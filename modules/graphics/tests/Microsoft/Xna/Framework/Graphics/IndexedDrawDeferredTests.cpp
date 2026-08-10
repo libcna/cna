@@ -447,7 +447,7 @@ namespace
         // This helper deliberately keeps STANDARD validation only. The Khronos synchronization
         // checks are a separate opt-in (VulkanRenderer::SetSyncValidationEnabledEXT) whose
         // hazards belong to whichever pass records them; REMED-GFX-144's acquire hazard was
-        // invisible here for exactly that reason, and examples/vulkan_swapchain_sync_test.cpp is
+        // invisible here for exactly that reason, and modules/renderers/vulkan/examples/vulkan_swapchain_sync_test.cpp is
         // the file that enforces it.
         ASSERT_TRUE(CNA::Internal::Renderers::Vulkan::VulkanRenderer::IsValidationActiveEXT())
             << "Vulkan validation layer is not active, so a zero message count proves nothing "

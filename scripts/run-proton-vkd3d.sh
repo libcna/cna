@@ -24,7 +24,7 @@
 #
 # Real result (2026-07-14, this exact script's manual predecessor): CreateSwapChainForHwnd genuinely
 # returns S_OK through this launch path -- IsSwapChainAvailableEXT() == true, confirmed via
-# examples/directx12_swapchain_diag.cpp's own file-based log (proton's process-launch plumbing does not
+# modules/renderers/directx12/examples/directx12_swapchain_diag.cpp's own file-based log (proton's process-launch plumbing does not
 # reliably forward the child's stdout back to the invoking shell -- write results to a file from
 # within the target .exe if you need to read them back, not stdout).
 #

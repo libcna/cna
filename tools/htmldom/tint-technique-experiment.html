@@ -9,8 +9,8 @@
   (it did not previously exist in the repository) so HTMLDOM-99's own conclusion is independently
   reproducible rather than only asserted in plan_html_dom.md's prose.
 
-  Methodology (same shape as examples/htmldom_stress_test.cpp's own HTMLDOM-89 benchmark, and
-  examples/graphics_renderer_benchmark.cpp's HTMLDOM-111 rework): 500 pooled sprite elements,
+  Methodology (same shape as modules/renderers/html-dom/examples/htmldom_stress_test.cpp's own HTMLDOM-89 benchmark, and
+  modules/graphics/examples/graphics_renderer_benchmark.cpp's HTMLDOM-111 rework): 500 pooled sprite elements,
   position animating every frame (never the thing under test), one warm-up frame excluded, 60
   requestAnimationFrame-paced timed frames per technique per workload. Two workloads:
     - steady-state: 8 fixed, already-cached tint values cycled by sprite index -- no tint EVER

@@ -6,7 +6,7 @@ The D3D12 renderer is a **native Windows Direct3D 12 graphics renderer**, verifi
 Debian dev machine via Windows cross-compilation + Wine+vkd3d-proton (see "Development environment"
 below). The **routine CTest suite runs off-screen** (real GPU proof, but not through a live window) —
 presentation through a real window/swap chain is separately proven, but only via a manual diagnostic
-(`examples/directx12_swapchain_diag.cpp`, through a Proton-managed launch), not the routine CTest, since
+(`modules/renderers/directx12/examples/directx12_swapchain_diag.cpp`, through a Proton-managed launch), not the routine CTest, since
 that launch is too heavy for a normal CI run on this dev loop. See "Known limitations" for the exact
 boundary. Select it with:
 
@@ -47,7 +47,7 @@ diagnostic, see "Known limitations"), not just "the API call returned `S_OK`."
 - **Not routinely presenting to a window in CTest.** Swap-chain *creation* genuinely works (a
   properly Proton-managed launch, `scripts/run-proton-vkd3d.sh`) and `Present()`/back-buffer
   rendering are real and proven through a live window (`DX-116`) — but only via a manual diagnostic
-  (`examples/directx12_swapchain_diag.cpp`), not the routine `DirectX12_Smoke` CTest, since Proton's own
+  (`modules/renderers/directx12/examples/directx12_swapchain_diag.cpp`), not the routine `DirectX12_Smoke` CTest, since Proton's own
   bootstrap launch is too heavy/slow for a normal CTest run on this dev loop. See "Known
   limitations" for the full plain-Wine-vs-Proton distinction.
 - **Not verified on real Windows.** `plan_dx.md` `DX-114` (the D3D12 equivalent of `D3D11`'s
@@ -111,7 +111,7 @@ test through the same wrapper.
 Like `D3D11`, D3D12 tests are not ordinary `Game`-subclass examples — the routine CTest suite has no
 Proton-managed window/`Present()` path to drive one through (Proton's own bootstrap launch is too
 heavy for a normal CTest run, see "Known limitations"). All correctness tests live in
-`examples/directx12_smoke_test.cpp` (`DirectX12_Smoke` CTest, the single registered D3D12 CTest — checks
+`modules/renderers/directx12/examples/directx12_smoke_test.cpp` (`DirectX12_Smoke` CTest, the single registered D3D12 CTest — checks
 lettered A through VV as of `DX-113`/`DX-117`/`DX-121`/`DX-136`/`DX-144`/`DX-149`–`DX-155`,
 **212/212 passing**) and talk to the real
 `ID3D12Device`/command queue/list fairly directly. The general off-screen pixel-readback shape:
@@ -147,7 +147,7 @@ significantly stale; re-derived from source, not copy-edited)
   launch, it does.** `CreateSwapChainForHwnd`/`FLIP_DISCARD` crashes under plain Wine: a null-pointer
   read inside Wine's own `dxgi.dll` (`d3d12_swapchain_init` → `vkd3d_instance_get_vk_instance
   (instance=0)`), reproduced twice (`DX-100`'s raw spike, then `DX-102`'s dedicated
-  `examples/directx12_swapchain_diag.cpp` diagnostic with a full symbolized backtrace) — a genuine
+  `modules/renderers/directx12/examples/directx12_swapchain_diag.cpp` diagnostic with a full symbolized backtrace) — a genuine
   architecture mismatch between Debian's system `dxgi.dll` and vkd3d-proton's separately-overridden
   `d3d12.dll`, **not a CNA bug**. `DX-102` later found the real fix: a properly Proton-managed launch
   (`scripts/run-proton-vkd3d.sh`) gives vkd3d-proton the matched DLL pair it expects, and swap-chain

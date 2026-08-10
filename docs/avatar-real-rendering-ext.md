@@ -32,7 +32,7 @@ share a name by coincidence; do not conflate them.
 
 - **`VertexPositionNormalTextureSkinned`** — a GPU-skinned vertex: position, normal, one texture
   coordinate, up to 4 bone blend weights/indices. Matches the 52-byte layout already proven by
-  `examples/skinned_effect_integration_test.cpp`'s `SkinnedGpuVertex`. `VertexBuffer::SetData`
+  `modules/graphics/examples/skinned_effect_integration_test.cpp`'s `SkinnedGpuVertex`. `VertexBuffer::SetData`
   overloads exist for it, matching the other 4 typed vertex kinds.
 - **`SkinnedModelEXT`** — a real, GPU-skinnable mesh + skeleton + animation-clip container.
   Deliberately **not** built on `Model`/`ModelBone`/`ModelMesh`, which encode a *rigid*
@@ -101,7 +101,7 @@ existing hand-rolled-JSON-parser convention (no new JSON library dependency) use
   `Female` to the ContentManager asset name (`"avatar/male/avatar"` / `"avatar/female/avatar"`)
   for the matching procedurally-generated body. The **only** place this mapping is made; a
   caller picks the `AvatarBodyType` by whatever means it already has (a game's own
-  player-selection UI, a CLI flag like `examples/demo_avatar`'s `--gender`, etc.) — it is
+  player-selection UI, a CLI flag like `modules/gamer-services/examples/demo_avatar`'s `--gender`, etc.) — it is
   **not** derived from `AvatarDescription::getBodyTypeProperty()`, which faithfully never
   carries real body-type data (always lazily defaults to `Female`, matching the real XNA
   implementation's undocumented, never-populated description format).
@@ -110,14 +110,14 @@ existing hand-rolled-JSON-parser convention (no new JSON library dependency) use
 
 | Renderer | Status |
 |---|---|
-| EasyGL | Real, GPU-skinning proven end-to-end (`examples/avatar_real_render_integration_test.cpp`, pixel-readback, passing) |
+| EasyGL | Real, GPU-skinning proven end-to-end (`modules/gamer-services/examples/avatar_real_render_integration_test.cpp`, pixel-readback, passing) |
 | Vulkan | Real skinned pipeline exists (descriptor sets, per-frame bone UBO, dedicated pipeline); not yet smoke-tested for this feature |
 | Bgfx | Real bone-uniform wiring exists; not yet smoke-tested for this feature |
 | SDL_Renderer | 2D-only; any 3D resource creation (e.g. the `VertexBuffer`/`SkinnedEffect` this extension needs) already throws the pre-existing, tested `"SDL_Renderer does not support 3D: ..."` error — no new guard code was needed |
 
 ## Real content integration (Task 11.11)
 
-`examples/demo_avatar/` is the first real, non-synthetic-fixture proof: a real windowed
+`modules/gamer-services/examples/demo_avatar/` is the first real, non-synthetic-fixture proof: a real windowed
 demo that loads `Content/avatar/male/avatar.skinnedmodel.json` (produced by
 `tools/avatar_builder/generate_avatar.py` + `tools/avatar_asset_pipeline/convert_avatar.py`,
 Phase 11a/Tasks 11.1–11.10 — no MakeHuman/Mixamo involved) via
@@ -158,7 +158,7 @@ rest pose (which must reduce to identity for every bone, by definition) and a he
 clip bytes — not by static code review. See `tools/avatar_asset_pipeline/convert_avatar.py` and
 `ContentManager.cpp`'s `SkinnedModelTypeReader::Read()` for the fixes themselves.
 
-**Task 11.12, done:** both bodies are now wired into the demo — `examples/demo_avatar --gender
+**Task 11.12, done:** both bodies are now wired into the demo — `modules/gamer-services/examples/demo_avatar --gender
 male|female` (default `male`) selects which `AvatarBodyType` to pass to `AvatarDemo`, which maps
 it to a ContentManager asset name via `AvatarBodyTypeToContentNameEXT` (see "GamerServices API
 surface" above) and loads accordingly. Confirmed with a real screenshot of `--gender female`:

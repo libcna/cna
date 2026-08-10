@@ -19,7 +19,7 @@
 //   • Dispose marks the resource as disposed.
 //
 // Happy-path SetData/GetData round-trip coverage (per-face colour verification, level 0 only)
-// lives in the EasyGL pixel-readback integration test: examples/easygl_texturecube_faces_test.cpp.
+// lives in the EasyGL pixel-readback integration test: modules/renderers/easygl/examples/easygl_texturecube_faces_test.cpp.
 
 #include <gtest/gtest.h>
 #include <cstdint>

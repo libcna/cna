@@ -368,7 +368,7 @@ namespace CNA::Internal::Renderers::DirectX12
          *  clears the shared D3D12ResourceStateTracker (every previously-tracked resource's D3D12
          *  object is gone along with the removed device), and re-attempts the swap chain if a
          *  window was supplied. Honest scope boundary: this recreation logic is real and directly
-         *  callable/testable (see examples/directx12_smoke_test.cpp), but this dev loop cannot trigger
+         *  callable/testable (see modules/renderers/directx12/examples/directx12_smoke_test.cpp), but this dev loop cannot trigger
          *  a genuine DXGI_ERROR_DEVICE_REMOVED to prove the *trigger* path -- only DX-90/DX-114's
          *  real hardware can. CNAEXT -- not part of any IGraphicsRenderer contract. */
         void RecreateDeviceEXT();
@@ -455,7 +455,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /// class-level doc comment for why. A genuine Wine-level crash (as opposed to a clean
         /// HRESULT failure) cannot be caught here or anywhere in-process; that risk is why the
         /// primary D3D12 CTest suite never constructs this renderer with a real window (see
-        /// examples/directx12_smoke_test.cpp's own comment block). Stores the real swap-chain pixel
+        /// modules/renderers/directx12/examples/directx12_smoke_test.cpp's own comment block). Stores the real swap-chain pixel
         /// size into width_/height_ (DX-116) -- previously local-only, now needed by
         /// CreateWindowSizeDependentViews()'s own depth-stencil-buffer sizing.
         void CreateSwapChainResources();

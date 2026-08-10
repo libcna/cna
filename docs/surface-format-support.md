@@ -131,7 +131,7 @@ cancel it, so it came out **badly wrong**: a nominal (128,128,128) vertex color 
 
 **Fixed both:** `VulkanTextureRenderer`'s image/view format to `VK_FORMAT_R8G8B8A8_UNORM`, and the
 swapchain preference to `VK_FORMAT_B8G8R8A8_UNORM`. Added
-`examples/vulkan_texture_srgb_test.cpp` (`Vulkan_Texture2D_ColorFormat_Linear` ctest): renders a
+`modules/renderers/vulkan/examples/vulkan_texture_srgb_test.cpp` (`Vulkan_Texture2D_ColorFormat_Linear` ctest): renders a
 mid-grey (128,128,128) quad two ways — plain vertex color (no texture) vs. a sampled `Texture2D`
 filled with the same value (no vertex-color tint) — and compares the two backbuffer readbacks.
 Before the fix: vertex-color path read 188, textured path read 128 (diff 60, confirming both bugs).

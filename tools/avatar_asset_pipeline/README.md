@@ -44,7 +44,7 @@ shipping a unisex placeholder — see `tools/avatar_builder/generate_avatar.py`'
 `--gender` flag.
 
 **Now also proven end-to-end through the real C++ engine** (Task 11.11,
-`examples/demo_avatar/`): the converted content loads via `ContentManager` and renders,
+`modules/gamer-services/examples/demo_avatar/`): the converted content loads via `ContentManager` and renders,
 animated, in a real window (see `docs/avatar-real-rendering-ext.md`'s "Real content
 integration" section for full detail). Getting there found and fixed two more real bugs
 in `convert_body()` itself, on top of the two above:

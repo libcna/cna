@@ -9036,7 +9036,7 @@ namespace CNA::Internal::Renderers::Vulkan
     // REMED-GFX-018 established that contract for this project on Bgfx ("each clear is a full-target
     // ordered operation ... viewport and scissor do not restrict Clear"), it matches what the pass
     // load action this replaces already did, and checks V1/V2 of
-    // examples/graphicsdevice_ordered_clear_test.cpp assert it on every renderer that runs them.
+    // modules/graphics/examples/graphicsdevice_ordered_clear_test.cpp assert it on every renderer that runs them.
     // layerCount is 1 because every framebuffer this renderer builds is single-layer -- a cube face
     // has its own framebuffer over its own single-layer view (REMED-GFX-134), so the face is already
     // selected by the framebuffer and never by a base array layer here.

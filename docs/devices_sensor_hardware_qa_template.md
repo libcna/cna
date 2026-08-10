@@ -36,7 +36,7 @@ coordinate-convention or motor-selection bug in this layer.
 | CNA commit hash (`git rev-parse HEAD`) | |
 | Graphics backend (`CNA_GRAPHICS_RENDERER`: `SDL_RENDERER`/`OPENGLES3`/`VULKAN`/`BGFX`) | |
 | Build type (Debug/Release) | |
-| Test app used (`examples/demo_devices` or a specific game) | |
+| Test app used (`modules/devices/examples/demo_devices` or a specific game) | |
 
 ---
 

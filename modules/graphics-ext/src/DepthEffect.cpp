@@ -19,7 +19,7 @@ namespace {
     // buffer (Position=0, TexCoord=1, Color=2). uTexture is left at its GLSL-default
     // sampler unit 0, which is where SpriteBatch binds the sprite's texture for any
     // custom effect — matching the convention every other CNA ShaderEffect-based
-    // post-process shader already relies on (see examples/easygl_postprocesseffect_shader_test.cpp).
+    // post-process shader already relies on (see modules/renderers/easygl/examples/easygl_postprocesseffect_shader_test.cpp).
     const char* const kVertexSource = R"(#version 300 es
 precision highp float;
 layout(location = 0) in vec2 aPos;

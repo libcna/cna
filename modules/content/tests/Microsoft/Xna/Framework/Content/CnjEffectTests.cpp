@@ -2,7 +2,7 @@
 //
 // plan_cnj.md CNB-15/CNB-16: first-ever gtest coverage for EffectTypeReader, migrated from
 // .shader.json to .cnj (CNB-14). The only prior exercise of this reader anywhere in the repo was
-// examples/easygl_bloom_extract_test.cpp (a standalone example program, not part of CnaTests),
+// modules/renderers/easygl/examples/easygl_bloom_extract_test.cpp (a standalone example program, not part of CnaTests),
 // which CNB-15 also migrated to .cnj.
 
 #include <filesystem>

@@ -398,7 +398,7 @@ Two implementation choices are worth knowing if you are debugging a render-targe
   actually queued in between (which only happens for a `DiscardContents` bind, at the shared XNA
   layer). This is an INCIDENTAL, not implemented-on-purpose, form of `PreserveContents` support —
   it does NOT survive a flush: once `frameCommands_` is submitted and cleared, the next bind of that
-  same target starts a genuinely new, unpreserved pass. See `examples/rendertargetcube_usage_test.cpp`/
+  same target starts a genuinely new, unpreserved pass. See `modules/graphics/examples/rendertargetcube_usage_test.cpp`/
   `rendertargetcube_msaa_face_test.cpp`'s own `CNA_RENDERER_LLGL` `Contract` branches (measured true,
   since neither file's own producer/marker draws are ever separated by a flush) versus
   `rendertargetcube_getdata_contract_test.cpp`'s own branch (measured false for its own U1/U2 checks
@@ -559,7 +559,7 @@ layout(std140, binding = 1) uniform PC {
 not consulted -- matching the same established precedent rather than inventing new semantics.
 `colorMap`/`samplerState` (binding 2/3) sample the sprite's own texture, exactly as the stock
 sprite shader does; there is no way yet to bind a second texture unit to a custom effect on this
-renderer. See `examples/llgl_shadereffect_test.cpp` for a complete worked example, including the
+renderer. See `modules/renderers/llgl/examples/llgl_shadereffect_test.cpp` for a complete worked example, including the
 vertex shader's own pixel-to-NDC technique.
 
 ## EnvironmentMapEffect
@@ -714,7 +714,7 @@ units share this renderer's one global sampler state (`ApplySamplerState` only e
 declaration still needs its own binding even when the underlying resource is identical.
 
 `Llgl_PbrEffect_HandDerived` (+ `_OpenGL`) is adapted from the Vulkan renderer's own
-`examples/vulkan_pbreffect_handderived_test.cpp` (itself fully renderer-agnostic real public XNA
+`modules/renderers/vulkan/examples/vulkan_pbreffect_handderived_test.cpp` (itself fully renderer-agnostic real public XNA
 API + `VertexBuffer::SetDataRaw`), drawing into an off-screen `RenderTarget2D` read back with
 `GetData()` instead of the source's own hand-rolled `Game` subclass that resizes the whole window
 -- `PixelTestGame`'s `Game` construction has no equivalent hook, and reading a hard-coded small
@@ -789,7 +789,7 @@ limitation of this project's own OpenGL module, not a gap in this renderer).
 `Llgl_SkinnedEffect_IdentityBones`/`Llgl_SkinnedEffect_TwoBoneBlend` are ported (not verbatim, but
 adapted with only the class name/comment changed) from the Vulkan renderer's own sources -- see
 "SkinnedEffect" above. `Llgl_SkinnedEffect_VertexColor` (LLGL-37) is adapted the same way from
-`examples/vulkan_skinnedeffect_vertexcolor_test.cpp`'s own analytically-derived technique (checks
+`modules/renderers/vulkan/examples/vulkan_skinnedeffect_vertexcolor_test.cpp`'s own analytically-derived technique (checks
 (a)/(b)/(c) only; that file's own (d)/(e) are an unrelated Vulkan dynamic-blend-factor finding) --
 plain `SkinnedEffect` works on both modules, so this gets an `_OpenGL` twin too.
 `Llgl_RenderTargetCube` covers 6 independent per-face draw/`GetData()` round

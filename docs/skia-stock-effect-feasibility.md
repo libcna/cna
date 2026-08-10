@@ -25,7 +25,7 @@ reporting. Those capabilities remain false.
 
 ## Textured BasicEffect prototype
 
-`examples/skia_cpu_stock_effect_spike_test.cpp` adds a bounded RGBA8+float-depth target and a
+`modules/renderers/skia/examples/skia_cpu_stock_effect_spike_test.cpp` adds a bounded RGBA8+float-depth target and a
 bounded immutable RGBA8 texture. Axes are restricted to 1..16384 and each resource refuses storage
 above 256 MiB before allocation. The route accepts only finite, positive-W vertices wholly inside
 clip space; a missing texture, lighting, fog or a vertex requiring homogeneous clipping rejects

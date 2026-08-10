@@ -3,7 +3,7 @@
 // these tests exercise the structural contract (mode round-trip, Clone() independence,
 // GetTypeName()) against a default-constructed GraphicsDevice with no real renderer, not GLSL
 // compile/render correctness (that needs a live EasyGL context — see
-// examples/easygl_postprocesseffect_shader_test.cpp for the runtime-verified pattern).
+// modules/renderers/easygl/examples/easygl_postprocesseffect_shader_test.cpp for the runtime-verified pattern).
 
 #ifdef CNA_CNAEXT
 

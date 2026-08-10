@@ -95,7 +95,7 @@ the project owner's decision to do the full fix:
    render pass instance) — so a query reused every frame (the idiomatic real-world usage pattern)
    gets a fresh reset each time, not just the first.
 
-New `examples/vulkan_occlusionquery_pixelcount_test.cpp` (`Vulkan_OcclusionQuery_PixelCount`, 6/6
+New `modules/renderers/vulkan/examples/vulkan_occlusionquery_pixelcount_test.cpp` (`Vulkan_OcclusionQuery_PixelCount`, 6/6
 pass): a fully-visible 64×64 quad reports `PixelCount()==4096` (the exact pixel count); a quad
 fully hidden behind a nearer opaque occluder reports `PixelCount()==0`; a 3rd scenario draws 2
 non-overlapping half-quads inside ONE `Begin()`/`End()` span and confirms `PixelCount()==4096`

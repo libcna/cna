@@ -95,10 +95,10 @@ behavior was compared, per the task's own explicit instruction.
 Two new permanent regression tests were added to `cna_graphics`, both registered on all 3
 runnable renderers (EasyGL, Vulkan, Bgfx):
 
-### 4.1 `examples/rasterizerstate_cullmode_camera_test.cpp`
+### 4.1 `modules/graphics/examples/rasterizerstate_cullmode_camera_test.cpp`
 
 Extends the pre-existing, already-passing
-`examples/easygl_rasterizerstate_cullmode_test.cpp`/`bgfx_rasterizerstate_cullmode_test.cpp`
+`modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_test.cpp`/`bgfx_rasterizerstate_cullmode_test.cpp`
 (Tasks 323-325/765, identity-transform only) with a **real** `Matrix.CreateLookAt` view and
 perspective/orthographic projection, matching SimpleAnimation's own exact camera
 (`eye=(1000,500,0)`, `target=(0,150,0)`, `up=(0,1,0)`, `FOV=PiOver4`, `near=10`, `far=10000`).
@@ -123,7 +123,7 @@ documented separately — a real flip is *expected* here).
 
 **Result: 30/30 checks PASS on EasyGL, Vulkan, and Bgfx — identical outcome on all 3 renderers.**
 
-### 4.2 `examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp`
+### 4.2 `modules/graphics/examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp`
 
 Same methodology, but drives `GraphicsDevice::DrawIndexedPrimitives` with a **real**
 `VertexBuffer`/`IndexBuffer`/`BasicEffect` (`VertexPositionNormalTexture`, stride 32) plus
@@ -376,9 +376,9 @@ evidence that closed this investigation.
 
 ### `cna_graphics`
 
-- **New**: `examples/rasterizerstate_cullmode_camera_test.cpp` (§4.1), registered on EasyGL/
+- **New**: `modules/graphics/examples/rasterizerstate_cullmode_camera_test.cpp` (§4.1), registered on EasyGL/
   Vulkan/Bgfx.
-- **New**: `examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` (§4.2), registered on
+- **New**: `modules/graphics/examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` (§4.2), registered on
   EasyGL/Vulkan/Bgfx.
 - **New**: this document + `docs/xna_culling_compatibility_audit_images/` (3 reference
   screenshots, plus the XNA `CullModeTest` result).

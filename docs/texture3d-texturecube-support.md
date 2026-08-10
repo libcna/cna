@@ -78,7 +78,7 @@ out-of-bounds rect throws, "WithinBoundsDoesNotThrow") — none of them assert o
 actually returns. Running the full suite against `cmake-build-vulkan`/`cmake-build-bgfx` reports
 "34/34 `TextureCubeTest` pass" (confirmed during Task 279) — which is entirely consistent with
 `GetData` being a silent no-op, since no existing test checks the returned pixels. Only EasyGL has a
-dedicated pixel-readback integration test (`examples/easygl_texturecube_faces_test.cpp`, etc.), which
+dedicated pixel-readback integration test (`modules/renderers/easygl/examples/easygl_texturecube_faces_test.cpp`, etc.), which
 is why this went unnoticed until this task cross-checked the Vulkan/Bgfx renderer source directly.
 
 Not fixed here — this is a real feature gap (Vulkan needs a staging-buffer-based

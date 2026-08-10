@@ -237,7 +237,7 @@ uniform-scale-then-perspective-divide argument worked out algebraically, not mea
 the bone-palette translation genuinely reaches the vertex shader *and* that `WeightsPerVertex`
 correctly gates which bones contribute; ambient/facing/back-facing checks prove real lighting
 reaches both shader families; a `VertexColorEnabled` check (pure black per-vertex colour, mirroring
-`examples/easygl_skinnedeffect_vertexcolor_test.cpp`'s own convention) proves the stride-56 colour
+`modules/renderers/easygl/examples/easygl_skinnedeffect_vertexcolor_test.cpp`'s own convention) proves the stride-56 colour
 path; and a `PreferPerPixelLighting` check (Gouraud-averaged vs fresh-per-fragment specular at a
 triangle seam) proves the vertex-lit/pixel-lit dispatch selects two genuinely different shaders.
 
@@ -282,7 +282,7 @@ and verified end-to-end as of 2026-07-18: the renderer-global `sampleCount_`,
 genuine multisample-resolved render now works through the real `GraphicsDevice`/`BasicEffect` draw
 path for both the backbuffer and a `RenderTarget2D` (`WebGPU_Msaa`, 6/6). The initial investigation
 found the MSAA infrastructure itself was already correct; the reported failures (Checks B/D-2/E)
-turned out to be a test-authoring defect in `examples/webgpu_msaa_test.cpp` — its diagonal triangle
+turned out to be a test-authoring defect in `modules/renderers/webgpu/examples/webgpu_msaa_test.cpp` — its diagonal triangle
 relied on `BasicEffect`'s default `RasterizerState` (`CullCounterClockwiseFace`) without the
 `RasterizerState::CullNone` override every other WebGPU 3D test in this suite sets, and the
 triangle's winding is a genuine XNA back face under this renderer's (independently correct)
@@ -331,7 +331,7 @@ cache key genuinely includes both the per-vertex and per-instance buffer strides
 binding always matches whatever the caller's buffers actually declare. `params.instanceVb ==
 nullptr` falls back to a real `DrawIndexedPrimitivesEx()` draw rather than throwing, matching
 `VulkanRenderer`'s identical fallback. `WebGPU_Instanced3D` (5/5, tested directly at the
-`IGraphicsRenderer` level, matching `examples/directx9_instanced_test.cpp`'s own established
+`IGraphicsRenderer` level, matching `modules/renderers/directx9/examples/directx9_instanced_test.cpp`'s own established
 test-authoring convention for this API): 3 instances in ONE draw call each paint their own small
 quad at their own independently-predicted screen location with the shared `DiffuseColor` — proving
 the per-instance buffer is genuinely read per-instance, not e.g. always instance 0 or a hardcoded

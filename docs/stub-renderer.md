@@ -53,7 +53,7 @@ oddly. See `plan_stub.md`'s own "Naming" section for the full rationale.
 ## Writing a Stub test
 
 Like `HEADLESS`/`SOFTWARE`, a Stub test is a normal `Game` subclass — the only difference is the
-renderer selected at CMake configure time. See `examples/stub_smoke_test.cpp` for a full working
+renderer selected at CMake configure time. See `modules/renderers/stub/examples/stub_smoke_test.cpp` for a full working
 example (registered as the `Stub_Smoke` CTest). The pattern:
 
 ```cpp

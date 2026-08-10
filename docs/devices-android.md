@@ -98,7 +98,7 @@ deprecation warning is locally suppressed in `AndroidSensorBridge.cpp`.
   API-level/permission claim above is sourced from NDK headers and Android platform
   documentation, not from on-device confirmation.
 
-## Build integration (`examples/demo_devices/android/`)
+## Build integration (`modules/devices/examples/demo_devices/android/`)
 
 The first — and, as of this writing, only — Android app packaging in this project's
 history. Generated from SDL's own `create-android-project.py --variant copy` template,
@@ -117,7 +117,7 @@ Section 4.1 for the exact commands and every bug hit/fixed getting there:
 - `Main.cpp` needed `#include <SDL3/SDL_main.h>` for the `#define main SDL_main`
   redirection `SDLActivity.java`'s `dlsym()` lookup requires — a no-op on desktop.
 - `--variant copy` duplicates source files into `app/jni/src/`; edits to
-  `examples/demo_devices/src/*` do not auto-propagate.
+  `modules/devices/examples/demo_devices/src/*` do not auto-propagate.
 
 **Result:** `./gradlew -PBUILD_WITH_CMAKE assembleDebug` produces a real, installable
 `app-debug.apk`. Installed and launched on the `Medium_Phone` emulator (`/dev/kvm` now

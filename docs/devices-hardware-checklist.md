@@ -90,7 +90,7 @@ available.
 **Update (2026-07-05, `plan_devices.md` Phase 9, Tasks DEVICES-0122-0126): the "no working
 emulator"/"no APK packaging" blockers above are resolved** — `/dev/kvm` now exists in this
 container (absent every session above), and a real Gradle/CMake Android app integration
-now exists (`examples/demo_devices/android/`, see `docs/devices-build.md` Section 4.1).
+now exists (`modules/devices/examples/demo_devices/android/`, see `docs/devices-build.md` Section 4.1).
 The `Medium_Phone` AVD boots, `cna_demo_devices` installs, launches, and renders its real
 UI (screenshot-confirmed), and responds to synthetic sensor values injected via the
 emulator console. **This closes the "the software pipeline works end-to-end" gap, not

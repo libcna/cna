@@ -445,7 +445,7 @@ namespace CNA::Internal::Renderers::Sokol
         /// EasyGLRenderer::ApplyLayout()'s own fallback switch uses (in the same field
         /// order) -- VertexBuffer's own CNAEXT-tagged auto-detect constructor stores a
         /// default-constructed, ELEMENT-LESS VertexDeclaration (see DrawColored3D's own identical
-        /// comment on this), which is what examples/easygl_shadereffect_3d_test.cpp's
+        /// comment on this), which is what modules/renderers/easygl/examples/easygl_shadereffect_3d_test.cpp's
         /// VertexPositionNormalTexture buffer actually has. Returns empty for neither case, so the
         /// caller can throw a clear error rather than binding a garbage layout.
         std::vector<CustomEffectAttribLayout> BuildCustomEffectAttribLayoutEXT(
@@ -5438,7 +5438,7 @@ namespace CNA::Internal::Renderers::Sokol
         // Only Position is read (instanced3d.glsl's own doc comment); resolved from the mesh
         // buffer's declaration when one was supplied, else offset 0 / FLOAT3 -- every one of this
         // codebase's built-in vertex layouts (and the position-only 12-byte layout
-        // examples/webgpu_instanced3d_test.cpp itself uses) puts Position first.
+        // modules/renderers/webgpu/examples/webgpu_instanced3d_test.cpp itself uses) puts Position first.
         key.stride = static_cast<int>(vb.GetStrideEXT());
         key.positionOffset = 0;
         key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT3);

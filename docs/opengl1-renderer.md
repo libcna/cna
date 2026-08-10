@@ -70,7 +70,7 @@ onto the eye-Z row of the same `world*view` matrix the draw just loaded into `GL
 the projection yields the scale, the `w` term then yields `FogStart`/`FogEnd`. All-zero is
 honoured as FNA's "fog disabled" encoding; `{0,0,0,1}` (the degenerate `FogStart == FogEnd`)
 lands on a fully-fogged ramp. Pinned by a three-pair pixel oracle in
-`examples/opengl1_fog_alphatest_test.cpp` — before-ramp, exact mid-ramp and degenerate, each
+`modules/renderers/opengl1/examples/opengl1_fog_alphatest_test.cpp` — before-ramp, exact mid-ramp and degenerate, each
 with its own expected result.
 
 ## Unsupported — rejects or reports truthfully, never silently

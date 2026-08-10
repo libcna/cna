@@ -32,7 +32,7 @@ doubt with a full-surface regression pin, mirroring `DepthStencilState`'s own Ta
 
 ## 3. `CullMode` (Tasks 323–325)
 
-One comprehensive pixel test (`examples/easygl_rasterizerstate_cullmode_test.cpp`, registered for
+One comprehensive pixel test (`modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_test.cpp`, registered for
 both EasyGL and Vulkan as `EasyGL_RasterizerState_CullMode`/`Vulkan_RasterizerState_CullMode`)
 draws two quads of opposite, empirically-verified winding order (via signed area, not assumed)
 side by side, redrawn under all 3 `CullMode` values:
@@ -57,7 +57,7 @@ renderers — this test is the first in the project to empirically confirm that 
 correct, rather than only asserting it in a comment.
 
 **Real, minor finding (not a bug, noted for the record, not fixed)**: while designing this test,
-direct pixel evidence showed that an earlier test (`examples/easygl_depthstencilstate_stencil_twosided_test.cpp`,
+direct pixel evidence showed that an earlier test (`modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_twosided_test.cpp`,
 Task 318)'s `DrawQuadFront`/`DrawQuadBack` naming and accompanying comment ("front-facing... survives
 the default state") is backwards. That test only ever draws with `CullMode::None`, so the claim was
 never actually exercised under a real cull mode — Task 323's direct empirical measurement (signed
@@ -68,7 +68,7 @@ windings, which they still do) and was left unfixed there as out of scope.
 
 ## 4. `FillMode` (Tasks 326–327)
 
-`examples/vulkan_fill_mode_test.cpp` (Task 327) already covered both `FillMode::Solid` (baseline,
+`modules/renderers/vulkan/examples/vulkan_fill_mode_test.cpp` (Task 327) already covered both `FillMode::Solid` (baseline,
 checked before and after the `WireFrame` sub-test) and `FillMode::WireFrame`, but was registered
 for Vulkan only. Task 326 found the source is fully renderer-agnostic (`VertexBuffer`+`BasicEffect`,
 no Vulkan-specific API — confirmed by compiling it standalone outside any renderer target) and
@@ -79,7 +79,7 @@ found — closed a real test-registration gap.
 
 ## 5. Depth bias / slope-scale depth bias (Task 328)
 
-Already verified via `examples/vulkan_depth_bias_test.cpp` (`Vulkan_DepthBias`) prior to this
+Already verified via `modules/renderers/vulkan/examples/vulkan_depth_bias_test.cpp` (`Vulkan_DepthBias`) prior to this
 phase's audit tasks. `DepthBias=-1e6` is a pre-existing, documented failure (its extreme magnitude
 sub-case; the other 3 sub-cases — flat `DepthBias=0`, tilted `SlopeScaleDepthBias=0`/`-2000` —
 consistently pass). Not re-investigated in Phase 38; tracked as a pre-existing issue, not
@@ -87,8 +87,8 @@ consistently pass). Not re-investigated in Phase 38; tracked as a pre-existing i
 
 ## 6. Scissor test (Task 329)
 
-Already verified via `examples/vulkan_scissor_test.cpp` (`Vulkan_ScissorTest`, 4/4 PASS: no-scissor
-full coverage, scissor-to-top-left-quadrant clipping) and `examples/easygl_scissor_test.cpp` prior
+Already verified via `modules/renderers/vulkan/examples/vulkan_scissor_test.cpp` (`Vulkan_ScissorTest`, 4/4 PASS: no-scissor
+full coverage, scissor-to-top-left-quadrant clipping) and `modules/renderers/easygl/examples/easygl_scissor_test.cpp` prior
 to this phase's audit tasks. No new findings in Phase 38.
 
 ## 7. State object immutability/freeze behavior (Task 330)
@@ -132,7 +132,7 @@ smoke-test/no-regression only by design).
   findings). The only gaps found were test-coverage/registration gaps (`Name` on presets, missing
   EasyGL `FillMode` registration), both closed within this phase.
 - `DepthBias`/`SlopeScaleDepthBias` still has no EasyGL pixel test registered (only Vulkan). Not
-  blocking — `examples/vulkan_depth_bias_test.cpp` appears renderer-agnostic like the `FillMode`
+  blocking — `modules/renderers/vulkan/examples/vulkan_depth_bias_test.cpp` appears renderer-agnostic like the `FillMode`
   test was, so registering it for EasyGL too would likely be a similarly small, low-risk task if
   ever prioritized.
 - Pre-existing, unrelated to `RasterizerState`: `Vulkan_DepthBias`'s `DepthBias=-1e6` sub-case

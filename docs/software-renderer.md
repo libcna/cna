@@ -49,8 +49,8 @@ design decision 1).
 ## Writing a Software test
 
 Like `HEADLESS`, a Software test is a normal `Game` subclass — the only difference is the renderer
-selected at CMake configure time. See `examples/software_smoke_test.cpp`,
-`examples/software_rasterizer_test.cpp`, and `examples/software_effects_test.cpp` for full working
+selected at CMake configure time. See `modules/renderers/software/examples/software_smoke_test.cpp`,
+`modules/renderers/software/examples/software_rasterizer_test.cpp`, and `modules/renderers/software/examples/software_effects_test.cpp` for full working
 examples. The pattern:
 
 ```cpp
@@ -88,10 +88,10 @@ up — see `plan_software.md` `SOFTWARE-50`'s notes for the full story).
 
 ## Cross-renderer diagnostic (SOFTWARE-61/84)
 
-`examples/cross_renderer_diagnostic_scene.cpp` renders one simple, fully unlit (vertex-color-only,
+`modules/graphics/examples/cross_renderer_diagnostic_scene.cpp` renders one simple, fully unlit (vertex-color-only,
 no lighting) triangle and dumps the resulting 64x64 RGBA8 backbuffer to a raw file given as
 `argv[1]`. It is deliberately renderer-agnostic (no `#ifdef`) and is built once per renderer that
-needs it. `examples/cross_renderer_diagnostic_compare.cpp` (built as `cna_diag_compare`, no
+needs it. `modules/graphics/examples/cross_renderer_diagnostic_compare.cpp` (built as `cna_diag_compare`, no
 CNA/SHARP_RUNTIME dependency) diffs two such dumps and reports the max/mean per-channel absolute
 difference, failing if the max exceeds a given tolerance.
 

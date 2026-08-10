@@ -65,7 +65,7 @@ there since has broken NDK compatibility. This document does not attempt to iden
   check `SDL_GetRendererInfo` there, unlike the desktop build's own confirmed `SDL_Renderer uses
   OpenGL` startup log line (Task 456).
 - **No real Android graphics demo project exists.** The only Android Gradle/NDK project in this
-  repository is `examples/demo_devices/android/` (`docs/devices-build.md` §4.1), which packages the
+  repository is `modules/devices/examples/demo_devices/android/` (`docs/devices-build.md` §4.1), which packages the
   **devices/sensors demo**, not a graphics demo — confirmed via `CMakeLists.txt`'s own comment
   explaining why a plain `add_executable()` demo target is skipped entirely on Android
   (`SDL_main`/`SDLActivity.java` `dlsym` linkage requirements mean a real Android app needs its own

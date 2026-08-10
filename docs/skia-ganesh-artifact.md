@@ -226,7 +226,7 @@ implementations -- there is only ever one linked at a time. What SKIA-160 actual
      diagnostic (`surface=ganesh-gl`, the pinned revision, and a genuinely queried
      `max-texture-size`, unlike raster's fixed `constexpr` diagnostic string, since this value is
      driver-dependent).
-3. A single test source, `examples/skia_ganesh_mode_test.cpp`, that compiles and runs correctly in
+3. A single test source, `modules/renderers/skia/examples/skia_ganesh_mode_test.cpp`, that compiles and runs correctly in
    *either* mode and is registered differently depending on which: under `Skia;Raster` (no display
    needed) in a `RASTER` build, proving the refusal path; under the long-reserved
    `Skia;Accelerated;Display` label (`cna_register_skia_accelerated_test`, previously unused since
@@ -340,7 +340,7 @@ paired with a post-swap readback.
 
 ### Verification
 
-`examples/skia_ganesh_backbuffer_test.cpp` (`Skia_Ganesh_Backbuffer`, `Skia;Accelerated;Display`,
+`modules/renderers/skia/examples/skia_ganesh_backbuffer_test.cpp` (`Skia_Ganesh_Backbuffer`, `Skia;Accelerated;Display`,
 the second member the long-reserved label has ever had) proves, run with a hidden window (CTest's
 default) against this repository's `:99` Xvfb display -- confirmed to also pass identically against
 a real desktop display, so neither is specifically required:
@@ -353,7 +353,7 @@ a real desktop display, so neither is specifically required:
   alpha is genuinely interpreted through this path;
 - `Present()` (flush/submit + `SDL_GL_SwapWindow`) does not throw;
 - a real SDL window resize (`SDL_SetWindowSize` + `SDL_SyncWindow` to block until it actually
-  applies, mirroring `examples/easygl_real_window_resize_test.cpp`'s own established real-resize
+  applies, mirroring `modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp`'s own established real-resize
   precedent) followed by `Resize()` rewraps the framebuffer at its new dimensions, which are then
   genuinely drawable and readable;
 - a second, independent `SkiaGaneshSurface` constructed on the same window after the first is
@@ -443,13 +443,13 @@ single-shot RAII object with no reconstruct operation of its own, by design (SKI
 ### Resize and fullscreen
 
 `Resize()` itself is unchanged from SKIA-161 -- this task's contribution is proving it more
-thoroughly, not changing its mechanism. `examples/skia_ganesh_backbuffer_test.cpp` gained:
+thoroughly, not changing its mechanism. `modules/renderers/skia/examples/skia_ganesh_backbuffer_test.cpp` gained:
 
 - three consecutive `DebugSimulateContextLossEXT()` cycles on the same surface, each followed by a
   fresh draw/readback proving the recovered object is genuinely live and non-stale, not just once;
 - a best-effort real fullscreen toggle (`SDL_SetWindowFullscreen`), matching the documented
   precedent that this call "may fail in headless / virtual-display environments"
-  (`examples/easygl_fullscreen_field_test.cpp`'s own comment): if the toggle itself fails, or
+  (`modules/renderers/easygl/examples/easygl_fullscreen_field_test.cpp`'s own comment): if the toggle itself fails, or
   succeeds but the drawable size does not actually change (confirmed to be exactly what happens
   under this repository's `:99` Xvfb display), the check logs an `[INFO]` line and is skipped --
   not counted as a failure, since a virtual display's inability to truly fullscreen is not this
@@ -503,9 +503,9 @@ and not claimed as one.
 
 ### What was delivered
 
-- New `examples/skia_ganesh_resource_budget_test.cpp` (`Skia_Ganesh_ResourceBudget`), directly
+- New `modules/renderers/skia/examples/skia_ganesh_resource_budget_test.cpp` (`Skia_Ganesh_ResourceBudget`), directly
   addressing the "resource-budget"/"repeated reconstruction" clauses at the `SkiaGaneshSurface`
-  level, matching `examples/skia_resource_budget_test.cpp`'s own 64-cycle scale and precedent:
+  level, matching `modules/renderers/skia/examples/skia_resource_budget_test.cpp`'s own 64-cycle scale and precedent:
   - **Phase 1**: 64 independent construct/draw/readback/destroy cycles on the same window, each
     with a distinct verified colour -- proving repeated `SkiaGaneshSurface` construction is stable
     at scale, not just once (SKIA-161) or three times (SKIA-162).

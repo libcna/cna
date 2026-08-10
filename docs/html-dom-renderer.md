@@ -163,7 +163,7 @@ caller branch ahead of time instead of provoking an exception, for the capabilit
 
 ## Performance characteristics
 
-**Measured, not just claimed** (`examples/htmldom_stress_test.cpp`, HTMLDOM-89/90): 500 sprites/
+**Measured, not just claimed** (`modules/renderers/html-dom/examples/htmldom_stress_test.cpp`, HTMLDOM-89/90): 500 sprites/
 frame, tint changing every frame with STATIC position (HTMLDOM-111 correction: despite this
 workload's own older "moving sprites" framing, its position formula never actually depends on the
 frame number — only tint does, so this is this renderer's own documented heavy-tint-churn WORST
@@ -210,7 +210,7 @@ layers cost more memory than a single canvas would.
 Rule of thumb: this renderer rewards static sprite sheets and moving sprites, and punishes dynamic
 pixel data.
 
-**Comparative benchmark** (`examples/graphics_renderer_benchmark.cpp`, HTMLDOM-92): the same
+**Comparative benchmark** (`modules/graphics/examples/graphics_renderer_benchmark.cpp`, HTMLDOM-92): the same
 500-sprite/frame workload, built and run under all three Emscripten-capable renderers from three
 separate `emcmake` configures and measured in the same headless-Chromium harness. **HTMLDOM-111
 correction, superseding the table this section used to publish**: the earlier ms/frame numbers here
@@ -254,7 +254,7 @@ software one without saying so.
 7. **Non-default `ColorWriteChannels` / `MultiSampleMask` are inexpressible and therefore throw.**
 8. **Sprite count drives DOM size** — this targets normal 2D games, not particle storms. Every
    pooled sprite `<div>` carries `will-change:transform`, forcing its own permanent compositor
-   layer; measured directly (`examples/htmldom_memory_test.cpp`, HTMLDOM-116) rather than left as
+   layer; measured directly (`modules/renderers/html-dom/examples/htmldom_memory_test.cpp`, HTMLDOM-116) rather than left as
    an unmeasured claim: a 5,000/10,000-sprite burst creates that many pool elements in ~44 ms in
    this container (well within a sane budget, no O(n²) blowup). Before HTMLDOM-116, the pool never
    released an element once created — only hidden via `display:none` — so a single transient burst
@@ -315,7 +315,7 @@ software one without saying so.
     OUT-of-bounds overflow, HTMLDOM-104) at a large fractional scale under linear filtering: the
     Canvas2D path (active while a `RenderTarget2D` is bound) measurably bleeds the adjacent,
     UNDRAWN atlas region into an edge sample still genuinely inside the drawn source rect — hand-
-    derived and confirmed exact (`examples/htmldom_pixel_verification_test.cpp`, HTMLDOM-119):
+    derived and confirmed exact (`modules/renderers/html-dom/examples/htmldom_pixel_verification_test.cpp`, HTMLDOM-119):
     sampling 0.397 texels past the last drawn texel's own centre toward the next (undrawn) one
     produces almost precisely the linearly-interpolated blend of the two (measured (147,0,108)
     against a hand-derived (154,0,101)). This is the CORRECT, hardware-matching result — real D3D/

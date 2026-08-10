@@ -76,7 +76,7 @@ namespace
     }
 
     // Writes a minimal stride-32 VertexPositionNormalTexture quad fixture (verts + indices +
-    // .cnj), matching examples/easygl_model_json_reader_test.cpp's own fixture shape.
+    // .cnj), matching modules/renderers/easygl/examples/easygl_model_json_reader_test.cpp's own fixture shape.
     void WriteQuadModelFixture(const std::filesystem::path& root)
     {
         struct V { float x, y, z, nx, ny, nz, u, v; };

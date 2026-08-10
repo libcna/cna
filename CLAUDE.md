@@ -184,7 +184,8 @@ C# `internal DebugDisplayString` should **not** become a public C++ API method.
 
 The repository is a **module-oriented monorepo** (Phase-3 physical layout, see
 `docs/physical-modules.md`): every subsystem and every renderer implementation family owns
-`modules/<name>/{CMakeLists.txt,include/,src/,tests/}`.
+`modules/<name>/{CMakeLists.txt,include/,src/,tests/,examples/}` (examples/ present where a
+module has examples).
 
 - Declarations and public documentation: `.hpp` under the owning module's `include/`
 - Implementation: `.cpp` under the owning module's `src/`

@@ -49,7 +49,7 @@ using CNA::GraphicsCapability;
 //
 // plan_opengl1.md phase 12 finding: OPENGL1 is a SECOND genuinely-3D-capable renderer this file's
 // original "only ever builds against EasyGL" assumption did not anticipate -- and its real,
-// honest capability profile (examples/opengl1_graphics_capability_test.cpp, plan_opengl1.md
+// honest capability profile (modules/renderers/opengl1/examples/opengl1_graphics_capability_test.cpp, plan_opengl1.md
 // phase 11) legitimately differs from EasyGL's on 3 of these checks: OPENGL1 has no
 // ARB_multitexture-based MRT or custom-shader Effect pipeline (this renderer's own design rule:
 // "No GLSL/custom ShaderEffect pipeline in the strict OPENGL1 renderer"), but DOES support
@@ -306,7 +306,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     //
     // Note what this arm is NOT. Stub is not in the rejection set: unlike WebGPU, it does not throw
     // on a WireFrame draw, because its declared contract is that a real Game loop runs to
-    // completion without throwing (docs/stub-renderer.md, examples/stub_smoke_test.cpp). The
+    // completion without throwing (docs/stub-renderer.md, modules/renderers/stub/examples/stub_smoke_test.cpp). The
     // refusal obligation exists to stop a renderer from returning a frame that silently lies -- a
     // solid fill presented as a wireframe. Stub returns no frame at all, so it has the third shape
     // this file describes: an honest report with no pixel route to measure, which is why

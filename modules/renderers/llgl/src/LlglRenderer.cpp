@@ -1519,7 +1519,7 @@ namespace CNA::Internal::Renderers::Llgl
                 break;
             // PbrEffect (LLGL-26 follow-up): VertexPositionNormalTangentTexture's own byte layout
             // (float3 pos + float3 normal + float4 tangent + float2 uv) -- matches
-            // examples/llgl_pbreffect_handderived_test.cpp's own PbrGpuVertex, mirroring the
+            // modules/renderers/llgl/examples/llgl_pbreffect_handderived_test.cpp's own PbrGpuVertex, mirroring the
             // Vulkan renderer's own pbr3d.vert.glsl attribute layout.
             case 48:
                 addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
@@ -1555,7 +1555,7 @@ namespace CNA::Internal::Renderers::Llgl
             // SkinnedPbrEffect (LLGL-25 follow-up): VertexPositionNormalTangentTextureSkinned's own
             // byte layout -- the stride-48 PbrGpuVertex layout above with the stride-52 skinning
             // suffix (BlendWeight, BlendIndices) appended, matching
-            // examples/vulkan_pbreffect_handderived_test.cpp's own SkinnedPbrGpuVertex.
+            // modules/renderers/vulkan/examples/vulkan_pbreffect_handderived_test.cpp's own SkinnedPbrGpuVertex.
             case 68:
                 addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
                 addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);

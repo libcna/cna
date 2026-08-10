@@ -110,7 +110,7 @@ replaced by a later parent write. Common `Texture2D` target staging is therefore
 
 ## Pixel and precision rules
 
-The reusable fixture is `examples/common/SkiaSuccessorOracle.hpp`.
+The reusable fixture is `modules/renderers/skia/examples/common/SkiaSuccessorOracle.hpp`.
 
 | Operation | Accepted comparison |
 |---|---|

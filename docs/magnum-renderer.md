@@ -139,29 +139,29 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
   everything that needs no live GL context: the XNA-ordinal → Magnum-enum mappings, the vertex
   layout resolution both the stock and declaration-driven routes share, and the generated stock
   GLSL. Runs as part of `CnaTests`.
-- `examples/magnum_smoke_test.cpp` (`ctest -R Magnum_Smoke`) — the integration smoke test: clear +
+- `modules/renderers/magnum/examples/magnum_smoke_test.cpp` (`ctest -R Magnum_Smoke`) — the integration smoke test: clear +
   back-buffer readback, a SpriteBatch textured quad, a 3D coloured primitive draw and a render
   target round trip, each with a pixel assertion.
-- `examples/magnum_dualtextureeffect_test.cpp` (`ctest -R Magnum_DualTextureEffect`) — the
+- `modules/renderers/magnum/examples/magnum_dualtextureeffect_test.cpp` (`ctest -R Magnum_DualTextureEffect`) — the
   overbright factor and the second layer's participation, both measured against a mid-tone texel so
   a saturated scene cannot hide either.
-- `examples/magnum_environmentmapeffect_test.cpp` (`ctest -R Magnum_EnvironmentMapEffect`) — the
+- `modules/renderers/magnum/examples/magnum_environmentmapeffect_test.cpp` (`ctest -R Magnum_EnvironmentMapEffect`) — the
   reflection at amount 0 and 1 plus the specular tint. The amount-1 case is what separates a lerp
   from an addition, which a saturated cube map cannot.
-- `examples/magnum_skinnedeffect_test.cpp` (`ctest -R Magnum_SkinnedEffect`) — an identity bone, a
+- `modules/renderers/magnum/examples/magnum_skinnedeffect_test.cpp` (`ctest -R Magnum_SkinnedEffect`) — an identity bone, a
   translation bone and a two-bone blend, each measured by where the geometry lands rather than by
   its colour.
-- `examples/magnum_pbreffect_test.cpp` (`ctest -R Magnum_PbrEffect`) — the metallic-roughness BRDF
+- `modules/renderers/magnum/examples/magnum_pbreffect_test.cpp` (`ctest -R Magnum_PbrEffect`) — the metallic-roughness BRDF
   on a rig where N, V, L and H coincide, so every expected byte is derived from the formula rather
   than captured from a run.
-- `examples/magnum_meshcache_test.cpp` (`ctest -R Magnum_MeshCache`) — four draws over one binding,
+- `modules/renderers/magnum/examples/magnum_meshcache_test.cpp` (`ctest -R Magnum_MeshCache`) — four draws over one binding,
   each selecting a different range by index offset or base vertex, so a cached vertex array that
   kept either term is caught.
-- `examples/magnum_pervertexlighting_test.cpp` (`ctest -R Magnum_PerVertexLighting`) — a specular
+- `modules/renderers/magnum/examples/magnum_pervertexlighting_test.cpp` (`ctest -R Magnum_PerVertexLighting`) — a specular
   highlight aimed at a quad's centre, which is the only place the two lighting families disagree:
   per pixel the centre is lit, per vertex it interpolates four already-dark corners. The corners
   themselves must still agree, which is what keeps the shared formula honest.
-- `examples/magnum_mrt_msaa_test.cpp` (`ctest -R Magnum_MrtMsaa`) — a `#version 400 core`
+- `modules/renderers/magnum/examples/magnum_mrt_msaa_test.cpp` (`ctest -R Magnum_MrtMsaa`) — a `#version 400 core`
   `ShaderEffect` writing `gl_SampleMask[0] = 1` into two slots at once. One sample per pixel is the
   only thing that separates a genuinely multisampled attachment from a resolved image, and the same
   draw into a single-sampled set is the control that makes the reading a measurement.

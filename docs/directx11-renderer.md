@@ -95,8 +95,8 @@ limitations"). Most D3D11 correctness tests instead talk to the real `ID3D11Devi
 `ID3D11DeviceContext` fairly directly, going through `DirectX11Renderer::GetDeviceEXT()` (a
 `CNAEXT` accessor added specifically so tests/`D3DCommon` callers can reach the real device without
 duplicating its creation path) and `D3DCommon`'s shader/input-layout/constant-buffer helpers. See
-`examples/directx11_smoke_test.cpp` (`DirectX11_Smoke` CTest, the primary GPU-facing pixel-correctness
-suite — Checks A through AC as of `DX-85`) and `examples/directx11_common_test.cpp` (`DirectX11_Common`
+`modules/renderers/directx11/examples/directx11_smoke_test.cpp` (`DirectX11_Smoke` CTest, the primary GPU-facing pixel-correctness
+suite — Checks A through AC as of `DX-85`) and `modules/renderers/directx11/examples/directx11_common_test.cpp` (`DirectX11_Common`
 CTest, pure-function format/state/vertex-layout mapping-table checks, no GPU/device needed) for the
 two established patterns. The general pixel-readback shape:
 

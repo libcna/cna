@@ -49,7 +49,7 @@ this session:
 | Vulkan | `GetOrCreateDualTexDescSet` hardcoded `defaultSampler_` (Linear+ClampToEdge) into both descriptor image slots and cached the descriptor set keyed only by image views — the correctly-computed `slotSamplers_[0]`/`[1]` were never actually bound. | Threaded both samplers through as parameters; widened the descriptor cache key to include them (mirrors the already-correct single-texture `GetOrCreateTexSamplerDescSet(view, sampler)` pattern). |
 | Bgfx | The dual-texture draw branch bound texture slot 1 using `samplerFlags_[0]` instead of `samplerFlags_[1]`, so the second texture always inherited slot 0's sampler state. | Fixed the index. |
 
-Proven with a pixel test (`examples/easygl_sampler_state_effect_test.cpp`, registered on both
+Proven with a pixel test (`modules/renderers/easygl/examples/easygl_sampler_state_effect_test.cpp`, registered on both
 EasyGL and Vulkan as `*_SamplerState_DualTextureEffect`) that initially failed on all three
 renderers and now passes; Bgfx confirmed via full-suite no-regression only (no pixel-readback API
 in this project).

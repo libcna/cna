@@ -451,7 +451,7 @@ EM_JS(void, CNA_HtmlDom_PresentFrame, (), {
         // So a single transient burst (e.g. a one-time explosion effect briefly drawing 10,000
         // sprites) permanently retained 10,000 DOM nodes and compositor layers for the rest of the
         // session, even after usage settled back down to a handful -- measured directly in
-        // examples/htmldom_memory_test.cpp, which is also where kIdleShrinkFrames below is chosen
+        // modules/renderers/html-dom/examples/htmldom_memory_test.cpp, which is also where kIdleShrinkFrames below is chosen
         // and justified against real numbers, not just asserted.
         //
         // Age-out: once a region's used count has been EXACTLY unchanged for kIdleShrinkFrames

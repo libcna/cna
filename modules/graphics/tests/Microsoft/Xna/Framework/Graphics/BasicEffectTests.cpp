@@ -3,7 +3,7 @@
 // against FNA's Graphics/Effect/StockEffects/BasicEffect.cs and
 // Graphics/DirectionalLight.cs. Builds on Task 361's audit, which found and
 // fixed 2 real default-value bugs (VertexColorEnabled, DirectionalLight0.Enabled)
-// in BasicEffect.hpp/.cpp and corrected examples/basic_effect_test.cpp's
+// in BasicEffect.hpp/.cpp and corrected modules/graphics/examples/basic_effect_test.cpp's
 // pre-existing (wrong) assertions; this file is the dedicated, centralized,
 // GTest-based lock-in for all 22 properties' defaults.
 
@@ -216,7 +216,7 @@ TEST_F(BasicEffectDefaultsTest, CloneSharesOwnedTextureOwnership)
 // for-literal against FNA's Graphics/Effect/StockEffects/EffectHelpers.cs
 // (EnableDefaultLighting) and BasicEffect.cs (EnableDefaultLighting, which
 // additionally sets LightingEnabled = true). Complements Task 194's existing
-// EasyGL integration test (examples/easygl_basiceffect_default_lighting_test.cpp),
+// EasyGL integration test (modules/renderers/easygl/examples/easygl_basiceffect_default_lighting_test.cpp),
 // which already caught and fixed 2 literal-value bugs in this same rig
 // (Light2.SpecularColor, Light2.DiffuseColor.Y) — this is the GTest-level,
 // GPU-independent lock-in for the same 3-light rig, using a tight epsilon

@@ -38,7 +38,7 @@ std::string fragSpv(reinterpret_cast<const char*>(fragSpirvBytes), fragSpirvSize
 ShaderEffect fx(device, vertSpv, fragSpv);
 ```
 
-(See `examples/easygl_shader_effect_test.cpp` and `examples/vulkan_shader_effect_test.cpp` for
+(See `modules/renderers/easygl/examples/easygl_shader_effect_test.cpp` and `modules/renderers/vulkan/examples/vulkan_shader_effect_test.cpp` for
 full working examples.) **Bgfx's `ShaderEffect` renderer is currently a no-op stub** — both source
 strings are accepted but ignored, per `docs/xna-4-api-coverage.md` §7 — so this path is EasyGL/
 Vulkan only today.
@@ -56,13 +56,13 @@ fx.SetTexture(1, someTexture2D);                        // binds sampler unit 1 
 
 Use `SetTexture()` for any shader that samples more than one texture in a single draw (matching
 real XNA's `GraphicsDevice.Textures[unit] = someTexture`) — see
-`examples/easygl_bloom_combine_test.cpp` for a worked example (two independent flat-color
+`modules/renderers/easygl/examples/easygl_bloom_combine_test.cpp` for a worked example (two independent flat-color
 textures combined via a ported `BloomCombine.fx`).
 
 **Loading via `ContentManager`**: `Content.Load<std::shared_ptr<Effect>>("name")` reads a
 `name.shader.json` descriptor (`{"vertex": "...", "fragment": "..."}`, paths relative to the
 content root) and constructs a `ShaderEffect` from the referenced GLSL files — see
-`examples/easygl_bloom_extract_test.cpp` for a full round-trip example.
+`modules/renderers/easygl/examples/easygl_bloom_extract_test.cpp` for a full round-trip example.
 
 ## What doesn't work yet: loading a real compiled `.fx` file
 

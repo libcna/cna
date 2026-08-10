@@ -63,7 +63,7 @@ See `tools/avatar_builder/README.md` for the full pipeline description. Common f
 - **CMake doesn't pick up regenerated `Content/` after re-running the pipeline** — CMake's own
   `Content/` copy step only re-triggers on a build reconfigure, not automatically when only binary
   content files change underneath it. Re-run `cmake --build` after touching `CMakeLists.txt` (or
-  manually copy `examples/demo_avatar/Content/` into the build directory) if a demo still shows
+  manually copy `modules/gamer-services/examples/demo_avatar/Content/` into the build directory) if a demo still shows
   stale content after regenerating assets.
 - **Regenerating content changes vertex/animation output slightly between runs** — expected:
   Blender's own floating-point rounding introduces ~1-ULP (`2^-23`) noise between otherwise

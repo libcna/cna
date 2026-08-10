@@ -3,8 +3,10 @@
 Since the Phase-3 physical modularization (2026-08-10, implemented on `feature/physical-modules`
 and promoted to `develop` the same day as `3ecbbce72`), the
 repository is a module-oriented monorepo: every subsystem and every renderer implementation
-family physically owns `modules/<name>/{CMakeLists.txt,include/,src/,tests/}` (a subdirectory
-is omitted only when genuinely empty). Consumer include spelling is unchanged — each module's
+family physically owns `modules/<name>/{CMakeLists.txt,include/,src/,tests/,examples/}` (a
+subdirectory is omitted only when genuinely empty; `examples/` joined the owned areas when
+the tracked examples moved into their owning modules, 2026-08-10). Consumer include spelling
+is unchanged — each module's
 `include/` root reproduces the public `Microsoft/...` / `CNA/...` paths beneath it, so
 `#include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"` still works everywhere; only the
 physical location of the header changed. The root `CMakeLists.txt` composes the modules via
@@ -81,6 +83,52 @@ Common helper targets (deliberate sharing, not public identities):
   suites deliberately compile into the CnaTests corpus on every renderer, so their
   `CNA/Internal/Renderers/<X>` policy headers stay reachable in every configuration.
 
+## Module examples — modules/<name>/examples/
+
+Examples follow the same ownership model as sources and tests (module-examples campaign,
+2026-08-10; move map + no-loss reconciliation under `modularization/module-examples/`):
+
+- **Subsystem examples** live with the framework module whose API they primarily
+  demonstrate: `modules/graphics/examples/` (demo_2d, house3d_demo, the renderer-agnostic
+  conformance fixtures, the cross-renderer diagnostic scene/comparator + Emscripten
+  benchmark, and the shared support headers under `common/` — PixelTestGame, ScreenshotEXT,
+  SimpleFontEXT, ViewSpaceFogRef), `modules/audio/examples/` (demo_sound, demo_xact),
+  `modules/input/examples/` (demo_input, input_smoke), `modules/devices/examples/`
+  (demo_devices incl. its Android Gradle/CMake subproject),
+  `modules/gamer-services/examples/` (demo_avatar + the avatar variant demos, the
+  GamerServices demo fleet, the avatar integration fixtures) and `modules/net/examples/`
+  (the Microsoft.Xna.Framework.Net demo fleet incl. demo_net_avatar_sync).
+- **Renderer examples** live with their implementation family under
+  `modules/renderers/<family>/examples/`, ownership following the implementation, not the
+  public profile (the easygl family's suite serves OPENGLES3/OPENGL33/WEBGL1/WEBGL2; the
+  profile stays visible in target/ctest names).
+- **Extension examples** live with their extension module:
+  `modules/graphics-ext/examples/` (cnaext_settings_example, depth/crt effect demos — all
+  CNAEXT).
+- **Registration is module-local**: each owning module's `CMakeLists.txt` enters
+  `examples/CMakeLists.txt` via `add_subdirectory(examples)`; the historical configure
+  conditions moved into those files unchanged, and example/test executables still land at
+  the build root (`CMAKE_RUNTIME_OUTPUT_DIRECTORY`), where they have always been.
+  `CNA_GRAPHICS_EXAMPLES_DIR` (set in `modules/CMakeLists.txt`) is how family registrations
+  compile the graphics-owned shared fixtures per renderer and how consumers reach the
+  `common/` support headers. Cross-family reuse (e.g. Vulkan/DirectX building
+  EasyGL-authored golden fixtures) is spelled as an explicit
+  `${CMAKE_SOURCE_DIR}/modules/renderers/<owner>/examples/` path. Module-registered tests
+  get the root's headless-safe skip convention through `cna_apply_skip_convention()`
+  (cmake/TestHelpers.cmake).
+- **Top-level `examples/` holds exactly one thing**: `examples/golden/`, the cross-renderer
+  golden oracle corpus (SHARED_EXAMPLE_ASSET). The easygl/opengl1/opengl2/opengl4/skia
+  suites load those PNGs at run time via CWD-relative `"examples/golden/*.png"` literals
+  from the repo-root test working directory, so the corpus deliberately stays at that
+  documented shared location.
+
+**Adding a new example**: a module-specific example belongs to its owning module's
+`examples/` (register it in that module's `examples/CMakeLists.txt`); a renderer-specific
+example belongs to its renderer family's `examples/`; only a genuinely cross-module
+integration example with no single owner may sit at repository level, with its
+justification documented. The top-level `examples/` directory must not become a
+miscellaneous dumping ground again.
+
 ## Intentional cycles (unchanged from the accepted target graph)
 
 - **graphics ↔ input** — XNA semantics (GraphicsDevice updates TouchPanel/Mouse binding;
@@ -94,8 +142,8 @@ Common helper targets (deliberate sharing, not public identities):
 ## Validators
 
 - `modules/CMakeLists.txt` — physical source-partition validator: every production TU must
-  live inside a declared module's `src`/`tests` tree, and the legacy global `src/`/`include/`
-  roots must not reappear (configure-time FATAL_ERROR).
+  live inside a declared module's `src`/`tests`/`examples` tree, and the legacy global
+  `src/`/`include/` roots must not reappear (configure-time FATAL_ERROR).
 - `modularization/tools/check_include_reachability.py` — every `#include "CNA/..."`
   / `"Microsoft/..."` in every module TU (transitively through headers) must resolve through
   the declared module graph; config-gated renderer includes are attributed to their renderer.

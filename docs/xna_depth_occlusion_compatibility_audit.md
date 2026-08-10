@@ -172,7 +172,7 @@ code ever explicitly sets it.
 
 ## 7. Regression testing
 
-New shared (3-renderer) regression test: `examples/graphicsdevice_default_state_occlusion_test.cpp`,
+New shared (3-renderer) regression test: `modules/graphics/examples/graphicsdevice_default_state_occlusion_test.cpp`,
 registered as `EasyGL_GraphicsDevice_DefaultStateOcclusion` / `Vulkan_GraphicsDevice_
 DefaultStateOcclusion` / `Bgfx_GraphicsDevice_DefaultStateOcclusion`.
 
@@ -230,7 +230,7 @@ the full write-up and the new `EasyGL_SpriteBatch_BlendStateLeak` regression tes
 ### `cna_graphics`
 
 - `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`: the 2-line constructor fix (§6).
-- **New**: `examples/graphicsdevice_default_state_occlusion_test.cpp` (§7), registered on all 3
+- **New**: `modules/graphics/examples/graphicsdevice_default_state_occlusion_test.cpp` (§7), registered on all 3
   renderers.
 - `CMakeLists.txt`: 3 new test registrations.
 - **New**: this document + `docs/xna_depth_occlusion_compatibility_audit_images/`.

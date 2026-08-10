@@ -13,7 +13,7 @@
 //   • Dispose marks the resource as disposed.
 //
 // Happy-path SetData/GetData round-trip coverage (per-slice colour verification) lives in
-// the EasyGL pixel-readback integration test: examples/easygl_texture3d_slices_test.cpp.
+// the EasyGL pixel-readback integration test: modules/renderers/easygl/examples/easygl_texture3d_slices_test.cpp.
 //
 // plan_graphics.md Task 863: Texture3D now inherits Texture (matching FNA), instead of
 // GraphicsResource directly, so it can be assigned into GraphicsDevice.Textures/VertexTextures

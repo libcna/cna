@@ -149,7 +149,7 @@ the stride‑56 skinned+color layout used by `SkinnedEffect.VertexColorEnabled` 
   `Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4`, `HdrBlendable`. Supported as **textures**
   today; **not yet as render targets** in the renderers (that is the first task of §5).
 - **Proof‑of‑concept post effects** exist as *example‑level* code only
-  (`examples/easygl_bloom_pipeline_test.cpp`, `easygl_shadowmapping_*`): they demonstrate that
+  (`modules/renderers/easygl/examples/easygl_bloom_pipeline_test.cpp`, `easygl_shadowmapping_*`): they demonstrate that
   `ShaderEffect` + `RenderTarget2D` + `SpriteBatch` are sufficient, but there is **no reusable
   library class**. Turning that example logic into first‑class `CNA::Graphics` passes is exactly
   what §5.3–§5.4 specify.
@@ -597,7 +597,7 @@ implementation precedes its per‑renderer follow‑ups.
 | N03 | `RenderPipelineSettings` config bag | ✅ (extend fields in N30) |
 | N04 | `PbrMaterial` data bag | ✅ (extend in N42) |
 | N05 | `include/CNA/Graphics/CNAEXT.hpp` master include | ⬜ **(mislabeled done; actually missing)** |
-| N06 | `examples/cnaext_settings_example.cpp` compile test | ✅ |
+| N06 | `modules/graphics-ext/examples/cnaext_settings_example.cpp` compile test | ✅ |
 
 ### Renderer foundation for HDR & compute
 

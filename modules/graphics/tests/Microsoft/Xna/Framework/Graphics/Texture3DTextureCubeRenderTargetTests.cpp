@@ -193,7 +193,7 @@ namespace
     /// REMED-GFX-130 left RenderTargetCube READBACK unimplemented here (tracked as
     /// REMED-GFX-134), so this test can only assert that the upload is accepted -- the byte-exact
     /// content assertion for the identical `set_sub_image_2d` path lives on the plain cube in
-    /// examples/texturecube_texture3d_setdata_contract_test.cpp.
+    /// modules/graphics/examples/texturecube_texture3d_setdata_contract_test.cpp.
     constexpr bool kRenderTargetCubeAcceptsSetData = true;
 #elif defined(CNA_RENDERER_OPENGL4)
     /// OpenGL4RenderTargetCubeRenderer::SetData is the same real glTexSubImage2D upload shape as

@@ -62,7 +62,7 @@ renderer.SetMode(CNA::Internal::Renderers::Headless::HeadlessMode::Fast);
 
 A headless test is a normal `Game` subclass, run exactly like any other CNA example — the only
 difference is the renderer selected at CMake configure time. See
-`examples/headless_smoke_test.cpp` and `examples/headless_resource_renderers_test.cpp` for full
+`modules/renderers/headless/examples/headless_smoke_test.cpp` and `modules/renderers/headless/examples/headless_resource_renderers_test.cpp` for full
 working examples. The pattern:
 
 ```cpp

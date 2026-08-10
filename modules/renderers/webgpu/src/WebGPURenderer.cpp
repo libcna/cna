@@ -538,7 +538,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // visible under XNA's default cull mode and the mapping was inverted to satisfy it -- which
         // is why the defect only ever showed in the stock 3D path (the SpriteBatch pipeline below
         // hardcodes WGPUCullMode_None and so was immune). Now measured against the FNA-derived
-        // contract by examples/frontface_winding_test.cpp on eight renderers.
+        // contract by modules/graphics/examples/frontface_winding_test.cpp on eight renderers.
         [[nodiscard]] WGPUCullMode ToWGPUCullMode(int xnaCullMode)
         {
             switch (xnaCullMode)

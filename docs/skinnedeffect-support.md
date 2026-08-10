@@ -83,7 +83,7 @@ unit tests/audits, no GPU rendering exercised yet. **Verify-only, zero bugs foun
 skinning math correctly degenerates to a no-op when every bone transform is `Identity`: for a
 vertex bound 100% to a single bone, `skinMat = 1 × Identity = Identity`, so the mesh renders at
 exactly its authored position. Deliberately structured as a direct contrast with the pre-existing
-(Task 123) `examples/skinned_effect_integration_test.cpp`, which uses identical geometry but sets
+(Task 123) `modules/graphics/examples/skinned_effect_integration_test.cpp`, which uses identical geometry but sets
 bone 0 to a `+0.5` X translation — this test leaves the default identity palette untouched and
 confirms the quad does **not** move.
 

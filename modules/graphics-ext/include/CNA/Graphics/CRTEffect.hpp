@@ -24,7 +24,7 @@ namespace CNA::Graphics {
      * vignette warped around its own local rect instead of one shared curved screen. Render the
      * scene into an offscreen `RenderTarget2D` first (with no `CRTEffect` bound), then redraw
      * that single composited texture full-screen through `CRTEffect` — see
-     * `examples/crt_effect_demo_test.cpp`'s `RenderSceneToTexture()`/`DrawCrtPass()` for the
+     * `modules/graphics-ext/examples/crt_effect_demo_test.cpp`'s `RenderSceneToTexture()`/`DrawCrtPass()` for the
      * exact pattern, including the `SpriteEffects::FlipVertically` needed to compensate for
      * `RenderTarget2D` content being stored bottom-up. Scanlines and the RGB mask do not have
      * this restriction (they index by `gl_FragCoord`, real screen pixels), but the single-pass

@@ -163,7 +163,7 @@ Two established patterns, matching `D3D11`'s own precedent:
    `DirectX9_GraphicsProfile`, ...). Most draw a known scene, read back specific pixels via
    `GraphicsDevice::GetBackBufferData()`, and assert exact or discriminating-expected colors — not
    just "the call returned `S_OK`."
-2. **Pure-function checks** (`examples/directx9_common_test.cpp`, `DirectX9_Common`) — format/state/
+2. **Pure-function checks** (`modules/renderers/directx9/examples/directx9_common_test.cpp`, `DirectX9_Common`) — format/state/
    vertex-layout mapping-table checks needing no device/GPU at all.
 3. **The oracle** (`tools/xna-oracle/`) — for anything where "matches XNA" is the actual
    question, not just "internally consistent." This is the authoritative layer; the CTests above

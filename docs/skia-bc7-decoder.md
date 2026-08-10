@@ -73,7 +73,7 @@ cross-check.
 
 ## Conformance / regression coverage
 
-`Skia_Texture2D_Bc7` (`examples/skia_texture2d_bc7_test.cpp`) covers exact compressed-block
+`Skia_Texture2D_Bc7` (`modules/renderers/skia/examples/skia_texture2d_bc7_test.cpp`) covers exact compressed-block
 transfer, sRGB colour-space handling (`Bc7SrgbEXT` decodes the identical bit pattern that stays
 unchanged as `Bc7EXT`), block-alignment/NPOT-edge validation (reusing the same policy SKIA-140
 established for Dxt1/3/5), malformed/undersized input rejection, the deterministic reserved-mode

@@ -40,7 +40,7 @@ below is otherwise accurate.)*
 | `tests/Microsoft/Xna/Framework/Audio/AudioCategoryTests.cpp` | 10 `setenv` | `SDL_AUDIODRIVER=dummy` |
 | `tests/Microsoft/Xna/Framework/Audio/WaveBankTests.cpp` | 7 `setenv` | `SDL_AUDIODRIVER=dummy` |
 | `tests/Microsoft/Xna/Framework/Audio/AudioEngineTests.cpp` | 3 `setenv` | `SDL_AUDIODRIVER=dummy` |
-| `examples/headless_coverage_gaps_test.cpp` | 4 `setenv`, 1 `unsetenv` | `CNA_HEADLESS_MODE` (Fast/TRACE/validation/bogus) |
+| `modules/renderers/headless/examples/headless_coverage_gaps_test.cpp` | 4 `setenv`, 1 `unsetenv` | `CNA_HEADLESS_MODE` (Fast/TRACE/validation/bogus) |
 | `tests/Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstanceTests.cpp` | 2 `setenv` | `SDL_AUDIODRIVER=dummy` |
 | `tests/Microsoft/Xna/Framework/Audio/SoundBankTests.cpp` | 2 `setenv` | `SDL_AUDIODRIVER=dummy` |
 | `tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp` | 1 `setenv`, 1 `unsetenv` | `FNA_GRAPHICS_JPEG_SAVE_QUALITY=50` |

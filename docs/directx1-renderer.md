@@ -90,7 +90,7 @@ full red channel legitimately bled through regardless of alpha, correct XNA beha
 compositor bug. Fixed by switching the check to `BlendState::NonPremultiplied` (straight alpha),
 the preset a zero-alpha source pixel actually needs to leave the destination untouched.
 
-**Two more real bugs found post-ship, by actually running `examples/demo_2d` live (not just the
+**Two more real bugs found post-ship, by actually running `modules/graphics/examples/demo_2d` live (not just the
 CTest suite) and reported directly by the project owner:**
 
 - **Pixel channel order swap** (a texture that is really yellow rendered as blue/cyan on real

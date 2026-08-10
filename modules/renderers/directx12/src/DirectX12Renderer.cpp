@@ -121,7 +121,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         // DX-102: only attempted when a real window is supplied -- an off-screen construction
         // (args.window == nullptr, what the primary D3D12 CTest suite always uses on this Wine dev
-        // loop, see examples/directx12_smoke_test.cpp) never touches CreateSwapChainForHwnd at all.
+        // loop, see modules/renderers/directx12/examples/directx12_smoke_test.cpp) never touches CreateSwapChainForHwnd at all.
         if (window_)
         {
             CreateSwapChainResources();

@@ -287,13 +287,13 @@ rather than from scratch:
 
 ```bash
 # Generate the Android Studio/Gradle project from SDL's template (already done,
-# checked in under examples/demo_devices/android/ — re-run only if regenerating):
+# checked in under modules/devices/examples/demo_devices/android/ — re-run only if regenerating):
 python3 third_party/SDL/build-scripts/create-android-project.py \
   --variant copy \
-  --output examples/demo_devices/android \
+  --output modules/devices/examples/demo_devices/android \
   com.openeggbert.cna.demodevices \
-  examples/demo_devices/src/Main.cpp examples/demo_devices/src/DevicesDemo.cpp \
-  examples/demo_devices/src/DevicesDemo.hpp
+  modules/devices/examples/demo_devices/src/Main.cpp modules/devices/examples/demo_devices/src/DevicesDemo.cpp \
+  modules/devices/examples/demo_devices/src/DevicesDemo.hpp
 ```
 
 The generated project's own vendored SDL copy (`app/jni/SDL`, ~34MB) was deleted and its
@@ -319,7 +319,7 @@ missing any one sensor.
 
 **Build it:**
 ```bash
-cd examples/demo_devices/android/com.openeggbert.cna.demodevices
+cd modules/devices/examples/demo_devices/android/com.openeggbert.cna.demodevices
 echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 export ANDROID_HOME="$HOME/Android/Sdk"
 ./gradlew -PBUILD_WITH_CMAKE assembleDebug
@@ -345,7 +345,7 @@ adb shell am start -n com.openeggbert.cna.demodevices/com.openeggbert.cna.demode
 
 **First install/launch attempt failed** with a real, specific, now-fixed bug:
 `logcat` showed `nativeRunMain(): Couldn't find function SDL_main in library libmain.so`.
-Root cause: `examples/demo_devices/src/Main.cpp` defines a plain `int main(int, char**)`
+Root cause: `modules/devices/examples/demo_devices/src/Main.cpp` defines a plain `int main(int, char**)`
 and never included `<SDL3/SDL_main.h>` — on desktop this doesn't matter (Linux needs no
 special entry point), but `SDL_PLATFORM_ANDROID` requires `#define main SDL_main` (via
 `SDL_MAIN_NEEDED`, only applied if that header is actually included) because
@@ -355,7 +355,7 @@ a normal native `main()`. Fixed by adding `#include <SDL3/SDL_main.h>` to `Main.
 build, nothing to recompile, no regression). **Note for anyone regenerating this Android
 project:** `create-android-project.py --variant copy` duplicates source files into
 `app/jni/src/` rather than symlinking them — editing the original
-`examples/demo_devices/src/*` does **not** automatically propagate; re-`cp` (or
+`modules/devices/examples/demo_devices/src/*` does **not** automatically propagate; re-`cp` (or
 regenerate) after any source change.
 
 After that fix: `adb logcat` showed
