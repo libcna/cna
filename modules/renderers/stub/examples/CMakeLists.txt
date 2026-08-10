@@ -34,3 +34,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "STUB")
     cna_register_renderer_test(NAME Stub_Smoke COMMAND cna_test_stub_smoke
         TIMEOUT 30 LABELS "Stub")
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

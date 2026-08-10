@@ -125,3 +125,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "GDI")
             ENVIRONMENT "CNA_GDI_DIRTY_PRESENTATION=1;CNA_GDI_PRESENT_FILTER=halftone;CNA_GDI_DWM_FLUSH=0")
     endif()
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

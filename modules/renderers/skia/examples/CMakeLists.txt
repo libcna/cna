@@ -989,3 +989,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_skia_accelerated_test(Skia_Ganesh_ResourceBudget cna_test_skia_ganesh_resource_budget)
     endif()
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

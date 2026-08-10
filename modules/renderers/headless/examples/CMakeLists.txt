@@ -474,3 +474,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
         COMMAND cna_test_headless_cube_volume_setdata_contract
         TIMEOUT 30 LABELS "Headless")
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

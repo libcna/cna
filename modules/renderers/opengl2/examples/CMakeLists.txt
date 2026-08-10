@@ -296,3 +296,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL2")
     cna_register_renderer_test(NAME OpenGL2_SpriteBatch_BlendStateLeak COMMAND cna_test_opengl2_spritebatch_blendstate_leak
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

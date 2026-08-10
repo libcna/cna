@@ -208,3 +208,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME FreeDirect_CubeVolume_SetDataContract COMMAND cna_test_freedirect_cube_volume_setdata_contract
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

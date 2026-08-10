@@ -105,3 +105,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
     cna_register_renderer_test(NAME Direct2D_Lifetime COMMAND ${_direct2d_lifetime_command}
         TIMEOUT 60 LABELS "Direct2D;2D;Lifetime" ENVIRONMENT "${_direct2d_lifetime_environment}")
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

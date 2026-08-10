@@ -127,3 +127,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     target_link_libraries(cna_test_canvas_unsupported_3d_behavior
                           PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

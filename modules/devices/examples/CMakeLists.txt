@@ -69,3 +69,7 @@ if(CNA_BUILD_EXAMPLES AND NOT ANDROID)
         endif()
     endif()
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

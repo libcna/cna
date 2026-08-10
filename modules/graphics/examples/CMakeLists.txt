@@ -179,3 +179,7 @@ if(CNA_BUILD_TESTS AND EMSCRIPTEN)
             "-sMAX_WEBGL_VERSION=2")
     endif()
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

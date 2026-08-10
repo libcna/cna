@@ -117,3 +117,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_HTML_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
     add_test(NAME HtmlDomHostContracts COMMAND cna_test_htmldom_host)
     set_tests_properties(HtmlDomHostContracts PROPERTIES LABELS "HTML_DOM;host-only")
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

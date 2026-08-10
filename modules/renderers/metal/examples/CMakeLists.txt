@@ -68,3 +68,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     cna_register_renderer_test(NAME Metal_Capabilities COMMAND cna_test_metal_capabilities
         TIMEOUT 30 LABELS "Metal")
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

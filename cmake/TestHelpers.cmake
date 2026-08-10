@@ -46,3 +46,16 @@ function(cna_register_renderer_test)
         set_tests_properties(${T_NAME} PROPERTIES ${_cna_test_props})
     endif()
 endfunction()
+
+# Task 470's headless-safe CTest skip convention, extended to subdirectory scopes.
+# The root CMakeLists applies SKIP_RETURN_CODE 77 in one shot to every test registered at
+# root scope (cmake/UnitTests.cmake); a DIRECTORY TESTS property only sees its own
+# directory's registrations, so each module-local example/test registration file calls this
+# at its end to give its own tests the identical convention. Purely additive, exactly like
+# the root one-shot: a test that never exits 77 is completely unaffected.
+function(cna_apply_skip_convention)
+    get_property(_cna_dir_tests DIRECTORY PROPERTY TESTS)
+    if(_cna_dir_tests)
+        set_tests_properties(${_cna_dir_tests} PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endfunction()

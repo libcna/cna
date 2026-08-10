@@ -187,3 +187,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
     cna_register_renderer_test(NAME DirectX7_Stencil COMMAND ${_directx7_stencil_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()

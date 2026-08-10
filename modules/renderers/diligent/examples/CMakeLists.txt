@@ -227,3 +227,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
                       diligent_lighting_fidelity_test.cpp)
     cna_register_diligent_test(Diligent_LightingFidelity cna_test_diligent_lighting_fidelity)
 endif()
+
+# Module-local tests get the same headless-safe skip convention the root one-shot
+# gives root-registered tests (see cmake/TestHelpers.cmake).
+cna_apply_skip_convention()
