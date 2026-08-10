@@ -44,6 +44,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_State COMMAND cna_test_fna3d_state
         TIMEOUT 120 LABELS "Fna3d")
 
+    cna_fna3d_test(cna_test_fna3d_compressed fna3d_compressed_test.cpp)
+    cna_register_renderer_test(NAME Fna3d_Compressed COMMAND cna_test_fna3d_compressed
+        TIMEOUT 120 LABELS "Fna3d")
+
     cna_fna3d_test(cna_test_fna3d_capabilities fna3d_capabilities_test.cpp)
     cna_register_renderer_test(NAME Fna3d_Capabilities COMMAND cna_test_fna3d_capabilities
         TIMEOUT 120 LABELS "Fna3d")

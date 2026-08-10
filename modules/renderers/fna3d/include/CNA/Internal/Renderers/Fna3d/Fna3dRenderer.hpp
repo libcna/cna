@@ -58,9 +58,11 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param height       Level-0 height in texels.
          * @param levelCount   Allocated mip level count.
          * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal the texture was created with.
+         * @param compressedReadback Whether the running driver reads block-compressed textures
+         *                     back; only consulted for a block-compressed @p surfaceFormat.
          */
         Fna3dTextureRenderer(FNA3D_Device* device, FNA3D_Texture* texture, int width, int height,
-                             int levelCount, int surfaceFormat);
+                             int levelCount, int surfaceFormat, bool compressedReadback = true);
         ~Fna3dTextureRenderer() override;
 
         Fna3dTextureRenderer(const Fna3dTextureRenderer&) = delete;
@@ -134,6 +136,8 @@ namespace CNA::Internal::Renderers::Fna3d
         int levelCount_ = 1;
         /** @brief Raw XNA `SurfaceFormat` ordinal. */
         int surfaceFormat_ = 0;
+        /** @brief Whether the running driver reads block-compressed textures back. */
+        bool compressedReadback_ = true;
         /** @brief Bit i set once level i has been written by the caller. */
         std::uint32_t definedLevels_ = 0;
     };
@@ -1355,6 +1359,56 @@ namespace CNA::Internal::Renderers::Fna3d
         void UnbindTargetsEXT();
 
         /**
+         * @brief CNAEXT. Refuses a texture surface format the running FNA3D driver cannot store.
+         *
+         * FNA3D reports compressed-format support per family (`FNA3D_SupportsDXT1`,
+         * `FNA3D_SupportsS3TC`, `FNA3D_SupportsBC7`). Creating a texture the driver has no format
+         * for would leave a resource that samples as garbage, so the request is refused by name
+         * instead.
+         *
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @param what          Resource kind named in the exception, e.g. "Texture2D".
+         * @throws std::runtime_error when the driver does not support that format.
+         */
+        void RequireTextureFormatSupportedEXT(int surfaceFormat, const char* what) const;
+
+        /**
+         * @brief CNAEXT. Refuses an sRGB render-target format on a driver without sRGB targets.
+         *
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @throws std::runtime_error when an sRGB target was asked of a driver that has none.
+         */
+        void RequireRenderTargetFormatSupportedEXT(int surfaceFormat) const;
+
+        /** @brief CNAEXT. Fragment-shader texture slots the running driver actually exposes. */
+        [[nodiscard]] int GetMaxTextureSlotsEXT() const { return maxTextureSlots_; }
+
+        /** @brief CNAEXT. Vertex-shader texture slots the running driver actually exposes. */
+        [[nodiscard]] int GetMaxVertexTextureSlotsEXT() const { return maxVertexTextureSlots_; }
+
+        /**
+         * @brief CNAEXT. Whether the running driver can store this block-compressed format.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @return True when the format is uncompressed or its compressed family is supported.
+         */
+        [[nodiscard]] bool SupportsTextureFormatEXT(int surfaceFormat) const;
+
+        /**
+         * @brief CNAEXT. Whether the running driver reads block-compressed textures back.
+         *
+         * Measured once at device creation, because FNA3D's drivers disagree (its OpenGL and
+         * Direct3D 11 drivers refuse compressed `GetTextureData2D` outright, its SDL_GPU driver
+         * forwards it) and expose no query. `GetData` on a compressed texture reports that it read
+         * nothing when this is false, rather than returning a buffer the driver never wrote.
+         *
+         * @return True when a compressed readback genuinely returns the stored blocks.
+         */
+        [[nodiscard]] bool SupportsCompressedReadbackEXT() const
+        {
+            return compressedReadbackSupported_;
+        }
+
+        /**
          * @brief CNAEXT. Selects and applies the stock effect a draw's parameters describe.
          * @param world      World matrix.
          * @param view       View matrix.
@@ -1417,6 +1471,8 @@ namespace CNA::Internal::Renderers::Fna3d
         void ClearInternal(FNA3D_ClearOptions options, const FNA3D_Vec4* color, float depth,
                            int stencil);
         void ProbeTexture3DReadbackSupport();
+        void ProbeCompressedReadbackSupport();
+        void QueryDriverLimits();
         void ResetBackbuffer();
         void RecomputeLayout();
         [[nodiscard]] int ClampMultiSampleCount(int requested, int format) const;
@@ -1448,5 +1504,20 @@ namespace CNA::Internal::Renderers::Fna3d
         /// Measured once at device creation: whether the selected FNA3D driver implements
         /// GetTextureData3D at all. See Fna3dTexture3DRenderer's own mirror.
         bool texture3DReadbackSupported_ = true;
+
+        /// Measured once at device creation: whether the selected FNA3D driver implements
+        /// GetTextureData2D for block-compressed formats. Unlike the volume case there is no
+        /// mirror behind it -- a false here makes GetData answer "read nothing".
+        bool compressedReadbackSupported_ = false;
+
+        /// Driver-reported format and slot limits, queried once at device creation. Every one of
+        /// them exists so a request the driver cannot serve is refused by name rather than
+        /// accepted into a resource that would sample as garbage.
+        bool supportsDxt1_ = false;
+        bool supportsS3tc_ = false;
+        bool supportsBc7_ = false;
+        bool supportsSrgbRenderTargets_ = false;
+        int maxTextureSlots_ = 0;
+        int maxVertexTextureSlots_ = 0;
     };
 }

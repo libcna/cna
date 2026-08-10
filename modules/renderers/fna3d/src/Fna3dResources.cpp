@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Fna3d
@@ -20,6 +22,38 @@ namespace CNA::Internal::Renderers::Fna3d
                 extent /= 2;
             }
             return extent > 0 ? extent : 1;
+        }
+
+        /**
+         * FNA3D_SupportsNoOverwrite reports whether the running driver can honour a no-overwrite
+         * upload; FNA itself downgrades to the plain option when it cannot, and forwarding it
+         * blindly would ask a driver for a guarantee it never made.
+         */
+        FNA3D_SetDataOptions ResolveSetDataOptions(FNA3D_Device* device, SetDataOptions options)
+        {
+            const FNA3D_SetDataOptions resolved = ToFna3dSetDataOptions(options);
+            if (resolved == FNA3D_SETDATAOPTIONS_NOOVERWRITE &&
+                FNA3D_SupportsNoOverwrite(device) == 0)
+            {
+                return FNA3D_SETDATAOPTIONS_NONE;
+            }
+            return resolved;
+        }
+
+        /**
+         * Volume and cube transfers are RGBA8 in CNA's own renderer contract, so a block-
+         * compressed request would be sized wrongly by every transfer. Refuse it by name.
+         */
+        void RequireLinearTransferFormatEXT(int surfaceFormat, const char* what)
+        {
+            if (IsBlockCompressedFormat(surfaceFormat))
+            {
+                throw std::runtime_error(
+                    std::string("FNA3D renderer: ") + what +
+                    " does not accept a block-compressed surface format -- CNA's renderer "
+                    "contract transfers volume and cube data as RGBA8, so the compressed byte "
+                    "layout could not be honoured.");
+            }
         }
 
         /** Full mip chain length for a base extent, or 1 when mips were not requested. */
@@ -45,13 +79,14 @@ namespace CNA::Internal::Renderers::Fna3d
 
     Fna3dTextureRenderer::Fna3dTextureRenderer(FNA3D_Device* device, FNA3D_Texture* texture,
                                                int width, int height, int levelCount,
-                                               int surfaceFormat)
+                                               int surfaceFormat, bool compressedReadback)
         : device_(device)
         , texture_(texture)
         , width_(width)
         , height_(height)
         , levelCount_(levelCount > 0 ? levelCount : 1)
         , surfaceFormat_(surfaceFormat)
+        , compressedReadback_(compressedReadback)
     {
     }
 
@@ -81,26 +116,44 @@ namespace CNA::Internal::Renderers::Fna3d
         return (definedLevels_ & (1u << level)) != 0;
     }
 
-    void Fna3dTextureRenderer::UpdatePixels(const std::uint8_t* rgba, int stride)
+    void Fna3dTextureRenderer::UpdatePixels(const std::uint8_t* pixels, int stride)
     {
-        if (rgba == nullptr || texture_ == nullptr)
+        if (pixels == nullptr || texture_ == nullptr)
         {
             return;
         }
 
-        const int tightStride = width_ * 4;
-        if (stride == tightStride)
+        // `ImageData::surfaceFormat` is part of the renderer contract and may name a
+        // block-compressed ordinal, whose raw blocks travel through this RGBA-named method
+        // (SKIA-140/141's convention). Neither the row pitch nor the total byte count may then be
+        // derived from `width * 4` -- doing so reads past the end of the source buffer.
+        const int levelBytes = FormatRegionByteCount(surfaceFormat_, width_, height_);
+        const int tightStride = FormatRowByteCount(surfaceFormat_, width_);
+        const int rowCount = IsBlockCompressedFormat(surfaceFormat_) ? (height_ + 3) / 4 : height_;
+        if (levelBytes <= 0 || tightStride <= 0)
+        {
+            return;
+        }
+        if (stride > 0 && stride < tightStride)
+        {
+            // A source row narrower than one packed row cannot hold this level; reading it either
+            // way would run off the end of the caller's buffer. Same silent-return convention the
+            // null/empty guards above use.
+            return;
+        }
+
+        if (stride == tightStride || stride <= 0)
         {
             FNA3D_SetTextureData2D(device_, texture_, 0, 0, width_, height_, 0,
-                                   const_cast<std::uint8_t*>(rgba), tightStride * height_);
+                                   const_cast<std::uint8_t*>(pixels), levelBytes);
         }
         else
         {
-            std::vector<std::uint8_t> packed(static_cast<std::size_t>(tightStride) * height_);
-            for (int row = 0; row < height_; ++row)
+            std::vector<std::uint8_t> packed(static_cast<std::size_t>(levelBytes));
+            for (int row = 0; row < rowCount; ++row)
             {
                 std::memcpy(packed.data() + static_cast<std::size_t>(row) * tightStride,
-                            rgba + static_cast<std::size_t>(row) * stride,
+                            pixels + static_cast<std::size_t>(row) * stride,
                             static_cast<std::size_t>(tightStride));
             }
             FNA3D_SetTextureData2D(device_, texture_, 0, 0, width_, height_, 0, packed.data(),
@@ -109,28 +162,42 @@ namespace CNA::Internal::Renderers::Fna3d
         MarkLevelDefinedEXT(0);
     }
 
-    void Fna3dTextureRenderer::UpdatePixelsLevel(int level, const std::uint8_t* rgba, int levelW,
+    void Fna3dTextureRenderer::UpdatePixelsLevel(int level, const std::uint8_t* pixels, int levelW,
                                                  int levelH)
     {
-        if (rgba == nullptr || texture_ == nullptr || level < 0 || level >= levelCount_ ||
+        if (pixels == nullptr || texture_ == nullptr || level < 0 || level >= levelCount_ ||
             levelW <= 0 || levelH <= 0)
         {
             return;
         }
+        const int levelBytes = FormatRegionByteCount(surfaceFormat_, levelW, levelH);
+        if (levelBytes <= 0)
+        {
+            return;
+        }
         FNA3D_SetTextureData2D(device_, texture_, 0, 0, levelW, levelH, level,
-                               const_cast<std::uint8_t*>(rgba), levelW * levelH * 4);
+                               const_cast<std::uint8_t*>(pixels), levelBytes);
         MarkLevelDefinedEXT(level);
     }
 
     bool Fna3dTextureRenderer::GetData(int level, int x, int y, int w, int h, void* data,
                                        int dataLength) const
     {
+        const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
         if (texture_ == nullptr || data == nullptr || w <= 0 || h <= 0 || level < 0 ||
-            level >= levelCount_ || dataLength < w * h * 4)
+            level >= levelCount_ || regionBytes <= 0 || dataLength < regionBytes)
         {
             return false;
         }
-        FNA3D_GetTextureData2D(device_, texture_, x, y, w, h, level, data, w * h * 4);
+        // FNA3D's OpenGL and Direct3D 11 drivers refuse a compressed GetTextureData2D and write
+        // nothing; only its SDL_GPU driver forwards it. Reporting success there would hand the
+        // caller whatever the destination already held, which is precisely what this method's
+        // contract forbids, so a driver that cannot read compressed blocks answers "read nothing".
+        if (!compressedReadback_ && IsBlockCompressedFormat(surfaceFormat_))
+        {
+            return false;
+        }
+        FNA3D_GetTextureData2D(device_, texture_, x, y, w, h, level, data, regionBytes);
         return true;
     }
 
@@ -160,6 +227,7 @@ namespace CNA::Internal::Renderers::Fna3d
             throw std::runtime_error(
                 "FNA3D renderer: FNA3D_CreateTexture2D failed for a render target.");
         }
+        FNA3D_SetTextureName(device_, texture_, "CNA RenderTarget2D");
 
         if (multiSampleCount > 1)
         {
@@ -254,8 +322,11 @@ namespace CNA::Internal::Renderers::Fna3d
     bool Fna3dRenderTargetRenderer::GetData(int level, int x, int y, int w, int h, void* data,
                                             int dataLength) const
     {
+        // A render target created through CreateRenderTarget2DEXT may carry any surface format,
+        // so its readback is sized by that format rather than assumed to be RGBA8.
+        const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
         if (texture_ == nullptr || data == nullptr || w <= 0 || h <= 0 || level < 0 ||
-            level >= levelCount_ || dataLength < w * h * 4)
+            level >= levelCount_ || regionBytes <= 0 || dataLength < regionBytes)
         {
             return false;
         }
@@ -263,7 +334,7 @@ namespace CNA::Internal::Renderers::Fna3d
         // once FNA3D has resolved it; the renderer resolves on unbind, so reading a target that is
         // still bound would see stale content. Resolve-on-unbind plus this ordering is exactly
         // FNA's own contract for RenderTarget2D.GetData.
-        FNA3D_GetTextureData2D(device_, texture_, x, y, w, h, level, data, w * h * 4);
+        FNA3D_GetTextureData2D(device_, texture_, x, y, w, h, level, data, regionBytes);
         return true;
     }
 
@@ -341,6 +412,7 @@ namespace CNA::Internal::Renderers::Fna3d
             throw std::runtime_error(
                 "FNA3D renderer: FNA3D_CreateTextureCube failed for a render target.");
         }
+        FNA3D_SetTextureName(device_, texture_, "CNA RenderTargetCube");
 
         if (multiSampleCount > 1)
         {
@@ -631,7 +703,7 @@ namespace CNA::Internal::Renderers::Fna3d
         // A freshly allocated buffer has no previous content to preserve or alias, so NoOverwrite
         // would be a lie about GPU state; Discard is the only honest hint for a first write.
         const FNA3D_SetDataOptions resolved =
-            reallocated ? FNA3D_SETDATAOPTIONS_DISCARD : ToFna3dSetDataOptions(options);
+            reallocated ? FNA3D_SETDATAOPTIONS_DISCARD : ResolveSetDataOptions(device_, options);
 
         FNA3D_SetVertexBufferData(device_, buffer_, 0, const_cast<void*>(data), vertex_count,
                                   static_cast<int32_t>(stride_in_bytes),
@@ -736,13 +808,13 @@ namespace CNA::Internal::Renderers::Fna3d
     void Fna3dIndexBufferRenderer::SetData16WithOptions(const void* data, int index_count,
                                                         SetDataOptions options)
     {
-        Upload(data, index_count, 2, false, ToFna3dSetDataOptions(options));
+        Upload(data, index_count, 2, false, ResolveSetDataOptions(device_, options));
     }
 
     void Fna3dIndexBufferRenderer::SetData32WithOptions(const void* data, int index_count,
                                                         SetDataOptions options)
     {
-        Upload(data, index_count, 4, true, ToFna3dSetDataOptions(options));
+        Upload(data, index_count, 4, true, ResolveSetDataOptions(device_, options));
     }
 
     // ---------------------------------------------------------------------------------------
@@ -798,6 +870,7 @@ namespace CNA::Internal::Renderers::Fna3d
         const int height = data.height > 0 ? data.height : 1;
         const int levelCount = data.mipLevels > 0 ? data.mipLevels : 1;
         const FNA3D_SurfaceFormat format = ToFna3dSurfaceFormat(data.surfaceFormat);
+        RequireTextureFormatSupportedEXT(data.surfaceFormat, "Texture2D");
 
         FNA3D_Texture* texture =
             FNA3D_CreateTexture2D(device_, format, width, height, levelCount, 0);
@@ -806,11 +879,21 @@ namespace CNA::Internal::Renderers::Fna3d
             throw std::runtime_error("FNA3D renderer: FNA3D_CreateTexture2D failed.");
         }
 
+        // FNA3D forwards this to the native API's own debug-object naming (glObjectLabel,
+        // ID3D11DeviceChild::SetPrivateData, SDL_GPU's texture name), so a RenderDoc/apitrace
+        // capture of a CNA frame shows recognisable resources instead of anonymous handles.
+        FNA3D_SetTextureName(device_, texture, "CNA Texture2D");
+
         auto handle = std::make_unique<Fna3dTextureRenderer>(device_, texture, width, height,
-                                                             levelCount, data.surfaceFormat);
+                                                             levelCount, data.surfaceFormat,
+                                                             compressedReadbackSupported_);
         if (!data.pixels.empty())
         {
-            handle->UpdatePixels(data.pixels.data(), width * 4);
+            // `ImageData::pixels` is always tightly packed, and for a block-compressed ordinal a
+            // tight row is one block row -- not `width * 4`, which would send UpdatePixels down its
+            // repack branch and read past the end of the vector.
+            handle->UpdatePixels(data.pixels.data(),
+                                 FormatRowByteCount(data.surfaceFormat, width));
         }
         return handle;
     }
@@ -827,6 +910,10 @@ namespace CNA::Internal::Renderers::Fna3d
         const int width = w > 0 ? w : 1;
         const int height = h > 0 ? h : 1;
         const int slices = depth > 0 ? depth : 1;
+        // Volume and cube transfers are RGBA8 in CNA's own renderer contract (the DDS/XNB readers
+        // decompress on the CPU before upload), so a block-compressed request here would be sized
+        // wrongly by every transfer below. Refusing is the honest answer rather than mis-sizing.
+        RequireLinearTransferFormatEXT(surfaceFormat, "Texture3D");
         const int levelCount = LevelCountFor(std::max({ width, height, slices }), mipMap);
         FNA3D_Texture* texture = FNA3D_CreateTexture3D(
             device_, ToFna3dSurfaceFormat(surfaceFormat), width, height, slices, levelCount);
@@ -842,6 +929,7 @@ namespace CNA::Internal::Renderers::Fna3d
     std::unique_ptr<ITextureCubeRenderer> Fna3dRenderer::CreateTextureCube(int size, bool mipMap,
                                                                            int surfaceFormat)
     {
+        RequireLinearTransferFormatEXT(surfaceFormat, "TextureCube");
         const int edge = size > 0 ? size : 1;
         const int levelCount = LevelCountFor(edge, mipMap);
         FNA3D_Texture* texture = FNA3D_CreateTextureCube(
@@ -865,6 +953,7 @@ namespace CNA::Internal::Renderers::Fna3d
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount,
         int surfaceFormat)
     {
+        RequireRenderTargetFormatSupportedEXT(surfaceFormat);
         return std::make_unique<Fna3dRenderTargetRenderer>(this, device_, w, h, depthFormat,
                                                            preserveContents, mipMap,
                                                            multiSampleCount, surfaceFormat);

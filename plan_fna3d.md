@@ -59,6 +59,8 @@ native API: it picks SDL_GPU, Direct3D 11 or OpenGL at runtime. That is still on
 | 2 | `GraphicsCapability::Instancing` is false; `DrawInstancedPrimitivesEx` refuses | FNA3D instances fine, but the stock effects declare no per-instance vertex input — in real XNA, hardware instancing needs a custom Effect, which is divergence 1 again. Rendering anyway would stack every instance on record 0. |
 | 3 | `Texture3D::GetData` is served from an upload mirror on drivers without volume readback | FNA3D's OpenGL driver implements no `GetTextureData3D`. A volume texture in XNA has no GPU write path, so mirroring the uploads is exact, not invented. Measured once per device by a 1×1×1 probe; not kept on drivers that do support the readback. |
 | 4 | The 2D sprite submission disables culling and restores the tracked state immediately | Sprite quads have a fixed winding a game's `RasterizerState.CullMode` has no reason to agree with, and XNA's 2D pipeline is not culled in practice. |
+| 5 | `SetDataOptions::NoOverwrite` is downgraded to `None` on a driver without it | `FNA3D_SupportsNoOverwrite` answers per driver. XNA's `NoOverwrite` is a promise the *caller* makes, so honouring it as a plain write is correct where the driver has no fast path; claiming the fast path it does not have would not be. |
+| 6 | `ITextureRenderer::GetData` returns false for a block-compressed texture on OpenGL/D3D11 | Those FNA3D drivers refuse compressed `GetTextureData2D` and write nothing. The contract says `true` means the whole region was written, so the honest answer is `false` — measured once per device by a 4×4 DXT1 probe rather than assumed from the driver name. |
 
 ## Tasks
 
@@ -84,6 +86,13 @@ native API: it picks SDL_GPU, Direct3D 11 or OpenGL at runtime. That is still on
 | FNA3D-16 | Unit tests: presentation layout and its inverse transform | **done** |
 | FNA3D-17 | Unit tests: enum bridge rejection and the stride table | **done** |
 | FNA3D-18 | Documentation: renderer doc, registry, physical-module inventory, third-party notices | **done** |
+| FNA3D-19 | Format-correct transfer sizing (`Fna3dSurfaceFormats`) for block-compressed formats | **done** — `Fna3d_Compressed`, `Fna3dSurfaceFormatTests` |
+| FNA3D-20 | Driver limit queries: `FNA3D_SupportsDXT1/S3TC/BC7/SRGBRenderTargets`, `FNA3D_GetMaxTextureSlots` | **done** |
+| FNA3D-21 | Compressed-readback probe; `GetData` refuses instead of reporting an untouched buffer | **done** |
+| FNA3D-22 | `FNA3D_SupportsNoOverwrite` gate: downgrade `NoOverwrite` to `None` where the driver has none | **done** |
+| FNA3D-23 | `FNA3D_SetTextureName` on textures and render targets, for capture tools | **done** |
+| FNA3D-24 | `FNA3D_LinkedVersion()` vs `FNA3D_COMPILED_VERSION` check at device creation | **done** |
+| FNA3D-25 | Sampler-slot ceiling: refuse a bind past the driver's real fragment texture-slot count | **done** |
 
 ## Deferred / external gates
 
@@ -95,3 +104,9 @@ native API: it picks SDL_GPU, Direct3D 11 or OpenGL at runtime. That is still on
 | Custom `ShaderEffect` | Blocked upstream by design (divergence 1). Would need FNA3D to gain a shader-source entry point, or CNA to ship a D3D9 effect compiler. |
 | Instanced drawing | Blocked by divergence 2, which is divergence 1 again. |
 | `DebugSimulateContextLoss` / `DebugRestoreContext` | Not implemented; FNA3D exposes no device-loss surface. |
+| Block-compressed readback | Implemented and measured, but FNA3D's OpenGL and Direct3D 11 drivers both refuse compressed `GetTextureData2D` outright. On those drivers `GetData` reports that it read nothing; on SDL_GPU it reads the blocks back. External gate: the "reads back" arm is unexercised here because no container has a working SDL_GPU stack. |
+| Public compressed `Texture2D` | Blocked one level above this renderer: the shared `Texture::ValidateFormat` still admits only `SurfaceFormat::Color` for every renderer but Skia, so no public XNA texture under FNA3D is compressed. The renderer contract itself has no such restriction and is sized correctly for every format (FNA3D-19). Opening that gate is a shared-graphics decision, not an FNA3D one. |
+| `FNA3D_SetTextureDataYUV` | Unreachable: `IGraphicsRenderer` has no YUV texture route, and `VideoDecoder` converts YUV→RGBA in the media module before any renderer sees it. Using it would need a shared-contract change. |
+| `FNA3D_GetVertexBufferData` / `FNA3D_GetIndexBufferData` | Unreachable: `IVertexBufferRenderer`/`IIndexBufferRenderer` expose no readback method, and XNA's `GetData` on those buffers is served from the shared layer's own CPU shadow. Would need a shared-contract change. |
+| `FNA3D_CloneEffect` | Unreachable: CNA has one instance of each stock effect per device and no public `Effect` clone route. |
+| `FNA3D_VerifyVertexSampler` | Unreachable: the stock effects declare no vertex-shader sampler, and `IGraphicsRenderer` exposes no vertex-texture binding. The driver's vertex slot count is nevertheless reported (`GetMaxVertexTextureSlotsEXT`). |

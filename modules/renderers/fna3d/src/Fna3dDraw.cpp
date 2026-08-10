@@ -6,6 +6,7 @@
 #include <array>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Fna3d
@@ -202,10 +203,27 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dRenderer::BindEffectTextureEXT(int slot, const ITextureRenderer* texture)
     {
-        if (slot < 0 || slot >= static_cast<int>(samplerStates_.size()))
+        if (slot < 0)
         {
             return;
         }
+        // A texture bound to a slot the driver does not have samples nothing at all, silently.
+        // FNA3D reports the driver's real ceiling, so this is the point where such a bind is
+        // refused by name. The check precedes the sampler-array bound below because on a driver
+        // whose ceiling is XNA's own 16 the two coincide, and a silent return there would make the
+        // boundary unobservable.
+        if (maxTextureSlots_ > 0 && slot >= maxTextureSlots_)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: a texture was bound to sampler slot " + std::to_string(slot) +
+                ", but the running driver exposes only " + std::to_string(maxTextureSlots_) +
+                " fragment texture slots. Binding it would sample nothing.");
+        }
+        if (slot >= static_cast<int>(samplerStates_.size()))
+        {
+            return;
+        }
+
         // A render target bound as an effect texture is an IRenderTargetRenderer, not an
         // Fna3dTextureRenderer, so the sampled-texture mix-in is what both have in common.
         const auto* sampled = dynamic_cast<const Fna3dSampledTexture*>(texture);

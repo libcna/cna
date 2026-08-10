@@ -2,7 +2,10 @@
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dWindowFlags.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+
 #include "CNA/LogCategory.hpp"
 #include "CNA/Logger.hpp"
 
@@ -13,6 +16,7 @@
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 
 namespace CNA::Internal::Renderers::Fna3d
 {
@@ -65,6 +69,21 @@ namespace CNA::Internal::Renderers::Fna3d
         , presentationMode_(args.presentationMode)
     {
         FNA3D_HookLogFunctions(ForwardInfo, ForwardWarn, ForwardError);
+
+        // FNA3D is fetched and built from source at a pinned revision, so the linked library and
+        // the headers CNA compiled against always agree -- but saying so is a one-call check, and
+        // a mismatch (a system FNA3D picked up by an unusual link order) would otherwise surface
+        // as unexplained struct-layout corruption rather than a clear message.
+        const uint32_t linkedVersion = FNA3D_LinkedVersion();
+        if (linkedVersion != FNA3D_COMPILED_VERSION)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: the linked FNA3D reports version " +
+                std::to_string(linkedVersion) + " but CNA was compiled against " +
+                std::to_string(static_cast<uint32_t>(FNA3D_COMPILED_VERSION)) +
+                ". The renderer refuses to run against a mismatched library, whose structure "
+                "layouts it cannot assume.");
+        }
 
         if (window_ == nullptr)
         {
@@ -200,8 +219,96 @@ namespace CNA::Internal::Renderers::Fna3d
             .Load(device_, kSkinnedEffectFxb, sizeof(kSkinnedEffectFxb), "SkinnedEffect");
 
         ProbeTexture3DReadbackSupport();
+        QueryDriverLimits();
+        ProbeCompressedReadbackSupport();
 
         IGraphicsRenderer::RegisterForWindow(window_, this);
+    }
+
+    void Fna3dRenderer::QueryDriverLimits()
+    {
+        // FNA3D answers all of these per running driver, and every one of them changes what this
+        // renderer may honestly accept. Asking once at device creation keeps the answers out of
+        // the per-resource path while still making them the driver's answers rather than CNA's
+        // assumptions.
+        supportsDxt1_ = FNA3D_SupportsDXT1(device_) != 0;
+        supportsS3tc_ = FNA3D_SupportsS3TC(device_) != 0;
+        supportsBc7_ = FNA3D_SupportsBC7(device_) != 0;
+        supportsSrgbRenderTargets_ = FNA3D_SupportsSRGBRenderTargets(device_) != 0;
+
+        int32_t textureSlots = 0;
+        int32_t vertexTextureSlots = 0;
+        FNA3D_GetMaxTextureSlots(device_, &textureSlots, &vertexTextureSlots);
+        maxTextureSlots_ = static_cast<int>(textureSlots);
+        maxVertexTextureSlots_ = static_cast<int>(vertexTextureSlots);
+
+        CNA::Logger::Info(
+            "FNA3D: driver limits -- DXT1 " + std::string(supportsDxt1_ ? "yes" : "no") +
+                ", S3TC " + (supportsS3tc_ ? "yes" : "no") +
+                ", BC7 " + (supportsBc7_ ? "yes" : "no") +
+                ", sRGB render targets " + (supportsSrgbRenderTargets_ ? "yes" : "no") +
+                ", texture slots " + std::to_string(maxTextureSlots_) +
+                " (vertex " + std::to_string(maxVertexTextureSlots_) + ")",
+            CNA::LogCategory::RENDER);
+    }
+
+    bool Fna3dRenderer::SupportsTextureFormatEXT(int surfaceFormat) const
+    {
+        using Xna = Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<Xna>(surfaceFormat))
+        {
+            case Xna::Dxt1:
+                // FNA3D reports DXT1 separately because some drivers expose the DXT1-only subset.
+                return supportsDxt1_ || supportsS3tc_;
+            case Xna::Dxt3:
+            case Xna::Dxt5:
+            case Xna::Dxt5SrgbEXT:
+                return supportsS3tc_;
+            case Xna::Bc7EXT:
+            case Xna::Bc7SrgbEXT:
+                return supportsBc7_;
+            default:
+                // Every uncompressed format FNA3D's enumeration has is a format its drivers
+                // create; only the compressed families are optional.
+                return true;
+        }
+    }
+
+    void Fna3dRenderer::RequireTextureFormatSupportedEXT(int surfaceFormat, const char* what) const
+    {
+        if (SupportsTextureFormatEXT(surfaceFormat))
+        {
+            return;
+        }
+        throw std::runtime_error(
+            std::string("FNA3D renderer: the running driver reports no support for the ") +
+            "block-compressed surface format ordinal " + std::to_string(surfaceFormat) +
+            " requested for a " + what + ", so the texture is refused rather than created with "
+            "content it cannot sample.");
+    }
+
+    void Fna3dRenderer::RequireRenderTargetFormatSupportedEXT(int surfaceFormat) const
+    {
+        using Xna = Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const Xna format = static_cast<Xna>(surfaceFormat);
+        const bool wantsSrgb = format == Xna::ColorSrgbEXT || format == Xna::Dxt5SrgbEXT ||
+                               format == Xna::Bc7SrgbEXT;
+        if (wantsSrgb && !supportsSrgbRenderTargets_)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: the running driver reports no sRGB render-target support, so an "
+                "sRGB render target is refused rather than created as a linear one that would "
+                "silently render with the wrong gamma.");
+        }
+        // A render target is something the GPU writes; no driver renders into a block-compressed
+        // surface, so such a request is refused here rather than handed to FNA3D.
+        if (IsBlockCompressedFormat(surfaceFormat))
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: RenderTarget2D does not accept a block-compressed surface "
+                "format -- no driver renders into compressed blocks.");
+        }
+        RequireTextureFormatSupportedEXT(surfaceFormat, "RenderTarget2D");
     }
 
     void Fna3dRenderer::ProbeTexture3DReadbackSupport()
@@ -242,6 +349,51 @@ namespace CNA::Internal::Renderers::Fna3d
                   "served by the GPU."
                 : "FNA3D: the selected driver implements no volume-texture readback; "
                   "Texture3D::GetData is served from this renderer's own upload mirror.",
+            CNA::LogCategory::RENDER);
+    }
+
+    void Fna3dRenderer::ProbeCompressedReadbackSupport()
+    {
+        // Same shape as the volume-readback probe above, for the same reason: FNA3D's OpenGL and
+        // Direct3D 11 drivers both refuse GetTextureData2D on a block-compressed texture (they log
+        // "GetData with compressed textures unsupported!" and write nothing), while the SDL_GPU
+        // driver forwards it, and FNA3D exposes no query to tell them apart. Reporting the region
+        // as read when the driver wrote nothing would hand the caller a buffer of whatever it
+        // happened to contain, which is exactly what ITextureRenderer::GetData forbids, so this is
+        // measured rather than assumed. Unlike the volume case there is no mirror to fall back on:
+        // the answer decides whether GetData refuses.
+        compressedReadbackSupported_ = false;
+        if (!supportsDxt1_ && !supportsS3tc_)
+        {
+            return;
+        }
+
+        // One 4x4 DXT1 block: c0 = 0xF800 (red), c1 = 0, all indices 0.
+        constexpr std::uint8_t kUploaded[8] = { 0x00, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        std::uint8_t readback[8] = { 0xAB, 0xAB, 0xAB, 0xAB, 0xAB, 0xAB, 0xAB, 0xAB };
+
+        FNA3D_Texture* probe =
+            FNA3D_CreateTexture2D(device_, FNA3D_SURFACEFORMAT_DXT1, 4, 4, 1, 0);
+        if (probe == nullptr)
+        {
+            return;
+        }
+
+        FNA3D_SetTextureData2D(device_, probe, 0, 0, 4, 4, 0,
+                               const_cast<std::uint8_t*>(kUploaded), sizeof(kUploaded));
+
+        FNA3D_HookLogFunctions(SwallowLog, SwallowLog, SwallowLog);
+        FNA3D_GetTextureData2D(device_, probe, 0, 0, 4, 4, 0, readback, sizeof(readback));
+        FNA3D_HookLogFunctions(ForwardInfo, ForwardWarn, ForwardError);
+
+        FNA3D_AddDisposeTexture(device_, probe);
+
+        compressedReadbackSupported_ = std::memcmp(kUploaded, readback, sizeof(kUploaded)) == 0;
+        CNA::Logger::Info(
+            compressedReadbackSupported_
+                ? "FNA3D: the selected driver reads block-compressed textures back."
+                : "FNA3D: the selected driver implements no block-compressed readback; GetData on "
+                  "a compressed texture reports that it read nothing.",
             CNA::LogCategory::RENDER);
     }
 

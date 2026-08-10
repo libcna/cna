@@ -87,7 +87,7 @@ effect.
 | `WireFrame` | true | `FNA3D_FILLMODE_WIREFRAME` |
 | `OcclusionQuery` | true | `FNA3D_CreateQuery`/`QueryPixelCount` |
 | `Texture3D` | true | `FNA3D_CreateTexture3D` |
-| `Instancing` | device-dependent | Answered from `FNA3D_SupportsHardwareInstancing` |
+| **`Instancing`** | **false** | FNA3D instances natively, but none of XNA's compiled stock effects declares a per-instance vertex input, so a per-instance stream could not reach a shader that reads it. `DrawInstancedPrimitivesEx` refuses with the same reason. |
 | `AdditiveBlending` | true | |
 | **`MultiStreamVertexInput`** | **true** | Native: `FNA3D_ApplyVertexBufferBindings` takes an array of per-stream declarations, each with its own stride, vertex offset and instance frequency |
 | **`CustomEffects`** | **false** | See above — no source-string shader compilation exists in FNA3D |
@@ -112,9 +112,21 @@ effect.
   factor, standalone reference stencil, scissor and viewport.
 - 2D `SpriteBatch` through the stock `SpriteEffect`: tint, source rectangles, rotation about a
   scaled origin, both flips, layer depth, sampler filter and address modes, Immediate flushing.
-- 3D through the stock effects, including instanced draws.
+- 3D through the stock effects (not instanced — see the capability table).
 - Hardware occlusion queries.
 - `SetStringMarkerEXT` → `FNA3D_SetStringMarker`.
+- Driver limits queried once at device creation — `FNA3D_SupportsDXT1` / `SupportsS3TC` /
+  `SupportsBC7` / `SupportsSRGBRenderTargets` and `FNA3D_GetMaxTextureSlots` — and enforced: a
+  texture or render target in a format the driver has no storage for is refused by name, and so is
+  a bind past the driver's real fragment sampler-slot count.
+- Format-correct transfer sizing for every `SurfaceFormat`, block-compressed families included:
+  `ceil(w/4) * ceil(h/4) * blockBytes`, with the row pitch counted in block rows.
+- `SetDataOptions::NoOverwrite` gated on `FNA3D_SupportsNoOverwrite` and downgraded to `None`
+  where the driver has no such fast path.
+- `FNA3D_SetTextureName` on textures and render targets, so a RenderDoc/apitrace capture of a CNA
+  frame shows named resources.
+- `FNA3D_LinkedVersion()` checked against `FNA3D_COMPILED_VERSION` at device creation, so a
+  mismatched shared FNA3D is reported rather than silently trusted.
 
 ## Not supported, and why
 
@@ -125,7 +137,27 @@ effect.
 | Render-target array slices | `SetRenderTargets` throws for a non-zero `arraySlice`; CNA exposes no texture arrays and FNA3D's binding has no slice field. |
 | Unknown vertex stride with no `VertexDeclaration` | Throws, naming the stride. FNA3D binds real per-stream declarations and this renderer will not guess a layout. |
 | Out-of-contract state ordinals | Throw, naming the state and the ordinal, instead of casting into an undefined FNA3D enumerator. |
+| Instanced drawing | `DrawInstancedPrimitivesEx` throws; `Instancing` is false. The limit is the stock effects' vertex inputs, which is the custom-shader limit again. |
 | Context-loss simulation | Not implemented; FNA3D exposes no device-loss surface, and the shared `DebugSimulateContextLoss` default is a no-op. |
+| Block-compressed readback on OpenGL / D3D11 | `GetData` returns false — "this renderer read nothing" — rather than reporting an untouched buffer as a successful read. Both drivers refuse compressed `GetTextureData2D` upstream; SDL_GPU forwards it. Which one applies is measured once per device by a 4×4 DXT1 probe, not guessed from the driver name. |
+| A compressed `Texture3D` / `TextureCube` | Refused by name. Volume and cube transfers are RGBA8 in CNA's own renderer contract (the DDS/XNB readers decompress on the CPU before upload), so a compressed request there would be mis-sized rather than served. |
+
+### What FNA3D offers that CNA cannot currently reach
+
+Not gaps in this renderer — routes the shared `IGraphicsRenderer` contract has no shape for. Each
+would need a shared-contract change, so each is reported rather than faked:
+
+| FNA3D entry point | Why it is unreachable |
+|---|---|
+| `FNA3D_SetTextureDataYUV` | `IGraphicsRenderer` has no YUV texture route; `VideoDecoder` converts YUV→RGBA in the media module before any renderer sees a frame. |
+| `FNA3D_GetVertexBufferData` / `FNA3D_GetIndexBufferData` | The buffer renderer interfaces expose no readback; XNA's `GetData` on those buffers is served from the shared layer's own CPU shadow. |
+| `FNA3D_CloneEffect` | CNA holds one instance of each stock effect per device and has no public `Effect` clone route. |
+| `FNA3D_VerifyVertexSampler` | The stock effects declare no vertex-shader sampler, and there is no vertex-texture binding in the contract. The driver's vertex slot count is still reported through `GetMaxVertexTextureSlotsEXT()`. |
+
+A public block-compressed `Texture2D` is blocked one level above this renderer as well: the shared
+`Texture::ValidateFormat` admits only `SurfaceFormat::Color` for every renderer except Skia. The
+renderer contract has no such restriction — an `ImageData` naming a compressed format reaches
+`CreateTexture` directly — and that is the layer `Fna3d_Compressed` measures.
 
 ### Backbuffer readback quirk (upstream, worked around here)
 
@@ -145,10 +177,11 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 
 | Kind | Status |
 |---|---|
-| Native runtime (Linux, Xvfb + Mesa llvmpipe, FNA3D OpenGL driver) | **Performed** — all six `Fna3d_*` CTest binaries pass, all pixel oracles |
-| Unit tests (`CnaTests`, `Fna3d*`) | **Performed** — 30 tests |
+| Native runtime (Linux, Xvfb + Mesa llvmpipe, FNA3D OpenGL driver) | **Performed** — all seven `Fna3d_*` CTest binaries pass, all pixel oracles |
+| Unit tests (`CnaTests`, `Fna3d*`) | **Performed** — 37 tests |
+| Sanitizers (ASan + UBSan, all seven example tests) | **Performed** — no CNA-originating defect. UBSan reports one pre-existing upstream signed-overflow in MojoShader's own `mojoshader_common.c:1042` string parser, on every test alike. |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
-| SDL_GPU driver | **Not exercised here**: this container has no Vulkan ICD, so FNA3D declines SDL_GPU and falls through to OpenGL. The code path is driver-agnostic; the gate is external. |
+| SDL_GPU driver | **Not exercised here**: this container has no Vulkan ICD, so FNA3D declines SDL_GPU and falls through to OpenGL. The code path is driver-agnostic; the gate is external. This is also the only driver on which compressed readback is expected to succeed, so that arm of `Fna3d_Compressed` is unexercised here. |
 | Direct3D 11 driver | **Not exercised here**: Windows-only (or DXVK-native). External gate. |
 | macOS / iOS | Not exercised. External gate. |
 
@@ -162,7 +195,10 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 | `Fna3d_RenderTarget` | Target clear/readback, geometry placement inside a target, unbind restores the backbuffer, sampling a rendered target, depth/stencil reporting, MSAA resolve, `PreserveContents` |
 | `Fna3d_State` | AlphaBlend, Additive, colour write masks, BlendFactor, scissor on/off, a non-default depth comparison, stencil write-then-test, viewport sub-rectangle |
 | `Fna3d_Capabilities` | Every capability answer matched against a real factory or a real refusal, and both rejection paths |
+| `Fna3d_Compressed` | Hand-built DXT5 blocks uploaded through `IGraphicsRenderer::CreateTexture` decode as the right colour in the right quadrant, including a 6×6 level whose tail blocks are padded; `GetData` matches the driver's real compressed-readback answer; a compressed cube and an out-of-range sampler slot are refused by name |
 
 `CnaTests --gtest_filter=Fna3d*` covers the device-free logic: the `ShaderIndex` arithmetic against
 an independently transcribed reference, the presentation layout and its inverse transform, the
-enum bridge's range rejection, and the stride table.
+enum bridge's range rejection, the stride table, and the per-format transfer byte arithmetic
+(including the partial-tail block cases and a row-pitch × block-rows = region-count consistency
+sweep).
