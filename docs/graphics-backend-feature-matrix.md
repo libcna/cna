@@ -394,7 +394,7 @@ Fixed since this section was originally written (2026-07-15):
 - ~~Render targets cannot be sampled as textures at all — a reproducible, uncaught DXVK crash~~ —
   **fixed 2026-07-16**: a real type-confusion bug (`static_cast` between the unrelated sibling
   classes `D3D9TextureBackend`/`D3D9RenderTargetBackend`, both implementing `ITextureBackend`),
-  not a DXVK/environment limitation. See `NEXT.md` §4 and `src/CNA/Internal/Backends/D3D9/
+  not a DXVK/environment limitation. See `NEXT.md` §4 and `src/Graphics/Backends/D3D9/
   D3D9EffectDraw.cpp`'s `ResolveD3D9TextureEXT`/`ResolveD3D9TextureCubeEXT`.
 - ~~`PreferPerPixelLighting` and real specular highlights are structurally unreachable~~ — **fixed
   2026-07-16** (`plan_graphics.md` Phase 80, Task 1101): `GpuDrawParams::preferPerPixelLighting`/

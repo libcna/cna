@@ -14,7 +14,7 @@
 
 Covers `Microsoft::Xna::Framework::Graphics::Model` (and its `ModelMesh`/`ModelMeshPart`/
 `ModelBone`/collection types) plus its content-pipeline loader, `ModelTypeReader`
-(`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`). Written as the closing documentation
+(`src/Content/Xna/ContentManager.cpp`). Written as the closing documentation
 task for Phase 49 (Tasks 431-440), which line-by-line audited and unit/pixel-tested `Model`'s own
 runtime API against FNA (see `plan_graphics.md` rows 431-439). This doc covers the one piece those
 tasks didn't: how a `Model` actually gets **loaded from content**, and where that loader falls

@@ -140,7 +140,7 @@ and stencil writes — the same fallback the other render-pass-based CNA backend
 
 ## Shaders
 
-One HLSL source (`src/CNA/Internal/Backends/Wicked/WickedShaderSources.hpp`) is compiled at device
+One HLSL source (`src/Graphics/Backends/Wicked/WickedShaderSources.hpp`) is compiled at device
 creation into whatever binary format `GraphicsDevice::GetShaderFormat()` reports — SPIR-V for the
 Vulkan device, DXIL for D3D12. Because `wi::shadercompiler::Compile()` reads from a file path, the
 source is written to a private temporary directory for the lifetime of the backend, so a CNA game

@@ -185,12 +185,28 @@ C# `internal DebugDisplayString` should **not** become a public C++ API method.
 - Declarations and public documentation: `.hpp` file under `include/`
 - Implementation: `.cpp` file under `src/`
 
-Directory structure mirrors the namespace:
+The **public header tree mirrors the namespace** (consumer include paths are stable API):
 
 ```text
 include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp
-src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp
+include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp
 ```
+
+The **implementation tree mirrors module ownership** (Phase-2 modularization layout):
+`src/<Module>/` named after the owning CMake target, with the XNA API implementation under
+`<Module>/Xna/`, `CNA::Internal` engine parts under `<Module>/Internal/`, and NOXNA extension
+surfaces under `<Module>/NoXna/`; single-area modules stay flat. Renderer implementations live
+in `src/Graphics/Backends/<Backend>/`.
+
+```text
+src/Graphics/Xna/Texture2D.cpp        # Microsoft::Xna::Framework::Graphics::Texture2D
+src/Input/Internal/SdlInputBridge.cpp # CNA::Internal::Input
+src/Math/Vector3.cpp                  # Framework-root math type
+src/Graphics/Backends/Vulkan/…        # one directory per renderer backend
+```
+
+A new production `.cpp` placed outside every module directory fails the configure (the
+source-partition validator in `cmake/CnaLibrary.cmake` keeps ownership total).
 
 Avoid putting non-template implementations in headers.
 

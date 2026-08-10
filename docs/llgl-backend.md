@@ -210,7 +210,7 @@ Handing LLGL a handle it cannot present to would be worse than saying so.
 Both flavours are checked in and no shader toolchain is needed to build:
 
 ```text
-src/CNA/Internal/Backends/Llgl/shaders/
+src/Graphics/Backends/Llgl/shaders/
   sprite2d.vert.glsl      sprite2d.frag.glsl        Vulkan flavour, compiled to SPIR-V
   sprite2d.gl.vert.glsl   sprite2d.gl.frag.glsl     OpenGL flavour, embedded as source
   colored3d.vert.glsl     textured3d.vert.glsl      3D vertex shaders, one per vertex layout
@@ -238,8 +238,8 @@ src/CNA/Internal/Backends/Llgl/shaders/
 After changing any shader:
 
 ```bash
-python3 src/CNA/Internal/Backends/Llgl/shaders/compile_shaders.py
-python3 src/CNA/Internal/Backends/Llgl/shaders/compile_shaders.py --check   # verifies freshness
+python3 src/Graphics/Backends/Llgl/shaders/compile_shaders.py
+python3 src/Graphics/Backends/Llgl/shaders/compile_shaders.py --check   # verifies freshness
 ```
 
 Which flavour is used is decided from the shading language the loaded module reports, not from the

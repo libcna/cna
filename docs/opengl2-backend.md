@@ -1,7 +1,7 @@
 # OPENGL2 backend — native desktop OpenGL 2.1 (compatibility profile)
 
 `-DCNA_GRAPHICS_BACKEND=OPENGL2` · enum `CNA::GraphicsBackendType::OpenGL2` · target
-`cna_backend_graphics_opengl2` · sources `src/CNA/Internal/Backends/OpenGL2/`.
+`cna_backend_graphics_opengl2` · sources `src/Graphics/Backends/OpenGL2/`.
 
 Plan and per-session history: `plan_opengl2.md`.
 

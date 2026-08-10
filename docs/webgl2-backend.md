@@ -2,7 +2,7 @@
 
 `WEBGL2` is one of the 4 public GL-family `CNA_GRAPHICS_BACKEND` values introduced by
 `plan_glbackends.md` — it shares its entire implementation with `OPENGLES`/`OPENGL33`/`WEBGL1`
-(`src/CNA/Internal/Backends/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
+(`src/Graphics/Backends/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
 compile time by the `CNA_GL_PROFILE_WEBGL2` definition. Unlike `OPENGLES`/`OPENGL33` (native
 desktop/mobile), `WEBGL2` only builds for Emscripten and requests the same GLES 3.0 context
 `OPENGLES` does — Emscripten/browsers map a GLES-3.0-shaped SDL3 GL context request to a real

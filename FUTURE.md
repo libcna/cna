@@ -16,8 +16,8 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
 | **CURRENT** | Public CNA renderer identities | **41** — mechanically counted from `include/CNA/GraphicsBackendType.hpp` |
-| **NEXT** | Phase 1 — CNA modularization | **not started**; the immediate next major campaign |
-| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**; blocked on Phase 1 |
+| **NEXT** | Phase 1 — CNA modularization | **complete on `feature/modularization`** (target graph 2026-08-09 + physical layout/hardening 2026-08-10, no-loss-proven); pending owner review and develop promotion; the sharp-runtime audit-remediation develop merge is a separate still-open external gate |
+| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**; blocked on the Phase-1 develop promotion |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
 | **FUTURE** | Phase 5 — glTF correctness campaign | **not started**; blocked on Phase 4 |
@@ -25,7 +25,10 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 Explicitly **not** true today, and not to be stated as true anywhere:
 
 - CNA does **not** have 55 renderers. It has 41.
-- Modularization is **not** complete. It has not begun.
+- Modularization is complete **on `feature/modularization` only** (target graph + physical
+  layout, no-loss-proven; see `MODULARIZATION_PLAN.md`); `develop` itself is **not** yet
+  modularized — the promotion merge has not happened, and the sharp-runtime
+  audit-remediation develop merge is a separate still-open gate.
 - The XNA samples do **not** all pass. The corpus has not been revisited.
 - glTF is **not** corrected. `cna-gltf-viewer` still displays many assets incorrectly.
 

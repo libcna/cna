@@ -7,7 +7,7 @@ contract.
 ## Decoder choice
 
 `CNA::Internal::Graphics::Bc7Util` (`include/CNA/Internal/Graphics/Bc7Util.hpp`,
-`src/CNA/Internal/Graphics/Bc7Util.cpp`) is a from-scratch decoder implemented directly from the
+`src/Graphics/Internal/Bc7Util.cpp`) is a from-scratch decoder implemented directly from the
 public **Khronos Data Format Specification**'s BPTC section (the same normative text later
 folded into `KhronosGroup/DataFormat`'s `bptc.txt`), not a vendored third-party library. It
 covers:
@@ -50,7 +50,7 @@ licensed DirectXTex, or Rich Geldreich's public-domain `bc7decomp`). None were v
 ## Build impact
 
 None. `Bc7Util.cpp`/`Bc7Util.hpp` are plain C++23 translation units alongside the existing
-`DxtUtil.cpp`/`.hpp` in `src/CNA/Internal/Graphics/` and `include/CNA/Internal/Graphics/`; they
+`DxtUtil.cpp`/`.hpp` in `src/Graphics/Internal/` and `include/CNA/Internal/Graphics/`; they
 compile into the existing `CNA` static library with no new dependency, submodule, or vendored
 directory. `SkiaTextureBackend.cpp` (in the separate `cna_backend_graphics_skia` static library)
 calls into `Bc7Util::DecompressBc7`; making that cross-library symbol resolvable required adding

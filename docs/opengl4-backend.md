@@ -1,7 +1,7 @@
 # OPENGL4 backend — real desktop OpenGL 4.x core profile
 
 `-DCNA_GRAPHICS_BACKEND=OPENGL4` · enum `CNA::GraphicsBackendType::OpenGL4` · target
-`cna_backend_graphics_opengl4` · sources `src/CNA/Internal/Backends/OpenGL4/`.
+`cna_backend_graphics_opengl4` · sources `src/Graphics/Backends/OpenGL4/`.
 
 Plan and per-task history: `plan_opengl4.md` (GL4-1 … GL4-33).
 

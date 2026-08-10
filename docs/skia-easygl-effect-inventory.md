@@ -14,7 +14,7 @@ Shader/Program/Buffer wrapper).
 This is the same "EasyGL" `docs/skia-3d-emulation-adr.md` and its companion matrices measure Skia's
 own 3D-refusal decisions against.
 
-Every embedded shader lives in exactly one file, `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`
+Every embedded shader lives in exactly one file, `src/Graphics/Backends/EasyGL/EasyGLGraphicsBackend.cpp`
 (5748 lines): thirteen `#version 300 es` vertex+fragment program pairs, compiled through a shared
 `CompileAndLink(prog, vsrc, fsrc, label)` helper. `AlphaTestEffect` is not a separate program: a
 `uniform vec4 uAlphaTest` plus an `if(_at<0.0)discard;` clause (reference/tolerance/pass/fail-sentinel

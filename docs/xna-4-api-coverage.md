@@ -937,9 +937,9 @@ behavior or a genuinely unimplemented feature).
 
 - `docs/xna-4-api-coverage.md` (this file; updated Tasks 196, 200)
 - `include/Microsoft/Xna/Framework/Content/ResourceContentManager.hpp` — stub
-- `src/Microsoft/Xna/Framework/Content/ResourceContentManager.cpp` — stub
+- `src/Content/Xna/ResourceContentManager.cpp` — stub
 - `include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp` — stub
-- `src/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.cpp` — stub
+- `src/GamerServices/Xna/GamerServicesComponent.cpp` — stub
 - `include/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp` — stub
 - All 17 PackedVector types fully implemented with correct FNA Pack/Unpack math (Tasks 197–199)
 - `tests/PackedVectorGolden.md` — FNA bit-packing reference table for all 17 types

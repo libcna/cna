@@ -2,7 +2,7 @@
 
 `WEBGL1` is one of the 4 public GL-family `CNA_GRAPHICS_BACKEND` values introduced by
 `plan_glbackends.md` — it shares its entire implementation with `OPENGLES`/`OPENGL33`/`WEBGL2`
-(`src/CNA/Internal/Backends/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
+(`src/Graphics/Backends/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
 compile time by the `CNA_GL_PROFILE_WEBGL1` definition. Unlike the other 3 profiles (all
 GLSL ES 3.00 / desktop GLSL 3.30 core, close enough in body syntax to share one shader source),
 `WEBGL1` requests a GLES 2.0-shaped context (mapping to a real WebGL 1.0 context under Emscripten)

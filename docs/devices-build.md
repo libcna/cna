@@ -252,7 +252,7 @@ against the cross-compiled ARM64 object files):
 
 ```bash
 "$HOME/Android/Sdk/ndk/30.0.14904198/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -C \
-    cmake-build-android/CMakeFiles/CNA.dir/src/Microsoft/Devices/Sensors/Accelerometer.cpp.o \
+    cmake-build-android/CMakeFiles/CNA.dir/src/Devices/Microsoft/Sensors/Accelerometer.cpp.o \
     | grep -i landscape
 ```
 
@@ -596,7 +596,7 @@ evidence trail before reconsidering this.
 
 `.github/workflows/devices-tests.yml` builds `CnaTests` and runs the exact-suite-name
 Devices/Sensors filter from Section 2 above on every push/PR that touches
-`include/Microsoft/Devices/**`, `src/Microsoft/Devices/**`,
+`include/Microsoft/Devices/**`, `src/Devices/Microsoft/**`,
 `tests/Microsoft/Devices/**`, or the top-level CMake files, plus on manual
 `workflow_dispatch`. It runs on a plain `ubuntu-latest` GitHub-hosted runner — no
 physical sensor or haptic hardware is available there, which is the point: the two

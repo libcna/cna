@@ -40,7 +40,7 @@ SDL_PollEvent  (Game::PollEvents(), called once per frame from Game::Tick())
 Two classes do the work:
 
 - **`CNA::Internal::Input::SdlInputBridge`** (`include/CNA/Internal/Input/SdlInputBridge.hpp`,
-  `src/CNA/Internal/Input/SdlInputBridge.cpp`) — the single SDL event funnel. `ProcessEvent`
+  `src/Input/Internal/SdlInputBridge.cpp`) — the single SDL event funnel. `ProcessEvent`
   is the *only* place that reads an `SDL_Event`; do not add a second event path. It also
   exposes public static query methods that XNA-layer classes call into directly (not through
   the event stream): `SetVibration`, `SetTriggerVibration`, `SetLightBar`, `GetGUID`, `GetGyro`,
@@ -48,7 +48,7 @@ Two classes do the work:
   plus query surface — is intentional; adding a query method here is fine, adding a second
   event-processing entry point is not.
 - **`CNA::Internal::Input::InputManager`** (`include/CNA/Internal/Input/InputManager.hpp`,
-  `src/CNA/Internal/Input/InputManager.cpp`) — accumulates per-device state pushed by
+  `src/Input/Internal/InputManager.cpp`) — accumulates per-device state pushed by
   `SdlInputBridge` (`Set*State`/`Add*Delta` methods) and hands back immutable XNA state-object
   snapshots (`Get*State` methods: `GetMouseState`, `GetKeyboardState`, `GetTouchState`,
   `GetGamePadState`, `GetRawGamePadState`). `GamePad::GetState(playerIndex, deadZoneMode)` calls
@@ -58,7 +58,7 @@ Two classes do the work:
 Touch additionally has a third internal class:
 
 - **`CNA::Internal::Input::GestureDetector`** (`include/CNA/Internal/Input/GestureDetector.hpp`,
-  `src/CNA/Internal/Input/GestureDetector.cpp`) — a ported gesture-recognition state machine
+  `src/Input/Internal/GestureDetector.cpp`) — a ported gesture-recognition state machine
   (Tap, DoubleTap, Hold, HorizontalDrag, VerticalDrag, FreeDrag, Flick, DragComplete, Pinch,
   PinchComplete). Driven by `TouchPanel::INTERNAL_onTouchEvent` (per-event) and
   `TouchPanel::Update()` (per-frame, for timing-based gestures like Hold and the DoubleTap
@@ -293,8 +293,8 @@ other backends (bgfx adds 4 backend-specific, input-unrelated tests). The full s
 `InputManager`'s accumulated `InternalInputState`, `GestureDetector`'s state machine,
 `TouchPanel`'s touch arrays and gesture queue, and the static `Mouse::ClickedEXT` /
 `TextInputEXT` callbacks — is plain process-wide static state with **no locking** (verified:
-there is no `mutex`/`atomic`/`thread` anywhere under `src/CNA/Internal/Input/` or
-`src/Microsoft/Xna/Framework/Input/`). That is deliberate and safe because every access happens on
+there is no `mutex`/`atomic`/`thread` anywhere under `src/Input/Internal/` or
+`src/Input/Xna/`). That is deliberate and safe because every access happens on
 one thread:
 
 - **Writes** flow from `Game::PollEvents()` → `SdlInputBridge::ProcessEvent` → `InputManager::Set*`

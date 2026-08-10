@@ -447,7 +447,7 @@ recording one specific session's results.
 ## 6. `Detail::AndroidSensorBridge` lifecycle safety (`plan_devices.md` Task DEVICES-0085)
 
 **Code under test:** `AndroidSensorBridge::Stop()`'s self-join-detects-and-detaches
-logic (`src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`) — confirmed by
+logic (`src/Devices/Microsoft/Sensors/Detail/AndroidSensorBridge.cpp`) — confirmed by
 code review and a successful Android NDK cross-compile (`llvm-nm` symbol check) in this
 session, but **never actually run**: this bridge's real (`#ifdef __ANDROID__`) code path
 cannot execute in this headless container at all, only compile.
@@ -595,7 +595,7 @@ RUN — hardware validation open.**
 
 ## 7. `Compass` real Android backend (`plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
 
-**Code under test:** `Detail::AndroidCompassBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`)
+**Code under test:** `Detail::AndroidCompassBackend` (`src/Devices/Microsoft/Sensors/Detail/AndroidCompassBackend.cpp`)
 and `Detail::ConvertRotationVectorToMagneticHeadingDegrees()`
 (`include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`) — confirmed by code
 review, unit tests of the pure azimuth/accuracy math (self-consistency only), and a
@@ -692,7 +692,7 @@ observed. **Status: NOT RUN — hardware validation open** (matching this pass's
 
 ## 8. `Motion` real Android backend (`plan_devices.md` Phase 8, Tasks DEVICES-0101-0119)
 
-**Code under test:** `Detail::AndroidMotionBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`)
+**Code under test:** `Detail::AndroidMotionBackend` (`src/Devices/Microsoft/Sensors/Detail/AndroidMotionBackend.cpp`)
 and `Detail::ConvertRotationVectorToXnaQuaternion()`/`ExtractYawPitchRollFromQuaternion()`
 (`include/Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp`) — confirmed by code
 review, round-trip unit tests of the yaw/pitch/roll extraction (against CNA's own already-

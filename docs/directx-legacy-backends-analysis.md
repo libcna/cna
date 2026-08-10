@@ -355,7 +355,7 @@ the *analysis* here changes anything for it — it does not.
 - **Route B, DXVK `d3d8`.** Cross-compile the backend with MinGW-w64 against `d3d8.h`, run under Wine
   with DXVK's `d3d8.dll`. This is the **same delivery mechanism** the shipping `D3D9`/`D3D11` backends
   already prove works on this machine — the lowest-novelty path of any option here.
-- **Reuse:** could share `src/CNA/Internal/Backends/D3DCommon` (format/state/vertex-format mapping)
+- **Reuse:** could share `src/Graphics/Backends/D3DCommon` (format/state/vertex-format mapping)
   the way `D3D11`/`D3D12` do — `D3D9` deliberately does not, but a fixed-function-ish D3D8 backend is
   closer to `D3D9`'s shape.
 - **Capability:** full 2D `SpriteBatch`/`SpriteFont`; fixed-function stock-effect 3D; **but XNA's

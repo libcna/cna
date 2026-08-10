@@ -2,7 +2,7 @@
 
 `OPENGL33` is one of the 4 public GL-family `CNA_GRAPHICS_BACKEND` values introduced by
 `plan_glbackends.md` — it shares its entire implementation with `OPENGLES`/`WEBGL1`/`WEBGL2`
-(`src/CNA/Internal/Backends/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
+(`src/Graphics/Backends/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
 compile time by the `CNA_GL_PROFILE_OPENGL33` definition. Unlike the other 3 profiles (all
 OpenGL ES / WebGL, GLSL ES syntax), `OPENGL33` requests a real desktop `SDL_GL_CONTEXT_PROFILE_CORE`
 context, GL 3.3.

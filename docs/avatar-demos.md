@@ -78,7 +78,7 @@ Applies to any Net-using demo (`demo_net_avatar_sync`, `demo_net_client_server_a
 
 - **"No session found after searching - is a host running?"** — the client
   (`NetworkSession::Find`) searches for `kSearchWindowMs` (150ms) per attempt and retries up to
-  100 times (`src/CNA/Internal/Net/ENetDiscoveryService.cpp`); a host must already be running and
+  100 times (`src/Net/Internal/ENetDiscoveryService.cpp`); a host must already be running and
   past its own `NetworkSession::Create` call before the client starts searching. Launch the host
   process first, give it a moment to finish creating its session, then launch the client — a tight
   race between the two process launches (both started in the same shell command with no delay) is

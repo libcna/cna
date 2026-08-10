@@ -1,5 +1,47 @@
 # NEXT.md
 
+## MODULARIZATION PHASE 2 — **physical layout + architecture hardening complete on `feature/modularization`** (2026-08-10)
+
+> Continuation of the campaign below, same branch, from Phase-1 head `b072f0da6`. Authoritative
+> record: **`MODULARIZATION_PLAN.md` §9**; machine-readable evidence:
+> `modularization/after-phase2-layout/` (incl. the 674-row `move-map.tsv`); item-by-item
+> classification: `modularization/RECONCILIATION.md` (Phase-2 section).
+>
+> **Done and proven:** the implementation tree now mirrors module ownership —
+> `src/<Module>/{Xna,Internal,NoXna}/` per subsystem, all 38 renderer directories under
+> `src/Graphics/Backends/` — via five pure `git mv` commits (674/674 files R100 byte-identical)
+> plus one path-update commit; the only source-content changes anywhere are 15 generated-shader
+> include directives in 12 backend files rewritten to the includer-relative form Bgfx/Llgl
+> already used (old-blob/new-blob diffs: zero non-`#include` lines) and one example TU's
+> directive. Public `include/` is untouched — `api-decls.tsv` byte-identical, consumer include
+> paths stable. Include hygiene: no target exposes `src/` as an include root any more (one
+> documented scoped exception: `cna_test_d3d9_shadercache`). A new nm-based symbol-edge audit
+> over the built archives found exactly one undeclared edge — FrameworkDispatcher's
+> FNA-mandated TouchPanel pump (audio→input), previously resolving through another module's
+> `$<LINK_ONLY>` closure — now declared explicitly; post-fix: 35/35 cross-module symbol edges
+> declared/reachable. The three declared cycles were re-reviewed with exact symbol/FNA evidence
+> and all three classified **ACCEPT_INTENTIONAL** (dossiers: plan §9.4). Retakes on the new
+> layout: OPENGLES full-suite A/B vs the preserved pristine Phase-1 binary — identical per-test
+> outcome sets (6218 universe; the single in-run failure is a diagnosed A/B-harness env-var
+> interaction that passes on both binaries under Phase-1's env); HEADLESS 6130 = control + the
+> 12 gates with exactly the control's 2 accepted deterministic residuals after the serial flake
+> rerun; VULKAN 222 = 211 + 11 gates with the single accepted `Vulkan_DepthBias` llvmpipe
+> residual on the identical arm; module probes + closure gates + RendererIdentityRegistry (41)
+> green on OPENGLES, HEADLESS and VULKAN; modular sharp-runtime seam tree green with Decimal
+> readers present 5 = 5.
+>
+> **sharp-runtime gate (external, still open):** remediation branch observed at `832726e0`
+> (moved again during this session — still active); its module registry is byte-identical to
+> the Phase-1-studied `e8340b33`, so the CNA seam needed no change; sharp-runtime develop
+> untouched at `1e51c2d8`; the Net-only `NetworkSessionProperties::operator[]` adaptation
+> remains documented and deliberately unapplied.
+>
+> **Incidental pre-existing finding (recorded, not fixed):** running `CnaTests` with a CWD other
+> than the repo root leaves `tests/assets/…` unresolvable and `MediaLibraryTestFixture` then
+> fails into a pre-existing index-out-of-range + segfault path in the empty-media-library
+> state — reproduced identically with the pristine Phase-1 binary, absent under ctest (correct
+> per-test working directories). A future MediaLibrary robustness ticket of its own.
+
 ## MODULARIZATION CAMPAIGN — **target-graph modularization complete on `feature/modularization`** (2026-08-10)
 
 > FUTURE.md Phase 1 work, on branch `feature/modularization` from base `5f2c4e941`. The
