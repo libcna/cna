@@ -1,6 +1,7 @@
 # CNA physical module layout
 
-Since the Phase-3 physical modularization (2026-08-10, `feature/physical-modules`), the
+Since the Phase-3 physical modularization (2026-08-10, implemented on `feature/physical-modules`
+and promoted to `develop` the same day as `3ecbbce72`), the
 repository is a module-oriented monorepo: every subsystem and every renderer implementation
 family physically owns `modules/<name>/{CMakeLists.txt,include/,src/,tests/}` (a subdirectory
 is omitted only when genuinely empty). Consumer include spelling is unchanged — each module's

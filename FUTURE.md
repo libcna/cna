@@ -1,6 +1,7 @@
 # CNA future development roadmap
 
-Date: 2026-08-09 (updated 2026-08-10 — Phase 1 promoted to `develop`)
+Date: 2026-08-09 (updated 2026-08-10 — Phase 1 complete: the final physical module/package
+layout is promoted to `develop`)
 
 > **THIS DOCUMENT IS A ROADMAP, NOT AUTHORIZATION TO START FUTURE WORK.**
 >
@@ -16,8 +17,8 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
 | **CURRENT** | Public CNA renderer identities | **41** — mechanically counted from `CNA/GraphicsBackendType.hpp` (modules/core) |
-| **CURRENT** | Phase 1 — CNA modularization | **COMPLETE** in three stages: target graph + physical `src/` layout promoted 2026-08-10 (`41028e995`), modular sharp-runtime consumption promoted (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, MODULARIZATION_PLAN.md §11) implemented and validated on `feature/physical-modules` — **READY FOR PROMOTION, not yet merged**; the complete modularization campaign is DONE once the owner promotes that branch |
-| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started and still blocked**: it must base on the promoted physical-modules `develop` head, which requires the owner's dedicated promotion session first |
+| **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** in three stages, all now on public `develop`: target graph + physical `src/` layout (`41028e995`), modular sharp-runtime consumption (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, MODULARIZATION_PLAN.md §11–§11.2) promoted 2026-08-10 by fast-forward to `3ecbbce72` (tree unchanged by the promotion). The modularization campaign is DONE |
+| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**, and no longer blocked by modularization: its base is the promoted physical-modules `develop` head. Like every phase here it still requires a fresh explicit owner instruction before any work begins |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
 | **FUTURE** | Phase 5 — glTF correctness campaign | **not started**; blocked on Phase 4 |
@@ -25,9 +26,11 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 Explicitly **not** true today, and not to be stated as true anywhere:
 
 - CNA does **not** have 55 renderers. It has 41.
-- Modularization is complete **and promoted**: `develop` is modularized as of 2026-08-10
-  (`41028e995`, target graph + physical layout, no-loss-proven; see `MODULARIZATION_PLAN.md`
-  §10). The sharp-runtime side is closed too: the remediation snapshot `7888a29f` was merged
+- Modularization is complete **and promoted**, including the final physical module/package
+  layout: `develop` is a module-oriented monorepo as of 2026-08-10 (`41028e995` target graph +
+  physical layout, then `3ecbbce72` `modules/<name>/{include,src,tests}`; both no-loss-proven —
+  see `MODULARIZATION_PLAN.md` §10 and §11–§11.2). The sharp-runtime side is closed too: the
+  remediation snapshot `7888a29f` was merged
   into sharp-runtime `develop` (`81624983`, published) and CNA consumes the modular
   `SharpRuntime::<Component>` targets; the audit-remediation campaign itself continues on its
   feature branch and later increments merge separately.

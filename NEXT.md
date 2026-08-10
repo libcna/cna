@@ -1,5 +1,62 @@
 # NEXT.md
 
+## PHYSICAL MODULARIZATION PROMOTED — **CNA MODULARIZATION CAMPAIGN CLOSED** (2026-08-10)
+
+> `develop` was fast-forwarded to the accepted Phase-3 head: `ea61123e6` → **`3ecbbce72`**, tree
+> **`a116280e0`** — byte-identical to the accepted `feature/physical-modules` tree. The
+> fast-forward was proven read-only first (`git merge-tree --write-tree` produced exactly
+> `a116280e0`), so the promotion changed no implementation content. No merge commit
+> (`git merge --ff-only`); merge-base `ea61123e6`; 0 behind / 19 ahead; all 19 campaign commits
+> retained and `git verify-commit`-good. `feature/physical-modules` keeps pointing at the
+> implementation result. Promotion evidence: `MODULARIZATION_PLAN.md` §11.2.
+>
+> **Owner-local `develop` work was preserved first**, not stashed. The same four items as the
+> previous promotion (the two ad hoc xvfb registrations in
+> `cmake/Tests/{EasyGL,SdlRenderer}Tests.cmake`, untracked `AGENTS.md` and
+> `examples/xvfb_screenshot_demo.cpp`) were captured in the new unpushed signed snapshot
+> `owner/pre-develop-promotion-20260810-physical-modules` (`ea84f4537`, parent `ea61123e6`). A
+> new snapshot was required: the existing `owner/pre-develop-promotion-20260810` carries the same
+> intent but different bytes, because the Phase-1 promotion rewrote those two files' base blobs.
+> No re-application was needed afterwards — both cmake files are byte-identical across the
+> promoted range and neither untracked path exists on the feature branch, so the fast-forward
+> touched none of the four; all four verified byte-identical after the ref moved. No owner-local
+> work entered the modularization history.
+>
+> **Bounded post-promotion gate** (a ref move is not a code rewrite — the full Phase-3 matrix was
+> deliberately not rerun). Configure-time, run from the promoted `develop` worktree: HEADLESS,
+> OPENGLES and VULKAN all configure clean (0 CMake warnings/errors), so the physical
+> source-partition/ownership validator passes on all three; legacy global `src/` and `include/`
+> roots absent (0 tracked paths); 14 framework modules each with
+> `CMakeLists.txt`+`include`+`src`+`tests`; 38 renderer families + `renderers/common/d3d`;
+> `check_renderer_identities.py` = **41**; `check_include_reachability.py` clean; header
+> self-containment 542 checked / 540 pass — the 2 failures are the Windows-only Glide ABI pair
+> (`<windows.h>`/`HMODULE`), host-inherent and reproduced identically by the byte-identical
+> script on the feature branch. No-loss: `reconcile_phase3.py` **RECONCILIATION: OK**
+> (production 1357 → 1357, tests 483 → 492, api-decls 1300 → 1301 with **zero removed** — the
+> single addition is the relocated `D3D9ShaderConstantSlot`, ctest names HEADLESS 6120 → 6143 and
+> OPENGLES 6527 → 6546 with **zero removals, zero renames**), and a fresh
+> `capture_inventory.py` run against the promoted worktree is **byte-identical** to the committed
+> `modularization/physical-modules/after/` evidence for production, tests and api-decls.
+> Runtime gates on the identical tree: module probe/link-closure fleet **35/35 HEADLESS**,
+> **30/30 OPENGLES**, **31/31 VULKAN** (including `ModuleLinkClosure_NoXnaComposition`,
+> the DevicesExt/GraphicsExt probes, the four HEADLESS native-SDK-free gates and
+> `ModuleLinkClosure_VulkanRendererClosure`); `RendererIdentityRegistry` green; builds 0 errors /
+> 0 warnings. HEADLESS `-L Headless` 48 = 45 pass + 2 skip + the accepted `Headless_Smoke`
+> residual; EasyGL 293 on the dedicated `:96` Xvfb = 291 pass + 1 skip + exactly the documented
+> `EasyGL_GraphicsDevice_ReferenceStencil` failure (Task 872); VULKAN 211 = 210 pass + the
+> accepted `Vulkan_DepthBias` llvmpipe residual (one `-j4` contention flake,
+> `Vulkan_BoundTargetLifetime`, passed standalone). `git diff --check` clean. D3D link graph
+> re-verified: `cna_backend_graphics_d3dcommon` is consumed by d3d11 and d3d12 only — d3d10 and
+> d3d9 are independent.
+>
+> **The CNA modularization campaign is closed.** Target modularization COMPLETE; physical
+> module/package modularization COMPLETE AND PROMOTED; modular sharp-runtime consumption ACTIVE
+> AND PUBLIC (sibling `develop` `81624983`); sharp-runtime post-audit remediation CONTINUES
+> INDEPENDENTLY on its own branch and merges in later increments. **Renderer expansion is NEXT**
+> (FUTURE.md Phase 2, 41 → 55) — **not started**, and it needs its own explicit owner
+> instruction. Its common base is the public `develop` head produced by this promotion (the
+> implementation head `3ecbbce72` plus this documentation commit).
+
 ## MODULAR SHARP-RUNTIME LIVE — **CNA CONSUMES THE PUBLIC MODULAR sharp-runtime `develop`** (2026-08-10)
 
 > The §9.7 external gate is closed by owner decision (integrate the current remediation

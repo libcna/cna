@@ -885,3 +885,93 @@ Highlights, in the same OBSERVED/PROVEN discipline as §9:
   VideoDecoder.hpp and the Windows-only Glide ABI loader pair.
 - **Include reachability:** every `#include` in every module TU (transitive) resolves
   through the declared module graph (`check_include_reachability.py` clean).
+
+### 11.2 PROMOTION — physical module layout merged into `develop` (2026-08-10)
+
+Promotion is a ref movement, not a code rewrite. `develop` `ea61123e6` was fast-forwarded to
+the accepted `feature/physical-modules` head `3ecbbce72`.
+
+- **Relationship proven before the ref moved.** merge-base = `ea61123e6` = `develop`, so
+  `develop` was an ancestor; 0 behind / 19 ahead; `git merge-tree --write-tree develop
+  feature/physical-modules` produced exactly `a116280e0`, the accepted branch tree. The
+  promotion therefore could not introduce content.
+- **`git merge --ff-only feature/physical-modules`.** No merge commit; the resulting `develop`
+  is `3ecbbce72` with tree `a116280e0` — equal to the accepted head and tree, verified
+  immediately and before any documentation commit. All 19 commits kept their signatures
+  (`git verify-commit` good on every one, key `255C69CC…0AADA55F`).
+- **`feature/physical-modules` was not moved** and still points at `3ecbbce72`; the
+  implementation branch keeps recording the implementation result.
+
+#### 11.2.1 Owner-local preservation (no `git stash`)
+
+The `develop` worktree carried the same four owner-local items as §10.1. They were captured
+verbatim in a new **unpushed** signed snapshot `owner/pre-develop-promotion-20260810-physical-modules`
+(`ea84f4537`, parent `ea61123e6`, so its diff is exactly the owner-local delta). A new snapshot
+was required rather than reusing `owner/pre-develop-promotion-20260810`: that older snapshot
+carries the same intent but different bytes for the two cmake files, because the Phase-1
+promotion rewrote their base blobs (the `--start-group` collapse).
+
+No re-application was needed after the fast-forward. `cmake/Tests/EasyGLTests.cmake` and
+`cmake/Tests/SdlRendererTests.cmake` are byte-identical across `ea61123e6..3ecbbce72`, and
+neither `AGENTS.md` nor `examples/xvfb_screenshot_demo.cpp` exists on the feature branch, so the
+promotion touched none of the four paths; all four were verified byte-identical afterwards. The
+owner-local intent still holds on the promoted tree: an OPENGLES configure of the promoted
+`develop` worktree creates the ad hoc `cna_xvfb_screenshot_demo_easygl` target (the macro builds
+an executable and deliberately registers no ctest test, matching the edit's own comment).
+
+#### 11.2.2 PROVEN — bounded post-promotion gate
+
+The full Phase-3 matrix (§11.1) was deliberately not rerun; only enough to prove the promoted
+`develop` behaves like the accepted branch. Configure-time gates were run **from the promoted
+`develop` worktree**; runtime gates were run on the byte-identical tree in the existing
+`cmake-build-next-*` trees.
+
+- **Physical ownership / source partition:** HEADLESS, OPENGLES and VULKAN all configure clean
+  (0 CMake warnings, 0 errors), so the `modules/CMakeLists.txt` validator — unowned or
+  doubly-owned production TU, and resurrected legacy root — passes on all three.
+- **Legacy roots absent:** no `src/` or `include/` at the repository root; 0 tracked paths
+  beneath either.
+- **Module inventory:** 14 framework modules, each owning
+  `CMakeLists.txt`+`include/`+`src/`+`tests/`; 38 renderer families plus
+  `modules/renderers/common/d3d`.
+- **Renderer identities:** `scripts/check_renderer_identities.py` = **41**;
+  `RendererIdentityRegistry` green on all three configurations.
+- **No-loss:** `reconcile_phase3.py` → **RECONCILIATION: OK** (production 1357 → 1357; tests
+  483 → 492; api-decls 1300 → 1301 with zero declarations removed, the one addition being the
+  relocated `D3D9ShaderConstantSlot`; ctest names HEADLESS 6120 → 6143 and OPENGLES
+  6527 → 6546, zero removed and zero renamed). Independently, a fresh `capture_inventory.py`
+  run against the promoted worktree is **byte-identical** to the committed
+  `modularization/physical-modules/after/` captures for `files-production.tsv` (1357),
+  `files-tests.tsv` (492) and `api-decls.tsv` (1301).
+- **Include/header compatibility:** every module `include/` root exposes only the public
+  `CNA/` and `Microsoft/` namespace paths, so consumer include spelling is unchanged;
+  `check_include_reachability.py` clean; header self-containment 542 checked / 540 pass. The
+  2 failures are the Windows-only Glide ABI pair (`GlideAbi.hpp`, `GlideAbiLoader.hpp`, which
+  include `<windows.h>` for `HMODULE` loading) — they are in the script's own `SKIP` set but
+  re-added by its `EXTRA_PORTABLE` pass, a pre-existing script quirk, and the script blob is
+  identical on both refs, so this is host-inherent and not promotion-attributable.
+- **Module/minimal-link probe fleet:** **35/35** HEADLESS, **30/30** OPENGLES, **31/31**
+  VULKAN — covering every module probe and link closure, the SharpRuntime component closures,
+  `ModuleProbe_probe_devices_ext` / `ModuleProbe_probe_graphics_ext` /
+  `ModuleLinkClosure_NoXnaComposition`, `ModuleLinkClosure_NetHasENet`, the four HEADLESS
+  native-SDK-free gates and `ModuleLinkClosure_VulkanRendererClosure`. All three builds
+  completed with 0 errors and 0 warnings.
+- **Representative suites:** HEADLESS `-L Headless` 48 = 45 pass + 2 skip + the accepted
+  `Headless_Smoke` residual; EasyGL 293 on the dedicated `:96` Xvfb = 291 pass + 1 skip +
+  exactly the documented `EasyGL_GraphicsDevice_ReferenceStencil` failure (Task 872); VULKAN
+  211 = 210 pass + the accepted `Vulkan_DepthBias` llvmpipe residual, after the single `-j4`
+  contention flake `Vulkan_BoundTargetLifetime` passed standalone.
+- **D3D common graph:** `cna_backend_graphics_d3dcommon` is linked by the d3d11 and d3d12
+  families only; d3d10 has no build-level reference to it and d3d9 documents its independence
+  and keeps its own `cna_backend_graphics_d3d9_effect` sub-target.
+- **`git diff --check`** clean, both over the promoted range and over the worktree.
+
+#### 11.2.3 Campaign status after promotion
+
+The CNA modularization campaign is closed: target modularization COMPLETE, physical
+module/package modularization COMPLETE AND PROMOTED, modular sharp-runtime consumption ACTIVE
+AND PUBLIC (sibling `develop` `81624983`, clean and unmodified by this promotion). The
+sharp-runtime post-audit remediation continues independently on its own branch and merges in
+later increments — it does not make CNA modularization incomplete. The next CNA phase is the
+FUTURE.md renderer expansion (41 → 55), which has **not** begun and needs its own owner
+instruction; its common base is the public `develop` head produced by this promotion.
