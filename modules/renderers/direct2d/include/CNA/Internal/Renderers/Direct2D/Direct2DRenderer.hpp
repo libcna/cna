@@ -236,6 +236,56 @@ namespace CNA::Internal::Renderers::Direct2D
         [[nodiscard]] bool operator==(const SpriteBitmapCacheKey&) const = default;
     };
 
+    /**
+     * @brief Complete identity of one decorated SpriteBatch brush and its effect graph.
+     *
+     * Two draws with equal keys need byte-identical Direct2D objects, so the renderer may issue
+     * the second one with the brush it already built -- without writing a single property, which
+     * is what makes the reuse safe even though Direct2D may read a brush's state late.
+     *
+     * The destination position is deliberately absent: it lives in the device context's transform,
+     * not in the brush, so many sprites drawn from one atlas cell at different positions share a
+     * single entry.
+     */
+    struct SpriteBrushCacheKey
+    {
+        /** @brief Identity of the image the brush samples. */
+        const void* image = nullptr;
+        /** @brief Device generation the objects belong to. */
+        std::uint64_t deviceGeneration = 0;
+        /** @brief Packed RGBA modulation color. */
+        std::uint32_t color = 0;
+        /** @brief Whether a ColorMatrix tint stage is part of the graph. */
+        bool tinted = false;
+        /** @brief Whether the tint stage uses straight-alpha matrix semantics. */
+        bool straightAlphaTint = false;
+        /** @brief Whether a Premultiply stage is part of the graph. */
+        bool premultiplyStage = false;
+        /** @brief Brush source rectangle left edge. */
+        int sourceX = 0;
+        /** @brief Brush source rectangle top edge. */
+        int sourceY = 0;
+        /** @brief Brush source rectangle width. */
+        int sourceWidth = 0;
+        /** @brief Brush source rectangle height. */
+        int sourceHeight = 0;
+        /** @brief Horizontal extend mode ordinal. */
+        int extendU = 0;
+        /** @brief Vertical extend mode ordinal. */
+        int extendV = 0;
+        /** @brief Brush interpolation mode ordinal. */
+        int interpolationMode = 0;
+        /** @brief SpriteEffects flip bits baked into the brush transform. */
+        int spriteEffects = 0;
+        /** @brief Horizontal sprite origin baked into the brush transform. */
+        float originX = 0.0f;
+        /** @brief Vertical sprite origin baked into the brush transform. */
+        float originY = 0.0f;
+
+        /** @brief Compares every field baked into the cached objects. */
+        [[nodiscard]] bool operator==(const SpriteBrushCacheKey&) const = default;
+    };
+
     /** A device-dependent Direct2D bitmap plus the source RGBA8 shadow required for CPU-side tint,
      *  flip, wrap/mirror, and non-premultiplied SpriteBatch variants. */
     class Direct2DTextureRenderer final : public ITextureRenderer
@@ -692,6 +742,22 @@ namespace CNA::Internal::Renderers::Direct2D
          * @return Non-owning bitmap pointer that stays alive at least until the next EndDraw.
          */
         [[nodiscard]] ID2D1Bitmap1* FindCachedSpriteBitmap(const SpriteBitmapCacheKey& key) const;
+        /**
+         * @brief Returns the cached decorated brush for a key, or null on a miss.
+         *
+         * @param key Complete identity of the wanted brush and effect graph.
+         * @return Non-owning brush pointer that stays alive at least until the next EndDraw.
+         */
+        [[nodiscard]] ID2D1ImageBrush* FindCachedSpriteBrush(const SpriteBrushCacheKey& key) const;
+        /// Stores a freshly built brush graph, evicting oldest-first within the entry budget.
+        /// Evicted objects move into the transient collections for the same reason cached bitmaps
+        /// do: a command recorded earlier in this chunk may still reference them.
+        void StoreCachedSpriteBrush(const SpriteBrushCacheKey& key,
+                                    const Microsoft::WRL::ComPtr<ID2D1Effect>& tintEffect,
+                                    const Microsoft::WRL::ComPtr<ID2D1Image>& tintOutput,
+                                    const Microsoft::WRL::ComPtr<ID2D1Effect>& premultiplyEffect,
+                                    const Microsoft::WRL::ComPtr<ID2D1Image>& premultiplyOutput,
+                                    const Microsoft::WRL::ComPtr<ID2D1ImageBrush>& brush);
         /// Stores a freshly uploaded CPU-materialized bitmap, evicting oldest-first within the
         /// documented entry/byte budget. Evicted bitmaps move into transientBitmaps_, so a command
         /// recorded earlier in this chunk keeps a live reference until EndDraw releases it.
@@ -773,6 +839,21 @@ namespace CNA::Internal::Renderers::Direct2D
         std::size_t spriteBitmapCacheBytes_ = 0;
         std::uint64_t spriteBitmapCacheHits_ = 0;
         std::uint64_t spriteBitmapCacheMisses_ = 0;
+        struct SpriteBrushCacheEntry
+        {
+            SpriteBrushCacheKey key;
+            Microsoft::WRL::ComPtr<ID2D1Effect> tintEffect;
+            Microsoft::WRL::ComPtr<ID2D1Image> tintOutput;
+            Microsoft::WRL::ComPtr<ID2D1Effect> premultiplyEffect;
+            Microsoft::WRL::ComPtr<ID2D1Image> premultiplyOutput;
+            Microsoft::WRL::ComPtr<ID2D1ImageBrush> brush;
+        };
+        /// D2D-107: decorated brush graphs for repeated identical configurations. A cached brush
+        /// keeps its own reference to the image it samples, so its input can never be freed and
+        /// its address reused while the entry lives.
+        std::vector<SpriteBrushCacheEntry> spriteBrushCache_;
+        std::uint64_t spriteBrushCacheHits_ = 0;
+        std::uint64_t spriteBrushCacheMisses_ = 0;
         // Wine and Proton's Direct2D expose image brushes but may omit the built-in effects.
         // Cache capability per device generation so ordinary textures can use the GPU effect path
         // on native Direct2D while retaining a correct CPU fallback on those runtimes.

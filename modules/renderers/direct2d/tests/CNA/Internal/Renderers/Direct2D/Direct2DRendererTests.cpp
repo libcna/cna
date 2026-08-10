@@ -21,6 +21,7 @@ using CNA::Internal::Renderers::Direct2D::FractionalMipLevelForTransform;
 using CNA::Internal::Renderers::Direct2D::IsDeviceLossHResult;
 using CNA::Internal::Renderers::Direct2D::MapSourceRectangleToMip;
 using CNA::Internal::Renderers::Direct2D::SpriteBitmapCacheKey;
+using CNA::Internal::Renderers::Direct2D::SpriteBrushCacheKey;
 using CNA::Internal::Renderers::Direct2D::PreferredMipLevelForTransform;
 using CNA::Internal::Renderers::Direct2D::SupportsDirect2DCapability;
 using CNA::GraphicsCapability;
@@ -488,5 +489,84 @@ TEST(Direct2DSpriteBitmapCacheKey, IdenticalDrawsShareOneEntry)
     SpriteBitmapCacheKey nextContent = first;
     nextContent.contentVersion = 8;
     EXPECT_FALSE(nextContent == first);
+}
+
+// D2D-107: the decorated-brush cache reuses Direct2D objects WITHOUT writing any property, which
+// is only sound while every value baked into those objects is part of the key.
+TEST(Direct2DSpriteBrushCacheKey, EveryBakedInPropertySeparatesTwoKeys)
+{
+    const SpriteBrushCacheKey baseline{};
+    int distinctFields = 0;
+    const auto expectDifferent = [&](const SpriteBrushCacheKey& mutated, const char* field) {
+        ++distinctFields;
+        EXPECT_FALSE(mutated == baseline) << "brush cache key ignores " << field;
+    };
+
+    int sentinel = 0;
+    SpriteBrushCacheKey key = baseline;
+    key.image = &sentinel;
+    expectDifferent(key, "image");
+
+    key = baseline;
+    key.deviceGeneration = 1;
+    expectDifferent(key, "deviceGeneration");
+
+    key = baseline;
+    key.color = 0x11223344u;
+    expectDifferent(key, "color");
+
+    key = baseline;
+    key.tinted = true;
+    expectDifferent(key, "tinted");
+
+    key = baseline;
+    key.straightAlphaTint = true;
+    expectDifferent(key, "straightAlphaTint");
+
+    key = baseline;
+    key.premultiplyStage = true;
+    expectDifferent(key, "premultiplyStage");
+
+    key = baseline;
+    key.sourceX = 1;
+    expectDifferent(key, "sourceX");
+
+    key = baseline;
+    key.sourceY = 1;
+    expectDifferent(key, "sourceY");
+
+    key = baseline;
+    key.sourceWidth = 1;
+    expectDifferent(key, "sourceWidth");
+
+    key = baseline;
+    key.sourceHeight = 1;
+    expectDifferent(key, "sourceHeight");
+
+    key = baseline;
+    key.extendU = 1;
+    expectDifferent(key, "extendU");
+
+    key = baseline;
+    key.extendV = 1;
+    expectDifferent(key, "extendV");
+
+    key = baseline;
+    key.interpolationMode = 1;
+    expectDifferent(key, "interpolationMode");
+
+    key = baseline;
+    key.spriteEffects = 1;
+    expectDifferent(key, "spriteEffects");
+
+    key = baseline;
+    key.originX = 0.5f;
+    expectDifferent(key, "originX");
+
+    key = baseline;
+    key.originY = 0.5f;
+    expectDifferent(key, "originY");
+
+    EXPECT_EQ(distinctFields, 16);
 }
 #endif

@@ -202,6 +202,10 @@ namespace CNA::Internal::Renderers::Direct2D
         constexpr std::size_t kMaxSpriteBitmapCacheEntries = 32;
         constexpr std::size_t kMaxSpriteBitmapCacheBytes = 16u * 1024u * 1024u;
 
+        /// D2D-107: how many distinct decorated brush configurations stay resident. Effect graphs
+        /// are small compared with bitmaps, so this is bounded by entry count alone.
+        constexpr std::size_t kMaxSpriteBrushCacheEntries = 32;
+
         /// D2D-111: steady-state capacity for the transient collections. clear() keeps capacity, so
         /// reserving once means an ordinary frame performs no reallocation at all.
         constexpr std::size_t kTransientBitmapReserve = 256;
@@ -1231,6 +1235,7 @@ namespace CNA::Internal::Renderers::Direct2D
         // alive and would be reported as leaks by the live-object gate.
         spriteBitmapCache_.clear();
         spriteBitmapCacheBytes_ = 0;
+        spriteBrushCache_.clear();
         colorMatrixEffectSupported_.reset();
         premultiplyEffectSupported_.reset();
         activeRenderTarget_ = nullptr;
@@ -1253,14 +1258,17 @@ namespace CNA::Internal::Renderers::Direct2D
                 std::fprintf(stderr,
                              "[Direct2D diagnostics] driver=%s EndDraw=%llu transient-releases=%llu "
                              "transient-high-water=%zu transient-chunk-flushes=%llu "
-                             "sprite-bitmap-cache-hits=%llu misses=%llu.\n",
+                             "sprite-bitmap-cache-hits=%llu misses=%llu "
+                             "sprite-brush-cache-hits=%llu misses=%llu.\n",
                              usingWarp_ ? "WARP" : "hardware",
                              static_cast<unsigned long long>(endDrawCount_),
                              static_cast<unsigned long long>(transientResourceReleaseCount_),
                              transientResourceHighWater_,
                              static_cast<unsigned long long>(transientChunkFlushCount_),
                              static_cast<unsigned long long>(spriteBitmapCacheHits_),
-                             static_cast<unsigned long long>(spriteBitmapCacheMisses_));
+                             static_cast<unsigned long long>(spriteBitmapCacheMisses_),
+                             static_cast<unsigned long long>(spriteBrushCacheHits_),
+                             static_cast<unsigned long long>(spriteBrushCacheMisses_));
             ReportLiveDeviceObjectsNoThrow();
         }
         d3dDevice_.Reset();
@@ -1585,6 +1593,7 @@ namespace CNA::Internal::Renderers::Direct2D
         transientImages_.reserve(kTransientImageReserve);
         transientImageBrushes_.reserve(kTransientImageBrushReserve);
         spriteBitmapCache_.reserve(kMaxSpriteBitmapCacheEntries);
+        spriteBrushCache_.reserve(kMaxSpriteBrushCacheEntries);
     }
 
     std::size_t Direct2DRenderer::TransientResourceCount() const
@@ -2449,6 +2458,39 @@ namespace CNA::Internal::Renderers::Direct2D
         spriteBitmapCacheBytes_ += byteCount;
     }
 
+    ID2D1ImageBrush* Direct2DRenderer::FindCachedSpriteBrush(const SpriteBrushCacheKey& key) const
+    {
+        for (const SpriteBrushCacheEntry& entry : spriteBrushCache_)
+        {
+            if (entry.key == key) return entry.brush.Get();
+        }
+        return nullptr;
+    }
+
+    void Direct2DRenderer::StoreCachedSpriteBrush(
+        const SpriteBrushCacheKey& key, const Microsoft::WRL::ComPtr<ID2D1Effect>& tintEffect,
+        const Microsoft::WRL::ComPtr<ID2D1Image>& tintOutput,
+        const Microsoft::WRL::ComPtr<ID2D1Effect>& premultiplyEffect,
+        const Microsoft::WRL::ComPtr<ID2D1Image>& premultiplyOutput,
+        const Microsoft::WRL::ComPtr<ID2D1ImageBrush>& brush)
+    {
+        if (!brush) return;
+        while (spriteBrushCache_.size() >= kMaxSpriteBrushCacheEntries)
+        {
+            SpriteBrushCacheEntry evicted = std::move(spriteBrushCache_.front());
+            spriteBrushCache_.erase(spriteBrushCache_.begin());
+            if (evicted.tintEffect) transientEffects_.push_back(std::move(evicted.tintEffect));
+            if (evicted.tintOutput) transientImages_.push_back(std::move(evicted.tintOutput));
+            if (evicted.premultiplyEffect)
+                transientEffects_.push_back(std::move(evicted.premultiplyEffect));
+            if (evicted.premultiplyOutput)
+                transientImages_.push_back(std::move(evicted.premultiplyOutput));
+            if (evicted.brush) transientImageBrushes_.push_back(std::move(evicted.brush));
+        }
+        spriteBrushCache_.push_back(SpriteBrushCacheEntry{
+            key, tintEffect, tintOutput, premultiplyEffect, premultiplyOutput, brush});
+    }
+
     D2D1_MATRIX_3X2_F Direct2DRenderer::ToD2DMatrix(const Matrix& matrix)
     {
         // Both XNA Matrix and Direct2D use row-vector affine form for 2D points.
@@ -2853,70 +2895,105 @@ namespace CNA::Internal::Renderers::Direct2D
             // or SpriteEffects flips it. In particular, it preserves the neighboring texel a
             // linear Wrap/Mirror sample needs at the source edge; CPU pre-expansion cannot do so
             // without reimplementing Direct2D's filter kernel.
-            ID2D1Image* input = bitmap;
+            // D2D-107: an identical decorated configuration reuses the graph built for the
+            // previous sprite. The reuse writes NO property on the cached objects -- every value
+            // that would be written is part of the key, so the objects already carry it. That is
+            // what makes reuse safe even though Direct2D may read a brush's state as late as
+            // EndDraw. The destination position is intentionally not part of the key: it lives in
+            // the context transform, so a row of sprites from one atlas cell shares one entry.
+            SpriteBrushCacheKey brushKey;
+            brushKey.image = bitmap;
+            brushKey.deviceGeneration = deviceGeneration_;
+            brushKey.color = color.getPackedValueProperty();
+            brushKey.tinted = needsTintEffect;
+            brushKey.straightAlphaTint = needsTintEffect && (nonPremultipliedSource_ || copyBlend);
+            brushKey.premultiplyStage = nonPremultipliedSource_;
+            brushKey.sourceX = localSource.X;
+            brushKey.sourceY = localSource.Y;
+            brushKey.sourceWidth = localSource.Width;
+            brushKey.sourceHeight = localSource.Height;
+            brushKey.extendU = addressU;
+            brushKey.extendV = addressV;
+            brushKey.interpolationMode = static_cast<int>(interpolation);
+            brushKey.spriteEffects = static_cast<int>(effects);
+            brushKey.originX = bitmapOrigin.X;
+            brushKey.originY = bitmapOrigin.Y;
+
+            ComPtr<ID2D1ImageBrush> imageBrush;
             ComPtr<ID2D1Effect> tintEffect;
             ComPtr<ID2D1Image> tintOutput;
-            if (needsTintEffect)
-            {
-                ThrowIfFailed(d2dContext_->CreateEffect(CLSID_D2D1ColorMatrix, &tintEffect),
-                              "ID2D1DeviceContext::CreateEffect(ColorMatrix)");
-                tintEffect->SetInput(0, input);
-                ThrowIfFailed(tintEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX,
-                                                   MakeSpriteTintMatrix(color)),
-                              "ID2D1Effect::SetValue(ColorMatrix)");
-                if (nonPremultipliedSource_ || copyBlend)
-                {
-                    // NonPremultiplied deliberately treats the stored channels as straight and
-                    // premultiplies once below. Copy/Opaque also needs straight matrix semantics:
-                    // Color.A scales the copied alpha without attenuating RGB's source factor One.
-                    ThrowIfFailed(tintEffect->SetValue(
-                                      D2D1_COLORMATRIX_PROP_ALPHA_MODE,
-                                      D2D1_COLORMATRIX_ALPHA_MODE_STRAIGHT),
-                                  "ID2D1Effect::SetValue(ColorMatrix alpha mode)");
-                }
-                tintEffect->GetOutput(&tintOutput);
-                input = tintOutput.Get();
-            }
-
             ComPtr<ID2D1Effect> premultiplyEffect;
             ComPtr<ID2D1Image> premultiplyOutput;
-            if (nonPremultipliedSource_)
+            if (ID2D1ImageBrush* const cachedBrush = FindCachedSpriteBrush(brushKey))
             {
-                ThrowIfFailed(d2dContext_->CreateEffect(CLSID_D2D1Premultiply, &premultiplyEffect),
-                              "ID2D1DeviceContext::CreateEffect(Premultiply)");
-                premultiplyEffect->SetInput(0, input);
-                premultiplyEffect->GetOutput(&premultiplyOutput);
-                input = premultiplyOutput.Get();
+                ++spriteBrushCacheHits_;
+                imageBrush = cachedBrush;
             }
+            else
+            {
+                ++spriteBrushCacheMisses_;
+                ID2D1Image* input = bitmap;
+                if (needsTintEffect)
+                {
+                    ThrowIfFailed(d2dContext_->CreateEffect(CLSID_D2D1ColorMatrix, &tintEffect),
+                                  "ID2D1DeviceContext::CreateEffect(ColorMatrix)");
+                    tintEffect->SetInput(0, input);
+                    ThrowIfFailed(tintEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX,
+                                                       MakeSpriteTintMatrix(color)),
+                                  "ID2D1Effect::SetValue(ColorMatrix)");
+                    if (nonPremultipliedSource_ || copyBlend)
+                    {
+                        // NonPremultiplied deliberately treats the stored channels as straight and
+                        // premultiplies once below. Copy/Opaque also needs straight matrix semantics:
+                        // Color.A scales the copied alpha without attenuating RGB's source factor One.
+                        ThrowIfFailed(tintEffect->SetValue(
+                                          D2D1_COLORMATRIX_PROP_ALPHA_MODE,
+                                          D2D1_COLORMATRIX_ALPHA_MODE_STRAIGHT),
+                                      "ID2D1Effect::SetValue(ColorMatrix alpha mode)");
+                    }
+                    tintEffect->GetOutput(&tintOutput);
+                    input = tintOutput.Get();
+                }
 
-            const D2D1_IMAGE_BRUSH_PROPERTIES imageProperties = D2D1::ImageBrushProperties(
-                source, ToD2DExtendMode(addressU), ToD2DExtendMode(addressV),
-                interpolation);
-            ComPtr<ID2D1ImageBrush> imageBrush;
-            ThrowIfFailed(d2dContext_->CreateImageBrush(input, &imageProperties, nullptr, &imageBrush),
-                          "ID2D1DeviceContext::CreateImageBrush(SpriteBatch source)");
-            // ID2D1ImageBrush's sourceRectangle bounds which part of the image is visible, but
-            // does not by itself align that rectangle's corner with the brush's local origin --
-            // brush-local (0,0) still maps to the underlying image's (0,0) unless SetTransform
-            // compensates, for ANY source origin, not just a negative one. D2D-80: the previous
-            // std::max(0.0f, -X) formula was a no-op for negative X (its own -X is already
-            // positive there) but incorrectly clamped to zero for X >= 0, leaving a
-            // positively-offset atlas crop sampling from the image's real origin instead of the
-            // requested one. The general, direction-correct shift is -X unconditionally.
-            const float clippedLeft = -static_cast<float>(localSource.X);
-            const float clippedTop = -static_cast<float>(localSource.Y);
-            // The crop correction has to run before reflection. The SpriteBatch origin is a
-            // destination-space shift and therefore runs after reflection: without that final
-            // translation an ImageBrush is anchored at local zero while FillRectangle starts at
-            // -origin, leaving part of a flipped, positively-offset atlas crop unsampled (D2D-82).
-            const D2D1_MATRIX_3X2_F clippedOrigin =
-                D2D1::Matrix3x2F::Translation(clippedLeft, clippedTop);
-            const D2D1_MATRIX_3X2_F spriteOrigin =
-                D2D1::Matrix3x2F::Translation(-bitmapOrigin.X, -bitmapOrigin.Y);
-            imageBrush->SetTransform(Multiply(
-                Multiply(clippedOrigin,
-                         MakeSpriteBrushTransform(localSource.Width, localSource.Height, effects)),
-                spriteOrigin));
+                if (nonPremultipliedSource_)
+                {
+                    ThrowIfFailed(d2dContext_->CreateEffect(CLSID_D2D1Premultiply, &premultiplyEffect),
+                                  "ID2D1DeviceContext::CreateEffect(Premultiply)");
+                    premultiplyEffect->SetInput(0, input);
+                    premultiplyEffect->GetOutput(&premultiplyOutput);
+                    input = premultiplyOutput.Get();
+                }
+
+                const D2D1_IMAGE_BRUSH_PROPERTIES imageProperties = D2D1::ImageBrushProperties(
+                    source, ToD2DExtendMode(addressU), ToD2DExtendMode(addressV),
+                    interpolation);
+                ThrowIfFailed(d2dContext_->CreateImageBrush(input, &imageProperties, nullptr, &imageBrush),
+                              "ID2D1DeviceContext::CreateImageBrush(SpriteBatch source)");
+                // ID2D1ImageBrush's sourceRectangle bounds which part of the image is visible, but
+                // does not by itself align that rectangle's corner with the brush's local origin --
+                // brush-local (0,0) still maps to the underlying image's (0,0) unless SetTransform
+                // compensates, for ANY source origin, not just a negative one. D2D-80: the previous
+                // std::max(0.0f, -X) formula was a no-op for negative X (its own -X is already
+                // positive there) but incorrectly clamped to zero for X >= 0, leaving a
+                // positively-offset atlas crop sampling from the image's real origin instead of the
+                // requested one. The general, direction-correct shift is -X unconditionally.
+                const float clippedLeft = -static_cast<float>(localSource.X);
+                const float clippedTop = -static_cast<float>(localSource.Y);
+                // The crop correction has to run before reflection. The SpriteBatch origin is a
+                // destination-space shift and therefore runs after reflection: without that final
+                // translation an ImageBrush is anchored at local zero while FillRectangle starts at
+                // -origin, leaving part of a flipped, positively-offset atlas crop unsampled (D2D-82).
+                const D2D1_MATRIX_3X2_F clippedOrigin =
+                    D2D1::Matrix3x2F::Translation(clippedLeft, clippedTop);
+                const D2D1_MATRIX_3X2_F spriteOrigin =
+                    D2D1::Matrix3x2F::Translation(-bitmapOrigin.X, -bitmapOrigin.Y);
+                imageBrush->SetTransform(Multiply(
+                    Multiply(clippedOrigin,
+                             MakeSpriteBrushTransform(localSource.Width, localSource.Height, effects)),
+                    spriteOrigin));
+                StoreCachedSpriteBrush(brushKey, tintEffect, tintOutput, premultiplyEffect,
+                                       premultiplyOutput, imageBrush);
+            }
 
             if (HasPrimitiveBlendEquivalent(blendMode_))
             {
@@ -2984,7 +3061,9 @@ namespace CNA::Internal::Renderers::Direct2D
             }
 
             // Direct2D may defer these commands until EndDraw, therefore the graph and brush
-            // must outlive this method but can be released once EndDraw completed.
+            // must outlive this method but can be released once EndDraw completed. On a cache hit
+            // only the brush is set here; the extra transient reference is redundant with the
+            // cache's own but preserves exactly the pre-cache lifetime guarantee.
             if (tintEffect) transientEffects_.push_back(tintEffect);
             if (tintOutput) transientImages_.push_back(tintOutput);
             if (premultiplyEffect) transientEffects_.push_back(premultiplyEffect);
