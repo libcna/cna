@@ -94,12 +94,13 @@ def release_gate(root: pathlib.Path, plan: str, statuses: dict[str, str]) -> int
     except OSError as error:
         registration = ""
         results.append(("Direct2D CTest registrations readable", False, str(error)))
-    expected_tests = ("Direct2D_Smoke", "Direct2D_2DParity", "Direct2D_Lifetime", "Direct2D_Unit")
+    expected_tests = ("Direct2D_Smoke", "Direct2D_2DParity", "Direct2D_Lifetime",
+                      "Direct2D_Unit", "Direct2D_Soak")
     missing_tests = [name for name in expected_tests if name not in registration]
     results.append((
-        "the four Direct2D CTest gates are registered",
+        "the five Direct2D CTest gates are registered",
         not missing_tests,
-        "missing: " + ", ".join(missing_tests) if missing_tests else "all four registered",
+        "missing: " + ", ".join(missing_tests) if missing_tests else "all five registered",
     ))
 
     gate_script = root / "scripts/verify-direct2d-debug-log.py"
@@ -144,6 +145,7 @@ def main(argv: list[str]) -> int:
         "modules/renderers/direct2d/examples/direct2d_2d_parity_test.cpp",
         "modules/renderers/direct2d/examples/direct2d_lifetime_test.cpp",
         "modules/renderers/direct2d/examples/direct2d_smoke_test.cpp",
+        "modules/renderers/direct2d/examples/direct2d_soak_test.cpp",
         "scripts/run-wine-direct2d.sh",
         "scripts/run-proton-direct2d.sh",
         "scripts/run-direct2d-virtual-display.sh",

@@ -15,8 +15,9 @@ blocked. It is deliberately not satisfiable by editing prose.
 1. **Every plan row is closed.** No `🟨` and no `⬜` remains in `plan_direct2d.md`. The checker's
    ordinary mode already refuses a `✅` that cites no evidence, so closing a row requires naming the
    test, gate, document, or delegated task that covers it.
-2. **The four CTest gates are registered.** `Direct2D_Smoke`, `Direct2D_2DParity`,
-   `Direct2D_Lifetime`, and `Direct2D_Unit` must all exist, so the label cannot silently shrink.
+2. **The five CTest gates are registered.** `Direct2D_Smoke`, `Direct2D_2DParity`,
+   `Direct2D_Lifetime`, `Direct2D_Unit`, and `Direct2D_Soak` must all exist, so the label cannot
+   silently shrink.
 3. **The debug-layer/live-object gate exists and is self-tested.**
    `scripts/verify-direct2d-debug-log.py --self-test` classifies its committed positive and
    negative fixtures, and the workflow runs the gate over both native logs. Its whitelist is the

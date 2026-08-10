@@ -133,7 +133,7 @@ when `Unsupported3DGraphicsCallBehavior::WarnAndStub` was explicitly selected.
 
 ## Validation gates
 
-The Direct2D CTest label contains four sequential tests:
+The Direct2D CTest label contains five sequential tests:
 
 - `Direct2D_Smoke`: HWND, D3D11 staging readback, and point SpriteBatch draw.
 - `Direct2D_2DParity`: public pixel, transform, update, render-target, presentation, recovery,
@@ -141,13 +141,18 @@ The Direct2D CTest label contains four sequential tests:
 - `Direct2D_Lifetime`: repeated target switching, readback, recovery, resize, and resource churn.
 - `Direct2D_Unit`: the `Direct2D*` GoogleTest subset from `CnaTests`, run through the dedicated
   Direct2D Wine/Proton runner and prefix.
+- `Direct2D_Soak`: per-branch SpriteBatch throughput and a long resize/recovery/target-switch soak
+  with a process working-set oracle. The throughput numbers are reported, not gated, unless
+  `CNA_DIRECT2D_BENCH_BASELINE_MS` supplies a baseline recorded on comparable hardware --
+  a timing threshold on shared CI, on WARP, or under Wine is either too loose to prove anything or
+  fails at random. `CNA_DIRECT2D_SOAK_CYCLES` raises the default 2000 cycles for an acceptance run.
 
 A bounded cross-build and run uses:
 
 ```bash
 cmake --build cmake-build-direct2d-integration --parallel 2 \
   --target CnaTests cna_test_direct2d_smoke cna_test_direct2d_2d_parity \
-  cna_test_direct2d_lifetime
+  cna_test_direct2d_lifetime cna_test_direct2d_soak
 scripts/run-direct2d-virtual-display.sh \
   ctest --test-dir cmake-build-direct2d-integration -L Direct2D -V
 ```

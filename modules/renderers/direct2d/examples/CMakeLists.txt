@@ -104,6 +104,34 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
     endif()
     cna_register_renderer_test(NAME Direct2D_Lifetime COMMAND ${_direct2d_lifetime_command}
         TIMEOUT 60 LABELS "Direct2D;2D;Lifetime" ENVIRONMENT "${_direct2d_lifetime_environment}")
+
+    # D2D-108/D2D-116/D2D-117: per-branch throughput plus a long resize/recovery/target-switch soak
+    # with a working-set oracle. Its own executable because it is the only Direct2D test whose
+    # runtime is measured in thousands of cycles rather than a handful of frames; keeping it out of
+    # the parity/lifetime binaries keeps their timeouts meaningful. It links psapi for the process
+    # working-set query the soak's leak oracle needs.
+    cna_direct2d_test(cna_test_direct2d_soak direct2d_soak_test.cpp)
+    target_link_libraries(cna_test_direct2d_soak PRIVATE psapi)
+    if(CMAKE_CROSSCOMPILING)
+        if(CNA_DIRECT2D_TEST_RUNTIME STREQUAL "WINE")
+            set(_direct2d_soak_command bash ${CMAKE_SOURCE_DIR}/scripts/run-wine-direct2d.sh
+                $<TARGET_FILE:cna_test_direct2d_soak>)
+            set(_direct2d_soak_environment "CNA_D3D11_SKIP_DXVK_GATE=1")
+        elseif(CNA_DIRECT2D_TEST_RUNTIME STREQUAL "PROTON")
+            set(_direct2d_soak_command ${CMAKE_SOURCE_DIR}/scripts/run-proton-direct2d.sh
+                $<TARGET_FILE:cna_test_direct2d_soak>)
+            unset(_direct2d_soak_environment)
+        else()
+            message(FATAL_ERROR "CNA_DIRECT2D_TEST_RUNTIME must be WINE or PROTON, got '${CNA_DIRECT2D_TEST_RUNTIME}'.")
+        endif()
+    else()
+        set(_direct2d_soak_command $<TARGET_FILE:cna_test_direct2d_soak>)
+        unset(_direct2d_soak_environment)
+    endif()
+    # The default 2000 cycles are the routine gate; the D2D-117 acceptance run raises them with
+    # CNA_DIRECT2D_SOAK_CYCLES=10000, which is why the timeout is generous rather than tight.
+    cna_register_renderer_test(NAME Direct2D_Soak COMMAND ${_direct2d_soak_command}
+        TIMEOUT 900 LABELS "Direct2D;2D;Lifetime;Soak" ENVIRONMENT "${_direct2d_soak_environment}")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
