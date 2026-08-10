@@ -32,6 +32,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         endif()
     endmacro()
 
+    # Ad hoc (not a permanent registered test): reuses the same SOFTWARE-renderer
+    # screenshot demo scene to prove a real SDL_Renderer screenshot under Xvfb.
+    # The source deliberately stays a repository-level cross-renderer diagnostic,
+    # so it is spelled with an explicit ${CMAKE_SOURCE_DIR} path like the other
+    # non-module-owned sources this file builds.
+    cna_sdl_test(cna_xvfb_screenshot_demo ${CMAKE_SOURCE_DIR}/examples/xvfb_screenshot_demo.cpp)
+
     # Task 915: GetBackBufferData readback -- foundational prerequisite for the whole
     # SDL_Renderer pixel-test audit phase (Tasks 666-861).
     cna_sdl_test(cna_test_sdl_readback

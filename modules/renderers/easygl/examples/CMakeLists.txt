@@ -43,6 +43,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         enable_testing()
 
+        # Ad hoc (not a permanent registered test): reuses the same SOFTWARE-renderer
+        # screenshot demo scene to prove a real EasyGL screenshot under Xvfb.
+        # The source deliberately stays a repository-level cross-renderer diagnostic,
+        # so it is spelled with an explicit ${CMAKE_SOURCE_DIR} path like the other
+        # non-module-owned sources this file builds.
+        cna_easygl_test(cna_xvfb_screenshot_demo_easygl ${CMAKE_SOURCE_DIR}/examples/xvfb_screenshot_demo.cpp)
+
         # Task 85: 3-frame smoke test
         cna_register_renderer_test(NAME EasyGL_House3D_SmokeTest COMMAND cna_house3d_demo --smoke 3
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
