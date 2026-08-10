@@ -29,7 +29,7 @@ Validation is therefore **build-only** for the production renderer, plus a fake-
 under Wine. It is not emulator image validation and not native-hardware validation. Full CNA i686
 linkage was externally blocked in the sibling `sharp-runtime` dependency path; the renderer itself
 passed i686 whole-translation-unit syntax, 78 portable tests, and the same 78 tests under linked
-ASan/UBSan runtimes. Five OPENGLES pixel/state tests provided the shared-interface control.
+ASan/UBSan runtimes. Five OPENGLES3 pixel/state tests provided the shared-interface control.
 
 Set `CNA_GLIDE_DIAGNOSTICS=1` to print the loaded runtime path, selected virtual/native mode,
 TMU count, texture limits and usable TMU0 bytes at startup. The report contains no native pointer

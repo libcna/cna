@@ -1,11 +1,11 @@
 # WEBGL2 (Emscripten, GLES 3.0 → WebGL 2.0) Renderer — Status
 
 `WEBGL2` is one of the 4 public GL-family `CNA_GRAPHICS_RENDERER` values introduced by
-`plan_glbackends.md` — it shares its entire implementation with `OPENGLES`/`OPENGL33`/`WEBGL1`
+`plan_glbackends.md` — it shares its entire implementation with `OPENGLES3`/`OPENGL33`/`WEBGL1`
 (`src/Graphics/Renderers/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
-compile time by the `CNA_GL_PROFILE_WEBGL2` definition. Unlike `OPENGLES`/`OPENGL33` (native
+compile time by the `CNA_GL_PROFILE_WEBGL2` definition. Unlike `OPENGLES3`/`OPENGL33` (native
 desktop/mobile), `WEBGL2` only builds for Emscripten and requests the same GLES 3.0 context
-`OPENGLES` does — Emscripten/browsers map a GLES-3.0-shaped SDL3 GL context request to a real
+`OPENGLES3` does — Emscripten/browsers map a GLES-3.0-shaped SDL3 GL context request to a real
 WebGL 2.0 context. This is functionally what used to be "`EASYGL` under Emscripten" before this
 plan gave it its own public name.
 
@@ -13,7 +13,7 @@ plan gave it its own public name.
 
 ## What's real today
 
-- ✅ **Context creation** — unchanged from `OPENGLES`'s GLES 3.0 request (`plan_glbackends.md`
+- ✅ **Context creation** — unchanged from `OPENGLES3`'s GLES 3.0 request (`plan_glbackends.md`
   GLB-8); confirmed by reading the vendored SDL3 Emscripten renderer
   (`third_party/SDL/src/video/emscripten/SDL_emscriptenopengles.c:87-98`) — it derives WebGL-1-vs-2
   purely from whether the requested GL major version is 3, which `EasyGLRenderer`'s
@@ -59,15 +59,15 @@ plan gave it its own public name.
   plan: the project's own `web` CMake preset already sets `CNA_BUILD_TESTS=OFF`, so a GTest build
   under Emscripten was never a supported/exercised configuration to begin with.
 - ⬜ **CI/CTest identity** (`plan_glbackends.md` GLB-25) — no dedicated `WEBGL2`-only CTest
-  registration distinguishing it from `OPENGLES`/`OPENGL33` runs.
+  registration distinguishing it from `OPENGLES3`/`OPENGL33` runs.
 - ⬜ **Pixel-level golden-image verification** — unlike `OPENGL33` (verified pixel-identical to
-  `OPENGLES` via a real desktop GL context), no pixel-comparison test has run against a real WebGL
+  `OPENGLES3` via a real desktop GL context), no pixel-comparison test has run against a real WebGL
   2 context (browser or otherwise) for `WEBGL2`.
 
 ## Relationship to the other 3 GL-family renderers
 
 See `plan_glbackends.md` §2's table and `docs/opengl33-renderer.md`'s own version of this section.
-In short: `OPENGLES` is today's original `EasyGL` public renderer renamed (GLES 3.0, unchanged
+In short: `OPENGLES3` is today's original `EasyGL` public renderer renamed (GLES 3.0, unchanged
 behavior, native/desktop); `WEBGL2` is the same GLES 3.0 path, but under Emscripten instead of
 native; `OPENGL33` is a new desktop GL 3.3 core-profile variant; `WEBGL1` (GLES 2.0 / Emscripten)
 needs a real GLSL ES 1.00 shader-body rewrite before it can build at all, tracked as

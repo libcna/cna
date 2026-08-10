@@ -10,7 +10,7 @@ LLGL, or another abstraction likewise do not add CNA identities.
 | # | Enum | Selector | Compile definition | Implementation / factory | Primary gate |
 |---:|---|---|---|---|---|
 | 1 | `SdlRenderer` | `SDL_RENDERER` | `CNA_RENDERER_SDL_RENDERER` | SDL Renderer / `SdlRenderer` | none |
-| 2 | `OpenGLES` | `OPENGLES` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGLES` | EasyGL / `EasyGLRenderer` | non-Emscripten |
+| 2 | `OpenGLES3` | `OPENGLES3` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGLES3` | EasyGL / `EasyGLRenderer` | non-Emscripten |
 | 3 | `OpenGL33` | `OPENGL33` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGL33` | shared EasyGL factory | non-Emscripten |
 | 4 | `WebGL1` | `WEBGL1` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_WEBGL1` | shared EasyGL factory | Emscripten |
 | 5 | `WebGL2` | `WEBGL2` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_WEBGL2` | shared EasyGL factory | Emscripten |
@@ -66,7 +66,7 @@ renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3
 - **CPU bounded 3D:** `SOFTWARE`.
 - **Legacy or fixed-function bounded 3D:** `OPENGLES1`, `OPENGL1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`,
   `DIRECTX7`, `DIRECTX8`, and `GLIDE`.
-- **Programmable/modern, with renderer-specific limits:** `OPENGLES`, `OPENGL33`, `WEBGL1`,
+- **Programmable/modern, with renderer-specific limits:** `OPENGLES3`, `OPENGL33`, `WEBGL1`,
   `WEBGL2`, `BGFX`, `VULKAN`, `WEBGPU`, `MAGNUM`, `DIRECTX9`, `DIRECTX10`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU`,
   `OPENGL4`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `LLGL`, and `METAL`.
 
@@ -81,4 +81,4 @@ operation-level boundary.
 `GraphicsRendererType`, its canonical name, CMake selector, compile definition/profile, selected
 target, factory branch, and platform/dependency gate must agree. No public selector/name may be
 duplicated. Every accepted selector either reaches its factory or rejects at its documented gate.
-The default is `WEBGL2` under Emscripten, `OPENGLES` on Linux, and `SDL_RENDERER` elsewhere.
+The default is `WEBGL2` under Emscripten, `OPENGLES3` on Linux, and `SDL_RENDERER` elsewhere.

@@ -1,7 +1,7 @@
 # WEBGL1 (Emscripten, GLSL ES 1.00 → WebGL 1.0) Renderer — Status
 
 `WEBGL1` is one of the 4 public GL-family `CNA_GRAPHICS_RENDERER` values introduced by
-`plan_glbackends.md` — it shares its entire implementation with `OPENGLES`/`OPENGL33`/`WEBGL2`
+`plan_glbackends.md` — it shares its entire implementation with `OPENGLES3`/`OPENGL33`/`WEBGL2`
 (`src/Graphics/Renderers/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
 compile time by the `CNA_GL_PROFILE_WEBGL1` definition. Unlike the other 3 profiles (all
 GLSL ES 3.00 / desktop GLSL 3.30 core, close enough in body syntax to share one shader source),
@@ -57,7 +57,7 @@ and needs a real GLSL ES 1.00 shader rewrite, not just a header swap.
   conditional on `CNA_GRAPHICS_RENDERER` (`cmake/Examples.cmake`); verified via a real `emcc`
   `VERBOSE=1` build that `WEBGL1` now links with `MIN_WEBGL_VERSION=1`/`MAX_WEBGL_VERSION=1` and
   `WEBGL2` is unchanged at `2`/`2`.
-- ✅ **No regression to `OPENGLES`/`OPENGL33`** — both re-verified against a real desktop Mesa GL
+- ✅ **No regression to `OPENGLES3`/`OPENGL33`** — both re-verified against a real desktop Mesa GL
   context after the `AdaptGlslEs300ForActiveProfile()` signature change this work required;
   `BasicEffect` and `SkinnedEffect` golden-image tests still `[PASS]` on both.
 - ✅ **`SkinnedEffect`/`SkinnedPbrEffect` now supported under `WEBGL1`** — fixed as a same-plan
@@ -71,7 +71,7 @@ and needs a real GLSL ES 1.00 shader rewrite, not just a header swap.
   `VertexBuffer` upload-path change needed at all**, only the attribute-pointer read mode at its 2
   call sites, `#ifdef`-gated to `WEBGL1` only. Verified: a standalone C++ test harness confirmed the
   real `SkinnedEffect` vertex shader transforms correctly (no `uvec4` remains); no regression on
-  `OPENGLES`/`OPENGL33` (`cna_test_easygl_skinnedeffect_golden`/`skinnedpbreffect_golden`/
+  `OPENGLES3`/`OPENGL33` (`cna_test_easygl_skinnedeffect_golden`/`skinnedpbreffect_golden`/
   `cna_test_skinned_effect`/`cna_test_skinned_integration` all still exit 0, real Mesa GL); a real
   `emcmake`/`emcc` build compiles and links cleanly, exercising the new `#ifdef` branch for real.
   **Actual GLSL ES 1.00 driver acceptance of the skinned shaders is still not verified** — same
@@ -96,7 +96,7 @@ and needs a real GLSL ES 1.00 shader rewrite, not just a header swap.
 ## Relationship to the other 3 GL-family renderers
 
 See `plan_glbackends.md` §2's table and `docs/opengl33-renderer.md`/`docs/webgl2-renderer.md`'s own
-versions of this section. In short: `OPENGLES` is today's original `EasyGL` public renderer renamed
+versions of this section. In short: `OPENGLES3` is today's original `EasyGL` public renderer renamed
 (GLES 3.0, native); `WEBGL2` is the same GLES 3.0 path under Emscripten; `OPENGL33` is a new
 desktop GL 3.3 core-profile variant. `WEBGL1` is the only profile needing a real shader-body
 rewrite (not just a header swap) — all ~26 stock effect shaders, including `SkinnedEffect`/

@@ -267,7 +267,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // REMED-GFX-219 landed with the GL-family lane: the EasyGL implementation's GL_LINES
     // re-expansion renders a correct wireframe (the pixel oracle below measures interior 0/1089
     // with all three edges present), so the report now states the capability the renderer
-    // genuinely has. True for every GL profile (OPENGLES/OPENGL33/WEBGL1/WEBGL2) alike -- the
+    // genuinely has. True for every GL profile (OPENGLES3/OPENGL33/WEBGL1/WEBGL2) alike -- the
     // emulation draws line primitives and depends on no polygon-mode API.
     EXPECT_TRUE(reported)
         << "the EasyGL-family renderers under-report WireFrame again -- REMED-GFX-219's corrected "

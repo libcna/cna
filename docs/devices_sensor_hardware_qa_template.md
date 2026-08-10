@@ -34,7 +34,7 @@ coordinate-convention or motor-selection bug in this layer.
 | OS / API level (e.g. Android 14 / API 34, iOS 17.5) | |
 | Physical or emulator/simulator (name the AVD/simulator if not physical) | |
 | CNA commit hash (`git rev-parse HEAD`) | |
-| Graphics backend (`CNA_GRAPHICS_RENDERER`: `SDL_RENDERER`/`OPENGLES`/`VULKAN`/`BGFX`) | |
+| Graphics backend (`CNA_GRAPHICS_RENDERER`: `SDL_RENDERER`/`OPENGLES3`/`VULKAN`/`BGFX`) | |
 | Build type (Debug/Release) | |
 | Test app used (`examples/demo_devices` or a specific game) | |
 

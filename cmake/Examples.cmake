@@ -1,7 +1,7 @@
 # --- Examples ---
 # The 3D house demo exercises the EasyGL 3D pipeline. Other renderers throw
 # "3D not supported", so the target is only enabled with a GL-family public renderer
-# (OPENGLES/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see plan_glbackends.md).
+# (OPENGLES3/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see plan_glbackends.md).
 option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, demo_2d, ...)" ON)
 if(CNA_BUILD_EXAMPLES)
     # ---- 2D sprite demo (works with all renderers) ----------------------------
@@ -275,7 +275,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA)
 endif()
 
 # ---- DepthEffect manual verification demo (renders + screenshots each colour-depth mode) -----
-if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_depth_effect_demo examples/depth_effect_demo_test.cpp)
     target_include_directories(cna_depth_effect_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     target_compile_definitions(cna_depth_effect_demo PRIVATE
@@ -296,7 +296,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLE
 endif()
 
 # ---- CRTEffect manual verification demo (renders + screenshots each CRT parameter set) --------
-if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_crt_effect_demo examples/crt_effect_demo_test.cpp)
     target_include_directories(cna_crt_effect_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     target_compile_definitions(cna_crt_effect_demo PRIVATE
@@ -330,7 +330,7 @@ if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
+if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
         OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
     # ---- 3D house demo (EasyGL and Vulkan) -----------------------------------

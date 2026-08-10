@@ -16,7 +16,7 @@ CNA input depends on three kinds of external code:
 | `third_party/SDL`, `third_party/SDL_image`, `third_party/SDL_mixer` | **git submodules** of this repo | `git submodule update --init --recursive`. Alternative: `-DCNA_USE_SYSTEM_SDL=ON` builds against installed system SDL3/SDL3_image/SDL3_mixer packages instead (`find_package(SDL3 REQUIRED)` etc., `cmake/ThirdPartySDL.cmake`) — no Input behavior differs either way, it is purely a build-time source-of-headers/libs choice (P9-025). |
 | `vendor/googletest` | **git submodule** | test framework |
 | `../sharp-runtime` | **sibling repository** (NOT a submodule) | CNA's C++ `System.*` runtime; must sit next to `cna_input` |
-| `../easy-gl` | **sibling repository** (NOT a submodule) | only for the `OPENGLES` backend |
+| `../easy-gl` | **sibling repository** (NOT a submodule) | only for the `OPENGLES3` backend |
 
 > A source-only `.zip` of just `cna_input` is **not** buildable: it is missing the submodules and the
 > two sibling repositories. The CMake configure step now fails early with an actionable message
@@ -33,7 +33,7 @@ git submodule update --init --recursive
 # 2. The sibling runtime + (for EasyGL) the GL helper, checked out NEXT TO cna_input:
 #    <parent>/cna_input, <parent>/sharp-runtime, <parent>/easy-gl
 git -C .. clone <sharp-runtime-url> sharp-runtime
-git -C .. clone <easy-gl-url> easy-gl        # only needed for -DCNA_GRAPHICS_RENDERER=OPENGLES
+git -C .. clone <easy-gl-url> easy-gl        # only needed for -DCNA_GRAPHICS_RENDERER=OPENGLES3
 
 # 3. System packages (Debian/Ubuntu) for VideoPlayer (unrelated to input, but part of the lib):
 sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
@@ -46,7 +46,7 @@ running the input tests. EasyGL is the default.
 
 ```bash
 # Configure with tests enabled (pick ONE backend):
-cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES -DCNA_BUILD_TESTS=ON
+cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
 # or VULKAN / BGFX / SDL_RENDERER
 
 # Build the test binary:
@@ -146,7 +146,7 @@ To reproduce locally in a throwaway clone (siblings present next to it):
 ```bash
 git clone <cna_input-url> /tmp/cna-fresh && cd /tmp/cna-fresh
 git submodule update --init --recursive
-cmake -S . -B build -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES -DCNA_BUILD_TESTS=ON
+cmake -S . -B build -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
 cmake --build build --target CnaTests
 xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir build -L input --output-on-failure
 ```
@@ -238,7 +238,7 @@ deviations.
 |---------|-------|-----|
 | CMake configure fails: `Missing vendored 'SDL' …` | submodules not initialized | `git submodule update --init --recursive` |
 | CMake configure fails: `required sibling repository 'sharp-runtime' … not found` | sibling repo not checked out next to `cna_input` | `git -C .. clone <sharp-runtime-url> sharp-runtime` |
-| CMake configure fails: `the OPENGLES backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=VULKAN` (or BGFX / SDL_RENDERER) |
+| CMake configure fails: `the OPENGLES3 backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=VULKAN` (or BGFX / SDL_RENDERER) |
 | `ctest -L input` fails on 3 `MouseCursor` cases | headless `SDL_VIDEODRIVER=dummy` (null cursors) | run under a display: `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest -L input` |
 | ASan reports leaks in `libGLX_mesa` | third-party Mesa GLX at process exit (not CNA) | run with `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` (what CI uses) |
 | Gamepad panels stay "disconnected" in `demo_input` | no controller / SDL can't map the device | attach a controller SDL knows (see `gamecontrollerdb`); Steam Input presents a virtual pad |

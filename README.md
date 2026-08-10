@@ -12,7 +12,7 @@ It is a framework/runtime and abstraction layer—not a game—designed to prese
 
 ```bash
 git submodule update --init --recursive
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES
+cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
 cmake --build build --target CNA CnaTests
 ctest --test-dir build --output-on-failure
 ```
@@ -26,13 +26,13 @@ ctest --test-dir build --output-on-failure
 - **Overall XNA 4.0 API surface:** 227 of 245 public FNA types are present in CNA (**92.7%**, computed 2026-07-11 by diffing FNA's public type list against CNA's headers) — 100% for `Graphics`/`Audio`/`Input`(+`Touch`)/`Storage`; the real gap is `.Content` (4/12 — no `.xnb` reader, by design) and `.Media` (25/25 present, but 14 are shells). See `docs/xna-4-api-coverage.md`. **Note this is a different metric from the Graphics bullet above** — this one counts whether a type/class exists at all across every XNA namespace (a raw presence count), while the Graphics "~90%" figure is a narrower, bug-weighted quality gate scoped to just the ~26 major Graphics classes (it also counts behavioral correctness, not just presence — Graphics itself is 91/91 = 100% present). The two numbers measuring different things is expected, not a typo or a contradiction.
 - **The two gaps that matter most to a real port:** no `.xnb` content pipeline (CNA loads raw assets + JSON descriptors instead) and no compiled `.fx` shader bytecode support (`Effect(GraphicsDevice&, byte[])`) — the latter is the single biggest real gap, blocking 23 of the 86 official XNA samples in `../cna-samples`. See `docs/migration-guide.md`.
 - **`SDL_RENDERER` renderer:** Implemented path focused on practical 2D rendering workflows; 2D-only by design (3D calls throw).
-- **`OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not four separate implementations. `OPENGLES` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) and `WEBGL1` (Emscripten, GLES 2.0 → WebGL 1.0) are newer and still landing — see `plan_glbackends.md` for current per-profile status.
+- **`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not four separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) and `WEBGL1` (Emscripten, GLES 2.0 → WebGL 1.0) are newer and still landing — see `plan_glbackends.md` for current per-profile status.
 - **`VULKAN` renderer:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature renderer; the one remaining named gap is an isolated `RasterizerState.DepthBias` sub-case. See `docs/xna-4-api-coverage.md`'s per-renderer table for current detail.
 - **`BGFX` renderer:** Broad 2D+3D functionality, largely pixel-verified parity with EasyGL/Vulkan as of this project's Phase 72 — but not unqualified full parity: known real limitations remain, including a `Depth24Stencil8`-attached `RenderTargetCube` face producing no colour output (Task 952, deferred, root cause not yet found), `DrawIndexedPrimitivesEx` silently discarding `startIndex`/`baseVertex` on a sub-range indexed draw (Task 954), and occlusion-query pixel-count correctness that can't be verified under this project's own sandbox's software GL driver. See `NEXT.md` §5 for the current, complete list.
 - **`SOKOL` renderer:** Experimental renderer on `sokol_gfx`, a single-header GPU abstraction (OpenGL 4.1 core today; GLES3/D3D11/Metal/WebGPU are wired but unimplemented). The current baseline covers context/pass lifecycle, the full `Clear` family, back-buffer read-back, `Texture2D`, `TextureCube`, vertex/index buffers, a pixel-verified `SpriteBatch` with real `BlendState`/`SamplerState` support, vertex-coloured/textured/lit/dual-textured/skinned/environment-mapped 3D geometry (`BasicEffect` with real depth testing, face culling, ambient + up to 3 per-pixel directional lights, specular, emissive, alpha test and fog; `DualTextureEffect`; `SkinnedEffect` with a 72-bone palette; `EnvironmentMapEffect` with real cube-map reflection and Fresnel), `Viewport.MinDepth`/`MaxDepth`, instanced draws, custom `ShaderEffect`s (raw-GL bypass of the `sg_pipeline` path, both `SpriteBatch` and 3D draws), MRT (2-4 `RenderTarget2D` targets via a real multi-attachment `sg_pass`), and `RenderTarget2D`/`RenderTargetCube` (real colour + depth-stencil attachments, MSAA, correct sampling orientation, immediate first-use, direct `GetData` readback, mip-mapped rendering). PBR shading, `RenderTargetCube` MSAA (a permanent sokol_gfx boundary), and `Texture3D` sampling are not implemented and fail loudly. See [`docs/sokol-renderer.md`](docs/sokol-renderer.md) and `plan_sokol.md`.
 - **`WEBGPU` renderer:** Experimental renderer using native `wgpu-native`. The current baseline covers device/surface setup, clear/present, RGBA8 `Texture2D`, vertex/index uploads and WGSL SpriteBatch rendering. It is not yet a 3D-parity replacement for EasyGL/Vulkan/Bgfx; see [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md) and `plan_webgpu.md`.
 - **`SKIA` renderer:** Experimental CPU-raster 2D path using a pinned external Skia build. Clear/presentation/readback, `Texture2D`, complete shared `SpriteBatch`/`SpriteFont` 2D routes, raster targets, bounded 2D SkSL, CPU cube/volume transfer storage, and six-face `RenderTargetCube` emulation are verified. It deliberately does not advertise 3D, depth/stencil, MSAA, MRT, occlusion queries, or cube/volume sampling; direct and emulated alternatives are recorded in [`docs/skia-renderer.md`](docs/skia-renderer.md), the [feature matrix](docs/graphics-renderer-feature-matrix.md), and `plan_skia.md`.
-- **`OPENGL4` renderer:** Real desktop OpenGL 4.x core-profile renderer (4.1 minimum requested, `SDL_GL_CONTEXT_PROFILE_CORE`), deliberately independent of the EasyGL-implemented `OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2` family — those profiles target ES 3.0/WebGL or a GL 3.3 core profile, not 4.x core. Uses its own small hand-rolled GL loader (`GL4Loader`), zero new third-party dependency beyond the platform's own GL library. All five stock effects plus `PbrEffect`/`SkinnedPbrEffect` (GLSL 410 core, stride-dispatched), real FBO render targets (2D + cube + MRT), backbuffer and render-target MSAA, real `GL_SAMPLES_PASSED` occlusion queries (exact pixel counts, unlike the EasyGL family's ES any-samples boolean), real wireframe via `glPolygonMode` (pixel-oracle-verified), `Texture3D`/`TextureCube` with real readback, 16/32-bit index buffers, `baseVertex`, custom GLSL `ShaderEffect` (3D + SpriteBatch), and hardware instancing through the unified vertex-stream transport. Multi-stream vertex input is reported unsupported and refused deterministically. 25 dedicated pixel-readback CTest suites, all verified against a real 4.5-core context. See [`docs/opengl4-renderer.md`](docs/opengl4-renderer.md) and `plan_opengl4.md`.
+- **`OPENGL4` renderer:** Real desktop OpenGL 4.x core-profile renderer (4.1 minimum requested, `SDL_GL_CONTEXT_PROFILE_CORE`), deliberately independent of the EasyGL-implemented `OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` family — those profiles target ES 3.0/WebGL or a GL 3.3 core profile, not 4.x core. Uses its own small hand-rolled GL loader (`GL4Loader`), zero new third-party dependency beyond the platform's own GL library. All five stock effects plus `PbrEffect`/`SkinnedPbrEffect` (GLSL 410 core, stride-dispatched), real FBO render targets (2D + cube + MRT), backbuffer and render-target MSAA, real `GL_SAMPLES_PASSED` occlusion queries (exact pixel counts, unlike the EasyGL family's ES any-samples boolean), real wireframe via `glPolygonMode` (pixel-oracle-verified), `Texture3D`/`TextureCube` with real readback, 16/32-bit index buffers, `baseVertex`, custom GLSL `ShaderEffect` (3D + SpriteBatch), and hardware instancing through the unified vertex-stream transport. Multi-stream vertex input is reported unsupported and refused deterministically. 25 dedicated pixel-readback CTest suites, all verified against a real 4.5-core context. See [`docs/opengl4-renderer.md`](docs/opengl4-renderer.md) and `plan_opengl4.md`.
 - **`OPENGL1` renderer:** Historical-class legacy desktop OpenGL 1.x **fixed-function** renderer — immediate-mode vertex emission, `GL_MODELVIEW`/`GL_PROJECTION` matrices, `glLight*` lighting (3 directional lights + specular + emissive), `glTexEnv*` combiners (`DualTextureEffect`, `EnvironmentMapEffect` reflection subset), real `GL_FOG` driven by an exact inversion of the FNA fog vector, `glAlphaFunc` alpha-test approximation. Runtime-discovers 1.2–1.5-era features via `SDL_GL_GetProcAddress` (FBO render targets 2D+cube with readback and mip regeneration, backbuffer + RT MSAA, `ARB_occlusion_query` with exact `GL_SAMPLES_PASSED` counts, extended blend, anisotropy, cube maps) — no GL loader library, no shaders anywhere, zero new third-party dependency. No custom effects, no MRT, no `Texture3D`, no instancing/multi-stream — all reported truthfully and refused deterministically. 38 dedicated CTest suites. See [`docs/opengl1-renderer.md`](docs/opengl1-renderer.md) and `plan_opengl1.md`.
 - **`OPENGL2` renderer:** Native desktop OpenGL 2.1 **compatibility-profile** renderer, GLSL 1.10 throughout (runtime-compiled inline programs, attribute names bound via `glBindAttribLocation`), deliberately independent of the EasyGL-implemented GL family and of the other GL renderers. All five stock effects plus `PbrEffect`/`SkinnedPbrEffect`, FNA fog-vector fog, real FBO render targets (2D incl. MSAA + cube), real MRT (up to 8 targets with real depth/MSAA resolve), real `GL_SAMPLES_PASSED` occlusion queries, `Texture3D`/`TextureCube` with readback, 16/32-bit indices, software `baseVertex` (pointer re-base -- no `glDrawElementsBaseVertex` on 2.1), full custom `VertexDeclaration` support (name-driven binding reads exactly the declared bytes), custom GLSL 1.10 `ShaderEffect` (3D + SpriteBatch), real Letterbox/Overscan/Stretch presentation modes, context-loss recovery, and hardware instancing when the driver grants `GL_ARB_draw_instanced`/`GL_ARB_instanced_arrays` -- the driver-dependence is why this lane added `GraphicsCapability::Instancing`. Multi-stream vertex input reported unsupported and refused deterministically. 48 dedicated CTest suites. See [`docs/opengl2-renderer.md`](docs/opengl2-renderer.md) and `plan_opengl2.md`.
 - **`OPENGLES1` renderer:** Genuine **OpenGL ES 1.1 fixed-function** renderer ("Common"/CM profile), deliberately independent of the EasyGL-implemented GL family — EasyGL targets shader-based ES 3.0/GL 3.3/WebGL pipelines and cannot create an ES 1.1 context at all, so the two share no code. No shaders anywhere (zero `#version` directives, zero shader entry points); fixed-function matrices, `glLight*` lighting, `glTexEnv*` multitexture combiners, `GL_FOG`, alpha test, FBO render targets via `GL_OES_framebuffer_object`, and `WireFrame` emulated by re-expanding triangles to `GL_LINES`. Multiple render targets, occlusion queries, custom effects, `Texture3D`, multi-stream vertex input and instancing are all reported `false` and refused deterministically. Requires a **real system OpenGL ES 1.1 library** (`libGLESv1_CM` plus `GLES/gl.h`/`GLES/glext.h`; Debian `libgles1`, `libgles-dev`), gated at configure time with a `FATAL_ERROR` — nothing vendored or downloaded. Note that Debian builds Mesa with `-Dgles1=disabled`, so its stock driver cannot create an ES 1.1 context on **any** device; the renderer is validated against a locally built ES1-capable Mesa driven by `scripts/opengles1-test-env.sh` (verified runtime identity: `OpenGL ES-CM 1.1 Mesa 25.0.7`, softpipe). 7 dedicated pixel-readback CTest suites. See [`docs/opengles1-renderer.md`](docs/opengles1-renderer.md) and `plan_opengles1.md`.
@@ -101,7 +101,7 @@ ctest --test-dir build --output-on-failure
 - Renderer abstraction supports targeting multiple rendering paths from one API layer.
 - **Windows support** via the `SDL_RENDERER` renderer (MSVC, clang-cl, or MinGW-w64) — cross-compiled
   with MinGW-w64 and verified running under Wine.
-- Linux support via `OPENGLES`/`OPENGL33` (OpenGL) or `SDL_RENDERER`.
+- Linux support via `OPENGLES3`/`OPENGL33` (OpenGL) or `SDL_RENDERER`.
 - **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
   architecturally planned — see section 7 (Networking, Services & Avatar) below for real
   cross-platform `Net` verification on both.
@@ -172,7 +172,7 @@ inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
 - `SDL_RENDERER`
 - `SDL_GPU`
-- `OPENGLES` (internal implementation: EasyGL)
+- `OPENGLES3` (internal implementation: EasyGL)
 - `OPENGL33` (internal implementation: EasyGL)
 - `WEBGL1` (Emscripten only; internal implementation: EasyGL)
 - `WEBGL2` (Emscripten only; internal implementation: EasyGL)
@@ -184,8 +184,8 @@ inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 - `HEADLESS`
 - `SOFTWARE`
 - `STUB`
-- `OPENGLES1` (genuine OpenGL ES 1.1 fixed-function, "Common"/CM profile -- independent of the `OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2` family (internally EasyGL, targeting ES 3.0/WebGL2), which cannot create an ES 1.1 context; needs a real system `libGLESv1_CM`)
-- `OPENGL4` (real desktop OpenGL 4.x core profile -- deliberately independent of the `OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2` family (internally EasyGL), which cannot create a desktop 4.x core-profile context)
+- `OPENGLES1` (genuine OpenGL ES 1.1 fixed-function, "Common"/CM profile -- independent of the `OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` family (internally EasyGL, targeting ES 3.0/WebGL2), which cannot create an ES 1.1 context; needs a real system `libGLESv1_CM`)
+- `OPENGL4` (real desktop OpenGL 4.x core profile -- deliberately independent of the `OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` family (internally EasyGL), which cannot create a desktop 4.x core-profile context)
 - `OPENGL1` (legacy desktop OpenGL 1.x fixed-function -- Historical class, independent of the EasyGL-implemented GL family and of `OPENGL4`; desktop Linux/Windows only)
 - `OPENGL2` (native desktop OpenGL 2.1 compatibility profile, GLSL 1.10 -- independent of the EasyGL-implemented GL family and of the other GL renderers)
 - `DIRECTX9` (Windows-only; native Direct3D 9 running Microsoft's own vendored Stock Effects HLSL bytecode)
@@ -302,7 +302,7 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - **Language:** C++23
 - **Core platform/runtime library:** SDL3 (vendored via Git submodule at `third_party/SDL`)
 - **Media integration:** `SDL3_image`, `SDL3_mixer` (vendored via Git submodules)
-- **Graphics dependency:** `easy-gl` (for the `OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers),
+- **Graphics dependency:** `easy-gl` (for the `OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers),
   resolved from the canonical `../easy-gl` sibling; EasyGL in turn resolves `../meta-gl`
 - **Networking:** [ENet](http://enet.bespin.org/) (vendored directly at `third_party/enet`) —
   reliable-UDP transport backing `Microsoft::Xna::Framework::Net`'s `SystemLink` sessions
@@ -318,7 +318,7 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - C++23-capable compiler (GCC 12+ or Clang 15+)
 - Dependency directories available to CMake:
     - `../sharp-runtime`
-    - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES`/`OPENGL33`/`WEBGL1`/`WEBGL2`
+    - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2`
       renderers)
 - SDL3, SDL3_image, and SDL3_mixer are built from vendored submodules by default — no system SDL packages required.
 
@@ -350,11 +350,11 @@ After that, no system SDL packages are required.
 > update --init --recursive`, from `cmake/ThirdPartySDL.cmake`). Either clone with Git and run
 > the command above, or set `-DCNA_USE_SYSTEM_SDL=ON` to use system-installed SDL3 packages.
 
-### Build (Linux — OPENGLES renderer, default)
+### Build (Linux — OPENGLES3 renderer, default)
 
 ```bash
 git submodule update --init --recursive
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES
+cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
 cmake --build build --target CNA CnaTests
 ```
 
@@ -530,8 +530,8 @@ cmake --build build --target hello-triangle-sdl
 
 | Platform | Compiler | Renderer | Status |
 |----------|----------|---------|--------|
-| Linux x86_64 | GCC 12+ | OPENGLES, SDL_RENDERER | ✅ |
-| Linux x86_64 | Clang 15+ | OPENGLES, SDL_RENDERER | ✅ |
+| Linux x86_64 | GCC 12+ | OPENGLES3, SDL_RENDERER | ✅ |
+| Linux x86_64 | Clang 15+ | OPENGLES3, SDL_RENDERER | ✅ |
 | Windows x86_64 | MSVC 2022 | SDL_RENDERER | planned |
 | Windows x86_64 (native) | MinGW-w64 | SDL_RENDERER | planned |
 | Linux → Windows (cross) | MinGW-w64 | SDL_RENDERER | ✅ verified building + full test suite under Wine |
@@ -539,7 +539,7 @@ cmake --build build --target hello-triangle-sdl
 | Linux → Windows (cross) | MinGW-w64 | D3D11 | ✅ verified building + `D3D11` CTest suite (6 tests, 96+ checks) under Wine+DXVK on a real GPU — real Windows hardware verification still open, see `docs/directx11-renderer.md` |
 | Linux → Windows (cross) | MinGW-w64 | D3D12 | ✅ verified building + `D3D12` CTest suite (1 test, 80/80 checks, off-screen only) under Wine+vkd3d-proton on a real GPU — swap-chain presentation and real Windows hardware verification both still open, see `docs/directx12-renderer.md` |
 | Web (Emscripten) | emcc/Clang (emsdk) | WEBGL2 | ✅ verified building + running under Node.js (as `EASYGL`, prior to the `plan_glbackends.md` rename — not yet re-verified under its new `WEBGL2` name/build flags) |
-| Android (NDK) | Clang (NDK 29/30) | OPENGLES | ✅ verified building + running on a real x86_64 emulator (as `EASYGL`, prior to the `plan_glbackends.md` rename) |
+| Android (NDK) | Clang (NDK 29/30) | OPENGLES3 | ✅ verified building + running on a real x86_64 emulator (as `EASYGL`, prior to the `plan_glbackends.md` rename) |
 
 ## 10. 📖 Usage Example
 

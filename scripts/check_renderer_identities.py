@@ -19,7 +19,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Canonical public identities: (cmake selection name, enum name). 41 entries.
 IDENTITIES = [
     ("SDL_RENDERER", "SdlRenderer"),
-    ("OPENGLES", "OpenGLES"),
+    ("OPENGLES3", "OpenGLES3"),
     ("OPENGL33", "OpenGL33"),
     ("WEBGL1", "WebGL1"),
     ("WEBGL2", "WebGL2"),

@@ -11,7 +11,7 @@ namespace CNA
         SdlRenderer,
 
         /** @brief OpenGL ES (desktop/mobile GLES 3.0), internally implemented by EasyGL. */
-        OpenGLES,
+        OpenGLES3,
 
         /** @brief Desktop OpenGL 3.3 core profile, internally implemented by EasyGL. */
         OpenGL33,
@@ -137,9 +137,9 @@ namespace CNA
      *
      * Resolved entirely from the CNA_RENDERER_* compile definition cmake/RendererSelection.cmake
      * sets per renderer, so this is a compile-time constant -- usable in a constant expression
-     * (e.g. static_assert(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::OpenGLES)).
+     * (e.g. static_assert(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::OpenGLES3)).
      *
-     * The 4 GL-family public renderers (OPENGLES/OPENGL33/WEBGL1/WEBGL2) all share the internal
+     * The 4 GL-family public renderers (OPENGLES3/OPENGL33/WEBGL1/WEBGL2) all share the internal
      * CNA_RENDERER_EASYGL identity (see plan_glbackends.md) -- the CNA_GL_PROFILE_* compile
      * definition set alongside it distinguishes which of the 4 public names was selected.
      *
@@ -156,8 +156,8 @@ namespace CNA
         return GraphicsRendererType::WebGL1;
 #elif defined(CNA_GL_PROFILE_WEBGL2)
         return GraphicsRendererType::WebGL2;
-#else // CNA_GL_PROFILE_OPENGLES (default within CNA_RENDERER_EASYGL)
-        return GraphicsRendererType::OpenGLES;
+#else // CNA_GL_PROFILE_OPENGLES3 (default within CNA_RENDERER_EASYGL)
+        return GraphicsRendererType::OpenGLES3;
 #endif
 #elif defined(CNA_RENDERER_BGFX)
         return GraphicsRendererType::Bgfx;
@@ -240,7 +240,7 @@ namespace CNA
      * @brief Returns the human-readable name of the graphics renderer compiled into this build.
      *
      * The returned view matches the CNA_GRAPHICS_RENDERER CMake option value exactly
-     * (e.g. "OPENGLES", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string literal),
+     * (e.g. "OPENGLES3", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string literal),
      * so it stays valid for the lifetime of the program. Like getCurrentGraphicsRendererType(),
      * this is a compile-time constant.
      *
@@ -251,7 +251,7 @@ namespace CNA
         switch (getCurrentGraphicsRendererType())
         {
             case GraphicsRendererType::SdlRenderer: return "SDL_RENDERER";
-            case GraphicsRendererType::OpenGLES:    return "OPENGLES";
+            case GraphicsRendererType::OpenGLES3:    return "OPENGLES3";
             case GraphicsRendererType::OpenGL33:    return "OPENGL33";
             case GraphicsRendererType::WebGL1:       return "WEBGL1";
             case GraphicsRendererType::WebGL2:       return "WEBGL2";

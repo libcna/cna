@@ -265,7 +265,7 @@ suites (Keyboard, Mouse, MouseCursor, GamePad, Touch, Gesture, TextInputEXT, and
 
 ```bash
 git submodule update --init --recursive   # first time only (see README)
-cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES -DCNA_BUILD_TESTS=ON
+cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-input-easygl --target CnaTests -j"$(nproc)"
 
 # Canonical input-test selector (INPUT-BUILD-003): runs the single-source-of-truth filter
@@ -281,7 +281,7 @@ process lifetime) is shaken out by the baked-in `--gtest_shuffle --gtest_repeat=
 determinism gate (INPUT-BUILD-009); bump the repeat higher via a direct binary invocation with the same
 filter variable if you want more iterations.
 
-Swap `-DCNA_GRAPHICS_RENDERER=OPENGLES` for `VULKAN` or `BGFX` to verify the same input tests on the
+Swap `-DCNA_GRAPHICS_RENDERER=OPENGLES3` for `VULKAN` or `BGFX` to verify the same input tests on the
 other backends (bgfx adds 4 backend-specific, input-unrelated tests). The full suite is just
 `./cmake-build-input-easygl/CnaTests` with no filter.
 

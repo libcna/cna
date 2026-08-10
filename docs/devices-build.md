@@ -51,7 +51,7 @@ Layout expected (all four as siblings under one parent directory):
 
 `meta-gl` has no further sibling or submodule dependencies of its own (confirmed by
 inspecting its `CMakeLists.txt`/`.gitmodules` directly) — this three-repo chain is the
-full transitive closure for an `OPENGLES`-backend build. `sharp-runtime` has its own
+full transitive closure for an `OPENGLES3`-backend build. `sharp-runtime` has its own
 separate `vendor/googletest` submodule, handled automatically by its own build, not
 something this repo's setup needs to touch directly.
 
@@ -90,11 +90,11 @@ environment's core count) with zero errors — confirmed by actually running bot
 commands in a genuinely fresh clone, not assumed from the existing checkout this
 document's other sections use.
 
-## 1. Desktop debug build (Linux, `OPENGLES` backend)
+## 1. Desktop debug build (Linux, `OPENGLES3` backend)
 
 ```bash
 cmake -S . -B cmake-build-debug \
-      -DCNA_GRAPHICS_RENDERER=OPENGLES -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+      -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
 
 cmake --build cmake-build-debug --target CNA -j"$(nproc)"
 cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"

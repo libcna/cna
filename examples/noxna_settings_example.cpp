@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // NOXNA Example — compile-time demonstration of CNA extended graphics API.
 //
-// Build with: cmake -DCNA_NOXNA=ON -DCNA_GRAPHICS_RENDERER=OPENGLES ..
+// Build with: cmake -DCNA_NOXNA=ON -DCNA_GRAPHICS_RENDERER=OPENGLES3 ..
 //
 // This example does not draw anything.  It exercises the NOXNA settings
 // API so the compiler verifies that all declarations compile correctly.

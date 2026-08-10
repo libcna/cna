@@ -383,7 +383,7 @@ CNA_GDI_DIRTY_PRESENTATION=1 CNA_GDI_PRESENT_FILTER=halftone CNA_GDI_DWM_FLUSH=0
   Glide `FakeGlide3xDll` fixture includes `windows.h`; Glide was not reopened. The focused run
   excluded the unrelated integration-baseline Software `SetRenderTargets_FourTargets` expectation
   mismatch and Pulse-sensitive capability matrix; neither is a GDI finding.
-- REMED-GFX-223's principal current OPENGLES/EasyGL control passed **8/8** focused runtime
+- REMED-GFX-223's principal current OPENGLES3/EasyGL control passed **8/8** focused runtime
   pixel/state tests: TexturedQuad, BlendState Additive, RT2D readback, render-target
   viewport/scissor reset, InstancedModel, MRT, AdditiveBlendContract, and Texture2D GetData. The
   actual `CnjCacheIsolationTest` passed **2/2** on Mesa OpenGL ES 3.2 llvmpipe/Xvfb display `:105`.

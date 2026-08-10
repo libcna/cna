@@ -7,7 +7,7 @@ downstream task that owns its promotion (or its continued rejection).
 
 ## Scope
 
-"EasyGL" here means CNA's internal implementation selected publicly as `OPENGLES`, `OPENGL33`,
+"EasyGL" here means CNA's internal implementation selected publicly as `OPENGLES3`, `OPENGL33`,
 `WEBGL1`, or `WEBGL2` -- a real, full 3D-capable GL renderer, not the separate sibling `easy-gl`
 GL-wrapper library it links against (that library owns no shader source of its own; it is a thin
 Shader/Program/Buffer wrapper).

@@ -66,7 +66,7 @@ namespace CNA::Internal::Renderers::Bgfx::Detail
         {
             return bgfx::RendererType::OpenGL;
         }
-        if (normalized == "GLES" || normalized == "OPENGLES")
+        if (normalized == "GLES" || normalized == "OPENGLES3")
         {
             return bgfx::RendererType::OpenGLES;
         }
@@ -77,7 +77,7 @@ namespace CNA::Internal::Renderers::Bgfx::Detail
 
         throw std::runtime_error(
             std::string("Unsupported BGFX renderer override in ") + kRendererOverrideEnvVar + ": '" + safeValue
-            + "'. Supported values: AUTO, OPENGL, OPENGLES, VULKAN, METAL, DIRECT3D11, DIRECT3D12, NOOP."
+            + "'. Supported values: AUTO, OPENGL, OPENGLES3, VULKAN, METAL, DIRECT3D11, DIRECT3D12, NOOP."
         );
     }
 

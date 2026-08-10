@@ -306,7 +306,7 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     // plan_glbackends.md Phase B (GLB-10/11): every embedded shader in this file is authored
-    // once, against GLSL ES 3.00 (the OPENGLES/WEBGL2 profiles' native syntax). Body syntax
+    // once, against GLSL ES 3.00 (the OPENGLES3/WEBGL2 profiles' native syntax). Body syntax
     // (in/out, texture(), no varying/attribute) is shared with desktop GLSL 3.30 core -- only
     // the "#version ...\nprecision ... float;\n" header two lines differ, so OPENGL33 does not
     // need a second copy of every shader, just a header rewrite performed here at first-use time.
@@ -588,7 +588,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // requires this capability explicitly enabled, or gl_PointSize is silently ignored and
         // every point renders at the fixed 1.0-pixel default size. Found investigating why
         // easygl_shipgame_particle_shader_test (a GL_POINTS/gl_PointSize/gl_PointCoord particle
-        // shader) rendered nothing under OPENGL33 while passing under OPENGLES/WEBGL2 -- NOT a
+        // shader) rendered nothing under OPENGL33 while passing under OPENGLES3/WEBGL2 -- NOT a
         // shader compile failure (Mesa's desktop compiler accepts "#version 300 es" leniently
         // even under a core-profile context, confirmed empirically), a real missing GL state
         // toggle. Not exposed by meta-gl's typed Capability enum (GLES/WebGL have no equivalent
@@ -2337,7 +2337,7 @@ void main()
 
         // plan_glbackends.md GLB-8: context attributes depend on which of the 4 public GL
         // profiles this translation unit was compiled for (see cmake/RendererSelection.cmake).
-        // OPENGLES/WEBGL2 request GLES 3.0 (today's original, unchanged behavior); WEBGL1
+        // OPENGLES3/WEBGL2 request GLES 3.0 (today's original, unchanged behavior); WEBGL1
         // requests GLES 2.0 (Emscripten maps this to a real WebGL 1 context); OPENGL33 requests
         // a desktop GL 3.3 core profile context instead of an ES profile.
 #if defined(CNA_GL_PROFILE_OPENGL33)
@@ -2348,7 +2348,7 @@ void main()
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-#else // CNA_GL_PROFILE_OPENGLES or CNA_GL_PROFILE_WEBGL2
+#else // CNA_GL_PROFILE_OPENGLES3 or CNA_GL_PROFILE_WEBGL2
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -2524,7 +2524,7 @@ void main()
                 // correct wireframe (shared pixel oracle: interior 0/1089, all three triangle edges
                 // present), so the previous `false` under-stated the implementation. The emulation
                 // draws line primitives and depends on no polygon-mode API, so it holds for every
-                // GL profile (OPENGLES/OPENGL33/WEBGL1/WEBGL2) alike.
+                // GL profile (OPENGLES3/OPENGL33/WEBGL1/WEBGL2) alike.
                 return true;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: implemented -- Draw*PrimitivesEx binds every per-vertex stream

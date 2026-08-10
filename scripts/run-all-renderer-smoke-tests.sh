@@ -5,7 +5,7 @@
 # smoke test (Tasks 85/88/89/730, CTest label "GraphicsSmoke") sequentially --
 # never concurrently, matching this project's own testing discipline -- using
 # the persistent per-renderer build directories this project already uses
-# locally (cmake-build-debug=OPENGLES, cmake-build-vulkan, cmake-build-bgfx,
+# locally (cmake-build-debug=OPENGLES3, cmake-build-vulkan, cmake-build-bgfx,
 # cmake-build-sdl).
 #
 # A renderer whose build directory does not exist and cannot be freshly
@@ -21,9 +21,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 CNA_SMOKE_TEST_DISPLAY="${CNA_SMOKE_TEST_DISPLAY:-:99}"
 
-RENDERERS=(OPENGLES VULKAN BGFX SDL_RENDERER)
+RENDERERS=(OPENGLES3 VULKAN BGFX SDL_RENDERER)
 declare -A RENDERER_DIRS=(
-    [OPENGLES]="cmake-build-debug"
+    [OPENGLES3]="cmake-build-debug"
     [VULKAN]="cmake-build-vulkan"
     [BGFX]="cmake-build-bgfx"
     [SDL_RENDERER]="cmake-build-sdl"

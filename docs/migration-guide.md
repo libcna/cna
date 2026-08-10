@@ -52,7 +52,7 @@ specifically want a CNA extension your original XNA code never used.
 ## Choosing a renderer
 
 CNA has 4 pluggable graphics renderers, chosen at CMake configure time
-(`-DCNA_GRAPHICS_RENDERER=<SDL_RENDERER|OPENGLES|OPENGL33|WEBGL1|WEBGL2|VULKAN|BGFX>`). Full per-feature detail is in
+(`-DCNA_GRAPHICS_RENDERER=<SDL_RENDERER|OPENGLES3|OPENGL33|WEBGL1|WEBGL2|VULKAN|BGFX>`). Full per-feature detail is in
 `docs/graphics-renderer-feature-matrix.md`; the practical summary:
 
 - **Your game is 2D only** (SpriteBatch/SpriteFont, no 3D models or stock Effects): any renderer
@@ -60,7 +60,7 @@ CNA has 4 pluggable graphics renderers, chosen at CMake configure time
   2D path (`docs/sdl-renderer-2d-completeness.md`). It cannot do 3D rendering at all — any 3D call
   throws `std::runtime_error` by design, this is not a bug to work around.
 - **Your game uses 3D** (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
-  `SkinnedEffect`, `Model`, render targets): use **OPENGLES** (or **WEBGL2** under Emscripten) —
+  `SkinnedEffect`, `Model`, render targets): use **OPENGLES3** (or **WEBGL2** under Emscripten) —
   internally implemented by EasyGL, it is the most mature 3D renderer, with the fewest open gaps
   and the most complete pixel-test coverage.
 - **Vulkan** and **Bgfx** both have working 3D pipelines (core MVP/lighting/texture/fog is
@@ -309,11 +309,11 @@ knowledge.
 ### Picking/overriding the renderer at configure time
 
 ```bash
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES      # or SDL_RENDERER / VULKAN / BGFX
+cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3      # or SDL_RENDERER / VULKAN / BGFX
 cmake --build build --target CNA CnaTests
 ```
 
-`CNA_GRAPHICS_RENDERER` defaults to `OPENGLES` on Linux/Emscripten, `SDL_RENDERER` elsewhere. See the
+`CNA_GRAPHICS_RENDERER` defaults to `OPENGLES3` on Linux/Emscripten, `SDL_RENDERER` elsewhere. See the
 top-level `README.md` §9 for the full per-platform build matrix (Windows/MinGW cross-compile
 included) — not repeated here.
 
@@ -333,7 +333,7 @@ included) — not repeated here.
 |---|---|---|
 | Any 3D call (`BasicEffect`, `Model::Draw`, render targets with depth, etc.) throws `std::runtime_error` | You're on **SDL_Renderer** | Not a bug — SDL_Renderer is 2D-only by design (see "Choosing a renderer" above). Switch to EasyGL/Vulkan/Bgfx for 3D. |
 | `bgfx::init failed` or a native-window-handle error on the `BGFX` renderer | No usable native window handle for bgfx's chosen renderer under your current SDL video driver | Check `SDL_GetCurrentVideoDriver()` output (included in the real error message); try forcing a renderer via `CNA_BGFX_RENDERER` below |
-| Bgfx picks the wrong graphics API (e.g. tries Vulkan on a machine without a Vulkan ICD) | Bgfx's renderer auto-detection (`bgfx::RendererType::Count`) picked something unavailable | Set the `CNA_BGFX_RENDERER` environment variable to force one: `AUTO`, `OPENGL`, `OPENGLES`, `VULKAN`, `METAL`, `DIRECT3D11`, `DIRECT3D12`, or `NOOP` (case-insensitive; an unsupported value throws immediately with this exact list) |
+| Bgfx picks the wrong graphics API (e.g. tries Vulkan on a machine without a Vulkan ICD) | Bgfx's renderer auto-detection (`bgfx::RendererType::Count`) picked something unavailable | Set the `CNA_BGFX_RENDERER` environment variable to force one: `AUTO`, `OPENGL`, `OPENGLES3`, `VULKAN`, `METAL`, `DIRECT3D11`, `DIRECT3D12`, or `NOOP` (case-insensitive; an unsupported value throws immediately with this exact list) |
 | Blank/black window, or GL-based renderers (EasyGL/Bgfx-OpenGL) fail to create a context in CI/headless environments | No real X server / GPU driver — common under Xvfb with only a software (`llvmpipe`) GL driver | Expected in headless CI; tests still run against software rendering. If entire runs fail rather than just individual pixel-tolerance edge cases, confirm an X server is actually reachable (`DISPLAY` env var, or pass `-DCNA_TEST_DISPLAY=:99` at configure time to point the whole `ctest` suite at a specific Xvfb display) |
 | Pixel-comparison example/tests fail after an intentional rendering change | Golden images are stale references, not a bug | Re-run the specific test with `CNA_UPDATE_GOLDEN=1` set to regenerate the golden PNG, then review the diff before committing it |
 | Flaky/inconsistent test failures that don't reproduce in isolation | **Never run multiple renderers' full `ctest` suites concurrently** — confirmed to cause transient GPU/driver-contention false failures (`NEXT.md` §2) | Run renderer test suites sequentially; re-run any single anomalous test in isolation (`ctest -R <TestName>`) before treating it as a real regression |

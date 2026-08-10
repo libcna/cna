@@ -51,7 +51,7 @@ namespace
         switch (type)
         {
             case GraphicsRendererType::SdlRenderer: return "SDL_RENDERER";
-            case GraphicsRendererType::OpenGLES:    return "OPENGLES";
+            case GraphicsRendererType::OpenGLES3:    return "OPENGLES3";
             case GraphicsRendererType::OpenGL33:    return "OPENGL33";
             case GraphicsRendererType::WebGL1:      return "WEBGL1";
             case GraphicsRendererType::WebGL2:      return "WEBGL2";

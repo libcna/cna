@@ -60,7 +60,7 @@ The CMake/link-flag infrastructure below is real, non-trivial engineering — no
   -sNO_DISABLE_EXCEPTION_CATCHING=1`, applied before `sharp-runtime` is added) — Emscripten disables
   exception unwinding by default, but CNA's `System::Exception` hierarchy and every `EXPECT_THROW`
   test in this codebase depend on real unwinding working end-to-end.
-- **`cna_house3d_demo`** (the one real 3D EasyGL/Vulkan demo, gated to `OPENGLES OR OPENGL33 OR WEBGL1 OR WEBGL2 OR VULKAN`) pins
+- **`cna_house3d_demo`** (the one real 3D EasyGL/Vulkan demo, gated to `OPENGLES3 OR OPENGL33 OR WEBGL1 OR WEBGL2 OR VULKAN`) pins
   `-sMIN_WEBGL_VERSION=2`/`-sMAX_WEBGL_VERSION=2` explicitly — the only target in the whole build
   that does. `cna_demo_2d`/`cna_demo_sound` have Emscripten link options (`.html` output suffix,
   `-sALLOW_MEMORY_GROWTH=1`, `--preload-file` for their `Content` directories, per-demo memory

@@ -34,7 +34,7 @@ endif()
 #
 # plan_glbackends.md GLB-39: uses the modern Wasm exception-handling proposal
 # (-fwasm-exceptions), not the legacy JS-based -fexceptions model this project used previously.
-# Forced by a real link failure once the GL-family renderers (OPENGLES/OPENGL33/WEBGL1/WEBGL2)
+# Forced by a real link failure once the GL-family renderers (OPENGLES3/OPENGL33/WEBGL1/WEBGL2)
 # started depending on the sibling easy-gl -> meta-gl chain: easy-gl's own
 # cmake/EasyGlPlatform.cmake sets -fwasm-exceptions in ITS directory scope (needed for its own
 # standalone Emscripten preset/tests), which only affects object files compiled within that

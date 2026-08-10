@@ -97,14 +97,14 @@ difference, failing if the max exceeds a given tolerance.
 
 This is **not** a single automated `ctest` — `CNA_GRAPHICS_RENDERER` is a compile-time choice, so a
 single build only ever links one renderer; comparing two needs two separate builds' dumps. Run it
-by hand (or from a script) like this, comparing `SOFTWARE` against `OPENGLES`:
+by hand (or from a script) like this, comparing `SOFTWARE` against `OPENGLES3`:
 
 ```bash
 # 1. Software's dump (built as cna_diag_software in a SOFTWARE-configured build dir)
 cmake --build cmake-build-software --target cna_diag_software cna_diag_compare
 ./cmake-build-software/cna_diag_software /tmp/software.rgba
 
-# 2. EasyGL's dump (built as cna_diag_easygl in an OPENGLES-configured build dir, needs a real
+# 2. EasyGL's dump (built as cna_diag_easygl in an OPENGLES3-configured build dir, needs a real
 #    display -- a real desktop session or Xvfb)
 cmake --build cmake-build-debug --target cna_diag_easygl
 SDL_VIDEODRIVER=x11 DISPLAY=:0 ./cmake-build-debug/cna_diag_easygl /tmp/easygl.rgba
@@ -113,7 +113,7 @@ SDL_VIDEODRIVER=x11 DISPLAY=:0 ./cmake-build-debug/cna_diag_easygl /tmp/easygl.r
 ./cmake-build-software/cna_diag_compare /tmp/software.rgba /tmp/easygl.rgba 40
 ```
 
-Verified 2026-07-13: `SOFTWARE` vs. `OPENGLES` on this canonical scene gives a max per-channel
+Verified 2026-07-13: `SOFTWARE` vs. `OPENGLES3` on this canonical scene gives a max per-channel
 diff of 1 (mean 0.139) — effectively identical, the residual being ordinary rounding noise, not a
 real rendering discrepancy. The comparator was also checked against a deliberately corrupted dump
 (one channel of one pixel flipped) to confirm it actually fails when the images genuinely differ,
