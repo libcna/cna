@@ -71,14 +71,25 @@ def main():
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
-    write_hashed(os.path.join(a.out, "files-production.tsv"),
-                 tracked(["include/", "src/"]))
-    write_hashed(os.path.join(a.out, "files-tests.tsv"), tracked(["tests/"]))
+    # Physical module layout: production files live under modules/**/{include,src},
+    # module-owned tests under modules/**/tests, and the historical global trees (if any
+    # remain -- pre-Phase-3 captures) keep their original meaning.
+    module_files = tracked(["modules/"])
+    production = (tracked(["include/", "src/"])
+                  + [p for p in module_files
+                     if re.search(r"/(include|src)/", p)])
+    module_tests = [p for p in module_files if re.search(r"/tests/", p)]
+    module_build = [p for p in module_files if p.endswith("CMakeLists.txt")
+                    and not re.search(r"/(include|src|tests)/", p)]
+    write_hashed(os.path.join(a.out, "files-production.tsv"), sorted(production))
+    write_hashed(os.path.join(a.out, "files-tests.tsv"),
+                 sorted(tracked(["tests/"]) + module_tests))
     write_hashed(os.path.join(a.out, "files-build-tooling.tsv"),
-                 tracked(["CMakeLists.txt", "CMakePresets.json", "cmake/",
-                          "scripts/", "tools/", "examples/"]))
+                 sorted(tracked(["CMakeLists.txt", "CMakePresets.json", "cmake/",
+                                 "scripts/", "tools/", "examples/"]) + module_build))
 
-    headers = [p for p in tracked(["include/"]) if p.endswith((".hpp", ".h"))]
+    headers = [p for p in production if p.endswith((".hpp", ".h"))
+               and "/include/" in ("/" + p)]
     with open(os.path.join(a.out, "api-decls.tsv"), "w") as f:
         f.write("\n".join(api_decls(headers)) + "\n")
 
