@@ -46,6 +46,12 @@ else()
     message(STATUS "CNA: Draco not found -- KHR_draco_mesh_compression primitives will throw at import time")
 endif()
 
+# The root-scope test registration (cmake/UnitTests.cmake) keys its FFmpeg-gated test
+# exclusions on this value; export it up from this directory scope, or the root would see
+# an unset variable and silently drop the five video test TUs on FFmpeg-capable hosts.
+set(CNA_FFMPEG_AVAILABLE ${CNA_FFMPEG_AVAILABLE} PARENT_SCOPE)
+set(CNA_DRACO_AVAILABLE ${CNA_DRACO_AVAILABLE} PARENT_SCOPE)
+
 # Common public build surface shared by every CNA module and, transitively, by every
 # consumer of any module: the public compile definitions the monolithic CNA target used
 # to carry PUBLIC. Public include paths deliberately do NOT live here any more -- each
