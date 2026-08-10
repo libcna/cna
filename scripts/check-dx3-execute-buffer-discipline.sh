@@ -16,8 +16,8 @@
 set -uo pipefail
 
 repo_root="$1"
-dx3_src="${repo_root}/src/Graphics/Backends/Dx3"
-dx3_include="${repo_root}/include/CNA/Internal/Backends/Dx3"
+dx3_src="${repo_root}/modules/renderers/dx3/src"
+dx3_include="${repo_root}/modules/renderers/dx3/include/CNA/Internal/Backends/Dx3"
 
 if [ ! -d "$dx3_src" ] || [ ! -d "$dx3_include" ]; then
     echo "error: DX3 backend directories not found under ${repo_root}" >&2

@@ -26,8 +26,8 @@
 set -uo pipefail
 
 repo_root="$1"
-dx2_src="${repo_root}/src/Graphics/Backends/Dx2"
-dx2_include="${repo_root}/include/CNA/Internal/Backends/Dx2"
+dx2_src="${repo_root}/modules/renderers/dx2/src"
+dx2_include="${repo_root}/modules/renderers/dx2/include/CNA/Internal/Backends/Dx2"
 
 if [ ! -d "$dx2_src" ] || [ ! -d "$dx2_include" ]; then
     echo "error: DX2 backend directories not found under ${repo_root}" >&2

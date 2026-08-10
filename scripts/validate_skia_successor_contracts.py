@@ -11,22 +11,22 @@ from collections import Counter
 
 ENUM_CONTRACTS = {
     "FMT": (
-        "include/Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp",
+        "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp",
         "SurfaceFormat",
     ),
     "BLEND": (
-        "include/Microsoft/Xna/Framework/Graphics/Blend.hpp",
+        "modules/graphics/include/Microsoft/Xna/Framework/Graphics/Blend.hpp",
         "Blend",
     ),
     "BLENDFUNC": (
-        "include/Microsoft/Xna/Framework/Graphics/BlendFunction.hpp",
+        "modules/graphics/include/Microsoft/Xna/Framework/Graphics/BlendFunction.hpp",
         "BlendFunction",
     ),
     "FILTER": (
-        "include/Microsoft/Xna/Framework/Graphics/TextureFilter.hpp",
+        "modules/graphics/include/Microsoft/Xna/Framework/Graphics/TextureFilter.hpp",
         "TextureFilter",
     ),
-    "CAP": ("include/CNA/GraphicsCapability.hpp", "GraphicsCapability"),
+    "CAP": ("modules/graphics/include/CNA/GraphicsCapability.hpp", "GraphicsCapability"),
 }
 
 FIXED_CONTRACTS = {

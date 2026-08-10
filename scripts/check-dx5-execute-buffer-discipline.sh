@@ -26,8 +26,8 @@
 set -uo pipefail
 
 repo_root="$1"
-dx5_src="${repo_root}/src/Graphics/Backends/Dx5"
-dx5_include="${repo_root}/include/CNA/Internal/Backends/Dx5"
+dx5_src="${repo_root}/modules/renderers/dx5/src"
+dx5_include="${repo_root}/modules/renderers/dx5/include/CNA/Internal/Backends/Dx5"
 
 if [ ! -d "$dx5_src" ] || [ ! -d "$dx5_include" ]; then
     echo "error: DX5 backend directories not found under ${repo_root}" >&2

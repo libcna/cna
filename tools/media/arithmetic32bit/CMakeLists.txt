@@ -29,34 +29,44 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # (tools/media/arithmetic32bit/ -> tools/media/ -> tools/ -> repo root). Overridable in case this
 # is ever invoked with the standalone project relocated relative to the main tree.
 set(CNA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." CACHE PATH
-    "Path to the main CNA repository checkout (include/ and src/)")
+    "Path to the main CNA repository checkout (modules/ physical layout)")
 get_filename_component(CNA_ROOT "${CNA_ROOT}" ABSOLUTE)
+
+set(CNA_MODULE_INCLUDE_ROOTS
+    "${CNA_ROOT}/modules/core/include"
+    "${CNA_ROOT}/modules/math/include"
+    "${CNA_ROOT}/modules/graphics/include"
+    "${CNA_ROOT}/modules/audio/include"
+    "${CNA_ROOT}/modules/media/include"
+    "${CNA_ROOT}/modules/content/include"
+    "${CNA_ROOT}/modules/renderers/software/include"
+)
 
 add_executable(cna_audio_tag_parser_32bit_overflow_check
     "${CMAKE_CURRENT_SOURCE_DIR}/../audio_tag_parser_32bit_overflow_check.cpp"
-    "${CNA_ROOT}/src/Media/Internal/AudioTagParser.cpp"
-    "${CNA_ROOT}/src/Content/Xna/ContentLoadException.cpp"
+    "${CNA_ROOT}/modules/media/src/Internal/AudioTagParser.cpp"
+    "${CNA_ROOT}/modules/content/src/Xna/ContentLoadException.cpp"
 )
 target_include_directories(cna_audio_tag_parser_32bit_overflow_check PRIVATE
-    "${CNA_ROOT}/include"
+    ${CNA_MODULE_INCLUDE_ROOTS}
 )
 
 add_executable(cna_framebuffer_allocation_32bit_overflow_check
     "${CNA_ROOT}/tools/graphics/framebuffer_allocation_32bit_check.cpp"
-    "${CNA_ROOT}/src/Graphics/Backends/Software/SoftwareFramebufferAllocation.cpp"
+    "${CNA_ROOT}/modules/renderers/software/src/SoftwareFramebufferAllocation.cpp"
 )
 target_include_directories(cna_framebuffer_allocation_32bit_overflow_check PRIVATE
-    "${CNA_ROOT}/include"
+    ${CNA_MODULE_INCLUDE_ROOTS}
 )
 
 # GDI-076: the CPU texture layout planner gets the same genuine-32-bit coverage as the
 # framebuffer planner above -- see tools/graphics/texture_allocation_32bit_check.cpp.
 add_executable(cna_texture_allocation_32bit_overflow_check
     "${CNA_ROOT}/tools/graphics/texture_allocation_32bit_check.cpp"
-    "${CNA_ROOT}/src/Graphics/Backends/Software/SoftwareTextureAllocation.cpp"
+    "${CNA_ROOT}/modules/renderers/software/src/SoftwareTextureAllocation.cpp"
 )
 target_include_directories(cna_texture_allocation_32bit_overflow_check PRIVATE
-    "${CNA_ROOT}/include"
+    ${CNA_MODULE_INCLUDE_ROOTS}
 )
 
 if(MINGW)

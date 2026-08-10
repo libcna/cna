@@ -30,8 +30,8 @@
 set -uo pipefail
 
 repo_root="$1"
-dx7_src="${repo_root}/src/Graphics/Backends/Dx7"
-dx7_include="${repo_root}/include/CNA/Internal/Backends/Dx7"
+dx7_src="${repo_root}/modules/renderers/dx7/src"
+dx7_include="${repo_root}/modules/renderers/dx7/include/CNA/Internal/Backends/Dx7"
 
 if [ ! -d "$dx7_src" ] || [ ! -d "$dx7_include" ]; then
     echo "error: DX7 backend directories not found under ${repo_root}" >&2

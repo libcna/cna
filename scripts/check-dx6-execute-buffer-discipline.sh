@@ -23,8 +23,8 @@
 set -uo pipefail
 
 repo_root="$1"
-dx6_src="${repo_root}/src/Graphics/Backends/Dx6"
-dx6_include="${repo_root}/include/CNA/Internal/Backends/Dx6"
+dx6_src="${repo_root}/modules/renderers/dx6/src"
+dx6_include="${repo_root}/modules/renderers/dx6/include/CNA/Internal/Backends/Dx6"
 
 if [ ! -d "$dx6_src" ] || [ ! -d "$dx6_include" ]; then
     echo "error: DX6 backend directories not found under ${repo_root}" >&2

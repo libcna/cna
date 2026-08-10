@@ -13,7 +13,7 @@ name: Devices and Sensors Tests
 #
 # REMED-BUILD-011: also covers CNA::Devices (Clipboard/FileDialog/MessageBox/
 # SystemTray/Camera/DisplayInfo/PowerInfo/SystemInfo/Locale/UrlLauncher —
-# tests/CNA/Devices/), the NOXNA extension surface gated by CNA_DEVICES. Before
+# modules/devices-ext/tests/CNA/Devices/), the NOXNA extension surface gated by CNA_DEVICES. Before
 # this fix, this job silently never compiled that surface at all (the
 # devices-ubsan preset never set CNA_DEVICES=ON) and never ran its suites
 # either (DEVICES_GTEST_FILTER below named only Microsoft::Devices suites) —
@@ -26,24 +26,24 @@ on:
   push:
     branches: [ master, main ]
     paths:
-      - 'include/Microsoft/Devices/**'
-      - 'src/Microsoft/Devices/**'
-      - 'tests/Microsoft/Devices/**'
-      - 'include/CNA/Devices/**'
-      - 'src/CNA/Devices/**'
-      - 'tests/CNA/Devices/**'
+      - 'modules/devices/include/Microsoft/Devices/**'
+      - 'modules/devices/src/**'
+      - 'modules/devices/tests/Microsoft/Devices/**'
+      - 'modules/devices-ext/include/CNA/Devices/**'
+      - 'modules/devices-ext/src/**'
+      - 'modules/devices-ext/tests/CNA/Devices/**'
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'cmake/**'
       - '.github/workflows/devices-tests.yml'
   pull_request:
     paths:
-      - 'include/Microsoft/Devices/**'
-      - 'src/Microsoft/Devices/**'
-      - 'tests/Microsoft/Devices/**'
-      - 'include/CNA/Devices/**'
-      - 'src/CNA/Devices/**'
-      - 'tests/CNA/Devices/**'
+      - 'modules/devices/include/Microsoft/Devices/**'
+      - 'modules/devices/src/**'
+      - 'modules/devices/tests/Microsoft/Devices/**'
+      - 'modules/devices-ext/include/CNA/Devices/**'
+      - 'modules/devices-ext/src/**'
+      - 'modules/devices-ext/tests/CNA/Devices/**'
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'cmake/**'
@@ -52,10 +52,10 @@ on:
 
 env:
   # Exact-suite-name filter, kept in sync with docs/devices-build.md Section 2/6
-  # (DEV-BUILD-002) — every TEST(...) under tests/Microsoft/Devices/, no more
+  # (DEV-BUILD-002) — every TEST(...) under modules/devices/tests/Microsoft/Devices/, no more
   # and no fewer. Update both places together if a suite is added/renamed.
   DEVICES_GTEST_FILTER: "AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
-  # REMED-BUILD-011: exact-suite-name filter for tests/CNA/Devices/ (the CNA_DEVICES-gated NOXNA
+  # REMED-BUILD-011: exact-suite-name filter for modules/devices-ext/tests/CNA/Devices/ (the CNA_DEVICES-gated NOXNA
   # surface) — kept as a second, separate variable rather than folded into DEVICES_GTEST_FILTER so
   # each stays independently traceable to its own directory, matching this file's existing
   # one-variable-per-scope convention.

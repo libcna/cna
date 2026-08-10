@@ -217,12 +217,12 @@ def capability_entries(source: str) -> list[str]:
 
 def expected_entries(root: pathlib.Path) -> list[str]:
     backend_source = sanitized_cpp(
-        (root / "include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp").read_text()
+        (root / "modules/graphics/include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp").read_text()
     )
     device_source = sanitized_cpp(
-        (root / "include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp").read_text()
+        (root / "modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp").read_text()
     )
-    capability_source = sanitized_cpp((root / "include/CNA/GraphicsCapability.hpp").read_text())
+    capability_source = sanitized_cpp((root / "modules/graphics/include/CNA/GraphicsCapability.hpp").read_text())
     entries: list[str] = []
     for class_name in BACKEND_INTERFACES:
         entries.extend(disambiguated(method_bases(backend_source, class_name)))

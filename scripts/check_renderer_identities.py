@@ -63,7 +63,7 @@ IDENTITIES = [
 
 
 def enum_identities():
-    path = os.path.join(REPO, "include", "CNA", "GraphicsBackendType.hpp")
+    path = os.path.join(REPO, "modules", "core", "include", "CNA", "GraphicsBackendType.hpp")
     text = open(path, encoding="utf-8").read()
     body = re.search(r"enum class GraphicsBackendType\s*\{(.*?)\n\s*\};", text, re.S)
     if not body:
