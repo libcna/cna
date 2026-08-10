@@ -65,14 +65,15 @@ target_compile_definitions(cna_build_flags INTERFACE
         $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_FFMPEG_AVAILABLE>
 )
 
-# Defines one CNA module: a STATIC library named cna_<name> with alias CNA::<Alias>,
-# the shared public build surface, and the private include roots every module TU uses
-# today (internal headers under src/ resolve exactly as they did in the monolith).
+# Defines one CNA module: a STATIC library named cna_<name> with alias CNA::<Alias> and
+# the shared public build surface. No module needs src/ as an include root any more: every
+# internal header a module TU consumes lives under include/CNA/Internal/ (public-internal
+# contract headers), and the only headers under src/ are backend-local shader headers,
+# addressed includer-relative from inside their own backend directory.
 function(cna_add_module target alias)
     add_library(${target} STATIC ${ARGN})
     add_library(CNA::${alias} ALIAS ${target})
     target_link_libraries(${target} PUBLIC cna_build_flags)
-    target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endfunction()
 
 # --- Per-module directory-owned sources (Phase-2 physical layout: every module owns the
@@ -204,6 +205,13 @@ target_link_libraries(cna_audio PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 # OnMediaStateChanged), while MediaPlayer itself plays through the audio mixer. Declared on both
 # targets (see cna_media below) so CMake repeats the archives.
 target_link_libraries(cna_audio PRIVATE cna_media)
+# FrameworkDispatcher::Update() also pumps TouchPanel (TouchDeviceExists check + gesture
+# update), exactly as FNA's FrameworkDispatcher.Update() does. This audio -> input symbol
+# edge previously resolved only through the transitive link closure (media -> graphics-core
+# -> $<LINK_ONLY:cna_input>); declare it directly so the build graph states the real
+# dependency instead of relying on another module's private edge. Plain DAG edge, no cycle:
+# input has no path back to audio.
+target_link_libraries(cna_audio PRIVATE cna_input)
 
 cna_add_module(cna_media Media ${CNA_MEDIA_SOURCES})
 target_link_libraries(cna_media PUBLIC cna_audio cna_graphics_core)
@@ -352,9 +360,6 @@ if(CNA_ENABLE_NET)
     file(GLOB_RECURSE CNA_GAMERSERVICES_SOURCES CONFIGURE_DEPENDS "src/GamerServices/*.cpp")
     add_library(CNA_GamerServices STATIC ${CNA_GAMERSERVICES_SOURCES})
     add_library(CNA::GamerServices ALIAS CNA_GamerServices)
-    target_include_directories(CNA_GamerServices
-        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
     # Guide.cpp calls SDL3 directly (message box); this was previously only compiling by
     # accident on hosts with a stray system-wide SDL3 install on the default include path.
     # The public dependency is the runtime layer (Guide/SignedInGamer use Game, graphics,
@@ -365,9 +370,6 @@ if(CNA_ENABLE_NET)
     file(GLOB_RECURSE CNA_NET_SOURCES CONFIGURE_DEPENDS "src/Net/*.cpp")
     add_library(CNA_Net STATIC ${CNA_NET_SOURCES})
     add_library(CNA::Net ALIAS CNA_Net)
-    target_include_directories(CNA_Net
-        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
     target_link_libraries(CNA_Net
         PUBLIC
         CNA_GamerServices

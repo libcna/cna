@@ -1,7 +1,10 @@
-# Common backend interfaces
+# Common backend interfaces. Only the public include tree: backend TUs consume the
+# IGraphicsBackend contract and every internal header from include/CNA/Internal/, and the
+# backend-local shader headers under src/Graphics/Backends/<X>/shaders/ are addressed
+# includer-relative -- nothing resolves against a src/ include root any more, so the whole
+# implementation tree is no longer exposed as an include directory to every consumer.
 add_library(cna_backend_graphics_common INTERFACE)
 target_include_directories(cna_backend_graphics_common INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
@@ -16,7 +19,6 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12
     add_library(cna_backend_graphics_d3dcommon STATIC ${D3DCOMMON_SOURCES})
     target_link_libraries(cna_backend_graphics_d3dcommon PUBLIC cna_backend_graphics_common d3d11 dxgi)
     cna_link_sharp_runtime(cna_backend_graphics_d3dcommon PUBLIC)
-    target_include_directories(cna_backend_graphics_d3dcommon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
 # plan_ascii.md design decision 2: ASCII is a thin decorator around SDL_RENDERER's own
@@ -33,7 +35,6 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     target_link_libraries(cna_backend_graphics_sdl_renderer_core PUBLIC cna_backend_graphics_common)
     cna_link_sharp_runtime(cna_backend_graphics_sdl_renderer_core PUBLIC)
     target_link_libraries(cna_backend_graphics_sdl_renderer_core PRIVATE SDL3::SDL3)
-    target_include_directories(cna_backend_graphics_sdl_renderer_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
 # GDI presents the Software backend's CPU framebuffer through classic Win32 GDI. Keep this dependency
@@ -99,13 +100,11 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9" AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/
     target_link_libraries(cna_backend_graphics_d3d9_effect PUBLIC cna_backend_graphics_common)
     cna_link_sharp_runtime(cna_backend_graphics_d3d9_effect PUBLIC)
     target_link_libraries(cna_backend_graphics_d3d9_effect PRIVATE d3d9 d3dcompiler)
-    target_include_directories(cna_backend_graphics_d3d9_effect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
 add_library(${BACKEND_TARGET} STATIC ${BACKEND_SOURCES})
 target_link_libraries(${BACKEND_TARGET} PUBLIC cna_backend_graphics_common)
 cna_link_sharp_runtime(${BACKEND_TARGET} PUBLIC)
-target_include_directories(${BACKEND_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "OPENGL1")
     find_package(OpenGL REQUIRED)
