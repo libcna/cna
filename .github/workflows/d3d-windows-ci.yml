@@ -155,6 +155,33 @@ jobs:
             Add-WindowsCapability -Online -Name $graphicsTools.Name
           }
 
+      # D2D-125: this runner is a headless, non-interactive Windows session. Record what it can
+      # and cannot physically observe, so no later reading of the artifact can mistake a green run
+      # here for display, DPI, or multi-monitor evidence. The facts are recorded rather than
+      # asserted: a runner image that gains a real interactive desktop should be visible as a
+      # change in this file, not silently absorbed.
+      - name: Record display and session limitations of this runner
+        if: matrix.renderer == 'DIRECT2D'
+        shell: pwsh
+        working-directory: cna_graphics
+        run: |
+          New-Item -ItemType Directory -Force build/direct2d-native-diagnostics | Out-Null
+          $output = @()
+          $output += "InteractiveSession=$([Environment]::UserInteractive)"
+          $output += "SessionName=$($env:SESSIONNAME)"
+          Add-Type -AssemblyName System.Windows.Forms
+          $screens = [System.Windows.Forms.Screen]::AllScreens
+          $output += "MonitorCount=$($screens.Count)"
+          foreach ($screen in $screens) {
+            $output += "Monitor=$($screen.DeviceName);Bounds=$($screen.Bounds);Primary=$($screen.Primary)"
+          }
+          $output += "SystemDpiHint=$([System.Windows.Forms.SystemInformation]::IconSize)"
+          $output += "ProvesPhysicalPresentation=false"
+          $output += "ProvesDpiScaling=false"
+          $output += "ProvesMultiMonitor=false"
+          $output += "Rationale=headless non-interactive CI session; see docs/direct2d-release-gate.md criteria 4 and 5"
+          $output | Tee-Object -FilePath build/direct2d-native-diagnostics/runner-limits.txt
+
       - name: Record native Direct2D runtime and adapter environment
         if: matrix.renderer == 'DIRECT2D'
         shell: pwsh

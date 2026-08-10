@@ -186,6 +186,13 @@ table, and a stale `direct2d-plan-status` summary marker. Run it after any statu
 python3 scripts/validate_direct2d_plan.py
 ```
 
+Two further documents complete the picture:
+[`direct2d-runtime-support-matrix.md`](direct2d-runtime-support-matrix.md) gives every
+runtime-dependent branch one of four dispositions (supported, fallback, named reject, open task)
+across Windows, WARP, Wine, and Proton, and
+[`direct2d-release-gate.md`](direct2d-release-gate.md) defines the release criteria and the command
+that evaluates them.
+
 Wine 10.0 is useful evidence for the supported portable/native-API surface but is not physical
 Windows. WineD3D does not register Direct2D's built-in ColorMatrix effect and does not implement
 the bounded-copy image composite used by the Opaque pixel oracle. The compatibility run therefore

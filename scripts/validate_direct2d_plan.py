@@ -8,10 +8,18 @@ A plan row is only worth reading if its status can be trusted. This checker fail
   * a row cites a repository path, a CTest name, or a `CNA_DIRECT2D_*` variable that does not
     exist,
   * a row cross-references a `D2D-<n>` task that is not in the table,
-  * an incomplete row is missing from the plan's own closing classification table, or
+  * an incomplete row is missing from the plan's own closing classification table,
+  * a `CNA_DIRECT2D_SKIP_*` variable exists in the tree without a row in the runtime support
+    matrix (D2D-130), or
   * the maintained status marker no longer matches the real row counts.
 
-Usage: validate_direct2d_plan.py [<repository-root>]
+Usage:
+  validate_direct2d_plan.py [<repository-root>]
+  validate_direct2d_plan.py --release-gate [<repository-root>]
+
+`--release-gate` (D2D-133) evaluates the backend's release criteria and reports each one as PASS or
+BLOCKED. It exits nonzero while any criterion is blocked, so "is Direct2D releasable?" has one
+answer produced by a program rather than by reading prose.
 """
 
 from __future__ import annotations
@@ -57,8 +65,69 @@ def load(root: pathlib.Path, relative: str) -> str:
     return (root / relative).read_text(encoding="utf-8")
 
 
+RELEASE_EVIDENCE_FILES = (
+    # Filled in only by a real recorded run; their absence is what keeps the gate honest.
+    ("docs/direct2d-native-evidence.md",
+     "recorded native x64 Windows run of the built-in effect and composite branches (D2D-22)"),
+    ("docs/direct2d-physical-presentation-evidence.md",
+     "recorded physical display/DPI/presentation capture (D2D-126)"),
+)
+
+
+def release_gate(root: pathlib.Path, plan: str, statuses: dict[str, str]) -> int:
+    """Reports each release criterion; returns 0 only when every one of them passes."""
+    results: list[tuple[str, bool, str]] = []
+
+    incomplete = sorted(
+        (task for task, status in statuses.items() if status != COMPLETE),
+        key=lambda item: int(item.split("-")[1]),
+    )
+    results.append((
+        "every plan row closed",
+        not incomplete,
+        "still open: " + ", ".join(incomplete) if incomplete else "all rows complete",
+    ))
+
+    try:
+        registration = load(root, "modules/renderers/direct2d/examples/CMakeLists.txt")
+        registration += load(root, "cmake/UnitTests.cmake")
+    except OSError as error:
+        registration = ""
+        results.append(("Direct2D CTest registrations readable", False, str(error)))
+    expected_tests = ("Direct2D_Smoke", "Direct2D_2DParity", "Direct2D_Lifetime", "Direct2D_Unit")
+    missing_tests = [name for name in expected_tests if name not in registration]
+    results.append((
+        "the four Direct2D CTest gates are registered",
+        not missing_tests,
+        "missing: " + ", ".join(missing_tests) if missing_tests else "all four registered",
+    ))
+
+    gate_script = root / "scripts/verify-direct2d-debug-log.py"
+    results.append((
+        "debug-layer/live-object gate exists and is self-tested",
+        gate_script.exists() and (root / "tests/fixtures/direct2d").is_dir(),
+        "run scripts/verify-direct2d-debug-log.py --self-test",
+    ))
+
+    for relative, description in RELEASE_EVIDENCE_FILES:
+        results.append((description, (root / relative).exists(), f"expected {relative}"))
+
+    width = max(len(name) for name, _, _ in results)
+    for name, passed, detail in results:
+        print(f"[{'PASS' if passed else 'BLOCKED'}] {name.ljust(width)}  {detail}")
+    blocked = sum(1 for _, passed, _ in results if not passed)
+    if blocked:
+        print(f"\nDirect2D release gate: BLOCKED on {blocked} criterion/criteria.")
+        return 1
+    print("\nDirect2D release gate: every criterion passes.")
+    return 0
+
+
 def main(argv: list[str]) -> int:
-    root = pathlib.Path(argv[1] if len(argv) > 1 else pathlib.Path(__file__).resolve().parents[1])
+    arguments = argv[1:]
+    wants_release_gate = "--release-gate" in arguments
+    arguments = [argument for argument in arguments if argument != "--release-gate"]
+    root = pathlib.Path(arguments[0] if arguments else pathlib.Path(__file__).resolve().parents[1])
     root = root.resolve()
     try:
         plan = load(root, "plan_direct2d.md")
@@ -155,6 +224,21 @@ def main(argv: list[str]) -> int:
     for task in sorted(incomplete - classified, key=lambda item: int(item.split("-")[1])):
         errors.append(f"{task} is incomplete but the closing classification table does not list it")
 
+    # D2D-130: a compatibility skip is only acceptable while the support matrix says which single
+    # branch it withholds. A new skip variable added without that row would silently reintroduce
+    # the "this runtime is unsupported" blanket the matrix exists to prevent.
+    try:
+        matrix = load(root, "docs/direct2d-runtime-support-matrix.md")
+    except OSError as error:
+        errors.append(f"missing docs/direct2d-runtime-support-matrix.md ({error})")
+        matrix = ""
+    for skip in sorted(set(re.findall(r"CNA_DIRECT2D_SKIP_[A-Z0-9_]+", registration_sources))):
+        if skip not in matrix:
+            errors.append(
+                f"{skip} narrows what a run asserts but the runtime support matrix does not say "
+                "which branch it withholds"
+            )
+
     marker = STATUS_MARKER_RE.search(plan)
     done = sum(1 for status in statuses.values() if status == COMPLETE)
     partial = sum(1 for status in statuses.values() if status == PARTIAL)
@@ -186,6 +270,9 @@ def main(argv: list[str]) -> int:
         f"Direct2D plan checker: {len(statuses)} rows consistent "
         f"({done} complete, {partial} partial, {still_open} open)."
     )
+    if wants_release_gate:
+        print()
+        return release_gate(root, plan, statuses)
     return 0
 
 
