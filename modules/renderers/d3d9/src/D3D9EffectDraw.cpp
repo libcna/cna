@@ -49,7 +49,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
-#include "shaders/D3D9ShaderRegisters.hpp"
+#include "CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 

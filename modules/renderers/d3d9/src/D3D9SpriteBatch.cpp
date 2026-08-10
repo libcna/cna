@@ -6,7 +6,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9EffectBackend.hpp"
 #include "shaders/d3d9_shaders.hpp"
-#include "shaders/D3D9ShaderRegisters.hpp"
+#include "CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"

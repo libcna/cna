@@ -105,7 +105,7 @@ def parse_registers(disassembly: str):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=SCRIPT_DIR / "D3D9ShaderRegisters.hpp")
+    parser.add_argument("--output", type=Path, default=SCRIPT_DIR.parents[1] / "include/CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp")
     parser.add_argument("--wineprefix", type=Path, default=DEFAULT_WINEPREFIX)
     args = parser.parse_args()
 
