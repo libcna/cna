@@ -176,6 +176,16 @@ python3 scripts/verify-direct2d-debug-log.py --self-test
 python3 scripts/verify-direct2d-debug-log.py build/direct2d-native-diagnostics/*.log
 ```
 
+`scripts/validate_direct2d_plan.py` keeps [`plan_direct2d.md`](../plan_direct2d.md) honest about
+its own state. It fails on a status outside the documented set, a duplicated task, a `✅` row citing
+no evidence at all, a cited path/CTest name/`CNA_DIRECT2D_*` variable that does not exist, a
+reference to a task without a row, an incomplete row missing from the plan's closing classification
+table, and a stale `direct2d-plan-status` summary marker. Run it after any status change:
+
+```bash
+python3 scripts/validate_direct2d_plan.py
+```
+
 Wine 10.0 is useful evidence for the supported portable/native-API surface but is not physical
 Windows. WineD3D does not register Direct2D's built-in ColorMatrix effect and does not implement
 the bounded-copy image composite used by the Opaque pixel oracle. The compatibility run therefore

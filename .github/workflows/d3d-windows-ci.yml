@@ -103,6 +103,13 @@ jobs:
         working-directory: cna_graphics
         run: bash scripts/verify-direct2d-parallel-jobs.sh
 
+      # D2D-132: a plan row whose evidence no longer exists is worse than no row at all, so the
+      # status/evidence consistency of plan_direct2d.md is a build step, not a review habit.
+      - name: Verify the Direct2D plan matches its evidence
+        if: matrix.renderer == 'DIRECT2D'
+        working-directory: cna_graphics
+        run: python scripts/validate_direct2d_plan.py .
+
       # D2D-113/D2D-124: prove the debug-layer/live-object parser itself still classifies its
       # committed positive and negative fixtures correctly before it is trusted to gate this run.
       - name: Self-test the Direct2D debug-layer log gate
