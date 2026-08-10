@@ -1,0 +1,7 @@
+# Built spike artefacts only -- the .c sources and README.md stay committed
+# (CLAUDE.md, "Existence-Gate Spikes -- Persistent Directories Too").
+*.exe
+*.o
+fna3d_device_spike
+fna3d_sprite_spike
+fna3d-build/
