@@ -47,7 +47,7 @@ THIRD_PARTY = [
     "third_party/cgltf",
     "third_party/stb",
 ]
-DEFINES = ["SOUND_ENABLED", "XNA5", "CNA_BACKEND_HEADLESS", "CNA_NOXNA", "CNA_DEVICES",
+DEFINES = ["SOUND_ENABLED", "XNA5", "CNA_RENDERER_HEADLESS", "CNA_CNAEXT", "CNA_DEVICES",
            "CNA_FFMPEG_AVAILABLE"]
 # Headers whose compilation needs optional external SDKs absent from the host contract.
 SKIP = {
@@ -56,8 +56,8 @@ SKIP = {
     "modules/media/include/CNA/Internal/Media/VideoDecoder.hpp",
     # The Glide ABI loader pair is Windows-only by design (<windows.h> HMODULE loading);
     # consumed only by the Windows-only GLIDE targets and the standalone ABI programs.
-    "modules/renderers/glide/include/CNA/Internal/Backends/Glide/GlideAbi.hpp",
-    "modules/renderers/glide/include/CNA/Internal/Backends/Glide/GlideAbiLoader.hpp",
+    "modules/renderers/glide/include/CNA/Internal/Renderers/Glide/GlideAbi.hpp",
+    "modules/renderers/glide/include/CNA/Internal/Renderers/Glide/GlideAbiLoader.hpp",
 }
 
 

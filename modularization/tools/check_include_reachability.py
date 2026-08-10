@@ -4,7 +4,7 @@
 For every module file (src + include), maps each #include "CNA/..." / "Microsoft/..."
 directive to the owning module and verifies the owner is reachable through the declared
 module graph (PUBLIC edges transitively; PRIVATE edges for the module's own TUs).
-Config-gated backend includes (#if CNA_BACKEND_*/CNA_GL_PROFILE_*) are attributed to the
+Config-gated renderer includes (#if CNA_RENDERER_*/CNA_GL_PROFILE_*) are attributed to the
 guarded backend and checked only for the configuration that selects it.
 """
 import os
@@ -39,12 +39,15 @@ PRIVATE = {
 RENDERER_PRIVATE = ["graphics", "core", "math"]
 RENDERER_EXTRA = {
     "gdi": ["software"], "ascii": ["sdl-renderer"],
-    "d3d11": ["common/d3d"], "d3d12": ["common/d3d"],
+    "directx11": ["common/d3d"], "directx12": ["common/d3d"],
 }
-FAMILY = {"Ascii": "ascii", "Bgfx": "bgfx", "Canvas": "canvas", "D3D10": "d3d10",
-          "D3D11": "d3d11", "D3D12": "d3d12", "D3D9": "d3d9", "Diligent": "diligent",
-          "Direct2D": "direct2d", "Dx1": "dx1", "Dx2": "dx2", "Dx3": "dx3", "Dx5": "dx5",
-          "Dx6": "dx6", "Dx7": "dx7", "Dx8": "dx8", "EasyGL": "easygl",
+FAMILY = {"Ascii": "ascii", "Bgfx": "bgfx", "Canvas": "canvas", "DirectX10": "directx10",
+          "DirectX11": "directx11", "DirectX12": "directx12", "DirectX9": "directx9",
+          "Diligent": "diligent",
+          "Direct2D": "direct2d", "DirectX1": "directx1", "DirectX2": "directx2",
+          "DirectX3": "directx3", "DirectX5": "directx5",
+          "DirectX6": "directx6", "DirectX7": "directx7", "DirectX8": "directx8",
+          "EasyGL": "easygl",
           "FreeDirect": "freedirect", "Gdi": "gdi", "Glide": "glide", "Headless": "headless",
           "HtmlDom": "html-dom", "Llgl": "llgl", "Magnum": "magnum", "Metal": "metal",
           "OpenGL1": "opengl1", "OpenGL2": "opengl2", "OpenGL4": "opengl4",
@@ -124,7 +127,7 @@ def main():
             for i, l in enumerate(lines):
                 ls = l.strip()
                 if ls.startswith("#if"):
-                    gm = re.findall(r"CNA_BACKEND_([A-Z0-9_]+)|CNA_GL_PROFILE_", ls)
+                    gm = re.findall(r"CNA_RENDERER_([A-Z0-9_]+)|CNA_GL_PROFILE_", ls)
                     guard.append(bool(gm))
                 elif ls.startswith("#endif") and guard:
                     guard.pop()
