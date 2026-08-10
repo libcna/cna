@@ -1,0 +1,169 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+#include <cstdint>
+
+namespace CNA::Internal::Renderers::SvgDom
+{
+    /**
+     * @brief How a draw's source pixels must be prepared, and how the result composites.
+     *
+     * plan_svg_dom.md design decisions 3 and 4. Neither CSS Compositing (which `mix-blend-mode`
+     * on an SVG element also participates in, since it applies to any element with a box, not only
+     * HTML ones) nor SVG's own filter/compositing primitives expose a per-channel blend-factor
+     * model, so the four standard XNA `BlendState` presets are reproduced by preparing the SOURCE
+     * PIXELS instead of the compositing step -- the same strategy `CNA::Internal::Renderers::HtmlDom`
+     * uses for its own CSS-composited `<div>` path, independently re-derived here for SVG's own
+     * primitives (an `<image>`'s referenced bytes plus an `feColorMatrix` filter, not a
+     * `background-image` variant):
+     *
+     * - `Opaque` (`srcBlend=One`, `dstBlend=Zero` for both colour and alpha) replaces the
+     *   destination pixel with the source pixel exactly, alpha included -- a real Porter-Duff
+     *   "copy". Neither CSS Compositing's `mix-blend-mode` list nor SVG's per-element stacking has
+     *   an operator for that, so this renderer reproduces the same accepted, documented deviation
+     *   HTML_DOM's own `<div>` path uses: the drawn element's own filter forces its OUTPUT alpha to
+     *   a constant 1 (see `SvgDomTintFilterEXT`), which is the closest a single stacked, blended
+     *   element can get to "ignore the destination" while still being composited by the browser.
+     * - `AlphaBlend` (`srcBlend=One`) assumes source colour that is ALREADY premultiplied by its own
+     *   alpha; ordinary SVG/CSS `source-over` compositing assumes straight alpha, so the sprite is
+     *   drawn from a lazily generated, cached un-premultiplied copy of the texture (variant 1 below).
+     * - `NonPremultiplied` (`srcBlend=SourceAlpha`) already matches what source-over assumes
+     *   natively, so the texture's own uploaded bytes are used unmodified (variant 0).
+     * - `Additive` needs no pixel preparation beyond the ordinary uploaded bytes, only
+     *   `style="mix-blend-mode:plus-lighter"` on the sprite element.
+     */
+    enum class DomCompositeOp
+    {
+        /** @brief BlendState.Opaque -- straight source pixels, output alpha forced to 1 by filter. */
+        Opaque = 0,
+        /** @brief BlendState.NonPremultiplied -- source pixels as uploaded, normal compositing. */
+        NonPremultiplied = 1,
+        /** @brief BlendState.AlphaBlend -- un-premultiplied source pixels, normal compositing. */
+        AlphaBlend = 2,
+        /** @brief BlendState.Additive -- source pixels as uploaded, `mix-blend-mode: plus-lighter`. */
+        Additive = 3
+    };
+
+    /**
+     * @brief Which cached pixel variant of a texture a DomCompositeOp draws from.
+     *
+     * Unlike `HtmlDom::VariantModeFor`, `Opaque`'s alpha-forcing needs no separate pixel variant
+     * here -- it is expressed with an `feColorMatrix` alpha row of `0 0 0 0 1` on top of variant 0,
+     * applied at draw time (see `SvgDomTextureRenderer`). Only the un-premultiply transform is a
+     * genuinely non-linear per-pixel operation `feColorMatrix` cannot express, so it is the only
+     * one still baked into a cached, lazily generated texture-level variant.
+     *
+     * @param op The composite operation in effect for the draw.
+     * @return 0 for the as-uploaded pixels, 1 for the un-premultiplied variant.
+     */
+    [[nodiscard]] constexpr int VariantModeFor(DomCompositeOp op)
+    {
+        return op == DomCompositeOp::AlphaBlend ? 1 : 0;
+    }
+
+    /**
+     * @brief Maps raw XNA BlendState factor/function ordinals to a DomCompositeOp.
+     *
+     * Pure function -- no DOM access -- exercised directly by `CNA_SVG_DOM_HOST_TESTS`/
+     * `CNA_RENDERER_SVG_DOM` GTest coverage without a browser. Ordinals match
+     * `IGraphicsRenderer::ApplyBlendState`'s own documented convention (Blend: One=0, Zero=1,
+     * SourceAlpha=4, InverseSourceAlpha=5; BlendFunction: Add=0) -- the same table
+     * `HtmlDom::BlendStateToDomCompositeOp` and `CanvasRenderer::BlendStateToCompositeOp` read.
+     *
+     * @param colorSrcBlend  Raw Blend ordinal for the colour source factor.
+     * @param alphaSrcBlend  Raw Blend ordinal for the alpha source factor.
+     * @param colorDstBlend  Raw Blend ordinal for the colour destination factor.
+     * @param alphaDstBlend  Raw Blend ordinal for the alpha destination factor.
+     * @param colorBlendFunc Raw BlendFunction ordinal for the colour channels.
+     * @param alphaBlendFunc Raw BlendFunction ordinal for the alpha channel.
+     * @return The DomCompositeOp reproducing that BlendState.
+     * @throws std::runtime_error if the combination is not one of the four standard presets.
+     */
+    [[nodiscard]] DomCompositeOp BlendStateToDomCompositeOp(int colorSrcBlend, int alphaSrcBlend,
+                                                            int colorDstBlend, int alphaDstBlend,
+                                                            int colorBlendFunc, int alphaBlendFunc);
+
+    /**
+     * @brief CNAEXT. Returns the composite operation the most recent ApplyBlendState selected.
+     *
+     * Shared between SvgDomRenderer (which sets it) and SvgDomSpriteBatchRenderer (which encodes
+     * it into every draw command) -- plain C++ state rather than a JS-side flag, so both it and
+     * every decision made from it stay unit-testable outside a browser.
+     *
+     * @return The active composite operation; DomCompositeOp::NonPremultiplied before any
+     *         ApplyBlendState call, matching source-over's own native straight-alpha compositing.
+     */
+    [[nodiscard]] DomCompositeOp GetCurrentCompositeOpEXT();
+
+    /** @brief CNAEXT. Records the composite operation subsequent draws must use. */
+    void SetCurrentCompositeOpEXT(DomCompositeOp op);
+
+    /** @brief CNAEXT. Returns whether the most recent ApplyRasterizerState enabled scissor testing. */
+    [[nodiscard]] bool GetCurrentScissorEnableEXT();
+
+    /** @brief CNAEXT. Records whether subsequent draws should honour the scissor rect. */
+    void SetCurrentScissorEnableEXT(bool enabled);
+
+    /** @brief CNAEXT. Records the scissor rectangle most recently set via SetScissorRect. */
+    void SetCurrentScissorRectEXT(float x, float y, float w, float h);
+
+    /** @brief CNAEXT. Returns the scissor rectangle most recently set via SetScissorRect. */
+    void GetCurrentScissorRectEXT(float& x, float& y, float& w, float& h);
+
+    /**
+     * @brief CNAEXT. Records the active GraphicsDevice.Viewport's own (X,Y) offset.
+     *
+     * plan_svg_dom.md design decision 6: real XNA/FNA applies Viewport.X/Y strictly after
+     * SpriteBatch's own Begin(transformMatrix), so it is composed as the OUTERMOST translation on
+     * top of each sprite's own placement (see SvgDomSpriteBatchRenderer::QueueDraw) -- the same
+     * ordering HtmlDom's own per-batch viewport offset uses, independently re-derived here.
+     */
+    void SetCurrentViewportOffsetEXT(float x, float y);
+
+    /** @brief CNAEXT. Returns the active viewport offset; (0,0) before any SetViewport call. */
+    void GetCurrentViewportOffsetEXT(float& x, float& y);
+
+    /**
+     * @brief CNAEXT. Returns the JS-side canvas id of the currently bound render target.
+     *
+     * plan_svg_dom.md design decision 5: while a render target is bound, draws cannot become real
+     * `<svg>`/`<image>` elements (an SVG element cannot render into an off-screen surface a
+     * `Texture2D::GetData` readback could later sample), so they route through the target's own
+     * private Canvas2D context instead -- the same "render targets fall back to raster" boundary
+     * `HtmlDom`'s own render-target path uses, independently justified here by the identical
+     * constraint (no browser API rasterizes a live vector subtree back to pixels synchronously).
+     *
+     * @return The bound target's canvas id, or 0 when the SVG backbuffer is the active target.
+     */
+    [[nodiscard]] int GetBoundRenderTargetIdEXT();
+
+    /** @brief CNAEXT. Records which render target is bound, or 0 for the SVG backbuffer. */
+    void SetBoundRenderTargetIdEXT(int canvasId);
+
+    /**
+     * @brief CNAEXT. Allocates the next unique id for `Module['cnaSvgDomTextures']`.
+     *
+     * Shared by every texture (plain or render-target) so both kinds key into the same JS-side
+     * registry without collisions -- a render target sampled later as an ordinary Draw() source
+     * texture resolves through the identical id/lookup an uploaded texture uses.
+     *
+     * @return A process-wide monotonically increasing id, starting at 1 (0 means "no texture").
+     */
+    [[nodiscard]] int AllocateTextureIdEXT();
+
+    /**
+     * @brief Rejects a source rectangle this renderer cannot reproduce.
+     *
+     * plan_svg_dom.md SVGDOM-1 (V1 scope): unlike the more mature `HtmlDom` renderer, this first
+     * implementation does not yet generate edge-extended (`Clamp`) or tiled (`Wrap`/`Mirror`)
+     * texture variants for an out-of-bounds source rectangle -- every draw's source rectangle must
+     * lie entirely within the texture. `TextureAddressMode` itself is still recorded and applied
+     * (see `SvgDomSpriteBatchRenderer::SetSamplerAddressMode`), but only ever matters once a source
+     * rectangle actually leaves the texture, which this function refuses outright rather than
+     * silently approximating. A truthful, narrower boundary than `HtmlDom`'s, not a fake pass.
+     *
+     * @param exceedsBounds Whether the source rectangle leaves the texture's own bounds.
+     * @throws std::runtime_error when @p exceedsBounds is true.
+     */
+    void ValidateSourceRectangleEXT(bool exceedsBounds);
+}
