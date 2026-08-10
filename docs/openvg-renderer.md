@@ -114,3 +114,22 @@ not implemented. `vgSetColor`/`vgGetColor` are declared in `openvg.h` but have n
 revision's `shPaint.c` either -- OpenVgSpriteBatchRenderer's tint path uses the underlying
 `vgSetParameterfv(paint, VG_PAINT_COLOR, ...)` primitive instead, which IS implemented. No
 multi-threading support.
+
+**Fixed-size leak per renderer lifecycle (AddressSanitizer/LeakSanitizer, upstream).** Running the
+`OpenVg`-labelled examples and the graphics test suites under `-DCNA_SANITIZE=address,undefined`
+reports a constant 64-byte / 5-allocation leak for every `OpenVgRenderer` construct/destroy cycle
+(`vgCreateContextSH` / `vgDestroyContextSH`) -- e.g. 5088 bytes / 390 allocations across a ~78-cycle
+graphics test run, i.e. exactly 64/5 bytes-per-cycle throughout, never growing per draw call, per
+texture, or per frame. Traced to `shContext.c`'s `VGContext_ctor`/`VGContext_dtor`: the constructor
+calls `SH_INITOBJ` on five dynamic arrays/objects (`c->scissor`, `c->strokeDashPattern`,
+`c->paths`, `c->paints`, `c->images`), but the destructor only frees the *elements inside*
+`paths`/`paints`/`images` (`SH_DELETEOBJ` in a loop) and calls `SH_DEINITOBJ` on `scissor` and
+`strokeDashPattern` only -- it never deinits the three backing `SHPathArray`/`SHPaintArray`/
+`SHImageArray` structures themselves, nor `c->defaultPaint`. This is a genuine upstream ShivaVG
+bug (a ctor/dtor asymmetry inside the vendored library itself), not CNA glue code: `OpenVgRenderer`
+calls `vgCreateContextSH` and `vgDestroyContextSH` symmetrically (`OpenVgRenderer.cpp`'s
+constructor/destructor), and per this project's own `cmake/ThirdPartyOpenVG.cmake` convention,
+upstream gaps are bridged from CNA's side rather than by patching ShivaVG's vendored source. No
+other AddressSanitizer/UndefinedBehaviorSanitizer defect (heap/stack overflow, use-after-free,
+undefined-behavior runtime error) was observed anywhere in this renderer's own tests or in the
+broader graphics/SpriteBatch/Texture2D/BlendState/Viewport suite run against it.
