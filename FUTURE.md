@@ -1,7 +1,8 @@
 # CNA future development roadmap
 
-Date: 2026-08-09 (updated 2026-08-10 — Phase 1 complete: the final physical module/package
-layout is promoted to `develop`)
+Date: 2026-08-09 (updated 2026-08-10 — all pre-expansion preparation is complete and public:
+the final physical module/package layout, the renderer terminology normalization and the
+module-owned examples are all promoted to `develop`)
 
 > **THIS DOCUMENT IS A ROADMAP, NOT AUTHORIZATION TO START FUTURE WORK.**
 >
@@ -17,9 +18,10 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
 | **CURRENT** | Public CNA renderer identities | **41** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core) |
-| **CURRENT** | Phase 1.5 — naming normalization (backend→renderer, DIRECTX*, OPENGLES3, CNAEXT) | implemented on `feature/renderer-naming-normalization`, awaiting owner review/promotion — see `docs/RendererNamingMigration.md`. Renderer count unchanged at 41 |
+| **CURRENT** | Phase 1.5 — naming normalization (backend→renderer, DIRECTX*, OPENGLES3, CNAEXT) | **COMPLETE AND PUBLIC** — implemented on `feature/renderer-naming-normalization` (endpoint `16f76cf1a`) and promoted to `develop` on 2026-08-10 as part of the pre-expansion fast-forward. See `docs/RendererNamingMigration.md`. Renderer count unchanged at 41 |
+| **CURRENT** | Phase 1.6 — module-owned examples | **COMPLETE AND PUBLIC** — implemented on `feature/module-examples` (endpoint `675e04c7a`, a descendant of the naming endpoint) and promoted in the same fast-forward. All 1373 tracked example files now live with their owning module, registered by 44 module-local `examples/CMakeLists.txt` files; only the shared `examples/golden/` oracle corpus stays at repository level. See `docs/physical-modules.md` §"Module examples" and `modularization/module-examples/` |
 | **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** in three stages, all now on public `develop`: target graph + physical `src/` layout (`41028e995`), modular sharp-runtime consumption (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, MODULARIZATION_PLAN.md §11–§11.2) promoted 2026-08-10 by fast-forward to `3ecbbce72` (tree unchanged by the promotion). The modularization campaign is DONE |
-| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**, and no longer blocked by modularization: its base is the promoted physical-modules `develop` head. Like every phase here it still requires a fresh explicit owner instruction before any work begins |
+| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**, and no longer blocked by anything: all pre-expansion preparation (modularization, naming normalization, module-owned examples) is complete and public, so its base is the current public `develop` head produced by the 2026-08-10 pre-expansion promotion. Like every phase here it still requires a fresh explicit owner instruction before any work begins |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
 | **FUTURE** | Phase 5 — glTF correctness campaign | **not started**; blocked on Phase 4 |

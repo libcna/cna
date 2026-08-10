@@ -86,7 +86,8 @@ Common helper targets (deliberate sharing, not public identities):
 ## Module examples — modules/<name>/examples/
 
 Examples follow the same ownership model as sources and tests (module-examples campaign,
-2026-08-10; move map + no-loss reconciliation under `modularization/module-examples/`):
+implemented on `feature/module-examples` and promoted to `develop` on 2026-08-10 as
+`675e04c7a`; move map + no-loss reconciliation under `modularization/module-examples/`):
 
 - **Subsystem examples** live with the framework module whose API they primarily
   demonstrate: `modules/graphics/examples/` (demo_2d, house3d_demo, the renderer-agnostic

@@ -1,31 +1,99 @@
 # NEXT.md
 
-## RENDERER NAMING NORMALIZATION IMPLEMENTED — awaiting owner review/promotion (2026-08-10)
+## PRE-RENDERER-EXPANSION NORMALIZATION PROMOTED AND PUBLISHED (2026-08-10)
 
-> The owner-directed pre-expansion naming campaign is implemented and validated on
-> **`feature/renderer-naming-normalization`** (base: public `develop` `25db3ccbe`).
-> One canonical terminology now holds across the active tree:
-> graphics "backend" → **renderer** (`CNA_GRAPHICS_RENDERER`, `IGraphicsRenderer`,
-> `cna_renderer_*`, `cmake/RendererSelection.cmake`), the 11 historical DX*/D3D*
-> public identities → **DIRECTX1..DIRECTX12** (no DIRECTX4), **OPENGLES → OPENGLES3**
-> (OPENGLES2 deliberately not created yet), and **NOXNA → CNAEXT** /
-> **CNA_NOXNA → CNA_CNAEXT** (umbrella `CNA::CnaExt`). Renderer identity count is
-> unchanged at **41** (`scripts/check_renderer_identities.py` green on both
-> registries); renderer behavior, module boundaries and SharpRuntime component
-> mappings are untouched. Full mapping: `docs/RendererNamingMigration.md`;
-> campaign evidence + mechanical-replay reconciliation:
-> `modularization/renderer-naming/` (RECONCILIATION: OK — 3509/3521 baseline
-> files byte-identical to the committed engine's replay, 12 enumerated manual
-> edits, 0 unexplained public-API or file changes).
+> `develop` was fast-forwarded to the accepted combined descendant
+> `25db3ccbe` → **`675e04c7a`**, tree **`9766eb2f0`** — byte-identical to the accepted
+> `feature/module-examples` tree. The fast-forward was proven read-only first
+> (`git merge-tree --write-tree` produced exactly `9766eb2f0`), so the promotion changed no
+> implementation content. No merge commit (`git merge --ff-only`); merge-base `25db3ccbe`;
+> 0 behind / 17 ahead; all 17 commits retained and `git verify-commit`-good. Both accepted
+> branches keep their own endpoints and are published there:
+> **`feature/renderer-naming-normalization` = `16f76cf1a`** (the naming campaign's historical
+> endpoint — deliberately not moved forward) and **`feature/module-examples` = `675e04c7a`**.
 >
-> **NEXT action:** owner review of `feature/renderer-naming-normalization`,
-> then a dedicated promotion/publication session. Only the resulting public
-> `develop` SHA becomes the common base for Phase 2 (OPENGLES2 + 13 new
-> renderer implementations, FUTURE.md). Nothing was pushed from the
-> implementation session; owner-local `develop` work (the two ad hoc xvfb
-> registrations, `AGENTS.md`, `examples/xvfb_screenshot_demo.cpp`) still uses
-> the old selector/macro names and needs the mechanical migration described in
-> `docs/RendererNamingMigration.md` §6 when it is next touched.
+> **Two owner-directed pre-expansion campaigns are now public.**
+> *Renderer terminology normalization* (`25db3ccbe..16f76cf1a`): graphics "backend" →
+> **renderer** (`CNA_GRAPHICS_RENDERER`, `IGraphicsRenderer`, `cna_renderer_*`,
+> `cmake/RendererSelection.cmake`), the 11 historical DX*/D3D* public identities →
+> **DIRECTX1..DIRECTX12** (no DIRECTX4), **OPENGLES → OPENGLES3** (OPENGLES2 deliberately not
+> created yet), and **NOXNA → CNAEXT** / **CNA_NOXNA → CNA_CNAEXT** (umbrella `CNA::CnaExt`).
+> Mapping: `docs/RendererNamingMigration.md`; evidence: `modularization/renderer-naming/`.
+> *Module-owned examples* (`16f76cf1a..675e04c7a`): all **1373** tracked example files now live
+> with their owning module — 1346 moved byte-identical, 10 with declared edits, 17 shared golden
+> images deliberately kept at `examples/golden/` — registered by **44** module-local
+> `examples/CMakeLists.txt` files, with **1756 → 1756** identical CTest registrations. Evidence:
+> `modularization/module-examples/`; layout: `docs/physical-modules.md`. Renderer identity count
+> is unchanged at **41**; renderer behavior, module boundaries and SharpRuntime component
+> mappings are untouched.
+>
+> **Owner-local `develop` work was preserved first**, not stashed. The same four items
+> (the two ad hoc xvfb registrations, untracked `AGENTS.md` and
+> `examples/xvfb_screenshot_demo.cpp`) were proven byte-exact against the existing unpushed
+> signed snapshot `owner/pre-develop-promotion-20260810-physical-modules` (`ea84f4537`) by
+> SHA-256, so no new snapshot branch was needed; an independent out-of-repository byte copy plus
+> patch was taken as well. Unlike the previous promotion, **re-application was required**: this
+> descendant deletes `cmake/Tests/{EasyGL,SdlRenderer}Tests.cmake`, so the owner's +4/+4 intent
+> was migrated to the new owning files
+> `modules/renderers/{easygl,sdl-renderer}/examples/CMakeLists.txt` — same macros
+> (`cna_easygl_test` / `cna_sdl_test`), same target names
+> (`cna_xvfb_screenshot_demo_easygl` / `cna_xvfb_screenshot_demo`), same insertion points, with
+> the source spelled `${CMAKE_SOURCE_DIR}/examples/xvfb_screenshot_demo.cpp` (the file
+> deliberately stays a repository-level cross-renderer diagnostic) and the comment vocabulary
+> moved to "renderer". The demo's one build-breaking include
+> (`"../examples/common/ScreenshotEXT.hpp"`) became `"common/ScreenshotEXT.hpp"`, resolved
+> through `CNA_GRAPHICS_EXAMPLES_DIR` exactly like every other migrated example. `AGENTS.md` is
+> untouched. **All of it stays local and uncommitted**; the obsolete `cmake/Tests` copies were
+> not resurrected. Owner-local functional gate: the OPENGLES3 target configures, builds and runs
+> on the `:96` Xvfb, writing a real 400×300 RGBA PNG whose scene is exactly the intended one
+> (green clear + blue 100×100 texture + 20×20 red marker); the SDL_RENDERER target configures
+> and its translation unit compiles under `-DCNA_RENDERER_SDL_RENDERER` (its full link needs a
+> cold whole-framework SDL_RENDERER build and was deliberately not run).
+>
+> **Bounded post-promotion gate** (a ref move is not a code rewrite — the full campaign matrices
+> were deliberately not rerun). On the promoted committed tree: physical source-partition
+> validator green on every configure; legacy global `src/`/`include/` roots absent (0 tracked
+> paths, absent on disk); `check_renderer_identities.py` = **41**; all 11 canonical `DIRECTX<N>`
+> selectors present, no `DIRECTX4`, and all 12 old selectors (`DX1..DX8`, `D3D9..D3D12`,
+> `OPENGLES`) rejected; `OPENGLES1` + `OPENGLES3` both live; active `NOXNA`/`CNA_NOXNA`
+> preprocessor uses **0**; `check_include_reachability.py` clean; `reconcile_examples.py`
+> **RECONCILIATION: PASS**. Runtime: module probe + link-closure fleet **34/34 HEADLESS**
+> (CNAEXT off) and the CNAEXT-on matrix **5/5** (`StrictXnaApiSurfaceCheck_Compile_Run`,
+> `StrictXnaApiSurfaceLeakCheck_MustFailToCompile`, `ModuleProbe_probe_cnaext`,
+> `ModuleLinkClosure_CnaExtComposition`, `CNAEXT_Settings_Compile_Run`); HEADLESS representative
+> contract slice 24/24 with the two expected **Skips** (the campaign's
+> `cna_apply_skip_convention()` fix holding); OPENGLES3 full incremental build 410 targets /
+> 0 errors, **6564** tests registered, EasyGL representative slice 5/5 including the
+> golden-image tests that read `examples/golden/` from the repo-root working directory; VULKAN
+> configure green with **6462** tests registered; DIRECTX5 MinGW cross-configure green (the
+> accepted green DX boundary); DIRECTX11/DIRECTX12/DIRECTX9 configures green. D3D link graph
+> re-verified: `cna_renderer_d3dcommon` is linked by directx11 and directx12 only — directx9 and
+> directx10 are independent. Live OPENGLES3 target set is **identical** to the campaign's
+> `after-targets-opengles.txt` capture (1681/1681). Active-scope terminology audit: **0**
+> occurrences of `GraphicsBackend`, `CNA_GRAPHICS_BACKEND`, `CNA_BACKEND_`, `backend_graphics`,
+> `BackendSelection`, `cna_register_backend_test` or `CNA::Internal::Backends` anywhere under
+> `modules/`, `cmake/`, `scripts/`, `tools/`, `tests/` or the root build configuration.
+>
+> **All pre-renderer-expansion preparation is complete and public**: target modularization
+> COMPLETE AND PUBLIC; physical module/package modularization COMPLETE AND PUBLIC; modular
+> sharp-runtime consumption COMPLETE AND PUBLIC (sibling `develop` `81624983`, untouched here);
+> renderer terminology normalization COMPLETE AND PUBLIC; module-owned examples COMPLETE AND
+> PUBLIC. **Renderer expansion is NEXT** (FUTURE.md Phase 2, 41 → 55: OPENGLES2 plus the 13 new
+> renderer implementations) — **not started**, and it needs its own explicit owner instruction.
+> Its common base is the public `develop` head produced by this promotion (the implementation
+> head `675e04c7a` plus this documentation commit); no future renderer, XNA-sample or glTF work
+> began in the promotion session.
+>
+> **Known residuals recorded, not fixed here** (neither introduced by these two campaigns, and
+> both outside a promotion session's mandate): `.gitattributes` still exempts
+> `src/CNA/Internal/Backends/Bgfx/shaders/bgfx_shaders.hpp` from whitespace checks — a path that
+> ceased to exist at the *physical-modules* promotion (`3ecbbce72`), so the generated header at
+> its real location `modules/renderers/bgfx/src/shaders/bgfx_shaders.hpp` no longer gets the
+> exemption; and `GraphicsDevice::GetGraphicsRendererName()`'s Doxygen prose still cites
+> `"EASYGL"`/`"D3D9"` as example values although the function returns the canonical identity
+> names. `tools/xna-oracle/CnaOracleRender.cpp` intentionally keeps its short `D3D9`/`D3D11`/
+> `D3D12` **stdout tags** (`CNA-XNA-ORACLE-OK renderer=...`) while selecting on the new
+> `CNA_RENDERER_DIRECTX<N>` macros, so the checked-in oracle corpus comparisons stay valid.
 
 
 ## PHYSICAL MODULARIZATION PROMOTED — **CNA MODULARIZATION CAMPAIGN CLOSED** (2026-08-10)

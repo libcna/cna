@@ -983,3 +983,11 @@ sharp-runtime post-audit remediation continues independently on its own branch a
 later increments — it does not make CNA modularization incomplete. The next CNA phase is the
 FUTURE.md renderer expansion (41 → 55), which has **not** begun and needs its own owner
 instruction; its common base is the public `develop` head produced by this promotion.
+
+**Superseded base (2026-08-10).** Two further owner-directed pre-expansion campaigns were
+accepted and promoted after this section was written — the renderer terminology normalization
+(`feature/renderer-naming-normalization`, endpoint `16f76cf1a`) and the module-owned examples
+(`feature/module-examples`, endpoint `675e04c7a`). Neither changes the module architecture
+recorded above, but both moved `develop`. The renderer-expansion base is therefore the public
+`develop` head produced by that later pre-renderer-expansion promotion, not `3ecbbce72`; see
+`NEXT.md` and `FUTURE.md` for the authoritative value.

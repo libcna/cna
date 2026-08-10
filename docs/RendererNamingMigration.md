@@ -2,10 +2,16 @@
 
 The owner-directed terminology + renderer-identity normalization performed on
 `feature/renderer-naming-normalization` (base: post-modularization `develop`
-`25db3ccbe`). It is a deliberate, breaking naming normalization of the source and
-build surface — no renderer behavior, module boundary, dependency edge, or
-SharpRuntime component mapping changed, and no compatibility aliases were kept.
-The public renderer identity count is **41 before and exactly 41 after**.
+`25db3ccbe`, endpoint `16f76cf1a`). It is a deliberate, breaking naming
+normalization of the source and build surface — no renderer behavior, module
+boundary, dependency edge, or SharpRuntime component mapping changed, and no
+compatibility aliases were kept. The public renderer identity count is **41
+before and exactly 41 after**.
+
+**Status: complete and public.** Promoted to `develop` on 2026-08-10 by the
+pre-renderer-expansion fast-forward, together with its accepted descendant
+`feature/module-examples`. Everything below describes the live `develop` naming;
+the old spellings survive only in historical records.
 
 Campaign evidence (engine, per-pass rename maps, baseline/after inventories,
 mechanical-replay reconciliation): `modularization/renderer-naming/`.
