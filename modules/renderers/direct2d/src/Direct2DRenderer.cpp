@@ -739,6 +739,19 @@ namespace CNA::Internal::Renderers::Direct2D
 
     void Direct2DTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
+        // D2D-110: ownership of the single recovery copy is HERE, in rgbaPixels_/mipRgbaPixels_,
+        // and it is deliberately a copy rather than a share of Texture2D's own cpuPixels_.
+        // ITextureRenderer::ShareCpuPixels exists, but the shared layer publishes that pointer only
+        // when it (re)creates a renderer, never when it replaces the buffer behind it:
+        // Texture2D::storeCpuPixels allocates a fresh vector whenever cpuPixels_ was released by
+        // MaybeFreeCpuPixels (which happens with context recovery disabled) and does not re-share
+        // it, so a backend holding the old pointer would silently keep a stale shadow. That shadow
+        // is not merely a recovery cache: it is the authority for authored mip-linear blending and
+        // for the compatibility tint/straight-alpha fallback (D2D-73), so stale means wrong pixels,
+        // not just a slower recovery. There is also no share hook for lower mip levels at all.
+        // Deduplicating this would therefore require changing the shared contract for every
+        // renderer, which is not a Direct2D-local change.
+
         (void)CheckedRgbaByteCount(width_, height_);
         const std::size_t rowBytes = static_cast<std::size_t>(width_) * 4u;
         if (!rgba)
