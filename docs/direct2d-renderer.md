@@ -107,8 +107,32 @@ A bounded cross-build and run uses:
 cmake --build cmake-build-direct2d-integration --parallel 2 \
   --target CnaTests cna_test_direct2d_smoke cna_test_direct2d_2d_parity \
   cna_test_direct2d_lifetime
-xvfb-run -a ctest --test-dir cmake-build-direct2d-integration -L Direct2D -V
+scripts/run-direct2d-virtual-display.sh \
+  ctest --test-dir cmake-build-direct2d-integration -L Direct2D -V
 ```
+
+### Virtual display, Wine prefix, and Proton runtime
+
+Direct2D always presents to a real HWND, so every run needs a display.
+`scripts/run-direct2d-virtual-display.sh` is the single canonical decision: an isolated Xvfb at an
+explicit geometry (`CNA_DIRECT2D_XVFB_SCREEN`, default `1280x800x24`), a private X authority file,
+and cleanup on every exit path. It is reentrant, so a `ctest` already launched under it is reused
+instead of nesting a second server, and both `run-wine-direct2d.sh` and `run-proton-direct2d.sh`
+enter it automatically. `CNA_DIRECT2D_USE_HOST_DISPLAY=1` opts out for interactive debugging.
+
+`scripts/run-direct2d-fresh-wine-suite.sh <build-dir>` runs the whole label against a prefix created
+from nothing (`wineboot --init` in a temporary directory, removed afterwards unless
+`CNA_DIRECT2D_KEEP_PREFIX=1`), so a pass cannot depend on a developer's accumulated `~/.wine` state.
+The prefix deliberately receives no winetricks package, no DLL override, and no DXVK install: the
+supported contract is Wine's own built-in `d2d1`/`d3d11`/`dxgi`.
+
+The Proton lane is pinned by `scripts/direct2d-proton-pin.txt`, a priority-ordered list of Steam
+library directory names. `Proton - Experimental` is refused unless
+`CNA_DIRECT2D_PROTON_ALLOW_EXPERIMENTAL=1` is set for a one-off investigation, because Steam
+upgrades it underneath a passing run and such a result cannot be reproduced. Every run publishes the
+resolved runtime identity — Proton directory, build id, bundled Wine build, and DXVK version — to
+stderr and, with `CNA_DIRECT2D_PROTON_IDENTITY_FILE`, to an artifact file.
+`CNA_DIRECT2D_PROTON_DRY_RUN=1` resolves and publishes that identity without running anything.
 
 `scripts/verify-direct2d-parallel-jobs.sh` rejects missing, nonnumeric, or greater-than-two build
 parallelism in the Direct2D workflow/helpers. `CNA_ENABLE_NET=OFF` excludes only tests belonging to

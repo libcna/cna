@@ -13,16 +13,28 @@ cd "$REPO_ROOT"
 
 FILES=(
     ".github/workflows/d3d-windows-ci.yml"
-    "cmake/Tests/Direct2DTests.cmake"
+    "modules/renderers/direct2d/examples/CMakeLists.txt"
     "cmake/UnitTests.cmake"
     "docs/direct2d-renderer.md"
     "docs/direct2d-mip-storage-spike.md"
     "plan_direct2d.md"
     "scripts/run-wine-direct2d.sh"
     "scripts/run-proton-direct2d.sh"
+    "scripts/run-direct2d-virtual-display.sh"
+    "scripts/run-direct2d-fresh-wine-suite.sh"
 )
 
 fail=0
+
+# A path that silently disappears (renamed file, moved CMake fragment) would turn this gate into a
+# no-op without anyone noticing, so a missing entry is itself a failure -- the list has to be
+# maintained together with the files it guards.
+for expected in "${FILES[@]}"; do
+    if [ ! -f "$expected" ]; then
+        echo "ERROR: $expected is listed as a Direct2D parallelism input but does not exist." >&2
+        fail=1
+    fi
+done
 
 check_file() {
     local file="$1"

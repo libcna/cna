@@ -14,6 +14,16 @@ if [ "$#" -lt 1 ]; then
     exit 2
 fi
 
+# D2D-120: Direct2D presents to a real HWND, so every run needs a display with a known geometry and
+# depth. run-direct2d-virtual-display.sh is the single canonical decision (isolated Xvfb, private
+# X authority, cleanup on exit); it is reentrant, so a ctest already launched under it is reused
+# rather than nested, and CNA_DIRECT2D_USE_HOST_DISPLAY=1 opts out for interactive debugging.
+if [ "${CNA_DIRECT2D_VIRTUAL_DISPLAY:-0}" != "1" ] && [ "${CNA_DIRECT2D_USE_HOST_DISPLAY:-0}" != "1" ]; then
+    # run-wine-direct2d.sh is invoked as `bash <path>` by the CTest registration and
+    # carries no execute bit, so re-enter it through bash explicitly.
+    exec "$(dirname "$0")/run-direct2d-virtual-display.sh" bash "$0" "$@"
+fi
+
 # The standard Wine prefix is intentionally the compatible default for the non-Proton test path.
 # This launcher performs no prefix mutation; projects that maintain a dedicated Direct2D prefix
 # can select it explicitly with CNA_DIRECT2D_WINEPREFIX.
