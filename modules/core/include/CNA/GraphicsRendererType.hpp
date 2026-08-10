@@ -129,7 +129,10 @@ namespace CNA
         Llgl,
 
         /** @brief Native Apple Metal. */
-        Metal
+        Metal,
+
+        /** @brief OpenVG 1.1 vector graphics (2D-only), implemented by ShivaVG on top of desktop OpenGL. */
+        OpenVg
     };
 
     /**
@@ -231,6 +234,8 @@ namespace CNA
         return GraphicsRendererType::Llgl;
 #elif defined(CNA_RENDERER_METAL)
         return GraphicsRendererType::Metal;
+#elif defined(CNA_RENDERER_OPENVG)
+        return GraphicsRendererType::OpenVg;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -291,6 +296,7 @@ namespace CNA
             case GraphicsRendererType::Gdi:           return "GDI";
             case GraphicsRendererType::Llgl:          return "LLGL";
             case GraphicsRendererType::Metal:          return "METAL";
+            case GraphicsRendererType::OpenVg:         return "OPENVG";
         }
         return "UNKNOWN";
     }

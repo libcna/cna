@@ -144,6 +144,14 @@ namespace Microsoft::Xna::Framework::Graphics
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
+            // The OPENVG renderer creates its own real desktop OpenGL context (SDL_GL_CreateContext,
+            // same "own GL context, no EasyGL" shape as OPENGL1/OPENGL2/OPENGL4 above) and attaches
+            // ShivaVG's OpenVG context on top of it via vgCreateContextSH -- same "SDL rejects a
+            // non-SDL_WINDOW_OPENGL window" requirement as every other renderer in this block.
+#ifdef CNA_RENDERER_OPENVG
+            windowFlags |= SDL_WINDOW_OPENGL;
+#endif
+
             // plan_magnum.md MAGNUM-3: Magnum renders through an OpenGL context CNA creates on
             // this same SDL window, so the window needs the identical OpenGL flag EasyGL asks for
             // just above -- SDL cannot attach a GL context to a window that was not created with
