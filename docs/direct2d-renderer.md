@@ -63,6 +63,23 @@ WIC, SDL_Renderer, or a hidden 3D/compositing pass. Use `CNA_GRAPHICS_RENDERER=D
   public lost/resetting/reset events fire once in order. Unregistered stale resources fail instead
   of being used on a new device generation.
 
+## DPI and monitor changes
+
+A DPI change -- the user changing a monitor's scaling, or the window moving to a differently scaled
+monitor -- reaches this renderer as a change of the client rectangle in physical pixels, which the
+per-frame size check already acts on: the swap chain is resized and the backbuffer target and
+logical framebuffer are rebuilt at the new size, without a restart.
+
+Nothing else has to react, and that is a consequence of D2D-54 rather than an omission. Every
+Direct2D surface is pinned at 96 DPI and every CNA coordinate is a physical client pixel, so there
+is no DIP-derived quantity to recompute when the scale changes. The logical/window round trip is
+derived from the backbuffer's own pixel size, so it follows the resize automatically.
+
+What the renderer does do is *observe* the scale: with `CNA_DIRECT2D_DIAGNOSTICS=1` a change of
+SDL's window-units-to-pixels ratio is logged with both sizes. A run that claims presentation
+evidence therefore records the DPI it actually ran at, instead of leaving it to be assumed.
+Physical multi-monitor and non-96-DPI validation remains an external Windows gate.
+
 ## Alpha representation at every boundary
 
 Direct2D composes premultiplied colors. CNA's public surface does not, so the exact place where a

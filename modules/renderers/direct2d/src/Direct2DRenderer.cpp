@@ -1513,9 +1513,43 @@ namespace CNA::Internal::Renderers::Direct2D
         d2dContext_->SetTarget(logicalTarget_.Get());
     }
 
+    float Direct2DRenderer::ObserveWindowDisplayScale()
+    {
+        // SDL's own two sizes are the portable expression of the display scale: window units come
+        // from Windows' DIP domain, the pixel size is the physical client surface. Their ratio
+        // changes exactly when the window moves to a differently scaled monitor or the user changes
+        // that monitor's scaling -- which is the event WM_DPICHANGED reports.
+        int windowWidth = 0;
+        int windowHeight = 0;
+        int pixelWidth = 0;
+        int pixelHeight = 0;
+        if (!SDL_GetWindowSize(window_, &windowWidth, &windowHeight) ||
+            !SDL_GetWindowSizeInPixels(window_, &pixelWidth, &pixelHeight) || windowWidth <= 0)
+        {
+            return observedDisplayScale_;
+        }
+        const float scale = static_cast<float>(pixelWidth) / static_cast<float>(windowWidth);
+        if (observedDisplayScale_ != 0.0f && scale != observedDisplayScale_ && diagnosticsEnabled_)
+        {
+            std::fprintf(stderr,
+                         "[Direct2D diagnostics] display scale changed %.4f -> %.4f "
+                         "(window %dx%d, pixels %dx%d).\n",
+                         static_cast<double>(observedDisplayScale_), static_cast<double>(scale),
+                         windowWidth, windowHeight, pixelWidth, pixelHeight);
+        }
+        observedDisplayScale_ = scale;
+        return scale;
+    }
+
     void Direct2DRenderer::EnsureMainTargetSize()
     {
         if (activeRenderTarget_) return;
+        // D2D-55: a DPI or monitor change reaches this renderer as a client-pixel size change,
+        // which the comparison below already acts on. Nothing else needs to react, because every
+        // Direct2D surface is fixed at 96 DPI and every CNA coordinate is a physical client pixel
+        // (D2D-54) -- there is no DIP-derived value to recompute. The scale is observed rather than
+        // used, so a run that claims presentation evidence records the DPI it actually ran at.
+        (void)ObserveWindowDisplayScale();
         const HWND hwnd = GetWindowHandle();
         RECT clientRect{};
         if (!GetClientRect(hwnd, &clientRect)) throw std::runtime_error("Direct2DRenderer: GetClientRect failed.");

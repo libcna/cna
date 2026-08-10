@@ -707,6 +707,11 @@ namespace CNA::Internal::Renderers::Direct2D
         /// (and virtualWidth_/virtualHeight_/presentationMode_) intact and usable.
         [[nodiscard]] Microsoft::WRL::ComPtr<ID2D1Bitmap1> CreateLogicalTargetBitmap() const;
         void EnsureMainTargetSize();
+        /// D2D-55: reports the window's current display scale (physical pixels per window unit) and
+        /// records a change of it. The renderer needs no other reaction to a DPI or monitor change
+        /// -- see the analysis in docs/direct2d-renderer.md -- but a scale change must be visible
+        /// in the diagnostics of a run that claims presentation evidence.
+        [[nodiscard]] float ObserveWindowDisplayScale();
         void EndDrawing(const char* operation);
         /// Copies a render target through a temporary Direct2D CPU-readable bitmap. This is a
         /// 2D-only path: CopyFromRenderTarget is the native route; CopyFromBitmap is a narrower
@@ -797,6 +802,7 @@ namespace CNA::Internal::Renderers::Direct2D
         bool nonPremultipliedSource_ = false;
         std::optional<Direct2DBlendMode> pendingBlendMode_;
         bool pendingNonPremultipliedSource_ = false;
+        float observedDisplayScale_ = 0.0f;
         bool diagnosticsEnabled_ = false;
         bool debugLayerEnabled_ = false;
         bool usingWarp_ = false;
