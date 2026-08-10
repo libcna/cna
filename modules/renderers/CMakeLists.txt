@@ -87,3 +87,39 @@ endif()
 if(NOT CNA_SELECTED_RENDERER STREQUAL "metal" AND NOT CNA_SELECTED_RENDERER STREQUAL "glide")
     add_subdirectory(${CNA_SELECTED_RENDERER})
 endif()
+
+# plan_svg_dom.md SHARED-HOOK REQUIREMENT: SVG_DOM (like HTML_DOM/CANVAS) is Emscripten-only, so
+# its own modules/renderers/svg-dom/CMakeLists.txt -- which defines its native host-side contract
+# test target (CNA_BUILD_SVG_DOM_HOST_TESTS, mirroring HTML_DOM's identical
+# CNA_BUILD_HTML_DOM_HOST_TESTS precedent) -- is only entered via the ${CNA_SELECTED_RENDERER}
+# dispatch above, which itself requires selecting SVG_DOM, which requires Emscripten
+# (cmake/RendererSelection.cmake's own platform gate). That leaves the native host-test target
+# genuinely unreachable in ANY non-Emscripten configuration regardless of which renderer is
+# selected -- the same latent gap HTML_DOM's own cna_test_htmldom_host target already has (no
+# CI/script reference to it exists anywhere in this repo either). Proven while implementing
+# SVG_DOM's own host tests: this is a pre-existing shared-dispatcher gap, not something specific
+# to one renderer, and the smallest fix is a small, off-by-default (OFF unless explicitly
+# requested), fully self-contained addition here -- it defines its own target directly rather than
+# entering svg-dom's own CMakeLists.txt (which would redefine ${RENDERER_TARGET}, a name that
+# belongs to whichever renderer IS actually selected), so it has zero effect on any other
+# renderer's build unless a developer explicitly passes -DCNA_BUILD_SVG_DOM_HOST_TESTS=ON.
+option(CNA_BUILD_SVG_DOM_HOST_TESTS
+    "Build native host-side SVG DOM renderer contract tests (see the comment above)" OFF)
+if(CNA_BUILD_TESTS AND CNA_BUILD_SVG_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
+    add_executable(cna_test_svgdom_host
+        ${CMAKE_CURRENT_SOURCE_DIR}/svg-dom/tests/CNA/Internal/Renderers/SvgDom/SvgDomRendererTests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/svg-dom/src/SvgDomRenderer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/svg-dom/src/SvgDomRenderTargetRenderer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/svg-dom/src/SvgDomSpriteBatchRenderer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/svg-dom/src/SvgDomState.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/svg-dom/src/SvgDomTextureRenderer.cpp)
+    target_include_directories(cna_test_svgdom_host PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/svg-dom/include)
+    target_compile_definitions(cna_test_svgdom_host PRIVATE CNA_SVG_DOM_HOST_TESTS=1)
+    target_link_libraries(cna_test_svgdom_host PRIVATE
+        cna_graphics_core cna_core cna_math gtest_main SDL3::SDL3 SDL3_image::SDL3_image)
+    cna_link_sharp_runtime(cna_test_svgdom_host PRIVATE)
+    add_test(NAME SvgDomHostContracts COMMAND cna_test_svgdom_host)
+    set_tests_properties(SvgDomHostContracts PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    set_tests_properties(SvgDomHostContracts PROPERTIES LABELS "SVG_DOM;host-only")
+endif()
