@@ -19,6 +19,9 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
+// D2D-128: shared tolerance/oracle helpers, so this test cannot drift from the parity one.
+#include "direct2d_test_support.hpp"
+
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -29,6 +32,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using CnaDirect2DTestSupport::Matches;
 
 class Direct2DLifetimeTest final : public Game
 {
@@ -157,15 +161,6 @@ private:
         const Rectangle region(x, y, 1, 1);
         device.GetBackBufferData(&region, &pixel, 0, 1);
         return true;
-    }
-
-    [[nodiscard]] static bool Matches(const Color& actual, const Color& expected)
-    {
-        constexpr int tolerance = 4;
-        return std::abs(static_cast<int>(actual.getRProperty()) - expected.getRProperty()) <= tolerance &&
-               std::abs(static_cast<int>(actual.getGProperty()) - expected.getGProperty()) <= tolerance &&
-               std::abs(static_cast<int>(actual.getBProperty()) - expected.getBProperty()) <= tolerance &&
-               std::abs(static_cast<int>(actual.getAProperty()) - expected.getAProperty()) <= tolerance;
     }
 
     // D2D-114: an application may dispose a texture after SpriteBatch::End and before the frame is

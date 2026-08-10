@@ -44,6 +44,7 @@
 #endif
 #include "CNA/Internal/Renderers/Direct2D/Direct2DRenderer.hpp"
 #include "System/NotSupportedException.hpp"
+#include "direct2d_test_support.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -64,16 +65,11 @@ using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Internal::Renderers::Direct2D::CompositePorterDuffReference;
 using CNA::Internal::Renderers::Direct2D::Direct2DBlendMode;
 
-namespace
-{
-    [[nodiscard]] bool Matches(const Color& actual, const Color& expected, int tolerance = 4)
-    {
-        return std::abs(static_cast<int>(actual.getRProperty()) - expected.getRProperty()) <= tolerance &&
-               std::abs(static_cast<int>(actual.getGProperty()) - expected.getGProperty()) <= tolerance &&
-               std::abs(static_cast<int>(actual.getBProperty()) - expected.getBProperty()) <= tolerance &&
-               std::abs(static_cast<int>(actual.getAProperty()) - expected.getAProperty()) <= tolerance;
-    }
-}
+// D2D-128: the tolerance comparison and the read-one-pixel-and-report step are shared by every
+// Direct2D example test; they live in one header so two tests cannot drift apart about what a
+// tolerance means.
+using CnaDirect2DTestSupport::Matches;
+using CnaDirect2DTestSupport::PixelChecker;
 
 class Direct2D2DParityTest final : public Game
 {
@@ -124,16 +120,9 @@ protected:
         const bool verifyAdvancedBlend =
             std::getenv("CNA_DIRECT2D_SKIP_ADVANCED_BLEND") == nullptr;
 
+        PixelChecker checker(device, passed);
         const auto check = [&](const char* label, int x, int y, const Color& expected) {
-            Color actual(0, 0, 0, 0);
-            const Rectangle region(x, y, 1, 1);
-            device.GetBackBufferData(&region, &actual, 0, 1);
-            const bool matches = Matches(actual, expected);
-            std::printf("[%s] %s: got=(%d,%d,%d,%d), expected=(%d,%d,%d,%d)\n",
-                        matches ? "PASS" : "FAIL", label,
-                        actual.getRProperty(), actual.getGProperty(), actual.getBProperty(), actual.getAProperty(),
-                        expected.getRProperty(), expected.getGProperty(), expected.getBProperty(), expected.getAProperty());
-            passed = passed && matches;
+            checker.Check(label, x, y, expected);
         };
 
         // D2D-89: the complete full/partial SetData matrix for every authored Texture2D mip and
