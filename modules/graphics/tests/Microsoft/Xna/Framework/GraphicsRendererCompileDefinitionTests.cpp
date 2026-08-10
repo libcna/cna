@@ -158,6 +158,9 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_METAL
     ++enabled;
 #endif
+#ifdef CNA_RENDERER_OPENVG
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }
@@ -178,6 +181,14 @@ TEST(GraphicsRendererCompileDefinitionsTest, SkiaMacroMatchesPublicRendererIdent
 {
     EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::Skia);
     EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "SKIA");
+}
+#endif
+
+#ifdef CNA_RENDERER_OPENVG
+TEST(GraphicsRendererCompileDefinitionsTest, OpenVgMacroMatchesPublicRendererIdentity)
+{
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererType(), CNA::GraphicsRendererType::OpenVg);
+    EXPECT_EQ(CNA::getCurrentGraphicsRendererName(), "OPENVG");
 }
 #endif
 

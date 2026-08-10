@@ -13,9 +13,9 @@ static_assert(getCurrentGraphicsRendererType() == getCurrentGraphicsRendererType
 static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Metal) + 1;
-static_assert(kPublicRendererCount == 41,
-              "GraphicsRendererType must expose all 41 genuine renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::OpenVg) + 1;
+static_assert(kPublicRendererCount == 42,
+              "GraphicsRendererType must expose all 42 genuine renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
 {
@@ -91,6 +91,7 @@ namespace
             case GraphicsRendererType::Gdi:         return "GDI";
             case GraphicsRendererType::Llgl:        return "LLGL";
             case GraphicsRendererType::Metal:       return "METAL";
+            case GraphicsRendererType::OpenVg:      return "OPENVG";
         }
         return {};
     }

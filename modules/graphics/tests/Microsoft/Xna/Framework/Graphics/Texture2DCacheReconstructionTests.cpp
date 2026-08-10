@@ -201,10 +201,28 @@ TEST_F(Texture2DCacheReconstructionTest, RepeatedReconstructionCyclesStayCorrect
     EXPECT_EQ(out, in);
 }
 
+// OPENVG: ShivaVG's non-EGL context extension (vgCreateContextSH/vgResizeSurfaceSH) only ever
+// binds the OpenVG pipeline to the one real window surface -- there is no pbuffer/FBO-backed
+// off-screen VGImage surface to bind as a draw target, so CreateRenderTarget2D keeps the shared
+// IGraphicsRenderer default (returns nullptr) and RenderTarget2D silently falls back to ordinary
+// CPU-shadowed Texture2D behaviour. Same "no genuine render-target storage" shape as this file's
+// pre-existing TextureCube/RenderTargetCube gates elsewhere use, just for the 2D case; no other
+// current renderer lacks RenderTarget2D, so this is the first gate of its kind here.
+#if defined(CNA_RENDERER_OPENVG)
+constexpr bool kRenderTarget2DSupported = false;
+#else
+constexpr bool kRenderTarget2DSupported = true;
+#endif
+
 // (6) a real RenderTarget2D keeps the opposite semantics: its renderer is updated in place -- it
 // must not be swapped for an ordinary texture renderer -- and it retains no CPU shadow.
 TEST_F(Texture2DCacheReconstructionTest, RenderTargetKeepsItsRendererAndDropsTheShadowOnUpload)
 {
+    if (!kRenderTarget2DSupported)
+    {
+        GTEST_SKIP() << "this renderer has no genuine RenderTarget2D storage to keep in place";
+    }
+
     RenderTarget2D rt(gd, kW, kH);
     const auto before = rt.GetRendererWeak().lock();
     ASSERT_NE(before, nullptr);
@@ -230,6 +248,11 @@ TEST_F(Texture2DCacheReconstructionTest, RenderTargetKeepsItsRendererAndDropsThe
 // contract.
 TEST_F(Texture2DCacheReconstructionTest, RenderTargetReadbackComesFromTheSurfaceNotAnUploadShadow)
 {
+    if (!kRenderTarget2DSupported)
+    {
+        GTEST_SKIP() << "this renderer has no genuine RenderTarget2D storage to read back from";
+    }
+
     RenderTarget2D rt(gd, kW, kH);
     const auto in = Pattern(110);
     rt.SetData(in.data(), static_cast<int>(in.size()));
