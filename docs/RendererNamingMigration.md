@@ -140,7 +140,7 @@ FREEDIRECT DIRECTX9 DIRECTX1 DIRECTX2 DIRECTX3 DIRECTX5 DIRECTX6 DIRECTX7
 DIRECTX8 DIRECTX10 SDL_GPU OPENGLES1 OPENGL4 OPENGL1 OPENGL2 WICKED SOKOL
 DILIGENT GLIDE GDI LLGL METAL OPENVG`
 
-41 identities at normalization time; `OPENVG` (feature/renderer-openvg, ShivaVG-backed 2D
+41 identities at normalization time; `OPENVG` (claude/renderer-openvg-c2wnet, ShivaVG-backed 2D
 vector-graphics renderer) is the first Phase 2 addition on top of that baseline, bringing the
 live count to 42.
 
