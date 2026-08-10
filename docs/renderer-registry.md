@@ -1,9 +1,10 @@
 # CNA renderer registry
 
-Current as of the final 21-lane reconciliation on 2026-08-09. CNA exposes exactly **41 public
-renderer identities**. EasyGL is an internal implementation shared by four public GL profiles and
-does not add a public identity. Internal renderer/API choices made by bgfx, Skia, Sokol, Diligent,
-LLGL, or another abstraction likewise do not add CNA identities.
+Current as of the PortableGL renderer addition (2026-08-10, following the final 21-lane
+reconciliation on 2026-08-09). CNA exposes exactly **42 public renderer identities**. EasyGL is an
+internal implementation shared by four public GL profiles and does not add a public identity.
+Internal renderer/API choices made by bgfx, Skia, Sokol, Diligent, LLGL, or another abstraction
+likewise do not add CNA identities.
 
 ## Canonical public identities
 
@@ -50,9 +51,10 @@ LLGL, or another abstraction likewise do not add CNA identities.
 | 39 | `Gdi` | `GDI` | `CNA_RENDERER_GDI` | GDI / `GdiRenderer` | Windows |
 | 40 | `Llgl` | `LLGL` | `CNA_RENDERER_LLGL` | LLGL / `LlglRenderer` | LLGL dependency |
 | 41 | `Metal` | `METAL` | `CNA_RENDERER_METAL` | Metal / `MetalRenderer` | macOS/Darwin |
+| 42 | `PortableGL` | `PORTABLEGL` | `CNA_RENDERER_PORTABLEGL` | PortableGL / `PortableGLRenderer` | none (CPU-only, fetched header) |
 
-The four GL profiles share one implementation target, macro, and factory, so 41 public identities
-map to 38 concrete implementation factories. Their public contracts remain distinct because the
+The four GL profiles share one implementation target, macro, and factory, so 42 public identities
+map to 39 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
 renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
 `EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.
@@ -63,7 +65,9 @@ renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3
   fidelity claim.
 - **2D-oriented:** `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SKIA`, `ASCII`, `FREEDIRECT`, `DIRECTX1`,
   `DIRECT2D`, and `GDI`.
-- **CPU bounded 3D:** `SOFTWARE`.
+- **CPU bounded 3D:** `SOFTWARE` and `PORTABLEGL` (the latter delegates its rasterization/shading
+  pipeline to real `rswinkle/PortableGL` OpenGL-shaped API calls rather than a hand-rolled
+  rasterizer).
 - **Legacy or fixed-function bounded 3D:** `OPENGLES1`, `OPENGL1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`,
   `DIRECTX7`, `DIRECTX8`, and `GLIDE`.
 - **Programmable/modern, with renderer-specific limits:** `OPENGLES3`, `OPENGL33`, `WEBGL1`,

@@ -166,7 +166,7 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 
 ## 6. 🔌 Renderer System
 
-CNA exposes **41 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+CNA exposes **42 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
 configuration). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
@@ -211,6 +211,7 @@ inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 - `GDI` (Windows-only, 2D-only)
 - `LLGL` (experimental; accepted support is OpenGL on Linux/X11/x86_64)
 - `METAL` (macOS only, experimental — see [`docs/metal-renderer.md`](docs/metal-renderer.md))
+- `PORTABLEGL` (CPU software OpenGL 3.x-ish pipeline via `rswinkle/PortableGL`; no GPU/window required)
 
 ### Tradeoffs
 

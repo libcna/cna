@@ -285,8 +285,10 @@ namespace Microsoft::Xna::Framework::Graphics
         // plan_headless.md design decision 2 / plan_software.md design decision 4 / plan_stub.md
         // design decision 1: the Headless, Software, and Stub renderers never create a real window
         // and never touch SDL's video subsystem at all, so all three can run in CI containers with
-        // no display server present -- not just a headless-but-present one.
-#if !defined(CNA_RENDERER_HEADLESS) && !defined(CNA_RENDERER_SOFTWARE) && !defined(CNA_RENDERER_STUB)
+        // no display server present -- not just a headless-but-present one. PortableGL joins them:
+        // it is a CPU software OpenGL 3.x-ish renderer (rswinkle/PortableGL) with the same "no
+        // window, no GPU library, no SDL video subsystem" shape.
+#if !defined(CNA_RENDERER_HEADLESS) && !defined(CNA_RENDERER_SOFTWARE) && !defined(CNA_RENDERER_STUB) && !defined(CNA_RENDERER_PORTABLEGL)
         // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the compile-time
         // guard above: a renderer that normally wants a window (D3D12) can be asked for a genuinely
         // off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what lets such a
@@ -2239,7 +2241,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::createOrAttachWindow()
     {
-#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB)
+#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)
         // No real window, ever -- see the constructor's matching guard above.
         // GraphicsRendererCreateArgs::window stays nullptr; UpdateViewportFromWindow() already
         // falls back to the renderer's own GetViewportSize() first and only touches window_ if
