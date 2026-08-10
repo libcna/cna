@@ -49,15 +49,103 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     cna_add_module_probe(probe_runtime CNA::Runtime
         "libcna_(devices|noxna|storage)|libCNA_|libenet")
 
+    # Input: graphics-core/math/core through the declared graphics<->input cycle (plus the
+    # selected backend via the factory edge), but nothing above it.
+    cna_add_module_probe(probe_input CNA::Input
+        "libcna_(content|media|audio|runtime|devices|storage|graphics_ext)|libCNA_|libenet|libav")
+
+    # Audio: media (declared audio<->media pump cycle), input (dispatcher TouchPanel pump),
+    # graphics-core via media, math/core -- but no content, runtime, devices or networking.
+    cna_add_module_probe(probe_audio CNA::Audio
+        "libcna_(content|runtime|devices|storage|graphics_ext)|libCNA_|libenet")
+
+    # Media: the same accepted cycle closure as audio, nothing above it.
+    cna_add_module_probe(probe_media CNA::Media
+        "libcna_(content|runtime|devices|storage|graphics_ext)|libCNA_|libenet")
+
+    # Storage: nothing but the storage archive and sharp-runtime. The PlayerIndex/NOXNA
+    # dependency on the core module is headers-only (cna_core_headers), so even the core
+    # archive must stay off the link line.
+    cna_add_module_probe(probe_storage CNA::Storage
+        "libcna_(?!storage)|libCNA_|libenet|libav|cna_backend_")
+
+    # Devices (XNA base): the runtime stack below it, but never an extension module or
+    # networking.
+    cna_add_module_probe(probe_devices CNA::Devices
+        "libcna_(devices_ext|graphics_ext)|libCNA_|libenet")
+
+    # DevicesExt: the runtime stack below it, but never the XNA device base (dependency
+    # direction devices-ext -> devices is forbidden by design) nor networking.
+    cna_add_module_probe(probe_devices_ext CNA::DevicesExt
+        "libcna_devices\\.|libcna_graphics_ext|libCNA_|libenet")
+
+    # GraphicsExt (the former cna_noxna implementation): graphics-core closure only.
+    cna_add_module_probe(probe_graphics_ext CNA::GraphicsExt
+        "libcna_(content|media|audio|runtime|devices|storage)|libCNA_|libenet")
+
+    # NoXna compatibility umbrella: must COMPOSE both extension modules. The probe runs like
+    # every other; its closure gate needs --require, which cna_add_module_probe does not
+    # pass, so the composition gate is registered directly below.
+    cna_add_module_probe(probe_noxna CNA::NoXna)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME ModuleLinkClosure_NoXnaComposition
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
+                --build-dir "${CMAKE_BINARY_DIR}"
+                --target probe_noxna
+                --forbid "libCNA_|libenet"
+                --require "libcna_graphics_ext" --require "libcna_devices_ext")
+    endif()
+
+    if(CNA_ENABLE_NET)
+        # Net: the networking closure (gamer-services -> runtime stack + enet), but never a
+        # device module or an extension module.
+        cna_add_module_probe(probe_net CNA::Net
+            "libcna_(devices|graphics_ext)|libav")
+        if(Python3_Interpreter_FOUND)
+            add_test(NAME ModuleLinkClosure_NetHasENet
+                COMMAND Python3::Interpreter
+                    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
+                    --build-dir "${CMAKE_BINARY_DIR}"
+                    --target probe_net
+                    --forbid "libcna_(devices|graphics_ext)"
+                    --require "libenet")
+        endif()
+    endif()
+
     # HEADLESS is the configuration that proves backend-neutral graphics needs no native
     # renderer SDK: the whole probe closure must stay free of every native graphics library.
+    # The same must hold for the content pipeline (no renderer/native SDK through the type
+    # readers) and for both extension modules.
     if(CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS" AND Python3_Interpreter_FOUND)
+        set(_cna_native_sdk_forbid
+            "vulkan|libGL|GLES|EGL|d3d|dxgi|ddraw|d2d1|bgfx|wgpu|webgpu|glide|gdi32|[Mm]agnum|[Dd]iligent|LLGL|skia|sokol|[Ww]icked|shaderc")
+        foreach(_cna_sdkfree_probe IN ITEMS probe_graphics probe_content probe_graphics_ext probe_devices_ext)
+            add_test(NAME ModuleLinkClosure_NativeSdkFree_${_cna_sdkfree_probe}
+                COMMAND Python3::Interpreter
+                    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
+                    --build-dir "${CMAKE_BINARY_DIR}"
+                    --target ${_cna_sdkfree_probe}
+                    --forbid "${_cna_native_sdk_forbid}")
+        endforeach()
+        # Historical name kept so the existing gate's registration survives by NAME.
         add_test(NAME ModuleLinkClosure_GraphicsNativeSdkFree
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
                 --build-dir "${CMAKE_BINARY_DIR}"
                 --target probe_graphics
-                --forbid "vulkan|libGL|GLES|EGL|d3d|dxgi|ddraw|d2d1|bgfx|wgpu|webgpu|glide|gdi32|[Mm]agnum|[Dd]iligent|LLGL|skia|sokol|[Ww]icked|shaderc")
+                --forbid "${_cna_native_sdk_forbid}")
+    endif()
+
+    # VULKAN closure: the selected renderer's native SDK and nothing from any other family.
+    if(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN" AND Python3_Interpreter_FOUND)
+        add_test(NAME ModuleLinkClosure_VulkanRendererClosure
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
+                --build-dir "${CMAKE_BINARY_DIR}"
+                --target probe_graphics
+                --forbid "d3d|dxgi|ddraw|d2d1|bgfx|wgpu|webgpu|glide|gdi32|[Mm]agnum|[Dd]iligent|LLGL|skia|sokol|[Ww]icked|GLESv1|shaderc"
+                --require "vulkan")
     endif()
 
     if(Python3_Interpreter_FOUND)
