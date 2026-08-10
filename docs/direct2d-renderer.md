@@ -198,6 +198,12 @@ python3 scripts/verify-direct2d-debug-log.py --self-test
 python3 scripts/verify-direct2d-debug-log.py build/direct2d-native-diagnostics/*.log
 ```
 
+`scripts/direct2d_mutation_check.py` proves the suite can actually go red. It introduces one
+deliberate defect at a time -- a blend-factor mapping, the Porter-Duff coefficients, the letterbox
+scale, the mip rounding, a dropped validation -- and requires the named test to fail. `--dry-run`
+only checks that each anchor still matches exactly once (the part that goes stale after a refactor)
+and needs no build; `--run <build-dir>` performs the full apply, rebuild, and expect-failure pass.
+
 `scripts/validate_direct2d_plan.py` keeps [`plan_direct2d.md`](../plan_direct2d.md) honest about
 its own state. It fails on a status outside the documented set, a duplicated task, a `✅` row citing
 no evidence at all, a cited path/CTest name/`CNA_DIRECT2D_*` variable that does not exist, a

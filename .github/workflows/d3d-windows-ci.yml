@@ -110,6 +110,14 @@ jobs:
         working-directory: cna_graphics
         run: python scripts/validate_direct2d_plan.py .
 
+      # D2D-127: a mutation whose anchor text no longer exists is a silent no-op that would
+      # "survive" for a reason unrelated to test coverage. The dry run needs no build, so it fails
+      # fast here; the full apply/build/expect-failure pass is a deliberate manual run.
+      - name: Verify the Direct2D mutation anchors still apply
+        if: matrix.renderer == 'DIRECT2D'
+        working-directory: cna_graphics
+        run: python scripts/direct2d_mutation_check.py --dry-run .
+
       # D2D-113/D2D-124: prove the debug-layer/live-object parser itself still classifies its
       # committed positive and negative fixtures correctly before it is trusted to gate this run.
       - name: Self-test the Direct2D debug-layer log gate
