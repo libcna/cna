@@ -114,6 +114,20 @@ xvfb-run -a ctest --test-dir cmake-build-direct2d-integration -L Direct2D -V
 parallelism in the Direct2D workflow/helpers. `CNA_ENABLE_NET=OFF` excludes only tests belonging to
 the omitted Net and GamerServices modules; it retains the Direct2D unit subset.
 
+`scripts/verify-direct2d-debug-log.py` turns the native debug-layer output into a gate rather than
+an artifact. With `CNA_DIRECT2D_DEBUG_LAYER=1` the renderer emits every stored D3D11 message as
+`[Direct2D D3D11 debug] severity=<S> category=<C> id=<I> <description>` and closes the report with
+`[Direct2D diagnostics] live-object report end.`. The parser fails on a message of severity `ERROR`
+or `CORRUPTION`, on a live object outside the whitelist of objects CNA itself still holds when it
+reports (`ID3D11Device`, `ID3D11DeviceContext`, `ID3D11Debug`, `ID3D11InfoQueue`), on a run whose
+diagnostics or debug layer never engaged, and on a truncated report. Its own classification is
+regression-tested against the committed positive/negative fixtures in `tests/fixtures/direct2d/`:
+
+```bash
+python3 scripts/verify-direct2d-debug-log.py --self-test
+python3 scripts/verify-direct2d-debug-log.py build/direct2d-native-diagnostics/*.log
+```
+
 Wine 10.0 is useful evidence for the supported portable/native-API surface but is not physical
 Windows. WineD3D does not register Direct2D's built-in ColorMatrix effect and does not implement
 the bounded-copy image composite used by the Opaque pixel oracle. The compatibility run therefore

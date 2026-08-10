@@ -1,0 +1,12 @@
+1: Test command: C:/cna/build/cna_test_direct2d_2d_parity.exe
+1: [Direct2D diagnostics] created driver=hardware feature-level=0xB100 adapter-vendor=0x8086 adapter-device=0x9A49 debug-layer=enabled.
+1: [Direct2D 2D parity] clear + readback: ok
+1: [Direct2D 2D parity] authored mip selection: ok
+1: [Direct2D diagnostics] driver=hardware EndDraw=61 transient-releases=48 transient-high-water=3.
+1: [Direct2D diagnostics] ReportLiveDeviceObjects hr=0x0.
+1: [Direct2D diagnostics] debug-layer stored messages=3.
+1: [Direct2D D3D11 debug] severity=WARNING category=2 id=441 Live ID3D11Device at 0x00000232A9C0B0F0, Refcount: 4
+1: [Direct2D D3D11 debug] severity=WARNING category=2 id=442 Live ID3D11DeviceContext at 0x00000232A9C1D220, Refcount: 1
+1: [Direct2D D3D11 debug] severity=INFO category=2 id=0 Live Objects Summary:
+1: [Direct2D diagnostics] live-object report end.
+1/4 Test #1: Direct2D_2DParity ................   Passed    3.11 sec

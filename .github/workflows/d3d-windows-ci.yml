@@ -103,6 +103,13 @@ jobs:
         working-directory: cna_graphics
         run: bash scripts/verify-direct2d-parallel-jobs.sh
 
+      # D2D-113/D2D-124: prove the debug-layer/live-object parser itself still classifies its
+      # committed positive and negative fixtures correctly before it is trusted to gate this run.
+      - name: Self-test the Direct2D debug-layer log gate
+        if: matrix.renderer == 'DIRECT2D'
+        working-directory: cna_graphics
+        run: python scripts/verify-direct2d-debug-log.py --self-test .
+
       # CNA_BUILD_EXAMPLES=OFF / CNA_ENABLE_NET=OFF: keeps this job scoped to exactly what it's
       # meant to verify (CNA core + the D3D11/D3D12 renderer + their own CTest executables) --
       # demos/tools (cna_reference_dump, cna_demo_2d, ...) and networking are real, separate parts
@@ -193,6 +200,17 @@ jobs:
           CNA_DIRECT2D_FORCE_WARP=1 \
           ctest --test-dir build -R '^Direct2D_Lifetime$' --verbose 2>&1 \
             | tee build/direct2d-native-diagnostics/warp-debug-lifetime-ctest.log
+
+      # D2D-113/D2D-124: the two logs above are a GATE, not just an artifact. The parser fails the
+      # job on a debug-layer ERROR/CORRUPTION message, on a live D3D11 object outside the
+      # documented whitelist, and on a run whose diagnostics/debug layer silently never engaged.
+      - name: Gate on Direct2D debug-layer errors and live objects
+        if: matrix.renderer == 'DIRECT2D'
+        working-directory: cna_graphics
+        run: |
+          python scripts/verify-direct2d-debug-log.py \
+            build/direct2d-native-diagnostics/hardware-debug-ctest.log \
+            build/direct2d-native-diagnostics/warp-debug-lifetime-ctest.log
 
       - name: Upload Direct2D native validation artifact
         if: always() && matrix.renderer == 'DIRECT2D'

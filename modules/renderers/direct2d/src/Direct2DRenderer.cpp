@@ -93,6 +93,21 @@ namespace CNA::Internal::Renderers::Direct2D
             bool active_ = false;
         };
 
+        /// D2D-124: the debug-layer gate classifies messages by severity, so the emitted line has
+        /// to carry it. The mapping is the fixed D3D11 enumeration, not a heuristic on the text.
+        [[nodiscard]] const char* DebugMessageSeverityName(D3D11_MESSAGE_SEVERITY severity)
+        {
+            switch (severity)
+            {
+                case D3D11_MESSAGE_SEVERITY_CORRUPTION: return "CORRUPTION";
+                case D3D11_MESSAGE_SEVERITY_ERROR: return "ERROR";
+                case D3D11_MESSAGE_SEVERITY_WARNING: return "WARNING";
+                case D3D11_MESSAGE_SEVERITY_INFO: return "INFO";
+                case D3D11_MESSAGE_SEVERITY_MESSAGE: return "MESSAGE";
+            }
+            return "UNKNOWN";
+        }
+
         [[nodiscard]] D2D1_PRIMITIVE_BLEND ToPrimitiveBlend(Direct2DBlendMode blendMode)
         {
             switch (blendMode)
@@ -1026,7 +1041,12 @@ namespace CNA::Internal::Renderers::Direct2D
             std::fprintf(stderr,
                          "[Direct2D diagnostics] ReportLiveDeviceObjects hr=%s.\n",
                          FormatHr(reportResult).c_str());
-            if (!infoQueue) return;
+            if (!infoQueue)
+            {
+                std::fprintf(stderr,
+                             "[Direct2D diagnostics] live-object report end (no info queue).\n");
+                return;
+            }
             const UINT64 messageCount = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
             std::fprintf(stderr,
                          "[Direct2D diagnostics] debug-layer stored messages=%llu.\n",
@@ -1038,11 +1058,18 @@ namespace CNA::Internal::Renderers::Direct2D
                     continue;
                 std::vector<std::uint8_t> storage(messageBytes);
                 auto* const message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
-                if (SUCCEEDED(infoQueue->GetMessage(index, message, &messageBytes)))
-                    std::fprintf(stderr, "[Direct2D D3D11 debug] %.*s\n",
-                                 static_cast<int>(message->DescriptionByteLength),
-                                 message->pDescription ? message->pDescription : "");
+                if (FAILED(infoQueue->GetMessage(index, message, &messageBytes))) continue;
+                // D2D-124: severity/category/id are machine-read by
+                // scripts/verify-direct2d-debug-log.py. Keep the key=value prefix stable; the
+                // description keeps the debug layer's own wording so a live-object line stays
+                // recognizable as "Live <interface> at 0x..., Refcount: N".
+                std::fprintf(stderr, "[Direct2D D3D11 debug] severity=%s category=%d id=%d %.*s\n",
+                             DebugMessageSeverityName(message->Severity),
+                             static_cast<int>(message->Category), static_cast<int>(message->ID),
+                             static_cast<int>(message->DescriptionByteLength),
+                             message->pDescription ? message->pDescription : "");
             }
+            std::fprintf(stderr, "[Direct2D diagnostics] live-object report end.\n");
         }
         catch (...)
         {
