@@ -1,5 +1,49 @@
 # NEXT.md
 
+## FNA3D RENDERER LANE — IMPLEMENTED, AWAITING INTEGRATION (2026-08-10)
+
+> The first renderer-expansion lane. **`FNA3D` is CNA's 42nd public renderer identity**
+> (`GraphicsRendererType::Fna3d`, `-DCNA_GRAPHICS_RENDERER=FNA3D`, `CNA_RENDERER_FNA3D`,
+> `modules/renderers/fna3d`, `cna_renderer_fna3d`, `CNA::Internal::Renderers::Fna3d::Fna3dRenderer`),
+> implemented on `claude/renderer-fna3d-q1rsyc` / `feature/renderer-fna3d`. **Not merged into
+> `develop`** — integration is the owner's call.
+>
+> **What it is.** FNA3D (https://github.com/FNA-XNA/FNA3D, pinned at release **26.08** = `3240147`,
+> zlib) is the graphics library FNA itself renders through; its device API *is* XNA 4.0's, and every
+> enumeration it exposes is numerically the XNA enumeration CNA already ports — pinned by
+> `static_assert` rather than transcribed. Like `LLGL`/`DILIGENT`/`SOKOL`/`BGFX` it names a portable
+> middleware layer, not a native API: it selects SDL_GPU, Direct3D 11 or OpenGL at runtime. Its only
+> dependency is SDL 3.2.0+, i.e. exactly the SDL3 CNA already vendors.
+>
+> **What is new about it.** This is the only CNA renderer that executes **XNA's actual compiled
+> stock effects** (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`,
+> `SkinnedEffect`, `SpriteEffect`) through MojoShader, selecting variants with XNA's own integer
+> `ShaderIndex` arithmetic, rather than a reimplementation of them. It is also the only renderer
+> whose `MultiStreamVertexInput` is native rather than emulated: `FNA3D_ApplyVertexBufferBindings`
+> takes an array of real per-stream `VertexDeclaration`s.
+>
+> **Truthful boundaries, each with a matching refusal.** `CustomEffects` is **false** —
+> `FNA3D_CreateEffect` takes a *compiled* D3D9 Effect binary and nothing in FNA3D compiles shader
+> source, so `CreateEffectRenderer` returns null. `Instancing` is **false** — FNA3D instances fine,
+> but the stock effects declare no per-instance vertex input (in real XNA that needs a custom
+> Effect), so `DrawInstancedPrimitivesEx` refuses by name instead of stacking every instance on
+> record 0. Both are structural, not deferred. See `docs/fna3d-renderer.md` and `plan_fna3d.md`.
+>
+> **Validation.** Native runtime on Linux/Xvfb/Mesa llvmpipe through FNA3D's OpenGL driver: six
+> `Fna3d_*` CTest binaries, all pixel oracles, plus 30 device-free unit tests in the corpus. The
+> full `CnaTests` corpus under `CNA_GRAPHICS_RENDERER=FNA3D` is **6095 passed / 0 failed / 7
+> skipped**, and the `HEADLESS` control is unchanged. FNA3D's SDL_GPU and Direct3D 11 drivers are
+> external gates (no Vulkan ICD and no Windows here). Two existence-gate spikes are committed under
+> `fna3d-spike/`; the second one is what measured FNA3D's driver-dependent sub-rectangle
+> `ReadBackbuffer` origin, which the renderer works around by cropping in CNA.
+>
+> **Shared CNA surface touched** (each minimal and renderer-guarded): the identity registries and
+> their validators (41 → 42), one `#ifdef CNA_RENDERER_FNA3D` block in
+> `GraphicsDevice::getRendererWindowFlags()`, the `CnaTests` glob filter for the renderer-local test
+> directory (Wicked/Magnum precedent), and renderer arms in three shared tests that enumerate
+> renderers by name. No renderer behavior, module boundary or SharpRuntime mapping changed for any
+> existing identity.
+
 ## PRE-RENDERER-EXPANSION NORMALIZATION PROMOTED AND PUBLISHED (2026-08-10)
 
 > `develop` was fast-forwarded to the accepted combined descendant

@@ -1,6 +1,6 @@
 # CNA renderer registry
 
-Current as of the final 21-lane reconciliation on 2026-08-09. CNA exposes exactly **41 public
+Current as of the FNA3D renderer lane (2026-08-10). CNA exposes exactly **42 public
 renderer identities**. EasyGL is an internal implementation shared by four public GL profiles and
 does not add a public identity. Internal renderer/API choices made by bgfx, Skia, Sokol, Diligent,
 LLGL, or another abstraction likewise do not add CNA identities.
@@ -50,9 +50,10 @@ LLGL, or another abstraction likewise do not add CNA identities.
 | 39 | `Gdi` | `GDI` | `CNA_RENDERER_GDI` | GDI / `GdiRenderer` | Windows |
 | 40 | `Llgl` | `LLGL` | `CNA_RENDERER_LLGL` | LLGL / `LlglRenderer` | LLGL dependency |
 | 41 | `Metal` | `METAL` | `CNA_RENDERER_METAL` | Metal / `MetalRenderer` | macOS/Darwin |
+| 42 | `Fna3d` | `FNA3D` | `CNA_RENDERER_FNA3D` | FNA3D / `Fna3dRenderer` | FNA3D dependency |
 
-The four GL profiles share one implementation target, macro, and factory, so 41 public identities
-map to 38 concrete implementation factories. Their public contracts remain distinct because the
+The four GL profiles share one implementation target, macro, and factory, so 42 public identities
+map to 39 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
 renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
 `EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.

@@ -51,7 +51,7 @@ runtime-literal paths) and the cross-module minimal-link probes (`tests/modules`
 
 ## Renderer modules — modules/renderers/
 
-38 implementation families carry the 41 public renderer identities (the easygl family
+39 implementation families carry the 42 public renderer identities (the easygl family
 implements the four GL-profile identities OPENGLES3/OPENGL33/WEBGL1/WEBGL2). Identities are
 pinned by `scripts/check_renderer_identities.py` over `CNA/GraphicsRendererType.hpp` (core
 module) + `cmake/RendererSelection.cmake`; family directories are implementation structure,
@@ -60,7 +60,7 @@ not identities. Exactly one family's `${RENDERER_TARGET}` is configured per buil
 specific SDK links, carried over branch-for-branch from the former central manifest.
 
 ascii, bgfx, canvas, diligent, direct2d, directx1, directx2, directx3, directx5, directx6,
-directx7, directx8, directx9, directx10, directx11, directx12, easygl, freedirect, gdi,
+directx7, directx8, directx9, directx10, directx11, directx12, easygl, fna3d, freedirect, gdi,
 glide, headless, html-dom, llgl, magnum, metal, opengl1, opengl2, opengl4, opengles1,
 sdl-gpu, sdl-renderer, skia, software, sokol, stub, vulkan, webgpu, wicked.
 
@@ -153,4 +153,4 @@ miscellaneous dumping ground again.
   composition umbrella and net, with per-probe link-closure gates
   (`scripts/check_module_link_closure.py`) and the HEADLESS native-SDK-free /
   VULKAN closure configuration gates.
-- `scripts/check_renderer_identities.py` — pins the 41 public renderer identities.
+- `scripts/check_renderer_identities.py` — pins the 42 public renderer identities.

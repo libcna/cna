@@ -39,6 +39,32 @@ than shipping Microsoft's pre-built `.fxb` bytecode — see `plan_dx9.md`'s "CNA
 XNA 4.0" section and design decision 4 for why, and `src/CNA/Internal/Backends/D3D9/shaders/xna/README.md`
 for the full list of compiled entry points.
 
+## FNA3D (FNA3D renderer dependency)
+
+The `FNA3D` graphics renderer links FNA3D, the 3D graphics library for FNA, by Ethan Lee, at the
+pinned revision `3240147` (release tag 26.08). FNA3D is licensed under the **zlib license**; see
+the fetched checkout's own `LICENSE`. It carries MojoShader (by Ryan C. Gordon, zlib license) as a
+git submodule, which FNA3D's own CMake compiles. `cmake/ThirdPartyFNA3D.cmake` fetches an
+unmodified upstream checkout at that revision and builds it from source; nothing is copied into
+the CNA source tree and no local patch is carried.
+
+## Microsoft XNA 4.0 Stock Effects compiled binaries (FNA3D renderer)
+
+`modules/renderers/fna3d/effects/` contains six compiled Direct3D 9 Effect Framework binaries
+(`BasicEffect.fxb`, `AlphaTestEffect.fxb`, `DualTextureEffect.fxb`, `EnvironmentMapEffect.fxb`,
+`SkinnedEffect.fxb`, `SpriteEffect.fxb`) copied **verbatim** from FNA's own
+`src/Graphics/Effect/StockEffects/FXB/` directory at FNA revision
+`30a427365a1684d6599329560efcfb90233701a9`, together with that directory's own license file
+(`LICENSE.StockEffects`). They are the `fxc`-compiled form of Microsoft's Stock Effects sample
+sources and are licensed under the Microsoft Permissive License (Ms-PL).
+
+Unlike the D3D9 renderer above, which compiles the HLSL sources itself, this renderer ships the
+pre-built bytecode because it has no alternative: `FNA3D_CreateEffect` — FNA3D's only shader entry
+point — takes exactly this format, and compiling `.fx` to `.fxb` requires `fxc` from the DirectX
+SDK, which exists on no platform CNA builds on. See
+`modules/renderers/fna3d/effects/README.md` for the full provenance table and
+`docs/fna3d-renderer.md` for what it means for the renderer's capability boundary.
+
 ## Skia (optional Skia 2D raster / Ganesh backend dependency)
 
 The experimental `SKIA` graphics backend links against Skia, Google's 2D graphics library, at the
