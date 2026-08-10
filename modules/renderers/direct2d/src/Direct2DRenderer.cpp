@@ -191,6 +191,24 @@ namespace CNA::Internal::Renderers::Direct2D
             return textureFilter == 0 || textureFilter == 4 || textureFilter == 5 || textureFilter == 7;
         }
 
+        /// D2D-112: an extremely long SpriteBatch must not grow the transient set without bound.
+        /// Both limits are deliberately generous -- an ordinary frame never reaches either, so the
+        /// intermediate commit stays an exceptional safety valve rather than a per-frame cost.
+        constexpr std::size_t kMaxTransientResources = 1024;
+        constexpr std::size_t kMaxTransientBytes = 64u * 1024u * 1024u;
+
+        /// D2D-109: bounded reuse of CPU-materialized sprite bitmaps. The budget is a cache, not a
+        /// correctness requirement: exceeding it costs a re-upload, never a wrong pixel.
+        constexpr std::size_t kMaxSpriteBitmapCacheEntries = 32;
+        constexpr std::size_t kMaxSpriteBitmapCacheBytes = 16u * 1024u * 1024u;
+
+        /// D2D-111: steady-state capacity for the transient collections. clear() keeps capacity, so
+        /// reserving once means an ordinary frame performs no reallocation at all.
+        constexpr std::size_t kTransientBitmapReserve = 256;
+        constexpr std::size_t kTransientEffectReserve = 128;
+        constexpr std::size_t kTransientImageReserve = 256;
+        constexpr std::size_t kTransientImageBrushReserve = 128;
+
         [[nodiscard]] bool IsWhite(const Color& color)
         {
             return color.getRProperty() == 255 && color.getGProperty() == 255 &&
@@ -356,8 +374,11 @@ namespace CNA::Internal::Renderers::Direct2D
         return unsignedWidth * unsignedHeight * 4u;
     }
 
-    std::vector<std::uint8_t> CopyRgbaToTightBgra(
-        const std::uint8_t* rgba, int stride, int width, int height)
+    /// Shared conversion core of CopyRgbaToTightBgra and the in-place bitmap upload path; file
+    /// local because the reusable-buffer form is an implementation detail, not renderer API.
+    static void ConvertRgbaToTightBgraInto(
+        const std::uint8_t* rgba, int stride, int width, int height,
+        std::vector<std::uint8_t>& bgra)
     {
         const std::size_t bytes = CheckedRgbaByteCount(width, height);
         const std::size_t rowBytes = static_cast<std::size_t>(width) * 4u;
@@ -368,7 +389,9 @@ namespace CNA::Internal::Renderers::Direct2D
                 "stride", std::to_string(stride),
                 "Direct2D RGBA upload stride is shorter than one complete row.");
 
-        std::vector<std::uint8_t> bgra(bytes);
+        // D2D-106/D2D-111: resize keeps an already sufficient capacity, so a repeatedly reused
+        // scratch buffer stops allocating after the first upload of a given size.
+        bgra.resize(bytes);
         for (int y = 0; y < height; ++y)
         {
             const std::uint8_t* sourceRow = rgba + static_cast<std::size_t>(y) *
@@ -382,6 +405,13 @@ namespace CNA::Internal::Renderers::Direct2D
                 destinationRow[x * 4 + 3] = sourceRow[x * 4 + 3];
             }
         }
+    }
+
+    std::vector<std::uint8_t> CopyRgbaToTightBgra(
+        const std::uint8_t* rgba, int stride, int width, int height)
+    {
+        std::vector<std::uint8_t> bgra;
+        ConvertRgbaToTightBgraInto(rgba, stride, width, height, bgra);
         return bgra;
     }
 
@@ -638,6 +668,7 @@ namespace CNA::Internal::Renderers::Direct2D
         bitmap_ = std::move(replacement);
         mipBitmaps_ = std::move(replacementMips);
         deviceGeneration_ = owner_->deviceGeneration_;
+        ++contentVersion_;
     }
 
     ID2D1Bitmap1* Direct2DTextureRenderer::Bitmap() const
@@ -719,16 +750,34 @@ namespace CNA::Internal::Renderers::Direct2D
                         rgba + static_cast<std::size_t>(y) * stride,
                         rowBytes);
         }
+        // Commit any command that still reads the old contents before they change. This gives
+        // Immediate SpriteBatch draws snapshot semantics across SetData: everything issued before
+        // this call keeps the previous pixels, everything after observes the new ones. Every check
+        // that can reject the upload has already run, so no rejected call reaches this flush.
+        owner_->EndDrawing("Texture2D SetData");
+        // D2D-106: overwrite the existing bitmap instead of allocating a replacement. The
+        // create-and-swap path remains as the fallback for a runtime whose CopyFromMemory cannot
+        // serve this bitmap, so the shadow and the GPU contents never diverge.
+        // Only a bitmap that still belongs to the CURRENT device generation may be written in
+        // place. A stale one (created before a device loss this texture did not participate in)
+        // must be replaced outright; overwriting it and then claiming the current generation would
+        // revive a resource whose storage still belongs to the dead device.
+        const bool bitmapIsCurrent = bitmap_ && deviceGeneration_ == owner_->deviceGeneration_;
+        if (bitmapIsCurrent && owner_->TryUploadBitmapRgba(*bitmap_.Get(), replacementPixels.data(),
+                                                           width_, height_))
+        {
+            rgbaPixels_ = std::move(replacementPixels);
+            deviceGeneration_ = owner_->deviceGeneration_;
+            ++contentVersion_;
+            return;
+        }
         ComPtr<ID2D1Bitmap1> replacementBitmap;
         replacementBitmap.Attach(
             owner_->CreateBitmapFromRgba(replacementPixels.data(), width_, height_));
-        // Commit any commands that still reference the old bitmap before replacing our final
-        // COM owner. This gives Immediate SpriteBatch draws snapshot semantics across SetData and
-        // keeps a failed EndDraw transactional: the old pixels/bitmap remain authoritative.
-        owner_->EndDrawing("Texture2D SetData");
         rgbaPixels_ = std::move(replacementPixels);
         bitmap_ = std::move(replacementBitmap);
         deviceGeneration_ = owner_->deviceGeneration_;
+        ++contentVersion_;
     }
 
     void Direct2DTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
@@ -750,14 +799,28 @@ namespace CNA::Internal::Renderers::Direct2D
         }
         const std::size_t bytes = CheckedRgbaByteCount(expectedWidth, expectedHeight);
         std::vector<uint8_t> replacementPixels(rgba, rgba + bytes);
+        owner_->EndDrawing("Texture2D mip SetData");
+        const std::size_t index = static_cast<std::size_t>(level - 1);
+        // D2D-106: same in-place upload as level zero. Writing one authored mip must not disturb
+        // the COM identity of level zero or of any other authored level, which recreating the
+        // bitmap here never did either -- but now it does not even reallocate this one.
+        ID2D1Bitmap1* const existing =
+            deviceGeneration_ == owner_->deviceGeneration_ ? mipBitmaps_[index].Get() : nullptr;
+        if (existing && owner_->TryUploadBitmapRgba(*existing, replacementPixels.data(),
+                                                     expectedWidth, expectedHeight))
+        {
+            mipRgbaPixels_[index] = std::move(replacementPixels);
+            deviceGeneration_ = owner_->deviceGeneration_;
+            ++contentVersion_;
+            return;
+        }
         ComPtr<ID2D1Bitmap1> replacementBitmap;
         replacementBitmap.Attach(
             owner_->CreateBitmapFromRgba(replacementPixels.data(), expectedWidth, expectedHeight));
-        owner_->EndDrawing("Texture2D mip SetData");
-        const std::size_t index = static_cast<std::size_t>(level - 1);
         mipRgbaPixels_[index] = std::move(replacementPixels);
         mipBitmaps_[index] = std::move(replacementBitmap);
         deviceGeneration_ = owner_->deviceGeneration_;
+        ++contentVersion_;
     }
 
     bool Direct2DTextureRenderer::GetData(int level, int x, int y, int w, int h,
@@ -1162,6 +1225,12 @@ namespace CNA::Internal::Renderers::Direct2D
         transientEffects_.clear();
         transientImages_.clear();
         transientImageBrushes_.clear();
+        transientByteEstimate_ = 0;
+        // D2D-109: cached bitmaps belong to the device being torn down. Their keys carry the old
+        // generation and could never match again, but holding them would keep dead COM objects
+        // alive and would be reported as leaks by the live-object gate.
+        spriteBitmapCache_.clear();
+        spriteBitmapCacheBytes_ = 0;
         colorMatrixEffectSupported_.reset();
         premultiplyEffectSupported_.reset();
         activeRenderTarget_ = nullptr;
@@ -1183,11 +1252,15 @@ namespace CNA::Internal::Renderers::Direct2D
             if (diagnosticsEnabled_)
                 std::fprintf(stderr,
                              "[Direct2D diagnostics] driver=%s EndDraw=%llu transient-releases=%llu "
-                             "transient-high-water=%zu.\n",
+                             "transient-high-water=%zu transient-chunk-flushes=%llu "
+                             "sprite-bitmap-cache-hits=%llu misses=%llu.\n",
                              usingWarp_ ? "WARP" : "hardware",
                              static_cast<unsigned long long>(endDrawCount_),
                              static_cast<unsigned long long>(transientResourceReleaseCount_),
-                             transientResourceHighWater_);
+                             transientResourceHighWater_,
+                             static_cast<unsigned long long>(transientChunkFlushCount_),
+                             static_cast<unsigned long long>(spriteBitmapCacheHits_),
+                             static_cast<unsigned long long>(spriteBitmapCacheMisses_));
             ReportLiveDeviceObjectsNoThrow();
         }
         d3dDevice_.Reset();
@@ -1350,6 +1423,7 @@ namespace CNA::Internal::Renderers::Direct2D
         ThrowIfFailed(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &d2dContext_),
                       "ID2D1Device::CreateDeviceContext");
         d2dContext_->SetDpi(96.0f, 96.0f); // CNA's public 2D coordinates are pixels, not DIPs.
+        ReserveTransientCapacity();
 
         const HWND hwnd = GetWindowHandle();
         RECT clientRect{};
@@ -1504,21 +1578,58 @@ namespace CNA::Internal::Renderers::Direct2D
         ApplyOutputClips();
     }
 
+    void Direct2DRenderer::ReserveTransientCapacity()
+    {
+        transientBitmaps_.reserve(kTransientBitmapReserve);
+        transientEffects_.reserve(kTransientEffectReserve);
+        transientImages_.reserve(kTransientImageReserve);
+        transientImageBrushes_.reserve(kTransientImageBrushReserve);
+        spriteBitmapCache_.reserve(kMaxSpriteBitmapCacheEntries);
+    }
+
+    std::size_t Direct2DRenderer::TransientResourceCount() const
+    {
+        return transientBitmaps_.size() + transientEffects_.size() + transientImages_.size() +
+               transientImageBrushes_.size();
+    }
+
+    void Direct2DRenderer::FlushTransientChunkIfOverBudget()
+    {
+        if (!drawing_) return;
+        if (TransientResourceCount() < kMaxTransientResources &&
+            transientByteEstimate_ < kMaxTransientBytes)
+            return;
+
+        // Committing here is safe and order-preserving: Direct2D executes the commands of the
+        // closed chunk before any command of the next one, and the reopened chunk restores exactly
+        // the state EnsureDrawing would have installed -- the same primitive blend and the same
+        // viewport/scissor clips. EnsureMainTargetSize is deliberately NOT re-run: a window resize
+        // observed halfway through one SpriteBatch would otherwise swap the target underneath it.
+        EndDrawing("transient chunk flush");
+        ++transientChunkFlushCount_;
+        d2dContext_->BeginDraw();
+        drawing_ = true;
+        d2dContext_->SetPrimitiveBlend(ToPrimitiveBlend(blendMode_));
+        ApplyOutputClips();
+    }
+
     void Direct2DRenderer::EndDrawing(const char* operation)
     {
         if (!drawing_) return;
         ClearOutputClips();
         const HRESULT hr = d2dContext_->EndDraw();
         drawing_ = false;
-        const std::size_t transientCount = transientBitmaps_.size() + transientEffects_.size() +
-            transientImages_.size() + transientImageBrushes_.size();
+        const std::size_t transientCount = TransientResourceCount();
         ++endDrawCount_;
         transientResourceReleaseCount_ += transientCount;
         transientResourceHighWater_ = std::max(transientResourceHighWater_, transientCount);
+        // D2D-111: clear() releases every ComPtr but keeps the reserved capacity, so the next
+        // chunk reuses this storage instead of reallocating it.
         transientBitmaps_.clear();
         transientEffects_.clear();
         transientImages_.clear();
         transientImageBrushes_.clear();
+        transientByteEstimate_ = 0;
         if (IsDeviceLossHResult(hr))
         {
             RecreateDeviceResourcesForRecovery();
@@ -2280,6 +2391,64 @@ namespace CNA::Internal::Renderers::Direct2D
         return bitmap.Detach();
     }
 
+    bool Direct2DRenderer::TryUploadBitmapRgba(ID2D1Bitmap1& bitmap, const uint8_t* rgba,
+                                               int width, int height) const
+    {
+        // D2D-106: recreating an ID2D1Bitmap1 for every SetData allocates a fresh D3D11 texture and
+        // discards a perfectly good one. CopyFromMemory overwrites the existing storage instead, so
+        // a repeated upload of unchanged dimensions costs one staging conversion and no COM or GPU
+        // allocation at all -- and every untouched mip keeps its COM identity, because nothing here
+        // touches the other levels.
+        const D2D1_SIZE_U size = bitmap.GetPixelSize();
+        if (size.width != static_cast<UINT32>(width) || size.height != static_cast<UINT32>(height))
+            return false;
+        ConvertRgbaToTightBgraInto(rgba, width * 4, width, height, uploadScratch_);
+        const HRESULT hr = bitmap.CopyFromMemory(
+            nullptr, uploadScratch_.data(), static_cast<UINT32>(width * 4));
+        if (SUCCEEDED(hr)) return true;
+        // A lost device must recover rather than silently fall back to a create-and-swap that
+        // would fail again for the same reason.
+        if (IsDeviceLossHResult(hr))
+            ThrowIfFailed(hr, "ID2D1Bitmap::CopyFromMemory(in-place level upload)");
+        // Any other failure (a runtime that does not implement CopyFromMemory for this bitmap
+        // kind, for instance) is reported so the caller can recreate the bitmap from the same
+        // pixels and stay consistent with its shadow.
+        return false;
+    }
+
+    ID2D1Bitmap1* Direct2DRenderer::FindCachedSpriteBitmap(const SpriteBitmapCacheKey& key) const
+    {
+        for (const SpriteBitmapCacheEntry& entry : spriteBitmapCache_)
+        {
+            if (entry.key == key) return entry.bitmap.Get();
+        }
+        return nullptr;
+    }
+
+    void Direct2DRenderer::StoreCachedSpriteBitmap(
+        const SpriteBitmapCacheKey& key, const Microsoft::WRL::ComPtr<ID2D1Bitmap1>& bitmap,
+        std::size_t byteCount)
+    {
+        if (!bitmap) return;
+        // A single sprite larger than the whole budget would evict everything and still not fit;
+        // leave it uncached rather than thrashing the cache for it.
+        if (byteCount > kMaxSpriteBitmapCacheBytes) return;
+        while (!spriteBitmapCache_.empty() &&
+               (spriteBitmapCache_.size() >= kMaxSpriteBitmapCacheEntries ||
+                spriteBitmapCacheBytes_ + byteCount > kMaxSpriteBitmapCacheBytes))
+        {
+            // Oldest first. An evicted bitmap may still be referenced by a command recorded
+            // earlier in this chunk, so it moves into the transient set and is released with it
+            // at the next EndDraw instead of being destroyed here.
+            SpriteBitmapCacheEntry evicted = std::move(spriteBitmapCache_.front());
+            spriteBitmapCache_.erase(spriteBitmapCache_.begin());
+            spriteBitmapCacheBytes_ -= std::min(spriteBitmapCacheBytes_, evicted.byteCount);
+            if (evicted.bitmap) transientBitmaps_.push_back(std::move(evicted.bitmap));
+        }
+        spriteBitmapCache_.push_back(SpriteBitmapCacheEntry{key, bitmap, byteCount});
+        spriteBitmapCacheBytes_ += byteCount;
+    }
+
     D2D1_MATRIX_3X2_F Direct2DRenderer::ToD2DMatrix(const Matrix& matrix)
     {
         // Both XNA Matrix and Direct2D use row-vector affine form for 2D points.
@@ -2298,13 +2467,17 @@ namespace CNA::Internal::Renderers::Direct2D
             left._31 * right._12 + left._32 * right._22 + right._32);
     }
 
-    std::vector<uint8_t> Direct2DRenderer::MakeSpritePixels(
+    void Direct2DRenderer::MakeSpritePixels(
         const Direct2DTextureRenderer& texture, const Rectangle& sourceRectangle,
-        const Color& color, SpriteEffects effects, int addressU, int addressV, int mipLevel) const
+        const Color& color, SpriteEffects effects, int addressU, int addressV, int mipLevel,
+        std::vector<uint8_t>& result) const
     {
         const int sourceWidth = sourceRectangle.Width;
         const int sourceHeight = sourceRectangle.Height;
-        std::vector<uint8_t> result(static_cast<std::size_t>(sourceWidth) * sourceHeight * 4u, 0);
+        // D2D-109: assign() reuses the caller's buffer (its capacity survives from the previous
+        // sprite), so a long batch of CPU-fallback draws stops allocating after the first one. The
+        // zero fill is retained because the address-mode branches below may skip texels.
+        result.assign(static_cast<std::size_t>(sourceWidth) * sourceHeight * 4u, 0);
         const bool flipH = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0;
         const bool flipV = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0;
         const auto sampleCoordinate = [](int coordinate, int size, int addressMode) -> int
@@ -2349,13 +2522,13 @@ namespace CNA::Internal::Renderers::Direct2D
                 output[3] = static_cast<uint8_t>(fragA);
             }
         }
-        return result;
     }
 
-    std::vector<uint8_t> Direct2DRenderer::MakeMipBlendedSpritePixels(
+    void Direct2DRenderer::MakeMipBlendedSpritePixels(
         const Direct2DTextureRenderer& texture, const Rectangle& lowerSource,
         const Rectangle& upperSource, int lowerLevel, int upperLevel, float blendFraction,
-        const Color& color, SpriteEffects effects, int addressU, int addressV) const
+        const Color& color, SpriteEffects effects, int addressU, int addressV,
+        std::vector<uint8_t>& result) const
     {
         // D2D-74: samples both mip levels bracketing a fractional LOD and linearly blends them
         // (in the same premultiplied-or-not space MakeSpritePixels uses) before tinting, rather
@@ -2363,7 +2536,7 @@ namespace CNA::Internal::Renderers::Direct2D
         // level samples are proportionally rescaled onto that same grid.
         const int sourceWidth = lowerSource.Width;
         const int sourceHeight = lowerSource.Height;
-        std::vector<uint8_t> result(static_cast<std::size_t>(sourceWidth) * sourceHeight * 4u, 0);
+        result.assign(static_cast<std::size_t>(sourceWidth) * sourceHeight * 4u, 0);
         const bool flipH = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0;
         const bool flipV = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0;
         const auto sampleCoordinate = [](int coordinate, int size, int addressMode) -> int
@@ -2428,7 +2601,6 @@ namespace CNA::Internal::Renderers::Direct2D
                 output[3] = static_cast<uint8_t>(std::lround(fragA));
             }
         }
-        return result;
     }
 
     void Direct2DRenderer::DrawSprite(
@@ -2589,17 +2761,61 @@ namespace CNA::Internal::Renderers::Direct2D
                 throw System::ArgumentOutOfRangeException(
                     "sourceRectangle", "too large",
                     "The Direct2D CPU fallback source exceeds the device maximum bitmap size.");
-            const std::vector<uint8_t> pixels = mipBlendActive
-                ? MakeMipBlendedSpritePixels(*ordinaryTexture, localSource, mipBlendUpperSource,
-                                              selectedMipLevel, mipBlendUpperLevel, mipBlendFraction,
-                                              color, effects, addressU, addressV)
-                : MakeSpritePixels(*ordinaryTexture, localSource, color, effects, addressU, addressV,
-                                   selectedMipLevel);
-            transient.Attach(CreateBitmapFromRgba(pixels.data(), localSource.Width, localSource.Height,
-                                                   false));
-            bitmap = transient.Get();
+            // D2D-109: the materialized pixels are a pure function of the fields below, so an
+            // identical repeated draw (the common "many tinted sprites from one atlas" case) can
+            // reuse the bitmap already uploaded for the first of them. Every input of
+            // MakeSpritePixels/MakeMipBlendedSpritePixels is part of the key -- content version
+            // included, so any SetData invalidates the entries derived from the old pixels.
+            SpriteBitmapCacheKey cacheKey;
+            cacheKey.source = ordinaryTexture;
+            cacheKey.contentVersion = ordinaryTexture->ContentVersion();
+            cacheKey.deviceGeneration = deviceGeneration_;
+            cacheKey.mipLevel = selectedMipLevel;
+            cacheKey.upperMipLevel = mipBlendActive ? mipBlendUpperLevel : -1;
+            cacheKey.mipBlendFraction = mipBlendActive ? mipBlendFraction : 0.0f;
+            cacheKey.sourceX = localSource.X;
+            cacheKey.sourceY = localSource.Y;
+            cacheKey.sourceWidth = localSource.Width;
+            cacheKey.sourceHeight = localSource.Height;
+            cacheKey.color = color.getPackedValueProperty();
+            cacheKey.spriteEffects = static_cast<int>(effects);
+            cacheKey.addressU = addressU;
+            cacheKey.addressV = addressV;
+            cacheKey.nonPremultipliedSource = nonPremultipliedSource_;
+
+            if (ID2D1Bitmap1* const cached = FindCachedSpriteBitmap(cacheKey))
+            {
+                ++spriteBitmapCacheHits_;
+                bitmap = cached;
+            }
+            else
+            {
+                ++spriteBitmapCacheMisses_;
+                if (mipBlendActive)
+                {
+                    MakeMipBlendedSpritePixels(*ordinaryTexture, localSource, mipBlendUpperSource,
+                                               selectedMipLevel, mipBlendUpperLevel, mipBlendFraction,
+                                               color, effects, addressU, addressV,
+                                               spritePixelScratch_);
+                }
+                else
+                {
+                    MakeSpritePixels(*ordinaryTexture, localSource, color, effects, addressU,
+                                     addressV, selectedMipLevel, spritePixelScratch_);
+                }
+                transient.Attach(CreateBitmapFromRgba(spritePixelScratch_.data(), localSource.Width,
+                                                       localSource.Height, false));
+                bitmap = transient.Get();
+                // Held by the transient set no matter what the cache decides: a bitmap the cache
+                // declines (one larger than the whole budget) must still outlive the deferred
+                // command recorded below, exactly as before the cache existed.
+                transientBitmaps_.push_back(transient);
+                StoreCachedSpriteBitmap(cacheKey, transient, spritePixelScratch_.size());
+                // D2D-112: the CPU fallback is the only transient whose size is unbounded by the
+                // renderer itself, so its footprint is what the chunk byte budget tracks.
+                transientByteEstimate_ += spritePixelScratch_.size();
+            }
             localSource = Rectangle(0, 0, localSource.Width, localSource.Height);
-            transientBitmaps_.push_back(transient);
         }
 
         const float scaleX = static_cast<float>(destinationRectangle.Width) / localSource.Width;
@@ -2774,6 +2990,7 @@ namespace CNA::Internal::Renderers::Direct2D
             if (premultiplyEffect) transientEffects_.push_back(premultiplyEffect);
             if (premultiplyOutput) transientImages_.push_back(premultiplyOutput);
             transientImageBrushes_.push_back(imageBrush);
+            FlushTransientChunkIfOverBudget();
             return;
         }
         // DrawBitmap is hard-wired to source-over on WineD3D. DrawImage has an explicit image
@@ -2806,6 +3023,7 @@ namespace CNA::Internal::Renderers::Direct2D
             ToImageCompositeMode(blendMode_));
         d2dContext_->SetTransform(D2D1::Matrix3x2F::Identity());
         if (needsCompositeMask) d2dContext_->PopLayer();
+        FlushTransientChunkIfOverBudget();
     }
 
     void Direct2DRenderer::Ensure3DSupported(const char* operation) const

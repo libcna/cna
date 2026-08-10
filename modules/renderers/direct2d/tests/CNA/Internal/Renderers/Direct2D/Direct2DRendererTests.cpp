@@ -20,6 +20,7 @@ using CNA::Internal::Renderers::Direct2D::Direct2DBlendMode;
 using CNA::Internal::Renderers::Direct2D::FractionalMipLevelForTransform;
 using CNA::Internal::Renderers::Direct2D::IsDeviceLossHResult;
 using CNA::Internal::Renderers::Direct2D::MapSourceRectangleToMip;
+using CNA::Internal::Renderers::Direct2D::SpriteBitmapCacheKey;
 using CNA::Internal::Renderers::Direct2D::PreferredMipLevelForTransform;
 using CNA::Internal::Renderers::Direct2D::SupportsDirect2DCapability;
 using CNA::GraphicsCapability;
@@ -377,5 +378,115 @@ TEST(Direct2DPorterDuffReference, DegenerateOperandsCollapseToTheDefiningIdentit
               opaque);
     EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::DestinationOut, opaque, kReferenceDestination),
               transparent);
+}
+
+// D2D-109: the sprite-bitmap cache is only safe if its key separates every input that can change
+// the materialized pixels. A field silently missing from the key would serve stale pixels for a
+// genuinely different draw, so each one is mutated individually here.
+TEST(Direct2DSpriteBitmapCacheKey, EveryPixelAffectingFieldSeparatesTwoKeys)
+{
+    const SpriteBitmapCacheKey baseline{};
+    EXPECT_EQ(baseline, SpriteBitmapCacheKey{});
+
+    int distinctFields = 0;
+    const auto expectDifferent = [&](const SpriteBitmapCacheKey& mutated, const char* field) {
+        ++distinctFields;
+        EXPECT_FALSE(mutated == baseline) << "cache key ignores " << field;
+        EXPECT_TRUE(mutated == mutated) << "cache key is not reflexive after changing " << field;
+    };
+
+    int sentinel = 0;
+    SpriteBitmapCacheKey key = baseline;
+    key.source = &sentinel;
+    expectDifferent(key, "source");
+
+    key = baseline;
+    key.contentVersion = 1;
+    expectDifferent(key, "contentVersion");
+
+    key = baseline;
+    key.deviceGeneration = 1;
+    expectDifferent(key, "deviceGeneration");
+
+    key = baseline;
+    key.mipLevel = 1;
+    expectDifferent(key, "mipLevel");
+
+    key = baseline;
+    key.upperMipLevel = 0;
+    expectDifferent(key, "upperMipLevel");
+
+    key = baseline;
+    key.mipBlendFraction = 0.5f;
+    expectDifferent(key, "mipBlendFraction");
+
+    key = baseline;
+    key.sourceX = 1;
+    expectDifferent(key, "sourceX");
+
+    key = baseline;
+    key.sourceY = 1;
+    expectDifferent(key, "sourceY");
+
+    key = baseline;
+    key.sourceWidth = 1;
+    expectDifferent(key, "sourceWidth");
+
+    key = baseline;
+    key.sourceHeight = 1;
+    expectDifferent(key, "sourceHeight");
+
+    key = baseline;
+    key.color = 0xFF00FF00u;
+    expectDifferent(key, "color");
+
+    key = baseline;
+    key.spriteEffects = 1;
+    expectDifferent(key, "spriteEffects");
+
+    key = baseline;
+    key.addressU = 1;
+    expectDifferent(key, "addressU");
+
+    key = baseline;
+    key.addressV = 1;
+    expectDifferent(key, "addressV");
+
+    key = baseline;
+    key.nonPremultipliedSource = true;
+    expectDifferent(key, "nonPremultipliedSource");
+
+    // Pins the count itself: a field added to the struct without a case above would leave this at
+    // the old number and fail here rather than silently going untested.
+    EXPECT_EQ(distinctFields, 15);
+}
+
+TEST(Direct2DSpriteBitmapCacheKey, IdenticalDrawsShareOneEntry)
+{
+    int texture = 0;
+    SpriteBitmapCacheKey first{};
+    first.source = &texture;
+    first.contentVersion = 7;
+    first.deviceGeneration = 3;
+    first.mipLevel = 2;
+    first.upperMipLevel = -1;
+    first.sourceX = 4;
+    first.sourceY = 5;
+    first.sourceWidth = 6;
+    first.sourceHeight = 7;
+    first.color = 0x80FF20C0u;
+    first.spriteEffects = 2;
+    first.addressU = 2;
+    first.addressV = 0;
+    first.nonPremultipliedSource = true;
+
+    const SpriteBitmapCacheKey second = first;
+    EXPECT_TRUE(first == second);
+
+    // Only the destination position differs between repeated sprites drawn from the same atlas
+    // cell; that is not part of the materialized pixels and deliberately not part of the key.
+    SpriteBitmapCacheKey nextContent = first;
+    nextContent.contentVersion = 8;
+    EXPECT_FALSE(nextContent == first);
 }
 #endif
