@@ -960,6 +960,95 @@ protected:
             }
         }
 
+        // D2D-81 (vertical half): the same independent numeric oracle transposed onto the Y axis,
+        // which the horizontal block above deliberately left uncovered.
+        //
+        // The expected values are NOT re-derived: they are the horizontal ones, and that is the
+        // whole point. Direct2D's bilinear filter is separable and its extend modes are per-axis --
+        // D2D1_IMAGE_BRUSH_PROPERTIES carries extendModeX and extendModeY as two independent
+        // parameters -- so a vertical sample through the same texel layout must produce the same
+        // numbers as the horizontal one, including Wrap's 1/18 seam weights (255/18 = 14.1(6) ->
+        // 14, 255*17/18 = 240.8(3) -> 241) that the horizontal run confirmed empirically. If a
+        // runtime disagrees here while agreeing there, that asymmetry is itself the finding: it
+        // would mean the Y axis is not being addressed or filtered the way the X axis is.
+        {
+            std::vector<uint8_t> columnPixels(8 * 4, 0);
+            for (int i = 0; i < 4; ++i)
+            {
+                columnPixels[static_cast<std::size_t>(i) * 4 + 0] = 255; // rows 0-3: red
+                columnPixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
+            }
+            for (int i = 4; i < 8; ++i)
+            {
+                columnPixels[static_cast<std::size_t>(i) * 4 + 1] = 255; // rows 4-7: green
+                columnPixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
+            }
+            Texture2D columnTexture = Texture2D::CreateFromPixels(device, 1, 8, columnPixels);
+            RenderTarget2D columnTarget(device, 1, 8);
+            device.SetRenderTarget(&columnTarget);
+            device.Clear(Color::Black);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            sprites_->Draw(*white_, Rectangle(0, 0, 1, 4), Rectangle(0, 0, 1, 1), Color(255, 0, 0, 255));
+            sprites_->Draw(*white_, Rectangle(0, 4, 1, 4), Rectangle(0, 0, 1, 1), Color(0, 255, 0, 255));
+            sprites_->End();
+            device.SetRenderTarget(nullptr);
+
+            const Color red(255, 0, 0, 255);
+            const Color green(0, 255, 0, 255);
+            const Color halfBlend(128, 128, 0, 255);
+            const Color wrapOutsideTop(14, 241, 0, 255);
+            const Color wrapOutsideBottom(241, 14, 0, 255);
+            struct ColumnSample { int destY; Color clampExpected; Color wrapExpected; Color mirrorExpected; const char* label; };
+            // Destination height 9 is odd for the same reason the horizontal width was: it puts one
+            // sample exactly at v=4.0, the midpoint between row 3's and row 4's centers.
+            const ColumnSample columnSamples[] = {
+                {1, red, red, red, "v~0.67 interior red"},
+                {2, red, red, red, "v~1.78 interior red"},
+                {4, halfBlend, halfBlend, halfBlend, "v=4.0 exact red/green midpoint"},
+                {6, green, green, green, "v~6.22 interior green"},
+                {0, red, wrapOutsideTop, red, "v~-0.44 outside top"},
+                {8, green, wrapOutsideBottom, green, "v~8.44 outside bottom"},
+            };
+
+            for (SamplerState* sampler : {&linearClamp, &linearWrap, &linearMirror})
+            {
+                const char* modeName = sampler == &linearClamp ? "Clamp"
+                    : sampler == &linearWrap ? "Wrap" : "Mirror";
+                for (const ColumnSample& sample : columnSamples)
+                {
+                    const Color& expected = sampler == &linearClamp   ? sample.clampExpected
+                                            : sampler == &linearWrap  ? sample.wrapExpected
+                                                                      : sample.mirrorExpected;
+                    device.Clear(Color::Black);
+                    sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, sampler, nullptr, nullptr);
+                    sprites_->Draw(columnTexture, Rectangle(0, 0, 1, 9), Rectangle(0, -1, 1, 10), Color::White);
+                    sprites_->Draw(columnTarget, Rectangle(1, 0, 1, 9), Rectangle(0, -1, 1, 10), Color::White);
+                    sprites_->End();
+                    Color ordinaryActual(0, 0, 0, 0);
+                    Color targetActual(0, 0, 0, 0);
+                    const Rectangle ordinaryTexel(0, sample.destY, 1, 1);
+                    const Rectangle targetTexel(1, sample.destY, 1, 1);
+                    device.GetBackBufferData(&ordinaryTexel, &ordinaryActual, 0, 1);
+                    device.GetBackBufferData(&targetTexel, &targetActual, 0, 1);
+                    const bool ordinaryMatches = Matches(ordinaryActual, expected, 8);
+                    const bool targetMatches = Matches(targetActual, expected, 8);
+                    std::printf("[%s] Texture2D vertical oracle Linear %s %s: got=(%d,%d,%d,%d), expected=(%d,%d,%d,%d)\n",
+                                ordinaryMatches ? "PASS" : "FAIL", modeName, sample.label,
+                                ordinaryActual.getRProperty(), ordinaryActual.getGProperty(),
+                                ordinaryActual.getBProperty(), ordinaryActual.getAProperty(),
+                                expected.getRProperty(), expected.getGProperty(),
+                                expected.getBProperty(), expected.getAProperty());
+                    std::printf("[%s] RenderTarget2D vertical oracle Linear %s %s: got=(%d,%d,%d,%d), expected=(%d,%d,%d,%d)\n",
+                                targetMatches ? "PASS" : "FAIL", modeName, sample.label,
+                                targetActual.getRProperty(), targetActual.getGProperty(),
+                                targetActual.getBProperty(), targetActual.getAProperty(),
+                                expected.getRProperty(), expected.getGProperty(),
+                                expected.getBProperty(), expected.getAProperty());
+                    passed = passed && ordinaryMatches && targetMatches;
+                }
+            }
+        }
+
         // 7. A recorded scissor rectangle must only affect SpriteBatch once RasterizerState
         // explicitly enables its test. Clear deliberately ignores it, so both branches begin
         // from the same black backbuffer.
