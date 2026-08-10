@@ -77,14 +77,15 @@ if(CNA_BUILD_EXAMPLES)
     endif()
 endif()
 
-if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
+if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
         OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
     # ---- 3D house demo (EasyGL and Vulkan) -----------------------------------
     # The 3D house demo exercises the EasyGL 3D pipeline. Other renderers throw
     # "3D not supported", so the target is only enabled with a GL-family public renderer
-    # (OPENGLES3/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see plan_glbackends.md)
-    # or VULKAN.
+    # (OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see
+    # plan_glbackends.md) or VULKAN.
     add_executable(cna_house3d_demo house3d_demo.cpp)
 
     if(EMSCRIPTEN)

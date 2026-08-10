@@ -1170,6 +1170,13 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheOffsetOnNonI
 TEST_F(OrdinaryDrawBindingOffsetTest, OrdinaryInstancedOrdinaryTransitionsKeepEachRoutesOffset)
 {
     RequireOrdinaryRendering();
+    // The middle leg of this transition is a hardware-instanced draw -- unavailable on a
+    // renderer profile that reports GraphicsCapability::Instancing = false (e.g. the OPENGLES2
+    // GL profile; core OpenGL ES 2.0 has no instancing entry points). The pure-ordinary legs of
+    // this file keep running there; only this mixed-route test skips.
+    if (!device.SupportsCapability(GraphicsCapability::Instancing))
+        GTEST_SKIP() << "Renderer reports GraphicsCapability::Instancing = false: the instanced "
+                        "middle leg of this transition cannot run on this renderer profile";
 
     const GridLayout layout = TargetLayout();
     const std::vector<VertexPositionColor> mesh = BuildPrefixedMesh(layout, kLiveBand);

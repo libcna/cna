@@ -67,6 +67,16 @@ using CNA::GraphicsCapability;
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = false;
 constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_RENDERER_EASYGL) \
+    && (defined(CNA_GL_PROFILE_OPENGLES2) || defined(CNA_GL_PROFILE_WEBGL1))
+// The GLSL ES 1.00 profiles of the EasyGL family (OPENGLES2 native; WEBGL1 is Emscripten-only
+// and cannot build this suite, listed for completeness) truthfully refuse the ES 3.0-level
+// features: core ES 2.0 has no draw-buffers MRT and no query objects. CustomEffects stays true
+// -- the ShaderEffect mechanism works; the game's GLSL source must be ES 1.00 under these
+// profiles (docs/opengles2-renderer.md), exactly as it must be ES 3.00-compatible elsewhere.
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = true;
 #elif defined(CNA_RENDERER_OPENGL1)
 // plan_opengl1.md phase 12: OPENGL1 is a second, legitimately-different, equally-honest
 // 3D-capable renderer -- no MRT and no custom-shader support in its fixed-function
@@ -267,8 +277,11 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // REMED-GFX-219 landed with the GL-family lane: the EasyGL implementation's GL_LINES
     // re-expansion renders a correct wireframe (the pixel oracle below measures interior 0/1089
     // with all three edges present), so the report now states the capability the renderer
-    // genuinely has. True for every GL profile (OPENGLES3/OPENGL33/WEBGL1/WEBGL2) alike -- the
-    // emulation draws line primitives and depends on no polygon-mode API.
+    // genuinely has. True for every GL profile alike -- the emulation draws line primitives and
+    // depends on no polygon-mode API. Under OPENGLES2 the renderer's report is additionally
+    // conditional on GL_OES_element_index_uint (the emulation's 32-bit line indices are an
+    // extension in core ES 2.0); every driver this suite runs on advertises it, so the
+    // expectation holds unchanged there.
     EXPECT_TRUE(reported)
         << "the EasyGL-family renderers under-report WireFrame again -- REMED-GFX-219's corrected "
            "report is gone while the GL_LINES emulation still renders a measured-correct wireframe";

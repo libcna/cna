@@ -14,6 +14,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "CNA/GraphicsCapability.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -38,6 +40,29 @@ class SurfaceFormatThrowsTest : public Game
             ++fail_;
         }
         catch (const std::runtime_error&)
+        {
+            std::printf("[PASS] %s\n", label);
+            ++pass_;
+        }
+        catch (const std::exception& e)
+        {
+            std::printf("[FAIL] %s — wrong exception type: %s\n", label, e.what());
+            ++fail_;
+        }
+    }
+
+    /// A renderer without real volume-texture storage refuses EVERY Texture3D construction up
+    /// front with System::NotSupportedException (REMED-CONTENT-004's gate), before any format
+    /// validation runs -- the capability-false arms below expect exactly that refusal.
+    void expectThrowsNotSupported(const char* label, auto fn)
+    {
+        try
+        {
+            fn();
+            std::printf("[FAIL] %s — expected System::NotSupportedException, no exception thrown\n", label);
+            ++fail_;
+        }
+        catch (const System::NotSupportedException&)
         {
             std::printf("[PASS] %s\n", label);
             ++pass_;
@@ -77,9 +102,22 @@ protected:
         expectNoThrow("Texture2D Color", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Color);
         });
-        expectNoThrow("Texture3D Color", [&]{
-            Texture3D t(dev, 2, 2, 2, false, SurfaceFormat::Color);
-        });
+        // Texture3D legs are capability-conditional: a profile without real volume storage
+        // (e.g. OPENGLES2 -- core OpenGL ES 2.0 has no 3D textures,
+        // docs/opengles2-renderer.md) refuses construction before format validation can run.
+        const bool hasTexture3D = dev.SupportsCapability(CNA::GraphicsCapability::Texture3D);
+        if (hasTexture3D)
+        {
+            expectNoThrow("Texture3D Color", [&]{
+                Texture3D t(dev, 2, 2, 2, false, SurfaceFormat::Color);
+            });
+        }
+        else
+        {
+            expectThrowsNotSupported("Texture3D Color (refused: no volume storage)", [&]{
+                Texture3D t(dev, 2, 2, 2, false, SurfaceFormat::Color);
+            });
+        }
         expectNoThrow("TextureCube Color", [&]{
             TextureCube t(dev, 2, false, SurfaceFormat::Color);
         });
@@ -127,9 +165,18 @@ protected:
         expectThrows("TextureCube ColorSrgbEXT", [&]{
             TextureCube t(dev, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
-        expectThrows("Texture3D ColorSrgbEXT", [&]{
-            Texture3D t(dev, 2, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
-        });
+        if (hasTexture3D)
+        {
+            expectThrows("Texture3D ColorSrgbEXT", [&]{
+                Texture3D t(dev, 2, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
+            });
+        }
+        else
+        {
+            expectThrowsNotSupported("Texture3D ColorSrgbEXT (refused: no volume storage)", [&]{
+                Texture3D t(dev, 2, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
+            });
+        }
 
         // ── Other unsupported formats must throw ─────────────────────────────
 
