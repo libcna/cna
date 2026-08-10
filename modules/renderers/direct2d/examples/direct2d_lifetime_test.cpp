@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// D2D-27: exercise Direct2D's frame-scoped resources across the boundaries that release them.
+// D2D-27/D2D-114/D2D-115: exercise Direct2D's frame-scoped resources across the boundaries
+// that release them, and pin what disposing or updating a source mid-frame must produce.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -18,7 +19,9 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -111,6 +114,19 @@ protected:
             return;
         }
 
+        if (frame_ == 5 && !RunDisposeAfterEndScenario(device))
+        {
+            result_ = 1;
+            Exit();
+            return;
+        }
+        if (frame_ == 6 && !RunMidFrameUpdateScenario(device))
+        {
+            result_ = 1;
+            Exit();
+            return;
+        }
+
         if (frame_ == 2)
         {
             device.GetRenderer().DebugSimulateContextLoss();
@@ -136,6 +152,142 @@ protected:
     }
 
 private:
+    [[nodiscard]] bool ReadPixel(GraphicsDevice& device, int x, int y, Color& pixel) const
+    {
+        const Rectangle region(x, y, 1, 1);
+        device.GetBackBufferData(&region, &pixel, 0, 1);
+        return true;
+    }
+
+    [[nodiscard]] static bool Matches(const Color& actual, const Color& expected)
+    {
+        constexpr int tolerance = 4;
+        return std::abs(static_cast<int>(actual.getRProperty()) - expected.getRProperty()) <= tolerance &&
+               std::abs(static_cast<int>(actual.getGProperty()) - expected.getGProperty()) <= tolerance &&
+               std::abs(static_cast<int>(actual.getBProperty()) - expected.getBProperty()) <= tolerance &&
+               std::abs(static_cast<int>(actual.getAProperty()) - expected.getAProperty()) <= tolerance;
+    }
+
+    // D2D-114: an application may dispose a texture after SpriteBatch::End and before the frame is
+    // presented. Every draw branch must already hold whatever COM lifetime it needs, so the
+    // committed frame still shows the disposed texture's pixels instead of released memory. All
+    // four source branches are covered: a plain bitmap draw, the ImageBrush path (forced by a
+    // flip), the CPU fallback / decorated path (forced by a tint), and a render-target source.
+    [[nodiscard]] bool RunDisposeAfterEndScenario(GraphicsDevice& device)
+    {
+        SamplerState point = SamplerState::PointClamp;
+        auto plain = Texture2D::CreateFromPixels(device, 1, 1,
+                                                 std::vector<uint8_t>{255, 0, 0, 255});
+        auto flipped = Texture2D::CreateFromPixels(device, 1, 1,
+                                                   std::vector<uint8_t>{0, 255, 0, 255});
+        auto tinted = Texture2D::CreateFromPixels(device, 1, 1,
+                                                  std::vector<uint8_t>{255, 255, 255, 255});
+        RenderTarget2D source(device, 1, 1, false, SurfaceFormat::Color, DepthFormat::None);
+        const std::array<Color, 1> sourcePixel{Color(0, 0, 255, 255)};
+        source.SetData(sourcePixel.data(), static_cast<int>(sourcePixel.size()));
+
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, nullptr);
+        sprites_->Draw(plain, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->Draw(flipped, Rectangle(4, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White,
+                       0.0f, Vector2::Zero, SpriteEffects::FlipHorizontally, 0.0f);
+        sprites_->Draw(tinted, Rectangle(8, 0, 4, 4), Rectangle(0, 0, 1, 1), Color(0, 128, 128, 255));
+        sprites_->Draw(source, Rectangle(12, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+
+        // Every source is destroyed here, while the frame it was drawn into has not been read back
+        // or presented yet.
+        plain.Dispose();
+        flipped.Dispose();
+        tinted.Dispose();
+        source.Dispose();
+
+        struct Expectation
+        {
+            const char* label;
+            int x;
+            Color expected;
+        };
+        const std::array<Expectation, 4> expectations{{
+            {"plain bitmap", 1, Color(255, 0, 0, 255)},
+            {"image brush", 5, Color(0, 255, 0, 255)},
+            {"decorated", 9, Color(0, 128, 128, 255)},
+            {"render-target source", 13, Color(0, 0, 255, 255)},
+        }};
+        bool passed = true;
+        for (const Expectation& expectation : expectations)
+        {
+            Color actual(0, 0, 0, 0);
+            (void)ReadPixel(device, expectation.x, 1, actual);
+            const bool matches = Matches(actual, expectation.expected);
+            std::printf("[%s] dispose-after-End %s: got=(%d,%d,%d,%d) expected=(%d,%d,%d,%d)\n",
+                        matches ? "PASS" : "FAIL", expectation.label,
+                        actual.getRProperty(), actual.getGProperty(), actual.getBProperty(),
+                        actual.getAProperty(), expectation.expected.getRProperty(),
+                        expectation.expected.getGProperty(), expectation.expected.getBProperty(),
+                        expectation.expected.getAProperty());
+            passed = passed && matches;
+        }
+        return passed;
+    }
+
+    // D2D-115: updating a source in the middle of a frame has one semantics on every branch --
+    // a draw already issued keeps the pixels it was issued with, and the next draw observes the
+    // new ones. SpriteSortMode::Immediate is required for the first draw to be a real native draw
+    // rather than something End() would replay after the update.
+    [[nodiscard]] bool RunMidFrameUpdateScenario(GraphicsDevice& device)
+    {
+        SamplerState point = SamplerState::PointClamp;
+        auto plain = Texture2D::CreateFromPixels(device, 1, 1,
+                                                 std::vector<uint8_t>{255, 0, 0, 255});
+        auto flipped = Texture2D::CreateFromPixels(device, 1, 1,
+                                                   std::vector<uint8_t>{0, 255, 0, 255});
+
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend, &point, nullptr, nullptr);
+        sprites_->Draw(plain, Rectangle(0, 4, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->Draw(flipped, Rectangle(4, 4, 4, 4), Rectangle(0, 0, 1, 1), Color::White,
+                       0.0f, Vector2::Zero, SpriteEffects::FlipHorizontally, 0.0f);
+
+        const std::array<Color, 1> replacedPlain{Color(0, 0, 255, 255)};
+        const std::array<Color, 1> replacedFlipped{Color(255, 0, 255, 255)};
+        plain.SetData(replacedPlain.data(), static_cast<int>(replacedPlain.size()));
+        flipped.SetData(replacedFlipped.data(), static_cast<int>(replacedFlipped.size()));
+
+        sprites_->Draw(plain, Rectangle(8, 4, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->Draw(flipped, Rectangle(12, 4, 4, 4), Rectangle(0, 0, 1, 1), Color::White,
+                       0.0f, Vector2::Zero, SpriteEffects::FlipHorizontally, 0.0f);
+        sprites_->End();
+
+        struct Expectation
+        {
+            const char* label;
+            int x;
+            Color expected;
+        };
+        const std::array<Expectation, 4> expectations{{
+            {"plain bitmap before update", 1, Color(255, 0, 0, 255)},
+            {"image brush before update", 5, Color(0, 255, 0, 255)},
+            {"plain bitmap after update", 9, Color(0, 0, 255, 255)},
+            {"image brush after update", 13, Color(255, 0, 255, 255)},
+        }};
+        bool passed = true;
+        for (const Expectation& expectation : expectations)
+        {
+            Color actual(0, 0, 0, 0);
+            (void)ReadPixel(device, expectation.x, 5, actual);
+            const bool matches = Matches(actual, expectation.expected);
+            std::printf("[%s] mid-frame update %s: got=(%d,%d,%d,%d) expected=(%d,%d,%d,%d)\n",
+                        matches ? "PASS" : "FAIL", expectation.label,
+                        actual.getRProperty(), actual.getGProperty(), actual.getBProperty(),
+                        actual.getAProperty(), expectation.expected.getRProperty(),
+                        expectation.expected.getGProperty(), expectation.expected.getBProperty(),
+                        expectation.expected.getAProperty());
+            passed = passed && matches;
+        }
+        return passed;
+    }
+
     std::unique_ptr<GraphicsDeviceManager> manager_;
     std::unique_ptr<SpriteBatch> sprites_;
     std::unique_ptr<Texture2D> white_;

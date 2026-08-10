@@ -3098,6 +3098,13 @@ namespace CNA::Internal::Renderers::Direct2D
                 finalTransform);
             d2dContext_->PushLayer(layerParameters, nullptr);
         }
+        // D2D-114: retain the source bitmap until this chunk's EndDraw, exactly as the brush and
+        // command-list branches already retain theirs. Whether Direct2D's own DrawImage keeps a
+        // reference for a deferred command is not something CNA should depend on: an application
+        // is allowed to dispose a Texture2D after SpriteBatch::End and before Present, and that
+        // must not turn into a draw from released memory. The CPU-fallback bitmap is skipped here
+        // because it was already added to the transient set when it was created.
+        if (!requiresCpuBitmap) transientBitmaps_.push_back(ComPtr<ID2D1Bitmap1>(bitmap));
         d2dContext_->SetTransform(imageTransform);
         d2dContext_->DrawImage(
             bitmap, &imageOffset, &source,
