@@ -150,7 +150,7 @@ int main()
           "RASTER-mode build: SkiaGaneshSurface's real resource-budget/repeated-reconstruction "
           "behaviour is not compiled here (no Ganesh/GL Skia symbol exists to test); its "
           "unconditional construction-time refusal is already proven by "
-          "examples/skia_ganesh_mode_test.cpp");
+          "modules/renderers/skia/examples/skia_ganesh_mode_test.cpp");
     return failures == 0 ? 0 : 1;
 }
 
