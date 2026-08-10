@@ -63,6 +63,30 @@ WIC, SDL_Renderer, or a hidden 3D/compositing pass. Use `CNA_GRAPHICS_RENDERER=D
   public lost/resetting/reset events fire once in order. Unregistered stale resources fail instead
   of being used on a new device generation.
 
+## Alpha representation at every boundary
+
+Direct2D composes premultiplied colors. CNA's public surface does not, so the exact place where a
+straight-alpha value becomes premultiplied matters. Every boundary is listed here; there is no
+other conversion site in the renderer.
+
+| Boundary | Representation | Conversion |
+|---|---|---|
+| `Texture2D::SetData` / `ImageData` bytes | Exactly the bytes the caller passed, RGBA order | None. Only the channel order changes (RGBA to native BGRA) |
+| `Texture2D`, `RenderTarget2D`, logical framebuffer storage | `DXGI_FORMAT_B8G8R8A8_UNORM`, `D2D1_ALPHA_MODE_PREMULTIPLIED` | None; the stored bytes are taken as already premultiplied |
+| `BlendState::AlphaBlend` and `BlendState::Opaque` sources | Premultiplied, as stored | None |
+| `BlendState::NonPremultiplied` sources | Straight, as stored | Premultiplied exactly once, by the Direct2D `Premultiply` effect on the GPU path or by `MakeSpritePixels` on the CPU fallback |
+| SpriteBatch `Color` modulation | Straight per channel | `Color.RGB` scales the (already premultiplied) RGB, `Color.A` scales only alpha. It is never applied twice |
+| `ColorMatrix` tint stage | Premultiplied by default; `D2D1_COLORMATRIX_ALPHA_MODE_STRAIGHT` for `NonPremultiplied` and for `Opaque` | The straight mode keeps `Color.A` from attenuating the copied RGB, whose source factor is `One` |
+| `GraphicsDevice::Clear` | Straight `D2D1::ColorF` | Direct2D premultiplies internally |
+| Physical swap-chain surface | `D2D1_ALPHA_MODE_IGNORE`, `DXGI_ALPHA_MODE_IGNORE` | None. It is the presentation destination only; application readback never reads it |
+| `GetData` / `GetBackBufferData` | Premultiplied bytes of the read surface, RGBA order | None. Only the channel order changes (native BGRA to RGBA) |
+| Readback staging bitmap | Inherits the source bitmap's pixel format | None |
+
+Two consequences are worth stating explicitly. Readback returns *premultiplied* bytes even for
+content uploaded as straight alpha under `NonPremultiplied`, because the conversion happened on the
+way in and is not undone. And no application-visible bitmap uses an alpha-ignoring format: the only
+alpha-ignoring surface in the renderer is the physical backbuffer, which nothing reads.
+
 ## Capability boundary
 
 The capability query is an exhaustive switch over all 13 current `GraphicsCapability` values:

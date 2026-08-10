@@ -603,16 +603,20 @@ namespace CNA::Internal::Renderers::Direct2D
                                           int primitiveCount) override;
 
         /**
-         * @brief Creates a native bitmap from tightly described RGBA pixels.
+         * @brief Creates a native premultiplied-alpha bitmap from tightly described RGBA pixels.
+         *
+         * Every CNA bitmap uses `DXGI_FORMAT_B8G8R8A8_UNORM` with `D2D1_ALPHA_MODE_PREMULTIPLIED`.
+         * A straight-alpha source is converted to premultiplied before it reaches Direct2D, either
+         * by the Premultiply effect or by the CPU fallback, so there is no alpha-ignoring bitmap
+         * kind for application content.
          *
          * @param rgba Source RGBA bytes.
          * @param width Width in pixels.
          * @param height Height in pixels.
-         * @param ignoreAlpha Whether Direct2D should treat alpha as opaque.
          * @return A caller-owned native bitmap pointer.
          */
-        [[nodiscard]] ID2D1Bitmap1* CreateBitmapFromRgba(const uint8_t* rgba, int width, int height,
-                                                          bool ignoreAlpha = false) const;
+        [[nodiscard]] ID2D1Bitmap1* CreateBitmapFromRgba(const uint8_t* rgba, int width,
+                                                          int height) const;
         /**
          * @brief Replaces an existing bitmap's pixels in place instead of allocating a new one.
          *

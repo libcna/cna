@@ -2376,8 +2376,8 @@ namespace CNA::Internal::Renderers::Direct2D
         return SupportsDirect2DCapability(capability);
     }
 
-    ID2D1Bitmap1* Direct2DRenderer::CreateBitmapFromRgba(const uint8_t* rgba, int width, int height,
-                                                                 bool ignoreAlpha) const
+    ID2D1Bitmap1* Direct2DRenderer::CreateBitmapFromRgba(const uint8_t* rgba, int width,
+                                                         int height) const
     {
         (void) CheckedRgbaByteCount(width, height);
         const int maximumDimension = GetMaxTextureDimension();
@@ -2389,8 +2389,11 @@ namespace CNA::Internal::Renderers::Direct2D
         const std::vector<uint8_t> bgra = CopyRgbaToTightBgra(rgba, rowPitch, width, height);
         D2D1_BITMAP_PROPERTIES1 properties = D2D1::BitmapProperties1(
             D2D1_BITMAP_OPTIONS_NONE,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                               ignoreAlpha ? D2D1_ALPHA_MODE_IGNORE : D2D1_ALPHA_MODE_PREMULTIPLIED),
+            // D2D-44: application content is always premultiplied at this boundary. The former
+            // alpha-ignoring variant became unreachable when D2D-28 stopped building an
+            // alpha-ignore CPU fallback bitmap, and an unreachable alpha mode in a renderer whose
+            // alpha contract is documented per boundary is exactly the kind of thing that misleads.
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
             96.0f, 96.0f);
         ComPtr<ID2D1Bitmap1> bitmap;
         ThrowIfFailed(d2dContext_->CreateBitmap(
@@ -2846,7 +2849,7 @@ namespace CNA::Internal::Renderers::Direct2D
                                      addressV, selectedMipLevel, spritePixelScratch_);
                 }
                 transient.Attach(CreateBitmapFromRgba(spritePixelScratch_.data(), localSource.Width,
-                                                       localSource.Height, false));
+                                                       localSource.Height));
                 bitmap = transient.Get();
                 // Held by the transient set no matter what the cache decides: a bitmap the cache
                 // declines (one larger than the whole budget) must still outlive the deferred
