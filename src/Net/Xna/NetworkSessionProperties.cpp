@@ -16,16 +16,39 @@ namespace Microsoft::Xna::Framework::Net
         return properties_.at(static_cast<std::size_t>(index));
     }
 
-    std::optional<int>& NetworkSessionProperties::operator[](int index)
+    System::Collections::detail::ElementReference<std::optional<int>>
+    NetworkSessionProperties::operator[](int index)
     {
         // Matches FNA exactly: assigning past the end appends instead of extending out to
         // `index` (the reference source itself has a "TODO: Expand list to index size?" comment).
+        // The proxy can only bind an already-existing slot, so the append happens here, at
+        // indexing time, whether the caller goes on to read or to write.
         if (index >= static_cast<int>(properties_.size()))
         {
             properties_.push_back(std::nullopt);
-            return properties_.back();
+            ++version_;
+            return {&properties_.back(), &version_};
         }
-        return properties_[static_cast<std::size_t>(index)];
+        return {&properties_[static_cast<std::size_t>(index)], &version_};
+    }
+
+    const std::optional<int>& NetworkSessionProperties::getItem(int index) const
+    {
+        return properties_.at(static_cast<std::size_t>(index));
+    }
+
+    void NetworkSessionProperties::setItem(int index, const std::optional<int>& value)
+    {
+        // XNA's indexer `set` accessor: appends when the index is past the end (FNA's
+        // "TODO: Expand list to index size?" behavior), replaces in place otherwise.
+        if (index >= static_cast<int>(properties_.size()))
+        {
+            properties_.push_back(value);
+            ++version_;
+            return;
+        }
+        System::Collections::detail::ElementReference<std::optional<int>>{
+            &properties_[static_cast<std::size_t>(index)], &version_} = value;
     }
 
     int NetworkSessionProperties::IndexOf(const std::optional<int>& item) const
@@ -39,11 +62,13 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSessionProperties::Insert(int index, const std::optional<int>& item)
     {
         properties_.insert(properties_.begin() + index, item);
+        ++version_;
     }
 
     void NetworkSessionProperties::RemoveAt(int index)
     {
         properties_.erase(properties_.begin() + index);
+        ++version_;
     }
 
     bool NetworkSessionProperties::getIsReadOnlyProperty() const
@@ -54,6 +79,7 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSessionProperties::Add(const std::optional<int>& item)
     {
         properties_.push_back(item);
+        ++version_;
     }
 
     bool NetworkSessionProperties::Remove(const std::optional<int>& item)
@@ -62,6 +88,7 @@ namespace Microsoft::Xna::Framework::Net
         if (it == properties_.end())
             return false;
         properties_.erase(it);
+        ++version_;
         return true;
     }
 
@@ -73,6 +100,7 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSessionProperties::Clear()
     {
         properties_.clear();
+        ++version_;
     }
 
     void NetworkSessionProperties::CopyTo(std::vector<std::optional<int>>& destination, int index) const

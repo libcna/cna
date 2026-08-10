@@ -3,6 +3,8 @@
 #include "CNA/CNAHelper.hpp"
 #include "System/Collections/Generic/IEnumerator.hpp"
 #include "System/Collections/Generic/IList.hpp"
+#include "System/Collections/detail/ElementReference.hpp"
+#include "System/Collections/detail/MutationCounter.hpp"
 #include <optional>
 #include <vector>
 
@@ -39,31 +41,53 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] const std::optional<int>& operator[](int index) const override;
 
         /**
-         * @brief Gets or sets the property at the specified index.
+         * @brief Gets or sets the property at the specified index through a tracked proxy.
          *
-         * If index is beyond the current end of the list, the returned slot is a
+         * If index is beyond the current end of the list, the bound slot is a
          * newly appended element at the end instead of one extending the list out
          * to @p index — this matches FNA's own incomplete behavior (its reference
          * source carries a "TODO: Expand list to index size?" comment).
          *
          * Known, structural divergence from FNA: real XNA's `int?[index]` indexer has separate
          * `get`/`set` accessors — only `set` auto-appends on an out-of-range index; `get` throws
-         * (via `List<T>`'s own indexer). `IList<T>::operator[]` (the interface this overrides) has
-         * a single non-const signature returning `T&` for both reading and writing, so C++ cannot
-         * distinguish "this call is a read" from "this call is a write" the way C#'s separate
-         * accessors can — auto-append fires on *any* out-of-range access through this non-const
-         * overload, including a bare read with no assignment. A proxy-object return type could in
-         * principle disambiguate this, but `operator[]`'s return type is fixed by the pure virtual
-         * `IList<T>::operator[]` it overrides (changing that would ripple through every `IList<T>`
-         * implementer in this codebase) — this divergence is accepted as-is, not silently. Code
-         * that needs strict, non-appending bounds-checked reads should go through a
-         * `const NetworkSessionProperties&` reference instead, which always resolves to the
-         * correctly-throwing const overload above.
+         * (via `List<T>`'s own indexer). The `ElementReference` proxy this returns must bind one
+         * already-existing slot at construction time, before it can know whether the caller will
+         * read or write through it — so auto-append still fires on *any* out-of-range access
+         * through this non-const overload, including a bare read with no assignment. This
+         * divergence is accepted as-is, not silently. Code that needs strict, non-appending
+         * bounds-checked reads should use getItem() or go through a
+         * `const NetworkSessionProperties&` reference, both of which always throw; writes with
+         * exact XNA `set` semantics are available through setItem().
          *
          * @param index Zero-based index.
-         * @return Reference to the slot that will hold the assigned value.
+         * @return A tracked reference proxy for the slot that will hold the assigned value.
          */
-        [[nodiscard]] std::optional<int>& operator[](int index) override;
+        [[nodiscard]] System::Collections::detail::ElementReference<std::optional<int>>
+        operator[](int index) override;
+
+        /**
+         * @brief Gets the property at the specified index without mutating anything.
+         *
+         * Unlike the non-const operator[], an out-of-range index never appends here — this is
+         * the strict counterpart of real XNA's indexer `get` accessor.
+         *
+         * @param index Zero-based index.
+         * @return Const reference to the value at that index.
+         * @throws std::out_of_range if index is out of range.
+         */
+        [[nodiscard]] const std::optional<int>& getItem(int index) const override;
+
+        /**
+         * @brief Replaces the property at the specified index, matching XNA's `set` accessor.
+         *
+         * If index is beyond the current end of the list, the value is appended at the end
+         * instead of extending the list out to @p index — FNA's own indexer `set` behavior
+         * (its reference source carries a "TODO: Expand list to index size?" comment).
+         *
+         * @param index Zero-based index.
+         * @param value The value to store.
+         */
+        void setItem(int index, const std::optional<int>& value) override;
 
         /**
          * @brief Determines the index of a specific value in the list.
@@ -187,5 +211,6 @@ namespace Microsoft::Xna::Framework::Net
         };
 
         std::vector<std::optional<int>> properties_;
+        System::Collections::detail::MutationCounter version_;
     };
 }

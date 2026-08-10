@@ -57,11 +57,12 @@ TEST(NetworkSessionPropertiesTest, MutableIndexerOutOfRangeAppendsInsteadOfExten
 
 // Task 2.10: a documented, structural divergence from FNA (see the non-const operator[]'s own
 // doc comment) - real XNA's separate get/set indexer accessors only auto-append on `set`; `get`
-// throws for an out-of-range index. IList<T>::operator[]'s single, fixed T& signature can't tell
-// a bare read apart from an assignment through the non-const overload, so even a read-only access
-// (no assignment at all) silently grows the list here, unlike the correctly-throwing const
-// overload. This test locks in that documented behavior so a future change doesn't silently
-// regress it back to a crash (or silently "fix" it without updating the doc comment).
+// throws for an out-of-range index. The ElementReference proxy the non-const overload now
+// returns must bind an already-existing slot at construction time, before it can know whether
+// the caller will read or write through it, so even a read-only access (no assignment at all)
+// silently grows the list here, unlike the correctly-throwing const overload and getItem().
+// This test locks in that documented behavior so a future change doesn't silently regress it
+// back to a crash (or silently "fix" it without updating the doc comment).
 TEST(NetworkSessionPropertiesTest, MutableIndexerBareOutOfRangeReadAlsoAppends) {
     NetworkSessionProperties props;
     props.Add(1);
@@ -213,4 +214,102 @@ TEST(NetworkSessionPropertiesTest, RangeForViaBeginEnd) {
         sum += value.value_or(0);
     }
     EXPECT_EQ(6, sum);
+}
+
+// Modular sharp-runtime adaptation: IList<T>'s non-const indexer returns a tracked
+// System::Collections::detail::ElementReference<T> proxy instead of a plain T&, and the
+// interface grew getItem/setItem pure virtuals. The tests below pin the adapted behavior.
+
+TEST(NetworkSessionPropertiesTest, ProxyReadsKeepPlainSpellings) {
+    NetworkSessionProperties props;
+    props.Add(10);
+    props.Add(std::nullopt);
+
+    // Ordinary value read through the implicit const T& conversion.
+    std::optional<int> byValue = props[0];
+    EXPECT_EQ(std::optional<int>(10), byValue);
+
+    // Const-reference binding through the proxy stays valid: it aliases the slot, not the proxy.
+    const std::optional<int>& byRef = props[0];
+    EXPECT_EQ(10, byRef.value());
+
+    // Read-only member access through the proxy's operator->.
+    EXPECT_TRUE(props[0]->has_value());
+    EXPECT_FALSE(props[1]->has_value());
+}
+
+TEST(NetworkSessionPropertiesTest, ProxyWriteStoresThroughToTheList) {
+    NetworkSessionProperties props;
+    props.Add(1);
+    props.Add(2);
+
+    props[1] = 42;
+    EXPECT_EQ(42, props[1]);
+
+    props[0] = std::nullopt;
+    EXPECT_FALSE(props[0]->has_value());
+    EXPECT_EQ(2, props.getCountProperty());
+}
+
+TEST(NetworkSessionPropertiesTest, ProxyAssignThroughCopiesTheValue) {
+    NetworkSessionProperties props;
+    props.Add(1);
+    props.Add(2);
+
+    // list[i] = list[j] assigns through to the element; it never rebinds the proxy.
+    props[0] = props[1];
+    EXPECT_EQ(2, props[0]);
+    EXPECT_EQ(2, props[1]);
+}
+
+TEST(NetworkSessionPropertiesTest, MutableIndexerOnEmptyListAppendsOneSlot) {
+    NetworkSessionProperties props;
+    props[0] = 7;
+    EXPECT_EQ(1, props.getCountProperty());
+    EXPECT_EQ(7, props[0]);
+}
+
+TEST(NetworkSessionPropertiesTest, GetItemReadsWithoutAppending) {
+    NetworkSessionProperties props;
+    props.Add(10);
+    props.Add(std::nullopt);
+
+    EXPECT_EQ(std::optional<int>(10), props.getItem(0));
+    EXPECT_FALSE(props.getItem(1).has_value());
+    EXPECT_EQ(2, props.getCountProperty());
+}
+
+TEST(NetworkSessionPropertiesTest, GetItemOutOfRangeThrowsInsteadOfAppending) {
+    NetworkSessionProperties props;
+    EXPECT_THROW((void) props.getItem(0), std::out_of_range);
+    props.Add(1);
+    EXPECT_THROW((void) props.getItem(1), std::out_of_range);
+    EXPECT_EQ(1, props.getCountProperty());
+}
+
+TEST(NetworkSessionPropertiesTest, SetItemReplacesInRange) {
+    NetworkSessionProperties props;
+    props.Add(1);
+    props.Add(2);
+
+    props.setItem(0, 99);
+    props.setItem(1, std::nullopt);
+    EXPECT_EQ(99, props.getItem(0));
+    EXPECT_FALSE(props.getItem(1).has_value());
+    EXPECT_EQ(2, props.getCountProperty());
+}
+
+TEST(NetworkSessionPropertiesTest, SetItemOutOfRangeAppendsLikeXnaSet) {
+    // Real XNA's indexer `set` appends past the end instead of extending out to the index;
+    // setItem is the direct spelling of that accessor.
+    NetworkSessionProperties props;
+    props.Add(1);
+    props.setItem(10, 42);
+    EXPECT_EQ(2, props.getCountProperty());
+    EXPECT_EQ(42, props.getItem(1));
+
+    NetworkSessionProperties empty;
+    empty.setItem(0, 5);
+    EXPECT_EQ(1, empty.getCountProperty());
+    EXPECT_EQ(5, empty.getItem(0));
 }

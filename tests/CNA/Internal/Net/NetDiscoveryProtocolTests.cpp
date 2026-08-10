@@ -68,10 +68,10 @@ TEST(NetDiscoveryProtocolTest, AnnounceRoundtripWithSparseProperties) {
     auto decoded = NetDiscoveryProtocol::DecodeAnnounce(bytes);
 
     ASSERT_EQ(decoded.Properties.getCountProperty(), 4);
-    EXPECT_EQ(decoded.Properties[0], std::optional<int>(42));
-    EXPECT_EQ(decoded.Properties[1], std::nullopt);
-    EXPECT_EQ(decoded.Properties[2], std::nullopt);
-    EXPECT_EQ(decoded.Properties[3], std::optional<int>(7));
+    EXPECT_EQ(decoded.Properties.getItem(0), std::optional<int>(42));
+    EXPECT_EQ(decoded.Properties.getItem(1), std::nullopt);
+    EXPECT_EQ(decoded.Properties.getItem(2), std::nullopt);
+    EXPECT_EQ(decoded.Properties.getItem(3), std::optional<int>(7));
 }
 
 namespace {
