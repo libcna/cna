@@ -136,6 +136,214 @@ protected:
             passed = passed && matches;
         };
 
+        // D2D-89: the complete full/partial SetData matrix for every authored Texture2D mip and
+        // for the render target. Everything here is a byte-exact transfer contract -- no
+        // filtering, no blending -- so it holds identically on every runtime.
+        {
+            const auto transferCheck = [&](const char* label, bool condition) {
+                std::printf("[%s] %s\n", condition ? "PASS" : "FAIL", label);
+                passed = passed && condition;
+            };
+            const auto rejects = [&](const char* label, auto&& action) {
+                bool threw = false;
+                try
+                {
+                    action();
+                }
+                catch (const std::exception&)
+                {
+                    threw = true;
+                }
+                transferCheck(label, threw);
+            };
+
+            // 5x3 with one authored lower level (2x1); the odd width and the non-square shape make
+            // a row-pitch or transposition mistake visible instead of self-cancelling.
+            Texture2D transferTexture(device, 5, 3, true, SurfaceFormat::Color);
+            std::vector<Color> levelZero(15, Color::Transparent);
+            for (std::size_t index = 0; index < levelZero.size(); ++index)
+            {
+                const int value = static_cast<int>(index);
+                levelZero[index] = Color(10 + value * 3, 200 - value * 5, 40 + value * 7,
+                                         255 - value * 2);
+            }
+            transferTexture.SetData(levelZero.data(), static_cast<int>(levelZero.size()));
+            std::vector<Color> readBack(15, Color::Transparent);
+            transferTexture.GetData(readBack.data(), static_cast<int>(readBack.size()));
+            transferCheck("SetData full level 0 round trip", readBack == levelZero);
+
+            // Interior rectangle at a nonzero offset: every texel outside it must survive.
+            const Rectangle interior(1, 1, 3, 1);
+            const std::array<Color, 3> interiorPixels{
+                Color(1, 2, 3, 4), Color(5, 6, 7, 8), Color(9, 10, 11, 12)};
+            transferTexture.SetData(0, &interior, interiorPixels.data(), 0,
+                                    static_cast<int>(interiorPixels.size()));
+            std::vector<Color> afterInterior(15, Color::Transparent);
+            transferTexture.GetData(afterInterior.data(), static_cast<int>(afterInterior.size()));
+            bool interiorExact = true;
+            for (std::size_t index = 0; index < afterInterior.size(); ++index)
+            {
+                const int x = static_cast<int>(index) % 5;
+                const int y = static_cast<int>(index) / 5;
+                const bool inside = y == 1 && x >= 1 && x <= 3;
+                const Color expectedPixel =
+                    inside ? interiorPixels[static_cast<std::size_t>(x - 1)] : levelZero[index];
+                interiorExact = interiorExact && afterInterior[index] == expectedPixel;
+            }
+            transferCheck("SetData offset rectangle preserves every other texel", interiorExact);
+
+            // Last pixel of the level: an off-by-one in the row offset lands outside it.
+            const Rectangle lastPixel(4, 2, 1, 1);
+            // Opaque on purpose: this texel is also the one sampled through SpriteBatch below,
+            // where an AlphaBlend result would otherwise mix with the cleared background.
+            const std::array<Color, 1> lastPixelData{Color(123, 45, 67, 255)};
+            transferTexture.SetData(0, &lastPixel, lastPixelData.data(), 0, 1);
+            std::array<Color, 1> lastPixelReadback{Color::Transparent};
+            transferTexture.GetData(0, &lastPixel, lastPixelReadback.data(), 0, 1);
+            transferCheck("SetData/GetData address the last texel",
+                          lastPixelReadback[0] == lastPixelData[0]);
+
+            // startIndex selects a window inside a larger buffer rather than its beginning.
+            const Rectangle windowRect(0, 0, 2, 1);
+            const std::array<Color, 4> windowSource{
+                Color(200, 0, 0, 255), Color(0, 200, 0, 255),
+                Color(0, 0, 200, 255), Color(200, 200, 0, 255)};
+            transferTexture.SetData(0, &windowRect, windowSource.data(), 2, 2);
+            std::array<Color, 2> windowReadback{Color::Transparent, Color::Transparent};
+            transferTexture.GetData(0, &windowRect, windowReadback.data(), 0, 2);
+            transferCheck("SetData honours startIndex",
+                          windowReadback[0] == windowSource[2] && windowReadback[1] == windowSource[3]);
+
+            // The authored lower level is 2x1 and is written and read independently of level 0.
+            const std::array<Color, 2> levelOne{Color(0, 0, 255, 255), Color(255, 255, 0, 255)};
+            transferTexture.SetData(1, nullptr, levelOne.data(), 0,
+                                    static_cast<int>(levelOne.size()));
+            std::array<Color, 2> levelOneReadback{Color::Transparent, Color::Transparent};
+            transferTexture.GetData(1, nullptr, levelOneReadback.data(), 0, 2);
+            transferCheck("SetData/GetData round trip for the authored mip",
+                          levelOneReadback == levelOne);
+            const Rectangle levelOneTail(1, 0, 1, 1);
+            const std::array<Color, 1> levelOneTailData{Color(7, 8, 9, 10)};
+            transferTexture.SetData(1, &levelOneTail, levelOneTailData.data(), 0, 1);
+            std::array<Color, 2> levelOneAfterPartial{Color::Transparent, Color::Transparent};
+            transferTexture.GetData(1, nullptr, levelOneAfterPartial.data(), 0, 2);
+            transferCheck("partial SetData on the authored mip keeps its other texel",
+                          levelOneAfterPartial[0] == levelOne[0] &&
+                              levelOneAfterPartial[1] == levelOneTailData[0]);
+
+            // Writing a lower level must not disturb level zero.
+            std::vector<Color> levelZeroAfterMipWrite(15, Color::Transparent);
+            transferTexture.GetData(levelZeroAfterMipWrite.data(),
+                                    static_cast<int>(levelZeroAfterMipWrite.size()));
+            transferCheck("authored mip writes leave level 0 untouched",
+                          levelZeroAfterMipWrite[0] == afterInterior[0] &&
+                              levelZeroAfterMipWrite[14] == lastPixelData[0]);
+
+            // Invalid ranges. Each rejection must also leave the texture untouched, which the
+            // full-level comparison after them asserts once for all of them.
+            const Rectangle outsideRight(3, 0, 3, 1);
+            const Rectangle negativeOrigin(-1, 0, 2, 1);
+            const Rectangle emptyRegion(1, 1, 0, 0);
+            rejects("SetData rejects a rectangle leaving the level", [&] {
+                transferTexture.SetData(0, &outsideRight, interiorPixels.data(), 0, 3);
+            });
+            rejects("SetData rejects a negative origin", [&] {
+                transferTexture.SetData(0, &negativeOrigin, interiorPixels.data(), 0, 2);
+            });
+            // An empty region is a no-op rather than an error: the shared transfer layer bounds-
+            // checks the rectangle and the element count, and a zero-area region violates neither.
+            // Pin that it really changes nothing instead of pretending it throws.
+            std::vector<Color> beforeEmptyRegion(15, Color::Transparent);
+            transferTexture.GetData(beforeEmptyRegion.data(),
+                                    static_cast<int>(beforeEmptyRegion.size()));
+            transferTexture.SetData(0, &emptyRegion, interiorPixels.data(), 0, 1);
+            std::vector<Color> afterEmptyRegion(15, Color::Transparent);
+            transferTexture.GetData(afterEmptyRegion.data(),
+                                    static_cast<int>(afterEmptyRegion.size()));
+            transferCheck("an empty region writes nothing", beforeEmptyRegion == afterEmptyRegion);
+            rejects("SetData rejects an element count smaller than the region", [&] {
+                transferTexture.SetData(0, &interior, interiorPixels.data(), 0, 2);
+            });
+            rejects("SetData rejects a level that does not exist", [&] {
+                transferTexture.SetData(7, nullptr, levelOne.data(), 0, 2);
+            });
+            rejects("GetData rejects a rectangle leaving the level", [&] {
+                std::vector<Color> destination(3, Color::Transparent);
+                transferTexture.GetData(0, &outsideRight, destination.data(), 0, 3);
+            });
+            rejects("GetData rejects a destination smaller than the region", [&] {
+                std::vector<Color> destination(1, Color::Transparent);
+                transferTexture.GetData(0, &interior, destination.data(), 0, 1);
+            });
+
+            // Every rejection above must have left the texture exactly as it was.
+            std::vector<Color> afterRejections(15, Color::Transparent);
+            transferTexture.GetData(afterRejections.data(), static_cast<int>(afterRejections.size()));
+            transferCheck("rejected transfers change nothing",
+                          afterRejections == levelZeroAfterMipWrite);
+
+            // The GPU side must agree with the CPU round trip: point-sample the updated texture
+            // 1:1 and compare the exact texels.
+            device.Clear(Color::Black);
+            SamplerState transferSampler = SamplerState::PointClamp;
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &transferSampler,
+                            nullptr, nullptr);
+            sprites_->Draw(transferTexture, Rectangle(0, 0, 5, 3), Rectangle(4, 2, 1, 1),
+                           Color::White);
+            sprites_->End();
+            check("SetData reaches the GPU (last texel)", 2, 1, lastPixelData[0]);
+
+            // RenderTarget2D: level zero only, full and partial, with the same rejection contract.
+            RenderTarget2D transferTarget(device, 4, 2, false, SurfaceFormat::Color,
+                                          DepthFormat::None);
+            std::vector<Color> targetPixels(8, Color::Transparent);
+            for (std::size_t index = 0; index < targetPixels.size(); ++index)
+            {
+                const int value = static_cast<int>(index);
+                targetPixels[index] = Color(20 * value, 255 - 20 * value, 30 + value, 255);
+            }
+            transferTarget.SetData(targetPixels.data(), static_cast<int>(targetPixels.size()));
+            std::vector<Color> targetReadback(8, Color::Transparent);
+            transferTarget.GetData(targetReadback.data(), static_cast<int>(targetReadback.size()));
+            transferCheck("render-target full SetData round trip", targetReadback == targetPixels);
+
+            const Rectangle targetRegion(2, 1, 2, 1);
+            const std::array<Color, 2> targetRegionPixels{
+                Color(11, 22, 33, 255), Color(44, 55, 66, 255)};
+            transferTarget.SetData(0, &targetRegion, targetRegionPixels.data(), 0, 2);
+            std::vector<Color> targetAfterPartial(8, Color::Transparent);
+            transferTarget.GetData(targetAfterPartial.data(),
+                                   static_cast<int>(targetAfterPartial.size()));
+            bool targetPartialExact = true;
+            for (std::size_t index = 0; index < targetAfterPartial.size(); ++index)
+            {
+                const int x = static_cast<int>(index) % 4;
+                const int y = static_cast<int>(index) / 4;
+                const bool inside = y == 1 && x >= 2;
+                const Color expectedPixel =
+                    inside ? targetRegionPixels[static_cast<std::size_t>(x - 2)] : targetPixels[index];
+                targetPartialExact = targetPartialExact && targetAfterPartial[index] == expectedPixel;
+            }
+            transferCheck("render-target partial SetData preserves every other texel",
+                          targetPartialExact);
+            rejects("render-target rejects level 1 SetData", [&] {
+                transferTarget.SetData(1, nullptr, targetRegionPixels.data(), 0, 1);
+            });
+            rejects("render-target rejects level 1 GetData", [&] {
+                std::vector<Color> destination(1, Color::Transparent);
+                transferTarget.GetData(1, nullptr, destination.data(), 0, 1);
+            });
+            rejects("render-target rejects a rectangle leaving level 0", [&] {
+                const Rectangle outside(3, 1, 2, 1);
+                transferTarget.SetData(0, &outside, targetRegionPixels.data(), 0, 2);
+            });
+            std::vector<Color> targetAfterRejections(8, Color::Transparent);
+            transferTarget.GetData(targetAfterRejections.data(),
+                                   static_cast<int>(targetAfterRejections.size()));
+            transferCheck("rejected render-target transfers change nothing",
+                          targetAfterRejections == targetAfterPartial);
+        }
+
         // 1. Clear and native backbuffer readback.
         device.Clear(Color(12, 34, 56, 255));
         check("Clear + GetBackBufferData", 1, 1, Color(12, 34, 56, 255));
