@@ -427,7 +427,7 @@ endif()
 
 # Task 470: headless-safe CTest skip convention. A test that self-detects "no GPU/display
 # available" (e.g. SDL_InitSubSystem(SDL_INIT_VIDEO) failing, see
-# examples/common/PixelTestGame.hpp's RunPixelTest()) and exits with this sentinel code is
+# modules/graphics/examples/common/PixelTestGame.hpp's RunPixelTest()) and exits with this sentinel code is
 # reported by ctest as SKIPPED rather than FAILED. Applied here in one shot to every test
 # already registered anywhere in this file, rather than adding a SKIP_RETURN_CODE property to
 # each individual set_tests_properties() call across ~330 existing test registrations -- purely

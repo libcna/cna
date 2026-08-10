@@ -19,3 +19,8 @@ target_link_libraries(cna_graphics_core PRIVATE cna_input)
 # by the renderer modules this closes the graphics-core <-> renderer cycle for the renderers
 # that have one, and a plain ordered dependency for the rest.
 target_link_libraries(cna_graphics_core PRIVATE ${RENDERER_TARGET})
+
+# Module-owned examples (module-examples campaign): demo/example registration is
+# module-local; the conditions historically applied by cmake/Examples.cmake live
+# inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

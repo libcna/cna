@@ -149,15 +149,23 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
-# --- plan_software.md SOFTWARE-61/84: cross-renderer diagnostic comparator ---
-# Standalone, renderer-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
-# 64x64 RGBA8 dumps produced by cross_renderer_diagnostic_scene.cpp (built once per renderer, see
-# the SOFTWARE and EASYGL sections below) within a tolerance. Not wired into a single ctest run --
-# CNA_GRAPHICS_RENDERER is a compile-time choice, so comparing two renderers' output needs two
-# separate builds' dumps; see docs/software-renderer.md's "Cross-renderer diagnostic" section for
-# the exact manual invocation.
-if(CNA_BUILD_TESTS)
-    add_executable(cna_diag_compare examples/cross_renderer_diagnostic_compare.cpp)
+# The cross-renderer diagnostic comparator (cna_diag_compare) is registered by its owning
+# module now: modules/graphics/examples/CMakeLists.txt, next to the diagnostic scene it diffs.
+
+# --- Task 479: CNA-side reference-value dump tool (no window/GraphicsDevice needed) -----------
+# Dumps enums, state presets, PackedVector, and Viewport reference values as JSON, mirroring
+# tools/fna-reference/*.cs exactly so scripts/compare-fna-reference.py can diff the two outputs.
+# Not registered as a ctest: comparing against the FNA-side harness additionally requires mono/
+# xbuild and a locally-built FNA.dll (tools/fna-reference/README.md), which isn't guaranteed on
+# every machine that builds CNA -- this is a manually-invoked developer verification tool.
+# (Source lives under tools/, so its registration lives with the other tools/ harnesses here,
+# not with the module-owned examples.)
+if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_reference_dump tools/cna-reference/CnaReferenceDump.cpp)
+    target_link_libraries(cna_reference_dump PRIVATE CNA)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_reference_dump PRIVATE SDL3::SDL3main)
+    endif()
 endif()
 
 # --- Task VERIFY-003/DEV-API-002: strict XNA API surface compile check ---

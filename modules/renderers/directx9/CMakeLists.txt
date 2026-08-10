@@ -43,3 +43,8 @@ target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 d3d9)
 if(TARGET cna_renderer_d3d9_effect)
     target_link_libraries(${RENDERER_TARGET} PRIVATE cna_renderer_d3d9_effect)
 endif()
+
+# Module-owned examples (module-examples campaign): the family's example/test
+# registration is module-local; its historical selection/platform conditions
+# live inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

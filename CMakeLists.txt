@@ -39,7 +39,7 @@ endif()
 # cmake/EasyGlPlatform.cmake sets -fwasm-exceptions in ITS directory scope (needed for its own
 # standalone Emscripten preset/tests), which only affects object files compiled within that
 # subdirectory tree (meta-gl, easy-gl) -- it does NOT propagate to CNA's own top-level directory
-# scope, where the final executable link step is defined (cmake/Examples.cmake). With the old
+# scope, where the final executable link steps are defined (the modules' example CMakeLists). With the old
 # legacy -fexceptions here, meta-gl's objects (compiled under -fwasm-exceptions, referencing the
 # Wasm EH exception-tag import symbol __cpp_exception) and the final link (configured for legacy
 # JS EH, unaware of that symbol) disagreed on ABI, producing
@@ -53,6 +53,10 @@ if(EMSCRIPTEN)
 endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
+# Example/demo applications. The registrations themselves are module-local
+# (modules/<name>/examples/CMakeLists.txt, modules/renderers/<family>/examples/CMakeLists.txt);
+# this option keeps its historical configure-wide meaning.
+option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, demo_2d, ...)" ON)
 option(CNA_CNAEXT "Enable CNA CNAEXT extended graphics layer (beyond XNA 4.0)" OFF)
 option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
@@ -118,198 +122,29 @@ cna_detect_sharp_runtime_shape()
 
 include(cmake/RendererSelection.cmake)
 
+# Example and test registrations live inside the module tree (modules/<name>/examples/,
+# modules/renderers/<family>/examples/): testing must be enabled before the modules are
+# composed so their subdirectory add_test() registrations take effect.
+if(CNA_BUILD_TESTS)
+    enable_testing()
+endif()
+
 # Physical module composition (MODULARIZATION_PLAN.md §11): every subsystem and renderer
 # family owns modules/<name>/{CMakeLists.txt,include/,src/,tests/}; the former central
 # cmake/BackendLibraries.cmake + cmake/CnaLibrary.cmake manifests dissolved into the
 # per-module files this directory composes.
 add_subdirectory(modules)
 
-include(cmake/Examples.cmake)
-
-# EasyGL integration tests (Task 85, 86, 87). Self-contained: bundles the CNA_BUILD_EXAMPLES
-# condition this block has always (historically) required -- see EasyGLTests.cmake's own comment.
-include(cmake/Tests/EasyGLTests.cmake)
-
-# SKIA raster/display integration tests. The module is a no-op unless SKIA is selected.
-include(cmake/Tests/SkiaTests.cmake)
-
-# Vulkan integration tests. Self-contained: bundles the CNA_BUILD_EXAMPLES condition this block
-# has always (historically) required -- see VulkanTests.cmake's own comment.
-include(cmake/Tests/VulkanTests.cmake)
-
-# SDL_Renderer integration tests (Task 666 audit phase)
-include(cmake/Tests/SdlRendererTests.cmake)
-
-# plan_opengl1.md: OPENGL1 (native legacy fixed-function OpenGL) CTest registration --
-# tests/opengl1/README.md's 8 priority smoke-coverage scenarios.
-include(cmake/Tests/OpenGL1Tests.cmake)
-
-# GLIDE's smoke executable is built only when selected. It is not registered as a normal CTest:
-# running it requires a user-supplied, separately licensed glide3x.dll (e.g. dgVoodoo2).
-include(cmake/Tests/GlideTests.cmake)
-
-# Win32 GDI 2D renderer tests. Native Windows registers them directly; cross-built executables
-# remain available for an explicit Wine/display invocation.
-include(cmake/Tests/GdiTests.cmake)
-
-include(cmake/Tests/BgfxTests.cmake)
-
-include(cmake/Tests/WebGpuTests.cmake)
-
-# plan_magnum.md: Magnum (mosra/magnum) renderer integration tests.
-include(cmake/Tests/MagnumTests.cmake)
-
-# plan_headless.md: Headless (no GPU/window) graphics renderer tests. Deliberately no
-# SDL_VIDEODRIVER/DISPLAY environment -- the entire point of this renderer is running with neither.
-include(cmake/Tests/HeadlessTests.cmake)
-
-# plan_software.md: Software (CPU rasterizer) graphics renderer tests. Deliberately no
-# SDL_VIDEODRIVER/DISPLAY environment -- like HEADLESS, this renderer never needs either.
-include(cmake/Tests/SoftwareTests.cmake)
-
-# plan_stub.md: Stub (no-op) graphics renderer tests. Deliberately no SDL_VIDEODRIVER/DISPLAY
-# environment -- like HEADLESS/SOFTWARE, this renderer never needs either.
-include(cmake/Tests/StubTests.cmake)
-
-# plan_ascii.md Phase G2+: ASCII (SDL-windowed glyph-grid) renderer test registration.
-include(cmake/Tests/AsciiTests.cmake)
-
-# plan_freedirect.md Phase X2/X8 (DX3-18/DX3-80): DIRECTX3 (DirectDraw via free-direct) CTest registration.
-# Unlike SDL_RENDERER's own window-based ctests, these do NOT need a real/virtual X11 display:
-# every pixel assertion reads back through the shadow-backbuffer surface directly
-# (FreeDirectRenderer::ReadBackbuffer/GetBackBufferData), never through real physical
-# presentation, so SDL_VIDEODRIVER=dummy (no display required at all) produces identical,
-# verified-correct results (confirmed empirically: all 8 binaries, 49/49 checks, under
-# SDL_VIDEODRIVER=dummy) while being far more portable than requiring CNA_TEST_DISPLAY to point
-# at a working X11 server. This was a real registration bug found in review: the original
-# SDL_VIDEODRIVER=x11 registration (copy-pasted from SDL_RENDERER's own pattern, which genuinely
-# does need a real display) made every one of these 8 ctests fail outright in any environment
-# without a live DISPLAY, even though the underlying binaries themselves were always correct.
-include(cmake/Tests/FreeDirectTests.cmake)
-
-# plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this renderer is
-# Windows-only, design decision 2), CTest itself still runs on the Linux host, so the test COMMAND
-# wraps the real .exe with scripts/run-wine-dxvk.sh (DX-3). A native MSVC configure on a real
-# Windows machine (CMAKE_CROSSCOMPILING is false there) needs no Wine wrapper at all -- runs the
-# .exe directly (see .github/workflows/d3d-windows-ci.yml, added specifically to exercise this
-# path for real; it only covers MSVC-compile/unit-test/shader-generation-check, not a substitute
-# for plan_dx.md DX-90's real swap-chain/tearing/device-lost/driver-parity items).
-include(cmake/Tests/DirectX11Tests.cmake)
-
-# plan_dx.md DX-102/103/104/105: D3D12 CTest registration, mirroring DX-80's own D3D11 macro
-# exactly, including the CMAKE_CROSSCOMPILING-aware command selection above (native MSVC runs the
-# .exe directly; a Linux-hosted cross-compile wraps it with scripts/run-wine-vkd3d.sh, DX-100's own
-# Wine+vkd3d-proton dev loop, a distinct Wine prefix from D3D11's DXVK one).
-include(cmake/Tests/DirectX12Tests.cmake)
-
-# Direct2D 1.1 is a Windows-only 2D renderer. Its tests use the same native-Windows/Wine+DXVK
-# execution model as D3D11 because Direct2D owns a real D3D11/DXGI presentation surface.
-include(cmake/Tests/Direct2DTests.cmake)
-
-# plan_canvas.md CANVAS-15: structural smoke-test build for the CANVAS (HTML Canvas 2D) renderer.
-# Deliberately NOT registered as a CTest (mirrors cna_diag_software's/directx12_swapchain_diag's own
-# "real executable, not a ctest" precedent above): SDL_Init(SDL_INIT_VIDEO) itself throws under
-# `node CnaTests.js` (no real browser DOM -- confirmed empirically, "window is not defined"),
-# before any Canvas-specific code even runs. This target only proves the smoke test configures and
-# links here; it needs a real browser (e.g. `emrun`) against a page with a real <canvas> element to
-# actually produce a PASS/FAIL (Design decision 9).
-include(cmake/Tests/CanvasTests.cmake)
-
-# plan_html_dom.md HTMLDOM-15/72: the HTML_DOM (CSS-composited DOM elements) renderer's smoke test.
-# Like CANVAS's above it is a real executable rather than a ctest -- it needs a browser, not node --
-# but unlike CANVAS it has a driver that actually runs it here
-# (scripts/run-htmldom-browser-test.sh, headless Chromium via Playwright).
-include(cmake/Tests/HtmlDomTests.cmake)
-
-# plan_html_dom.md Phase D10: cross-renderer sprite benchmark, built for whichever Emscripten
-# renderer is currently selected (not tied to one CNA_GRAPHICS_RENDERER value) -- see the file's
-# own header comment for why a HTML_DOM-vs-CANVAS-vs-EASYGL comparison needs three separate
-# configures rather than one.
-include(cmake/Tests/CrossRendererBenchmark.cmake)
-
-# plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_directx11_test/
-# cna_directx12_test macros (design decision: mirror the shape, don't invent a new pattern). Uses the
-# new scripts/run-wine-dxvk9.sh (D9-5), not the shared run-wine-dxvk.sh (cold-start Sec.4).
-include(cmake/Tests/DirectX9Tests.cmake)
-
-# plan_sdlgpu.md SDLGPU-12: first end-to-end proof for the SDL_GPU graphics renderer -- a real
-# window, a real SDL_GPUDevice, and a 60-frame Clear()+Present() loop. Needs a real
-# display/GPU, same as the Vulkan/Bgfx/D3D11 CTest entries above -- run with a real DISPLAY.
-include(cmake/Tests/SdlGpuTests.cmake)
-
-# plan_dx1.md: DIRECTX1 (real DirectDraw v1, no ../free-direct) CTest registration, mirroring D3D9's
-# own cna_directx9_test/cna_directx9_ctest_command shape (Windows-only, MinGW cross-compile + Wine
-# wrapper) rather than DIRECTX3's native-Linux shape, since DIRECTX1 genuinely needs real ddraw.h.
-include(cmake/Tests/DirectX1Tests.cmake)
-
-# plan_dx2.md Phase O1/O2: DIRECTX2 (real DirectDraw v1 2D layer ported from DIRECTX1 + Direct3D v2
-# DrawPrimitive 3D layer, landing in a later phase) CTest registration, mirroring DirectX1Tests.cmake's
-# own shape (Windows-only, MinGW cross-compile + Wine wrapper).
-include(cmake/Tests/DirectX2Tests.cmake)
-
-# plan_dx3.md: real DirectX 3 renderer (originally landed under the temporary DX30 name; renamed
-# to DIRECTX3 on 2026-08-04 once the free-direct renderer released the name as FREEDIRECT, and to
-# DIRECTX3 in the 2026-08 naming normalization) -- a
-# mechanical port of DIRECTX2's own 2D+3D layers upgraded to IDirectDraw2, same
-# Windows-only/MinGW-cross-compile/Wine-wrapper shape as DirectX2Tests.cmake.
-include(cmake/Tests/DirectX3Tests.cmake)
-
-# plan_dx5.md: real DirectX 5 renderer -- DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, a further
-# port of DIRECTX3's own 2D+3D layers, same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
-include(cmake/Tests/DirectX5Tests.cmake)
-
-# plan_dx6.md: real DirectX 6 renderer -- same DirectDraw v4 + Direct3D v3 interfaces as DIRECTX5, with
-# real stencil buffer operations added; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
-include(cmake/Tests/DirectX6Tests.cmake)
-
-# plan_dx7.md: real DirectX 7 renderer -- new IDirectDraw7/IDirect3D7 interfaces, viewport object
-# removed, texture binding simplified; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
-include(cmake/Tests/DirectX7Tests.cmake)
-
-# plan_dx8.md: real DirectX 8 renderer -- DXVK-delivered (not DirectDraw-based), fixed-function 3D
-# only, real GPU-quad SpriteBatch; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
-include(cmake/Tests/DirectX8Tests.cmake)
-
-# plan_d3d10.md: real Direct3D 10 renderer -- no fixed-function at all, real HLSL vs_4_0/ps_4_0
-# shaders throughout, DXVK-delivered via d3d10core.
-include(cmake/Tests/DirectX10Tests.cmake)
-
-# plan_opengles1.md: OPENGLES1 (fixed-function OpenGL ES 1.1) CTest registration. Needs a real
-# EGL/GLESv1_CM driver capable of creating an actual ES1 context -- not every EGL implementation
-# does (see docs/opengles1-renderer.md's own empirical finding on this project's Mesa/llvmpipe
-# development host), same "run with a real DISPLAY and a real driver" caveat as the Vulkan/Bgfx/
-# D3D11/SDL_GPU entries above.
-include(cmake/Tests/OpenGLES1Tests.cmake)
-
-# plan_opengl4.md GL4-1: real desktop OpenGL 4.x core-profile graphics renderer CTest
-# registration. Needs a real display/GPU, same as the Vulkan/Bgfx/D3D11/SDL_GPU entries above.
-include(cmake/Tests/OpenGL4Tests.cmake)
-
-# plan_opengl2.md: first end-to-end proof for the native OpenGL 2.1 graphics renderer -- a real
-# window, a real SDL GL context, and Clear/Present + Texture2D/SpriteBatch vertical-slice tests.
-# Needs a real display/GPU, same as the SDL_GPU/Vulkan/Bgfx/D3D11 CTest entries above.
-include(cmake/Tests/OpenGL2Tests.cmake)
-
-# plan_wicked.md WICKED-70/74: the Wicked Engine renderer's device-independent pipeline-cache-key
-# unit test, plus the same demo smoke test the other GPU renderers register (needs a real
-# display/GPU and a Vulkan loader).
+# Renderer-family example/test registration is module-local now: each family owns
+# modules/renderers/<family>/examples/CMakeLists.txt (reached through
+# add_subdirectory(modules) above, which enters exactly the families the selected
+# renderer needs), and the framework-module demos own
+# modules/<name>/examples/CMakeLists.txt the same way. The per-family registration
+# knowledge that used to sit here as one include-per-family travels with those files.
+#
+# Wicked's registration stays: it registers only the module's own unit tests
+# (modules/renderers/wicked/tests/), no examples.
 include(cmake/Tests/WickedTests.cmake)
-
-# plan_sokol.md SOKOL-16/17: sokol_gfx renderer CTest registration. Needs a real display and GL
-# context, same as the EasyGL/Vulkan/Bgfx entries above -- run with a real (or Xvfb) DISPLAY.
-include(cmake/Tests/SokolTests.cmake)
-# plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent Engine renderer.
-# Skips (exit 77) rather than fails when no device can be created, since Diligent picks its
-# native API at runtime and a headless machine may have none of them.
-include(cmake/Tests/DiligentTests.cmake)
-
-# plan_llgl.md: LLGL renderer CTest registration. Like the Vulkan/Bgfx/SDL_GPU entries above these
-# need a real (or virtual) display; unlike them, the native API underneath is decided at runtime by
-# LLGL itself, so the same binaries exercise whichever module was selected.
-include(cmake/Tests/LlglTests.cmake)
-
-# Native Apple Metal renderer smoke test.
-include(cmake/Tests/MetalTests.cmake)
 
 include(cmake/Harnesses.cmake)
 

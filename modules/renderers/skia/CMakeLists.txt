@@ -17,3 +17,8 @@ if(CNA_SANITIZE MATCHES "(^|,)undefined(,|$)"
    AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${RENDERER_TARGET} PRIVATE -fno-sanitize=vptr)
 endif()
+
+# Module-owned examples (module-examples campaign): the family's example/test
+# registration is module-local; its historical selection/platform conditions
+# live inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

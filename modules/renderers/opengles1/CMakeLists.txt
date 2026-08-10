@@ -16,3 +16,8 @@ endif()
 message(STATUS "CNA: using GLESv1_CM at ${CNA_GLESV1_CM_LIBRARY} (headers: ${CNA_GLES_INCLUDE_DIR})")
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 "${CNA_GLESV1_CM_LIBRARY}")
 target_include_directories(${RENDERER_TARGET} PRIVATE "${CNA_GLES_INCLUDE_DIR}")
+
+# Module-owned examples (module-examples campaign): the family's example/test
+# registration is module-local; its historical selection/platform conditions
+# live inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

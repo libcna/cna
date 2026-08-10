@@ -18,3 +18,8 @@ target_link_libraries(cna_audio PRIVATE cna_media)
 # dependency instead of relying on another module's private edge. Plain DAG edge, no cycle:
 # input has no path back to audio.
 target_link_libraries(cna_audio PRIVATE cna_input)
+
+# Module-owned examples (module-examples campaign): demo/example registration is
+# module-local; the conditions historically applied by cmake/Examples.cmake live
+# inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

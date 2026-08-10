@@ -12,3 +12,8 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     cna_add_renderer(${CNA_METAL_OBJCXX_SOURCES})
     target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 "-framework Metal" "-framework QuartzCore" "-framework Foundation")
 endif()
+
+# Module-owned examples (module-examples campaign): the family's example/test
+# registration is module-local; its historical selection/platform conditions
+# live inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

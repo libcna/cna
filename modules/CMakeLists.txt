@@ -82,6 +82,12 @@ function(cna_add_module target alias)
     target_include_directories(${target} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 endfunction()
 
+# The graphics module's examples/ directory owns the shared renderer-agnostic example
+# fixtures and the shared example-support headers ("common/PixelTestGame.hpp", ...).
+# Renderer-family example registrations compile those fixtures per renderer through this
+# path, and consumers of the support headers add it as an include directory.
+set(CNA_GRAPHICS_EXAMPLES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/graphics/examples")
+
 # --- Module composition. Order is readability-only: target_link_libraries resolves
 # not-yet-defined target names at generate time, so cycles and forward references are fine.
 add_subdirectory(core)
@@ -141,6 +147,9 @@ target_link_libraries(CNA INTERFACE
 # directory outside the declared set, fails the configure. The one documented
 # target-membership exception is GDI compiling eight software-module 2D TUs
 # (modules/renderers/gdi/CMakeLists.txt) -- physical ownership stays with software.
+# examples/ joined src/ and tests/ as a declared owned area when the tracked examples
+# moved into their owning modules (module-examples campaign): a module may own
+# modules/<name>/examples/, and example TUs outside every declared module still fail.
 set(_cna_framework_modules
     core math runtime graphics input audio media content storage
     devices devices-ext graphics-ext gamer-services net)
@@ -155,20 +164,20 @@ file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
 foreach(_cna_tu IN LISTS _cna_all_module_tus)
     set(_cna_tu_ok FALSE)
     foreach(_cna_m IN LISTS _cna_framework_modules)
-        if(_cna_tu MATCHES "^${_cna_m}/(src|tests)/")
+        if(_cna_tu MATCHES "^${_cna_m}/(src|tests|examples)/")
             set(_cna_tu_ok TRUE)
         endif()
     endforeach()
     foreach(_cna_m IN LISTS _cna_renderer_modules)
-        if(_cna_tu MATCHES "^renderers/${_cna_m}/(src|tests)/")
+        if(_cna_tu MATCHES "^renderers/${_cna_m}/(src|tests|examples)/")
             set(_cna_tu_ok TRUE)
         endif()
     endforeach()
     if(NOT _cna_tu_ok)
         message(FATAL_ERROR
-            "CNA: translation unit outside every declared physical module src/tests tree: "
-            "modules/${_cna_tu} -- add it to a module (modules/<name>/src) or extend the "
-            "declared module set here deliberately.")
+            "CNA: translation unit outside every declared physical module src/tests/examples "
+            "tree: modules/${_cna_tu} -- add it to a module (modules/<name>/src) or extend "
+            "the declared module set here deliberately.")
     endif()
 endforeach()
 unset(_cna_all_module_tus)

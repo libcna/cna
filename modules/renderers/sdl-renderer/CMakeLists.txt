@@ -21,3 +21,8 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "ASCII")
     # compiles against the graphics/math/core public headers.
     target_link_libraries(cna_renderer_sdl_renderer_core PRIVATE cna_graphics_core cna_core cna_math)
 endif()
+
+# Module-owned examples (module-examples campaign): the family's example/test
+# registration is module-local; its historical selection/platform conditions
+# live inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

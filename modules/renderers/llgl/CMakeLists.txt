@@ -45,3 +45,8 @@ if(NOT CNA_SHADERC_LIBRARY)
 endif()
 message(STATUS "CNA: using libshaderc at ${CNA_SHADERC_LIBRARY}")
 target_link_libraries(${RENDERER_TARGET} PRIVATE "${CNA_SHADERC_LIBRARY}")
+
+# Module-owned examples (module-examples campaign): the family's example/test
+# registration is module-local; its historical selection/platform conditions
+# live inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

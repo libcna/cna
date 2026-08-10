@@ -11,3 +11,8 @@ math(EXPR CNA_GDI_ARCHIVE_TOTAL "${CNA_GDI_SHARED_SOURCE_COUNT} + 3")
 message(STATUS
     "CNA: GDI renderer archive = ${CNA_GDI_SHARED_SOURCE_COUNT} shared CPU-2D sources + 3 "
     "GDI-owned units = ${CNA_GDI_ARCHIVE_TOTAL} translation units")
+
+# Module-owned examples (module-examples campaign): the family's example/test
+# registration is module-local; its historical selection/platform conditions
+# live inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

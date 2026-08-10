@@ -9,3 +9,8 @@ target_link_libraries(CNA_Net
     enet
 )
 cna_link_sharp_runtime(CNA_Net PUBLIC Core.Base IO Collections.Core Runtime Threading)
+
+# Module-owned examples (module-examples campaign): demo/example registration is
+# module-local; the conditions historically applied by cmake/Examples.cmake live
+# inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

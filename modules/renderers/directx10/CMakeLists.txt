@@ -5,3 +5,8 @@
 # a link-time concern).
 cna_add_renderer()
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 d3d10 dxgi d3dcompiler)
+
+# Module-owned examples (module-examples campaign): the family's example/test
+# registration is module-local; its historical selection/platform conditions
+# live inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

@@ -9,3 +9,8 @@ target_include_directories(CNA_GamerServices PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/
 # input, audio through it) plus Storage (device selector flows).
 target_link_libraries(CNA_GamerServices PUBLIC cna_runtime cna_storage PRIVATE SDL3::SDL3)
 cna_link_sharp_runtime(CNA_GamerServices PUBLIC Core.Base IO Collections.Core Globalization Runtime Threading)
+
+# Module-owned examples (module-examples campaign): demo/example registration is
+# module-local; the conditions historically applied by cmake/Examples.cmake live
+# inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

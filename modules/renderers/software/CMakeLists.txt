@@ -31,3 +31,8 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "GDI")
     target_include_directories(cna_renderer_software_headers INTERFACE
         "${CMAKE_CURRENT_SOURCE_DIR}/include")
 endif()
+
+# Module-owned examples (module-examples campaign): the family's example/test
+# registration is module-local; its historical selection/platform conditions
+# live inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)

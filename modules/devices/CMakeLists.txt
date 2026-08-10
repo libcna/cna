@@ -20,3 +20,8 @@ if(ANDROID)
     # not pulled in transitively by it.
     target_link_libraries(cna_devices PUBLIC android log)
 endif()
+
+# Module-owned examples (module-examples campaign): demo/example registration is
+# module-local; the conditions historically applied by cmake/Examples.cmake live
+# inside examples/CMakeLists.txt unchanged.
+add_subdirectory(examples)
