@@ -1538,7 +1538,7 @@ namespace CNA::Internal::Renderers::Llgl
                 addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 32);
                 addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 48);
                 break;
-            // SkinnedEffect.VertexColorEnabled (LLGL-37, NOXNA extension property): the stride-52
+            // SkinnedEffect.VertexColorEnabled (LLGL-37, CNAEXT extension property): the stride-52
             // layout above with a trailing normalized ubyte4 Color APPENDED at offset 52 -- matches
             // every other renderer's own "append rather than insert" convention for this vertex shape
             // (EasyGL/Vulkan/etc's own local SkinnedColorGpuVertex test structs), keeping locations
@@ -1757,7 +1757,7 @@ namespace CNA::Internal::Renderers::Llgl
         LLGL::RenderSystemDescriptor rendererDesc;
         rendererDesc.moduleName = Detail::GetRendererModuleName(module_);
 
-        // NOXNA diagnostics: CNA_LLGL_DEBUG=1 turns on LLGL's own debug layer and routes its
+        // CNAEXT diagnostics: CNA_LLGL_DEBUG=1 turns on LLGL's own debug layer and routes its
         // reports to stdout. Off by default -- the debug layer validates every command and is far
         // too costly to leave on -- but invaluable when a draw silently produces nothing.
         static LLGL::RenderingDebugger debugger;
@@ -2643,7 +2643,7 @@ namespace CNA::Internal::Renderers::Llgl
         // SkinnedEffect is always textured and lit (GpuDrawParams::textureEnabled/lightingEnabled
         // are unconditionally true in SkinnedEffect::FillGpuDrawParams); the only shape that
         // actually varies is whether the vertex layout carries a colour attribute (LLGL-37,
-        // SkinnedEffect.VertexColorEnabled -- a NOXNA extension property), which selects a whole
+        // SkinnedEffect.VertexColorEnabled -- a CNAEXT extension property), which selects a whole
         // separate compiled shader pair rather than an always-declared, conditionally-read
         // attribute -- matching AcquirePrimitiveVertexShader()'s own colored/textured shader-file
         // split, since a shader declaring an input the bound buffer does not supply reads undefined

@@ -316,7 +316,7 @@ namespace Microsoft::Xna::Framework::Audio
         // an expected pick independently (seeding an identical std::mt19937 + distribution in the
         // test itself) and cross-check it against Cue::Play()'s real, deterministic-for-a-known-
         // seed outcome, instead of relying on an unseeded std::random_device draw every run.
-        NOXNA static void INTERNAL_seedRngForTest(unsigned int seed);
+        CNAEXT static void INTERNAL_seedRngForTest(unsigned int seed);
 
         // P11-XACT-002: test-only entry point for the PlayWaveTrackVariation-family selection
         // algorithm (Cue.cpp's anonymous-namespace SelectTrackVariationIndex), so its exact
@@ -324,7 +324,7 @@ namespace Microsoft::Xna::Framework::Audio
         // directly against a synthetic entry list, without needing a full XACT fixture wired
         // through Cue::Play() for every case. Reuses the same shared Rng() INTERNAL_seedRngForTest
         // above reseeds, for deterministic-for-a-known-seed test outcomes.
-        NOXNA static std::size_t INTERNAL_selectTrackVariationIndexForTest(
+        CNAEXT static std::size_t INTERNAL_selectTrackVariationIndexForTest(
             const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
             CNA::Internal::Audio::XsbTrackVariationType type);
 
@@ -335,13 +335,13 @@ namespace Microsoft::Xna::Framework::Audio
         // Out-params (not a return-by-value struct) since ApplyEffectVariation's own result type
         // is anonymous-namespace-private to Cue.cpp. Reuses the same shared Rng()
         // INTERNAL_seedRngForTest above reseeds, for deterministic-for-a-known-seed test outcomes.
-        NOXNA static void INTERNAL_applyEffectVariationForTest(
+        CNAEXT static void INTERNAL_applyEffectVariationForTest(
             const CNA::Internal::Audio::XsbWaveRef& waveRef,
             float& pitchCentsDelta, float& volumeAmplitudeMultiplier,
             bool& hasFilterOverride, float& filterFrequencyHz, float& filterQFactor);
 
         // Tests need to observe which sound a variation table selected (via the category
         // index it carries) without a real WaveBank/audio device backing playback.
-        NOXNA friend struct CueTestAccess;
+        CNAEXT friend struct CueTestAccess;
     };
 }

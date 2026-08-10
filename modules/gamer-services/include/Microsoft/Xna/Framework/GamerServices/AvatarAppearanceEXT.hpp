@@ -9,14 +9,14 @@ namespace Microsoft::Xna::Framework::GamerServices
      * @brief CNA-original avatar body customization (skin tone, hair, and per-garment-slot
      * clothing tint).
      *
-     * @note NOXNA — not part of the XNA 4.0 API. CNA extension used only by
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension used only by
      * AvatarRenderer::EnableRealRenderingEXT's real-rendering path. This is not a
      * reproduction of Microsoft's proprietary, undocumented 1021-byte AvatarDescription
      * format (which was never public and cannot be reverse-engineered from the reference
      * assembly alone) — it is a wholly new, CNA-invented data model. Tint only, no texture:
      * the content pipeline does not yet export per-part textures (Task 11.19).
      */
-    NOXNA struct AvatarAppearanceEXT
+    CNAEXT struct AvatarAppearanceEXT
     {
         /**
          * @brief Gets the skin tint color applied to the body part.

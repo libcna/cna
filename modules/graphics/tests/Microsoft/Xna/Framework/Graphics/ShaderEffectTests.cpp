@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 883: ShaderEffect::Clone() — a NOXNA CNA extension, not part of XNA's
+// Task 883: ShaderEffect::Clone() — a CNAEXT CNA extension, not part of XNA's
 // stock-effect set, gained a Clone() override as a mechanical consequence of
 // Effect::Clone() becoming a pure virtual base-class contract. Unlike the
 // other 7 concrete Effect subclasses, ShaderEffect deliberately recompiles a

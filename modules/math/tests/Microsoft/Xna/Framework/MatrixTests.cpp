@@ -755,7 +755,7 @@ TEST(MatrixTest, DecomposeScaleMatrix)
     EXPECT_NEAR(scale.Z, 4.0f, kEps);
 }
 
-// --- ToColumnMajor (NOXNA) ---
+// --- ToColumnMajor (CNAEXT) ---
 
 TEST(MatrixTest, ToColumnMajorIdentity)
 {

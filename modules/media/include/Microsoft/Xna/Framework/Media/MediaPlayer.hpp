@@ -173,16 +173,16 @@ namespace Microsoft::Xna::Framework::Media
         static void GetVisualizationData(VisualizationData& data);
 
         /** @brief Performs pending media-player maintenance (timer updates, state transitions). */
-        NOXNA static void Update();
+        CNAEXT static void Update();
 
         /** @brief Raises the deferred ActiveSongChanged event. */
-        NOXNA static void OnActiveSongChanged();
+        CNAEXT static void OnActiveSongChanged();
 
         /** @brief Raises the deferred MediaStateChanged event. */
-        NOXNA static void OnMediaStateChanged();
+        CNAEXT static void OnMediaStateChanged();
 
         /** @brief Releases renderer media resources if initialized. Called at application exit. */
-        NOXNA static void ProgramExit();
+        CNAEXT static void ProgramExit();
 
         /**
          * @brief Fallback song-end detector for builds without a native track-stopped signal
@@ -199,7 +199,7 @@ namespace Microsoft::Xna::Framework::Media
          * @param elapsed    Elapsed playback time since the song started.
          * @return true if the song should be considered ended.
          */
-        NOXNA [[nodiscard]] static bool DetectSongEndedByElapsedTime(
+        CNAEXT [[nodiscard]] static bool DetectSongEndedByElapsedTime(
             Song* activeSong, System::TimeSpan elapsed);
 
     private:

@@ -63,7 +63,7 @@ namespace Microsoft::Xna::Framework::Audio
         void setIsLoopedProperty(const bool& looped) override;
 
         /** @brief Attempting to set IsLooped on a dynamic instance has no effect (move overload). */
-        NOXNA void setIsLoopedProperty(bool&& looped) override;
+        CNAEXT void setIsLoopedProperty(bool&& looped) override;
 
         /** @brief Stops playback, releases the dynamic audio stream, and disposes the instance. */
         void Dispose() override;
@@ -119,7 +119,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * If SubmitFloatBufferEXT() was previously used on this instance while it is not
          * currently Stopped, throws System::InvalidOperationException instead of feeding int16
-         * bytes into a live float-format stream (a NOXNA safety guard; real XNA has no float
+         * bytes into a live float-format stream (a CNAEXT safety guard; real XNA has no float
          * submission path at all).
          *
          * @param buffer PCM audio data.
@@ -137,7 +137,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param buffer Float32 audio samples.
          */
-        NOXNA void SubmitFloatBufferEXT(const std::vector<float>& buffer);
+        CNAEXT void SubmitFloatBufferEXT(const std::vector<float>& buffer);
 
         /**
          * @brief Submits a range from a float32 sample buffer for playback.
@@ -152,18 +152,18 @@ namespace Microsoft::Xna::Framework::Audio
          * @throws System::InvalidOperationException if this instance is currently playing/paused
          *         in int16 mode.
          */
-        NOXNA void SubmitFloatBufferEXT(const std::vector<float>& buffer,
+        CNAEXT void SubmitFloatBufferEXT(const std::vector<float>& buffer,
                                          SharpRuntime::intcs offset,
                                          SharpRuntime::intcs count);
 
         /** @brief Submits any pending pre-play buffers to the hardware stream. */
-        NOXNA void QueueInitialBuffers();
+        CNAEXT void QueueInitialBuffers();
 
         /** @brief Clears all pending buffers without stopping playback. */
-        NOXNA void ClearBuffers();
+        CNAEXT void ClearBuffers();
 
         /** @brief Pumps stream data and raises BufferNeeded when more data is required. */
-        NOXNA void Update();
+        CNAEXT void Update();
 
         /**
          * @brief Returns the current playback state based on the dynamic track.

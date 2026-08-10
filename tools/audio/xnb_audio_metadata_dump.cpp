@@ -11,7 +11,7 @@
 //
 // Deliberately does not report raw WAVEFORMATEX fields (format tag, channels, sample rate, bits,
 // loop points): real XNA's SoundEffect only exposes Name and Duration publicly, and this tool
-// intentionally stays within that same public surface rather than adding new NOXNA accessors
+// intentionally stays within that same public surface rather than adding new CNAEXT accessors
 // under a P2 tooling task -- see AUD-06-021's differential tool
 // (tools/audio/fna_soundeffect_metadata_dump/) for a from-first-principles WAVEFORMATEX field dump
 // against a real fixture corpus if that level of detail is ever needed for debugging.

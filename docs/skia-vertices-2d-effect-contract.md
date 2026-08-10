@@ -182,7 +182,7 @@ SKIA-157 added a second, thin class, `SkiaMeshEffectAdapterEXT`, that *does* con
 `CNA_SKIA_SKSL_MESH_V1`-tagged `ShaderEffect` flows through `ShaderEffect`'s existing, completely
 unmodified public surface. Drawing reuses `ISpriteBatchRenderer`'s established additive-virtual-
 with-safe-default pattern: a new `DrawMeshEXT` method, implemented only by `SkiaSpriteBatchRenderer`,
-reached from a new public `SpriteBatch::DrawMeshEXT` (NOXNA) restricted to `SpriteSortMode::
+reached from a new public `SpriteBatch::DrawMeshEXT` (CNAEXT) restricted to `SpriteSortMode::
 Immediate`, since a mesh draw does not participate in the shared deferred sort/batch queue that
 every ordinary `Draw()` overload's quad-shaped `SpriteInfo` does. See `plan_skia.md`'s own SKIA-157
 row for the full acceptance evidence, including a real integration bug the new public test caught:

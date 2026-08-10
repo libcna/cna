@@ -27,14 +27,14 @@ namespace Microsoft::Xna::Framework::Graphics
         explicit DisplayModeCollection(std::vector<DisplayMode> modes);
 
         /** @brief Returns the number of display modes in the collection. */
-        NOXNA [[nodiscard]] SharpRuntime::intcs getCountProperty() const;
+        CNAEXT [[nodiscard]] SharpRuntime::intcs getCountProperty() const;
 
         /**
          * @brief Returns the display mode at the given index.
          * @param index Zero-based index into the collection.
          * @return Const reference to the DisplayMode at @p index.
          */
-        NOXNA [[nodiscard]] const DisplayMode& operator[](SharpRuntime::intcs index) const;
+        CNAEXT [[nodiscard]] const DisplayMode& operator[](SharpRuntime::intcs index) const;
 
         /**
          * @brief Returns every display mode in this collection matching the given format.
@@ -44,12 +44,12 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] std::vector<DisplayMode> operator[](SurfaceFormat format) const;
 
         /** @brief Returns an iterator to the first display mode. */
-        NOXNA [[nodiscard]] const_iterator begin() const;
+        CNAEXT [[nodiscard]] const_iterator begin() const;
         /** @brief Returns an iterator past the last display mode. */
-        NOXNA [[nodiscard]] const_iterator end() const;
+        CNAEXT [[nodiscard]] const_iterator end() const;
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         std::vector<DisplayMode> modes_;

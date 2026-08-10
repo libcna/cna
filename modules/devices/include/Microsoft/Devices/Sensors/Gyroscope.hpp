@@ -138,7 +138,7 @@ namespace Microsoft::Devices::Sensors
         /**
          * Converts raw sensor floats into a GyroscopeReading and raises
          * CurrentValueChanged. No hardware-presence guard — callers
-         * (ProcessSensorUpdateEvent() and the NOXNA synthetic-injection
+         * (ProcessSensorUpdateEvent() and the CNAEXT synthetic-injection
          * hook below) are responsible for deciding whether this call is
          * legitimate. Timestamp is always the real wall-clock time of the
          * call (Task P4-7), not derived from any caller-supplied value.
@@ -164,7 +164,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @return Current sensor state.
          */
-        NOXNA [[nodiscard]] SensorState getStateProperty() const;
+        CNAEXT [[nodiscard]] SensorState getStateProperty() const;
 
     public:
         /**
@@ -228,7 +228,7 @@ namespace Microsoft::Devices::Sensors
          * @param y Raw Y-axis rotation rate, in radians/second.
          * @param z Raw Z-axis rotation rate, in radians/second.
          */
-        NOXNA void InjectSyntheticSensorUpdate(float x, float y, float z);
+        CNAEXT void InjectSyntheticSensorUpdate(float x, float y, float z);
 
         /**
          * @brief Test-only hook (Task P4-2): directly sets the internal
@@ -241,7 +241,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param started New value for the internal started flag.
          */
-        NOXNA void SetStartedForTesting(bool started);
+        CNAEXT void SetStartedForTesting(bool started);
 
         /**
          * @brief Test-only hook (Task P5-6): directly sets the base
@@ -257,7 +257,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param supported New value for the base class's isSupported_ flag.
          */
-        NOXNA void SetSupportedForTesting(bool supported);
+        CNAEXT void SetSupportedForTesting(bool supported);
 
         /**
          * @brief Test-only hook (Task P6-2): exposes whether this instance
@@ -267,7 +267,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @return True if this instance currently holds the subsystem open.
          */
-        NOXNA [[nodiscard]] bool GetSubsystemHeldForTesting() const;
+        CNAEXT [[nodiscard]] bool GetSubsystemHeldForTesting() const;
 
         /**
          * @brief Test-only hook (Task P7-2): see Accelerometer.hpp's
@@ -275,7 +275,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param hook Callback to invoke; pass an empty std::function to clear it.
          */
-        NOXNA void SetDisposalCleanupHookForTesting(std::function<void()> hook);
+        CNAEXT void SetDisposalCleanupHookForTesting(std::function<void()> hook);
 
         /**
          * @brief Test-only hook (Task P7-3): see Accelerometer.hpp's
@@ -283,7 +283,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param instance Instance to register.
          */
-        NOXNA static void RegisterStartedInstanceForTesting(Gyroscope& instance);
+        CNAEXT static void RegisterStartedInstanceForTesting(Gyroscope& instance);
 
         /**
          * @brief Test-only hook (Task P7-3): see Accelerometer.hpp's
@@ -291,7 +291,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param instance Instance to unregister.
          */
-        NOXNA static void UnregisterStartedInstanceForTesting(Gyroscope& instance);
+        CNAEXT static void UnregisterStartedInstanceForTesting(Gyroscope& instance);
 
         /**
          * @brief Test-only hook (Task P7-3): see Accelerometer.hpp's
@@ -302,7 +302,7 @@ namespace Microsoft::Devices::Sensors
          * @param y Raw Y-axis rotation rate.
          * @param z Raw Z-axis rotation rate.
          */
-        NOXNA static void DispatchToInstancesForTesting(
+        CNAEXT static void DispatchToInstancesForTesting(
             const std::vector<Gyroscope*>& instances, float x, float y, float z);
 
         /**
@@ -312,7 +312,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param shouldFail true to force the next registration attempt to fail.
          */
-        NOXNA static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
+        CNAEXT static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
 
         /**
          * @brief Test-only hook (Task SDLCORE-009): see
@@ -321,7 +321,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @return The number of exceptions Detail::SdlSensorSubsystem<Gyroscope>::DispatchToInstances() has ever swallowed.
          */
-        NOXNA static int GetDispatchExceptionCountForTesting();
+        CNAEXT static int GetDispatchExceptionCountForTesting();
 
         /**
          * @brief Test-only hook (Task SDLCORE-009): see
@@ -330,7 +330,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @return `ex.what()` for a swallowed `std::exception`, a fixed placeholder for any other thrown value, or empty if none has been swallowed yet.
          */
-        NOXNA static std::string GetLastDispatchExceptionMessageForTesting();
+        CNAEXT static std::string GetLastDispatchExceptionMessageForTesting();
 
         /**
          * @brief Test-only hook (Task SDLCORE-005): see
@@ -340,6 +340,6 @@ namespace Microsoft::Devices::Sensors
          * @param sensorId The SDL sensor id to check.
          * @return true if still present in the current SDL_GetSensors() list.
          */
-        NOXNA static bool IsSensorConnectedForTesting(std::int64_t sensorId);
+        CNAEXT static bool IsSensorConnectedForTesting(std::int64_t sensorId);
     };
 } // namespace Microsoft::Devices::Sensors

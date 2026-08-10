@@ -8,7 +8,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     // The real XNA implementation never reads the animationPreset argument for any of its
     // faithful fields: every instance ends up with 71 zero-valued bone transforms and a
     // zero-length animation, regardless of which preset was requested. Preserved exactly, not
-    // "fixed." animationPreset IS used below, but only to seed the NOXNA realClipName_ field.
+    // "fixed." animationPreset IS used below, but only to seed the CNAEXT realClipName_ field.
     AvatarAnimation::AvatarAnimation(AvatarAnimationPreset animationPreset)
         : avatarBones_(71)
         , currentPosition_(System::TimeSpan::Zero)

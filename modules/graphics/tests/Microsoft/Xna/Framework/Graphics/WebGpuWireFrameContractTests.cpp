@@ -81,7 +81,7 @@ namespace
     using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
-    /// Every cardinality this ticket has to account for, read from the renderer's own NOXNA
+    /// Every cardinality this ticket has to account for, read from the renderer's own CNAEXT
     /// diagnostics. All seven are cumulative since device creation, so a difference between two
     /// readings is exactly what happened in between -- nothing here is reset by a flush.
     struct Counters

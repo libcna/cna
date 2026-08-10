@@ -154,7 +154,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @return Current sensor state.
          */
-        NOXNA [[nodiscard]] SensorState getStateProperty() const;
+        CNAEXT [[nodiscard]] SensorState getStateProperty() const;
 
     public:
         /**
@@ -230,6 +230,6 @@ namespace Microsoft::Devices::Sensors
          * platform-default (no-backend/stub) behavior.
          * @throws SensorFailedException If this instance is currently started.
          */
-        NOXNA void SetBackendForTesting(std::unique_ptr<Detail::ICompassBackend> backend);
+        CNAEXT void SetBackendForTesting(std::unique_ptr<Detail::ICompassBackend> backend);
     };
 } // namespace Microsoft::Devices::Sensors

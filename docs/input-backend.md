@@ -78,12 +78,12 @@ the `default: break;` case).
 | `SDL_EVENT_MOUSE_MOTION` | `SetMousePosition` (window→logical coords via `to_logical_position`), `AddMouseRelativeDelta(xrel, yrel)` | `Mouse::GetState().X/Y`; relative-mode delta accumulator (drained on next `GetState()` read while `IsRelativeMouseModeEXT` is on) |
 | `SDL_EVENT_MOUSE_BUTTON_DOWN` / `_UP` | `SetMouseButtonState` (Left/Right/Middle/XButton1/XButton2), `SetMousePosition`; on DOWN also `Mouse::INTERNAL_onClicked(button-1)` | `Mouse::GetState().LeftButton` etc.; `Mouse::ClickedEXT` fires |
 | `SDL_EVENT_MOUSE_WHEEL` | `AddScrollWheelDelta(wheel.y * 120)` | `Mouse::GetState().ScrollWheelValue` (cumulative, XNA units of 120 per notch) |
-| `SDL_EVENT_MOUSE_ADDED` / `_REMOVED` | none (bypasses `InputManager`) | `CNA::Input::InputDevices::MouseConnectedEXT`/`MouseDisconnectedEXT.Invoke(event.mdevice.which)` — NOXNA hotplug notification only |
-| `SDL_EVENT_KEYBOARD_ADDED` / `_REMOVED` | none (bypasses `InputManager`) | `CNA::Input::InputDevices::KeyboardConnectedEXT`/`KeyboardDisconnectedEXT.Invoke(event.kdevice.which)` — NOXNA hotplug notification only |
+| `SDL_EVENT_MOUSE_ADDED` / `_REMOVED` | none (bypasses `InputManager`) | `CNA::Input::InputDevices::MouseConnectedEXT`/`MouseDisconnectedEXT.Invoke(event.mdevice.which)` — CNAEXT hotplug notification only |
+| `SDL_EVENT_KEYBOARD_ADDED` / `_REMOVED` | none (bypasses `InputManager`) | `CNA::Input::InputDevices::KeyboardConnectedEXT`/`KeyboardDisconnectedEXT.Invoke(event.kdevice.which)` — CNAEXT hotplug notification only |
 | `SDL_EVENT_KEY_DOWN` / `_UP` | `SetKeyState(key, pressed)` (skipped on key-repeat — state is already set); also drives control-character `TextInput` synthesis (`handle_text_input_key_down/up`) | `Keyboard::GetState().IsKeyDown/Up`; `Keys` resolved via `try_convert_sdl_scancode` (scancode mode) or `try_convert_sdl_key` (default mode) — see §4 |
 | `SDL_EVENT_TEXT_INPUT` | none (bypasses `InputManager`) | `event.text.text` (UTF-8) is decoded to UTF-16 code units (`decode_utf8_to_utf16`) and each is dispatched via `TextInputEXT::INTERNAL_OnTextInput(charcs)` — one UTF-16 code unit per call, astral code points as surrogate pairs, matching FNA's `Encoding.UTF8.GetChars`; suppressed while a synthesized Ctrl+V paste is in flight |
 | `SDL_EVENT_TEXT_EDITING` | none | `TextInputEXT::INTERNAL_OnTextEditing(text, start, length)` — empty/null composition maps to `("", 0, 0)` |
-| `SDL_EVENT_TEXT_EDITING_CANDIDATES` | none | `TextInputEXT::INTERNAL_OnTextEditingCandidates(candidates, selected, horizontal)` — NOXNA IME candidate-list extension; null candidates dispatch as an empty list |
+| `SDL_EVENT_TEXT_EDITING_CANDIDATES` | none | `TextInputEXT::INTERNAL_OnTextEditingCandidates(candidates, selected, horizontal)` — CNAEXT IME candidate-list extension; null candidates dispatch as an empty list |
 | `SDL_EVENT_FINGER_DOWN` | `SetTouchState(id, Pressed, pixelPos)`; also `TouchPanel::setTouchDeviceExistsProperty(true)` and `TouchPanel::INTERNAL_onTouchEvent(id, Pressed, x, y, 0, 0)` | `TouchPanel::GetState()`; `GestureDetector::OnPressed` |
 | `SDL_EVENT_FINGER_MOTION` | `SetTouchState(id, Moved, pixelPos)`; `TouchPanel::INTERNAL_onTouchEvent(id, Moved, x, y, dx, dy)` | `TouchPanel::GetState()`; `GestureDetector::OnMoved` |
 | `SDL_EVENT_FINGER_UP` / `SDL_EVENT_FINGER_CANCELED` | `SetTouchState(id, Released, pixelPos)`; `TouchPanel::INTERNAL_onTouchEvent(id, Released, x, y, 0, 0)` | `TouchPanel::GetState()`; `GestureDetector::OnReleased` — both event types share one `case` fallthrough (P5-034/P6 audit), matching FNA's own `SDL_EVENT_FINGER_UP \|\| SDL_EVENT_FINGER_CANCELED` single branch |
@@ -91,7 +91,7 @@ the `default: break;` case).
 | `SDL_EVENT_GAMEPAD_REMOVED` | `SetGamePadConnection(playerIndex, false)` (closes the `SDL_Gamepad`, frees the slot) | `GamePad::GetState(playerIndex).IsConnected` becomes false |
 | `SDL_EVENT_GAMEPAD_BUTTON_DOWN` / `_UP` | `SetGamePadButtonState(playerIndex, button, state)` | `GamePadState.Buttons`/`.DPad` |
 | `SDL_EVENT_GAMEPAD_AXIS_MOTION` | `SetGamePadAxisValue(playerIndex, axis, normalizedValue)` (stick Y axes negated to match XNA's up-positive convention) | `GamePadState.ThumbSticks`/`.Triggers` (raw; dead zone applied by `GamePad::GetState`) |
-| `SDL_EVENT_JOYSTICK_ADDED` / `_REMOVED` | none (bypasses `InputManager` — separate `get_opened_joysticks()` handle map) | `CNA::Input::Joysticks::ConnectedEXT`/`DisconnectedEXT.Invoke(deviceId)` — the raw-joystick NOXNA extension, distinct from `GamePad`'s XNA-mapped view of the same physical device (P7-017/029/P8-013) |
+| `SDL_EVENT_JOYSTICK_ADDED` / `_REMOVED` | none (bypasses `InputManager` — separate `get_opened_joysticks()` handle map) | `CNA::Input::Joysticks::ConnectedEXT`/`DisconnectedEXT.Invoke(deviceId)` — the raw-joystick CNAEXT extension, distinct from `GamePad`'s XNA-mapped view of the same physical device (P7-017/029/P8-013) |
 
 **Intentionally unhandled event types (P8-012/014, confirmed 2026-07-17):**
 - `SDL_EVENT_GAMEPAD_REMAPPED` — FNA itself has no handler for this event either (confirmed: zero
@@ -202,7 +202,7 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
   `TransformLogicalToWindow` (a uniform height-scale with no offset, which is exact for EasyGL's
   `FixedHeightDynamicWidth` model — the logical width tracks the window aspect, so there are no
   bars to offset). Vulkan/bgfx pass through (no logical-presentation scaling).
-- `MouseCursor` (custom + 11 stock system cursors) is a MonoGame-derived `NOXNA` extension — FNA
+- `MouseCursor` (custom + 11 stock system cursors) is a MonoGame-derived `CNAEXT` extension — FNA
   has no `MouseCursor` type at all. Kept as a deliberate, documented status decision (task 754),
   since `Mouse::SetCursor(MouseCursor&)` depends on it and it's the standard way
   MonoGame/FNA-family games set cursors.

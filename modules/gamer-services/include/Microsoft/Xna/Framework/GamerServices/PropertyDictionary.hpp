@@ -280,13 +280,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         void CopyTo(std::vector<std::pair<std::string, std::any>>& array, int arrayIndex) const;
 
         /** @brief Returns an iterator to the beginning of the dictionary. */
-        NOXNA [[nodiscard]] auto begin() { return dictionary_.begin(); }
+        CNAEXT [[nodiscard]] auto begin() { return dictionary_.begin(); }
         /** @brief Returns an iterator past the end of the dictionary. */
-        NOXNA [[nodiscard]] auto end()   { return dictionary_.end(); }
+        CNAEXT [[nodiscard]] auto end()   { return dictionary_.end(); }
         /** @brief Returns a const iterator to the beginning of the dictionary. */
-        NOXNA [[nodiscard]] auto begin() const { return dictionary_.begin(); }
+        CNAEXT [[nodiscard]] auto begin() const { return dictionary_.begin(); }
         /** @brief Returns a const iterator past the end of the dictionary. */
-        NOXNA [[nodiscard]] auto end()   const { return dictionary_.end(); }
+        CNAEXT [[nodiscard]] auto end()   const { return dictionary_.end(); }
 
         /**
          * @brief Creates a PropertyDictionary from the given map.
@@ -294,7 +294,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param dict Initial key-value pairs.
          * @return A new PropertyDictionary wrapping the map.
          */
-        NOXNA static PropertyDictionary CreateInternal(std::map<std::string, std::any> dict);
+        CNAEXT static PropertyDictionary CreateInternal(std::map<std::string, std::any> dict);
 
     private:
         explicit PropertyDictionary(std::map<std::string, std::any> dict);

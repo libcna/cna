@@ -22,7 +22,7 @@ namespace Microsoft::Xna::Framework::Graphics
         System::EventHandler<System::EventArgs> Disposing;
 
         /** @brief Destroys the GraphicsResource and releases renderer resources. */
-        NOXNA ~GraphicsResource() override;
+        CNAEXT ~GraphicsResource() override;
 
         /** @brief Returns the graphics device that owns this resource. */
         [[nodiscard]] GraphicsDevice* getGraphicsDeviceProperty() const;

@@ -637,7 +637,7 @@ namespace CNA::Internal::Renderers::Headless
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
                                        const GpuDrawParams& params) override;
 
-        // ---- Headless-specific, NOXNA-equivalent debug/testing API (plan_headless.md Phase N4/N5) ----
+        // ---- Headless-specific, CNAEXT-equivalent debug/testing API (plan_headless.md Phase N4/N5) ----
 
         /// Sets the runtime validation strictness. Safe to call before or during a run; takes
         /// effect for all subsequent calls.

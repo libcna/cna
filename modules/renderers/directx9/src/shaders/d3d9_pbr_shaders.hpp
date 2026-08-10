@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// D3D9 PBR porting task: real vs_3_0/ps_3_0 bytecode for CNA's own NOXNA "Pbr3D"/"PbrSkinned3D"
+// D3D9 PBR porting task: real vs_3_0/ps_3_0 bytecode for CNA's own CNAEXT "Pbr3D"/"PbrSkinned3D"
 // shaders (src/CNA/Internal/Renderers/DirectX9/shaders/cna/Pbr3D.hlsl,
 // src/CNA/Internal/Renderers/DirectX9/shaders/cna/PbrSkinned3D.hlsl -- see those files' own header
 // comments for the BRDF source and the empirical ps_2_0-fails/ps_3_0-fits finding), compiled

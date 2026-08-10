@@ -40,7 +40,7 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11InputLayout> GetOrCreate(ID3D11Device* device, D3DShaderVariant variant,
                                               std::size_t strideInBytes);
 
-        /// Drops every cached layout (NOXNA -- device-lost recovery, DX-27, will need this once
+        /// Drops every cached layout (CNAEXT -- device-lost recovery, DX-27, will need this once
         /// it does full three-lifetime-group teardown/recreation).
         void Clear() { cache_.clear(); }
 

@@ -22,7 +22,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     /**
      * @brief Scoped, renderer-instance-local failure points used by the SDL_GPU lifetime
-     * regression. NOXNA.
+     * regression. CNAEXT.
      *
      * These hooks deliberately sit above SDL rather than replacing it: successful stages still
      * acquire real SDL_GPU resources, and a selected later stage throws before making its native
@@ -68,7 +68,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         DefaultFlatNormalTextureCreation
     };
 
-    /** @brief Resource categories reported by SdlGpuTestHooksEXT. NOXNA. */
+    /** @brief Resource categories reported by SdlGpuTestHooksEXT. CNAEXT. */
     enum class SdlGpuResourceKindEXT : std::uint8_t
     {
         Device,
@@ -80,7 +80,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         DefaultTexture
     };
 
-    /** @brief Acquisition/release edge reported by SdlGpuTestHooksEXT. NOXNA. */
+    /** @brief Acquisition/release edge reported by SdlGpuTestHooksEXT. CNAEXT. */
     enum class SdlGpuResourceEventEXT : std::uint8_t
     {
         Acquired,
@@ -88,7 +88,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     /**
-     * @brief Optional per-instance test injection and resource-lifetime observation. NOXNA.
+     * @brief Optional per-instance test injection and resource-lifetime observation. CNAEXT.
      *
      * `context` must outlive the renderer when `resourceEvent` is supplied. The callback is
      * noexcept so cleanup can preserve the exception that triggered it.
@@ -102,7 +102,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     /**
-     * @brief The one bindable form of a sampled texture in this renderer (REMED-GFX-152). NOXNA.
+     * @brief The one bindable form of a sampled texture in this renderer (REMED-GFX-152). CNAEXT.
      *
      * A public `Texture2D` and a public `RenderTarget2D` arrive at every draw as the SAME static
      * type, `const ITextureRenderer*`, but their concrete renderers — `SdlGpuTextureRenderer` and
@@ -177,20 +177,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// established convention for this void-returning interface method.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
-        /** @brief Returns the underlying `SDL_GPUTexture`. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
+        /** @brief Returns the underlying `SDL_GPUTexture`. CNAEXT — internal use only. */
+        CNAEXT [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
         /**
-         * @brief Returns the number of mip levels SDL really allocated. NOXNA — REMED-GFX-176.
+         * @brief Returns the number of mip levels SDL really allocated. CNAEXT — REMED-GFX-176.
          *
          * @return The native `num_levels` this texture was created with; never below one.
          */
-        NOXNA [[nodiscard]] int LevelCountEXT() const { return levelCount_; }
+        CNAEXT [[nodiscard]] int LevelCountEXT() const { return levelCount_; }
         /**
-         * @brief Returns this texture as a bindable, lifetime-safe sampled resource. NOXNA.
+         * @brief Returns this texture as a bindable, lifetime-safe sampled resource. CNAEXT.
          *
          * @return The native handle paired with the shared state that keeps it alive.
          */
-        NOXNA [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
+        CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
         /// The one upload path both public entry points share (REMED-GFX-176). @p stride is the
@@ -337,10 +337,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             return depthFormatWasRequested && state_->depthTexture != nullptr;
         }
 
-        /** @brief Returns the sampleable (single-sample, resolved-into-if-MSAA) color texture. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* ColorTexture() const { return state_->colorTexture; }
+        /** @brief Returns the sampleable (single-sample, resolved-into-if-MSAA) color texture. CNAEXT. */
+        CNAEXT [[nodiscard]] SDL_GPUTexture* ColorTexture() const { return state_->colorTexture; }
         /**
-         * @brief Returns this target as a bindable, lifetime-safe sampled resource. NOXNA.
+         * @brief Returns this target as a bindable, lifetime-safe sampled resource. CNAEXT.
          *
          * Always the single-sample colour texture, never `MsaaTexture()`: the multisample
          * attachment is created `COLOR_TARGET`-only and resolves INTO the colour texture at
@@ -348,19 +348,19 @@ namespace CNA::Internal::Renderers::SdlGpu
          *
          * @return The resolved native handle paired with the shared state that keeps it alive.
          */
-        NOXNA [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->colorTexture, state_}; }
-        /** @brief Returns the multisampled render texture, or null when not multisampled. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture() const { return state_->msaaTexture; }
-        /** @brief Returns the depth/stencil texture, or null when `DepthFormat::None` was requested. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return state_->depthTexture; }
-        /** @brief Whether a mip chain should be regenerated after this target's pass each frame. NOXNA. */
-        NOXNA [[nodiscard]] bool WantsMipMap() const { return state_->mipMap; }
+        CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->colorTexture, state_}; }
+        /** @brief Returns the multisampled render texture, or null when not multisampled. CNAEXT. */
+        CNAEXT [[nodiscard]] SDL_GPUTexture* MsaaTexture() const { return state_->msaaTexture; }
+        /** @brief Returns the depth/stencil texture, or null when `DepthFormat::None` was requested. CNAEXT. */
+        CNAEXT [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return state_->depthTexture; }
+        /** @brief Whether a mip chain should be regenerated after this target's pass each frame. CNAEXT. */
+        CNAEXT [[nodiscard]] bool WantsMipMap() const { return state_->mipMap; }
         /**
          * @brief Returns the shared, renderer-internal GPU state this target's actual rendering
          * operates on -- kept alive independent of this wrapper's own lifetime (see
-         * `SdlGpuRenderTarget2DState`'s own doc comment for why). NOXNA.
+         * `SdlGpuRenderTarget2DState`'s own doc comment for why). CNAEXT.
          */
-        NOXNA [[nodiscard]] const std::shared_ptr<SdlGpuRenderTarget2DState>& State() const { return state_; }
+        CNAEXT [[nodiscard]] const std::shared_ptr<SdlGpuRenderTarget2DState>& State() const { return state_; }
         /**
          * @brief Real GPU readback of this target's pixels (`SDLGPU-39`) -- reads from the
          * always-single-sample, sampleable color texture (already resolved-into if this target
@@ -383,9 +383,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          * REMED-GFX-145: the attachment set belongs to the bind CYCLE, not to the target, so it is
          * recorded on the segment rather than on either target's shared state — `{a,b}` followed by
          * `{a,c}` leaves `b` an attachment of the first segment instead of silently dropping it.
-         * NOXNA — internal use only.
+         * CNAEXT — internal use only.
          */
-        NOXNA void AttachToCurrentSegment();
+        CNAEXT void AttachToCurrentSegment();
 
     private:
         SdlGpuRenderer* owner_ = nullptr;
@@ -506,10 +506,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief Returns the single-sample, sampleable cube texture. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return state_->cubeTexture; }
+        /** @brief Returns the single-sample, sampleable cube texture. CNAEXT — internal use only. */
+        CNAEXT [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return state_->cubeTexture; }
         /**
-         * @brief Returns this cube target as a bindable, lifetime-safe sampled resource. NOXNA.
+         * @brief Returns this cube target as a bindable, lifetime-safe sampled resource. CNAEXT.
          *
          * Always the single-sample cube texture that the per-face multisample attachments resolve
          * INTO, never one of those attachments — they are `COLOR_TARGET`-only and are not legal
@@ -518,9 +518,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          *
          * @return The resolved native handle paired with the shared state that keeps it alive.
          */
-        NOXNA [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->cubeTexture, state_}; }
+        CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->cubeTexture, state_}; }
         /**
-         * @brief Returns one cube face's own multisample render texture. NOXNA.
+         * @brief Returns one cube face's own multisample render texture. CNAEXT.
          *
          * REMED-GFX-141: there are six, one per face, where this used to return the single texture
          * every face shared.
@@ -529,29 +529,29 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @return That face's multisample texture, or null when this target is not multisampled or
          *         @p face is out of range.
          */
-        NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture(int face) const
+        CNAEXT [[nodiscard]] SDL_GPUTexture* MsaaTexture(int face) const
         {
             return face >= 0 && face < 6 ? state_->msaaTextures[static_cast<std::size_t>(face)]
                                          : nullptr;
         }
-        /** @brief Native level count of one face's MSAA attachment, or zero when absent. NOXNA. */
-        NOXNA [[nodiscard]] int MsaaLevelCountEXT(int face) const
+        /** @brief Native level count of one face's MSAA attachment, or zero when absent. CNAEXT. */
+        CNAEXT [[nodiscard]] int MsaaLevelCountEXT(int face) const
         {
             return MsaaTexture(face) != nullptr ? state_->msaaLevelCount : 0;
         }
-        /** @brief Returns the shared depth/stencil texture, or null when `DepthFormat::None` was requested. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return state_->depthTexture; }
-        /** @brief Whether the mip chain should be regenerated after this cube's faces render each frame. NOXNA. */
-        NOXNA [[nodiscard]] bool WantsMipMap() const { return state_->mipMap; }
+        /** @brief Returns the shared depth/stencil texture, or null when `DepthFormat::None` was requested. CNAEXT. */
+        CNAEXT [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return state_->depthTexture; }
+        /** @brief Whether the mip chain should be regenerated after this cube's faces render each frame. CNAEXT. */
+        CNAEXT [[nodiscard]] bool WantsMipMap() const { return state_->mipMap; }
         /**
-         * @brief Returns the number of mip levels SDL really allocated for the resolved cube. NOXNA.
+         * @brief Returns the number of mip levels SDL really allocated for the resolved cube. CNAEXT.
          *
          * @return The native `num_levels` used to create the single-sample cube texture.
          */
-        NOXNA [[nodiscard]] int LevelCountEXT() const { return state_->levelCount; }
+        CNAEXT [[nodiscard]] int LevelCountEXT() const { return state_->levelCount; }
         /** @brief Returns the shared, renderer-internal GPU state this cube's rendering operates
-         * on -- kept alive independent of this wrapper's own lifetime. NOXNA. */
-        NOXNA [[nodiscard]] const std::shared_ptr<SdlGpuRenderTargetCubeState>& State() const { return state_; }
+         * on -- kept alive independent of this wrapper's own lifetime. CNAEXT. */
+        CNAEXT [[nodiscard]] const std::shared_ptr<SdlGpuRenderTargetCubeState>& State() const { return state_; }
 
     private:
         SdlGpuRenderer* owner_ = nullptr;
@@ -591,14 +591,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief Returns the underlying `SDL_GPUTexture`. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
+        /** @brief Returns the underlying `SDL_GPUTexture`. CNAEXT — internal use only. */
+        CNAEXT [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
         /**
-         * @brief Returns this cube texture as a bindable, lifetime-safe sampled resource. NOXNA.
+         * @brief Returns this cube texture as a bindable, lifetime-safe sampled resource. CNAEXT.
          *
          * @return The native handle paired with the shared state that keeps it alive.
          */
-        NOXNA [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
+        CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
         SdlGpuRenderer* owner_ = nullptr;
@@ -611,7 +611,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     /**
-     * @brief Resolves any public 2D texture resource to its bindable native form. NOXNA.
+     * @brief Resolves any public 2D texture resource to its bindable native form. CNAEXT.
      *
      * REMED-GFX-152: the ONE place this renderer is allowed to decide what a `const ITextureRenderer*`
      * really is. Every SpriteBatch and stock/custom 3D binding route goes through here, so a
@@ -627,11 +627,11 @@ namespace CNA::Internal::Renderers::SdlGpu
      * @throws std::invalid_argument If @p texture belongs to a different graphics renderer, or to a
      *         resource this renderer cannot expose as a sampleable 2D texture.
      */
-    NOXNA [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledTextureEXT(const ITextureRenderer* texture,
+    CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledTextureEXT(const ITextureRenderer* texture,
                                                                          const char* usage);
 
     /**
-     * @brief Resolves any public cube texture resource to its bindable native form. NOXNA.
+     * @brief Resolves any public cube texture resource to its bindable native form. CNAEXT.
      *
      * The `ITextureCubeRenderer` counterpart of @ref ResolveSampledTextureEXT, covering both an
      * uploaded `TextureCube` and a rendered-into `RenderTargetCube`.
@@ -642,7 +642,7 @@ namespace CNA::Internal::Renderers::SdlGpu
      * @throws std::invalid_argument If @p texture belongs to a different graphics renderer, or to a
      *         resource this renderer cannot expose as a sampleable cube texture.
      */
-    NOXNA [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledCubeEXT(const ITextureCubeRenderer* texture,
+    CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledCubeEXT(const ITextureCubeRenderer* texture,
                                                                       const char* usage);
 
     /** @brief `SDL_gpu`-backed vertex buffer. */
@@ -679,18 +679,18 @@ namespace CNA::Internal::Renderers::SdlGpu
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
-        /** @brief Returns the underlying `SDL_GPUBuffer`. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUBuffer* Buffer() const { return buffer_; }
-        /** @brief Returns the vertex stride in bytes from the most recent `SetData()`. NOXNA. */
-        NOXNA [[nodiscard]] std::size_t Stride() const { return stride_; }
+        /** @brief Returns the underlying `SDL_GPUBuffer`. CNAEXT — internal use only. */
+        CNAEXT [[nodiscard]] SDL_GPUBuffer* Buffer() const { return buffer_; }
+        /** @brief Returns the vertex stride in bytes from the most recent `SetData()`. CNAEXT. */
+        CNAEXT [[nodiscard]] std::size_t Stride() const { return stride_; }
         // CPU-side copy of the most recent SetData() upload -- needed because DrawColoredPrimitives()/
         // DrawPrimitivesEx() render lazily at Present() time, but a caller like
         // GraphicsDevice::DrawUserPrimitives() typically uses a function-local temporary
         // IVertexBufferRenderer already destroyed by then (matches WebGPUVertexBufferRenderer's own
         // ShadowData() rationale).
-        NOXNA [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
-        /** @brief The declaration this buffer carries, for REMED-GFX-DECL-GUARD. NOXNA. */
-        NOXNA [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
+        CNAEXT [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
+        /** @brief The declaration this buffer carries, for REMED-GFX-DECL-GUARD. CNAEXT. */
+        CNAEXT [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
         {
             return declaration_;
         }
@@ -722,10 +722,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
         [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
-        /** @brief Returns the underlying `SDL_GPUBuffer`. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUBuffer* Buffer() const { return buffer_; }
-        /** @brief CPU-side copy of the most recent upload. NOXNA — see SdlGpuVertexBufferRenderer::ShadowData(). */
-        NOXNA [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
+        /** @brief Returns the underlying `SDL_GPUBuffer`. CNAEXT — internal use only. */
+        CNAEXT [[nodiscard]] SDL_GPUBuffer* Buffer() const { return buffer_; }
+        /** @brief CPU-side copy of the most recent upload. CNAEXT — see SdlGpuVertexBufferRenderer::ShadowData(). */
+        CNAEXT [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
     private:
         void Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit, bool cycle);
@@ -794,8 +794,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /** @brief Writes the `[0..15]`-byte vpSize slot -- called once per sprite render by
          * `SdlGpuRenderer::QueueSprite`, mirroring every sibling `EffectRenderer`'s own
-         * "set automatically by the sprite-batch runtime" convention. NOXNA. */
-        NOXNA void SetViewportSizeEXT(float width, float height);
+         * "set automatically by the sprite-batch runtime" convention. CNAEXT. */
+        CNAEXT void SetViewportSizeEXT(float width, float height);
         /** @brief Returns the pipeline for @p colorFormat / @p sampleCount /
          * @p depthStencilFormat / @p colorTargetCount,
          * compiling+caching it on first use. @p colorTargetCount > 1 (real MRT, SDLGPU-37) builds
@@ -807,8 +807,8 @@ namespace CNA::Internal::Renderers::SdlGpu
          * of pipeline compatibility and cache identity (REMED-GFX-097). @p depthBias and
          * @p slopeScaleDepthBias are the queued sprite's by-value rasterizer snapshot and are
          * pipeline-static identity/state (REMED-GFX-051). Null if `CompileProgram()` did not
-         * succeed. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat,
+         * succeed. CNAEXT — internal use only. */
+        CNAEXT [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat,
                                                                           SDL_GPUSampleCount sampleCount,
                                                                           SDL_GPUTextureFormat depthStencilFormat,
                                                                           int colorTargetCount,
@@ -816,15 +816,15 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                                           float depthBias,
                                                                           float slopeScaleDepthBias);
         /** @brief Number of cached custom-effect pipelines. Test-only cache-identity
-         * introspection for REMED-GFX-051. NOXNA. */
-        NOXNA [[nodiscard]] std::size_t GetPipelineCacheSizeEXT() const
+         * introspection for REMED-GFX-051. CNAEXT. */
+        CNAEXT [[nodiscard]] std::size_t GetPipelineCacheSizeEXT() const
         {
             return pipelines_.size();
         }
-        /** @brief Returns a snapshot of the current 128-byte uniform block. NOXNA — internal use
+        /** @brief Returns a snapshot of the current 128-byte uniform block. CNAEXT — internal use
          * only (called once per queued sprite, so later `SetUniform*` calls on the live effect
          * object don't retroactively change an already-queued sprite's rendered result). */
-        NOXNA [[nodiscard]] std::array<float, 32> SnapshotUniforms() const { return pushConst_; }
+        CNAEXT [[nodiscard]] std::array<float, 32> SnapshotUniforms() const { return pushConst_; }
 
     private:
         SdlGpuRenderer* owner_ = nullptr;
@@ -1483,9 +1483,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                               CnaPresentationMode presentationMode, int swapInterval);
         /**
          * @brief Test-only constructor with scoped failure injection and destruction callbacks.
-         * NOXNA. Public renderer selection APIs continue to use the ordinary overload above.
+         * CNAEXT. Public renderer selection APIs continue to use the ordinary overload above.
          */
-        NOXNA SdlGpuRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
+        CNAEXT SdlGpuRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
                                     CnaPresentationMode presentationMode, int swapInterval,
                                     const SdlGpuTestHooksEXT& testHooks);
         /** @brief Releases the window from the `SDL_GPUDevice` and destroys the device. */
@@ -1715,13 +1715,13 @@ namespace CNA::Internal::Renderers::SdlGpu
                                      const GpuDrawParams& params) override;
 
         /**
-         * @brief Queues a sprite quad for drawing on the next render pass. NOXNA — internal use
+         * @brief Queues a sprite quad for drawing on the next render pass. CNAEXT — internal use
          * only. @p texture supplies GetWidth()/GetHeight() for UV math (works for any
          * ITextureRenderer); @p nativeTexture is the raw SDL_GPUTexture* actually bound at render
          * time (Texture2D and RenderTarget2D are unrelated concrete renderer classes, so
          * SdlGpuSpriteBatchRenderer::Draw resolves this once at call time).
          */
-        NOXNA void QueueSprite(const ITextureRenderer& texture, const SdlGpuSampledTextureEXT& nativeTexture,
+        CNAEXT void QueueSprite(const ITextureRenderer& texture, const SdlGpuSampledTextureEXT& nativeTexture,
                                 const Rectangle& destinationRectangle,
                                 const Rectangle& sourceRectangle,
                                 const Color& color,
@@ -1735,34 +1735,34 @@ namespace CNA::Internal::Renderers::SdlGpu
                                 int addressV,
                                 SdlGpuEffectRenderer* customEffect = nullptr);
 
-        /** @brief Returns the underlying `SDL_GPUDevice`. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUDevice* Device() const { return device_; }
+        /** @brief Returns the underlying `SDL_GPUDevice`. CNAEXT — internal use only. */
+        CNAEXT [[nodiscard]] SDL_GPUDevice* Device() const { return device_; }
         /**
          * @brief Whether `SDL_CreateGPUDevice`'s `debug_mode` was requested for this device.
          *
          * Mirrors `DirectX11Renderer::IsDebugLayerEnabledEXT()`'s identical `#ifndef NDEBUG`
          * CNA-side toggle rationale (SDLGPU-6) — a debug build asks the Vulkan driver for
-         * `SDL_gpu`'s own validation layer, a release build does not. NOXNA.
+         * `SDL_gpu`'s own validation layer, a release build does not. CNAEXT.
          */
-        NOXNA [[nodiscard]] bool IsDebugModeEnabledEXT() const { return debugModeEnabled_; }
+        CNAEXT [[nodiscard]] bool IsDebugModeEnabledEXT() const { return debugModeEnabled_; }
         /** @brief Number of cached stock SpriteBatch pipelines. Test-only compatibility/cache
          * cardinality introspection for REMED-GFX-097; target object and cube-face identity must
-         * not increase this count. NOXNA. */
-        NOXNA [[nodiscard]] std::size_t GetSpritePipelineCacheSizeEXT() const
+         * not increase this count. CNAEXT. */
+        CNAEXT [[nodiscard]] std::size_t GetSpritePipelineCacheSizeEXT() const
         {
             return spritePipelines_.size();
         }
         /** @brief Number of cached stock colored-3D pipelines. Test-only pipeline-static
-         * rasterizer-state introspection for REMED-GFX-051. NOXNA. */
-        NOXNA [[nodiscard]] std::size_t GetColoredPipelineCacheSizeEXT() const
+         * rasterizer-state introspection for REMED-GFX-051. CNAEXT. */
+        CNAEXT [[nodiscard]] std::size_t GetColoredPipelineCacheSizeEXT() const
         {
             return coloredPipelines_.size();
         }
         /**
          * @brief Drives the ordinary lazy stock-sprite pipeline and sampler factories without
-         * requiring swapchain presentation. Test-only GFX-028 failure/retry probe. NOXNA.
+         * requiring swapchain presentation. Test-only GFX-028 failure/retry probe. CNAEXT.
          */
-        NOXNA void InitializeSpritePipelineAndSamplerForTestEXT();
+        CNAEXT void InitializeSpritePipelineAndSamplerForTestEXT();
 
     private:
         struct ConstructionResources;

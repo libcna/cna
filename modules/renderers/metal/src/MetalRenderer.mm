@@ -448,7 +448,7 @@ fragment float4 cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], 
     return c;
 }
 
-// NOXNA PBR (plan_metal.md METAL-81/83-86, plan_cnj.md CNB-58), ported line-for-line from
+// CNAEXT PBR (plan_metal.md METAL-81/83-86, plan_cnj.md CNB-58), ported line-for-line from
 // EasyGLRenderer::EnsurePbrProgram()'s real GLSL -- the glTF 2.0 spec's own reference
 // metallic-roughness BRDF (Appendix B.3.2-B.3.4: GGX/Trowbridge-Reitz D, Smith-Schlick-GGX
 // visibility with direct-lighting k=(roughness+1)^2/8, Schlick Fresnel). Tangent transforms as a
@@ -536,7 +536,7 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     return c;
 }
 
-// NOXNA SkinnedPbrEffect (plan_metal.md METAL-82): combines cna_skin_common's real GPU-skinning
+// CNAEXT SkinnedPbrEffect (plan_metal.md METAL-82): combines cna_skin_common's real GPU-skinning
 // blend (position+normal+tangent all transformed by the same per-vertex weighted bone matrix sum,
 // mat3(skinMat) directly -- no separate inverse-transpose normal-matrix step, matching
 // SkinnedEffect's own established precedent, not PBR's unskinned inverse-transpose path) with

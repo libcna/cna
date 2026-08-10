@@ -61,20 +61,20 @@ namespace CNA::Internal::Renderers::Skia
         SDL_Window* GetWindowInternal() const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return renderer_; }
         /// Returns bounded live-resource counters for raster-renderer diagnostics and debug tests.
-        NOXNA [[nodiscard]] SkiaResourceStats GetResourceStatsEXT() const noexcept
+        CNAEXT [[nodiscard]] SkiaResourceStats GetResourceStatsEXT() const noexcept
         {
             return resourceCounters_ ? resourceCounters_->GetStats() : SkiaResourceStats{};
         }
         /// Returns the exact stable line emitted once after successful renderer construction.
-        NOXNA [[nodiscard]] std::string_view GetStartupDiagnosticEXT() const noexcept
+        CNAEXT [[nodiscard]] std::string_view GetStartupDiagnosticEXT() const noexcept
         {
             return kSkiaStartupDiagnostic;
         }
         /// Actual SDL presenter interval after any supported-driver clamp (2 may become 1).
-        NOXNA [[nodiscard]] int GetSwapIntervalEXT() const noexcept { return swapInterval_; }
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const noexcept { return swapInterval_; }
         /// Deterministic minimized/zero-output seam; does not alter the real SDL window.
-        NOXNA void DebugSetPresentationOutputSizeEXT(int width, int height);
-        NOXNA void DebugClearPresentationOutputSizeEXT();
+        CNAEXT void DebugSetPresentationOutputSizeEXT(int width, int height);
+        CNAEXT void DebugClearPresentationOutputSizeEXT();
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(

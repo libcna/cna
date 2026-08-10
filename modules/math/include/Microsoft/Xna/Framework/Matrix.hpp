@@ -966,7 +966,7 @@ namespace Microsoft::Xna::Framework
          *
          * @param out Array of 16 floats that receives the column-major matrix data.
          */
-        NOXNA void ToColumnMajor(float out[16]) const;
+        CNAEXT void ToColumnMajor(float out[16]) const;
 
     private:
         [[nodiscard]] std::string getDebugDisplayStringProperty() const;

@@ -6,14 +6,14 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — the glyph printed on a gamepad face button for the connected controller type.
+     * @brief CNAEXT — the glyph printed on a gamepad face button for the connected controller type.
      *
      * XNA 4.0 exposes only positional button names (A/B/X/Y); the printed label differs by controller
      * family (Xbox uses A/B/X/Y, PlayStation uses cross/circle/square/triangle, Nintendo swaps A/B and
      * X/Y). This CNA extension lets UI prompts show the correct glyph. It mirrors SDL3's
      * `SDL_GamepadButtonLabel`.
      */
-    NOXNA enum class GamePadButtonLabelEXT
+    CNAEXT enum class GamePadButtonLabelEXT
     {
         /** @brief No known label (non-face button, or the controller type is unknown). */
         Unknown,

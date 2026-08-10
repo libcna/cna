@@ -115,7 +115,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         void SetSamplerAddressMode(int addressU, int addressV) override;
 
         /**
-         * @brief NOXNA. Records whether the current batch is SpriteSortMode::Immediate.
+         * @brief CNAEXT. Records whether the current batch is SpriteSortMode::Immediate.
          *
          * plan_html_dom.md HTMLDOM-118: called by SpriteBatch::Begin(), before Begin() itself, with
          * the sort mode actually requested for this batch. When true, each subsequent Draw() flushes
@@ -175,11 +175,11 @@ namespace CNA::Internal::Renderers::HtmlDom
                   SpriteEffects effects,
                   float layerDepth) override;
 
-        /** @brief NOXNA. True between Begin() and End(). */
+        /** @brief CNAEXT. True between Begin() and End(). */
         [[nodiscard]] bool IsBegun() const { return begun_; }
 
         /**
-         * @brief NOXNA. Returns the commands queued so far, for tests and diagnostics.
+         * @brief CNAEXT. Returns the commands queued so far, for tests and diagnostics.
          *
          * @return The batch's command array; empty outside a Begin()/End() block that drew.
          */

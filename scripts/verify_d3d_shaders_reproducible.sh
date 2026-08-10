@@ -12,7 +12,7 @@
 #        flags : D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3
 #        script: compile_shaders_hlsl.py
 #
-#   2. D3D9 (custom NOXNA shaders)  d3d9_pbr_shaders.hpp / d3d9_skinned_vertex_color_shader.hpp
+#   2. D3D9 (custom CNAEXT shaders)  d3d9_pbr_shaders.hpp / d3d9_skinned_vertex_color_shader.hpp
 #        tool  : modules/renderers/directx9/src/shaders/fxc_tool.cpp (D3DCompile)
 #        DLL   : REAL Microsoft d3dcompiler_47.dll in ~/.wine-cna-d3d9-spike
 #        flags : D3DCOMPILE_OPTIMIZATION_LEVEL3, profiles vs_3_0/ps_3_0
@@ -72,7 +72,7 @@ else
 fi
 echo
 
-# ============================ 2. D3D9 custom NOXNA shaders ============================
+# ============================ 2. D3D9 custom CNAEXT shaders ============================
 if [ "$D3DCOMMON_ONLY" -eq 0 ]; then
   echo "=== D3D9 custom (real Microsoft d3dcompiler_47.dll, ~/.wine-cna-d3d9-spike): no-change regen ==="
   if [ ! -f "$HOME/.wine-cna-d3d9-spike/system.reg" ]; then

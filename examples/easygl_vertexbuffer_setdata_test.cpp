@@ -4,7 +4,7 @@
 // Tests:
 //   1. SetData(data, startIndex=3, elementCount=6) — uploads a slice of a 9-element array.
 //   2. SetData(data, startIndex=0, elementCount=6) — partial fill of a 12-vertex buffer.
-//   3. SetDataRaw with explicit stride — verifies NOXNA raw upload path.
+//   3. SetDataRaw with explicit stride — verifies CNAEXT raw upload path.
 //   4. DynamicVertexBuffer::SetData with SetDataOptions — options accepted without crash.
 //   5. getBufferUsageProperty / getVertexCountProperty / getVertexDeclarationProperty.
 //   6. IndexBuffer getBufferUsageProperty / getIndexElementSizeProperty / getIndexCountProperty.
@@ -102,7 +102,7 @@ protected:
                     "SetData(startIndex=0, count=6): capacity stays 12");
         }
 
-        // 3. NOXNA ctor + SetDataRaw with explicit stride
+        // 3. CNAEXT ctor + SetDataRaw with explicit stride
         {
             VertexBuffer vb(dev, 6);
             struct Compact { float x, y, z; std::uint8_t r, g, b, a; };

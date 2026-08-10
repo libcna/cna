@@ -245,7 +245,7 @@ namespace
         return gamepadToPlayerIndex;
     }
 
-    // NOXNA/EXT (input_noxna.md N-007): every connected raw joystick, opened for as long as it stays
+    // CNAEXT/EXT (input_noxna.md N-007): every connected raw joystick, opened for as long as it stays
     // connected. Deliberately independent of the gamepad slot map above — a device SDL also maps as a
     // gamepad is opened here too, so CNA::Input::Joysticks stays a complete, unmapped view.
     std::unordered_map<SDL_JoystickID, SDL_Joystick*>& get_opened_joysticks()
@@ -1280,7 +1280,7 @@ namespace CNA::Internal::Input
         }
     }
 
-    // NOXNA/EXT (input_noxna.md N-007): SDL_JoystickType -> the raw-joystick CNA::Input enum. Distinct
+    // CNAEXT/EXT (input_noxna.md N-007): SDL_JoystickType -> the raw-joystick CNA::Input enum. Distinct
     // from sdl_joystick_type_to_gamepad_type above (that one maps into XNA's GamePadType for mapped
     // pads; this one is the unmapped CNA::Input::Joysticks surface).
     static CNA::Input::JoystickTypeEXT sdl_joystick_type_to_ext(SDL_JoystickType t)
@@ -1301,7 +1301,7 @@ namespace CNA::Internal::Input
         }
     }
 
-    // NOXNA/EXT (input_noxna.md N-007): SDL's SDL_HAT_* bitmask -> the 9-value hat-position enum.
+    // CNAEXT/EXT (input_noxna.md N-007): SDL's SDL_HAT_* bitmask -> the 9-value hat-position enum.
     static CNA::Input::JoystickHatPositionEXT sdl_hat_to_ext(const Uint8 hat)
     {
         using CNA::Input::JoystickHatPositionEXT;
@@ -1682,14 +1682,14 @@ namespace CNA::Internal::Input
             InputManager::AddScrollWheelDelta(
                 static_cast<int>(event.wheel.y) * 120
             );
-            // Horizontal wheel = a NOXNA/EXT extension (XNA/FNA have no horizontal member). Previously
+            // Horizontal wheel = a CNAEXT/EXT extension (XNA/FNA have no horizontal member). Previously
             // dropped (DEC-18); now surfaced via MouseState::getHorizontalScrollWheelValueEXTProperty. Same
             // cast-then-scale-by-120 truncation as the vertical wheel so it stays a clean notch multiple.
             InputManager::AddHorizontalScrollWheelDelta(
                 static_cast<int>(event.wheel.x) * 120
             );
             break;
-        // NOXNA/EXT (input_noxna.md N-017b): device hot-plug events routed to CNA::Input::InputDevices.
+        // CNAEXT/EXT (input_noxna.md N-017b): device hot-plug events routed to CNA::Input::InputDevices.
         case SDL_EVENT_MOUSE_ADDED:
             CNA::Input::InputDevices::MouseConnectedEXT.Invoke(event.mdevice.which);
             break;
@@ -1828,7 +1828,7 @@ namespace CNA::Internal::Input
             }
         case SDL_EVENT_TEXT_EDITING_CANDIDATES:
             {
-                // NOXNA/EXT (input_noxna.md N-014): SDL3-new IME candidate list. Decode the
+                // CNAEXT/EXT (input_noxna.md N-014): SDL3-new IME candidate list. Decode the
                 // SDL-owned string array into UTF-8 std::strings before the event is recycled.
                 std::vector<std::string> candidates;
                 const int count = event.edit_candidates.candidates != nullptr
@@ -1971,7 +1971,7 @@ namespace CNA::Internal::Input
                 InputManager::SetGamePadConnection(playerIndex.value(), false);
                 break;
             }
-        // NOXNA/EXT (input_noxna.md N-007): raw joystick hot-plug, routed to CNA::Input::Joysticks.
+        // CNAEXT/EXT (input_noxna.md N-007): raw joystick hot-plug, routed to CNA::Input::Joysticks.
         // Every connected joystick is opened here — including devices SDL also maps as a gamepad
         // above — so raw axis/button/hat/trackball state stays queryable independent of GamePad.
         // Axis/button/hat/ball motion events need no handling: SDL's own event pump already updates

@@ -6,11 +6,11 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — which force-feedback effect family a `HapticEffectEXT` describes. Mirrors
+     * @brief CNAEXT — which force-feedback effect family a `HapticEffectEXT` describes. Mirrors
      *        SDL3's individual `SDL_HAPTIC_*` effect-type constants (as opposed to the capability
      *        bitmask, see `HapticFeatureEXT`).
      */
-    NOXNA enum class HapticEffectTypeEXT
+    CNAEXT enum class HapticEffectTypeEXT
     {
         /** @brief A steady directional push (`SDL_HAPTIC_CONSTANT`). */
         Constant,

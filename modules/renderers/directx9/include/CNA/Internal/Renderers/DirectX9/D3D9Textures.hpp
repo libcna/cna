@@ -39,11 +39,11 @@ namespace CNA::Internal::Renderers::DirectX9
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
-        /// Real mip level count this texture was allocated with (NOXNA diagnostics).
+        /// Real mip level count this texture was allocated with (CNAEXT diagnostics).
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
         /// Raw IDirect3DTexture9* for tests/diagnostics -- since this is D3DPOOL_MANAGED, tests
         /// may LockRect it directly for readback (D9-4's own confirmed payoff), no staging
-        /// texture dance needed (NOXNA).
+        /// texture dance needed (CNAEXT).
         [[nodiscard]] IDirect3DTexture9* GetTextureEXT() const { return texture_.Get(); }
 
     private:

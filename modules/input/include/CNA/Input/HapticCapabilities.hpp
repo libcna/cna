@@ -9,9 +9,9 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — the static hardware shape of an opened haptic device.
+     * @brief CNAEXT — the static hardware shape of an opened haptic device.
      */
-    NOXNA struct HapticCapabilitiesEXT
+    CNAEXT struct HapticCapabilitiesEXT
     {
         /** @brief True if the device handle is currently open. */
         bool isOpen = false;

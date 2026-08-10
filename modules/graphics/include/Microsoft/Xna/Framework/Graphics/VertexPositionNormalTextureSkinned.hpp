@@ -20,11 +20,11 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief Describes a GPU-skinned vertex: position, normal, one texture coordinate,
      * and up to four bone blend weights/indices.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. CNA extension used by the real-rendering
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension used by the real-rendering
      * Avatar path (see AvatarRenderer::EnableRealRenderingEXT) and any other game code that
      * hand-builds GPU-skinned meshes. Real XNA has no public skinned-vertex struct.
      */
-    NOXNA struct VertexPositionNormalTextureSkinned : public IVertexType
+    CNAEXT struct VertexPositionNormalTextureSkinned : public IVertexType
     {
         /** @brief Position of the vertex in object space. */
         Microsoft::Xna::Framework::Vector3 Position;

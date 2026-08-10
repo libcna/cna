@@ -3,14 +3,14 @@
 // Task VERIFY-003/DEV-API-002: a compile-only check that the genuine XNA 4.0/
 // WP7 `Microsoft::Devices`/`Microsoft::Devices::Sensors` API surface remains
 // fully usable when `CNA_STRICT_XNA_API` is defined (see
-// `include/CNA/CNAHelper.hpp`'s `NOXNA` macro, which expands to
+// `include/CNA/CNAHelper.hpp`'s `CNAEXT` macro, which expands to
 // `[[deprecated]]` instead of nothing under that macro). This translation
 // unit is compiled with `-Werror=deprecated-declarations` (see
 // `CMakeLists.txt`'s `cna_strict_xna_api_check` target) specifically so it
 // FAILS TO BUILD if it — or, more importantly, a future edit to this file —
-// ever calls a `NOXNA`-tagged member. It deliberately calls ONLY members this
+// ever calls a `CNAEXT`-tagged member. It deliberately calls ONLY members this
 // plan's own audits (`DEV-API-001`/`DEV-API-004`/`READINGS-001`/`READINGS-002`)
-// confirmed are genuinely real XNA/WP7 API, never a `NOXNA` one, so that a
+// confirmed are genuinely real XNA/WP7 API, never a `CNAEXT` one, so that a
 // clean build of this file is itself evidence the real API surface is
 // unaffected by strict mode.
 //
@@ -21,12 +21,12 @@
 //
 // Deliberately NOT calling: VibrateController::getIsSupportedProperty()/
 // getDeviceNameProperty()/StartLeftRight()/the intensity Start() overload
-// (all NOXNA); Accelerometer::InjectSyntheticSensorUpdate()/*ForTesting()
-// (all NOXNA); Gyroscope/Compass/Motion::getStateProperty() (NOXNA on those
+// (all CNAEXT); Accelerometer::InjectSyntheticSensorUpdate()/*ForTesting()
+// (all CNAEXT); Gyroscope/Compass/Motion::getStateProperty() (CNAEXT on those
 // three specifically — only Accelerometer::getStateProperty() is real, see
 // `DEV-API-003`'s resolution in plan_devices.md); any reading struct's
-// operator==/operator!=/ToString()/GetHashCode() (all NOXNA per
-// `DEV-API-004`); SensorBase<T>::TimeBetweenUpdatesChanged (NOXNA per
+// operator==/operator!=/ToString()/GetHashCode() (all CNAEXT per
+// `DEV-API-004`); SensorBase<T>::TimeBetweenUpdatesChanged (CNAEXT per
 // `SENSORBASE-007`).
 
 #include "Microsoft/Devices/VibrateController.hpp"

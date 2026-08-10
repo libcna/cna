@@ -23,7 +23,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * The matrix is row-major: `out[row] = dot(matrix[row], inRGBA) + offset[row]`. Every output
      * component is clamped to [0,1]. The default is the identity transform.
      */
-    NOXNA class ColorMatrixEffect final : public Effect
+    CNAEXT class ColorMatrixEffect final : public Effect
     {
     public:
         /** @brief Constructs an identity colour transform for @p device. */
@@ -33,22 +33,22 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] Effect* Clone() override;
 
         /** @brief Returns CNA's fully qualified type name for this extension. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Replaces the row-major 4×4 RGBA transform matrix; all values must be finite. */
-        NOXNA void SetColorMatrix(const std::array<float, 16>& rowMajor);
+        CNAEXT void SetColorMatrix(const std::array<float, 16>& rowMajor);
         /** @brief Returns the current row-major 4×4 RGBA transform matrix. */
-        NOXNA [[nodiscard]] const std::array<float, 16>& GetColorMatrix() const;
+        CNAEXT [[nodiscard]] const std::array<float, 16>& GetColorMatrix() const;
 
         /** @brief Replaces the finite RGBA value added after the matrix multiplication. */
-        NOXNA void SetColorOffset(const Vector4& offset);
+        CNAEXT void SetColorOffset(const Vector4& offset);
         /** @brief Returns the current post-matrix RGBA offset. */
-        NOXNA [[nodiscard]] Vector4 GetColorOffset() const;
+        CNAEXT [[nodiscard]] Vector4 GetColorOffset() const;
 
         /** @brief Sets Rec. 709 grayscale RGB rows and preserves alpha unchanged. */
-        NOXNA void SetGrayscale();
+        CNAEXT void SetGrayscale();
         /** @brief Restores the identity matrix and zero offset. */
-        NOXNA void Reset();
+        CNAEXT void Reset();
 
         /**
          * @brief Copies this fixed effect's state into a CPU SpriteBatch draw description.
@@ -57,7 +57,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * `Effect::FillGpuDrawParams()` is intentionally not overridden, so this extension cannot
          * accidentally alter a 3D draw.
          */
-        NOXNA void FillSpriteDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const;
+        CNAEXT void FillSpriteDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const;
 
     protected:
         /** @brief No GPU program exists for this fixed CPU effect. */

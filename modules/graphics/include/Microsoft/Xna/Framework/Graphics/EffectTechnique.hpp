@@ -77,10 +77,10 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return The identity token, unique per constructed EffectTechnique instance.
          *
-         * @note NOXNA — FNA's equivalent (`TechniquePointer`) is an internal implementation
+         * @note CNAEXT — FNA's equivalent (`TechniquePointer`) is an internal implementation
          * detail with no public C++ analogue needed here.
          */
-        NOXNA [[nodiscard]] std::uint64_t getIdInternal() const;
+        CNAEXT [[nodiscard]] std::uint64_t getIdInternal() const;
 
     private:
         static std::uint64_t NextId();

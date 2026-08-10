@@ -25,6 +25,6 @@ namespace Microsoft::Devices::Sensors
          *
          * @return "Microsoft.Devices.Sensors.CalibrationEventArgs"
          */
-        NOXNA [[nodiscard]] std::string GetTypeName() const;
+        CNAEXT [[nodiscard]] std::string GetTypeName() const;
     };
 } // namespace Microsoft::Devices::Sensors

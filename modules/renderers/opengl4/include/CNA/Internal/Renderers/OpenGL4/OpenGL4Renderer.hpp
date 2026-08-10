@@ -77,7 +77,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         void BindGL(int /*unit*/) const override;
 
-        NOXNA [[nodiscard]] unsigned int GLHandle() const { return texture_; }
+        CNAEXT [[nodiscard]] unsigned int GLHandle() const { return texture_; }
 
     private:
         unsigned int texture_ = 0;
@@ -334,17 +334,17 @@ namespace CNA::Internal::Renderers::OpenGL4
         /// declaration also feeds the REMED-GFX-DECL-GUARD fidelity check at draw time.
         void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override;
 
-        NOXNA [[nodiscard]] unsigned int VaoHandle() const { return vao_; }
-        NOXNA [[nodiscard]] unsigned int VboHandle() const { return vbo_; }
-        NOXNA [[nodiscard]] std::size_t GetStrideInBytes() const { return strideInBytes_; }
+        CNAEXT [[nodiscard]] unsigned int VaoHandle() const { return vao_; }
+        CNAEXT [[nodiscard]] unsigned int VboHandle() const { return vbo_; }
+        CNAEXT [[nodiscard]] std::size_t GetStrideInBytes() const { return strideInBytes_; }
         /// plan_opengl4.md GL4-33: the declaration set via SetVertexDeclaration(), or empty if
         /// none was ever supplied (this buffer uses the fixed stride-keyed layout instead).
-        NOXNA [[nodiscard]] const std::vector<VertexElement>& GetDeclarationElements() const
+        CNAEXT [[nodiscard]] const std::vector<VertexElement>& GetDeclarationElements() const
         {
             return declaration_.GetElements();
         }
         /// REMED-GFX-DECL-GUARD: the remembered declaration for the draw-time fidelity check.
-        NOXNA [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout&
+        CNAEXT [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout&
         GetDeclarationEXT() const { return declaration_; }
 
     private:
@@ -405,7 +405,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
         [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
-        NOXNA [[nodiscard]] unsigned int IboHandle() const { return ibo_; }
+        CNAEXT [[nodiscard]] unsigned int IboHandle() const { return ibo_; }
 
     private:
         unsigned int ibo_ = 0;
@@ -430,7 +430,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         void End() override;
         void SetTransformMatrix(const Matrix& m) override { transform_ = m; }
         /// plan_opengl4.md GL4-32: lets a custom Microsoft::Xna::Framework::Graphics::ShaderEffect
-        /// (NOXNA) drive 2D SpriteBatch rendering instead of the built-in sprite program, mirroring
+        /// (CNAEXT) drive 2D SpriteBatch rendering instead of the built-in sprite program, mirroring
         /// EasyGLRenderer::SetCustomEffect's own shape.
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override { pendingFilter_ = textureFilter; }
@@ -545,7 +545,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         /// plan_opengl4.md GL4-30: compiles a caller-supplied GLSL 410 core vertex+fragment
-        /// source pair for a custom Microsoft::Xna::Framework::Graphics::ShaderEffect (NOXNA).
+        /// source pair for a custom Microsoft::Xna::Framework::Graphics::ShaderEffect (CNAEXT).
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
 
@@ -645,16 +645,16 @@ namespace CNA::Internal::Renderers::OpenGL4
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
 
-        /// NOXNA: physical window size, used by the SpriteBatch renderer to size its ortho projection.
-        NOXNA void GetPhysicalSize(int& width, int& height) const;
-        /// NOXNA: logical (virtual) size, honoring FixedHeightDynamicWidth (mirrors EasyGL).
-        NOXNA void GetLogicalSize(int& width, int& height) const;
-        /// NOXNA: compiles (once) and returns the built-in textured-quad sprite program.
-        NOXNA OpenGL4RawProgram& GetOrCreateSpriteProgram();
-        /// NOXNA: reports the currently-bound RenderTarget2D's size (mirrors
+        /// CNAEXT: physical window size, used by the SpriteBatch renderer to size its ortho projection.
+        CNAEXT void GetPhysicalSize(int& width, int& height) const;
+        /// CNAEXT: logical (virtual) size, honoring FixedHeightDynamicWidth (mirrors EasyGL).
+        CNAEXT void GetLogicalSize(int& width, int& height) const;
+        /// CNAEXT: compiles (once) and returns the built-in textured-quad sprite program.
+        CNAEXT OpenGL4RawProgram& GetOrCreateSpriteProgram();
+        /// CNAEXT: reports the currently-bound RenderTarget2D's size (mirrors
         /// EasyGLRenderer::GetCurrentRenderTarget2DSize). Returns false (leaving width/
         /// height untouched) when no render target is currently bound.
-        NOXNA [[nodiscard]] bool GetCurrentRenderTarget2DSize(int& width, int& height) const;
+        CNAEXT [[nodiscard]] bool GetCurrentRenderTarget2DSize(int& width, int& height) const;
 
     private:
         void EnsureColored3DProgram();

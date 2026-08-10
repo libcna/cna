@@ -17,15 +17,15 @@ namespace Microsoft::Xna::Framework::Media
     {
     public:
         /** @brief Creates an empty media queue with no active song. */
-        NOXNA MediaQueue();
+        CNAEXT MediaQueue();
 
-        NOXNA MediaQueue(const MediaQueue&) = delete;
-        NOXNA MediaQueue& operator=(const MediaQueue&) = delete;
-        NOXNA MediaQueue(MediaQueue&&) = default;
-        NOXNA MediaQueue& operator=(MediaQueue&&) = default;
+        CNAEXT MediaQueue(const MediaQueue&) = delete;
+        CNAEXT MediaQueue& operator=(const MediaQueue&) = delete;
+        CNAEXT MediaQueue(MediaQueue&&) = default;
+        CNAEXT MediaQueue& operator=(MediaQueue&&) = default;
 
         /** @brief Destroys the media queue. */
-        NOXNA ~MediaQueue() override = default;
+        CNAEXT ~MediaQueue() override = default;
 
         /**
          * @brief Gets the currently active song, or nullptr when the queue is empty.
@@ -68,13 +68,13 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param song Song to add.
          */
-        NOXNA void Add(Song* song);
+        CNAEXT void Add(Song* song);
 
         /** @brief Clears all songs from the queue and resets the active index. */
-        NOXNA void Clear();
+        CNAEXT void Clear();
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         std::vector<std::unique_ptr<Song>> songs_;

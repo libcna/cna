@@ -29,7 +29,7 @@ namespace Microsoft::Xna::Framework::Media
          * @param fileName File path to the audio file.
          * @param name     Optional display name; defaults to the file name.
          */
-        NOXNA explicit Song(std::string fileName, std::string name = {});
+        CNAEXT explicit Song(std::string fileName, std::string name = {});
 
         /**
          * @brief Creates a song from a local file path, asset name, and duration in milliseconds.
@@ -38,10 +38,10 @@ namespace Microsoft::Xna::Framework::Media
          * @param assetName  Asset/display name for this song.
          * @param durationMS Song duration in milliseconds.
          */
-        NOXNA Song(std::string fileName, std::string assetName, SharpRuntime::intcs durationMS);
+        CNAEXT Song(std::string fileName, std::string assetName, SharpRuntime::intcs durationMS);
 
         /** @brief Destroys the song and releases any associated resources. */
-        NOXNA ~Song() override;
+        CNAEXT ~Song() override;
 
         /**
          * @brief Gets the display name of this song.
@@ -90,7 +90,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param value New duration.
          */
-        NOXNA void setDurationProperty(System::TimeSpan value);
+        CNAEXT void setDurationProperty(System::TimeSpan value);
 
         /**
          * @brief Gets a value that indicates whether the song is DRM protected content.
@@ -128,7 +128,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param value New play count.
          */
-        NOXNA void setPlayCountProperty(SharpRuntime::intcs value);
+        CNAEXT void setPlayCountProperty(SharpRuntime::intcs value);
 
         /**
          * @brief Gets the user's rating for the Song, on XNA's 0-10 scale.
@@ -196,7 +196,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @return Handle/path string.
          */
-        NOXNA [[nodiscard]] const std::string& getHandle() const;
+        CNAEXT [[nodiscard]] const std::string& getHandle() const;
 
         /**
          * @brief Constructs a song from a local URI/path string.
@@ -208,7 +208,7 @@ namespace Microsoft::Xna::Framework::Media
         static Song* FromUri(const std::string& name, const std::string& uri);
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns whether two songs are equal. */
         friend bool operator==(const Song& song1, const Song& song2);
@@ -222,7 +222,7 @@ namespace Microsoft::Xna::Framework::Media
         // the write path internal instead of widening the public XNA surface with a non-XNA setter
         // (plan_media.md MEDIA-175) -- same approach VideoPlayer already uses to reach
         // Video::parent_.
-        NOXNA friend class MediaLibrary;
+        CNAEXT friend class MediaLibrary;
 
     private:
         // Non-owning back-pointers into the MediaLibrary that produced this song; null for any

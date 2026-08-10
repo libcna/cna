@@ -97,18 +97,18 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 
         /// Real sampleable IDirect3DTexture9 -- the color texture itself when single-sample, or the
-        /// post-StretchRect-resolve copy when MSAA (NOXNA, tests/diagnostics/future shader binding).
+        /// post-StretchRect-resolve copy when MSAA (CNAEXT, tests/diagnostics/future shader binding).
         [[nodiscard]] IDirect3DTexture9* GetTextureEXT() const { return colorTexture_.Get(); }
-        /// Real level-0 IDirect3DSurface9 of GetTextureEXT() (NOXNA).
+        /// Real level-0 IDirect3DSurface9 of GetTextureEXT() (CNAEXT).
         [[nodiscard]] IDirect3DSurface9* GetColorSurfaceEXT() const { return colorSurface_.Get(); }
         /// D9-54: the surface actually bound as the render target (the offscreen MSAA surface when
         /// MSAA, else the same as GetColorSurfaceEXT()) -- what an MRT bind should pass to
-        /// SetRenderTarget(), same selection BindAsRenderTarget() itself already makes (NOXNA).
+        /// SetRenderTarget(), same selection BindAsRenderTarget() itself already makes (CNAEXT).
         [[nodiscard]] IDirect3DSurface9* GetActiveColorSurfaceEXT() const
         {
             return (appliedMultiSampleCount_ > 1 ? msaaSurface_ : colorSurface_).Get();
         }
-        /// Real depth-stencil surface, or null if no depth format was requested (NOXNA).
+        /// Real depth-stencil surface, or null if no depth format was requested (CNAEXT).
         [[nodiscard]] IDirect3DSurface9* GetDepthStencilSurfaceEXT() const { return depthStencilSurface_.Get(); }
 
         /// D9-40/D9-53: releases the D3DPOOL_DEFAULT color texture/MSAA surface/depth-stencil
@@ -124,7 +124,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// them, without also binding this target -- an MRT bind (DirectX9Renderer::
         /// SetRenderTargets()) needs each target's surfaces ready before it builds its own
         /// SetRenderTarget() call sequence, unlike a single-target bind which can just call
-        /// BindAsRenderTarget() directly (NOXNA).
+        /// BindAsRenderTarget() directly (CNAEXT).
         void EnsureReadyEXT() { if (!colorTexture_) Recreate(); }
 
     private:
@@ -163,7 +163,7 @@ namespace CNA::Internal::Renderers::DirectX9
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
 
-        /// Real IDirect3DCubeTexture9 (NOXNA).
+        /// Real IDirect3DCubeTexture9 (CNAEXT).
         [[nodiscard]] IDirect3DCubeTexture9* GetTextureEXT() const { return texture_.Get(); }
 
         /**

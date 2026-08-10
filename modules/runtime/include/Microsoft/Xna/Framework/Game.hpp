@@ -206,29 +206,29 @@ namespace Microsoft::Xna::Framework
          * @brief Returns the fully-qualified .NET type name of this class.
          * @return A const reference to the type name string.
          */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Compatibility helper used by existing CNA examples.
          * @return The current target frames per second.
          */
-        [[nodiscard]] NOXNA double getTargetFPSProperty() const;
+        [[nodiscard]] CNAEXT double getTargetFPSProperty() const;
 
         /**
          * @brief Compatibility helper used by existing CNA examples.
          * @return The current target milliseconds per frame.
          */
-        [[nodiscard]] NOXNA double getTargetMsFrameTimeProperty() const;
+        [[nodiscard]] CNAEXT double getTargetMsFrameTimeProperty() const;
 
         /**
          * @brief Converts frames-per-second to milliseconds per frame.
          * @param framesPerSecond The frame rate to convert.
          * @return The equivalent milliseconds per frame.
          */
-        [[nodiscard]] NOXNA static double fpsToMillisecondsPerFrame(SharpRuntime::intcs framesPerSecond);
+        [[nodiscard]] CNAEXT static double fpsToMillisecondsPerFrame(SharpRuntime::intcs framesPerSecond);
 
         /** @brief Internal loop flag matching the FNA/XNA Game implementation shape. */
-        NOXNA bool RunApplication;
+        CNAEXT bool RunApplication;
 
     protected:
         /** @brief Called before the game loop starts. */

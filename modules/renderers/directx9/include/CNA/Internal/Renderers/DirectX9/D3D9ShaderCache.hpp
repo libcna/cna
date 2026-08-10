@@ -40,12 +40,12 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-74: eagerly creates every one of the 66 embedded shaders through the live device --
         /// the real per-task verification this row's own plan text asks for ("test creates all 66
         /// through a live device"), and a legitimate warm-cache convenience for a future consumer
-        /// that would rather pay shader-creation cost once up front than on first use. NOXNA.
+        /// that would rather pay shader-creation cost once up front than on first use. CNAEXT.
         void CreateAllEXT();
 
-        /// Number of distinct vertex shaders created so far (NOXNA diagnostics/tests).
+        /// Number of distinct vertex shaders created so far (CNAEXT diagnostics/tests).
         [[nodiscard]] size_t GetCachedVertexShaderCountEXT() const { return vertexShaders_.size(); }
-        /// Number of distinct pixel shaders created so far (NOXNA diagnostics/tests).
+        /// Number of distinct pixel shaders created so far (CNAEXT diagnostics/tests).
         [[nodiscard]] size_t GetCachedPixelShaderCountEXT() const { return pixelShaders_.size(); }
 
     private:

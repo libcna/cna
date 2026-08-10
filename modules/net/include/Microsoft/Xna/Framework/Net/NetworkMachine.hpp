@@ -28,7 +28,7 @@ namespace Microsoft::Xna::Framework::Net
         void RemoveFromSession();
 
         /** @brief Creates a NetworkMachine for CNA internal use. */
-        NOXNA static NetworkMachine CreateInternal();
+        CNAEXT static NetworkMachine CreateInternal();
 
     private:
         NetworkMachine();

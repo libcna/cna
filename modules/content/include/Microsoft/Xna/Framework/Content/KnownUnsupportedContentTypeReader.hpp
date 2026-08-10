@@ -9,13 +9,13 @@
 namespace Microsoft::Xna::Framework::Content
 {
     /**
-     * @brief NOXNA reason a recognized `.xnb` type-reader name is deliberately unsupported.
+     * @brief CNAEXT reason a recognized `.xnb` type-reader name is deliberately unsupported.
      *
      * Extend as later phases identify further known-but-out-of-scope readers -- this is not
      * meant to grow unbounded; each value should map to a real, documented scope decision
      * (see plan_xnb.md/cnj.md for the general `EffectReader` case this was introduced for).
      */
-    enum class NOXNA UnsupportedContentReaderReason
+    enum class CNAEXT UnsupportedContentReaderReason
     {
         /**
          * @brief The general `Microsoft.Xna.Framework.Content.EffectReader` (compiled
@@ -25,11 +25,11 @@ namespace Microsoft::Xna::Framework::Content
     };
 
     /**
-     * @brief NOXNA placeholder reader for a `.xnb` type-reader name CNA recognizes but does not
+     * @brief CNAEXT placeholder reader for a `.xnb` type-reader name CNA recognizes but does not
      *        (yet, or ever) support reading, so a fixture referencing it fails with a precise,
      *        documented error instead of a generic "unknown content reader" (plan_xnb.md XNB-14B).
      */
-    class NOXNA KnownUnsupportedContentTypeReader : public ContentTypeReaderBase
+    class CNAEXT KnownUnsupportedContentTypeReader : public ContentTypeReaderBase
     {
     public:
         KnownUnsupportedContentTypeReader(std::string targetTypeName, UnsupportedContentReaderReason reason);
@@ -47,5 +47,5 @@ namespace Microsoft::Xna::Framework::Content
      *        fails with a clear "recognized but unsupported" error even before the corresponding
      *        phase (e.g. Phase E's stock-effect readers) exists. Idempotent.
      */
-    NOXNA void RegisterKnownUnsupportedXnbReaders();
+    CNAEXT void RegisterKnownUnsupportedXnbReaders();
 }

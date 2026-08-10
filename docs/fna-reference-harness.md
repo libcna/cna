@@ -66,7 +66,7 @@ python3 scripts/compare-fna-reference.py /tmp/fna-reference-values.json /tmp/cna
 ```
 
 Prints `PASS`/`FAIL` plus a per-key breakdown of any mismatch. The comparison is one-directional:
-every key on the FNA side must exist and match on the CNA side; CNA-only keys (real NOXNA
+every key on the FNA side must exist and match on the CNA side; CNA-only keys (real CNAEXT
 extensions, e.g. `PrimitiveType.PointListEXT`) are not reported as mismatches. Float comparisons
 use an absolute tolerance (`--tolerance`, default `1e-4`).
 

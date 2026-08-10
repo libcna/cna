@@ -118,11 +118,11 @@ namespace CNA::Internal::Renderers::DirectX12
         }
 
         /// Real mip-chain level count this target was allocated with (1 when `mipMap` was false) --
-        /// NOXNA, DX-144 subresource math/test introspection, mirrors D3D11RenderTargetRenderer's
+        /// CNAEXT, DX-144 subresource math/test introspection, mirrors D3D11RenderTargetRenderer's
         /// own GetLevelCountEXT().
         [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
-        /// Real GPU-resident color resource actually bound for rendering (NOXNA --
+        /// Real GPU-resident color resource actually bound for rendering (CNAEXT --
         /// SetRenderTargets()/tests) -- the MSAA resource itself when `GetMultiSampleCount() > 0`
         /// (matches what the real RTV/OMSetRenderTargets binding points at); use
         /// `GetSampleableColorResourceEXT()` instead for readback/sampling, which is always the
@@ -130,26 +130,26 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] ID3D12Resource* GetColorResourceEXT() const { return colorResource_.Get(); }
         /// The resource tests/shaders should actually read from -- `resolveResource_` when MSAA
         /// (post-`ResolveSubresource()`, only valid after `UnbindAsRenderTarget()` has run at least
-        /// once), else the same object `GetColorResourceEXT()` already returns (NOXNA, mirrors
+        /// once), else the same object `GetColorResourceEXT()` already returns (CNAEXT, mirrors
         /// D3D11RenderTargetRenderer's own `GetSampleableTextureEXT()` naming/behavior exactly).
         [[nodiscard]] ID3D12Resource* GetSampleableColorResourceEXT() const
         {
             return isMsaa_ ? resolveResource_.Get() : colorResource_.Get();
         }
-        /// Real RTV for this target's color attachment (NOXNA).
+        /// Real RTV for this target's color attachment (CNAEXT).
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetRtvEXT() const { return rtv_; }
         /// Shader-visible-heap GPU handle for this target's own color SRV, so it can be sampled
-        /// like any other texture once unbound (NOXNA -- GetSrvGpuHandleForTextureEXT's own
+        /// like any other texture once unbound (CNAEXT -- GetSrvGpuHandleForTextureEXT's own
         /// two-concrete-type resolution, mirroring DirectX11Renderer::GetSrvForTextureEXT).
         /// REMED-GFX-177: resolved on every call against whichever heap is current, never cached.
         [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const
         {
             return heaps_ ? heaps_->cbvSrvUav.GpuHandle(srvIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
         }
-        /// REMED-GFX-177: the stable shader-visible-heap slot index this target owns (NOXNA).
+        /// REMED-GFX-177: the stable shader-visible-heap slot index this target owns (CNAEXT).
         [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
         /// Real GPU-resident depth-stencil resource, or null if `depthFormat` was `None`/unrecognized
-        /// (NOXNA -- DX-145 real DXGI-format-fidelity introspection).
+        /// (CNAEXT -- DX-145 real DXGI-format-fidelity introspection).
         [[nodiscard]] ID3D12Resource* GetDepthResourceEXT() const { return depthResource_.Get(); }
         /// DX-146: the real DSV/format this render target created for its own depth-stencil resource.
         /// DX-117 created these but never passed them to BindAsRenderTarget(), so binding a render
@@ -214,14 +214,14 @@ namespace CNA::Internal::Renderers::DirectX12
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
-        /// The resource actually bound for rendering (NOXNA) -- the MSAA array itself when
+        /// The resource actually bound for rendering (CNAEXT) -- the MSAA array itself when
         /// `GetMultiSampleCount() > 0`; use `GetSampleableColorResourceEXT()` instead for
         /// readback/sampling, which is always the resolved single-sample resource.
         [[nodiscard]] ID3D12Resource* GetColorResourceEXT() const { return colorResource_.Get(); }
         /// The resource tests/shaders should actually read from -- `resolveResource_` when MSAA
         /// (post-`ResolveSubresource()`, only valid for the active face after
         /// `UnbindAsRenderTarget()` has run at least once), else the same object
-        /// `GetColorResourceEXT()` already returns (NOXNA, mirrors `D3D12RenderTargetRenderer`'s own
+        /// `GetColorResourceEXT()` already returns (CNAEXT, mirrors `D3D12RenderTargetRenderer`'s own
         /// `GetSampleableColorResourceEXT()` naming/behavior exactly).
         [[nodiscard]] ID3D12Resource* GetSampleableColorResourceEXT() const
         {
@@ -232,10 +232,10 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             return heaps_ ? heaps_->cbvSrvUav.GpuHandle(srvIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
         }
-        /// REMED-GFX-177: the stable shader-visible-heap slot index this cube target owns (NOXNA).
+        /// REMED-GFX-177: the stable shader-visible-heap slot index this cube target owns (CNAEXT).
         [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
         /// Real mip-chain level count this cube target was allocated with (1 when `mipMap` was
-        /// false) -- NOXNA, DX-144 subresource math/test introspection. Face `f`'s mip level `m` is
+        /// false) -- CNAEXT, DX-144 subresource math/test introspection. Face `f`'s mip level `m` is
         /// subresource `m + f * GetLevelCountEXT()` (the standard D3D12 texture-array/mip
         /// subresource-index convention, same as `D3D12TextureCubeRenderer`'s own doc comment).
         [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }

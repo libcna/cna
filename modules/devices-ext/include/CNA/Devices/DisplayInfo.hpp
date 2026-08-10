@@ -26,7 +26,7 @@ namespace CNA::Devices
      * `third_party/SDL/include/SDL3/SDL_video.h`.
      *
      * Every method here takes the game's existing `GameWindow` by reference and
-     * reads from its already-created SDL window (via the `NOXNA`
+     * reads from its already-created SDL window (via the `CNAEXT`
      * `GameWindow::GetNativeSdlWindowEXT()` accessor added for this purpose) — this
      * class never creates, owns, or queries any `SDL_Window`/`SDL_DisplayID` of its
      * own.

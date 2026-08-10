@@ -498,7 +498,7 @@ TEST(GamerCollectionEnumeratorTest, WorksThroughFriendCollectionToo) {
     EXPECT_EQ(&fgA, it.getCurrent());
 }
 
-// Task 9.3: GamerCollection<T>::Add/Remove (NOXNA mutators) had zero test coverage across every
+// Task 9.3: GamerCollection<T>::Add/Remove (CNAEXT mutators) had zero test coverage across every
 // GamerServices test file - exactly the coverage gap that let Task 7.8's getCurrent() bug ship
 // undetected. Exercised through both concrete subclasses, with 2+ elements.
 

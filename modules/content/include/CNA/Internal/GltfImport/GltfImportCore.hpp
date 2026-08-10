@@ -20,7 +20,7 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief One topologically-reordered skeleton bone, extracted from a glTF skin.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. Shared parsing core used by both
+     * @note CNAEXT — not part of the XNA 4.0 API. Shared parsing core used by both
      * `tools/gltf_to_cnj` (offline `.cnj` export) and `GltfModelTypeReader` (runtime
      * `ContentManager` loading, plan_cnj.md CNB-70/71).
      */
@@ -173,7 +173,7 @@ namespace CNA::Internal::GltfImport
      * @brief A `KHR_lights_punctual` light, already approximated down to CNA's own
      * `DirectionalLight`-only shape (see `ExtractPunctualLightsEXT`'s own doc comment).
      *
-     * @note NOXNA — not part of the XNA 4.0 API.
+     * @note CNAEXT — not part of the XNA 4.0 API.
      */
     struct LightOut
     {
@@ -205,7 +205,7 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief A morph-weight animation track extracted from a glTF "weights" animation channel.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. Independent of ExtractClips' own bone-track
+     * @note CNAEXT — not part of the XNA 4.0 API. Independent of ExtractClips' own bone-track
      * extraction: glTF's "weights" channel targets a mesh-instance node directly, not a skeleton
      * joint, so a mesh can have morph weight animation with no skin at all -- see
      * ExtractMorphWeightTrack's own doc comment. CUBICSPLINE tangents are preserved (in

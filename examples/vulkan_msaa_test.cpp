@@ -20,7 +20,7 @@
 //      IGraphicsRenderer::ApplyMultiSampleCount() -> VulkanRenderer's real in-place
 //      swapchain/render-pass/pipeline reconfiguration (Task 902). Earlier sibling tests
 //      (vulkan_rendertarget2d_msaa_test.cpp etc.) had to work around the gap this task fixes via
-//      the NOXNA-only GraphicsDevice::RecreateRendererForMultiSampleCount() escape hatch; this test
+//      the CNAEXT-only GraphicsDevice::RecreateRendererForMultiSampleCount() escape hatch; this test
 //      deliberately does NOT use that hook, to prove the real GraphicsDeviceManager path works.
 //
 // Exit code 0 = both checks PASS, 1 = either FAILs.
@@ -120,7 +120,7 @@ protected:
 
         // Task 902: toggle the preference and re-apply on the ALREADY-CONSTRUCTED renderer --
         // this is the exact real GraphicsDeviceManager path (not the RecreateRendererForMultiSampleCount
-        // NOXNA test-only escape hatch other MSAA tests in this family had to use) that was
+        // CNAEXT test-only escape hatch other MSAA tests in this family had to use) that was
         // previously a silent no-op and now genuinely reconfigures the Vulkan swapchain/render
         // pass/pipeline in place.
         gdm_->setPreferMultiSamplingProperty(true);

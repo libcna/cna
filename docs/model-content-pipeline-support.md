@@ -66,7 +66,7 @@ CNA-original format:
   `VertexPositionColor`/`VertexPositionColorTexture`/`VertexPositionTexture`/
   `VertexPositionNormalTexture` layouts to interpret the bytes as (`ContentManager.cpp:519-532`).
 
-This is a deliberate, NOXNA departure — a real `.xnb` binary reader would require reimplementing
+This is a deliberate, CNAEXT departure — a real `.xnb` binary reader would require reimplementing
 XNA's full content-pipeline compiler and its shared-resource graph serialization, well beyond this
 project's scope. **No existing FNA-produced `.xnb` model asset can be loaded by CNA.** Games must
 author (or generate) the `.model.json` + sidecar format directly.
@@ -85,7 +85,7 @@ author (or generate) the `.model.json` + sidecar format directly.
 
 **Zero test coverage**: confirmed via repo-wide search that no test or example anywhere exercises
 `ModelTypeReader` (`ContentManager::Load<Model>(...)`) at all — only the unrelated
-`SkinnedModelEXT`/Avatar binary-descriptor pipeline (a completely separate NOXNA system, see
+`SkinnedModelEXT`/Avatar binary-descriptor pipeline (a completely separate CNAEXT system, see
 below) has any content-loading test coverage. None of Tasks 431-439's extensive `Model` unit/pixel
 tests load a `Model` through `ContentManager` — they all hand-build `Model`/`ModelMesh`/
 `ModelBone` instances directly in C++, which is exactly what let Task 439's own dead-`ParentBone`
@@ -96,7 +96,7 @@ adding real test coverage for the JSON loader are natural next steps but out of 
 ## Not the same system: `SkinnedModelEXT` / Avatar real-rendering
 
 `SkinnedModelEXT` (`.skeleton.bin`/`.clip.bin`, loaded via `SkinnedModelTypeReader`) is a
-**deliberately separate**, `NOXNA`, GPU-vertex-skinned mesh+skeleton+animation container — not
+**deliberately separate**, `CNAEXT`, GPU-vertex-skinned mesh+skeleton+animation container — not
 built on `Model`/`ModelBone`/`ModelMesh` at all, since those encode XNA's *rigid* per-mesh
 parent-bone-transform hierarchy (a wrong fit for per-vertex GPU skinning). It exists to support the
 Avatar real-rendering extension (`AvatarRenderer::EnableRealRenderingEXT`) and has its own binary

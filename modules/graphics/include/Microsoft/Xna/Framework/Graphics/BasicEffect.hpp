@@ -48,7 +48,7 @@ namespace Microsoft::Xna::Framework::Graphics
         bool VertexColorEnabled = false;
 
         /** @brief Returns the fully qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets the world matrix.
@@ -279,7 +279,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture The texture to take shared ownership of; also becomes the effect's
          *                current texture (as if passed to `setTextureProperty()`).
          */
-        NOXNA void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
+        CNAEXT void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
 
         // IEffectFog
 
@@ -347,7 +347,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param params Output struct to populate.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
+        CNAEXT void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /**

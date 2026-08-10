@@ -28,9 +28,9 @@ When implementing code in the `Microsoft::Xna` namespace:
 - **MUST** preserve original XNA 4.0 class names, method signatures, and behavior.
 - **MUST** use modern C++23 internally while maintaining XNA-style public APIs.
 - If implementing functionality that is **NOT** part of the XNA 4.0 API within the `Microsoft::Xna` namespace,
-  you **MUST** wrap it with the `NOXNA` macro.
+  you **MUST** wrap it with the `CNAEXT` macro.
 
-`NOXNA` is defined in `include/CNA/CNAHelper.hpp` as an empty marker macro used to visually tag non-XNA extensions.
+`CNAEXT` is defined in `include/CNA/CNAHelper.hpp` as an empty marker macro used to visually tag non-XNA extensions.
 
 ---
 
@@ -201,8 +201,8 @@ modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffect.hpp
 all still included as `#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"` etc.
 
 The **src/ tree of a module** keeps the Phase-2 area convention: XNA API implementation under
-`src/Xna/`, `CNA::Internal` engine parts under `src/Internal/`, NOXNA extension surfaces under
-`src/NoXna/`; single-area modules stay flat. Renderer implementations live in
+`src/Xna/`, `CNA::Internal` engine parts under `src/Internal/`, CNAEXT extension surfaces under
+`src/CnaExt/`; single-area modules stay flat. Renderer implementations live in
 `modules/renderers/<family>/src/`.
 
 ```text
@@ -351,12 +351,12 @@ CHECKLIST.md
 Use it for every file. The minimum requirements are:
 
 - `// SPDX-License-Identifier: MS-PL` at the top of both `.hpp` **and** `.cpp`.
-- `#include "CNA/CNAHelper.hpp"` in `.hpp` if `NOXNA` is used anywhere in that file.
+- `#include "CNA/CNAHelper.hpp"` in `.hpp` if `CNAEXT` is used anywhere in that file.
 - Every method body verified **line-by-line** against the FNA equivalent.
 - Every intentional deviation from FNA logic documented with a `//` comment in the source.
-- Concrete classes that inherit `System::Object` **must** override `GetTypeName()` with `NOXNA`:
+- Concrete classes that inherit `System::Object` **must** override `GetTypeName()` with `CNAEXT`:
   ```cpp
-  NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+  CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
   ```
   The return value is the fully-qualified .NET name, e.g. `"Microsoft.Xna.Framework.Game"`.
 - Tests: every public method, operator, and constant covered. Out-ref overloads tested separately.
@@ -447,7 +447,7 @@ individual task. Do not push unless the user explicitly asks to push.
 | XNA public API            | `modules/<module>/include/Microsoft/Xna/Framework/…`            | Game-facing, must match XNA    |
 | Renderer contracts         | `modules/graphics/include/CNA/Internal/Renderers/Common/…`       | `IGraphicsRenderer` etc.        |
 | Renderer implementations   | `modules/renderers/<family>/{src,include}/…`                    | Hidden from XNA API            |
-| CNA utilities/extensions  | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | NOXNA helpers, logging, etc.   |
+| CNA utilities/extensions  | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | CNAEXT helpers, logging, etc.   |
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |

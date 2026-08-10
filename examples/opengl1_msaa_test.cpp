@@ -33,7 +33,7 @@
 // PresentationParameters the way GraphicsDevice::Reset()/RecreateRendererForMultiSampleCount()
 // does via ApplyMultiSampleCount() -- so PresentationParameters.MultiSampleCount after initial
 // construction is only ever an echo of what was requested, not proof of what was granted. The
-// renderer's own GetMultiSampleCount() (reachable via the NOXNA GraphicsDevice::GetRenderer()) is
+// renderer's own GetMultiSampleCount() (reachable via the CNAEXT GraphicsDevice::GetRenderer()) is
 // the only authoritative source for the initial-construction case; this test uses that, not the
 // PresentationParameters echo, as its primary check. (A pre-existing GraphicsDevice-level gap,
 // cross-renderer, out of scope for this OPENGL1-specific item.)

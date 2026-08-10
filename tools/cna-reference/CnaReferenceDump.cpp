@@ -169,7 +169,7 @@ namespace
         primitiveType.Add("TriangleStrip", static_cast<int>(PrimitiveType::TriangleStrip));
         primitiveType.Add("LineList", static_cast<int>(PrimitiveType::LineList));
         primitiveType.Add("LineStrip", static_cast<int>(PrimitiveType::LineStrip));
-        // PointListEXT is a CNA/NOXNA extension, not part of real XNA/FNA -- deliberately
+        // PointListEXT is a CNA/CNAEXT extension, not part of real XNA/FNA -- deliberately
         // included here anyway (extra CNA-only keys are fine; the comparison script only
         // requires every FNA-side key to be present and matching, not the reverse).
         primitiveType.Add("PointListEXT", static_cast<int>(PrimitiveType::PointListEXT));

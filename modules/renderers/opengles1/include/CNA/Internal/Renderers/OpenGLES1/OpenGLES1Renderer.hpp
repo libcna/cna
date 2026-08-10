@@ -21,7 +21,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     class OpenGLES1IndexBufferRenderer;
 
     /**
-     * @brief NOXNA. Real OpenGL ES 1.1 (fixed-function, no shaders) texture handle.
+     * @brief CNAEXT. Real OpenGL ES 1.1 (fixed-function, no shaders) texture handle.
      *
      * Always stores a level-0 RGBA8 image. There is no SDL_Renderer involved (GetNativeTexture()
      * always returns nullptr, matching every other raw-GL renderer), and no programmable shader
@@ -84,7 +84,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
          */
         void RestoreAfterContextLoss();
 
-        /// NOXNA. Releases the shared pixel copy; the texture can no longer survive a context loss.
+        /// CNAEXT. Releases the shared pixel copy; the texture can no longer survive a context loss.
         void DropCpuShadowEXT() { pixels_.reset(); }
 
         [[nodiscard]] unsigned int GetGLHandle() const { return texture_; }
@@ -98,7 +98,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     };
 
     /**
-     * @brief NOXNA. Real GPU-side vertex buffer object for OpenGL ES 1.1.
+     * @brief CNAEXT. Real GPU-side vertex buffer object for OpenGL ES 1.1.
      *
      * `glGenBuffers`/`glBindBuffer`/`glBufferData` are core OpenGL ES 1.1 entry points (the
      * `GL_OES_vertex_buffer_object` extension was folded into the 1.1 core spec, unlike the
@@ -128,13 +128,13 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
         int GetVertexCount() const override { return vertexCount_; }
 
-        /// NOXNA. The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        /// CNAEXT. The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
         [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
         {
             return declaration_;
         }
 
-        /// NOXNA. Releases the raw vertex shadow; the buffer can no longer survive a context loss.
+        /// CNAEXT. Releases the raw vertex shadow; the buffer can no longer survive a context loss.
         void DropCpuShadowEXT();
 
         /**
@@ -145,7 +145,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
          */
         void RestoreAfterContextLoss();
 
-        /// NOXNA. Binds this buffer's VBO to GL_ARRAY_BUFFER -- callers then use byte offsets
+        /// CNAEXT. Binds this buffer's VBO to GL_ARRAY_BUFFER -- callers then use byte offsets
         /// (not raw pointers) with glVertexPointer/glColorPointer/glTexCoordPointer/glNormalPointer.
         void Bind() const;
         [[nodiscard]] std::size_t Stride() const { return stride_; }
@@ -183,7 +183,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     }
 
     /**
-     * @brief NOXNA. Real GPU-side 16-bit index buffer object for OpenGL ES 1.1 (see vertex buffer
+     * @brief CNAEXT. Real GPU-side 16-bit index buffer object for OpenGL ES 1.1 (see vertex buffer
      * above).
      *
      * Also keeps a small CPU-side shadow copy of the raw index values -- needed only for
@@ -230,13 +230,13 @@ namespace CNA::Internal::Renderers::OpenGLES1
          */
         void RestoreAfterContextLoss();
 
-        /// NOXNA. Binds this buffer's VBO to GL_ELEMENT_ARRAY_BUFFER -- callers then pass a byte
+        /// CNAEXT. Binds this buffer's VBO to GL_ELEMENT_ARRAY_BUFFER -- callers then pass a byte
         /// offset (not a raw pointer) as glDrawElements' `indices` argument.
         void Bind() const;
-        /// NOXNA. Releases the raw vertex shadow; the buffer can no longer survive a context loss.
+        /// CNAEXT. Releases the raw vertex shadow; the buffer can no longer survive a context loss.
         void DropCpuShadowEXT();
 
-        /// NOXNA. CPU-side shadow of the index values, for wireframe emulation and context-loss
+        /// CNAEXT. CPU-side shadow of the index values, for wireframe emulation and context-loss
         /// restore only (see above). Always widened to 32 bits so one accessor serves both index
         /// sizes; the GPU buffer still holds the narrow form for 16-bit buffers.
         [[nodiscard]] const std::vector<uint32_t>& CpuShadow() const { return cpuShadow_; }
@@ -253,7 +253,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     class OpenGLES1Renderer;
 
     /**
-     * @brief NOXNA. 2D quad batcher built on the fixed-function pipeline.
+     * @brief CNAEXT. 2D quad batcher built on the fixed-function pipeline.
      *
      * Batches quads into CPU-side arrays exactly like the vertex/index buffers above, and flushes
      * them with a single glDrawElements() call per texture change, under an orthographic
@@ -310,7 +310,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     };
 
     /**
-     * @brief NOXNA. Off-screen render target backed by `GL_OES_framebuffer_object` (a common but
+     * @brief CNAEXT. Off-screen render target backed by `GL_OES_framebuffer_object` (a common but
      * optional ES 1.1 extension -- `OpenGLES1Renderer::CreateRenderTarget2D()` returns
      * `nullptr`, matching `IGraphicsRenderer`'s own "renderer that can't support this" contract, on
      * a driver where it isn't present).
@@ -390,7 +390,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     };
 
     /**
-     * @brief NOXNA. Cube-map texture backed by `GL_OES_texture_cube_map` (an optional ES 1.1
+     * @brief CNAEXT. Cube-map texture backed by `GL_OES_texture_cube_map` (an optional ES 1.1
      * extension -- `OpenGLES1Renderer::CreateTextureCube()` returns `nullptr` on a driver
      * where it isn't present, same "unsupported, not just unimplemented" contract as the render
      * target above). Used only for `EnvironmentMapEffect`'s reflection map -- see
@@ -438,7 +438,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     };
 
     /**
-     * @brief NOXNA. Cube-map render target: one GPU cube image whose faces are attached to a
+     * @brief CNAEXT. Cube-map render target: one GPU cube image whose faces are attached to a
      *        framebuffer one at a time (OPENGLES1-84).
      *
      * Needs both `GL_OES_framebuffer_object` and `GL_OES_texture_cube_map`; `CreateRenderTargetCube`
@@ -494,7 +494,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     };
 
     /**
-     * @brief NOXNA. Graphics renderer built on real OpenGL ES 1.1 (the fixed-function "Common"
+     * @brief CNAEXT. Graphics renderer built on real OpenGL ES 1.1 (the fixed-function "Common"
      * profile), deliberately independent of the EasyGL renderer (which targets WebGL2/OpenGL ES
      * 3.0 and cannot create an ES 1.1 context at all).
      *
@@ -630,43 +630,43 @@ namespace CNA::Internal::Renderers::OpenGLES1
         void DebugSimulateContextLoss() override;
         void DebugRestoreContext() override;
 
-        /// NOXNA. Physical (window) pixel size -- used by the sprite-batch renderer to size its
+        /// CNAEXT. Physical (window) pixel size -- used by the sprite-batch renderer to size its
         /// GL viewport/orthographic projection.
         void GetPhysicalSize(int& width, int& height) const;
-        /// NOXNA. Logical (virtual-resolution) size -- see GetPhysicalSize's own note.
+        /// CNAEXT. Logical (virtual-resolution) size -- see GetPhysicalSize's own note.
         void GetLogicalSize(int& width, int& height) const;
 
-        /// NOXNA. Sets the GL viewport to the physical window size and an orthographic
+        /// CNAEXT. Sets the GL viewport to the physical window size and an orthographic
         /// GL_PROJECTION matching the logical (virtual-resolution) size. Called by
         /// OpenGLES1SpriteBatchRenderer::FlushBatch() before each flush, mirroring every other
         /// renderer's SpriteBatch-owns-its-own-2D-projection convention.
         void ApplyLogicalViewportAndOrtho2D();
 
-        /// NOXNA. Returns the size of the currently-bound OpenGLES1RenderTargetRenderer, if any
+        /// CNAEXT. Returns the size of the currently-bound OpenGLES1RenderTargetRenderer, if any
         /// (used by ApplyLogicalViewportAndOrtho2D so a SpriteBatch flush while an RT is bound
         /// sizes its projection to the RT, not the window -- mirrors EasyGLRenderer's
         /// identical GetCurrentRenderTarget2DSize()).
         bool GetCurrentRenderTarget2DSize(int& width, int& height) const;
 
-        /// NOXNA. Whether GL_OES_framebuffer_object was detected at startup (queried once via
+        /// CNAEXT. Whether GL_OES_framebuffer_object was detected at startup (queried once via
         /// glGetString(GL_EXTENSIONS), not re-checked per call).
         [[nodiscard]] bool SupportsFramebufferObject() const { return fboSupported_; }
-        /// NOXNA. Whether GL_OES_texture_cube_map was detected at startup.
+        /// CNAEXT. Whether GL_OES_texture_cube_map was detected at startup.
         [[nodiscard]] bool SupportsTextureCubeMap() const { return cubeMapSupported_; }
 
-        /// NOXNA. True when GL_OES_texture_mirrored_repeat is present, i.e. when
+        /// CNAEXT. True when GL_OES_texture_mirrored_repeat is present, i.e. when
         /// TextureAddressMode::Mirror can be honoured instead of degrading to Wrap.
         [[nodiscard]] bool SupportsMirroredRepeat() const { return mirroredRepeatSupported_; }
 
-        /// NOXNA. True when GL_OES_element_index_uint is present, i.e. when 32-bit index buffers
+        /// CNAEXT. True when GL_OES_element_index_uint is present, i.e. when 32-bit index buffers
         /// are real rather than silently narrowed to 16 bits.
         [[nodiscard]] bool SupportsThirtyTwoBitIndicesEXT() const { return elementIndexUintSupported_; }
 
-        /// NOXNA. True when glGenerateMipmapOES resolved, i.e. when render-target mip chains can be
+        /// CNAEXT. True when glGenerateMipmapOES resolved, i.e. when render-target mip chains can be
         /// regenerated.
         [[nodiscard]] bool HasGenerateMipmapEXT() const { return glGenerateMipmapOES_ != nullptr; }
 
-        /// NOXNA. True when GL_OES_framebuffer_object is usable (see fboSupported_).
+        /// CNAEXT. True when GL_OES_framebuffer_object is usable (see fboSupported_).
         [[nodiscard]] bool HasFramebufferObjectsEXT() const { return fboSupported_; }
 
         /**
@@ -739,7 +739,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         {
             if (glGenerateMipmapOES_) glGenerateMipmapOES_(static_cast<GLenum>(target));
         }
-        /// NOXNA. Whether a second texture unit is actually available (GL_MAX_TEXTURE_UNITS >= 2),
+        /// CNAEXT. Whether a second texture unit is actually available (GL_MAX_TEXTURE_UNITS >= 2),
         /// needed for a real DualTextureEffect dispatch.
         [[nodiscard]] bool SupportsSecondTextureUnit() const { return maxTextureUnits_ >= 2; }
 
@@ -801,7 +801,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
          */
         void SetContextRecoveryEnabled(bool enabled) override;
 
-        /// NOXNA. Whether CPU copies for context-loss recovery are currently retained.
+        /// CNAEXT. Whether CPU copies for context-loss recovery are currently retained.
         [[nodiscard]] bool IsContextRecoveryEnabledEXT() const { return contextRecoveryEnabled_; }
 
         void RegisterVertexBufferEXT(OpenGLES1VertexBufferRenderer* buffer);

@@ -71,21 +71,21 @@ namespace CNA::Internal::Renderers::DirectX11
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
 
-        /// Exposes the negotiated feature level for tests/diagnostics (NOXNA).
+        /// Exposes the negotiated feature level for tests/diagnostics (CNAEXT).
         [[nodiscard]] D3D_FEATURE_LEVEL GetFeatureLevelEXT() const { return featureLevel_; }
-        /// Exposes whether the debug layer actually ended up enabled (NOXNA, DX-21 diagnostics).
+        /// Exposes whether the debug layer actually ended up enabled (CNAEXT, DX-21 diagnostics).
         [[nodiscard]] bool IsDebugLayerEnabledEXT() const { return debugLayerEnabled_; }
-        /// Exposes whether the swap chain was created tearing-capable (NOXNA, DX-23 diagnostics).
+        /// Exposes whether the swap chain was created tearing-capable (CNAEXT, DX-23 diagnostics).
         [[nodiscard]] bool IsTearingCapableEXT() const { return allowTearingSupported_ && allowTearingRequested_; }
         /// Exposes the raw device pointer for tests/diagnostics and for D3DCommon helpers (e.g.
         /// D3DShaderCache, DX-15-embed) that need a real ID3D11Device* without duplicating this
-        /// renderer's own device-creation path (NOXNA).
+        /// renderer's own device-creation path (CNAEXT).
         [[nodiscard]] ID3D11Device* GetDeviceEXT() const { return device_.Get(); }
         /// Exposes the real device context for D3DCommon/tests that need to issue Map/Unmap or
-        /// draw calls without duplicating this renderer's own context-creation path (NOXNA,
+        /// draw calls without duplicating this renderer's own context-creation path (CNAEXT,
         /// DX-30/DX-31's buffer renderers both need this).
         [[nodiscard]] ID3D11DeviceContext* GetContextEXT() const { return context_.Get(); }
-        /// Exposes the per-(shader,stride) ID3D11InputLayout cache (NOXNA, DX-32) -- shared by
+        /// Exposes the per-(shader,stride) ID3D11InputLayout cache (CNAEXT, DX-32) -- shared by
         /// tests now and by Phase DIRECTX8's draw-call wiring later.
         [[nodiscard]] D3D11InputLayoutCache& GetInputLayoutCacheEXT() { return inputLayoutCache_; }
 
@@ -141,19 +141,19 @@ namespace CNA::Internal::Renderers::DirectX11
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
-        /// Exposes the blend/depth-stencil/rasterizer state caches (NOXNA) -- Phase DIRECTX8's draw-call
+        /// Exposes the blend/depth-stencil/rasterizer state caches (CNAEXT) -- Phase DIRECTX8's draw-call
         /// wiring reuses these directly rather than re-implementing the same caching.
         [[nodiscard]] D3D11BlendStateCache& GetBlendStateCacheEXT() { return blendStateCache_; }
         [[nodiscard]] D3D11DepthStencilStateCache& GetDepthStencilStateCacheEXT() { return depthStencilStateCache_; }
         [[nodiscard]] D3D11RasterizerStateCache& GetRasterizerStateCacheEXT() { return rasterizerStateCache_; }
 
-        /// NOXNA (Phase DIRECTX6): updates Clear()'s target-RTV/DSV tracking to point at a custom
+        /// CNAEXT (Phase DIRECTX6): updates Clear()'s target-RTV/DSV tracking to point at a custom
         /// render target's own views. Called by D3D11RenderTargetRenderer::BindAsRenderTarget()/
         /// D3D11RenderTargetCubeRenderer::BindAsRenderTargetFace() -- those own the real
         /// OMSetRenderTargets()/viewport call, this only updates what Clear() (and friends) target
         /// next, since D3D11 has no single "currently bound FBO" the renderer can query back.
         void TrackCurrentRenderTargetEXT(ID3D11RenderTargetView* const* rtvs, int count, ID3D11DepthStencilView* dsv);
-        /// NOXNA (Phase DIRECTX6): restores the real back-buffer OM binding + viewport, and Clear()'s
+        /// CNAEXT (Phase DIRECTX6): restores the real back-buffer OM binding + viewport, and Clear()'s
         /// tracking to match. Called by D3D11RenderTargetRenderer/D3D11RenderTargetCubeRenderer's
         /// own UnbindAsRenderTarget() (after any MSAA resolve / mip regeneration they still need
         /// to do), and internally whenever SetRenderTarget2D(nullptr)/SetRenderTargets(nullptr, 0)

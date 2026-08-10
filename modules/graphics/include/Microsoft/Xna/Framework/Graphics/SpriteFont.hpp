@@ -43,7 +43,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws System::ArgumentException if @p defaultCharacter has a value not present in
          *         @p characters.
          */
-        NOXNA SpriteFont(Texture2D texture,
+        CNAEXT SpriteFont(Texture2D texture,
                          std::vector<Rectangle> glyphBounds,
                          std::vector<Rectangle> cropping,
                          std::vector<charcs> characters,

@@ -15,7 +15,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief A single keyframe within an animation bone track.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. Mirrors the well-known "Keyframe" class from
+     * @note CNAEXT — not part of the XNA 4.0 API. Mirrors the well-known "Keyframe" class from
      * Microsoft's own XNA Skinned Model Sample, which real XNA never shipped as framework
      * code — almost every XNA game needing skeletal animation copy-pasted an identical class
      * into its own project. A direct alias of KeyframeEXT (SkinnedModelEXT's own identical
@@ -23,20 +23,20 @@ namespace Microsoft::Xna::Framework::Graphics
      * this real-Model-facing path and the Avatar-facing SkinnedModelEXT path share the exact
      * same keyframe representation and content-loading code.
      */
-    NOXNA using Keyframe = KeyframeEXT;
+    CNAEXT using Keyframe = KeyframeEXT;
 
     /**
      * @brief A named animation clip: a fixed duration and a set of per-bone keyframe tracks.
      *
-     * @note NOXNA — see Keyframe above. A direct alias of AnimationClipEXT.
+     * @note CNAEXT — see Keyframe above. A direct alias of AnimationClipEXT.
      */
-    NOXNA using AnimationClip = AnimationClipEXT;
+    CNAEXT using AnimationClip = AnimationClipEXT;
 
     /**
      * @brief The skeleton and animation clip data needed to play back skeletal animation for
      * a real Model (as opposed to SkinnedModelEXT's own separate, Avatar-specific data model).
      *
-     * @note NOXNA — not part of the XNA 4.0 API. Mirrors the well-known "SkinningData" class
+     * @note CNAEXT — not part of the XNA 4.0 API. Mirrors the well-known "SkinningData" class
      * from Microsoft's own XNA Skinned Model Sample. `ModelTypeReader::Read()` attaches an
      * instance of this to a loaded Model's own `Tag` property whenever a `.model.json`
      * descriptor supplies a `"skeleton"` field — game code retrieves it via
@@ -45,10 +45,10 @@ namespace Microsoft::Xna::Framework::Graphics
      * skinning-data property of its own). Inherits `System::Object` so it can be pointed to
      * by `Model.Tag`'s own `System::Object*` type.
      */
-    NOXNA struct SkinningData : public System::Object
+    CNAEXT struct SkinningData : public System::Object
     {
         /** @brief Returns the fully-qualified .NET-style type name of this object. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Number of bones in this model's skeleton. */
         int BoneCount = 0;
@@ -66,14 +66,14 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief Advances a skeletal animation clip by elapsed time and produces per-bone
      * transform arrays each frame, interpolating between keyframes.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. Mirrors the well-known "AnimationPlayer"
+     * @note CNAEXT — not part of the XNA 4.0 API. Mirrors the well-known "AnimationPlayer"
      * class from Microsoft's own XNA Skinned Model Sample — most ported XNA samples needing
      * skeletal animation include a copy of this exact class and call into it the same way:
      * construct once with the model's SkinningData, `StartClip()` when playback begins,
      * `Update()` every frame, then feed `GetSkinTransforms()` straight into
      * `SkinnedEffect::SetBoneTransforms()` before drawing the mesh.
      */
-    NOXNA class AnimationPlayer
+    CNAEXT class AnimationPlayer
     {
     public:
         /**

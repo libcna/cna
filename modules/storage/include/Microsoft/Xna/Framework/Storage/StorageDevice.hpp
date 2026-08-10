@@ -25,7 +25,7 @@ namespace Microsoft::Xna::Framework::Storage
     {
     public:
         /** @brief Destroys the StorageDevice. */
-        NOXNA ~StorageDevice() = default;
+        CNAEXT ~StorageDevice() = default;
 
         // ---- Properties ----
 
@@ -161,14 +161,14 @@ namespace Microsoft::Xna::Framework::Storage
          *
          * @param appName Application name.
          */
-        NOXNA static void SetAppNameEXT(const std::string& appName);
+        CNAEXT static void SetAppNameEXT(const std::string& appName);
 
         /**
          * @brief Returns the storage root directory path for the current application.
          *
          * @return Absolute path to the storage root.
          */
-        NOXNA static std::string GetStorageRootEXT();
+        CNAEXT static std::string GetStorageRootEXT();
 
     private:
         explicit StorageDevice(std::optional<PlayerIndex> player);

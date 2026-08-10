@@ -57,7 +57,7 @@ namespace
     // TimeBetweenUpdatesChanged is protected in the real WP7 API (see
     // SensorBase.hpp), so it cannot be subscribed to from a plain TEST()
     // function — a derived class can, which is the standard C++ technique
-    // used here rather than adding new NOXNA test hooks to the public API.
+    // used here rather than adding new CNAEXT test hooks to the public API.
     class TestSensorBase final : public SensorBase<TestSensorReading>
     {
     public:
@@ -168,7 +168,7 @@ namespace
         // ShouldAcceptUpdateAt()/ResetUpdateThrottle() are protected (Task
         // SENSORBASE-001/ACCEL-005/GYRO-004), same reasoning as
         // TimeBetweenUpdatesChanged above — exercised here via a thin public
-        // wrapper rather than a new NOXNA hook on Accelerometer/Gyroscope.
+        // wrapper rather than a new CNAEXT hook on Accelerometer/Gyroscope.
         bool ShouldAcceptUpdateForTesting(const std::chrono::steady_clock::time_point& now)
         {
             return ShouldAcceptUpdateAt(now);

@@ -529,7 +529,7 @@ namespace Microsoft::Xna::Framework::Net
 
         // Task 2.5: AddRemoteGamer used to add any remote gamer unconditionally, silently
         // violating the documented "maximum players allowed" contract - no FNA equivalent exists
-        // to match (AddRemoteGamer is a CNA-internal, NOXNA extension; real FNA's networking is
+        // to match (AddRemoteGamer is a CNA-internal, CNAEXT extension; real FNA's networking is
         // entirely stubbed out), so InvalidOperationException is used for symmetry with
         // AddLocalGamer's own existing max-limit guard just above.
         if (allGamers_.getCountProperty() >= maxGamers_)

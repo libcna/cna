@@ -689,7 +689,7 @@ namespace CNA::Internal::Renderers::Software
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
 
-        // ---- Software-specific, NOXNA-equivalent debug/testing API ----
+        // ---- Software-specific, CNAEXT-equivalent debug/testing API ----
 
         /// The currently-active framebuffer (the bound RenderTarget2D's, or the backbuffer's when
         /// none is bound) -- real, CPU-owned pixel/depth storage.

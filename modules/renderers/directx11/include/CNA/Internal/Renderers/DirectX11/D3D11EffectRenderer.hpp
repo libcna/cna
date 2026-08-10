@@ -52,7 +52,7 @@ namespace CNA::Internal::Renderers::DirectX11
         /// DX-71 (Phase DX9): writes the [0..15]-byte vpSize slot this class's own header comment
         /// already reserved for it -- mirrors VulkanEffectRenderer's "set automatically by the
         /// sprite-batch runtime" convention (the game/effect author never calls this; SpriteBatch's
-        /// renderer does, once per FlushBatch(), immediately before Bind()). NOXNA.
+        /// renderer does, once per FlushBatch(), immediately before Bind()). CNAEXT.
         void SetViewportSizeEXT(float width, float height);
 
     private:

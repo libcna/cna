@@ -61,7 +61,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] GamerPrivilegeSetting getAllowUserCreatedContentProperty() const;
 
         /** @brief Creates a GamerPrivileges instance for CNA internal use. */
-        NOXNA static GamerPrivileges CreateInternal();
+        CNAEXT static GamerPrivileges CreateInternal();
 
     private:
         GamerPrivileges();

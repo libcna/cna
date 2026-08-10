@@ -95,7 +95,7 @@ namespace Microsoft::Devices::Sensors
          * @param other The reading to compare against.
          * @return true if equal; otherwise false.
          */
-        NOXNA bool operator==(const MotionReading& other) const;
+        CNAEXT bool operator==(const MotionReading& other) const;
 
         /**
          * @brief Returns true if the readings differ in attitude, any motion vector, or timestamp.
@@ -105,7 +105,7 @@ namespace Microsoft::Devices::Sensors
          * @param other The reading to compare against.
          * @return true if not equal; otherwise false.
          */
-        NOXNA bool operator!=(const MotionReading& other) const;
+        CNAEXT bool operator!=(const MotionReading& other) const;
 
         /**
          * @brief Returns a string representation of the reading.
@@ -116,7 +116,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @return String in the format "DeviceAcceleration:{X:0 Y:0 Z:0} Gravity:{X:0 Y:0 Z:0}".
          */
-        NOXNA [[nodiscard]] std::string ToString() const;
+        CNAEXT [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Returns a hash code for this reading.
@@ -127,14 +127,14 @@ namespace Microsoft::Devices::Sensors
          *
          * @return Hash derived from all reading values.
          */
-        NOXNA [[nodiscard]] std::size_t GetHashCode() const;
+        CNAEXT [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.
          *
          * @return "Microsoft.Devices.Sensors.MotionReading"
          */
-        NOXNA [[nodiscard]] std::string GetTypeName() const;
+        CNAEXT [[nodiscard]] std::string GetTypeName() const;
 
     private:
         /**

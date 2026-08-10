@@ -6,7 +6,7 @@
 namespace CNA::Internal::Renderers::Wicked
 {
     /**
-     * @brief NOXNA. The HLSL source of every built-in shader this renderer compiles.
+     * @brief CNAEXT. The HLSL source of every built-in shader this renderer compiles.
      *
      * `wi::shadercompiler::Compile()` reads its input from a file path, so this source is written
      * into a per-process temporary directory at device creation and compiled from there
@@ -22,7 +22,7 @@ namespace CNA::Internal::Renderers::Wicked
      *     D3D-shaped (Y down in window space, Z in [0,1]) on both device renderers.
      *   - Vertex colours arrive as `R8G8B8A8_UNORM`, matching XNA's `Color` byte order in memory.
      */
-    NOXNA inline constexpr const char* kWickedShaderSource = R"HLSL(
+    CNAEXT inline constexpr const char* kWickedShaderSource = R"HLSL(
 struct CnaConstants
 {
     float4 mvp0;

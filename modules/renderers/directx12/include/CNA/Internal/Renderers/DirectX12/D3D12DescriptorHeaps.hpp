@@ -52,7 +52,7 @@ namespace CNA::Internal::Renderers::DirectX12
     using Microsoft::WRL::ComPtr;
 
     /**
-     * @brief NOXNA. The shared fence reading that both allocators use to decide when a freed
+     * @brief CNAEXT. The shared fence reading that both allocators use to decide when a freed
      *        descriptor slot or a retired heap is safe to reuse or release.
      *
      * Owned by D3D12DescriptorHeaps and pointed at (never copied) by each allocator, so the two
@@ -76,7 +76,7 @@ namespace CNA::Internal::Renderers::DirectX12
     };
 
     /**
-     * @brief NOXNA. Per-heap counters, exposed for tests and for the CNA_D3D12_DESCRIPTOR_TRACE
+     * @brief CNAEXT. Per-heap counters, exposed for tests and for the CNA_D3D12_DESCRIPTOR_TRACE
      *        output. Every field is a real count taken from the allocator, never an estimate.
      */
     struct D3D12DescriptorHeapStats
@@ -115,7 +115,7 @@ namespace CNA::Internal::Renderers::DirectX12
     };
 
     /**
-     * @brief NOXNA. A growable RTV/DSV descriptor allocator whose handles never move.
+     * @brief CNAEXT. A growable RTV/DSV descriptor allocator whose handles never move.
      *
      * Capacity grows by appending another fixed-size heap block, so a CPU handle issued from an
      * earlier block stays valid for the lifetime of the allocator. Freed handles go back to a
@@ -198,7 +198,7 @@ namespace CNA::Internal::Renderers::DirectX12
     };
 
     /**
-     * @brief NOXNA. A growable shader-visible CBV/SRV/UAV or SAMPLER allocator addressed by stable
+     * @brief CNAEXT. A growable shader-visible CBV/SRV/UAV or SAMPLER allocator addressed by stable
      *        index rather than by handle.
      *
      * The authoritative copy of every descriptor lives in a non-shader-visible staging heap; the
@@ -322,7 +322,7 @@ namespace CNA::Internal::Renderers::DirectX12
     };
 
     /**
-     * @brief NOXNA. The four descriptor allocators plus the fence reading they share.
+     * @brief CNAEXT. The four descriptor allocators plus the fence reading they share.
      *
      * Held by the renderer through a std::shared_ptr and captured by every resource that owns a
      * descriptor, so a resource destroyed AFTER its renderer still frees its slot into a live

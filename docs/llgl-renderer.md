@@ -520,7 +520,7 @@ Two things are worth knowing:
 
 ## Custom effects
 
-`Microsoft::Xna::Framework::Graphics::ShaderEffect` (`NOXNA`) compiles hand-authored GLSL vertex
+`Microsoft::Xna::Framework::Graphics::ShaderEffect` (`CNAEXT`) compiles hand-authored GLSL vertex
 and fragment source and draws through it. It is **scoped to `SpriteBatch` draws only** -- the
 vertex shader is bound to the fixed sprite `position`/`texCoord`/`color` layout, not an arbitrary
 `VertexDeclaration` a 3D draw might use, mirroring the native `VULKAN` renderer's own
@@ -649,7 +649,7 @@ registered on both modules. Both tests were ported (not verbatim-shared, but ada
 class name/comment changed) from the Vulkan renderer's own `examples/vulkan_skinnedeffect_*_test.cpp`,
 which are already fully renderer-agnostic real-XNA-API code.
 
-**`SkinnedEffect.VertexColorEnabled` is real too (LLGL-37, `NOXNA` extension property; real XNA has
+**`SkinnedEffect.VertexColorEnabled` is real too (LLGL-37, `CNAEXT` extension property; real XNA has
 no such property -- CNB-66/67 added it project-wide for glTF `COLOR_0` import support).** A stride-56
 vertex layout (the stride-52 layout above with a colour attribute APPENDED at offset 52, location 1
 per this renderer's own `MapVertexUsage()` mapping, matching `ResolveVertexAttributes()`'s own
@@ -676,7 +676,7 @@ except D3D9 (`GpuDrawParams::preferPerPixelLighting`'s own documented deviation)
 
 ## PbrEffect
 
-The glTF 2.0 metallic-roughness BRDF (`PbrEffect`, `NOXNA` -- real XNA predates the PBR content
+The glTF 2.0 metallic-roughness BRDF (`PbrEffect`, `CNAEXT` -- real XNA predates the PBR content
 pipeline). Like `EnvironmentMapEffect`/`SkinnedEffect`, gets its own dedicated resources rather
 than reusing the shared `Transform` block:
 

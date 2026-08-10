@@ -6,9 +6,9 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — the physical category of a raw joystick device. Mirrors SDL3's `SDL_JoystickType`.
+     * @brief CNAEXT — the physical category of a raw joystick device. Mirrors SDL3's `SDL_JoystickType`.
      */
-    NOXNA enum class JoystickTypeEXT
+    CNAEXT enum class JoystickTypeEXT
     {
         /** @brief Unknown or unrecognized joystick type. */
         Unknown,

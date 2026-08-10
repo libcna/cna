@@ -84,7 +84,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] System::IO::Stream* GetGamerPicture() const;
 
         /** @brief Creates a GamerProfile for CNA internal use. */
-        NOXNA static GamerProfile CreateInternal();
+        CNAEXT static GamerProfile CreateInternal();
 
     private:
         GamerProfile();

@@ -11,7 +11,7 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — enumerates the connected input devices, backed by SDL3.
+     * @brief CNAEXT — enumerates the connected input devices, backed by SDL3.
      *
      * XNA 4.0 assumes exactly one keyboard, one mouse, and four gamepads, and exposes no device list.
      * This CNA extension enumerates every mouse, keyboard, and touch device with its id and name. It
@@ -19,7 +19,7 @@ namespace CNA::Input
      * Platform notes: desktop (Windows/Linux) enumerate fully; macOS is partial; Android/Web expose a
      * single logical device (the lists are typically short or empty).
      */
-    NOXNA class InputDevices
+    CNAEXT class InputDevices
     {
     public:
         /** @brief Static-only utility; not instantiable. */
@@ -29,36 +29,36 @@ namespace CNA::Input
          * @brief Enumerates the connected mice.
          * @return A list of mouse id/name descriptors (empty if none or unsupported).
          */
-        NOXNA [[nodiscard]] static std::vector<InputDeviceInfoEXT> GetMiceEXT();
+        CNAEXT [[nodiscard]] static std::vector<InputDeviceInfoEXT> GetMiceEXT();
 
         /**
          * @brief Enumerates the connected keyboards.
          * @return A list of keyboard id/name descriptors (empty if none or unsupported).
          */
-        NOXNA [[nodiscard]] static std::vector<InputDeviceInfoEXT> GetKeyboardsEXT();
+        CNAEXT [[nodiscard]] static std::vector<InputDeviceInfoEXT> GetKeyboardsEXT();
 
         /**
          * @brief Enumerates the connected touch devices.
          * @return A list of touch-device id/name descriptors (empty if none or unsupported).
          */
-        NOXNA [[nodiscard]] static std::vector<InputDeviceInfoEXT> GetTouchDevicesEXT();
+        CNAEXT [[nodiscard]] static std::vector<InputDeviceInfoEXT> GetTouchDevicesEXT();
 
-        /** @brief NOXNA/EXT: fires with the SDL mouse id when a mouse is connected. Multicast (use `+=`). */
-        NOXNA static System::MulticastAction<std::uint32_t> MouseConnectedEXT;
+        /** @brief CNAEXT/EXT: fires with the SDL mouse id when a mouse is connected. Multicast (use `+=`). */
+        CNAEXT static System::MulticastAction<std::uint32_t> MouseConnectedEXT;
 
-        /** @brief NOXNA/EXT: fires with the SDL mouse id when a mouse is disconnected. Multicast (use `+=`). */
-        NOXNA static System::MulticastAction<std::uint32_t> MouseDisconnectedEXT;
+        /** @brief CNAEXT/EXT: fires with the SDL mouse id when a mouse is disconnected. Multicast (use `+=`). */
+        CNAEXT static System::MulticastAction<std::uint32_t> MouseDisconnectedEXT;
 
-        /** @brief NOXNA/EXT: fires with the SDL keyboard id when a keyboard is connected. Multicast (use `+=`). */
-        NOXNA static System::MulticastAction<std::uint32_t> KeyboardConnectedEXT;
+        /** @brief CNAEXT/EXT: fires with the SDL keyboard id when a keyboard is connected. Multicast (use `+=`). */
+        CNAEXT static System::MulticastAction<std::uint32_t> KeyboardConnectedEXT;
 
-        /** @brief NOXNA/EXT: fires with the SDL keyboard id when a keyboard is disconnected. Multicast (use `+=`). */
-        NOXNA static System::MulticastAction<std::uint32_t> KeyboardDisconnectedEXT;
+        /** @brief CNAEXT/EXT: fires with the SDL keyboard id when a keyboard is disconnected. Multicast (use `+=`). */
+        CNAEXT static System::MulticastAction<std::uint32_t> KeyboardDisconnectedEXT;
 
         /**
          * @brief Test-only: clears all hot-plug event subscribers.
-         * @note NOXNA — a CNA test-support helper, not part of the XNA 4.0 API.
+         * @note CNAEXT — a CNA test-support helper, not part of the XNA 4.0 API.
          */
-        NOXNA static void ResetForTests();
+        CNAEXT static void ResetForTests();
     };
 }

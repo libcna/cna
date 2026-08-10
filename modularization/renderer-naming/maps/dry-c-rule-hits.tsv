@@ -1,0 +1,12 @@
+\bNOXNA\b	CNAEXT	2559
+CNA_NOXNA	CNA_CNAEXT	76
+_noxna_	_cnaext_	18
+cna_noxna	cna_cnaext	9
+\bnoxna\b	cnaext	7
+CNA::NoXna	CNA::CnaExt	6
+\bNoXna\b	CnaExt	4
+cmake-build-noxna	cmake-build-cnaext	4
+noxna_settings_example	cnaext_settings_example	2
+probe_noxna	probe_cnaext	2
+NoXna(?=[A-Z])	CnaExt	2
+NOXNA_	CNAEXT_	1

@@ -106,7 +106,7 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] std::string ToString() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Returns this picture's resolved file path, usable as the token accepted by
@@ -119,7 +119,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @return Token string identifying this picture.
          */
-        NOXNA [[nodiscard]] const std::string& getTokenEXT() const { return path_; }
+        CNAEXT [[nodiscard]] const std::string& getTokenEXT() const { return path_; }
 
         /** @brief Returns whether two pictures are equal. */
         friend bool operator==(const Picture& lhs, const Picture& rhs);

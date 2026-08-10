@@ -21,10 +21,10 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief A single keyframe within an animation bone track.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. CNA extension supporting
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension supporting
      * SkinnedModelEXT's real-rendering animation playback.
      */
-    NOXNA struct KeyframeEXT
+    CNAEXT struct KeyframeEXT
     {
         /** @brief Time of this keyframe, relative to the start of the clip. */
         System::TimeSpan Time;
@@ -39,9 +39,9 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief A sequence of keyframes driving a single bone within an animation clip.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. CNA extension.
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension.
      */
-    NOXNA struct BoneTrackEXT
+    CNAEXT struct BoneTrackEXT
     {
         /** @brief Index of the bone this track drives, into SkinnedModelEXT's bone arrays. */
         int BoneIndex = -1;
@@ -52,12 +52,12 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief A named animation clip: a fixed duration and a set of per-bone keyframe tracks.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. CNA extension. Clip names conventionally
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension. Clip names conventionally
      * match Microsoft::Xna::Framework::GamerServices::AvatarAnimationPreset enumerator names
      * (see AvatarAnimationPresetToClipNameEXT), but SkinnedModelEXT itself has no dependency
      * on that enum.
      */
-    NOXNA struct AnimationClipEXT
+    CNAEXT struct AnimationClipEXT
     {
         /** @brief Total playback duration of this clip. */
         System::TimeSpan Duration;
@@ -68,7 +68,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief A real, GPU-skinnable mesh + skeleton + animation clip set.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. CNA extension used by
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension used by
      * AvatarRenderer::EnableRealRenderingEXT for real avatar rendering. Deliberately not built
      * on Model/ModelBone/ModelMesh, which encode a *rigid* per-mesh parent-bone-transform
      * hierarchy (real XNA's multi-part model animation) rather than per-vertex GPU skinning.
@@ -76,13 +76,13 @@ namespace Microsoft::Xna::Framework::Graphics
      * 71-bone arrays exposed by AvatarRenderer::ParentBones/IAvatarAnimation::BoneTransforms —
      * no attempt is made to align indices, counts, or semantics between the two.
      */
-    NOXNA class SkinnedModelEXT
+    CNAEXT class SkinnedModelEXT
     {
     public:
         /**
          * @brief Names a single renderable part of the model.
          */
-        NOXNA struct PartEXT
+        CNAEXT struct PartEXT
         {
             /**
              * @brief Part name, used for appearance tinting (AvatarRenderer::PartTintEXT
@@ -164,7 +164,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Attaches every part from another, independently-loaded SkinnedModelEXT
          * onto this model, taking ownership of its buffers.
          *
-         * @note NOXNA — CNA extension (Task 11.21). Lets a standalone-converted wardrobe
+         * @note CNAEXT — CNA extension (Task 11.21). Lets a standalone-converted wardrobe
          * piece (`tools/avatar_builder/generate_wardrobe.py` + `convert_avatar.py`, Task
          * 11.14) actually be worn by an already-loaded, running avatar — until this
          * method existed, such a piece could be converted but never attached at
@@ -196,7 +196,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Removes every part with the given name, freeing its owned GPU resources.
          *
-         * @note NOXNA — CNA extension (Task 11.4/11.5). Unlike erasing directly from the
+         * @note CNAEXT — CNA extension (Task 11.4/11.5). Unlike erasing directly from the
          * public Parts vector (the previous only available approach, and the direct cause
          * of Task 11.5's GPU-resource leak — Parts merely holds non-owning descriptors),
          * this also removes the matching entries from this model's own owned-resource
@@ -209,13 +209,13 @@ namespace Microsoft::Xna::Framework::Graphics
         void RemovePartEXT(const std::string& name);
 
         /** @brief Returns the number of owned vertex buffers, for testing (Task 11.5). */
-        NOXNA [[nodiscard]] std::size_t GetOwnedVertexBufferCountForTesting() const { return vertexBuffers_.size(); }
+        CNAEXT [[nodiscard]] std::size_t GetOwnedVertexBufferCountForTesting() const { return vertexBuffers_.size(); }
         /** @brief Returns the number of owned index buffers, for testing (Task 11.5). */
-        NOXNA [[nodiscard]] std::size_t GetOwnedIndexBufferCountForTesting() const { return indexBuffers_.size(); }
+        CNAEXT [[nodiscard]] std::size_t GetOwnedIndexBufferCountForTesting() const { return indexBuffers_.size(); }
         /** @brief Returns the number of owned mesh parts, for testing (Task 11.5). */
-        NOXNA [[nodiscard]] std::size_t GetOwnedPartCountForTesting() const { return ownedParts_.size(); }
+        CNAEXT [[nodiscard]] std::size_t GetOwnedPartCountForTesting() const { return ownedParts_.size(); }
         /** @brief Returns the number of owned textures, for testing (Task 11.5). */
-        NOXNA [[nodiscard]] std::size_t GetOwnedTextureCountForTesting() const { return textures_.size(); }
+        CNAEXT [[nodiscard]] std::size_t GetOwnedTextureCountForTesting() const { return textures_.size(); }
 
     private:
         std::vector<std::unique_ptr<VertexBuffer>> vertexBuffers_;

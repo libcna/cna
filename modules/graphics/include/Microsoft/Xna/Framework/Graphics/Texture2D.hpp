@@ -60,13 +60,13 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Loads a Texture2D from a file asset by name.
          * @param assetName Path to the image file.
          */
-        NOXNA explicit Texture2D(const std::string& assetName);
+        CNAEXT explicit Texture2D(const std::string& assetName);
         /**
          * @brief Loads a Texture2D from a file asset using the given device.
          * @param assetName     Path to the image file.
          * @param graphicsDevice The device to upload the texture to.
          */
-        NOXNA Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice);
+        CNAEXT Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice);
 
         /**
          * @brief Creates an empty Texture2D with Color format.
@@ -92,7 +92,7 @@ namespace Microsoft::Xna::Framework::Graphics
                   bool mipMap, SurfaceFormat format);
 
         /** @brief Destructor. */
-        NOXNA ~Texture2D() override;
+        CNAEXT ~Texture2D() override;
 
         Texture2D(const Texture2D&) = default;
         Texture2D& operator=(const Texture2D&) = default;
@@ -100,7 +100,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture2D& operator=(Texture2D&&) noexcept = default;
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns the texture width in pixels. */
         [[nodiscard]] int getWidthProperty()  const { return width; }
@@ -213,19 +213,19 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetData(int level, const Rectangle* rect, const PackedVector::HalfVector4* data,
                      int startIndex, int elementCount);
         /** @brief Uploads exact unsigned bytes to a ByteEXT texture, or compressed blocks to a Dxt1/Dxt3/Dxt5 texture. */
-        NOXNA void SetData(const std::uint8_t* data, int elementCount);
+        CNAEXT void SetData(const std::uint8_t* data, int elementCount);
         /**
          * @brief Uploads exact unsigned bytes to a ByteEXT texture, or exact compressed blocks
          * to a Dxt1/Dxt3/Dxt5 texture. For a compressed format, level/rect coordinates are texel
          * space and must be block-aligned or reach the level's edge; elementCount is the exact
          * padded block byte count for the requested region.
          */
-        NOXNA void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
+        CNAEXT void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
                            int startIndex, int elementCount);
         /** @brief Uploads exact unsigned 16-bit values to a UShortEXT texture. */
-        NOXNA void SetData(const std::uint16_t* data, int elementCount);
+        CNAEXT void SetData(const std::uint16_t* data, int elementCount);
         /** @brief Uploads exact unsigned 16-bit values to a UShortEXT mip level or rectangle. */
-        NOXNA void SetData(int level, const Rectangle* rect, const std::uint16_t* data,
+        CNAEXT void SetData(int level, const Rectangle* rect, const std::uint16_t* data,
                            int startIndex, int elementCount);
 
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
@@ -371,23 +371,23 @@ namespace Microsoft::Xna::Framework::Graphics
         void GetData(int level, const Rectangle* rect, PackedVector::HalfVector4* data,
                      int startIndex, int elementCount) const;
         /** @brief Reads exact unsigned bytes from a ByteEXT texture. */
-        NOXNA void GetData(std::uint8_t* data, int startIndex, int elementCount) const;
+        CNAEXT void GetData(std::uint8_t* data, int startIndex, int elementCount) const;
         /** @brief Reads all exact unsigned bytes from a ByteEXT texture, or compressed blocks from a Dxt1/Dxt3/Dxt5 texture. */
-        NOXNA void GetData(std::uint8_t* data, int elementCount) const;
+        CNAEXT void GetData(std::uint8_t* data, int elementCount) const;
         /**
          * @brief Reads exact unsigned bytes from a ByteEXT mip level or rectangle, or exact
          * compressed blocks from a Dxt1/Dxt3/Dxt5 mip level or rectangle. For a compressed
          * format, rect coordinates are texel space and must be block-aligned or reach the
          * level's edge; elementCount is the exact padded block byte count for the region.
          */
-        NOXNA void GetData(int level, const Rectangle* rect, std::uint8_t* data,
+        CNAEXT void GetData(int level, const Rectangle* rect, std::uint8_t* data,
                            int startIndex, int elementCount) const;
         /** @brief Reads exact unsigned 16-bit values from a UShortEXT texture. */
-        NOXNA void GetData(std::uint16_t* data, int startIndex, int elementCount) const;
+        CNAEXT void GetData(std::uint16_t* data, int startIndex, int elementCount) const;
         /** @brief Reads all exact unsigned 16-bit values from a UShortEXT texture. */
-        NOXNA void GetData(std::uint16_t* data, int elementCount) const;
+        CNAEXT void GetData(std::uint16_t* data, int elementCount) const;
         /** @brief Reads exact unsigned 16-bit values from a UShortEXT mip level or rectangle. */
-        NOXNA void GetData(int level, const Rectangle* rect, std::uint16_t* data,
+        CNAEXT void GetData(int level, const Rectangle* rect, std::uint16_t* data,
                            int startIndex, int elementCount) const;
 
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
@@ -448,7 +448,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Saves the texture as a PNG image directly to a file.
          * @param filename Destination file path.
          */
-        NOXNA void SaveAsPng(const std::string& filename) const;
+        CNAEXT void SaveAsPng(const std::string& filename) const;
 
         /**
          * @brief Saves the texture as a JPEG image to the given stream.
@@ -462,17 +462,17 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Saves the texture as a JPEG image directly to a file.
          * @param filename Destination file path.
          */
-        NOXNA void SaveAsJpeg(const std::string& filename) const;
+        CNAEXT void SaveAsJpeg(const std::string& filename) const;
 
         /**
          * @brief Uploads raw RGBA pixel data to the texture.
          * @param data       Pointer to the RGBA byte buffer (4 bytes per pixel).
          * @param pixelCount Total number of pixels (width * height).
          */
-        NOXNA void SetDataRGBA(const uint8_t* data, int pixelCount);
+        CNAEXT void SetDataRGBA(const uint8_t* data, int pixelCount);
 
         /** @brief Returns a reference to the GPU texture renderer. */
-        NOXNA ITextureRenderer& GetRenderer() const { return *renderer_; }
+        CNAEXT ITextureRenderer& GetRenderer() const { return *renderer_; }
 
         /**
          * @brief Returns a weak pointer to the GPU texture renderer.
@@ -480,7 +480,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * Used by ContentManager's weak texture cache.
          * @return A weak_ptr to the renderer; may be expired if the texture is destroyed.
          */
-        NOXNA std::weak_ptr<ITextureRenderer> GetRendererWeak() const { return renderer_; }
+        CNAEXT std::weak_ptr<ITextureRenderer> GetRendererWeak() const { return renderer_; }
 
         /**
          * @brief Returns a weak pointer to the CPU-side pixel buffer.
@@ -488,7 +488,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * Used by ContentManager's weak texture cache.
          * @return A weak_ptr to the pixel buffer; may be expired if context recovery is disabled.
          */
-        NOXNA std::weak_ptr<std::vector<uint8_t>> GetCpuPixelsWeak() const { return cpuPixels_; }
+        CNAEXT std::weak_ptr<std::vector<uint8_t>> GetCpuPixelsWeak() const { return cpuPixels_; }
 
         /**
          * @brief Creates a Texture2D from a raw RGBA pixel vector.
@@ -501,12 +501,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param rgba   RGBA pixel data (4 bytes per pixel, size must equal w * h * 4).
          * @return The created Texture2D.
          */
-        NOXNA static Texture2D CreateFromPixels(GraphicsDevice& device,
+        CNAEXT static Texture2D CreateFromPixels(GraphicsDevice& device,
                                                 int w, int h,
                                                 const std::vector<std::uint8_t>& rgba);
 
         /**
-         * @brief NOXNA test-only: builds a CPU-only Texture2D (no GraphicsDevice, no GPU renderer)
+         * @brief CNAEXT test-only: builds a CPU-only Texture2D (no GraphicsDevice, no GPU renderer)
          *        from raw pixels, so headless tests can exercise CPU pixel paths such as
          *        MouseCursor::FromTexture2D without a real graphics device.
          *
@@ -516,11 +516,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param pixels w * h Color values in row-major order.
          * @return A Texture2D holding the pixels CPU-side with a null renderer.
          */
-        NOXNA static Texture2D CreateCpuOnlyForTests(int w, int h, SurfaceFormat format,
+        CNAEXT static Texture2D CreateCpuOnlyForTests(int w, int h, SurfaceFormat format,
                                                      const std::vector<Color>& pixels);
 
         /**
-         * @brief NOXNA test-only: builds a Texture2D wrapping an arbitrary renderer (e.g. a
+         * @brief CNAEXT test-only: builds a Texture2D wrapping an arbitrary renderer (e.g. a
          *        mock/recording ITextureRenderer) without a GraphicsDevice, so callers that
          *        dereference GetRenderer() (such as SpriteBatch::Draw) can be exercised
          *        headlessly against distinct, identifiable texture instances.
@@ -530,7 +530,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param renderer Renderer to attach; must be non-null.
          * @return A Texture2D wrapping the given renderer, with no GraphicsDevice.
          */
-        NOXNA static Texture2D CreateWithRendererForTests(int w, int h,
+        CNAEXT static Texture2D CreateWithRendererForTests(int w, int h,
                                                          std::shared_ptr<ITextureRenderer> renderer);
 
         /**
@@ -545,7 +545,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param cpuPixels Shared CPU pixel buffer from a previous Texture2D.
          * @return The reconstructed Texture2D.
          */
-        NOXNA static Texture2D ReconstructFromCache(GraphicsDevice& device,
+        CNAEXT static Texture2D ReconstructFromCache(GraphicsDevice& device,
                                                     int w, int h,
                                                     SurfaceFormat fmt,
                                                     int levelCount,
@@ -582,7 +582,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Becomes false immediately after `Dispose()` is called.
          */
-        NOXNA [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
+        CNAEXT [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
 
     private:
         std::shared_ptr<ITextureRenderer> renderer_;

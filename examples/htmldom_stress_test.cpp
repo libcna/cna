@@ -80,7 +80,7 @@ namespace
         return cache.has(combined) ? 1 : 0;
     });
 
-    // plan_html_dom.md HTMLDOM-110: NOXNA instrumentation reads -- see
+    // plan_html_dom.md HTMLDOM-110: CNAEXT instrumentation reads -- see
     // HtmlDomSpriteBatchRenderer.cpp's own cnaDomStyleWriteCount/cnaDomFlushCallCount comments for
     // what each counts. Reset variants zero the counter for a clean measurement window.
     EM_JS(int, JsStyleWriteCount, (), { return Module['cnaDomStyleWriteCount'] || 0; });

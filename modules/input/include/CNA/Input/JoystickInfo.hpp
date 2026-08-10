@@ -10,13 +10,13 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — identity of one enumerated raw joystick device.
+     * @brief CNAEXT — identity of one enumerated raw joystick device.
      *
      * XNA 4.0 only ever modeled Xbox-style mapped gamepads (`GamePad`); it has no notion of a raw
      * joystick (flight sticks, wheels, throttles, arbitrary HID controllers). This descriptor pairs
      * the SDL joystick instance id with its human-readable name and physical type.
      */
-    NOXNA struct JoystickInfoEXT
+    CNAEXT struct JoystickInfoEXT
     {
         /** @brief The SDL joystick instance id (`SDL_JoystickID`). */
         std::uint32_t id = 0;

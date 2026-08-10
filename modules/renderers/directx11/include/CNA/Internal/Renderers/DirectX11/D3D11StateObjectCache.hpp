@@ -43,7 +43,7 @@ namespace CNA::Internal::Renderers::DirectX11
                                              int colorBlendFunc, int alphaBlendFunc,
                                              int cw0, int cw1, int cw2, int cw3);
 
-        /// Number of distinct blend states created so far (NOXNA diagnostics).
+        /// Number of distinct blend states created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:
@@ -67,7 +67,7 @@ namespace CNA::Internal::Renderers::DirectX11
             bool twoSidedStencilMode,
             int ccwStencilFunc, int ccwStencilPass, int ccwStencilFail, int ccwStencilDepthFail);
 
-        /// Number of distinct depth-stencil states created so far (NOXNA diagnostics).
+        /// Number of distinct depth-stencil states created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:
@@ -87,7 +87,7 @@ namespace CNA::Internal::Renderers::DirectX11
                                                    bool scissorTestEnable,
                                                    float depthBias, float slopeScaleDepthBias);
 
-        /// Number of distinct rasterizer states created so far (NOXNA diagnostics).
+        /// Number of distinct rasterizer states created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:

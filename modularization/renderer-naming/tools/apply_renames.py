@@ -40,7 +40,7 @@ FULL_PATHSPECS = [
     "modules/runtime", "modules/media", "modules/content", "modules/storage",
     "modules/renderers", "cmake", "scripts", "tests", "tools", "examples", "docs",
     "CMakeLists.txt", "CMakePresets.json", "main.cpp", "Doxyfile",
-    "README.md", "CLAUDE.md", "CHECKLIST.md",
+    "README.md", "CLAUDE.md", "CHECKLIST.md", "NOXNA.md", "CNAEXT.md",
     ".github",
 ]
 

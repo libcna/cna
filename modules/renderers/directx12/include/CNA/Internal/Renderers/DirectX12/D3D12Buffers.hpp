@@ -60,13 +60,13 @@ namespace CNA::Internal::Renderers::DirectX12
             return declaration_;
         }
 
-        /// Requested capacity in vertices at construction time (NOXNA diagnostics).
+        /// Requested capacity in vertices at construction time (CNAEXT diagnostics).
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
-        /// Byte stride of the most recent SetData() call, 0 before the first call (NOXNA).
+        /// Byte stride of the most recent SetData() call, 0 before the first call (CNAEXT).
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
-        /// Raw GPU-resident ID3D12Resource* (NOXNA -- Phase DX-111's draw path / readback tests).
+        /// Raw GPU-resident ID3D12Resource* (CNAEXT -- Phase DX-111's draw path / readback tests).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return buffer_.Get(); }
-        /// D3D12_VERTEX_BUFFER_VIEW for IASetVertexBuffers() (NOXNA -- Phase DX-111).
+        /// D3D12_VERTEX_BUFFER_VIEW for IASetVertexBuffers() (CNAEXT -- Phase DX-111).
         [[nodiscard]] D3D12_VERTEX_BUFFER_VIEW GetViewEXT() const;
 
     private:
@@ -112,9 +112,9 @@ namespace CNA::Internal::Renderers::DirectX12
 
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return buffer_.Get(); }
-        /// DXGI_FORMAT_R16_UINT or DXGI_FORMAT_R32_UINT, for reference/tests (NOXNA).
+        /// DXGI_FORMAT_R16_UINT or DXGI_FORMAT_R32_UINT, for reference/tests (CNAEXT).
         [[nodiscard]] DXGI_FORMAT GetFormatEXT() const;
-        /// D3D12_INDEX_BUFFER_VIEW for IASetIndexBuffer() (NOXNA -- Phase DX-111).
+        /// D3D12_INDEX_BUFFER_VIEW for IASetIndexBuffer() (CNAEXT -- Phase DX-111).
         [[nodiscard]] D3D12_INDEX_BUFFER_VIEW GetViewEXT() const;
 
     private:

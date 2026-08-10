@@ -67,7 +67,7 @@ namespace Microsoft::Xna::Framework::Audio
         // Production code only ever constructs the single hardcoded SDL3_mixer renderer
         // (see AudioEngine::Init); tests need a distinct second instance to exercise the
         // unequal-comparison paths of Equals/operator==/operator!=.
-        NOXNA friend struct RendererDetailTestAccess;
+        CNAEXT friend struct RendererDetailTestAccess;
 
         RendererDetail(std::string friendlyName, std::string rendererId);
 

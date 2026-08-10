@@ -12,7 +12,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Virtual destructor. */
-        NOXNA virtual ~IRenderTarget() = default;
+        CNAEXT virtual ~IRenderTarget() = default;
 
         /** @brief Returns the width of the render target in pixels. */
         [[nodiscard]] virtual int getWidthProperty() const = 0;

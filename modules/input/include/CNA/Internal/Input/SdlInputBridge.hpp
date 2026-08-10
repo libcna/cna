@@ -128,53 +128,53 @@ namespace CNA::Internal::Input
         );
 
         /**
-         * @brief NOXNA/EXT: the SDL device player index (LED number) of the connected pad, or -1.
+         * @brief CNAEXT/EXT: the SDL device player index (LED number) of the connected pad, or -1.
          */
         static int GetPlayerIndex(Microsoft::Xna::Framework::PlayerIndex playerIndex);
 
         /**
-         * @brief NOXNA/EXT: sets the SDL device player index (LED number). Returns success.
+         * @brief CNAEXT/EXT: sets the SDL device player index (LED number). Returns success.
          */
         static bool SetPlayerIndex(Microsoft::Xna::Framework::PlayerIndex playerIndex, int index);
 
         /**
-         * @brief NOXNA/EXT: the battery/charge state of the connected pad; fills `percent`
+         * @brief CNAEXT/EXT: the battery/charge state of the connected pad; fills `percent`
          * (0-100, or -1 unknown). Returns PowerStateEXT::Error if no gamepad is connected.
          */
         static CNA::Input::PowerStateEXT GetPowerInfo(
             Microsoft::Xna::Framework::PlayerIndex playerIndex, int& percent);
 
         /**
-         * @brief NOXNA/EXT: the printed glyph label for a face button on the connected pad, or
+         * @brief CNAEXT/EXT: the printed glyph label for a face button on the connected pad, or
          * Unknown if no gamepad is connected or the button has no label on this controller.
          */
         static CNA::Input::GamePadButtonLabelEXT GetButtonLabel(
             Microsoft::Xna::Framework::PlayerIndex playerIndex,
             Microsoft::Xna::Framework::Input::Buttons button);
 
-        /** @brief NOXNA/EXT: controller name, or "" if disconnected/unknown. */
+        /** @brief CNAEXT/EXT: controller name, or "" if disconnected/unknown. */
         static std::string GetName(Microsoft::Xna::Framework::PlayerIndex playerIndex);
-        /** @brief NOXNA/EXT: OS device path, or "" if disconnected/unknown. */
+        /** @brief CNAEXT/EXT: OS device path, or "" if disconnected/unknown. */
         static std::string GetPath(Microsoft::Xna::Framework::PlayerIndex playerIndex);
-        /** @brief NOXNA/EXT: hardware serial, or "" if disconnected/unavailable. */
+        /** @brief CNAEXT/EXT: hardware serial, or "" if disconnected/unavailable. */
         static std::string GetSerial(Microsoft::Xna::Framework::PlayerIndex playerIndex);
-        /** @brief NOXNA/EXT: firmware version, or 0 if disconnected/unavailable. */
+        /** @brief CNAEXT/EXT: firmware version, or 0 if disconnected/unavailable. */
         static std::uint16_t GetFirmwareVersion(Microsoft::Xna::Framework::PlayerIndex playerIndex);
-        /** @brief NOXNA/EXT: Steam Input handle, or 0 if disconnected/not a Steam controller. */
+        /** @brief CNAEXT/EXT: Steam Input handle, or 0 if disconnected/not a Steam controller. */
         static std::uint64_t GetSteamHandle(Microsoft::Xna::Framework::PlayerIndex playerIndex);
 
-        /** @brief NOXNA/EXT: wired/wireless connection state, or Unknown if disconnected. */
+        /** @brief CNAEXT/EXT: wired/wireless connection state, or Unknown if disconnected. */
         static CNA::Input::GamePadConnectionStateEXT GetConnectionState(
             Microsoft::Xna::Framework::PlayerIndex playerIndex);
 
-        /** @brief NOXNA/EXT: number of touchpads on the pad, or 0 if disconnected. */
+        /** @brief CNAEXT/EXT: number of touchpads on the pad, or 0 if disconnected. */
         static int GetTouchpadCount(Microsoft::Xna::Framework::PlayerIndex playerIndex);
 
-        /** @brief NOXNA/EXT: fingers a touchpad can report, or 0 if disconnected/out of range. */
+        /** @brief CNAEXT/EXT: fingers a touchpad can report, or 0 if disconnected/out of range. */
         static int GetTouchpadFingerCount(
             Microsoft::Xna::Framework::PlayerIndex playerIndex, int touchpad);
 
-        /** @brief NOXNA/EXT: one touchpad finger's down/x/y/pressure. Returns false if unavailable. */
+        /** @brief CNAEXT/EXT: one touchpad finger's down/x/y/pressure. Returns false if unavailable. */
         static bool GetTouchpadFinger(
             Microsoft::Xna::Framework::PlayerIndex playerIndex, int touchpad, int finger,
             bool& down, float& x, float& y, float& pressure);
@@ -186,13 +186,13 @@ namespace CNA::Internal::Input
             Microsoft::Xna::Framework::PlayerIndex playerIndex
         );
 
-        /** @brief NOXNA/EXT: enumerates the connected raw joysticks (id/name/type). */
+        /** @brief CNAEXT/EXT: enumerates the connected raw joysticks (id/name/type). */
         static std::vector<CNA::Input::JoystickInfoEXT> GetJoysticks();
 
-        /** @brief NOXNA/EXT: static hardware shape/identity of a raw joystick; default if not connected. */
+        /** @brief CNAEXT/EXT: static hardware shape/identity of a raw joystick; default if not connected. */
         static CNA::Input::JoystickCapabilitiesEXT GetJoystickCapabilities(std::uint32_t id);
 
-        /** @brief NOXNA/EXT: current axis/button/hat/trackball state of a raw joystick; all-empty if not connected. */
+        /** @brief CNAEXT/EXT: current axis/button/hat/trackball state of a raw joystick; all-empty if not connected. */
         static CNA::Input::JoystickStateEXT GetJoystickState(std::uint32_t id);
 
         /**
@@ -245,19 +245,19 @@ namespace CNA::Internal::Input
             Microsoft::Xna::Framework::Input::Keys scancode
         );
 
-        /** @brief NOXNA/EXT: the currently active keyboard modifier/lock keys (SDL_GetModState). */
+        /** @brief CNAEXT/EXT: the currently active keyboard modifier/lock keys (SDL_GetModState). */
         static CNA::Input::KeyModifiersEXT GetModState();
 
-        /** @brief NOXNA/EXT: the physical (layout-independent) name of a key, or "" if it has none. */
+        /** @brief CNAEXT/EXT: the physical (layout-independent) name of a key, or "" if it has none. */
         static std::string GetScancodeName(Microsoft::Xna::Framework::Input::Keys key);
 
-        /** @brief NOXNA/EXT: the Keys value for a physical key name, or Keys::None if unrecognized. */
+        /** @brief CNAEXT/EXT: the Keys value for a physical key name, or Keys::None if unrecognized. */
         static Microsoft::Xna::Framework::Input::Keys GetScancodeFromName(const std::string& name);
 
-        /** @brief NOXNA/EXT: the layout-dependent name of a key, or "" if it has none. */
+        /** @brief CNAEXT/EXT: the layout-dependent name of a key, or "" if it has none. */
         static std::string GetKeyName(Microsoft::Xna::Framework::Input::Keys key);
 
-        /** @brief NOXNA/EXT: the Keys value for a layout-dependent key name, or Keys::None if unrecognized. */
+        /** @brief CNAEXT/EXT: the Keys value for a layout-dependent key name, or Keys::None if unrecognized. */
         static Microsoft::Xna::Framework::Input::Keys GetKeyFromName(const std::string& name);
     };
 }

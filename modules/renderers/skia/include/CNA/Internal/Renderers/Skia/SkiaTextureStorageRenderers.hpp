@@ -34,8 +34,8 @@ namespace CNA::Internal::Renderers::Skia
             return levels_.empty() ? 0 : levels_.front().dimension;
         }
 
-        NOXNA [[nodiscard]] std::size_t StorageBytesEXT() const noexcept { return storageBytes_; }
-        NOXNA [[nodiscard]] int LevelCountEXT() const noexcept
+        CNAEXT [[nodiscard]] std::size_t StorageBytesEXT() const noexcept { return storageBytes_; }
+        CNAEXT [[nodiscard]] int LevelCountEXT() const noexcept
         {
             return static_cast<int>(levels_.size());
         }
@@ -80,8 +80,8 @@ namespace CNA::Internal::Renderers::Skia
             depth = levels_.front().depth;
         }
 
-        NOXNA [[nodiscard]] std::size_t StorageBytesEXT() const noexcept { return storageBytes_; }
-        NOXNA [[nodiscard]] int LevelCountEXT() const noexcept
+        CNAEXT [[nodiscard]] std::size_t StorageBytesEXT() const noexcept { return storageBytes_; }
+        CNAEXT [[nodiscard]] int LevelCountEXT() const noexcept
         {
             return static_cast<int>(levels_.size());
         }

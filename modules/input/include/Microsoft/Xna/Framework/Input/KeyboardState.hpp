@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::Input
     struct KeyboardState
     {
         /** @brief Constructs a default KeyboardState with no keys pressed. */
-        NOXNA KeyboardState();
+        CNAEXT KeyboardState();
 
         /**
          * @brief Constructs a KeyboardState with the given keys flagged as pressed.
@@ -30,7 +30,7 @@ namespace Microsoft::Xna::Framework::Input
          * @brief Constructs a KeyboardState from a set of pressed keys.
          * @param pressedKeys The set of keys currently pressed.
          */
-        NOXNA explicit KeyboardState(const std::unordered_set<Keys>& pressedKeys);
+        CNAEXT explicit KeyboardState(const std::unordered_set<Keys>& pressedKeys);
 
         /**
          * @brief Returns the state of a specified key.
@@ -83,11 +83,11 @@ namespace Microsoft::Xna::Framework::Input
          * @brief Retrieves a string representation of this object.
          *
          * CNA convenience with no XNA/FNA counterpart: FNA's `KeyboardState` (unlike `MouseState`,
-         * `GamePadState`, and `TouchLocation`) declares no `ToString`, so this is tagged `NOXNA`.
+         * `GamePadState`, and `TouchLocation`) declares no `ToString`, so this is tagged `CNAEXT`.
          *
          * @return The string representation.
          */
-        NOXNA [[nodiscard]] std::string ToString() const;
+        CNAEXT [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Compares two KeyboardState instances for equality.

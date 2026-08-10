@@ -19,7 +19,7 @@
 namespace CNA::Internal::Renderers::FreeDirect
 {
     /**
-     * @brief Resize-only failure points used by the FreeDirect transaction regression. NOXNA.
+     * @brief Resize-only failure points used by the FreeDirect transaction regression. CNAEXT.
      *
      * Hooks are copied into one renderer instance and never shared globally. Initial construction
      * is deliberately not injectable through these points; they apply only to later
@@ -36,7 +36,7 @@ namespace CNA::Internal::Renderers::FreeDirect
         SurfaceSetCommit
     };
 
-    /** @brief Native FreeDirect resource categories reported by FreeDirectTestHooksEXT. NOXNA. */
+    /** @brief Native FreeDirect resource categories reported by FreeDirectTestHooksEXT. CNAEXT. */
     enum class FreeDirectResourceKindEXT : std::uint8_t
     {
         DirectDraw,
@@ -44,7 +44,7 @@ namespace CNA::Internal::Renderers::FreeDirect
         ShadowBackBuffer
     };
 
-    /** @brief Native acquisition/release edge reported by FreeDirectTestHooksEXT. NOXNA. */
+    /** @brief Native acquisition/release edge reported by FreeDirectTestHooksEXT. CNAEXT. */
     enum class FreeDirectResourceEventEXT : std::uint8_t
     {
         Acquired,
@@ -52,7 +52,7 @@ namespace CNA::Internal::Renderers::FreeDirect
     };
 
     /**
-     * @brief Per-instance resize injection and exact native-resource lifetime observation. NOXNA.
+     * @brief Per-instance resize injection and exact native-resource lifetime observation. CNAEXT.
      *
      * `context` must outlive the renderer while `resourceEvent` is installed. `identity` is the
      * native COM interface pointer and is for identity comparison only; a Released identity must
@@ -66,7 +66,7 @@ namespace CNA::Internal::Renderers::FreeDirect
                               FreeDirectResourceEventEXT event, const void* identity) noexcept = nullptr;
     };
 
-    /** @brief Snapshot used by the resize regression to prove native identity preservation. NOXNA. */
+    /** @brief Snapshot used by the resize regression to prove native identity preservation. CNAEXT. */
     struct FreeDirectTestStateEXT
     {
         const void* directDraw = nullptr;
@@ -112,7 +112,7 @@ namespace CNA::Internal::Renderers::FreeDirect
     {
     public:
         explicit FreeDirectRenderer(const GraphicsRendererCreateArgs& args);
-        /** @brief Test-only constructor with instance-local lifetime observation. NOXNA. */
+        /** @brief Test-only constructor with instance-local lifetime observation. CNAEXT. */
         FreeDirectRenderer(const GraphicsRendererCreateArgs& args, const FreeDirectTestHooksEXT& testHooks);
         ~FreeDirectRenderer() override;
 
@@ -127,9 +127,9 @@ namespace CNA::Internal::Renderers::FreeDirect
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         SDL_Window* GetWindowInternal() const override;
-        /** @brief Replaces this instance's resize-only test hooks and rearms one failure. NOXNA. */
+        /** @brief Replaces this instance's resize-only test hooks and rearms one failure. CNAEXT. */
         void SetTestHooksEXT(const FreeDirectTestHooksEXT& testHooks);
-        /** @brief Returns native identities and resize-dependent renderer state. NOXNA. */
+        /** @brief Returns native identities and resize-dependent renderer state. CNAEXT. */
         [[nodiscard]] FreeDirectTestStateEXT GetTestStateEXT() const;
         // free-direct manages its own internal SDL_Renderer privately (created lazily inside
         // PresentPrimary, against the same SDL_Window* this renderer hands to

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 namespace CNA::Graphics {
 
@@ -22,4 +22,4 @@ namespace CNA::Graphics {
 
 } // namespace CNA::Graphics
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

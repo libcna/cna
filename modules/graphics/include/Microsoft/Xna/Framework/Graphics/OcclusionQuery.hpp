@@ -24,10 +24,10 @@ namespace Microsoft::Xna::Framework::Graphics
         explicit OcclusionQuery(GraphicsDevice& device);
 
         /** @brief Destructor. */
-        NOXNA ~OcclusionQuery() override;
+        CNAEXT ~OcclusionQuery() override;
 
         /** @brief Returns the fully qualified CNA type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets whether the occlusion query result is available without blocking.
@@ -51,7 +51,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void End();
 
         /** @brief Returns true while the native query renderer is still alive (CNA extension). */
-        NOXNA [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
+        CNAEXT [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
 
     protected:
         /**

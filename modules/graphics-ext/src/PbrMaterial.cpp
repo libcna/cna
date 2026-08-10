@@ -2,7 +2,7 @@
 #include "CNA/Graphics/PbrMaterial.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 using Tex2D = Microsoft::Xna::Framework::Graphics::Texture2D;
 using Color = Microsoft::Xna::Framework::Color;
@@ -56,4 +56,4 @@ namespace CNA::Graphics {
 
 } // namespace CNA::Graphics
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

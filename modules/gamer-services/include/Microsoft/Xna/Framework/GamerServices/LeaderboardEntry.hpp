@@ -58,7 +58,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         void setRatingProperty(long long value);
 
         /**
-         * @brief NOXNA/internal: installs the callback LeaderboardWriter uses to persist this
+         * @brief CNAEXT/internal: installs the callback LeaderboardWriter uses to persist this
          * entry to the local store whenever setRatingProperty() runs. Not part of the real XNA
          * 4.0 API - purely internal wiring between LeaderboardWriter and its own returned entries,
          * invisible to any caller.
@@ -66,7 +66,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param hook The callback to invoke after Rating changes; pass an empty std::function to
          *        clear it.
          */
-        NOXNA void SetOnRatingChangedHookEXT(std::function<void()> hook);
+        CNAEXT void SetOnRatingChangedHookEXT(std::function<void()> hook);
 
         /**
          * @brief Gets the ranking of this entry on the leaderboard.
@@ -77,7 +77,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @return The ranking.
          */
-        NOXNA [[nodiscard]] int getRankingEXTProperty() const;
+        CNAEXT [[nodiscard]] int getRankingEXTProperty() const;
 
         /**
          * @brief Determines whether this entry is structurally equal to another.
@@ -89,7 +89,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param other The entry to compare against.
          * @return true if gamer, rating, and ranking are all equal.
          */
-        NOXNA [[nodiscard]] bool operator==(const LeaderboardEntry& other) const;
+        CNAEXT [[nodiscard]] bool operator==(const LeaderboardEntry& other) const;
 
         /**
          * @brief Determines whether this entry differs from another.
@@ -97,10 +97,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param other The entry to compare against.
          * @return true if any of gamer, rating, or ranking differ.
          */
-        NOXNA [[nodiscard]] bool operator!=(const LeaderboardEntry& other) const;
+        CNAEXT [[nodiscard]] bool operator!=(const LeaderboardEntry& other) const;
 
         /** @brief Creates a LeaderboardEntry for CNA internal use. */
-        NOXNA static LeaderboardEntry CreateInternal(Gamer* gamer, long long rating, int ranking);
+        CNAEXT static LeaderboardEntry CreateInternal(Gamer* gamer, long long rating, int ranking);
 
     private:
         LeaderboardEntry(Gamer* gamer, long long rating, int ranking);

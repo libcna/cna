@@ -102,7 +102,7 @@ namespace CNA::Internal::Renderers::Stub
     };
 
     /**
-     * @brief NOXNA. The Stub graphics renderer -- a deliberately minimal `IGraphicsRenderer`
+     * @brief CNAEXT. The Stub graphics renderer -- a deliberately minimal `IGraphicsRenderer`
      * implementation that renders nothing, touches no window, no GPU library, and no SDL video
      * subsystem, and keeps no bookkeeping of any kind (see `plan_stub.md`'s design decisions).
      *

@@ -12,7 +12,7 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — describes one force-feedback effect, for any `HapticEffectTypeEXT` family.
+     * @brief CNAEXT — describes one force-feedback effect, for any `HapticEffectTypeEXT` family.
      *
      * This is the C++ analog of SDL3's `SDL_HapticEffect` tagged union (`SDL_HapticConstant`,
      * `SDL_HapticPeriodic`, `SDL_HapticCondition`, `SDL_HapticRamp`, `SDL_HapticLeftRight`,
@@ -33,7 +33,7 @@ namespace CNA::Input
      * - **Custom**: `direction`, `length`, `delay`, `button`, `interval`, `customChannels`,
      *   `customPeriod`, `customData` (size must be `customChannels * samples`), envelope.
      */
-    NOXNA struct HapticEffectEXT
+    CNAEXT struct HapticEffectEXT
     {
         /** @brief A `length` value meaning "play forever" (`SDL_HAPTIC_INFINITY`). */
         static constexpr std::uint32_t InfiniteLengthEXT = 4294967295u;

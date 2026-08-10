@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 883: EffectMaterial::Clone() — the last of the 8 concrete Effect
-// subclasses (6 XNA stock effects + EffectMaterial + the NOXNA ShaderEffect
+// subclasses (6 XNA stock effects + EffectMaterial + the CNAEXT ShaderEffect
 // extension) to gain a Clone() override once Effect::Clone() became a pure
 // virtual base-class contract.
 

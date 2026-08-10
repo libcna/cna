@@ -3,7 +3,7 @@
 // inherited from EasyGL test assumptions -- this is a fresh, from-scratch exercise of every
 // overload against this renderer's own SdlSpriteBatchRenderer::Draw implementations).
 //
-// SpriteBatch::Draw has 9 public overloads (3 NOXNA taking a raw Texture2D + explicit Rectangle/
+// SpriteBatch::Draw has 9 public overloads (3 CNAEXT taking a raw Texture2D + explicit Rectangle/
 // float args, 6 real XNA overloads taking Vector2/optional<Rectangle>). Each is exercised exactly
 // once here, drawing a distinct 40x40 tinted square at its own non-overlapping screen slot using a
 // solid white 1x1 texture -- since white*tint == tint exactly (no blending ambiguity with
@@ -116,15 +116,15 @@ protected:
 
         sb_->Begin();
 
-        // 1: Draw(texture, x, y) -- NOXNA. Draws at native texture size (1x1, no tint
+        // 1: Draw(texture, x, y) -- CNAEXT. Draws at native texture size (1x1, no tint
         // parameter in this overload's signature), so the check below reads exactly that single
         // physical pixel rather than a tinted region.
         sb_->Draw(*whiteTex_, static_cast<float>(Slot(0).X), static_cast<float>(Slot(0).Y));
 
-        // 2: Draw(texture, destRect, sourceRect, color) -- NOXNA
+        // 2: Draw(texture, destRect, sourceRect, color) -- CNAEXT
         sb_->Draw(*whiteTex_, Slot(1), Rectangle(0, 0, 1, 1), kTints[1]);
 
-        // 3: Draw(texture, destRect, sourceRect, color, rotation, origin, effect, layerDepth) -- NOXNA
+        // 3: Draw(texture, destRect, sourceRect, color, rotation, origin, effect, layerDepth) -- CNAEXT
         //    Uses the split texture + FlipHorizontally so the LEFT half of the destination reads
         //    the texture's right-half colour (green) if the flip genuinely took effect.
         sb_->Draw(*splitTex_, Slot(2), Rectangle(0, 0, 16, 16), Color::White,

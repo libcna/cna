@@ -28,7 +28,7 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11SamplerState> GetOrCreate(ID3D11Device* device, int filter,
                                                int addressU, int addressV, int maxAnisotropy);
 
-        /// Number of distinct sampler states created so far (NOXNA diagnostics).
+        /// Number of distinct sampler states created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:

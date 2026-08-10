@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 PBR + skinned-vertex-color porting task: the real, compiler-verified constant register
-// layout for CNA's own 3 new NOXNA shaders (Pbr3D, PbrSkinned3D, SkinnedVertexColor3D -- see
+// layout for CNA's own 3 new CNAEXT shaders (Pbr3D, PbrSkinned3D, SkinnedVertexColor3D -- see
 // shaders/cna/*.hlsl's own header comments), extracted the same way D9-72's own
 // extract_shader_registers.py extracts the vendored XNA Stock Effects' tables: from a real
 // D3DDisassemble()'s own "// Registers:" comment block, NOT hand-derived from each .hlsl file's own

@@ -118,7 +118,7 @@ TEST(PrimitiveVertsTest, TriangleList_ZeroPrimitives)
 
 // These tests just verify the overloads exist and can be referenced.
 // They do not call them (that would require a GPU device).
-TEST(DrawUserPrimitivesAPITest, PrimitiveVertsIsPublicStaticNOXNA)
+TEST(DrawUserPrimitivesAPITest, PrimitiveVertsIsPublicStaticCNAEXT)
 {
     // If this compiles the static method is accessible.
     const int n = GraphicsDevice::PrimitiveVerts(PrimitiveType::TriangleList, 2);

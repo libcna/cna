@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/DepthEffectMode.hpp"
 #include "CNA/Graphics/DitherMode.hpp"
@@ -27,7 +27,7 @@ namespace CNA::Graphics {
      * into a `Texture2D` (typically via a `RenderTarget2D`), then redraw it through
      * `SpriteBatch::Begin(sortMode, blendState, sampler, nullptr, nullptr, &depthEffect)`.
      *
-     * NOXNA extension — no XNA/FNA precedent; this is a from-scratch CNA post-process
+     * CNAEXT extension — no XNA/FNA precedent; this is a from-scratch CNA post-process
      * effect, not a port.
      */
     class DepthEffect : public Microsoft::Xna::Framework::Graphics::ShaderEffect
@@ -85,4 +85,4 @@ namespace CNA::Graphics {
 
 } // namespace CNA::Graphics
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// DepthEffect is a NOXNA CNA extension (no XNA/FNA precedent) — like ShaderEffectTests.cpp,
+// DepthEffect is a CNAEXT CNA extension (no XNA/FNA precedent) — like ShaderEffectTests.cpp,
 // these tests exercise the structural contract (mode round-trip, Clone() independence,
 // GetTypeName()) against a default-constructed GraphicsDevice with no real renderer, not GLSL
 // compile/render correctness (that needs a live EasyGL context — see
 // examples/easygl_postprocesseffect_shader_test.cpp for the runtime-verified pattern).
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include <gtest/gtest.h>
 
@@ -146,4 +146,4 @@ TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSamePaletteMode)
     EXPECT_EQ(clone->getMode(), DepthEffectMode::Palette16);
 }
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

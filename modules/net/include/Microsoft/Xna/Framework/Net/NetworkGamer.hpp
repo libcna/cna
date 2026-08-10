@@ -30,13 +30,13 @@ namespace Microsoft::Xna::Framework::Net
          * FNA's setter for this is `private` (`{ get; private set; }`), not `internal` -
          * FNA's own NetworkSession never actually calls it after construction, so real XNA's
          * HasLeftSession is permanently false in practice (an unimplemented FNA stub, like several
-         * other NetworkSession-adjacent members). Restored here, as a NOXNA extension, so this
+         * other NetworkSession-adjacent members). Restored here, as a CNAEXT extension, so this
          * port's NetworkSession::RemoveGamer() (a sibling class, not a subclass, so it couldn't
          * reach a real `private` setter either way) can make this property actually functional.
          *
          * @param value The new value.
          */
-        NOXNA void SetHasLeftSession(bool value);
+        CNAEXT void SetHasLeftSession(bool value);
 
         /**
          * @brief Gets whether this gamer has a voice/headset available.
@@ -57,13 +57,13 @@ namespace Microsoft::Xna::Framework::Net
          *
          * FNA hardcodes this property's getter to 0 for every gamer (a real, confirmed upstream
          * limitation - see DEFERRED.md item #20 in the sibling cna-samples repo). Restored here,
-         * NOXNA, so NetworkSession and the ENet backend can assign a real, cross-machine-consistent
+         * CNAEXT, so NetworkSession and the ENet backend can assign a real, cross-machine-consistent
          * id: NetworkSession assigns a local placeholder at construction, and ENetBackend overwrites
          * it with the wire-negotiated id once a SystemLink session actually joins/hosts.
          *
          * @param value The new identifier.
          */
-        NOXNA void SetId(SharpRuntime::bytecs value);
+        CNAEXT void SetId(SharpRuntime::bytecs value);
 
         /**
          * @brief Gets whether this gamer is a guest.
@@ -84,7 +84,7 @@ namespace Microsoft::Xna::Framework::Net
          *
          * FNA hardcodes this property's getter to true for every gamer (see DEFERRED.md item #20
          * in the sibling cna-samples repo - this made NetworkSession.IsHost always true on every
-         * machine). Restored here, NOXNA, so NetworkSession can set a local gamer's real host
+         * machine). Restored here, CNAEXT, so NetworkSession can set a local gamer's real host
          * status at construction (true after Create(), false after Join()/JoinInvited()).
          *
          * Task 4.6: a *remote* gamer representing the actual host machine also reports this
@@ -94,7 +94,7 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @param value The new host state.
          */
-        NOXNA void SetIsHost(bool value);
+        CNAEXT void SetIsHost(bool value);
 
         /**
          * @brief Gets whether this gamer is a local gamer.
@@ -172,7 +172,7 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @param value The newly-measured round-trip time.
          */
-        NOXNA void SetRoundtripTime(System::TimeSpan value);
+        CNAEXT void SetRoundtripTime(System::TimeSpan value);
 
         /**
          * @brief Gets the network session this gamer belongs to.
@@ -189,7 +189,7 @@ namespace Microsoft::Xna::Framework::Net
          *                 behavior for gamers with no known real identity; ENetBackend passes a
          *                 real gamertag received over the wire when constructing remote gamers.
          */
-        NOXNA static NetworkGamer CreateInternal(NetworkSession* session, const std::string& gamertag = "Stub Gamer");
+        CNAEXT static NetworkGamer CreateInternal(NetworkSession* session, const std::string& gamertag = "Stub Gamer");
 
     protected:
         /**

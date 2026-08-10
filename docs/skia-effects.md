@@ -10,7 +10,7 @@ support for one must not be inferred from the other.
 |---|---|---|---|
 | `SpriteBatch::Begin(..., effect=nullptr)` | Stock textured sprite, vertex tint, transform, sampler, blend, viewport/scissor and ordering semantics. | Built-in GL sprite program. | Direct `SkCanvas` image/paint path; already pixel-proven. It does not construct or compile a `SpriteEffect`. |
 | Explicit `SpriteEffect` | Stock effect type whose `OnApply()` attempts to update `MatrixTransform`; it has no source or renderer program. | Falls back to the built-in sprite program because `GetEffectRendererPtr()` is null. | Exact runtime type aliases the already-proven built-in path; clones work identically. Derived types reject so overridden behavior cannot be lost. |
-| `ShaderEffect(device, vert, frag)` | NOXNA pair of renderer-specific opaque byte strings retained for cloning and source access. | Treats both as GLSL ES shader source. | Untagged strings still return null. An exact `CNA_SKIA_SKSL_V1` first string opts the fragment string into the bounded SkSL SpriteBatch ABI below. |
+| `ShaderEffect(device, vert, frag)` | CNAEXT pair of renderer-specific opaque byte strings retained for cloning and source access. | Treats both as GLSL ES shader source. | Untagged strings still return null. An exact `CNA_SKIA_SKSL_V1` first string opts the fragment string into the bounded SkSL SpriteBatch ABI below. |
 | `Effect(device, effectCode)` | Compiled XNA `.fx` bytecode. | Shared constructor throws; no renderer receives it. | Same shared, deterministic `NotImplementedException`; outside the SkSL bridge. |
 | `ContentManager` custom `Effect` | `.cnj`/`.shader.json` names separate `vertex` and `fragment` text files. | Files are GLSL source. | Existing untagged descriptors remain invalid. A deliberately renderer-specific descriptor can place the exact marker in its vertex payload, but the format still has no portable language tag. |
 | Stock 3D effects | XNA properties feed vertex/fragment/depth/cube/lighting pipelines. | Dedicated GL programs. | Outside the 2D effect route; tracked by SKIA-93--103 and never implied by a runtime colour filter. |
@@ -201,7 +201,7 @@ ShaderEffect effect(device, "CNA_SKIA_SKSL_MESH_V1", R"(
   `drawVertices` (`kModulate`), not as a shader input. Optional texture children reuse the same
   `cnaTexture0`-`7` naming convention as v1, but the unit range is `0..7` (all optional) rather than
   v1's reserved-0 `1..7` range, and reuse every existing `SkiaResourcePolicy.hpp` budget constant.
-- The only route to draw a mesh-ABI effect is the new NOXNA `SpriteBatch::DrawMeshEXT(effect,
+- The only route to draw a mesh-ABI effect is the new CNAEXT `SpriteBatch::DrawMeshEXT(effect,
   positions, colors, uvs, vertexCount, indices, indexCount)`, restricted to `SpriteSortMode::Immediate`
   -- a declared, tested scope boundary, since a mesh draw does not fit the shared quad-shaped
   deferred sort/batch queue every other `SpriteBatch` draw call uses. It throws for any other sort

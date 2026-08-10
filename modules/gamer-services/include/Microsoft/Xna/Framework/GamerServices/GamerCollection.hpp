@@ -113,7 +113,7 @@ namespace Microsoft::Xna::Framework::GamerServices
              * @param coll The collection to enumerate.
              * @param pos The zero-based starting position (typically -1, before the first element).
              */
-            NOXNA GamerCollectionEnumerator(const std::vector<T*>* coll, int pos)
+            CNAEXT GamerCollectionEnumerator(const std::vector<T*>* coll, int pos)
                 : collection_(coll), position_(pos) {}
 
         private:
@@ -221,9 +221,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
 
         /** @brief Returns a C++ iterator to the beginning (for range-for). */
-        NOXNA [[nodiscard]] auto begin() const { return collection_.begin(); }
+        CNAEXT [[nodiscard]] auto begin() const { return collection_.begin(); }
         /** @brief Returns a C++ iterator past the end (for range-for). */
-        NOXNA [[nodiscard]] auto end()   const { return collection_.end(); }
+        CNAEXT [[nodiscard]] auto end()   const { return collection_.end(); }
 
         /**
          * @brief Creates a plain GamerCollection<T> for CNA internal use.
@@ -237,7 +237,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param items The elements to store.
          * @return A new GamerCollection<T> wrapping items.
          */
-        NOXNA static GamerCollection<T> CreateInternal(std::vector<T*> items)
+        CNAEXT static GamerCollection<T> CreateInternal(std::vector<T*> items)
         {
             return GamerCollection<T>(std::move(items));
         }
@@ -252,7 +252,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param item The element to append.
          */
-        NOXNA void Add(T* item)
+        CNAEXT void Add(T* item)
         {
             collection_.push_back(item);
         }
@@ -265,7 +265,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param item The element to remove.
          */
-        NOXNA void Remove(T* item)
+        CNAEXT void Remove(T* item)
         {
             collection_.erase(std::remove(collection_.begin(), collection_.end(), item), collection_.end());
         }
@@ -278,7 +278,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * free, so a raw pointer into a just-destroyed object can never be observed through a
          * collection accessor).
          */
-        NOXNA void Clear()
+        CNAEXT void Clear()
         {
             collection_.clear();
         }

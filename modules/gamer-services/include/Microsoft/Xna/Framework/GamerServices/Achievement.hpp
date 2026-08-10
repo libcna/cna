@@ -101,7 +101,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param other The achievement to compare against.
          * @return true if every field is equal.
          */
-        NOXNA [[nodiscard]] bool operator==(const Achievement& other) const;
+        CNAEXT [[nodiscard]] bool operator==(const Achievement& other) const;
 
         /**
          * @brief Determines whether this achievement differs from another.
@@ -109,10 +109,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param other The achievement to compare against.
          * @return true if any field differs.
          */
-        NOXNA [[nodiscard]] bool operator!=(const Achievement& other) const;
+        CNAEXT [[nodiscard]] bool operator!=(const Achievement& other) const;
 
         /** @brief Creates an Achievement for CNA internal use. */
-        NOXNA static Achievement CreateInternal(
+        CNAEXT static Achievement CreateInternal(
             const std::string& key,
             const std::string& name,
             const std::string& description,

@@ -53,16 +53,16 @@ namespace Microsoft::Xna::Framework::Input::Touch
          * @brief Gets the finger id of the primary touch point (FNA extension).
          * @return The primary finger id.
          */
-        NOXNA [[nodiscard]] int getFingerIdEXTProperty() const;
+        CNAEXT [[nodiscard]] int getFingerIdEXTProperty() const;
 
         /**
          * @brief Gets the finger id of the secondary touch point (FNA extension).
          * @return The secondary finger id.
          */
-        NOXNA [[nodiscard]] int getFingerId2EXTProperty() const;
+        CNAEXT [[nodiscard]] int getFingerId2EXTProperty() const;
 
         /** @brief Constructs an empty gesture sample. */
-        NOXNA GestureSample();
+        CNAEXT GestureSample();
 
         /**
          * @brief Constructs a gesture sample; finger ids are set to NO_FINGER.
@@ -91,7 +91,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
          * @param fingerId The primary finger id.
          * @param fingerId2 The secondary finger id.
          */
-        NOXNA GestureSample(GestureType gestureType,
+        CNAEXT GestureSample(GestureType gestureType,
                              System::TimeSpan timestamp,
                              Microsoft::Xna::Framework::Vector2 position,
                              Microsoft::Xna::Framework::Vector2 position2,

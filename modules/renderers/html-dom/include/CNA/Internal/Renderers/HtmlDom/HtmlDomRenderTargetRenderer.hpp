@@ -110,7 +110,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         }
 
         /**
-         * @brief NOXNA. Returns this target's id into `Module['cnaDomTextures']`.
+         * @brief CNAEXT. Returns this target's id into `Module['cnaDomTextures']`.
          *
          * @return The JS-side canvas id backing this target.
          */

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// NOXNA. A renderer-agnostic sprite benchmark, deliberately written against nothing but the public
+// CNAEXT. A renderer-agnostic sprite benchmark, deliberately written against nothing but the public
 // XNA API (no CNA::Internal::Renderers::* include, no renderer-specific hook) so the identical
 // source can be compiled against CANVAS, EASYGL or HTML_DOM and produce a genuine like-for-like
 // comparison -- built once per renderer via three separate `emcmake` configures

@@ -41,7 +41,7 @@ python3 scripts/compare-fna-reference.py /tmp/fna-reference-values.json /tmp/cna
 
 The comparison is one-directional: every key present on the FNA side must exist on the CNA side
 with an equal (or, for floats, sufficiently close — `--tolerance`, default `1e-4`) value. Keys
-that exist only on the CNA side are not reported as mismatches — CNA has real NOXNA extensions
+that exist only on the CNA side are not reported as mismatches — CNA has real CNAEXT extensions
 with no FNA equivalent (e.g. `PrimitiveType.PointListEXT`), and requiring the reverse direction
 too would make legitimate, intentional CNA extensions look like failures.
 

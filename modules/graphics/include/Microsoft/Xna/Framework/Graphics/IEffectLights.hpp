@@ -14,7 +14,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Virtual destructor. */
-        NOXNA virtual ~IEffectLights() = default;
+        CNAEXT virtual ~IEffectLights() = default;
 
         /**
          * @brief Gets the ambient light color applied to the scene.

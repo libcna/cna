@@ -36,18 +36,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         "libcna_(?!core|math)|libCNA_|libenet|libav|cna_renderer_")
 
     # GraphicsCore: may pull math/core/input (declared XNA-semantic cycle) and the selected
-    # renderer's archive (factory edge), but no content/media/audio/runtime/devices/NOXNA/net.
+    # renderer's archive (factory edge), but no content/media/audio/runtime/devices/CNAEXT/net.
     cna_add_module_probe(probe_graphics CNA::GraphicsCore
-        "libcna_(content|media|audio|runtime|devices|noxna|storage)|libCNA_|libenet|libav")
+        "libcna_(content|media|audio|runtime|devices|cnaext|storage)|libCNA_|libenet|libav")
 
     # Content: pulls graphics/audio/media by XNA design (type readers construct
-    # Texture/SoundEffect/Song/Video), but no runtime layer, devices, NOXNA or networking.
+    # Texture/SoundEffect/Song/Video), but no runtime layer, devices, CNAEXT or networking.
     cna_add_module_probe(probe_content CNA::Content
-        "libcna_(runtime|devices|noxna|storage)|libCNA_|libenet")
+        "libcna_(runtime|devices|cnaext|storage)|libCNA_|libenet")
 
-    # Runtime: the full framework below it, but never GamerServices/Net, devices or NOXNA.
+    # Runtime: the full framework below it, but never GamerServices/Net, devices or CNAEXT.
     cna_add_module_probe(probe_runtime CNA::Runtime
-        "libcna_(devices|noxna|storage)|libCNA_|libenet")
+        "libcna_(devices|cnaext|storage)|libCNA_|libenet")
 
     # Input: graphics-core/math/core through the declared graphics<->input cycle (plus the
     # selected renderer via the factory edge), but nothing above it.
@@ -63,7 +63,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     cna_add_module_probe(probe_media CNA::Media
         "libcna_(content|runtime|devices|storage|graphics_ext)|libCNA_|libenet")
 
-    # Storage: nothing but the storage archive and sharp-runtime. The PlayerIndex/NOXNA
+    # Storage: nothing but the storage archive and sharp-runtime. The PlayerIndex/CNAEXT
     # dependency on the core module is headers-only (cna_core_headers), so even the core
     # archive must stay off the link line.
     cna_add_module_probe(probe_storage CNA::Storage
@@ -79,20 +79,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     cna_add_module_probe(probe_devices_ext CNA::DevicesExt
         "libcna_devices\\.|libcna_graphics_ext|libCNA_|libenet")
 
-    # GraphicsExt (the former cna_noxna implementation): graphics-core closure only.
+    # GraphicsExt (the former cna_noxna STATIC library's implementation): graphics-core closure only.
     cna_add_module_probe(probe_graphics_ext CNA::GraphicsExt
         "libcna_(content|media|audio|runtime|devices|storage)|libCNA_|libenet")
 
-    # NoXna compatibility umbrella: must COMPOSE both extension modules. The probe runs like
+    # CnaExt compatibility umbrella: must COMPOSE both extension modules. The probe runs like
     # every other; its closure gate needs --require, which cna_add_module_probe does not
     # pass, so the composition gate is registered directly below.
-    cna_add_module_probe(probe_noxna CNA::NoXna)
+    cna_add_module_probe(probe_cnaext CNA::CnaExt)
     if(Python3_Interpreter_FOUND)
-        add_test(NAME ModuleLinkClosure_NoXnaComposition
+        add_test(NAME ModuleLinkClosure_CnaExtComposition
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
                 --build-dir "${CMAKE_BINARY_DIR}"
-                --target probe_noxna
+                --target probe_cnaext
                 --forbid "libCNA_|libenet"
                 --require "libcna_graphics_ext" --require "libcna_devices_ext")
     endif()

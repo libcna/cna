@@ -46,12 +46,12 @@ namespace CNA::Internal::Renderers::Skia
         void BeforeWriteEXT() noexcept override;
         void FinalizeWriteEXT() override;
 
-        NOXNA [[nodiscard]] int LevelCountEXT() const noexcept
+        CNAEXT [[nodiscard]] int LevelCountEXT() const noexcept
         {
             return static_cast<int>(levels_.size());
         }
-        NOXNA [[nodiscard]] std::size_t StorageBytesEXT() const noexcept { return storageBytes_; }
-        NOXNA [[nodiscard]] bool PreservesContentsEXT() const noexcept { return preserveContents_; }
+        CNAEXT [[nodiscard]] std::size_t StorageBytesEXT() const noexcept { return storageBytes_; }
+        CNAEXT [[nodiscard]] bool PreservesContentsEXT() const noexcept { return preserveContents_; }
 
         /**
          * SKIA-146: returns an immutable sampling snapshot of one face/level, synchronizing that
@@ -62,10 +62,10 @@ namespace CNA::Internal::Renderers::Skia
          * Returns nullptr for an out-of-range face/level. The cached snapshot for a face is
          * dropped as soon as that face is next written to, never on an unrelated face's write.
          */
-        NOXNA [[nodiscard]] sk_sp<SkImage> SnapshotFaceEXT(int face, int level) const;
+        CNAEXT [[nodiscard]] sk_sp<SkImage> SnapshotFaceEXT(int face, int level) const;
         /// Drops every face's cached sampling snapshot; called from the destructor and available
         /// for callers that need every cache reset without writing to any face.
-        NOXNA void InvalidateAllFaceSnapshotsEXT() noexcept;
+        CNAEXT void InvalidateAllFaceSnapshotsEXT() noexcept;
 
     private:
         struct Level final

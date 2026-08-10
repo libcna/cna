@@ -91,20 +91,20 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Sets the real-rendering clip name paired with this preset.
          *
-         * @note NOXNA — CNA extension. Defaults to AvatarAnimationPresetToClipNameEXT(preset)
+         * @note CNAEXT — CNA extension. Defaults to AvatarAnimationPresetToClipNameEXT(preset)
          * at construction; this setter allows overriding it (e.g. to a documented best-effort
          * substitute clip name — see tools/avatar_asset_pipeline/README.md).
          * @param clipName The clip name to look up in a SkinnedModelEXT's Clips.
          */
-        NOXNA void SetRealClipNameEXT(const std::string& clipName);
+        CNAEXT void SetRealClipNameEXT(const std::string& clipName);
 
         /**
          * @brief Gets the real-rendering clip name paired with this preset.
          *
-         * @note NOXNA — CNA extension.
+         * @note CNAEXT — CNA extension.
          * @return The current clip name.
          */
-        NOXNA [[nodiscard]] const std::string& GetRealClipNameEXT() const;
+        CNAEXT [[nodiscard]] const std::string& GetRealClipNameEXT() const;
 
     protected:
         /**

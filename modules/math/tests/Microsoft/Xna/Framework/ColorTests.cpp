@@ -488,7 +488,7 @@ TEST(ColorTest, PackFromVector4IsDeterministicAcrossRepeatedCalls)
     EXPECT_EQ(a.getPackedValueProperty(), b.getPackedValueProperty());
 }
 
-// --- operator* commutative (NOXNA) ---
+// --- operator* commutative (CNAEXT) ---
 
 TEST(ColorTest, MultiplyOperatorCommutativeMatchesNormal)
 {

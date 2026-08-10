@@ -100,7 +100,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] bool getBrakeWithButtonsProperty() const;
 
         /** @brief Creates a GameDefaults instance for CNA internal use. */
-        NOXNA static GameDefaults CreateInternal();
+        CNAEXT static GameDefaults CreateInternal();
 
     private:
         GameDefaults();

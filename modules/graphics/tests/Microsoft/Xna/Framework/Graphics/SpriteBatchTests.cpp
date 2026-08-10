@@ -396,7 +396,7 @@ TEST(SpriteBatchRendererInjectionTest, DrawIsRecordedWithExactParameters)
 
 // Task 922: the real, XNA-faithful 7th SpriteBatch::Draw overload -- Rectangle destination +
 // optional (nullable) Rectangle source + rotation/origin/effects/depth. FNA's real equivalent
-// takes Rectangle? sourceRectangle (src/Graphics/SpriteBatch.cs); the pre-existing NOXNA overload
+// takes Rectangle? sourceRectangle (src/Graphics/SpriteBatch.cs); the pre-existing CNAEXT overload
 // wrongly required a non-optional Rectangle instead.
 
 TEST(SpriteBatchRendererInjectionTest, DrawRectOptSrcRotOriEffLayerWithSourceIsRecordedWithExactParameters)

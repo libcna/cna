@@ -33,11 +33,11 @@ namespace CNA::Internal::Renderers::DirectX11
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
-        /// Real mip level count this texture was allocated with (NOXNA diagnostics).
+        /// Real mip level count this texture was allocated with (CNAEXT diagnostics).
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
-        /// Raw ID3D11Texture2D* for draw-call binding / readback tests (NOXNA).
+        /// Raw ID3D11Texture2D* for draw-call binding / readback tests (CNAEXT).
         [[nodiscard]] ID3D11Texture2D* GetTextureEXT() const { return texture_.Get(); }
-        /// Raw SRV for Phase DIRECTX8's shader texture binding (NOXNA).
+        /// Raw SRV for Phase DIRECTX8's shader texture binding (CNAEXT).
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
 
     private:

@@ -484,7 +484,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         public:
             ~EffectRenderer() override { if (program_) glDeleteProgram(program_); }
 
-            // NOXNA: lets drawInternal()'s customEffectRenderer path (VertexDeclaration-driven
+            // CNAEXT: lets drawInternal()'s customEffectRenderer path (VertexDeclaration-driven
             // attribute binding, see BindVertexAttributesForDeclaration()) look up this custom
             // program's own attribute locations, same reasoning as
             // EasyGLSpriteBatchRenderer::FlushBatch()'s own dynamic_cast to its EasyGLEffectRenderer
@@ -1784,7 +1784,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                 addressU_ = addressU;
                 addressV_ = addressV;
             }
-            // NOXNA follow-up (plan_opengl2.md): only Draw()'s direct 3D counterpart
+            // CNAEXT follow-up (plan_opengl2.md): only Draw()'s direct 3D counterpart
             // (customEffectRenderer in drawInternal()) was implemented first; this wires the same
             // EffectRenderer infrastructure into the 2D SpriteBatch path too.
             void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }

@@ -33,7 +33,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief FNA's `internal static void AddTypeCreator(string typeString, Func<
-         *        ContentTypeReader> createFunction)`, made `NOXNA`-callable from ordinary CNA
+         *        ContentTypeReader> createFunction)`, made `CNAEXT`-callable from ordinary CNA
          *        code since CNA has no reflection fallback ahead of it.
          *
          * Registers a global, process-wide factory (plan_xnb.md XNB-14A) -- @p factory is called
@@ -46,27 +46,27 @@ namespace Microsoft::Xna::Framework::Content
          * @param canonicalName The XNB-5 canonical reader name this factory handles.
          * @param factory       Constructs one fresh reader instance; must not be empty.
          */
-        NOXNA static void AddTypeCreator(const std::string& canonicalName, ReaderFactory factory);
+        CNAEXT static void AddTypeCreator(const std::string& canonicalName, ReaderFactory factory);
 
         /** @brief FNA's `internal static void ClearTypeCreators()` -- primarily for test isolation. */
-        NOXNA static void ClearTypeCreators();
+        CNAEXT static void ClearTypeCreators();
 
         /**
-         * @brief NOXNA convenience wrapping the registered factory lookup: constructs a fresh
+         * @brief CNAEXT convenience wrapping the registered factory lookup: constructs a fresh
          *        reader instance for @p canonicalName, or returns null if nothing is registered
          *        under that name.
          *
          * @param canonicalName The XNB-5 canonical reader name to create an instance for.
          * @return A freshly constructed reader instance, or nullptr if unregistered.
          */
-        NOXNA static std::unique_ptr<ContentTypeReaderBase> CreateReader(const std::string& canonicalName);
+        CNAEXT static std::unique_ptr<ContentTypeReaderBase> CreateReader(const std::string& canonicalName);
 
         /**
-         * @brief NOXNA query-only check: is a factory registered for @p canonicalName, without
+         * @brief CNAEXT query-only check: is a factory registered for @p canonicalName, without
          *        constructing an instance (plan_xnb.md XNB-67 -- the manifest's reader-usage
          *        summary needs this without any construction side effect).
          */
-        NOXNA [[nodiscard]] static bool IsRegistered(const std::string& canonicalName);
+        CNAEXT [[nodiscard]] static bool IsRegistered(const std::string& canonicalName);
 
     private:
         static std::unordered_map<std::string, ReaderFactory>& TypeCreators();

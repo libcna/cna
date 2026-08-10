@@ -118,7 +118,7 @@ lettered A through VV as of `DX-113`/`DX-117`/`DX-121`/`DX-136`/`DX-144`/`DX-149
 
 ```cpp
 // 1. Create (or reuse) a real DirectX12Renderer/device.
-// 2. Bind a minimal off-screen render target via BindOffscreenColorTargetEXT() (a NOXNA helper --
+// 2. Bind a minimal off-screen render target via BindOffscreenColorTargetEXT() (a CNAEXT helper --
 //    a raw ID3D12Resource+RTV the test itself creates and registers with the resource-state
 //    tracker) or a real D3D12RenderTargetRenderer (DX-117) rather than the swap chain, since the
 //    routine CTest suite doesn't use the heavy Proton-managed launch presentation needs.

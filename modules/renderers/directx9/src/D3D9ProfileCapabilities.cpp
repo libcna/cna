@@ -63,7 +63,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // 15 Vector4, 16 HalfSingle, 17 HalfVector2, 18 HalfVector4, 19 HdrBlendable.
         //
         // D9-100's own table: Reach's 9-format whitelist (0-8) is a strict subset of HiDef's
-        // 20-format superset (0-19) -- every NOXNA extension format (ColorBgraEXT and later,
+        // 20-format superset (0-19) -- every CNAEXT extension format (ColorBgraEXT and later,
         // ordinal >= 20) is CNA-specific and out of XNA's own profile table entirely, treated as
         // HiDef-only (never part of any real XNA profile, so never "Reach-valid").
         if (surfaceFormat < 0) return false;

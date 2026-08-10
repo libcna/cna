@@ -727,7 +727,7 @@ namespace CNA::Internal::Renderers
          */
         virtual void SetSamplerAddressMode(int /*addressU*/, int /*addressV*/) {}
         /**
-         * @brief NOXNA. Tells the renderer whether the batch SpriteBatch::Begin() just started is
+         * @brief CNAEXT. Tells the renderer whether the batch SpriteBatch::Begin() just started is
          *        SpriteSortMode::Immediate.
          *
          * Called once per Begin(), before Begin() itself, with the sort mode actually requested for
@@ -1362,7 +1362,7 @@ namespace CNA::Internal::Renderers
         /// count applied (0 = no MSAA). Default: unsupported -- renderers that cannot change this
         /// post-construction report back whatever GetMultiSampleCount() already is.
         virtual int ApplyMultiSampleCount(int /*requestedMultiSampleCount*/) { return GetMultiSampleCount(); }
-        /// NOXNA (plan_dx9.md D9-30/D9-33, found empirically). Reconfigures the renderer's tracked
+        /// CNAEXT (plan_dx9.md D9-30/D9-33, found empirically). Reconfigures the renderer's tracked
         /// back-buffer format/depth-stencil format/fullscreen state in place, called from
         /// GraphicsDevice::Reset() alongside SetVirtualResolution()/ApplyMultiSampleCount() above --
         /// same "actually reach the renderer instead of being silently ignored after construction"
@@ -1978,7 +1978,7 @@ namespace CNA::Internal::Renderers
     };
 
     /**
-     * @brief NOXNA (plan_dx9.md D9-34). Real, driver-triggered device lifecycle events a renderer
+     * @brief CNAEXT (plan_dx9.md D9-34). Real, driver-triggered device lifecycle events a renderer
      * can report back to GraphicsDevice via GraphicsRendererCreateArgs::deviceEventCallback.
      *
      * Distinct from the pre-existing IGraphicsRenderer::SetContextRecoveryEnabled()/
@@ -2037,28 +2037,28 @@ namespace CNA::Internal::Renderers
         ///   2 = wait for 2 vertical retraces (half refresh rate)
         /// Corresponds to PresentInterval: Default/One→1, Two→2, Immediate→0.
         int swapInterval = 1;
-        /// NOXNA (plan_dx9.md D9-30). Requested back-buffer pixel format -- raw ordinal of
+        /// CNAEXT (plan_dx9.md D9-30). Requested back-buffer pixel format -- raw ordinal of
         /// Microsoft::Xna::Framework::Graphics::SurfaceFormat, avoiding coupling this
         /// renderer-agnostic header to the XNA namespace (mirrors CreateTexture3D's own
         /// surfaceFormat int convention). Renderers that don't need real format fidelity (every
         /// existing renderer except D3D9, whose goal is XNA authenticity rather than parity) may
         /// ignore this and keep hardcoding their own default, exactly as before this field existed.
         int backBufferFormat = 0;  // SurfaceFormat::Color
-        /// NOXNA (plan_dx9.md D9-30). Requested depth/stencil format -- raw ordinal of
+        /// CNAEXT (plan_dx9.md D9-30). Requested depth/stencil format -- raw ordinal of
         /// Microsoft::Xna::Framework::Graphics::DepthFormat. See backBufferFormat's own doc for
         /// the int-ordinal convention and the same "existing renderers may ignore this" note.
         int depthStencilFormat = 0;  // DepthFormat::None
-        /// NOXNA (plan_dx9.md D9-30). Whether the game requested exclusive fullscreen. Existing
+        /// CNAEXT (plan_dx9.md D9-30). Whether the game requested exclusive fullscreen. Existing
         /// renderers that already have their own fullscreen handling via the SDL window itself may
         /// continue to ignore this field exactly as before it existed.
         bool isFullScreen = false;
-        /// NOXNA (plan_dx9.md D9-30/D9-32). Requested Microsoft::Xna::Framework::Graphics::
+        /// CNAEXT (plan_dx9.md D9-30/D9-32). Requested Microsoft::Xna::Framework::Graphics::
         /// GraphicsProfile ordinal (Reach=0, HiDef=1). Only D3D9 can honestly enforce this today
         /// (a real D3DCAPS9 to consult) -- see plan_dx9.md's "CNA's divergences from XNA 4.0",
         /// Divergence 3. Every other renderer's GraphicsAdapter::IsProfileSupported() keeps its
         /// existing, honest `return true;` and may ignore this field.
         int graphicsProfile = 0;  // GraphicsProfile::Reach
-        /// NOXNA (plan_dx9.md D9-34). Callback a renderer may invoke to report a REAL,
+        /// CNAEXT (plan_dx9.md D9-34). Callback a renderer may invoke to report a REAL,
         /// driver-triggered device lifecycle event back to GraphicsDevice (which raises the
         /// corresponding DeviceLost/DeviceResetting/DeviceReset XNA event). Null by default; nine
         /// of the ten renderers never call it -- only a renderer that can genuinely lose its device

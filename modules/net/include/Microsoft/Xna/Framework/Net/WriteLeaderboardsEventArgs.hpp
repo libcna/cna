@@ -28,7 +28,7 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getIsLeavingProperty() const;
 
         /** @brief Creates a WriteLeaderboardsEventArgs for CNA internal use. */
-        NOXNA static WriteLeaderboardsEventArgs CreateInternal(NetworkGamer* gamer, bool isLeaving);
+        CNAEXT static WriteLeaderboardsEventArgs CreateInternal(NetworkGamer* gamer, bool isLeaving);
 
     private:
         WriteLeaderboardsEventArgs(NetworkGamer* gamer, bool isLeaving);

@@ -142,7 +142,7 @@ open. Treat GDI as a compatibility renderer under validation, not yet as a relea
   `GraphicsCapability::StencilBuffer` answer and documented lack of a stencil plane. The focused
   DIRECTX3 capability executable compares the two answers directly and passes 1/1 through Wine/Xvfb
   after the x64 MinGW build, with the DirectDraw-engagement wrapper active.
-- REMED-GFX-233 restores shared Software's legacy persistent-buffer compatibility. The NOXNA
+- REMED-GFX-233 restores shared Software's legacy persistent-buffer compatibility. The CNAEXT
   `VertexBuffer(device, count)` constructor deliberately carries an empty, zero-stride public
   declaration while typed `SetData` uploads real packed records. The immutable stream snapshot
   introduced before this adaptation copied that zero stride and repeatedly fetched record zero,

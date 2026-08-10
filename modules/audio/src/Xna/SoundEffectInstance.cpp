@@ -191,7 +191,7 @@ namespace Microsoft::Xna::Framework::Audio
         // this task removes), so a throw here was never actually observable. Now that filter
         // setup can run before Play() too (order-independent, matching how FACT establishes a
         // track's filter atomically alongside the voice itself), this may genuinely be the first
-        // GetMixer() call in the process. These are all NOXNA-internal, no-op-if-not-ready methods
+        // GetMixer() call in the process. These are all CNAEXT-internal, no-op-if-not-ready methods
         // that never throw -- swallow the failure here rather than let a raw std::runtime_error
         // escape into Cue::Play(), which isn't a sanctioned raw-exception boundary the way
         // XactParser/SoundBank's constructor are.

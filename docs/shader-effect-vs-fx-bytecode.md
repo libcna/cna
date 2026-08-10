@@ -24,7 +24,7 @@ All 6 are implemented natively in C++ (not translated from bytecode) and are pix
 EasyGL; see `docs/xna-4-api-coverage.md` §7 for exact per-renderer/per-effect status (Vulkan and
 Bgfx support varies by effect).
 
-**2. `ShaderEffect`** (`Microsoft::Xna::Framework::Graphics::ShaderEffect`, `NOXNA` — a CNA
+**2. `ShaderEffect`** (`Microsoft::Xna::Framework::Graphics::ShaderEffect`, `CNAEXT` — a CNA
 extension, not part of the XNA 4.0 API) — for custom shaders, construct it directly from
 hand-written GPU shader source:
 

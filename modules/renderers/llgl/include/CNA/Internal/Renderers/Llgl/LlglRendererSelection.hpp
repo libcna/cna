@@ -8,7 +8,7 @@
 namespace CNA::Internal::Renderers::Llgl::Detail
 {
     /**
-     * @brief An LLGL renderer module this build can select at runtime. NOXNA.
+     * @brief An LLGL renderer module this build can select at runtime. CNAEXT.
      *
      * LLGL is itself a graphics abstraction, so the native API is chosen when the process starts
      * rather than when CNA is compiled -- this enum names the candidates. Which entries are

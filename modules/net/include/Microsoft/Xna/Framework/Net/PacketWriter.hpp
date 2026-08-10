@@ -14,12 +14,12 @@
 namespace Microsoft::Xna::Framework::Net
 {
     /**
-     * @brief NOXNA base-from-member helper that owns PacketWriter's backing buffer.
+     * @brief CNAEXT base-from-member helper that owns PacketWriter's backing buffer.
      *
      * Listed before System::IO::BinaryWriter in PacketWriter's base list so the buffer
      * is fully constructed before BinaryWriter's constructor receives a pointer to it.
      */
-    class NOXNA PacketWriterStream
+    class CNAEXT PacketWriterStream
     {
     protected:
         /** @brief Constructs an empty backing buffer. */
@@ -52,12 +52,12 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Brings BinaryWriter's other Write(...) overloads into scope.
          *
-         * NOXNA: without this, declaring PacketWriter's own Write(Color)/Write(Matrix)/…
+         * CNAEXT: without this, declaring PacketWriter's own Write(Color)/Write(Matrix)/…
          * overloads would hide all of BinaryWriter's unrelated Write(...) overloads per
          * C++ name-hiding rules (C# has no equivalent hiding for overloads with new
          * parameter types), silently breaking calls like Write(intcs) or Write(bool).
          */
-        NOXNA using System::IO::BinaryWriter::Write;
+        CNAEXT using System::IO::BinaryWriter::Write;
 
         /** @brief Constructs an empty PacketWriter over a new backing buffer. */
         PacketWriter();

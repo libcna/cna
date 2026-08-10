@@ -128,7 +128,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @return Current sensor state.
          */
-        NOXNA [[nodiscard]] SensorState getStateProperty() const;
+        CNAEXT [[nodiscard]] SensorState getStateProperty() const;
 
         /**
          * @brief Gets whether `CurrentValue.Attitude`'s yaw is currently referenced to true/magnetic north.
@@ -152,7 +152,7 @@ namespace Microsoft::Devices::Sensors
          * with no native backend at all — nothing to warn about in either
          * case); false if it is the drift-prone fallback.
          */
-        NOXNA [[nodiscard]] bool getIsAttitudeNorthReferencedProperty() const;
+        CNAEXT [[nodiscard]] bool getIsAttitudeNorthReferencedProperty() const;
 
     public:
         /**
@@ -228,6 +228,6 @@ namespace Microsoft::Devices::Sensors
          * platform-default (no-backend/stub) behavior.
          * @throws SensorFailedException If this instance is currently started.
          */
-        NOXNA void SetBackendForTesting(std::unique_ptr<Detail::IMotionBackend> backend);
+        CNAEXT void SetBackendForTesting(std::unique_ptr<Detail::IMotionBackend> backend);
     };
 } // namespace Microsoft::Devices::Sensors

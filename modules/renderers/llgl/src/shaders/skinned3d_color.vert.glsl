@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SkinnedEffect.VertexColorEnabled vertex shader, Vulkan flavour (SPIR-V). LLGL-37, NOXNA extension
+// SkinnedEffect.VertexColorEnabled vertex shader, Vulkan flavour (SPIR-V). LLGL-37, CNAEXT extension
 // property (real XNA's SkinnedEffect has no such property; CNB-66/67 added it for glTF COLOR_0
 // import support, matching every other renderer). Selected instead of skinned3d.vert.glsl only when
 // the bound vertex buffer's own layout carries a colour attribute (stride 56, colour appended at

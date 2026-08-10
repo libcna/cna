@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// D3D9 PBR porting task: CNA's own NOXNA "PbrSkinned3D" shader -- SkinnedPbrEffect (same
+// D3D9 PBR porting task: CNA's own CNAEXT "PbrSkinned3D" shader -- SkinnedPbrEffect (same
 // metallic-roughness BRDF as Pbr3D.hlsl, plus bone skinning), ported line-by-line from
 // EasyGLRenderer.cpp's EnsurePbrSkinnedProgram() (GLSL/GLES 3.00) to HLSL Shader Model 3
 // (vs_3_0/ps_3_0). See Pbr3D.hlsl's own header comment for why this is a CNA custom shader (no

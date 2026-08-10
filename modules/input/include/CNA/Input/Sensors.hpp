@@ -11,9 +11,9 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — the kind of a host-device motion sensor. Mirrors SDL3's `SDL_SensorType`.
+     * @brief CNAEXT — the kind of a host-device motion sensor. Mirrors SDL3's `SDL_SensorType`.
      */
-    NOXNA enum class SensorTypeEXT
+    CNAEXT enum class SensorTypeEXT
     {
         /** @brief Unknown or unrecognized sensor. */
         Unknown,
@@ -32,9 +32,9 @@ namespace CNA::Input
     };
 
     /**
-     * @brief NOXNA — identity of one enumerated host-device motion sensor.
+     * @brief CNAEXT — identity of one enumerated host-device motion sensor.
      */
-    NOXNA struct SensorInfoEXT
+    CNAEXT struct SensorInfoEXT
     {
         /** @brief The SDL sensor instance id. */
         std::uint32_t id = 0;
@@ -67,14 +67,14 @@ namespace CNA::Input
     }
 
     /**
-     * @brief NOXNA — reads the host device's own motion sensors, backed by SDL3.
+     * @brief CNAEXT — reads the host device's own motion sensors, backed by SDL3.
      *
      * Distinct from a gamepad's gyro/accelerometer (`GamePad::Get{Gyro,Accelerometer}EXT`): these are
      * the machine's own sensors (phone/tablet/laptop). Values use SDL's standard units — accelerometer
      * in m/s², gyroscope in rad/s. Platform notes: mainly a mobile feature (Android full; Windows/Linux
      * partial; macOS none; Web permission-gated), so the enumeration is often empty on desktop.
      */
-    NOXNA class Sensors
+    CNAEXT class Sensors
     {
     public:
         /** @brief Static-only utility; not instantiable. */
@@ -84,20 +84,20 @@ namespace CNA::Input
          * @brief Enumerates the host device's motion sensors.
          * @return A list of sensor id/name/type descriptors (empty if none or unsupported).
          */
-        NOXNA [[nodiscard]] static std::vector<SensorInfoEXT> GetSensorsEXT();
+        CNAEXT [[nodiscard]] static std::vector<SensorInfoEXT> GetSensorsEXT();
 
         /**
          * @brief Reads the current data of the first accelerometer.
          * @param acceleration Output receiving the acceleration vector in m/s².
          * @return True if an accelerometer was read; false if none is present.
          */
-        NOXNA static bool GetAccelerometerEXT(Microsoft::Xna::Framework::Vector3& acceleration);
+        CNAEXT static bool GetAccelerometerEXT(Microsoft::Xna::Framework::Vector3& acceleration);
 
         /**
          * @brief Reads the current data of the first gyroscope.
          * @param angularVelocity Output receiving the angular velocity vector in rad/s.
          * @return True if a gyroscope was read; false if none is present.
          */
-        NOXNA static bool GetGyroscopeEXT(Microsoft::Xna::Framework::Vector3& angularVelocity);
+        CNAEXT static bool GetGyroscopeEXT(Microsoft::Xna::Framework::Vector3& angularVelocity);
     };
 }

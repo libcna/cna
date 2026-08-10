@@ -1,4 +1,4 @@
-# Avatar real-rendering extension (NOXNA/EXT)
+# Avatar real-rendering extension (CNAEXT/EXT)
 
 ## What this is
 
@@ -17,18 +17,18 @@ Avatar art style — that data is permanently inaccessible. The faithful XNA beh
 above remains the unconditional default; nothing here changes it unless a game explicitly calls
 `AvatarRenderer::EnableRealRenderingEXT(...)`.
 
-## Naming note: two unrelated "NOXNA" things
+## Naming note: two unrelated "CNAEXT" things
 
-`NOXNA.md` documents a **separate**, larger, independently-planned `CNA_NOXNA` CMake option
+`CNAEXT.md` documents a **separate**, larger, independently-planned `CNA_CNAEXT` CMake option
 gating a whole `CNA::Graphics` modern-engine layer (PBR/HDR/bloom/shadows/instancing/glTF). This
-extension does **not** use that system. It uses the small, always-compiled `NOXNA` marker macro
+extension does **not** use that system. It uses the small, always-compiled `CNAEXT` marker macro
 and `*EXT` method-suffix convention already used throughout `GamerServices`
 (`Guide::ShowAchievementsEXT`, `GamerPresence::SetPresenceModeStringEXT`, `ShaderEffect`). The two
 share a name by coincidence; do not conflate them.
 
 ## Architecture
 
-### New types (`Microsoft::Xna::Framework::Graphics`, all `NOXNA`)
+### New types (`Microsoft::Xna::Framework::Graphics`, all `CNAEXT`)
 
 - **`VertexPositionNormalTextureSkinned`** — a GPU-skinned vertex: position, normal, one texture
   coordinate, up to 4 bone blend weights/indices. Matches the 52-byte layout already proven by

@@ -17,7 +17,7 @@
 namespace CNA::Internal::Renderers::Diligent
 {
     /**
-     * @brief NOXNA. The Diligent Engine device type (native graphics API) a renderer instance runs on.
+     * @brief CNAEXT. The Diligent Engine device type (native graphics API) a renderer instance runs on.
      *
      * Diligent is itself an abstraction over several native APIs, so unlike every other CNA
      * renderer the choice is made at runtime rather than by the `CNA_GRAPHICS_RENDERER` CMake
@@ -37,15 +37,15 @@ namespace CNA::Internal::Renderers::Diligent
     };
 
     /**
-     * @brief NOXNA. Returns the stable, human-readable name of a device type ("Vulkan", "OpenGL", …).
+     * @brief CNAEXT. Returns the stable, human-readable name of a device type ("Vulkan", "OpenGL", …).
      *
      * @param type Device type to name.
      * @return Name of the device type; never empty.
      */
-    NOXNA [[nodiscard]] const char* GetDeviceTypeName(DiligentDeviceType type);
+    CNAEXT [[nodiscard]] const char* GetDeviceTypeName(DiligentDeviceType type);
 
     /**
-     * @brief NOXNA. Parses the `CNA_DILIGENT_DEVICE` environment variable value.
+     * @brief CNAEXT. Parses the `CNA_DILIGENT_DEVICE` environment variable value.
      *
      * Accepted values are case-insensitive: `d3d12`/`direct3d12`, `vulkan`/`vk`, `d3d11`/
      * `direct3d11`, `opengl`/`gl`/`gles`, and `auto`/empty (meaning "use the built-in preference
@@ -55,10 +55,10 @@ namespace CNA::Internal::Renderers::Diligent
      * @return The requested device type, or the full preference order for `auto`/empty.
      * @throws std::runtime_error If @p value names no known device type.
      */
-    NOXNA [[nodiscard]] std::vector<DiligentDeviceType> ParseDeviceTypeOverride(const std::string& value);
+    CNAEXT [[nodiscard]] std::vector<DiligentDeviceType> ParseDeviceTypeOverride(const std::string& value);
 
     /**
-     * @brief NOXNA. Returns the device types this build can attempt, in preference order.
+     * @brief CNAEXT. Returns the device types this build can attempt, in preference order.
      *
      * The order is D3D12 → Vulkan → D3D11 → OpenGL, filtered down to the engines DiligentCore
      * actually built for this platform. Device creation walks the list and uses the first entry
@@ -66,5 +66,5 @@ namespace CNA::Internal::Renderers::Diligent
      *
      * @return Preference-ordered device types; empty only if no engine was built at all.
      */
-    NOXNA [[nodiscard]] std::vector<DiligentDeviceType> GetDeviceTypePreferenceOrder();
+    CNAEXT [[nodiscard]] std::vector<DiligentDeviceType> GetDeviceTypePreferenceOrder();
 }

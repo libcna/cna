@@ -159,7 +159,7 @@ void DevicesDemo::HandleVibrationInput(const KbState& kb)
         vibrateController_->Start(System::TimeSpan::FromSeconds(1));
         vibrateStartFlash_ = 0;
     }
-    // D2/D3: NOXNA intensity extension, low vs. full strength.
+    // D2/D3: CNAEXT intensity extension, low vs. full strength.
     else if (justPressed(Keys::D2))
     {
         vibrateController_->Start(System::TimeSpan::FromSeconds(1), 0.3f);
@@ -170,7 +170,7 @@ void DevicesDemo::HandleVibrationInput(const KbState& kb)
         vibrateController_->Start(System::TimeSpan::FromSeconds(1), 1.0f);
         vibrateStartFlash_ = 0;
     }
-    // D4/D5/D6: NOXNA dual-motor StartLeftRight — large-only, small-only, both.
+    // D4/D5/D6: CNAEXT dual-motor StartLeftRight — large-only, small-only, both.
     else if (justPressed(Keys::D4))
     {
         vibrateController_->StartLeftRight(1.0f, 0.0f, System::TimeSpan::FromSeconds(1));
@@ -284,7 +284,7 @@ void DevicesDemo::UpdateWindowTitle()
     // shown nowhere — only the underlying SensorState indicator square,
     // which doesn't distinguish "started but no reading has arrived yet"
     // from "the last reading is/isn't trustworthy"), the VibrateController
-    // NOXNA device name diagnostic (getDeviceNameProperty(), previously
+    // CNAEXT device name diagnostic (getDeviceNameProperty(), previously
     // queried nowhere in this demo), and a Compass/Motion support note —
     // this demo deliberately has no SpriteFont/Content dependency (see this
     // class's own header comment), so the window title remains its one

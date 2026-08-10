@@ -78,19 +78,19 @@ namespace CNA::Internal::Renderers::Skia
         /// Drops this target's one-entry sampling cache before a canvas or upload write.
         void InvalidateSnapshot() noexcept;
 
-        NOXNA [[nodiscard]] std::size_t SurfaceStorageBytesEXT() const noexcept
+        CNAEXT [[nodiscard]] std::size_t SurfaceStorageBytesEXT() const noexcept
         {
             return surfaceStorageBytes_;
         }
-        NOXNA [[nodiscard]] const SkiaMipChain2D& MipChainEXT() const noexcept
+        CNAEXT [[nodiscard]] const SkiaMipChain2D& MipChainEXT() const noexcept
         {
             return *mipChain_;
         }
-        NOXNA [[nodiscard]] std::uint64_t MipGenerationCountEXT(int level) const;
-        NOXNA [[nodiscard]] bool MipLevelDirtyEXT(int level) const;
+        CNAEXT [[nodiscard]] std::uint64_t MipGenerationCountEXT(int level) const;
+        CNAEXT [[nodiscard]] bool MipLevelDirtyEXT(int level) const;
         [[nodiscard]] bool BelongsToBindingEXT(
             const std::shared_ptr<SkiaRenderTargetBinding>& binding) const noexcept;
-        NOXNA [[nodiscard]] Microsoft::Xna::Framework::Graphics::SurfaceFormat FormatEXT() const
+        CNAEXT [[nodiscard]] Microsoft::Xna::Framework::Graphics::SurfaceFormat FormatEXT() const
             noexcept
         {
             return format_;

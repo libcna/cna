@@ -68,7 +68,7 @@ namespace CNA::Internal::Renderers::Skia
         [[nodiscard]] std::shared_ptr<const SkiaMeshEffectCompiledEXT> GetOrCompileEXT(
             const std::string& marker, const std::string& source, std::string& compileError);
 
-        /** NOXNA diagnostic accessor: number of distinct (marker, source) pairs currently cached. */
+        /** CNAEXT diagnostic accessor: number of distinct (marker, source) pairs currently cached. */
         [[nodiscard]] std::size_t SizeEXT() const noexcept { return entries_.size(); }
 
     private:
@@ -110,7 +110,7 @@ namespace CNA::Internal::Renderers::Skia
         [[nodiscard]] bool IsValid() const noexcept { return compiled_ != nullptr; }
         [[nodiscard]] std::string GetCompileError() const { return compileError_; }
 
-        /** NOXNA diagnostic accessor: raw identity of the shared compiled program, or null if
+        /** CNAEXT diagnostic accessor: raw identity of the shared compiled program, or null if
          * invalid. Two renderers with the same identity share one cache entry; a source that was
          * evicted and recompiled gets a new identity even if the source text is unchanged --
          * exists for test/diagnostic use, not part of the mesh effect ABI itself. */

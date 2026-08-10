@@ -156,7 +156,7 @@ namespace Microsoft::Xna::Framework::Net
          * FNA exposes the backing queue as an `internal` field that NetworkSession::Dispose()
          * clears directly; this method restores that same-library access.
          */
-        NOXNA void ClearPacketQueue();
+        CNAEXT void ClearPacketQueue();
 
         /**
          * @brief Queues an incoming packet for later retrieval via ReceiveData.
@@ -169,10 +169,10 @@ namespace Microsoft::Xna::Framework::Net
          * @param evt The event to queue; its Gamer field should already be set to the sender
          *            (see NetworkEvent::Sender's doc comment for why the two differ).
          */
-        NOXNA void EnqueuePacket(NetworkSession::NetworkEvent evt);
+        CNAEXT void EnqueuePacket(NetworkSession::NetworkEvent evt);
 
         /** @brief Creates a LocalNetworkGamer for CNA internal use. */
-        NOXNA static LocalNetworkGamer CreateInternal(GamerServices::SignedInGamer* gamer, NetworkSession* session);
+        CNAEXT static LocalNetworkGamer CreateInternal(GamerServices::SignedInGamer* gamer, NetworkSession* session);
 
     private:
         LocalNetworkGamer(GamerServices::SignedInGamer* gamer, NetworkSession* session);

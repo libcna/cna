@@ -9,14 +9,14 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — active keyboard modifier keys and lock states, as a bit flag set.
+     * @brief CNAEXT — active keyboard modifier keys and lock states, as a bit flag set.
      *
      * XNA 4.0's `KeyboardState` exposes only individual key up/down; it has no aggregate modifier or
      * lock-state query. This CNA extension mirrors SDL3's `SDL_Keymod` (collapsing the left/right
      * variants of each modifier into one flag), so text/UI code can branch on Shift/Ctrl/Alt/Gui and
      * read the Caps/Num/Scroll lock toggles.
      */
-    NOXNA enum class KeyModifiersEXT : std::uint32_t
+    CNAEXT enum class KeyModifiersEXT : std::uint32_t
     {
         /** @brief No modifier active. */
         None   = 0,

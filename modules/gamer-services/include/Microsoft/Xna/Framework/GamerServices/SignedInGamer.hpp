@@ -89,7 +89,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @return Reference to the mutable GamerPresence.
          */
-        NOXNA [[nodiscard]] GamerPresence& getPresenceProperty();
+        CNAEXT [[nodiscard]] GamerPresence& getPresenceProperty();
 
         /**
          * @brief Gets the gamer's privilege settings.
@@ -181,7 +181,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * Task 7.6: genuine public XNA 4.0 API (FNA: `public static event
          * EventHandler<SignedInEventArgs> SignedIn;`) - not a CNA extension, so this is not
-         * NOXNA (unlike OnSignIn/OnSignOut just below, which really are internal-only).
+         * CNAEXT (unlike OnSignIn/OnSignOut just below, which really are internal-only).
          */
         static System::EventHandler<SignedInEventArgs> SignedIn;
 
@@ -194,7 +194,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         static System::EventHandler<SignedOutEventArgs> SignedOut;
 
         /** @brief Creates a SignedInGamer for CNA internal use. */
-        NOXNA static SignedInGamer CreateInternal(
+        CNAEXT static SignedInGamer CreateInternal(
             const std::string& gamertag,
             bool isSignedInToLive = false,
             bool isGuest = false,
@@ -204,10 +204,10 @@ namespace Microsoft::Xna::Framework::GamerServices
     private:
         // Task 7.7: FNA declares these `internal static void OnSignIn/OnSignOut(...)` - the only
         // real caller anywhere in this codebase is GamerServicesDispatcher (OnSignIn); OnSignOut
-        // currently has zero callers at all. Tightened from `public ... NOXNA` to match this
+        // currently has zero callers at all. Tightened from `public ... CNAEXT` to match this
         // project's own documented convention for C# `internal` members (see CHECKLIST.md).
         friend class GamerServicesDispatcher;
-        NOXNA friend struct SignedInGamerTestAccess;
+        CNAEXT friend struct SignedInGamerTestAccess;
 
         /**
          * @brief Raises the SignedIn event for the given gamer.

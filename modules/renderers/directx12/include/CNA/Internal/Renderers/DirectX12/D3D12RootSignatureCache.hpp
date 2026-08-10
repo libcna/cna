@@ -79,7 +79,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /// D3D11*Cache error-handling convention (callers check the returned ComPtr).
         ComPtr<ID3D12RootSignature> GetOrCreate(ID3D12Device* device, int numCbvs, int numSrvs, int numSamplers);
 
-        /// Number of distinct root-signature shapes created so far (NOXNA diagnostics).
+        /// Number of distinct root-signature shapes created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:

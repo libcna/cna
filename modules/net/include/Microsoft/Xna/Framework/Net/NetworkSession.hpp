@@ -61,9 +61,9 @@ namespace Microsoft::Xna::Framework::Net
     {
     public:
         /** @brief The maximum number of gamers supported by any session. */
-        NOXNA static constexpr int MaxSupportedGamers = 31;
+        CNAEXT static constexpr int MaxSupportedGamers = 31;
         /** @brief The maximum number of previous gamers tracked by a session. */
-        NOXNA static constexpr int MaxPreviousGamers = 100;
+        CNAEXT static constexpr int MaxPreviousGamers = 100;
 
         /**
          * @brief Identifies the kind of queued NetworkSession event.
@@ -104,7 +104,7 @@ namespace Microsoft::Xna::Framework::Net
              * it names the recipient) and each gamer's own packetQueue_ (where it names the
              * sender) — see NetworkSession.cpp's Update() for how the two are reconciled.
              */
-            NOXNA NetworkGamer* Sender{nullptr};
+            CNAEXT NetworkGamer* Sender{nullptr};
             /** @brief The packet payload, for PacketSend events. */
             std::vector<SharpRuntime::bytecs> Packet;
             /** @brief The delivery option the packet was sent with. */
@@ -369,7 +369,7 @@ namespace Microsoft::Xna::Framework::Net
         System::EventHandler<WriteLeaderboardsEventArgs> WriteTrueSkill;
 
         /** @brief Declared for API parity; never raised upstream. */
-        NOXNA static System::EventHandler<GamerServices::InviteAcceptedEventArgs> InviteAccepted;
+        CNAEXT static System::EventHandler<GamerServices::InviteAcceptedEventArgs> InviteAccepted;
 
         /**
          * @brief Disposes the session, flushing queued packets on all local gamers.
@@ -401,39 +401,39 @@ namespace Microsoft::Xna::Framework::Net
         ~NetworkSession() override;
 
         /**
-         * @brief NOXNA: the number of gamer objects this session currently owns and has not yet
+         * @brief CNAEXT: the number of gamer objects this session currently owns and has not yet
          * freed (see Dispose()'s doc comment). Exists purely to make Task 3.1's ownership fix
          * testable; not part of real XNA.
          *
          * @return The number of currently-owned, not-yet-freed gamer objects.
          */
-        NOXNA [[nodiscard]] std::size_t GetOwnedGamerCountForTesting() const;
+        CNAEXT [[nodiscard]] std::size_t GetOwnedGamerCountForTesting() const;
 
         /**
-         * @brief NOXNA: how many `NetworkSessionAction` instances are currently live (`new`'d by
+         * @brief CNAEXT: how many `NetworkSessionAction` instances are currently live (`new`'d by
          * some `Begin*` call, not yet `delete`d by its `End*` counterpart). `NetworkSessionAction`
          * itself is private, so this forwards to its own `GetInstanceCountForTesting()`. Exists
          * purely to make Task 3.2's leak fix testable; not part of real XNA.
          *
          * @return The number of currently-live instances.
          */
-        NOXNA [[nodiscard]] static int GetActiveActionInstanceCountForTesting();
+        CNAEXT [[nodiscard]] static int GetActiveActionInstanceCountForTesting();
 
         /**
-         * @brief NOXNA: how many `NetworkSession` instances are currently live (`new`'d by
+         * @brief CNAEXT: how many `NetworkSession` instances are currently live (`new`'d by
          * `EndCreate`/`EndFind`.../..., not yet `delete`d by their owning caller - see the class's
          * own doc comment for the ownership contract). Exists purely to make Task 3.3's documented
          * contract testable; not part of real XNA.
          *
          * @return The number of currently-live instances.
          */
-        NOXNA [[nodiscard]] static int GetInstanceCountForTesting();
+        CNAEXT [[nodiscard]] static int GetInstanceCountForTesting();
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.
          * @return A const reference to the type name string.
          */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Processes queued network events, raising the corresponding public events.
@@ -478,7 +478,7 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @param evt The event to queue.
          */
-        NOXNA void SendNetworkEvent(NetworkEvent evt);
+        CNAEXT void SendNetworkEvent(NetworkEvent evt);
 
         /**
          * @brief Adds a remote gamer to the session and queues its GamerJoin event.
@@ -489,7 +489,7 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @param gamer The remote gamer to add. Ownership stays with the caller.
          */
-        NOXNA void AddRemoteGamer(NetworkGamer* gamer);
+        CNAEXT void AddRemoteGamer(NetworkGamer* gamer);
 
         /**
          * @brief Removes a gamer from the session, migrating it to PreviousGamers.
@@ -501,7 +501,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param gamer The gamer to remove. Ownership stays with the caller.
          * @param reason Why the gamer is leaving; only observed when gamer is local (see above).
          */
-        NOXNA void RemoveGamer(NetworkGamer* gamer, NetworkSessionEndReason reason);
+        CNAEXT void RemoveGamer(NetworkGamer* gamer, NetworkSessionEndReason reason);
 
         /**
          * @brief Synchronously creates a new local network session.
@@ -813,13 +813,13 @@ namespace Microsoft::Xna::Framework::Net
             ~NetworkSessionAction() override;
 
             /**
-             * @brief NOXNA: how many `NetworkSessionAction` instances are currently live (`new`'d
+             * @brief CNAEXT: how many `NetworkSessionAction` instances are currently live (`new`'d
              * by some `Begin*` call, not yet `delete`d by its `End*` counterpart). Exists purely to
              * make Task 3.2's leak fix testable; not part of real XNA.
              *
              * @return The number of currently-live instances.
              */
-            NOXNA static int GetInstanceCountForTesting();
+            CNAEXT static int GetInstanceCountForTesting();
 
             /** @brief Gets the user-defined state supplied to the Begin* call. */
             [[nodiscard]] const std::any& getAsyncStateProperty() const override;
@@ -851,7 +851,7 @@ namespace Microsoft::Xna::Framework::Net
             // non-const WaitHandle&, so the handle exposed through it must be mutable.
             mutable System::Threading::EventWaitHandle asyncWaitHandle_;
 
-            NOXNA static int instanceCount_;
+            CNAEXT static int instanceCount_;
         };
 
         explicit NetworkSession(
@@ -893,14 +893,14 @@ namespace Microsoft::Xna::Framework::Net
         // allGamers_.getCountProperty() at call time - since RemoveGamer shrinks that count with
         // no separate counter, a remove-then-add sequence could hand out a colliding id already
         // owned by a still-present gamer, corrupting FindGamerById.
-        NOXNA SharpRuntime::bytecs nextLocalGamerId_{0};
+        CNAEXT SharpRuntime::bytecs nextLocalGamerId_{0};
         std::queue<NetworkEvent> networkEvents_;
 
         // Task 3.1/10.2: owns every gamer this session ever created - GamerCollection<T>'s own
         // views only ever hold non-owning raw pointers (see its doc comment for the full,
         // canonical ownership contract this follows). Freed in bulk on Dispose() - see Dispose()'s
         // own doc comment for why not incrementally.
-        NOXNA std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;
+        CNAEXT std::vector<std::unique_ptr<NetworkGamer>> ownedGamers_;
 
         static NetworkSessionAction* activeAction_;
         static NetworkSession* activeSession_;
@@ -915,7 +915,7 @@ namespace Microsoft::Xna::Framework::Net
         // callback, not activeAction_ read again afterward - a re-entrant callback that calls the
         // matching End* nulls activeAction_ as a side effect, and the Begin* caller must still get
         // back the real action it just created, not that now-stale null.
-        NOXNA static NetworkSessionAction* InvokeActiveActionCallback();
+        CNAEXT static NetworkSessionAction* InvokeActiveActionCallback();
 
         // Task 2.15: the connect address/port BeginJoin captured from its AvailableNetworkSession
         // argument, consumed by EndJoin to actually call ENetBackend::ConnectToHost once the
@@ -923,11 +923,11 @@ namespace Microsoft::Xna::Framework::Net
         // room for these without also touching Create/Find/JoinInvited's own call sites, so they
         // get the same single-pending-action static treatment as activeAction_/activeSession_
         // above rather than growing that shared class for just one caller.
-        NOXNA static std::string pendingJoinAddress_;
-        NOXNA static uint16_t pendingJoinPort_;
+        CNAEXT static std::string pendingJoinAddress_;
+        CNAEXT static uint16_t pendingJoinPort_;
 
         // Task 3.3: incremented by the constructor, decremented by ~NetworkSession() - see
         // GetInstanceCountForTesting()'s own doc comment.
-        NOXNA static int instanceCount_;
+        CNAEXT static int instanceCount_;
     };
 }

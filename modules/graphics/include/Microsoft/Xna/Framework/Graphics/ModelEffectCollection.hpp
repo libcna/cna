@@ -40,25 +40,25 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Adds an effect to this collection.
          * @param effect Pointer to the Effect to add.
          */
-        NOXNA void Add(Effect* effect);
+        CNAEXT void Add(Effect* effect);
 
         /**
          * @brief Removes an effect from this collection.
          * @param effect Pointer to the Effect to remove.
          */
-        NOXNA void Remove(const Effect* effect);
+        CNAEXT void Remove(const Effect* effect);
 
         using iterator = std::vector<Effect*>::iterator;
         using const_iterator = std::vector<Effect*>::const_iterator;
 
         /** @brief Returns an iterator to the beginning of the collection. */
-        NOXNA iterator begin();
+        CNAEXT iterator begin();
         /** @brief Returns an iterator past the end of the collection. */
-        NOXNA iterator end();
+        CNAEXT iterator end();
         /** @brief Returns a const iterator to the beginning of the collection. */
-        NOXNA const_iterator begin() const;
+        CNAEXT const_iterator begin() const;
         /** @brief Returns a const iterator past the end of the collection. */
-        NOXNA const_iterator end() const;
+        CNAEXT const_iterator end() const;
 
     private:
         std::vector<Effect*> effects_;

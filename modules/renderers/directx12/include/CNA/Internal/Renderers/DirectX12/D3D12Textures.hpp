@@ -57,23 +57,23 @@ namespace CNA::Internal::Renderers::DirectX12
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
-        /// Real mip level count this texture was allocated with (NOXNA diagnostics).
+        /// Real mip level count this texture was allocated with (CNAEXT diagnostics).
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
-        /// Raw GPU-resident ID3D12Resource* (NOXNA -- Phase DX-111's draw path / readback tests).
+        /// Raw GPU-resident ID3D12Resource* (CNAEXT -- Phase DX-111's draw path / readback tests).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return texture_.Get(); }
-        /// Staging-heap CPU handle for this texture's SRV (NOXNA -- where the descriptor itself
+        /// Staging-heap CPU handle for this texture's SRV (CNAEXT -- where the descriptor itself
         /// lives; REMED-GFX-177 keeps the authoritative copy in a non-shader-visible heap).
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetShaderResourceViewCpuHandleEXT() const
         {
             return heaps_ ? heaps_->cbvSrvUav.StagingCpuHandle(srvIndex_) : D3D12_CPU_DESCRIPTOR_HANDLE{};
         }
-        /// Shader-visible-heap GPU handle for this texture's SRV (NOXNA -- SetGraphicsRootDescriptorTable).
+        /// Shader-visible-heap GPU handle for this texture's SRV (CNAEXT -- SetGraphicsRootDescriptorTable).
         /// REMED-GFX-177: resolved on every call against whichever heap is current, never cached.
         [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const
         {
             return heaps_ ? heaps_->cbvSrvUav.GpuHandle(srvIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
         }
-        /// REMED-GFX-177: the stable shader-visible-heap slot index this texture owns (NOXNA).
+        /// REMED-GFX-177: the stable shader-visible-heap slot index this texture owns (CNAEXT).
         [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
 
     private:

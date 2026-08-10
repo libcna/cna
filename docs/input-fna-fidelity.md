@@ -87,7 +87,7 @@ byte-for-byte by INPUT-KBD-009/010):
   leaked sub-notch precision-wheel motion.)
 - **DEC-18 (superseded by N-005, corrected 2026-07-17/P1-018):** SDL's horizontal wheel (`wheel.x`) was
   originally dropped entirely — XNA/FNA `MouseState` exposes only the vertical `ScrollWheelValue`, so
-  there was no property to route horizontal scroll to. N-005 added a NOXNA/EXT field instead: `wheel.x`
+  there was no property to route horizontal scroll to. N-005 added a CNAEXT/EXT field instead: `wheel.x`
   is now scaled to the same 120-unit notch and surfaced via
   `MouseState::getHorizontalScrollWheelValueEXTProperty()`
   (`InputManager::AddHorizontalScrollWheelDelta`, wired in `SdlInputBridge::ProcessEvent`). It is
@@ -109,7 +109,7 @@ byte-for-byte by INPUT-KBD-009/010):
 ### MouseCursor
 
 No FNA source exists for `MouseCursor` — confirmed by full-tree search of
-`/rv/data/library/github.com/FNA-XNA/FNA`. It is a MonoGame-derived NOXNA extension
+`/rv/data/library/github.com/FNA-XNA/FNA`. It is a MonoGame-derived CNAEXT extension
 (`include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`), audited against MonoGame's
 `MouseCursor.cs`/`MouseCursor.SDL.cs` for task P1-017. Full stock-cursor parity confirmed (all 12:
 Arrow, IBeam, Wait, Crosshair, WaitArrow, SizeNWSE, SizeNESW, SizeWE, SizeNS, SizeAll, No, Hand). CNA
@@ -124,12 +124,12 @@ self-move-assignment guard now covered by a regression test.
   a disposed `MouseCursor` throws either: `GetSDLCursor()` simply returns the now-null pointer, and
   `Mouse::SetCursor` on a disposed cursor is an intentional safe no-op (tested by
   `SetCursorIsSafeNoOpForDisposedCursor`). This is deliberate: MonoGame's own `MouseCursor` (the
-  source this NOXNA type is modeled on) defines no post-Dispose exception contract either, and a
+  source this CNAEXT type is modeled on) defines no post-Dispose exception contract either, and a
   cursor object's only operations are read-only/pass-through (unlike, say, a `Stream`, where
   use-after-dispose hides a real resource-safety bug worth surfacing loudly). `Dispose()` itself
   remains idempotent (double-dispose is a safe no-op — P3-034, tested by
   `DisposeReleasesHandleAndIsIdempotent`), which does follow the general convention.
-- **`GetSDLCursor()` stays public `NOXNA` (P3-037, decided 2026-07-17):** the raw, non-owned
+- **`GetSDLCursor()` stays public `CNAEXT` (P3-037, decided 2026-07-17):** the raw, non-owned
   `SDL_Cursor*` accessor was considered for demotion to an internal/friend-only accessor (Phase-0
   concern #2), but kept public because CNA backend code outside this class (e.g. a graphics backend
   wanting to inspect the active cursor) legitimately needs it, and — per P3-036 — the header already
@@ -214,10 +214,10 @@ byte-identical to FNA. Pinned by `StickAxisNormalizationMatchesFnaDivisor`.
   (`InputManager::try_get_player_slot`, `SdlInputBridge::get_sdl_gamepad_for_player`) and returns the
   graceful disconnected/false/empty fallback instead — safer, deliberate, and already pinned by
   `GamePadInputTest.AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedState`.
-- **`GamePad::LeftDeadZone`/`RightDeadZone`/`TriggerThreshold`/`ExcludeAxisDeadZone` are `NOXNA public`
+- **`GamePad::LeftDeadZone`/`RightDeadZone`/`TriggerThreshold`/`ExcludeAxisDeadZone` are `CNAEXT public`
   (P1-003):** FNA declares these `internal` (`GamePad.cs:21-23,132-147`), relying on same-assembly
   visibility so `GamePadThumbSticks.cs`/`GamePadTriggers.cs` can read them. C++ has no assembly-scoped
-  visibility; CNA exposes them as `NOXNA`-tagged public statics on `GamePad` so `GamePadThumbSticks.cpp`/
+  visibility; CNA exposes them as `CNAEXT`-tagged public statics on `GamePad` so `GamePadThumbSticks.cpp`/
   `GamePadTriggers.cpp` (separate translation units) can consume them — the correct translation of FNA's
   `internal`, not an accidental widening of the public surface.
 - `GamePadButtons::buttons_` was public in the header (declared before `private:`) despite FNA's field
@@ -226,9 +226,9 @@ byte-identical to FNA. Pinned by `StickAxisNormalizationMatchesFnaDivisor`.
 - **Struct-level audit (P1-005):** every property of `GamePadCapabilities` (25 XNA bool properties +
   `GamePadType` + 10 `…EXT` bool properties) was compared field-by-field against FNA
   (`GamePadCapabilities.cs`): names, order, defaults (all `false` / `GamePadType.Unknown`), and
-  getter/setter shape. Zero divergences found. FNA's `internal set` maps to a public `NOXNA`-tagged
+  getter/setter shape. Zero divergences found. FNA's `internal set` maps to a public `CNAEXT`-tagged
   setter (documented in the struct's own Doxygen comment) since C++ has no `internal` accessibility;
-  all 10 EXT properties are correctly `NOXNA` on both getter and setter. No `VendorId`/`ProductId`
+  all 10 EXT properties are correctly `CNAEXT` on both getter and setter. No `VendorId`/`ProductId`
   properties exist on this struct in current FNA — only the 10 boolean `…EXT` flags. Test coverage
   (`GamePadTests.cpp`, `GamePadMappingTests.cpp`, `PublicApiInputSignatureFreezeTests.cpp`,
   `PublicApiInputCompileTests.cpp`) already exercises every getter/setter individually (default state,
@@ -288,7 +288,7 @@ from the fake-backend unit tests above.
   `std::out_of_range` (task 902), matching FNA's `ArgumentOutOfRangeException` intent. Pinned by
   `CopyToAppendsAllElementsInOrder`, `CopyToFromEmptyCollectionIsANoOp`,
   `CopyToThrowsOnOutOfRangeIndexInsteadOfUndefinedBehavior`, `CopyToInsertsAtValidNonZeroIndex`.
-- **`GestureSample`'s `NOXNA` default constructor seeds `FingerIdEXT`/`FingerId2EXT` with
+- **`GestureSample`'s `CNAEXT` default constructor seeds `FingerIdEXT`/`FingerId2EXT` with
   `TouchPanel::NO_FINGER` (P1-020):** a strict `default(GestureSample)` in C# would zero every field
   (`FingerIdEXT == 0`), but `0` is a legitimate real SDL finger id — a zero default would look
   ambiguously like "touching with finger 0" rather than "no finger". CNA deliberately uses the same
@@ -413,11 +413,11 @@ queue" API contract), not a CNA-specific gap to fix.
 `TextInputEXT` (unlike most `EXT`-suffixed CNA types) is not a CNA invention — FNA itself already
 ships a `Microsoft.Xna.Framework.Input.TextInputEXT` static class (`FNA/src/Input/TextInputEXT.cs`)
 as its own beyond-XNA-4.0 extension, so it is ported as a strict FNA-parity type in the
-`Microsoft::Xna` namespace, not tagged `NOXNA` itself. FNA's baseline surface is exactly:
+`Microsoft::Xna` namespace, not tagged `CNAEXT` itself. FNA's baseline surface is exactly:
 `TextInput`/`TextEditing` events, `WindowHandle` property, `IsTextInputActive()`,
 `IsScreenKeyboardShown()`/`IsScreenKeyboardShown(window)`, `StartTextInput()`, `StopTextInput()`,
 `SetInputRectangle()` — every one of these is a faithful 1:1 port (P2-030). CNA layers three
-`NOXNA`-tagged members with no FNA analog on top of that baseline: `TextEditingCandidatesEXT` (IME
+`CNAEXT`-tagged members with no FNA analog on top of that baseline: `TextEditingCandidatesEXT` (IME
 candidate-list event; FNA's `TextInputEXT` has no candidates support at all),
 `StartTextInputWithTypeEXT(TextInputTypeEXT)` and the `CNA::Input::TextInputTypeEXT` enum itself
 (a 9-value mobile/on-screen-keyboard hint mirroring SDL3's `SDL_TextInputType` one-to-one — verified
@@ -509,16 +509,16 @@ remains is real-hardware *actuation*, which is manual-only. See `plan_input.md` 
 
 ---
 
-## Extension APIs (FNAEXT / NOXNA) — INP-0214
+## Extension APIs (FNAEXT / CNAEXT) — INP-0214
 
 Beyond the strict XNA 4.0 surface, CNA exposes the FNA/MonoGame extensions and CNA conveniences below.
 See the tier glossary in `input-public-api-frozen.md`.
 
-- **`TextInputEXT`** (FNAEXT, whole class NOXNA) — portable text input/IME that XNA 4.0 lacked:
+- **`TextInputEXT`** (FNAEXT, whole class CNAEXT) — portable text input/IME that XNA 4.0 lacked:
   `StartTextInput`/`StopTextInput`, the `TextInput` (per UTF-16 code unit) and `TextEditing` (IME
   composition) multicast events, `SetInputRectangle`, `IsTextInputActive`, `IsScreenKeyboardShown`,
   `WindowHandle`. Backed by SDL text-input; UTF-8→UTF-16 decode + control-char/Ctrl+V synthesis.
-- **`MouseCursor`** (NOXNA, whole class) — MonoGame-style custom cursors: stock cursors, `FromTexture2D`,
+- **`MouseCursor`** (CNAEXT, whole class) — MonoGame-style custom cursors: stock cursors, `FromTexture2D`,
   ownership/disposal. Cursor creation needs `SDL_INIT_VIDEO` (graceful null otherwise).
 - **Relative mouse mode** (`Mouse::…IsRelativeMouseModeEXT`) — FPS-style pointer lock + relative-delta
   accumulation; not a stock XNA concept.
@@ -528,7 +528,7 @@ See the tier glossary in `input-public-api-frozen.md`.
   (adaptive-trigger haptics), `GetGyroEXT`/`GetAccelerometerEXT` (motion sensors); plus the
   `GamePadCapabilities` `Has…EXT` flags. All FNA extensions, capability-gated.
 - **`Mouse::ClickedEXT`** — FNA's click callback (`MulticastAction<int>`, DEC-06).
-- **`GestureSample::FingerId(2)EXT`** — per-gesture finger ids (NOXNA convenience).
+- **`GestureSample::FingerId(2)EXT`** — per-gesture finger ids (CNAEXT convenience).
 
 ## Convention: verified fact vs intended behavior (INP-0216)
 

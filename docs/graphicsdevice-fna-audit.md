@@ -13,9 +13,9 @@ This document compares CNA's `GraphicsDevice` against FNA's public XNA 4.0 API s
 | FNA signature | CNA status |
 |---|---|
 | `GraphicsDevice(GraphicsAdapter, GraphicsProfile, PresentationParameters)` | ✅ Present |
-| `GraphicsDevice()` (default, for headless use) | ✅ Present (NOXNA) |
+| `GraphicsDevice()` (default, for headless use) | ✅ Present (CNAEXT) |
 
-FNA has exactly one public constructor. CNA's no-arg constructor is a legitimate NOXNA addition.
+FNA has exactly one public constructor. CNA's no-arg constructor is a legitimate CNAEXT addition.
 
 ---
 
@@ -81,7 +81,7 @@ The three-argument `Present` allows rendering into a sub-rectangle of a foreign 
 | `Reset(PresentationParameters)` | ✅ |
 | `Reset(PresentationParameters, GraphicsAdapter)` | ✅ |
 
-CNA also has a fourth overload `Reset(const PresentationParameters&, GraphicsAdapter*)` (pointer variant) — this is a NOXNA convenience overload; it should be tagged `NOXNA`.
+CNA also has a fourth overload `Reset(const PresentationParameters&, GraphicsAdapter*)` (pointer variant) — this is a CNAEXT convenience overload; it should be tagged `CNAEXT`.
 
 ### Clear
 
@@ -91,10 +91,10 @@ CNA also has a fourth overload `Reset(const PresentationParameters&, GraphicsAda
 | `Clear(ClearOptions, Color, float depth, int stencil)` | ✅ |
 | `Clear(ClearOptions, Vector4 color, float depth, int stencil)` | ❌ Missing |
 
-The `Vector4` overload is XNA 4.0 API. CNA instead has two non-XNA convenience overloads that are missing the `NOXNA` tag:
+The `Vector4` overload is XNA 4.0 API. CNA instead has two non-XNA convenience overloads that are missing the `CNAEXT` tag:
 
-- `Clear(float r, float g, float b, float a)` — not in XNA, missing `NOXNA`
-- `Clear(const Color& color, float depth)` — not in XNA, missing `NOXNA`
+- `Clear(float r, float g, float b, float a)` — not in XNA, missing `CNAEXT`
+- `Clear(const Color& color, float depth)` — not in XNA, missing `CNAEXT`
 
 ### Dispose
 
@@ -141,13 +141,13 @@ All three overloads exist with the correct shape. The lack of generics is an int
 | `SetVertexBuffers(params VertexBufferBinding[])` | ✅ |
 | `GetVertexBuffers()` | ✅ |
 
-CNA adds three non-XNA helpers that are **missing the `NOXNA` tag**:
+CNA adds three non-XNA helpers that are **missing the `CNAEXT` tag**:
 
 - `SetIndexBuffer(const IndexBuffer*)` — XNA uses the `Indices` property setter; this is an alias
 - `GetIndexBuffer()` — XNA uses the `Indices` property getter; this is an alias
 - `GetVertexBuffer()` — returns only the first bound buffer; not in FNA API
 
-CNA also exposes `Indices()` / `Indices(const IndexBuffer*)` as named methods alongside `getIndicesProperty/setIndicesProperty`. The method forms are non-convention duplicates and should be marked `NOXNA`.
+CNA also exposes `Indices()` / `Indices(const IndexBuffer*)` as named methods alongside `getIndicesProperty/setIndicesProperty`. The method forms are non-convention duplicates and should be marked `CNAEXT`.
 
 ---
 
@@ -189,7 +189,7 @@ The `VertexDeclaration` variants allow callers to pass a custom vertex layout wi
 
 | FNA EXT method | CNA status |
 |---|---|
-| `SetStringMarkerEXT(string)` | ✅ Present, correctly tagged `NOXNA` |
+| `SetStringMarkerEXT(string)` | ✅ Present, correctly tagged `CNAEXT` |
 | `GetRenderTargetsNoAllocEXT(RenderTargetBinding[])` | ❌ Missing |
 
 ---
@@ -204,17 +204,17 @@ The `VertexDeclaration` variants allow callers to pass a custom vertex layout wi
 | Medium | `Clear(ClearOptions, Vector4, float, int)` | Convert Vector4 to Color internally |
 | Low | `GetRenderTargetsNoAllocEXT(RenderTargetBinding[])` | FNA extension; low priority |
 
-### Incorrect visibility / missing NOXNA tags (should fix)
+### Incorrect visibility / missing CNAEXT tags (should fix)
 
 | Item | Issue |
 |---|---|
-| `Clear(float, float, float, float)` | Not in XNA API — add `NOXNA` |
-| `Clear(const Color&, float)` | Not in XNA API — add `NOXNA` |
-| `Reset(const PresentationParameters&, GraphicsAdapter*)` | Pointer overload not in XNA — add `NOXNA` |
-| `SetIndexBuffer(const IndexBuffer*)` | Alias for `setIndicesProperty` — add `NOXNA` |
-| `GetIndexBuffer()` | Alias for `getIndicesProperty` — add `NOXNA` |
-| `GetVertexBuffer()` | Not in FNA API — add `NOXNA` |
-| `Indices()` / `Indices(const IndexBuffer*)` | Duplicate of property methods — add `NOXNA` |
+| `Clear(float, float, float, float)` | Not in XNA API — add `CNAEXT` |
+| `Clear(const Color&, float)` | Not in XNA API — add `CNAEXT` |
+| `Reset(const PresentationParameters&, GraphicsAdapter*)` | Pointer overload not in XNA — add `CNAEXT` |
+| `SetIndexBuffer(const IndexBuffer*)` | Alias for `setIndicesProperty` — add `CNAEXT` |
+| `GetIndexBuffer()` | Alias for `getIndicesProperty` — add `CNAEXT` |
+| `GetVertexBuffer()` | Not in FNA API — add `CNAEXT` |
+| `Indices()` / `Indices(const IndexBuffer*)` | Duplicate of property methods — add `CNAEXT` |
 
 ### Intentional C++ deviations (acceptable)
 

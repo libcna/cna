@@ -38,13 +38,13 @@ namespace Microsoft::Xna::Framework::Media
     class VideoPlayer final : public System::Object, public System::IDisposable
     {
     public:
-        NOXNA friend struct VideoPlayerTestAccess;
+        CNAEXT friend struct VideoPlayerTestAccess;
 
         /** @brief Constructs a VideoPlayer in the stopped state. */
         VideoPlayer();
 
         /** @brief Destroys the VideoPlayer and releases decoder and audio resources. */
-        NOXNA ~VideoPlayer() override;
+        CNAEXT ~VideoPlayer() override;
 
         /** @brief Releases all resources used by this VideoPlayer. */
         void Dispose() override;
@@ -167,7 +167,7 @@ namespace Microsoft::Xna::Framework::Media
          * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
          * @param track Zero-based audio stream index.
          */
-        NOXNA void SetAudioTrackEXT(SharpRuntime::intcs track);
+        CNAEXT void SetAudioTrackEXT(SharpRuntime::intcs track);
 
         /**
          * @brief Selects which video track to use (0-based index among video streams).
@@ -178,7 +178,7 @@ namespace Microsoft::Xna::Framework::Media
          * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
          * @param track Zero-based video stream index.
          */
-        NOXNA void SetVideoTrackEXT(SharpRuntime::intcs track);
+        CNAEXT void SetVideoTrackEXT(SharpRuntime::intcs track);
 
         /** @brief Stores basic video file metadata (width, height, fps). */
         struct VideoInfo
@@ -192,7 +192,7 @@ namespace Microsoft::Xna::Framework::Media
         };
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         void OpenDecoder(Video* video);

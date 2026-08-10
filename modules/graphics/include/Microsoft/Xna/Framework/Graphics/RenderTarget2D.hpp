@@ -50,7 +50,7 @@ namespace Microsoft::Xna::Framework::Graphics
                        RenderTargetUsage usage = RenderTargetUsage::DiscardContents);
 
         /** @brief Destructor. */
-        NOXNA ~RenderTarget2D() override = default;
+        CNAEXT ~RenderTarget2D() override = default;
 
         /**
          * @brief Throws InvalidOperationException if this render target is still bound to the device.
@@ -68,7 +68,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RenderTarget2D& operator=(RenderTarget2D&&)      = default;
 
         /** @brief Returns the fully qualified CNA type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         // Width, Height, Format, LevelCount are all inherited from Texture2D / Texture.
         // IRenderTarget pure virtuals satisfied:
@@ -97,7 +97,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * Returns nullptr if the renderer does not support off-screen rendering.
          * @return Pointer to the IRenderTargetRenderer, or nullptr.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Renderers::IRenderTargetRenderer* GetRenderTargetRenderer() const;
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::IRenderTargetRenderer* GetRenderTargetRenderer() const;
 
     private:
         DepthFormat depthFormat_      = DepthFormat::None;

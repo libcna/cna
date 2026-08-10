@@ -45,7 +45,7 @@ renamed or restructured equivalent) — CLAUDE.md's own project rule is to never
 XNA/FNA name even when a more "C++-idiomatic" name would read better.
 
 Non-XNA CNA-only additions (helpers, extensions, internal renderer types) are marked with a
-`NOXNA` macro and/or an `EXT` suffix (e.g. `PrimitiveType::PointListEXT`,
+`CNAEXT` macro and/or an `EXT` suffix (e.g. `PrimitiveType::PointListEXT`,
 `Texture2D::SetDataPointerEXT`) — anything with that suffix is safe to ignore unless you
 specifically want a CNA extension your original XNA code never used.
 
@@ -196,7 +196,7 @@ supported, throws · ⛔ BLOCKED, needs a project-owner decision.
 | `Draw(Texture2D, Vector2 position, Rectangle? source, Color, rotation, origin, Vector2 scale, SpriteEffects, layerDepth)` | ✅ | |
 | `Draw(Texture2D, Rectangle destination, Color)` | ✅ | |
 | `Draw(Texture2D, Rectangle destination, Rectangle? source, Color)` | ✅ | |
-| `Draw(Texture2D, Rectangle destination, Rectangle? source, Color, rotation, origin, SpriteEffects, layerDepth)` | ✅ **fixed, Task 922** (2026-07-09) | The real overload now takes an optional `std::optional<Rectangle> sourceRectangle`, matching FNA's `Rectangle?` exactly. Previously this was a `NOXNA`-marked near-equivalent with a required `Rectangle` source parameter — not a drop-in signature match — found while verifying this checklist against the real header. |
+| `Draw(Texture2D, Rectangle destination, Rectangle? source, Color, rotation, origin, SpriteEffects, layerDepth)` | ✅ **fixed, Task 922** (2026-07-09) | The real overload now takes an optional `std::optional<Rectangle> sourceRectangle`, matching FNA's `Rectangle?` exactly. Previously this was a `CNAEXT`-marked near-equivalent with a required `Rectangle` source parameter — not a drop-in signature match — found while verifying this checklist against the real header. |
 | `SpriteSortMode` (all 4 values) | ✅ | |
 | `transformMatrix` in `Begin()` | ✅ | |
 | Custom `Effect` via `Begin(effect)` | ⚠️ (SDL_Renderer only) | Throws by design on SDL_Renderer (no shader stage there); works on EasyGL/Vulkan/Bgfx. |
@@ -221,7 +221,7 @@ supported, throws · ⛔ BLOCKED, needs a project-owner decision.
 | `SetData(Color* data, int elementCount)` | ✅ | |
 | `SetData(int level, Rectangle* rect, Color* data, int startIndex, int elementCount)` | ⚠️ | `level > 0` (mip levels) is a silent no-op on Vulkan/Bgfx (Task 867) and throws on SDL_Renderer by design (Task 681); `level == 0` is fully correct everywhere. |
 | `GetData` (3 overloads) | ✅ | Pure CPU-side cache read on every renderer — renderer-independent by construction. |
-| `SaveAsPng`/`SaveAsJpeg` (stream + file-path `NOXNA` overloads) | ✅ | |
+| `SaveAsPng`/`SaveAsJpeg` (stream + file-path `CNAEXT` overloads) | ✅ | |
 | Non-`Color` `SurfaceFormat` for real GPU sampling | ⛔ BLOCKED | Task 732 — file I/O round-trips fine; GPU texture upload of non-`Color` formats does not. |
 
 **`BlendState`/`SamplerState` (as used via `SpriteBatch::Begin`)**
@@ -266,20 +266,20 @@ unlike `SpriteBatch::Draw` (Task 922), this area checked out clean.
 | `EnvironmentMapEffect` | ✅ | ✅ / ✅ / ✅ | No open gaps — `DirectionalLight1`/`2` (Task 890, fixed 2026-07-11, was missing on all 3 renderers not just Vulkan/Bgfx) and base-lerp alpha scaling (Task 891) are both fixed. |
 | `SkinnedEffect` | ✅ | ✅ / ✅ / ✅ | No open gaps — `DirectionalLight1`/`2` (Task 893), `SpecularColor`/`Power` (Task 894), and `WeightsPerVertex` GPU enforcement (Task 895) all fixed 2026-07-11, all three were missing on all 3 renderers not just Vulkan/Bgfx. |
 | Fog (all 5 effects) | — | ✅ / ✅ / ✅ | Fully implemented on every 3D renderer for every effect, including Vulkan's `env_map3d`/`skinned3d` (Task 899, closed 2026-07-07) — a stale "Vulkan still lacks fog" claim in this same file's own per-renderer table (Task 484) was found and corrected while writing this checklist. |
-| `ShaderEffect` (NOXNA custom shader) | ✅ (constructor exists on all 3) | ✅ / ✅ / ❌ | Bgfx's `CreateEffectRenderer` returns `nullptr` for it — the one whole-feature 3D gap left. |
+| `ShaderEffect` (CNAEXT custom shader) | ✅ (constructor exists on all 3) | ✅ / ✅ / ❌ | Bgfx's `CreateEffectRenderer` returns `nullptr` for it — the one whole-feature 3D gap left. |
 
 **`Model` / `ModelMesh` / `ModelBone`**
 
 Real FNA's own `Model` constructor is `internal` — ordinary XNA/FNA game code never calls it
 directly, only via `ContentManager.Load<Model>()`'s content pipeline (confirmed in `Model.cs`).
-CNA exposes two `NOXNA`-marked public constructors instead (there being no real public FNA
+CNA exposes two `CNAEXT`-marked public constructors instead (there being no real public FNA
 constructor to match against) so hand-built models are possible without content loading — this is
 an intentional, documented CNA convenience, not a signature mismatch.
 
 | Member | Status | Note |
 |---|---|---|
 | `Model::Draw(Matrix world, Matrix view, Matrix projection)` | ✅ | Correct on EasyGL/Vulkan/Bgfx; throws on SDL_Renderer by design. |
-| Constructing a `Model` by hand (`NOXNA` constructors) | ✅ | **Fixed, Task 916** (2026-07-09) — an optional `rootBoneIndex` parameter (default `0`) now lets you specify a root bone other than `bones[0]`. |
+| Constructing a `Model` by hand (`CNAEXT` constructors) | ✅ | **Fixed, Task 916** (2026-07-09) — an optional `rootBoneIndex` parameter (default `0`) now lets you specify a root bone other than `bones[0]`. |
 | Loading a `Model` via `ContentManager` | ⚠️ | CNA's own `.model.json` format, not FNA's `.xnb` — real gaps versus FNA's loader (no bone hierarchy/`ParentBone`/`BoundingSphere`/`Tag` wiring, Task 440). Don't expect an FNA-authored `.xnb` model to load as-is; see "Content pipeline" above. |
 | `ModelMesh`/`ModelBone` collections (`ModelMeshCollection`, `ModelBoneCollection`) | ✅ | `TryGetValue`/`Contains`/`begin()`/`end()` all present (Tasks 432/433). |
 | `Model::CopyBoneTransformsFrom`/`To` | ⚠️ | Loop bound is `Bones.Count`, not the caller array's length like FNA — an intentional, safer deviation (see "Known deviations" list), not a bug. |
@@ -288,7 +288,7 @@ an intentional, documented CNA convenience, not a signature mismatch.
 
 Real FNA has exactly 2 public constructors each for `VertexBuffer`/`IndexBuffer` and 2 for
 `VertexDeclaration` (confirmed against `VertexBuffer.cs`/`IndexBuffer.cs`/`VertexDeclaration.cs`);
-CNA has all of FNA's overloads plus extra `NOXNA` convenience overloads (e.g.
+CNA has all of FNA's overloads plus extra `CNAEXT` convenience overloads (e.g.
 `VertexBuffer(GraphicsDevice&, int vertexCount)` without an explicit `VertexDeclaration`) — purely
 additive, no missing or mismatched FNA-facing overload found.
 

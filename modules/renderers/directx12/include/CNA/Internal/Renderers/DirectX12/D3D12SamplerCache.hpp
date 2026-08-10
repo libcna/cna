@@ -39,7 +39,7 @@ namespace CNA::Internal::Renderers::DirectX12
             int filter, int addressU, int addressV, int maxAnisotropy,
             const std::function<std::uint32_t(const D3D12_SAMPLER_DESC&)>& createSlot);
 
-        /// Number of distinct sampler states created so far (NOXNA diagnostics).
+        /// Number of distinct sampler states created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:

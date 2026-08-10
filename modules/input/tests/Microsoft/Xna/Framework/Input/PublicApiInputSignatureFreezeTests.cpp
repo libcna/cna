@@ -12,7 +12,7 @@
 //
 // This is the enforced companion to the human-readable golden snapshot docs/input-public-api-frozen.md;
 // the two are kept in lock-step. When a member is intentionally added/changed, update BOTH in the same
-// commit. Strict-XNA, FNA EXT, and stable NOXNA-convenience members are all frozen so the whole
+// commit. Strict-XNA, FNA EXT, and stable CNAEXT-convenience members are all frozen so the whole
 // consumer-visible surface is drift-guarded (the doc marks which is which). Deliberately EXCLUDED are
 // members that are internal plumbing rather than API: anything named INTERNAL_* or *ForTests, and
 // private data members. Friend equality operators are frozen through an ADL expression (they are
@@ -93,22 +93,22 @@ namespace
     [[maybe_unused]] constexpr auto z_GamePad_SetTriggerVibrationEXT_7 = static_cast<bool(*)(PlayerIndex, float, float)>(&GamePad::SetTriggerVibrationEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetGyroEXT_8 = static_cast<bool(*)(PlayerIndex, Vector3&)>(&GamePad::GetGyroEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetAccelerometerEXT_9 = static_cast<bool(*)(PlayerIndex, Vector3&)>(&GamePad::GetAccelerometerEXT);
-    // NOXNA/EXT (input_noxna.md N-009): SDL device player-index (LED) get/set.
+    // CNAEXT/EXT (input_noxna.md N-009): SDL device player-index (LED) get/set.
     [[maybe_unused]] constexpr auto z_GamePad_GetPlayerIndexEXT = static_cast<int(*)(PlayerIndex)>(&GamePad::GetPlayerIndexEXT);
     [[maybe_unused]] constexpr auto z_GamePad_SetPlayerIndexEXT = static_cast<bool(*)(PlayerIndex, int)>(&GamePad::SetPlayerIndexEXT);
-    // NOXNA/EXT (input_noxna.md N-009b): SDL gamepad battery/charge state.
+    // CNAEXT/EXT (input_noxna.md N-009b): SDL gamepad battery/charge state.
     [[maybe_unused]] constexpr auto z_GamePad_GetPowerInfoEXT = static_cast<CNA::Input::PowerStateEXT(*)(PlayerIndex, int&)>(&GamePad::GetPowerInfoEXT);
-    // NOXNA/EXT (input_noxna.md N-011): SDL gamepad face-button glyph label.
+    // CNAEXT/EXT (input_noxna.md N-011): SDL gamepad face-button glyph label.
     [[maybe_unused]] constexpr auto z_GamePad_GetButtonLabelEXT = static_cast<CNA::Input::GamePadButtonLabelEXT(*)(PlayerIndex, Buttons)>(&GamePad::GetButtonLabelEXT);
-    // NOXNA/EXT (input_noxna.md N-010): SDL gamepad device metadata.
+    // CNAEXT/EXT (input_noxna.md N-010): SDL gamepad device metadata.
     [[maybe_unused]] constexpr auto z_GamePad_GetNameEXT = static_cast<std::string(*)(PlayerIndex)>(&GamePad::GetNameEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetPathEXT = static_cast<std::string(*)(PlayerIndex)>(&GamePad::GetPathEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetSerialEXT = static_cast<std::string(*)(PlayerIndex)>(&GamePad::GetSerialEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetFirmwareVersionEXT = static_cast<std::uint16_t(*)(PlayerIndex)>(&GamePad::GetFirmwareVersionEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetSteamHandleEXT = static_cast<std::uint64_t(*)(PlayerIndex)>(&GamePad::GetSteamHandleEXT);
-    // NOXNA/EXT (input_noxna.md N-010b): SDL gamepad wired/wireless connection state.
+    // CNAEXT/EXT (input_noxna.md N-010b): SDL gamepad wired/wireless connection state.
     [[maybe_unused]] constexpr auto z_GamePad_GetConnectionStateEXT = static_cast<CNA::Input::GamePadConnectionStateEXT(*)(PlayerIndex)>(&GamePad::GetConnectionStateEXT);
-    // NOXNA/EXT (input_noxna.md N-008): SDL gamepad touchpad fingers.
+    // CNAEXT/EXT (input_noxna.md N-008): SDL gamepad touchpad fingers.
     [[maybe_unused]] constexpr auto z_GamePad_GetTouchpadCountEXT = static_cast<int(*)(PlayerIndex)>(&GamePad::GetTouchpadCountEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetTouchpadFingerCountEXT = static_cast<int(*)(PlayerIndex, int)>(&GamePad::GetTouchpadFingerCountEXT);
     [[maybe_unused]] constexpr auto z_GamePad_GetTouchpadFingerEXT = static_cast<bool(*)(PlayerIndex, int, int, bool&, float&, float&, float&)>(&GamePad::GetTouchpadFingerEXT);
@@ -266,12 +266,12 @@ namespace
     [[maybe_unused]] constexpr auto z_Keyboard_GetState_1 = static_cast<KeyboardState(*)()>(&Keyboard::GetState);
     [[maybe_unused]] constexpr auto z_Keyboard_GetState_2 = static_cast<KeyboardState(*)(PlayerIndex)>(&Keyboard::GetState);
     [[maybe_unused]] constexpr auto z_Keyboard_GetKeyFromScancodeEXT_3 = static_cast<Keys(*)(Keys)>(&Keyboard::GetKeyFromScancodeEXT);
-    // NOXNA/EXT (input_noxna.md N-003): active keyboard modifier/lock state.
+    // CNAEXT/EXT (input_noxna.md N-003): active keyboard modifier/lock state.
     [[maybe_unused]] constexpr auto z_Keyboard_GetModStateEXT = static_cast<CNA::Input::KeyModifiersEXT(*)()>(&Keyboard::GetModStateEXT);
-    // NOXNA/EXT (input_noxna.md N-002): physical key-name helpers.
+    // CNAEXT/EXT (input_noxna.md N-002): physical key-name helpers.
     [[maybe_unused]] constexpr auto z_Keyboard_GetScancodeNameEXT = static_cast<std::string(*)(Keys)>(&Keyboard::GetScancodeNameEXT);
     [[maybe_unused]] constexpr auto z_Keyboard_GetScancodeFromNameEXT = static_cast<Keys(*)(const std::string&)>(&Keyboard::GetScancodeFromNameEXT);
-    // NOXNA/EXT (input_noxna.md N-002b): layout-dependent key-name helpers.
+    // CNAEXT/EXT (input_noxna.md N-002b): layout-dependent key-name helpers.
     [[maybe_unused]] constexpr auto z_Keyboard_GetKeyNameEXT = static_cast<std::string(*)(Keys)>(&Keyboard::GetKeyNameEXT);
     [[maybe_unused]] constexpr auto z_Keyboard_GetKeyFromNameEXT = static_cast<Keys(*)(const std::string&)>(&Keyboard::GetKeyFromNameEXT);
 
@@ -289,7 +289,7 @@ namespace
     [[maybe_unused]] constexpr auto z_KeyboardState_ToString_8 = static_cast<std::string(KeyboardState::*)() const>(&KeyboardState::ToString);
     static_assert(has_frozen_equality<KeyboardState>, "KeyboardState operator== / operator!= drift");
 
-    // ----- Mouse (static class, XNA + EXT + NOXNA) -----
+    // ----- Mouse (static class, XNA + EXT + CNAEXT) -----
     static_assert(!std::is_default_constructible_v<Mouse>, "Mouse() = delete");
     [[maybe_unused]] constexpr auto z_Mouse_getWindowHandleProperty_1 = static_cast<std::uintptr_t(*)()>(&Mouse::getWindowHandleProperty);
     [[maybe_unused]] constexpr auto z_Mouse_setWindowHandleProperty_2 = static_cast<void(*)(std::uintptr_t)>(&Mouse::setWindowHandleProperty);
@@ -299,7 +299,7 @@ namespace
     [[maybe_unused]] constexpr auto z_Mouse_ClickedEXT = &Mouse::ClickedEXT; // static System::MulticastAction<int>
     [[maybe_unused]] constexpr auto z_Mouse_getIsRelativeMouseModeEXTProperty_6 = static_cast<bool(*)()>(&Mouse::getIsRelativeMouseModeEXTProperty);
     [[maybe_unused]] constexpr auto z_Mouse_setIsRelativeMouseModeEXTProperty_7 = static_cast<void(*)(bool)>(&Mouse::setIsRelativeMouseModeEXTProperty);
-    // NOXNA/EXT (input_noxna.md N-016): mouse capture + global position/warp.
+    // CNAEXT/EXT (input_noxna.md N-016): mouse capture + global position/warp.
     [[maybe_unused]] constexpr auto z_Mouse_SetCaptureEXT = static_cast<bool(*)(bool)>(&Mouse::SetCaptureEXT);
     [[maybe_unused]] constexpr auto z_Mouse_GetGlobalPositionEXT = static_cast<void(*)(int&, int&)>(&Mouse::GetGlobalPositionEXT);
     [[maybe_unused]] constexpr auto z_Mouse_WarpGlobalEXT = static_cast<bool(*)(int, int)>(&Mouse::WarpGlobalEXT);
@@ -313,17 +313,17 @@ namespace
     [[maybe_unused]] constexpr auto z_MouseState_getXButton1Property_6 = static_cast<ButtonState(MouseState::*)() const>(&MouseState::getXButton1Property);
     [[maybe_unused]] constexpr auto z_MouseState_getXButton2Property_7 = static_cast<ButtonState(MouseState::*)() const>(&MouseState::getXButton2Property);
     [[maybe_unused]] constexpr auto z_MouseState_getScrollWheelValueProperty_8 = static_cast<int(MouseState::*)() const>(&MouseState::getScrollWheelValueProperty);
-    // NOXNA/EXT (input_noxna.md N-005): horizontal scroll wheel getter + the 9-arg ctor that populates it.
+    // CNAEXT/EXT (input_noxna.md N-005): horizontal scroll wheel getter + the 9-arg ctor that populates it.
     [[maybe_unused]] constexpr auto z_MouseState_getHorizontalScrollWheelValueEXTProperty = static_cast<int(MouseState::*)() const>(&MouseState::getHorizontalScrollWheelValueEXTProperty);
     static_assert(std::is_default_constructible_v<MouseState>, "MouseState()");
     static_assert(std::is_constructible_v<MouseState, int, int, int, ButtonState, ButtonState, ButtonState, ButtonState, ButtonState>, "MouseState(x, y, scrollWheel, left, middle, right, x1, x2)");
-    static_assert(std::is_constructible_v<MouseState, int, int, int, ButtonState, ButtonState, ButtonState, ButtonState, ButtonState, int>, "MouseState(x, y, scrollWheel, left, middle, right, x1, x2, horizontalScrollWheel) [NOXNA/EXT]");
+    static_assert(std::is_constructible_v<MouseState, int, int, int, ButtonState, ButtonState, ButtonState, ButtonState, ButtonState, int>, "MouseState(x, y, scrollWheel, left, middle, right, x1, x2, horizontalScrollWheel) [CNAEXT/EXT]");
     [[maybe_unused]] constexpr auto z_MouseState_Equals_9 = static_cast<bool(MouseState::*)(const MouseState&) const>(&MouseState::Equals);
     [[maybe_unused]] constexpr auto z_MouseState_GetHashCode_10 = static_cast<int(MouseState::*)() const>(&MouseState::GetHashCode);
     [[maybe_unused]] constexpr auto z_MouseState_ToString_11 = static_cast<std::string(MouseState::*)() const>(&MouseState::ToString);
     static_assert(has_frozen_equality<MouseState>, "MouseState operator== / operator!= drift");
 
-    // ----- MouseCursor (class, CNA/NOXNA) -----
+    // ----- MouseCursor (class, CNA/CNAEXT) -----
     static_assert(std::is_default_constructible_v<MouseCursor>, "MouseCursor()");
     static_assert(std::is_constructible_v<MouseCursor, SDL_Cursor*, bool>, "MouseCursor(SDL_Cursor*, bool = false)");
     [[maybe_unused]] constexpr auto z_MouseCursor_FromTexture2D_1 = static_cast<MouseCursor(*)(const Graphics::Texture2D&, int, int)>(&MouseCursor::FromTexture2D);
@@ -351,7 +351,7 @@ namespace
     static_assert(!std::is_default_constructible_v<TextInputEXT>, "TextInputEXT() = delete");
     [[maybe_unused]] constexpr auto z_TextInputEXT_TextInput = &TextInputEXT::TextInput;   // static System::MulticastAction<charcs>
     [[maybe_unused]] constexpr auto z_TextInputEXT_TextEditing = &TextInputEXT::TextEditing; // static System::MulticastAction<const std::string&, int, int>
-    // NOXNA/EXT (input_noxna.md N-014): IME candidate-list event.
+    // CNAEXT/EXT (input_noxna.md N-014): IME candidate-list event.
     [[maybe_unused]] constexpr auto z_TextInputEXT_TextEditingCandidatesEXT = &TextInputEXT::TextEditingCandidatesEXT; // static MulticastAction<const std::vector<std::string>&, int, bool>
     [[maybe_unused]] constexpr auto z_TextInputEXT_getWindowHandleProperty_1 = static_cast<std::uintptr_t(*)()>(&TextInputEXT::getWindowHandleProperty);
     [[maybe_unused]] constexpr auto z_TextInputEXT_setWindowHandleProperty_2 = static_cast<void(*)(std::uintptr_t)>(&TextInputEXT::setWindowHandleProperty);
@@ -361,12 +361,12 @@ namespace
     [[maybe_unused]] constexpr auto z_TextInputEXT_StartTextInput_6 = static_cast<void(*)()>(&TextInputEXT::StartTextInput);
     [[maybe_unused]] constexpr auto z_TextInputEXT_StopTextInput_7 = static_cast<void(*)()>(&TextInputEXT::StopTextInput);
     [[maybe_unused]] constexpr auto z_TextInputEXT_SetInputRectangle_8 = static_cast<void(*)(const Rectangle&)>(&TextInputEXT::SetInputRectangle);
-    // NOXNA/EXT (input_noxna.md N-014b): input-type hint for the on-screen keyboard / IME.
+    // CNAEXT/EXT (input_noxna.md N-014b): input-type hint for the on-screen keyboard / IME.
     [[maybe_unused]] constexpr auto z_TextInputEXT_StartTextInputWithTypeEXT_9 = static_cast<void(*)(CNA::Input::TextInputTypeEXT)>(&TextInputEXT::StartTextInputWithTypeEXT);
 
     // ============================= TOUCH CLUSTER =============================
 
-    // ----- TouchPanel (static class, XNA + NOXNA) -----
+    // ----- TouchPanel (static class, XNA + CNAEXT) -----
     static_assert(!std::is_default_constructible_v<TouchPanel>, "TouchPanel() = delete");
     static_assert(std::is_same_v<std::remove_cv_t<decltype(TouchPanel::MAX_TOUCHES)>, intcs>, "TouchPanel::MAX_TOUCHES : static constexpr intcs");
     static_assert(std::is_same_v<std::remove_cv_t<decltype(TouchPanel::NO_FINGER)>, intcs>, "TouchPanel::NO_FINGER : static constexpr intcs");
@@ -418,7 +418,7 @@ namespace
     [[maybe_unused]] constexpr auto z_TouchLocation_getIdProperty_1 = static_cast<int(TouchLocation::*)() const>(&TouchLocation::getIdProperty);
     [[maybe_unused]] constexpr auto z_TouchLocation_getStateProperty_2 = static_cast<TouchLocationState(TouchLocation::*)() const>(&TouchLocation::getStateProperty);
     [[maybe_unused]] constexpr auto z_TouchLocation_getPositionProperty_3 = static_cast<const Vector2&(TouchLocation::*)() const>(&TouchLocation::getPositionProperty);
-    // NOXNA/EXT (input_noxna.md N-006): SDL finger pressure getter + pressure-carrying constructors.
+    // CNAEXT/EXT (input_noxna.md N-006): SDL finger pressure getter + pressure-carrying constructors.
     [[maybe_unused]] constexpr auto z_TouchLocation_getPressureEXT = static_cast<float(TouchLocation::*)() const>(&TouchLocation::getPressureEXT);
     static_assert(std::is_constructible_v<TouchLocation, int, TouchLocationState, const Vector2&, float>, "TouchLocation(id, state, position, pressure)");
     static_assert(std::is_constructible_v<TouchLocation, int, TouchLocationState, const Vector2&, TouchLocationState, const Vector2&, float>, "TouchLocation(id, state, position, previousState, previousPosition, pressure)");

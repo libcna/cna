@@ -120,7 +120,7 @@ namespace Microsoft::Xna::Framework
          * @param vector3 The vector to add.
          * @return Reference to this vector after addition.
          */
-        NOXNA Vector3& operator+=(const Vector3& vector3);
+        CNAEXT Vector3& operator+=(const Vector3& vector3);
 
         /**
          * @brief Subtracts another vector from this vector in place.
@@ -128,7 +128,7 @@ namespace Microsoft::Xna::Framework
          * @param vector3 The vector to subtract.
          * @return Reference to this vector after subtraction.
          */
-        NOXNA Vector3& operator-=(const Vector3& vector3);
+        CNAEXT Vector3& operator-=(const Vector3& vector3);
 
         /**
          * @brief Adds two vectors.

@@ -74,7 +74,7 @@ collection-of-`T` combination nothing has registered fails with a clear "unregis
 ### Custom readers (XNB-42)
 
 A CNA game can register its own custom, non-built-in `.xnb` reader — no CNA-side involvement or
-special-casing needed. `ContentTypeReaderManager::AddTypeCreator()` (already public/`NOXNA`) is the
+special-casing needed. `ContentTypeReaderManager::AddTypeCreator()` (already public/`CNAEXT`) is the
 extension point, matching FNA's own real internal method of the same name/shape and playing the
 same role `.cnj`'s `RegisterCnjLoader<T>()` plays for CNA's JSON-based format:
 

@@ -6,7 +6,7 @@ Microsoft::Xna::Framework::Input (+ ::Touch) surface.
 
 Purpose
 -------
-The per-member STRICT/EXT/NOXNA table in docs/input-public-api-frozen.md is hand-maintained and
+The per-member STRICT/EXT/CNAEXT table in docs/input-public-api-frozen.md is hand-maintained and
 drifts. This helper regenerates the *CNA side* directly from the public headers and pairs it with
 the *FNA side* extracted from the FNA reference .cs, emitting one markdown matrix per type plus a
 summary of the rows a reviewer should look at (a STRICT member with no FNA counterpart, or an FNA
@@ -39,9 +39,9 @@ DEFAULT_HEADERS = os.path.join(REPO_ROOT, "include", "Microsoft", "Xna", "Framew
 DEFAULT_FNA = "/rv/data/library/github.com/FNA-XNA/FNA/src/Input"
 DEFAULT_OUT = os.path.join(REPO_ROOT, "docs", "input-member-parity-matrix.md")
 
-# CNA header basename (no .hpp) -> FNA .cs basename. MouseCursor has no FNA equivalent (NOXNA class).
+# CNA header basename (no .hpp) -> FNA .cs basename. MouseCursor has no FNA equivalent (CNAEXT class).
 FNA_FILE_FOR = {
-    "MouseCursor": None,  # NOXNA: CNA-only cursor handle, no FNA source
+    "MouseCursor": None,  # CNAEXT: CNA-only cursor handle, no FNA source
 }
 
 
@@ -59,7 +59,7 @@ def strip_cpp_comments(text: str) -> str:
 class CppMember:
     name: str          # canonical identifier (getXProperty, GetState, operator==, EnumValue, ...)
     signature: str     # normalized one-line declaration
-    tag: str           # STRICT | EXT | NOXNA
+    tag: str           # STRICT | EXT | CNAEXT
     kind: str          # method | ctor | operator | field | enum
 
 
@@ -67,20 +67,20 @@ class CppMember:
 class CppType:
     name: str
     kind: str          # class | struct | enum
-    is_noxna_class: bool
+    is_cnaext_class: bool
     members: list = field(default_factory=list)
 
 
-def classify_tag(decl: str, name: str, is_noxna_class: bool) -> str:
-    noxna = is_noxna_class or bool(re.search(r"\bNOXNA\b", decl))
+def classify_tag(decl: str, name: str, is_cnaext_class: bool) -> str:
+    cnaext = is_cnaext_class or bool(re.search(r"\bCNAEXT\b", decl))
     ext = name.endswith("EXT")
-    if noxna:
-        return "EXT" if ext else "NOXNA"
+    if cnaext:
+        return "EXT" if ext else "CNAEXT"
     return "EXT" if ext else "STRICT"
 
 
 def parse_enum(name: str, body: str) -> CppType:
-    t = CppType(name=name, kind="enum", is_noxna_class=False)
+    t = CppType(name=name, kind="enum", is_cnaext_class=False)
     for raw in body.split(","):
         m = re.match(r"\s*([A-Za-z_]\w*)", raw)
         if not m:
@@ -93,10 +93,10 @@ def parse_enum(name: str, body: str) -> CppType:
 
 
 def parse_class(name: str, kind: str, body: str, header_text: str) -> CppType:
-    # A whole class is NOXNA when the NOXNA marker sits on the class declaration itself.
-    is_noxna_class = bool(re.search(r"\bNOXNA\b[^;{]*\b(class|struct)\b\s+" + re.escape(name),
+    # A whole class is CNAEXT when the CNAEXT marker sits on the class declaration itself.
+    is_cnaext_class = bool(re.search(r"\bCNAEXT\b[^;{]*\b(class|struct)\b\s+" + re.escape(name),
                                     header_text))
-    t = CppType(name=name, kind=kind, is_noxna_class=is_noxna_class)
+    t = CppType(name=name, kind=kind, is_cnaext_class=is_cnaext_class)
 
     # Track access: struct defaults public, class defaults private.
     access = "public" if kind == "struct" else "private"
@@ -123,7 +123,7 @@ def parse_class(name: str, kind: str, body: str, header_text: str) -> CppType:
                 decl = "".join(stmt).strip()
                 stmt = []
                 if access == "public" and decl:
-                    member = classify_cpp_decl(decl, is_noxna_class)
+                    member = classify_cpp_decl(decl, is_cnaext_class)
                     if member:
                         t.members.append(member)
             continue
@@ -144,7 +144,7 @@ def parse_class(name: str, kind: str, body: str, header_text: str) -> CppType:
             i += 1
             if access != "public" or not decl:
                 continue
-            member = classify_cpp_decl(decl, is_noxna_class)
+            member = classify_cpp_decl(decl, is_cnaext_class)
             if member:
                 t.members.append(member)
             continue
@@ -153,7 +153,7 @@ def parse_class(name: str, kind: str, body: str, header_text: str) -> CppType:
     return t
 
 
-def classify_cpp_decl(decl: str, is_noxna_class: bool):
+def classify_cpp_decl(decl: str, is_cnaext_class: bool):
     norm = re.sub(r"\s+", " ", decl).strip()
     norm = norm.replace("[[nodiscard]] ", "")
     # operator==/!= (may be a hidden friend)
@@ -161,7 +161,7 @@ def classify_cpp_decl(decl: str, is_noxna_class: bool):
     if m:
         opname = "operator" + m.group(1)
         return CppMember(name=opname, signature=norm,
-                         tag=classify_tag(norm, opname, is_noxna_class), kind="operator")
+                         tag=classify_tag(norm, opname, is_cnaext_class), kind="operator")
     # function / constructor: an identifier immediately followed by '('
     m = re.search(r"([A-Za-z_]\w*)\s*\(", norm)
     if m:
@@ -171,14 +171,14 @@ def classify_cpp_decl(decl: str, is_noxna_class: bool):
         # crude ctor detection is not needed for the matrix; label uniformly as method/ctor
         kind = "method"
         return CppMember(name=fname, signature=norm,
-                         tag=classify_tag(norm, fname, is_noxna_class), kind=kind)
+                         tag=classify_tag(norm, fname, is_cnaext_class), kind=kind)
     # data member / static const: last identifier before '=' or end
     head = norm.split("=", 1)[0].strip()
     m = re.search(r"([A-Za-z_]\w*)\s*$", head)
     if m and re.search(r"\b(static|const|constexpr)\b", norm) is not None:
         fname = m.group(1)
         return CppMember(name=fname, signature=norm,
-                         tag=classify_tag(norm, fname, is_noxna_class), kind="field")
+                         tag=classify_tag(norm, fname, is_cnaext_class), kind="field")
     return None
 
 
@@ -356,7 +356,7 @@ def cross_check(cna_types: dict, fna: dict):
         fna_members = fna.get(fna_name, []) if fna_name else []
         fna_public = [x for x in fna_members if x.visibility == "public"]
         fna_keys = {cs_canonical_key(x) for x in fna_public}
-        # 'internal' FNA members are surfaced by CNA as NOXNA; keep them for the NOXNA cross-check.
+        # 'internal' FNA members are surfaced by CNA as CNAEXT; keep them for the CNAEXT cross-check.
         fna_all_keys = {cs_canonical_key(x) for x in fna_members}
 
         rows = []
@@ -384,7 +384,7 @@ def cross_check(cna_types: dict, fna: dict):
                 else:
                     note = "NO FNA COUNTERPART"
                     gap_strict.append((tname, cm))
-            else:  # NOXNA
+            else:  # CNAEXT
                 note = "CNA-only" if not in_fna_any else "maps FNA non-public"
             rows.append((cm, "yes" if in_fna_public else ("internal" if in_fna_any else "no"), note))
 
@@ -429,10 +429,10 @@ def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list,
     out.append("> (INPUT-API-031) and enum values by INPUT-API-034.")
     out.append("")
     out.append("Tags: **STRICT** = XNA 4.0 API (must match FNA) · **EXT** = FNA-compatible extension "
-               "(`…EXT`) · **NOXNA** = CNA-only convenience.")
+               "(`…EXT`) · **CNAEXT** = CNA-only convenience.")
     out.append("")
     out.append("The `In FNA` column: `yes` = a `public` FNA member matches by name; `internal` = matches "
-               "an FNA `internal` member (expected for a CNA `NOXNA` that surfaces FNA-internal plumbing); "
+               "an FNA `internal` member (expected for a CNA `CNAEXT` that surfaces FNA-internal plumbing); "
                "`no` = no FNA member of that name (expected for `= delete`/`= default` C++ idioms and EXT).")
     out.append("")
 
@@ -458,7 +458,7 @@ def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list,
         out.append("")
     out.append("> Rows flagged above are heuristic (name-level) and may be false positives — e.g. a")
     out.append("> C++ `ref`/`&&` overload pair mapping one C# member, an FNA `internal` surfaced as CNA")
-    out.append("> NOXNA, or an equality operator resolved via ADL. Review each against the .cs before acting.")
+    out.append("> CNAEXT, or an equality operator resolved via ADL. Review each against the .cs before acting.")
     out.append("")
 
     for tname in sorted(per_type):

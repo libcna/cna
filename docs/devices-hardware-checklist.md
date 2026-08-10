@@ -9,7 +9,7 @@ existing automated test either:
 
 - exercises the no-hardware-found silent-no-op / `SensorState::NotSupported` path, or
 - exercises the real `CurrentValueChanged`/`ReadingChanged` dispatch logic via the
-  `NOXNA` synthetic-injection test hooks (`InjectSyntheticSensorUpdate()`,
+  `CNAEXT` synthetic-injection test hooks (`InjectSyntheticSensorUpdate()`,
   `SetStartedForTesting()` — see `plan_devices_phase4.md` Task P4-2), which prove the
   C++ dispatch plumbing works but say nothing about whether the *numbers* flowing
   through it are physically correct.
@@ -298,7 +298,7 @@ this project — this has never been confirmed to actually reach
 2. Confirm the phone's own vibration motor actually buzzes for ~1 second.
 3. Call `Start(TimeSpan::FromMilliseconds(500), 0.25f)` and `Start(TimeSpan::FromMilliseconds(500), 1.0f)`
    in turn; confirm the buzz is noticeably weaker at `0.25f` than at `1.0f` (the
-   `NOXNA` intensity extension actually changes physical rumble strength, not just a
+   `CNAEXT` intensity extension actually changes physical rumble strength, not just a
    silently-clamped no-op).
 4. Call `Stop()` mid-vibration; confirm it actually stops immediately rather than
    running to completion.
@@ -435,7 +435,7 @@ non-gamepad haptic device connected). `Task DEMO-002` plans a separate
 results against — this table is the checklist of *what* to check, not a form for
 recording one specific session's results.
 
-| Device / OS | Backend | Action | Expected — strict XNA | Expected — `NOXNA` extensions | Status |
+| Device / OS | Backend | Action | Expected — strict XNA | Expected — `CNAEXT` extensions | Status |
 |---|---|---|---|---|---|
 | Android phone | `Detail::SdlHapticVibrateBackend` → `Context.VIBRATOR_SERVICE` | `Start(TimeSpan)` | Phone's built-in motor buzzes for the given duration | `Start(TimeSpan, intensity)` scales buzz strength; `getIsSupportedProperty()` true; `getDeviceNameProperty()` non-empty | **NOT RUN** — no Android device in this session (Section 3) |
 | Android phone | same | `StartLeftRight(large, small, duration)` | N/A (not real XNA API) | Blends to one intensity on the phone's single actuator (confirmed via SDL3 source, `VIB-003`) — do **not** expect two independently-felt motors | **NOT RUN**, but the single-actuator-blend *code path* is source-confirmed, not just assumed (`VIB-003`) |
@@ -813,7 +813,7 @@ this exact translation unit, never observed incrementing at runtime.
 
 ## 8b. Motion attitude-source fallback diagnostic (Task MOT2-005, 2026-07-17)
 
-**Code under test:** `Motion::getIsAttitudeNorthReferencedProperty()` (new `NOXNA`
+**Code under test:** `Motion::getIsAttitudeNorthReferencedProperty()` (new `CNAEXT`
 property) / `Detail::AndroidMotionBackend::IsUsingNorthReferencedAttitudeSource()` (new
 `IMotionBackend` method) — reports whether the real Android backend's currently-active
 attitude source is the magnetometer-fused, north-referenced `TYPE_ROTATION_VECTOR`, or

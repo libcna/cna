@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 
@@ -9,7 +9,7 @@ namespace Microsoft::Xna::Framework::Graphics { class Texture2D; }
 
 namespace CNA::Graphics {
     /**
-     * @brief PBR material definition for the NOXNA extended render layer.
+     * @brief PBR material definition for the CNAEXT extended render layer.
      *
      * Stores texture slots and scalar parameters following the glTF 2.0
      * metallic-roughness PBR material model.  Textures are non-owning
@@ -120,4 +120,4 @@ namespace CNA::Graphics {
 
 } // namespace CNA::Graphics
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

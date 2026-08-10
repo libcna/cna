@@ -31,7 +31,7 @@ namespace CNA::Internal::Renderers::Wicked
     class WickedRenderer;
 
     /**
-     * @brief NOXNA. Which of the renderer's built-in shader programs a draw uses.
+     * @brief CNAEXT. Which of the renderer's built-in shader programs a draw uses.
      *
      * CNA describes a vertex layout by its byte stride (see `IGraphicsRenderer`'s own
      * `combinedVertexStride` contract), so the variant is chosen by stride exactly as the D3D11,
@@ -39,7 +39,7 @@ namespace CNA::Internal::Renderers::Wicked
      * and present-blit layout: a sprite vertex is position + packed colour + UV, which is
      * byte-for-byte `VertexPositionColorTexture`.
      */
-    NOXNA enum class WickedShaderVariant : std::uint32_t
+    CNAEXT enum class WickedShaderVariant : std::uint32_t
     {
         /** @brief Stride 16 — `VertexPositionColor`. */
         Basic16 = 0,
@@ -62,26 +62,26 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. How many leading variants also have an instanced sibling.
+     * @brief CNAEXT. How many leading variants also have an instanced sibling.
      *
      * Instancing is offered for the four narrow stock layouts only. The wider tangent/skinned
      * layouts exist to carry `PbrEffect`/`SkinnedEffect` geometry, and neither of those effects has
      * an instanced form in CNA, so compiling four more entry points nothing can reach would be
      * dead weight. An instanced draw on a wider stride is refused rather than silently downgraded.
      */
-    NOXNA inline constexpr std::size_t kWickedInstancedVariantCount = 4;
+    CNAEXT inline constexpr std::size_t kWickedInstancedVariantCount = 4;
 
     /**
-     * @brief NOXNA. How many simultaneous colour targets this renderer binds.
+     * @brief CNAEXT. How many simultaneous colour targets this renderer binds.
      *
      * XNA 4.0 HiDef's own ceiling. The stock pixel shaders write `SV_Target` only, so slots 1..3
      * receive whatever their `BlendState.ColorWriteChannels` mask lets through and nothing more --
      * the same thing XNA does when a stock effect is drawn into an MRT set.
      */
-    NOXNA inline constexpr int kWickedMaxRenderTargets = 4;
+    CNAEXT inline constexpr int kWickedMaxRenderTargets = 4;
 
     /**
-     * @brief NOXNA. How many independent regions a CPU-writable buffer is split into.
+     * @brief CNAEXT. How many independent regions a CPU-writable buffer is split into.
      *
      * The renderer's vertex and index buffers live in `Usage::UPLOAD` memory the CPU writes
      * directly, so writing one the GPU may still be reading is a real hazard. Each write (other
@@ -93,23 +93,23 @@ namespace CNA::Internal::Renderers::Wicked
      * that rewrites the same buffer more than three times per frame can still outrun it — that
      * limitation is documented rather than hidden, since detecting it needs per-region fences.
      */
-    NOXNA inline constexpr int kWickedBufferRegions = 3;
+    CNAEXT inline constexpr int kWickedBufferRegions = 3;
 
-    /** @brief NOXNA. The first variant that carries blend weights, and so can be skinned. */
-    NOXNA inline constexpr std::size_t kWickedFirstSkinnableVariant =
+    /** @brief CNAEXT. The first variant that carries blend weights, and so can be skinned. */
+    CNAEXT inline constexpr std::size_t kWickedFirstSkinnableVariant =
         static_cast<std::size_t>(WickedShaderVariant::Basic52);
-    /** @brief NOXNA. How many variants can be skinned (strides 52, 56 and 68). */
-    NOXNA inline constexpr std::size_t kWickedSkinnableVariantCount =
+    /** @brief CNAEXT. How many variants can be skinned (strides 52, 56 and 68). */
+    CNAEXT inline constexpr std::size_t kWickedSkinnableVariantCount =
         static_cast<std::size_t>(WickedShaderVariant::Count) - kWickedFirstSkinnableVariant;
 
     /**
-     * @brief NOXNA. `SkinnedEffect`'s bone palette, bound as its own constant buffer.
+     * @brief CNAEXT. `SkinnedEffect`'s bone palette, bound as its own constant buffer.
      *
      * Kept out of @ref WickedShaderConstants deliberately: at 4608 bytes of matrices it dwarfs
      * every other per-draw constant, and copying it into the frame allocator on draws that do no
      * skinning at all would be pure waste. It is uploaded only for a skinned draw.
      */
-    NOXNA struct WickedBoneConstants
+    CNAEXT struct WickedBoneConstants
     {
         /** @brief Columns of up to 72 bone matrices, in CNA's raw `Matrix` byte order. */
         float bones[72 * 16] = {};
@@ -118,7 +118,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. The complete, hashable description of one graphics pipeline state.
+     * @brief CNAEXT. The complete, hashable description of one graphics pipeline state.
      *
      * Wicked Engine's `PipelineStateDesc` holds raw pointers into caller-owned `BlendState` /
      * `RasterizerState` / `DepthStencilState` / `InputLayout` objects that must outlive the
@@ -129,7 +129,7 @@ namespace CNA::Internal::Renderers::Wicked
      * It is compared and hashed byte-wise, so it must stay a POD with no padding holes left
      * uninitialised — always create one through value-initialisation (`WickedPipelineKey key{};`).
      */
-    NOXNA struct WickedPipelineKey
+    CNAEXT struct WickedPipelineKey
     {
         std::uint32_t variant = 0;            ///< WickedShaderVariant ordinal.
         std::uint32_t instanced = 0;          ///< Non-zero when the per-instance input layout is used.
@@ -183,17 +183,17 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] bool operator==(const WickedPipelineKey& other) const noexcept;
     };
 
-    /** @brief NOXNA. Byte-wise FNV-1a hash of a WickedPipelineKey. */
-    NOXNA struct WickedPipelineKeyHash
+    /** @brief CNAEXT. Byte-wise FNV-1a hash of a WickedPipelineKey. */
+    CNAEXT struct WickedPipelineKeyHash
     {
         /** @brief Hashes @p key byte-wise. */
         [[nodiscard]] std::size_t operator()(const WickedPipelineKey& key) const noexcept;
     };
 
     /**
-     * @brief NOXNA. One cached pipeline plus the state objects Wicked Engine keeps pointers into.
+     * @brief CNAEXT. One cached pipeline plus the state objects Wicked Engine keeps pointers into.
      */
-    NOXNA struct WickedPipelineEntry
+    CNAEXT struct WickedPipelineEntry
     {
         wig::BlendState        blend;        ///< Owned blend state referenced by @ref pipeline.
         wig::RasterizerState   rasterizer;   ///< Owned rasterizer state referenced by @ref pipeline.
@@ -204,13 +204,13 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. Constants shared by every built-in shader variant.
+     * @brief CNAEXT. Constants shared by every built-in shader variant.
      *
      * The two matrices are stored as their four COLUMNS, so the shader evaluates XNA's own
      * row-vector product (`clip = position * matrix`) with four `dot()`s and no packing-convention
      * assumption at the HLSL boundary.
      */
-    NOXNA struct WickedShaderConstants
+    CNAEXT struct WickedShaderConstants
     {
         float mvp[16] = {};              ///< Columns of `world * view * projection`.
         float world[16] = {};            ///< Columns of the world matrix (lighting/fog space).
@@ -233,7 +233,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. A Wicked Engine texture exposed to CNA as an `ITextureRenderer`.
+     * @brief CNAEXT. A Wicked Engine texture exposed to CNA as an `ITextureRenderer`.
      */
     class WickedTextureRenderer : public ITextureRenderer
     {
@@ -276,7 +276,7 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. The underlying Wicked Engine resource, for the owning renderer's binds. */
+        /** @brief CNAEXT. The underlying Wicked Engine resource, for the owning renderer's binds. */
         [[nodiscard]] const wig::Texture& GetTextureEXT() const { return texture_; }
 
     protected:
@@ -285,7 +285,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. A cube map exposed to CNA as an `ITextureCubeRenderer`.
+     * @brief CNAEXT. A cube map exposed to CNA as an `ITextureCubeRenderer`.
      *
      * Upload and readback only. This renderer has no `EnvironmentMapEffect` shader variant yet
      * (plan_wicked.md WICKED-56), so a cube map cannot currently be sampled by a draw — it can be
@@ -339,7 +339,7 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. The underlying Wicked Engine resource. */
+        /** @brief CNAEXT. The underlying Wicked Engine resource. */
         [[nodiscard]] const wig::Texture& GetTextureEXT() const { return texture_; }
 
     private:
@@ -350,7 +350,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. A volume texture exposed to CNA as an `ITexture3DRenderer`.
+     * @brief CNAEXT. A volume texture exposed to CNA as an `ITexture3DRenderer`.
      */
     class WickedTexture3DRenderer final : public ITexture3DRenderer
     {
@@ -405,7 +405,7 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. The underlying Wicked Engine resource. */
+        /** @brief CNAEXT. The underlying Wicked Engine resource. */
         [[nodiscard]] const wig::Texture& GetTextureEXT() const { return texture_; }
 
     private:
@@ -418,7 +418,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. An off-screen colour target (plus optional depth/stencil) CNA can render into.
+     * @brief CNAEXT. An off-screen colour target (plus optional depth/stencil) CNA can render into.
      */
     class WickedRenderTargetRenderer final : public IRenderTargetRenderer
     {
@@ -475,10 +475,10 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. The colour attachment this target renders into. */
+        /** @brief CNAEXT. The colour attachment this target renders into. */
         [[nodiscard]] const wig::Texture& GetColorTextureEXT() const { return color_; }
         /**
-         * @brief NOXNA. The texture to sample or copy from.
+         * @brief CNAEXT. The texture to sample or copy from.
          *
          * For a multisampled target this is the single-sample resolve destination, not the
          * attachment: a multisampled image can be neither sampled by the ordinary shaders nor
@@ -488,15 +488,15 @@ namespace CNA::Internal::Renderers::Wicked
         {
             return resolve_.IsValid() ? resolve_ : color_;
         }
-        /** @brief NOXNA. The resolve destination, or an invalid handle when MSAA is off. */
+        /** @brief CNAEXT. The resolve destination, or an invalid handle when MSAA is off. */
         [[nodiscard]] const wig::Texture& GetResolveTextureEXT() const { return resolve_; }
-        /** @brief NOXNA. The depth texture, or an invalid handle when none was allocated. */
+        /** @brief CNAEXT. The depth texture, or an invalid handle when none was allocated. */
         [[nodiscard]] const wig::Texture& GetDepthTextureEXT() const { return depth_; }
-        /** @brief NOXNA. Whether a bind must load the existing contents instead of discarding. */
+        /** @brief CNAEXT. Whether a bind must load the existing contents instead of discarding. */
         [[nodiscard]] bool PreservesContentsEXT() const { return preserveContents_; }
-        /** @brief NOXNA. Marks that this target has been rendered into at least once. */
+        /** @brief CNAEXT. Marks that this target has been rendered into at least once. */
         void MarkRenderedEXT() { hasContent_ = true; }
-        /** @brief NOXNA. Whether anything has been rendered into this target yet. */
+        /** @brief CNAEXT. Whether anything has been rendered into this target yet. */
         [[nodiscard]] bool HasContentEXT() const { return hasContent_; }
 
     private:
@@ -512,7 +512,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. A cube map CNA can render each face of, and sample as a whole.
+     * @brief CNAEXT. A cube map CNA can render each face of, and sample as a whole.
      *
      * One face is bound at a time through a per-face render-target subresource view, created once
      * at construction. The whole-cube shader-resource view is the resource's default, so a
@@ -584,17 +584,17 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. The cube colour texture, for binding as a shader resource. */
+        /** @brief CNAEXT. The cube colour texture, for binding as a shader resource. */
         [[nodiscard]] const wig::Texture& GetColorTextureEXT() const { return color_; }
-        /** @brief NOXNA. The depth texture, or an invalid handle when none was allocated. */
+        /** @brief CNAEXT. The depth texture, or an invalid handle when none was allocated. */
         [[nodiscard]] const wig::Texture& GetDepthTextureEXT() const { return depth_; }
-        /** @brief NOXNA. The render-target subresource index of @p face. */
+        /** @brief CNAEXT. The render-target subresource index of @p face. */
         [[nodiscard]] int RenderTargetSubresourceEXT(int face) const;
-        /** @brief NOXNA. Whether a bind must load the existing contents instead of discarding. */
+        /** @brief CNAEXT. Whether a bind must load the existing contents instead of discarding. */
         [[nodiscard]] bool PreservesContentsEXT() const { return preserveContents_; }
-        /** @brief NOXNA. Marks that @p face has been rendered into at least once. */
+        /** @brief CNAEXT. Marks that @p face has been rendered into at least once. */
         void MarkFaceRenderedEXT(int face);
-        /** @brief NOXNA. Whether anything has been rendered into @p face yet. */
+        /** @brief CNAEXT. Whether anything has been rendered into @p face yet. */
         [[nodiscard]] bool HasFaceContentEXT(int face) const;
 
     private:
@@ -609,7 +609,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. A CPU-writable vertex buffer.
+     * @brief CNAEXT. A CPU-writable vertex buffer.
      */
     class WickedVertexBufferRenderer final : public IVertexBufferRenderer
     {
@@ -664,13 +664,13 @@ namespace CNA::Internal::Renderers::Wicked
         /** @brief Number of vertices most recently uploaded. */
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
-        /** @brief NOXNA. The underlying Wicked Engine buffer. */
+        /** @brief CNAEXT. The underlying Wicked Engine buffer. */
         [[nodiscard]] const wig::GPUBuffer& GetBufferEXT() const { return buffer_; }
-        /** @brief NOXNA. Byte stride of the most recent upload, or 0 when nothing was uploaded. */
+        /** @brief CNAEXT. Byte stride of the most recent upload, or 0 when nothing was uploaded. */
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
-        /** @brief NOXNA. Byte offset of the region the most recent upload landed in. */
+        /** @brief CNAEXT. Byte offset of the region the most recent upload landed in. */
         [[nodiscard]] std::uint64_t GetByteOffsetEXT() const;
-        /** @brief NOXNA. The declaration this buffer carries, for the draw-time fidelity check. */
+        /** @brief CNAEXT. The declaration this buffer carries, for the draw-time fidelity check. */
         [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
         {
             return declaration_;
@@ -691,7 +691,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. REMED-GFX-DECL-GUARD: refuses a vertex declaration this renderer cannot
+     * @brief CNAEXT. REMED-GFX-DECL-GUARD: refuses a vertex declaration this renderer cannot
      * represent faithfully.
      *
      * `VariantForStride()` picks the input layout and vertex program from the buffer's byte
@@ -719,7 +719,7 @@ namespace CNA::Internal::Renderers::Wicked
     }
 
     /**
-     * @brief NOXNA. A CPU-writable 16- or 32-bit index buffer.
+     * @brief CNAEXT. A CPU-writable 16- or 32-bit index buffer.
      */
     class WickedIndexBufferRenderer final : public IIndexBufferRenderer
     {
@@ -769,9 +769,9 @@ namespace CNA::Internal::Renderers::Wicked
         /** @brief Whether this buffer stores 32-bit indices. */
         [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
-        /** @brief NOXNA. The underlying Wicked Engine buffer. */
+        /** @brief CNAEXT. The underlying Wicked Engine buffer. */
         [[nodiscard]] const wig::GPUBuffer& GetBufferEXT() const { return buffer_; }
-        /** @brief NOXNA. Byte offset of the region the most recent upload landed in. */
+        /** @brief CNAEXT. Byte offset of the region the most recent upload landed in. */
         [[nodiscard]] std::uint64_t GetByteOffsetEXT() const;
 
     private:
@@ -788,7 +788,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. A real GPU occlusion query backed by a Wicked Engine query heap.
+     * @brief CNAEXT. A real GPU occlusion query backed by a Wicked Engine query heap.
      */
     class WickedOcclusionQueryRenderer final : public IOcclusionQueryRenderer
     {
@@ -823,7 +823,7 @@ namespace CNA::Internal::Renderers::Wicked
     };
 
     /**
-     * @brief NOXNA. The batched 2D sprite renderer.
+     * @brief CNAEXT. The batched 2D sprite renderer.
      *
      * Sprites accumulate into a CPU-side vertex array between Begin() and End() and are flushed as
      * one draw per contiguous run of the same texture, exactly as the other GPU renderers batch.
@@ -1300,25 +1300,25 @@ namespace CNA::Internal::Renderers::Wicked
         /** @brief How many per-vertex `VertexBufferBinding`s one draw may bind. */
         [[nodiscard]] int GetMaxVertexStreams() const override;
 
-        // ---- NOXNA: internals shared with this renderer's resource classes ----
+        // ---- CNAEXT: internals shared with this renderer's resource classes ----
 
-        /** @brief NOXNA. The Wicked Engine device every resource in this renderer is created from. */
+        /** @brief CNAEXT. The Wicked Engine device every resource in this renderer is created from. */
         [[nodiscard]] wig::GraphicsDevice* GetDeviceEXT() const { return device_.get(); }
-        /** @brief NOXNA. The command list for the frame currently being recorded. */
+        /** @brief CNAEXT. The command list for the frame currently being recorded. */
         [[nodiscard]] wig::CommandList GetCommandListEXT();
-        /** @brief NOXNA. Ends any open render pass so a copy/blit operation may be recorded. */
+        /** @brief CNAEXT. Ends any open render pass so a copy/blit operation may be recorded. */
         void EndRenderPassEXT();
-        /** @brief NOXNA. Submits everything recorded so far and waits for the GPU to finish. */
+        /** @brief CNAEXT. Submits everything recorded so far and waits for the GPU to finish. */
         void FlushAndWaitEXT();
-        /** @brief NOXNA. The adapter name Wicked Engine reports, for diagnostics. */
+        /** @brief CNAEXT. The adapter name Wicked Engine reports, for diagnostics. */
         [[nodiscard]] std::string GetAdapterNameEXT() const;
-        /** @brief NOXNA. The shader binary format the device consumes (SPIR-V or DXIL). */
+        /** @brief CNAEXT. The shader binary format the device consumes (SPIR-V or DXIL). */
         [[nodiscard]] wig::ShaderFormat GetShaderFormatEXT() const;
-        /** @brief NOXNA. Records that @p rt is the render target currently bound, if any. */
+        /** @brief CNAEXT. Records that @p rt is the render target currently bound, if any. */
         void NotifyRenderTargetDestroyedEXT(const WickedRenderTargetRenderer* rt);
-        /** @brief NOXNA. The cube-target counterpart of NotifyRenderTargetDestroyedEXT. */
+        /** @brief CNAEXT. The cube-target counterpart of NotifyRenderTargetDestroyedEXT. */
         void NotifyRenderTargetCubeDestroyedEXT(const WickedRenderTargetCubeRenderer* rt);
-        /** @brief NOXNA. Submits a batch of sprite quads; used by WickedSpriteBatchRenderer. */
+        /** @brief CNAEXT. Submits a batch of sprite quads; used by WickedSpriteBatchRenderer. */
         void DrawSpriteQuadsEXT(const void* vertices, int vertexCount,
                                 const ITextureRenderer& texture,
                                 const Matrix* transform,

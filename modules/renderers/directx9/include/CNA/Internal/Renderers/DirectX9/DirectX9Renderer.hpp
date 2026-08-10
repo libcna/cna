@@ -160,11 +160,11 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-53: real MSAA-support probe backing D3D9RenderTargetRenderer's own clamp -- queries
         /// IDirect3D9::CheckDeviceMultiSampleType() for `format`/`requested`, returning 0 if
         /// `requested` <= 1 or the device does not support that exact sample count (matches
-        /// D3D11RenderTargetRenderer's own all-or-nothing clamp, no step-down ladder). NOXNA.
+        /// D3D11RenderTargetRenderer's own all-or-nothing clamp, no step-down ladder). CNAEXT.
         [[nodiscard]] int ClampMultiSampleCountEXT(D3DFORMAT format, int requested) const;
         /// D9-53: restores the device's own default back-buffer/depth-stencil surfaces -- called by
         /// SetRenderTarget2D(nullptr) and by a D3D9RenderTargetRenderer/D3D9RenderTargetCubeRenderer's
-        /// own UnbindAsRenderTarget(). NOXNA (mirrors DirectX11Renderer::RestoreBackBufferRenderTargetEXT()).
+        /// own UnbindAsRenderTarget(). CNAEXT (mirrors DirectX11Renderer::RestoreBackBufferRenderTargetEXT()).
         void RestoreBackBufferRenderTargetEXT();
         /// REMED-GFX-092: atomically switches all active D3D9 render-target slots, the depth
         /// surface, and viewport.  A failed transition restores the captured native binding when
@@ -213,7 +213,7 @@ namespace CNA::Internal::Renderers::DirectX9
                                      const GpuDrawParams& params) override;
         /// D9-83: real hardware instancing via `SetStreamSourceFreq` (`D3DSTREAMSOURCE_INDEXEDDATA`/
         /// `INSTANCEDATA`), indexed-only (matches this method's own base-class signature). Uses
-        /// CNA's own NOXNA `Instanced3D` shader (`shaders/cna/Instanced3D.hlsl`) -- real XNA has no
+        /// CNA's own CNAEXT `Instanced3D` shader (`shaders/cna/Instanced3D.hlsl`) -- real XNA has no
         /// per-instance-aware Stock Effect vertex shader at all, so this is not effect-aware and
         /// does not dispatch through `DrawPrimitivesExImpl()`. Falls back to
         /// `DrawIndexedPrimitivesEx()` when the bound set has no per-instance stream
@@ -293,12 +293,12 @@ namespace CNA::Internal::Renderers::DirectX9
 
         /// Exposes the real IDirect3DDevice9 for tests/diagnostics and later D3D9 renderer files
         /// (buffers/textures/draws) that need it without duplicating this renderer's own device-
-        /// creation path (NOXNA, mirrors DirectX11Renderer::GetDeviceEXT()).
+        /// creation path (CNAEXT, mirrors DirectX11Renderer::GetDeviceEXT()).
         [[nodiscard]] IDirect3DDevice9* GetDeviceEXT() const { return device_.Get(); }
-        /// Exposes the real D3DCAPS9 queried at device-creation time (NOXNA, D9-32 profile
+        /// Exposes the real D3DCAPS9 queried at device-creation time (CNAEXT, D9-32 profile
         /// enforcement and diagnostics/tests both need this without re-querying).
         [[nodiscard]] const D3DCAPS9& GetCapsEXT() const { return caps_; }
-        /// Exposes whether this renderer currently considers its device lost (NOXNA, D9-34
+        /// Exposes whether this renderer currently considers its device lost (CNAEXT, D9-34
         /// diagnostics/tests). Mirrors GraphicsDevice::GraphicsDeviceStatus at the renderer level.
         [[nodiscard]] bool IsDeviceLostEXT() const { return deviceLost_; }
         /// Throws when a preceding checked state/target operation left GPU state unproven.  This
@@ -318,7 +318,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-56: true when this device requires power-of-2 texture dimensions UNCONDITIONALLY
         /// (`D3DPTEXTURECAPS_POW2` set, `D3DPTEXTURECAPS_NONPOW2CONDITIONAL` NOT set) -- an NPOT
         /// `CreateTexture()` call would genuinely fail on such hardware. `false` on this dev
-        /// environment's DXVK device (reports full, unconditional NPOT support). NOXNA -- feeds
+        /// environment's DXVK device (reports full, unconditional NPOT support). CNAEXT -- feeds
         /// Phase D9-10's Reach/HiDef capability table (XNA's `Reach` profile forbids NPOT textures
         /// outright on hardware that reports this).
         [[nodiscard]] bool RequiresPowerOfTwoTexturesEXT() const
@@ -329,7 +329,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-56: true when NPOT textures are supported only CONDITIONALLY (`D3DPTEXTURECAPS_POW2`
         /// AND `D3DPTEXTURECAPS_NONPOW2CONDITIONAL` both set) -- real D3D9 semantics: such an NPOT
         /// texture must have no mip chain and may only use `D3DTADDRESS_CLAMP` (never `WRAP`/
-        /// `MIRROR`) on both axes. `false` on this dev environment's DXVK device. NOXNA -- feeds
+        /// `MIRROR`) on both axes. `false` on this dev environment's DXVK device. CNAEXT -- feeds
         /// Phase D9-10 (this is exactly the cap XNA's `Reach` profile's own "no wrapping on NPOT"
         /// restriction is modeling). Enforcing this against a real `SamplerState`/draw call is
         /// `D9-10`/`D9-82`'s own job -- no draw/sampler path exists yet to enforce it against.
@@ -342,9 +342,9 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-40: registers a live D3DPOOL_DEFAULT resource (a buffer, later a render target) so
         /// PerformResetRecovery() can release it before Reset(). Raw, non-owning -- the resource
         /// object's own lifetime is owned by its caller (VertexBuffer/IndexBuffer/...), not this
-        /// renderer. NOXNA.
+        /// renderer. CNAEXT.
         void RegisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource);
-        /// D9-40: unregisters a resource (called from its destructor). NOXNA.
+        /// D9-40: unregisters a resource (called from its destructor). CNAEXT.
         void UnregisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource);
 
     private:
@@ -413,7 +413,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// (real D3D9 semantics), so this cache is never invalidated/re-registered.
         IDirect3DVertexDeclaration9* GetOrCreateVertexDeclarationEXT(std::size_t strideInBytes);
         /// D9-83: returns (creating on first request) the real 2-stream
-        /// IDirect3DVertexDeclaration9 for CNA's own NOXNA Instanced3D shader -- stream 0
+        /// IDirect3DVertexDeclaration9 for CNA's own CNAEXT Instanced3D shader -- stream 0
         /// (per-vertex, step rate 1): POSITION0 (FLOAT3, offset 0); stream 1 (per-instance, step
         /// rate 1): TEXCOORD1..4 (FLOAT4 each, offsets 0/16/32/48). Not one of
         /// D3D9VertexDeclarations.hpp's single-stream stride-keyed layouts, so this is a separate,
@@ -480,7 +480,7 @@ namespace CNA::Internal::Renderers::DirectX9
                                   std::size_t stride, const Matrix& world, const Matrix& view,
                                   const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                   const GpuDrawParams& params);
-        /// D3D9 PBR porting task: real DrawPrimitivesEx dispatch for CNA's own NOXNA PbrEffect/
+        /// D3D9 PBR porting task: real DrawPrimitivesEx dispatch for CNA's own CNAEXT PbrEffect/
         /// SkinnedPbrEffect (`params.pbr`) -- highest-priority branch in `DrawPrimitivesExImpl`'s
         /// own flag cascade (mirrors `EasyGLRenderer::SelectProgram()`'s identical
         /// pbr-before-everything-else priority). Selects the "Pbr3D" shader (stride 48, unskinned)
@@ -492,7 +492,7 @@ namespace CNA::Internal::Renderers::DirectX9
                               const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                               const GpuDrawParams& params);
         /// D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx dispatch for CNA's own
-        /// NOXNA "SkinnedVertexColor3D" shader (stride 56 -- `SkinnedEffect` plus a vertex `Color`
+        /// CNAEXT "SkinnedVertexColor3D" shader (stride 56 -- `SkinnedEffect` plus a vertex `Color`
         /// real XNA's own compiled `SkinnedEffect.fx` bytecode never carries). Selected ahead of
         /// the real `SkinnedEffect` dispatch (`DrawSkinnedEffectEXT`) when `params.skinned` and the
         /// bound vertex buffer's stride is 56. Defined in `D3D9SkinnedVertexColorDraw.cpp`.
@@ -500,7 +500,7 @@ namespace CNA::Internal::Renderers::DirectX9
                                        const Matrix& world, const Matrix& view, const Matrix& projection,
                                        PrimitiveType primitive, int primitiveCount,
                                        const GpuDrawParams& params);
-        /// NOXNA: returns (creating on first request) a 1x1 flat tangent-space-normal texture
+        /// CNAEXT: returns (creating on first request) a 1x1 flat tangent-space-normal texture
         /// (RGBA 128,128,255,255 -- decodes in-shader to (0,0,1), the geometric normal
         /// unperturbed) used as PbrEffect's own NormalMap fallback when
         /// `GpuDrawParams::pbrNormalMap` is null, mirroring
@@ -509,7 +509,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// hand-rolled `LockRect`) so the RGBA8-native byte order every other CNA texture already
         /// relies on is guaranteed correct here too. Defined in `D3D9PbrDraw.cpp`.
         ITextureRenderer* GetOrCreateDefaultFlatNormalTextureEXT();
-        /// NOXNA: returns (creating on first request) a 1x1 opaque white texture, used as the
+        /// CNAEXT: returns (creating on first request) a 1x1 opaque white texture, used as the
         /// "map absent" fallback for every other optional PBR map
         /// (`MetallicRoughnessMap`/`EmissiveMap`/`OcclusionMap`) -- (1,1,1,1) is the correct
         /// neutral value for all three (factor*1=factor, tint*1=tint, occlusion 1=unoccluded),
@@ -539,7 +539,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// size did not also change (a format-only change would otherwise never be noticed).
         bool presentationDirty_ = false;
 
-        // NOXNA (D9-34): forwards a real device-lost/reset event to GraphicsDevice's own public
+        // CNAEXT (D9-34): forwards a real device-lost/reset event to GraphicsDevice's own public
         // XNA events. May be empty (default-constructed std::function) if the caller (a direct
         // spike/test, not GraphicsDevice) never set one -- call sites must check before invoking.
         std::function<void(RendererDeviceEvent)> deviceEventCallback_;
@@ -591,25 +591,25 @@ namespace CNA::Internal::Renderers::DirectX9
         /// (mirrors DirectX11Renderer::inputLayoutCache_'s shape). See
         /// GetOrCreateVertexDeclarationEXT().
         std::unordered_map<std::size_t, ComPtr<IDirect3DVertexDeclaration9>> vertexDeclCache_;
-        /// D9-83: CNA's own NOXNA Instanced3D shader pair + 2-stream vertex declaration, lazily
+        /// D9-83: CNA's own CNAEXT Instanced3D shader pair + 2-stream vertex declaration, lazily
         /// created on first DrawInstancedPrimitivesEx() call. Not D3DPOOL_DEFAULT resources --
         /// survive Reset() unaffected, same as shaderCache_/vertexDeclCache_ above.
         ComPtr<IDirect3DVertexShader9> instancedVS_;
         ComPtr<IDirect3DPixelShader9> instancedPS_;
         ComPtr<IDirect3DVertexDeclaration9> instancedVertexDecl_;
 
-        /// D3D9 PBR porting task: CNA's own NOXNA Pbr3D/PbrSkinned3D shader pairs, lazily created
+        /// D3D9 PBR porting task: CNA's own CNAEXT Pbr3D/PbrSkinned3D shader pairs, lazily created
         /// on first `DrawPbrEffectEXT()` call. Not `D3DPOOL_DEFAULT` resources -- survive `Reset()`
         /// unaffected, same as `shaderCache_`/`instancedVS_` above.
         ComPtr<IDirect3DVertexShader9> pbrVS_;
         ComPtr<IDirect3DPixelShader9> pbrPS_;
         ComPtr<IDirect3DVertexShader9> pbrSkinnedVS_;
         ComPtr<IDirect3DPixelShader9> pbrSkinnedPS_;
-        /// D3D9 skinned-vertex-color porting task: CNA's own NOXNA SkinnedVertexColor3D shader
+        /// D3D9 skinned-vertex-color porting task: CNA's own CNAEXT SkinnedVertexColor3D shader
         /// pair, lazily created on first `DrawSkinnedVertexColorEXT()` call.
         ComPtr<IDirect3DVertexShader9> skinnedVertexColorVS_;
         ComPtr<IDirect3DPixelShader9> skinnedVertexColorPS_;
-        /// NOXNA: 1x1 fallback textures for PbrEffect's optional maps when unbound. `D3DPOOL_MANAGED`
+        /// CNAEXT: 1x1 fallback textures for PbrEffect's optional maps when unbound. `D3DPOOL_MANAGED`
         /// (via the normal `CreateTexture()` path) -- survive `Reset()` unaffected like every other
         /// CNA D3D9 texture. Lazily created by `GetOrCreateDefault{FlatNormal,White}TextureEXT()`.
         std::unique_ptr<ITextureRenderer> defaultFlatNormalTexture_;

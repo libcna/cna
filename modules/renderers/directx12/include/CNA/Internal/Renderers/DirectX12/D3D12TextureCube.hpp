@@ -62,15 +62,15 @@ namespace CNA::Internal::Renderers::DirectX12
 
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
-        /// Raw GPU-resident ID3D12Resource* (NOXNA diagnostics).
+        /// Raw GPU-resident ID3D12Resource* (CNAEXT diagnostics).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return texture_.Get(); }
-        /// Shader-visible-heap GPU handle for this cube's SRV (NOXNA -- SetGraphicsRootDescriptorTable).
+        /// Shader-visible-heap GPU handle for this cube's SRV (CNAEXT -- SetGraphicsRootDescriptorTable).
         /// REMED-GFX-177: resolved on every call against whichever heap is current, never cached.
         [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const
         {
             return heaps_ ? heaps_->cbvSrvUav.GpuHandle(srvIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
         }
-        /// REMED-GFX-177: the stable shader-visible-heap slot index this cube owns (NOXNA).
+        /// REMED-GFX-177: the stable shader-visible-heap slot index this cube owns (CNAEXT).
         [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
 
     private:

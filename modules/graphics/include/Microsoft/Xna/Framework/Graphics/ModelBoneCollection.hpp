@@ -59,13 +59,13 @@ namespace Microsoft::Xna::Framework::Graphics
         using const_iterator = std::vector<ModelBone*>::const_iterator;
 
         /** @brief Returns an iterator to the beginning of the collection. */
-        NOXNA iterator begin();
+        CNAEXT iterator begin();
         /** @brief Returns an iterator past the end of the collection. */
-        NOXNA iterator end();
+        CNAEXT iterator end();
         /** @brief Returns a const iterator to the beginning of the collection. */
-        NOXNA const_iterator begin() const;
+        CNAEXT const_iterator begin() const;
         /** @brief Returns a const iterator past the end of the collection. */
-        NOXNA const_iterator end() const;
+        CNAEXT const_iterator end() const;
 
     private:
         std::vector<ModelBone*> bones_;

@@ -34,7 +34,7 @@
 //
 // Each stock effect's texture field(s) are read via ContentReader::ReadExternalReference<T>()
 // (plan_xnb.md XNB-35) and given to the effect via SetOwnedTexture()/SetOwnedTexture2()/
-// SetOwnedEnvironmentMap() -- NOXNA additions that let the effect keep its own texture reference
+// SetOwnedEnvironmentMap() -- CNAEXT additions that let the effect keep its own texture reference
 // alive (matching XNA's real GC-tracked Effect.Texture), since a standalone content-loaded effect
 // has no external owner the way a Model's shared texture pool does.
 

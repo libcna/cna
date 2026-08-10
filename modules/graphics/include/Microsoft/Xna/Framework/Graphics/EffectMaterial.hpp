@@ -24,10 +24,10 @@ namespace Microsoft::Xna::Framework::Graphics
         explicit EffectMaterial(Effect& cloneSource);
 
         /** @brief Destroys the EffectMaterial. */
-        NOXNA ~EffectMaterial() override = default;
+        CNAEXT ~EffectMaterial() override = default;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Creates a clone of this effect.

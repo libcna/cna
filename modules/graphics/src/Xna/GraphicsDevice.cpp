@@ -828,7 +828,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.vertexStreamCount = 0;
         p.combinedVertexStride = 0;
 
-        // REMED-GFX-233: the NOXNA VertexBuffer(device, count) convenience constructor has an
+        // REMED-GFX-233: the CNAEXT VertexBuffer(device, count) convenience constructor has an
         // intentionally empty declaration. Its typed SetData overload still uploads a real,
         // renderer-known packed stride, but there is no declared stride to put in a stream tuple.
         // Describing that one legacy buffer as a zero-stride stream makes a stream-aware CPU
@@ -1410,7 +1410,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // DrawUserPrimitives — typed overloads
     // -----------------------------------------------------------------------
 
-    // Public NOXNA static — mirrors FNA's private PrimitiveVerts().
+    // Public CNAEXT static — mirrors FNA's private PrimitiveVerts().
     int GraphicsDevice::PrimitiveVerts(PrimitiveType type, int primitiveCount)
     {
         switch (type)
@@ -2210,7 +2210,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             NormalizeAppliedPresentationFormats(*renderer_, applied);
 #ifdef CNA_RENDERER_GDI
-            // This NOXNA store-only path does not reconfigure MSAA. Keep reporting the currently
+            // This CNAEXT store-only path does not reconfigure MSAA. Keep reporting the currently
             // active GDI sample storage instead of echoing a request that was never applied.
             applied.setMultiSampleCountProperty(renderer_->GetMultiSampleCount());
 #endif

@@ -37,19 +37,19 @@ namespace Microsoft::Xna::Framework::Graphics
         TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format);
 
         /** @brief Destructor. */
-        NOXNA ~TextureCube() override;
+        CNAEXT ~TextureCube() override;
 
         /** @brief Not copyable — owns a unique GPU renderer handle. */
-        NOXNA TextureCube(const TextureCube&) = delete;
+        CNAEXT TextureCube(const TextureCube&) = delete;
         /** @brief Not copyable — owns a unique GPU renderer handle. */
-        NOXNA TextureCube& operator=(const TextureCube&) = delete;
+        CNAEXT TextureCube& operator=(const TextureCube&) = delete;
         /** @brief Movable — transfers ownership of the GPU renderer handle. */
-        NOXNA TextureCube(TextureCube&&) noexcept = default;
+        CNAEXT TextureCube(TextureCube&&) noexcept = default;
         /** @brief Movable — transfers ownership of the GPU renderer handle. */
-        NOXNA TextureCube& operator=(TextureCube&&) noexcept = default;
+        CNAEXT TextureCube& operator=(TextureCube&&) noexcept = default;
 
         /** @brief Returns the fully qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns the width and height of a cube map face in texels. */
         [[nodiscard]] int getSizeProperty() const;
@@ -155,14 +155,14 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param stream The input stream containing DDS-encoded cube map data.
          * @return The decoded TextureCube.
          */
-        NOXNA static TextureCube DDSFromStreamEXT(GraphicsDevice& device, System::IO::Stream& stream);
+        CNAEXT static TextureCube DDSFromStreamEXT(GraphicsDevice& device, System::IO::Stream& stream);
 
         /**
          * @brief Returns a reference to the renderer implementation object.
          *
          * @return Reference to the renderer ITextureCubeRenderer.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Renderers::ITextureCubeRenderer& GetRenderer() const { return *renderer_; }
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::ITextureCubeRenderer& GetRenderer() const { return *renderer_; }
 
     protected:
         /**
@@ -174,12 +174,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param renderer    Owning pointer to the pre-built GPU renderer.
          * @param levelCount Number of mip levels the renderer actually allocated (1 if none).
          */
-        NOXNA TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
+        CNAEXT TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
                           std::shared_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> renderer,
                           int levelCount = 1);
 
         /** @brief Returns the raw renderer pointer (used by RenderTargetCube to retrieve the RT handle). */
-        NOXNA [[nodiscard]] CNA::Internal::Renderers::ITextureCubeRenderer* GetRendererRaw() const { return renderer_.get(); }
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::ITextureCubeRenderer* GetRendererRaw() const { return renderer_.get(); }
 
         /** @brief Releases the renderer cube texture handle when the resource is disposed. */
         void Dispose(bool disposing) override;

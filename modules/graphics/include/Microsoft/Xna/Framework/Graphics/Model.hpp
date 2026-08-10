@@ -31,7 +31,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param bones The collection of bones.
          * @param meshes The collection of meshes.
          */
-        NOXNA Model(GraphicsDevice* graphicsDevice,
+        CNAEXT Model(GraphicsDevice* graphicsDevice,
                     std::vector<ModelBone*> bones,
                     std::vector<ModelMesh*> meshes);
 
@@ -49,7 +49,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *        loader (`ModelReader`) can assign an arbitrary root bone this way; this parameter
          *        is the public equivalent for hand-built models.
          */
-        NOXNA Model(GraphicsDevice* graphicsDevice,
+        CNAEXT Model(GraphicsDevice* graphicsDevice,
                     std::vector<ModelBone*> bones,
                     std::vector<ModelMesh*> meshes,
                     std::vector<ModelBone*> meshParentBones,
@@ -89,7 +89,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Transfers ownership of GPU resources allocated by a content reader.
          * @param resources Shared ownership handle to the resources.
          */
-        NOXNA void setOwnedResources(std::shared_ptr<void> resources);
+        CNAEXT void setOwnedResources(std::shared_ptr<void> resources);
 
         /**
          * @brief Copies bone transforms relative to all parent bones to a given vector.

@@ -877,7 +877,7 @@ namespace CNA::Internal::GltfImport
         out.name = name;
         out.skinned = (jointsAcc != nullptr) && (weightsAcc != nullptr);
         // A skinned+colored primitive uses a stride-56 layout (the stride-52 GPU-skinned layout
-        // with a per-vertex Color appended at the end) and SkinnedEffect's own NOXNA
+        // with a per-vertex Color appended at the end) and SkinnedEffect's own CNAEXT
         // VertexColorEnabled addition (real XNA's SkinnedEffect has no such property).
         out.colored = (colorAcc != nullptr);
         out.baseColorImage = FindBaseColorImage(prim);

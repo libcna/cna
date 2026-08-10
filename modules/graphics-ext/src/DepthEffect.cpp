@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/DepthEffect.hpp"
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
@@ -250,4 +250,4 @@ namespace CNA::Graphics {
 
 } // namespace CNA::Graphics
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

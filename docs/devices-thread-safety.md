@@ -21,7 +21,7 @@ section, verbatim:
 the same boilerplate. This is the floor CNA must not regress below: the real
 API never promised instance-member thread safety at all. Everything below is
 either matching that floor exactly, or a **CNA-specific stronger guarantee**
-that goes beyond it (marked `NOXNA` in spirit, even where not literally tagged
+that goes beyond it (marked `CNAEXT` in spirit, even where not literally tagged
 in code, since games written against the real API cannot rely on it).
 
 ## What CNA additionally guarantees, per class

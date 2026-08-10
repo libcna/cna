@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 PBR porting task: real DrawPrimitivesEx/DrawIndexedPrimitivesEx dispatch for CNA's own
-// NOXNA "Pbr3D"/"PbrSkinned3D" shaders (PbrEffect/SkinnedPbrEffect, plan_cnj.md CNB-56..79
+// CNAEXT "Pbr3D"/"PbrSkinned3D" shaders (PbrEffect/SkinnedPbrEffect, plan_cnj.md CNB-56..79
 // equivalent), porting EasyGLRenderer.cpp's EnsurePbrProgram()/EnsurePbrSkinnedProgram() +
 // SelectProgram()'s own pbr-highest-priority dispatch to real vs_3_0/ps_3_0 bytecode
 // (shaders/cna/Pbr3D.hlsl, shaders/cna/PbrSkinned3D.hlsl -- see those files' own header comments

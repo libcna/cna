@@ -45,7 +45,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
 // REMED-GFX-076: read-only cache introspection lives on the concrete Vulkan renderer (reached via the
-// NOXNA GraphicsDevice::GetRenderer()), and the raw sampled VkImageView via IVulkanSamplable -- both
+// CNAEXT GraphicsDevice::GetRenderer()), and the raw sampled VkImageView via IVulkanSamplable -- both
 // renderer-internal, exactly as the other renderer lifetime/diag tests reach their renderers.
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 

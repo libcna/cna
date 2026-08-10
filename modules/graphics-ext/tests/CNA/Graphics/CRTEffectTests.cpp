@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// CRTEffect is a NOXNA CNA extension (no XNA/FNA precedent) — like ShaderEffectTests.cpp and
+// CRTEffect is a CNAEXT CNA extension (no XNA/FNA precedent) — like ShaderEffectTests.cpp and
 // DepthEffectTests.cpp, these tests exercise the structural contract (parameter round-trip,
 // clamping, Clone() independence, GetTypeName()) against a default-constructed GraphicsDevice
 // with no real renderer, not GLSL compile/render correctness.
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include <gtest/gtest.h>
 
@@ -154,4 +154,4 @@ TEST(CRTEffectTest, CloneReturnsIndependentCRTEffectWithSameParameters)
     EXPECT_EQ(fx.getMaskType(), CRTMaskType::ShadowMask);
 }
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

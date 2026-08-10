@@ -192,7 +192,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] static std::string EndShowKeyboardInput(System::IAsyncResult* result);
 
         /**
-         * @brief NOXNA/test-only: gets the title the currently pending keyboard input request was
+         * @brief CNAEXT/test-only: gets the title the currently pending keyboard input request was
          * created with, without needing pixel readback of RenderPendingKeyboardInputEXT's own
          * rendering to confirm it round-tripped correctly (mirrors
          * GetPendingMessageBoxFocusButtonForTestingEXT's own established pattern).
@@ -200,19 +200,19 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @return The pending request's title.
          * @throws System::InvalidOperationException if no keyboard input is currently pending.
          */
-        NOXNA [[nodiscard]] static const std::string& GetPendingKeyboardInputTitleForTestingEXT();
+        CNAEXT [[nodiscard]] static const std::string& GetPendingKeyboardInputTitleForTestingEXT();
 
         /**
-         * @brief NOXNA/test-only: gets the description the currently pending keyboard input
+         * @brief CNAEXT/test-only: gets the description the currently pending keyboard input
          * request was created with. See GetPendingKeyboardInputTitleForTestingEXT above.
          *
          * @return The pending request's description.
          * @throws System::InvalidOperationException if no keyboard input is currently pending.
          */
-        NOXNA [[nodiscard]] static const std::string& GetPendingKeyboardInputDescriptionForTestingEXT();
+        CNAEXT [[nodiscard]] static const std::string& GetPendingKeyboardInputDescriptionForTestingEXT();
 
         /**
-         * @brief NOXNA/test-only: gets the exact display text `RenderPendingKeyboardInputEXT`
+         * @brief CNAEXT/test-only: gets the exact display text `RenderPendingKeyboardInputEXT`
          * would currently draw for the typed buffer - one `'*'` per typed UTF-16 code unit when
          * the pending request's `usePasswordMode` is true, the real typed text otherwise. Sourced
          * from the same masking logic `RenderPendingKeyboardInputEXT` itself calls (not a
@@ -223,10 +223,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @return The current display text, masked if password mode is on.
          * @throws System::InvalidOperationException if no keyboard input is currently pending.
          */
-        NOXNA [[nodiscard]] static std::string GetPendingKeyboardInputDisplayTextForTestingEXT();
+        CNAEXT [[nodiscard]] static std::string GetPendingKeyboardInputDisplayTextForTestingEXT();
 
         /**
-         * @brief NOXNA/EXT: gets whether the given completed BeginShowKeyboardInput operation was
+         * @brief CNAEXT/EXT: gets whether the given completed BeginShowKeyboardInput operation was
          * canceled (Escape, or SimulateKeyboardInputCancelEXT) rather than confirmed with Enter.
          * Not part of the real XNA 4.0 Guide API - real XNA distinguishes this case via a null
          * EndShowKeyboardInput return, which this port's non-nullable std::string return type
@@ -236,18 +236,18 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @return true if the operation was canceled rather than confirmed.
          * @throws System::ArgumentException if result was not returned by BeginShowKeyboardInput.
          */
-        NOXNA [[nodiscard]] static bool WasKeyboardInputCanceledEXT(System::IAsyncResult* result);
+        CNAEXT [[nodiscard]] static bool WasKeyboardInputCanceledEXT(System::IAsyncResult* result);
 
         /**
-         * @brief NOXNA/EXT: gets whether a keyboard input request is currently pending (shown via
+         * @brief CNAEXT/EXT: gets whether a keyboard input request is currently pending (shown via
          * BeginShowKeyboardInput and not yet completed). Not part of the real XNA 4.0 Guide API.
          *
          * @return true if a keyboard input request is currently awaiting Enter/cancel.
          */
-        NOXNA [[nodiscard]] static bool getHasPendingKeyboardInputEXTProperty();
+        CNAEXT [[nodiscard]] static bool getHasPendingKeyboardInputEXTProperty();
 
         /**
-         * @brief NOXNA/EXT: renders the currently pending keyboard input overlay (if any) -
+         * @brief CNAEXT/EXT: renders the currently pending keyboard input overlay (if any) -
          * title, description, and the text typed so far (masked as '*' per character if
          * usePasswordMode was set) - and checks real keyboard input for an Escape press,
          * canceling the pending operation when detected. A game's own Draw() calls this once per
@@ -264,7 +264,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param whitePixel  A caller-owned opaque white 1x1 (or larger) Texture2D used to draw
          *        the box background rectangle.
          */
-        NOXNA static void RenderPendingKeyboardInputEXT(
+        CNAEXT static void RenderPendingKeyboardInputEXT(
             Graphics::GraphicsDevice& device,
             Graphics::SpriteBatch& spriteBatch,
             Graphics::SpriteFont& font,
@@ -272,17 +272,17 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         /**
-         * @brief NOXNA/EXT: cancels the currently pending keyboard input as if the user pressed
+         * @brief CNAEXT/EXT: cancels the currently pending keyboard input as if the user pressed
          * Escape, without requiring real keyboard input. Intended for headless demos/tests that
          * cannot drive a real window's keyboard input - mirrors SimulateMessageBoxClickEXT's own
          * established pattern for the message box overlay.
          *
          * @throws System::InvalidOperationException if no keyboard input is currently pending.
          */
-        NOXNA static void SimulateKeyboardInputCancelEXT();
+        CNAEXT static void SimulateKeyboardInputCancelEXT();
 
         /**
-         * @brief NOXNA/test-only: clears any currently-pending keyboard input request without
+         * @brief CNAEXT/test-only: clears any currently-pending keyboard input request without
          * completing it or invoking its callback, and unsubscribes from
          * Microsoft::Xna::Framework::Input::TextInputEXT::TextInput - so a test/demo that creates
          * one and doesn't resolve it cannot strand the single-pending-request guard, or leave a
@@ -290,7 +290,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * test in the same process. Does not delete the pending action object - the caller who
          * received it from BeginShowKeyboardInput still owns and must delete it.
          */
-        NOXNA static void ResetPendingKeyboardInputForTestingEXT();
+        CNAEXT static void ResetPendingKeyboardInputForTestingEXT();
 
         /**
          * @brief Begins showing a system message box.
@@ -365,16 +365,16 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] static std::optional<int> EndShowMessageBox(System::IAsyncResult* result);
 
         /**
-         * @brief NOXNA/EXT: gets whether a message box is currently pending (shown via
+         * @brief CNAEXT/EXT: gets whether a message box is currently pending (shown via
          * BeginShowMessageBox and not yet completed). Not part of the real XNA 4.0 Guide API,
          * which has no local rendering concept to be "pending" against.
          *
          * @return true if a message box is currently awaiting a button selection.
          */
-        NOXNA [[nodiscard]] static bool getHasPendingMessageBoxEXTProperty();
+        CNAEXT [[nodiscard]] static bool getHasPendingMessageBoxEXTProperty();
 
         /**
-         * @brief NOXNA/EXT: renders the currently pending message box (if any) and checks real
+         * @brief CNAEXT/EXT: renders the currently pending message box (if any) and checks real
          * mouse input for a button click, completing the pending BeginShowMessageBox operation
          * when one is detected. A game's own Draw() calls this once per frame, after drawing its
          * own scene, so the overlay renders on top. No-op if no message box is pending.
@@ -393,7 +393,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *        created and destroyed within this call alone would already be a dangling
          *        pointer by the time the caller's own End() runs.
          */
-        NOXNA static void RenderPendingMessageBoxEXT(
+        CNAEXT static void RenderPendingMessageBoxEXT(
             Graphics::GraphicsDevice& device,
             Graphics::SpriteBatch& spriteBatch,
             Graphics::SpriteFont& font,
@@ -401,7 +401,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         /**
-         * @brief NOXNA/EXT: completes the currently pending message box as if the user clicked
+         * @brief CNAEXT/EXT: completes the currently pending message box as if the user clicked
          * the button at buttonIndex, without requiring real mouse input. Intended for headless
          * demos/tests that cannot drive a real window's mouse input.
          *
@@ -410,26 +410,26 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @throws System::ArgumentOutOfRangeException if buttonIndex is out of range for the
          *         pending message box's button list.
          */
-        NOXNA static void SimulateMessageBoxClickEXT(int buttonIndex);
+        CNAEXT static void SimulateMessageBoxClickEXT(int buttonIndex);
 
         /**
-         * @brief NOXNA/test-only: clears any currently-pending message box without completing
+         * @brief CNAEXT/test-only: clears any currently-pending message box without completing
          * it or invoking its callback, so a test/demo that creates one and doesn't resolve it
          * (e.g. one that only checks BeginShowMessageBox's validation) cannot strand the
          * single-pending-message-box guard for every later Begin* call in the same process. Does
          * not delete the pending action object - the caller who received it from
          * BeginShowMessageBox still owns and must delete it, per that method's own contract.
          */
-        NOXNA static void ResetPendingMessageBoxForTestingEXT();
+        CNAEXT static void ResetPendingMessageBoxForTestingEXT();
 
         /**
-         * @brief NOXNA/test-only: gets the focusButton the currently pending message box was
+         * @brief CNAEXT/test-only: gets the focusButton the currently pending message box was
          * created with, without needing pixel readback to confirm it round-tripped correctly.
          *
          * @return The pending box's focusButton index.
          * @throws System::InvalidOperationException if no message box is currently pending.
          */
-        NOXNA [[nodiscard]] static int GetPendingMessageBoxFocusButtonForTestingEXT();
+        CNAEXT [[nodiscard]] static int GetPendingMessageBoxFocusButtonForTestingEXT();
 
         /**
          * @brief Delays gamer notification toasts by the given duration.
@@ -551,7 +551,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param player The player viewing achievements.
          */
-        NOXNA static void ShowAchievementsEXT(Microsoft::Xna::Framework::PlayerIndex player);
+        CNAEXT static void ShowAchievementsEXT(Microsoft::Xna::Framework::PlayerIndex player);
 
     private:
         static bool isTrialMode_;

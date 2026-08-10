@@ -52,7 +52,7 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] bool operator!=(const DisplayMode& other) const;
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         SharpRuntime::intcs width_;

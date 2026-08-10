@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/TonemappingMode.hpp"
 #include "CNA/Graphics/RenderQuality.hpp"
@@ -9,7 +9,7 @@
 
 namespace CNA::Graphics {
     /**
-     * @brief Stores configuration for the NOXNA extended render pipeline.
+     * @brief Stores configuration for the CNAEXT extended render pipeline.
      *
      * This is a pure settings bag — it does not perform any rendering itself.
      * The active renderer reads these settings and adjusts its render passes
@@ -99,4 +99,4 @@ namespace CNA::Graphics {
 
 } // namespace CNA::Graphics
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

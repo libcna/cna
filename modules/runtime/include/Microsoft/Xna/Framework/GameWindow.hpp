@@ -33,9 +33,9 @@ namespace Microsoft::Xna::Framework
 
     public:
         /** @brief String type alias for C++ compatibility. */
-        NOXNA using String = SharpRuntime::String;
+        CNAEXT using String = SharpRuntime::String;
         /** @brief Integer type alias matching the C# int used in the XNA API. */
-        NOXNA using intcs = SharpRuntime::intcs;
+        CNAEXT using intcs = SharpRuntime::intcs;
 
         /** @brief Raised when the client area size changes. */
         System::EventHandler<System::EventArgs> ClientSizeChanged;
@@ -53,7 +53,7 @@ namespace Microsoft::Xna::Framework
          * @brief Creates a window wrapper for an existing SDL window.
          * @param window Pointer to an existing SDL_Window to wrap.
          */
-        NOXNA explicit GameWindow(SDL_Window* window);
+        CNAEXT explicit GameWindow(SDL_Window* window);
 
         /** @brief Destructor. */
         ~GameWindow() override = default;
@@ -99,7 +99,7 @@ namespace Microsoft::Xna::Framework
          * @return The native SDL_Window pointer, or nullptr if this GameWindow wraps
          * no SDL window.
          */
-        NOXNA [[nodiscard]] SDL_Window* GetNativeSdlWindowEXT() const;
+        CNAEXT [[nodiscard]] SDL_Window* GetNativeSdlWindowEXT() const;
 
         /**
          * @brief Gets the name of the screen/display containing this window.
@@ -137,7 +137,7 @@ namespace Microsoft::Xna::Framework
          * CNA extension — XNA has no minimize/restore API of its own. No-op if this
          * GameWindow wraps no SDL window.
          */
-        NOXNA void MinimizeEXT();
+        CNAEXT void MinimizeEXT();
 
         /**
          * @brief Restores a minimized or maximized window to its normal state.
@@ -145,7 +145,7 @@ namespace Microsoft::Xna::Framework
          * CNA extension — XNA has no minimize/restore API of its own. No-op if this
          * GameWindow wraps no SDL window.
          */
-        NOXNA void RestoreEXT();
+        CNAEXT void RestoreEXT();
 
         /**
          * @brief Begins a fullscreen/windowed device change.
@@ -171,7 +171,7 @@ namespace Microsoft::Xna::Framework
          * @brief Returns the fully-qualified .NET type name of this class.
          * @return A const reference to the type name string.
          */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
         /** @brief Called when the window is activated. */

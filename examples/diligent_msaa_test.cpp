@@ -16,7 +16,7 @@
 // Check A/B -- back buffer: MultiSampleCount=0 is a binary edge, then
 //   GraphicsDeviceManager.PreferMultiSampling + ApplyChanges() (the real, non-test-only path --
 //   GraphicsDevice::Reset() already forwards to IGraphicsRenderer::ApplyMultiSampleCount()
-//   generically, so this renderer needs no NOXNA RecreateRendererForMultiSampleCount() escape hatch,
+//   generically, so this renderer needs no CNAEXT RecreateRendererForMultiSampleCount() escape hatch,
 //   unlike the older Vulkan/EasyGL sibling tests that had to work around a plumbing gap since
 //   fixed) makes the edge blended.
 // Check C/D -- RenderTarget2D: the SAME differential, this time through RenderTarget2D's own

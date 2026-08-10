@@ -51,11 +51,11 @@ namespace CNA::Internal::Renderers::DirectX11
             return declaration_;
         }
 
-        /// Requested capacity in vertices at construction time (NOXNA diagnostics).
+        /// Requested capacity in vertices at construction time (CNAEXT diagnostics).
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
-        /// Byte stride of the most recent SetData() call, 0 before the first call (NOXNA).
+        /// Byte stride of the most recent SetData() call, 0 before the first call (CNAEXT).
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
-        /// Raw ID3D11Buffer* for draw-call binding (Phase DIRECTX8) (NOXNA).
+        /// Raw ID3D11Buffer* for draw-call binding (Phase DIRECTX8) (CNAEXT).
         [[nodiscard]] ID3D11Buffer* GetBufferEXT() const { return buffer_.Get(); }
 
     private:
@@ -104,7 +104,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
         [[nodiscard]] ID3D11Buffer* GetBufferEXT() const { return buffer_.Get(); }
-        /// DXGI_FORMAT_R16_UINT or DXGI_FORMAT_R32_UINT, for IASetIndexBuffer() (Phase DIRECTX8) (NOXNA).
+        /// DXGI_FORMAT_R16_UINT or DXGI_FORMAT_R32_UINT, for IASetIndexBuffer() (Phase DIRECTX8) (CNAEXT).
         [[nodiscard]] DXGI_FORMAT GetFormatEXT() const;
 
     private:

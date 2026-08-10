@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx dispatch for CNA's own NOXNA
+// D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx dispatch for CNA's own CNAEXT
 // "SkinnedVertexColor3D" shader (stride 56 -- SkinnedEffect + a vertex Color real XNA's own
 // compiled SkinnedEffect.fx bytecode never carries), via D3D9SkinnedVertexColorDraw.cpp /
 // shaders/cna/SkinnedVertexColor3D.hlsl.

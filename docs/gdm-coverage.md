@@ -7,7 +7,7 @@ Status labels:
 - **✅ supported** — implemented and tested, matches FNA behaviour
 - **⚠ partial** — implemented but with a known limitation or deviation
 - **❌ missing** — not implemented
-- **🔧 NOXNA** — CNA extension not present in XNA/FNA
+- **🔧 CNAEXT** — CNA extension not present in XNA/FNA
 
 ---
 
@@ -87,13 +87,13 @@ Status labels:
 
 ---
 
-## NOXNA extensions (CNA-only, not in FNA)
+## CNAEXT extensions (CNA-only, not in FNA)
 
 | CNA | Purpose |
 |---|---|
 | `GraphicsDeviceManager()` (default ctor) | Allows GDM construction without a Game (used in headless tests) |
 | `PresentationMode` enum | Scaling policy: Letterbox / Overscan / Stretch / NativeBackBuffer / FixedHeightDynamicWidth |
-| `getPreferredPresentationModeProperty()` / `setPreferredPresentationModeProperty()` | Controls the NOXNA scaling policy |
+| `getPreferredPresentationModeProperty()` / `setPreferredPresentationModeProperty()` | Controls the CNAEXT scaling policy |
 
 ---
 
@@ -110,7 +110,7 @@ format, sample count, depth format, and present interval simultaneously.
 1. Calls `GraphicsDevice::SetPresentationParameters(pp)` — stores PP + updates swap interval.
 2. Calls `SDL_SetWindowFullscreen` (soft-fail).
 3. Calls `SDL_SetWindowSize`.
-4. Calls `GraphicsDevice::SetPresentationMode` (NOXNA scaling).
+4. Calls `GraphicsDevice::SetPresentationMode` (CNAEXT scaling).
 5. Calls `GraphicsDevice::SetVirtualResolution` — updates renderer virtual size + viewport.
 
 **Consequence**: changes to `PreferredBackBufferFormat`, `PreferredDepthStencilFormat`, and

@@ -9,13 +9,13 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — the force-feedback effect families and global capabilities a haptic device
+     * @brief CNAEXT — the force-feedback effect families and global capabilities a haptic device
      *        supports, as a bit flag set. Mirrors SDL3's `SDL_HapticFeatures` bitmask.
      *
      * XNA 4.0 has no force-feedback API beyond `GamePad::SetVibration`'s simple dual-motor rumble;
      * this CNA extension exposes SDL3's richer `SDL_haptic` capability query.
      */
-    NOXNA enum class HapticFeatureEXT : std::uint32_t
+    CNAEXT enum class HapticFeatureEXT : std::uint32_t
     {
         /** @brief No effect families or global capabilities supported. */
         None = 0,

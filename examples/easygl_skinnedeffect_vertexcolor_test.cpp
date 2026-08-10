@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// CNB-67 (Phase 13C): golden-image test for SkinnedEffect's new NOXNA VertexColorEnabled
+// CNB-67 (Phase 13C): golden-image test for SkinnedEffect's new CNAEXT VertexColorEnabled
 // property (see SkinnedEffect.hpp) -- proves the stride-56 skinned+Color vertex layout's aColor
 // attribute (EasyGLRenderer::ApplyLayout's stride==56 case, attribute location 5) is
 // actually read by both EnsureSkinnedProgram() (per-pixel-lit) and

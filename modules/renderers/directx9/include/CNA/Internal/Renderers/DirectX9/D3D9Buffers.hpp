@@ -63,11 +63,11 @@ namespace CNA::Internal::Renderers::DirectX9
 
         void ReleaseDefaultPoolResourceEXT() override;
 
-        /// Requested capacity in vertices at construction time (NOXNA diagnostics).
+        /// Requested capacity in vertices at construction time (CNAEXT diagnostics).
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
-        /// Byte stride of the most recent SetData() call, 0 before the first call (NOXNA).
+        /// Byte stride of the most recent SetData() call, 0 before the first call (CNAEXT).
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
-        /// Raw IDirect3DVertexBuffer9* for draw-call binding (Phase D9-8) (NOXNA).
+        /// Raw IDirect3DVertexBuffer9* for draw-call binding (Phase D9-8) (CNAEXT).
         [[nodiscard]] IDirect3DVertexBuffer9* GetBufferEXT() const { return buffer_.Get(); }
 
     private:
@@ -125,7 +125,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
         [[nodiscard]] IDirect3DIndexBuffer9* GetBufferEXT() const { return buffer_.Get(); }
-        /// D3DFMT_INDEX16 or D3DFMT_INDEX32, for SetIndices() (Phase D9-8) (NOXNA).
+        /// D3DFMT_INDEX16 or D3DFMT_INDEX32, for SetIndices() (Phase D9-8) (CNAEXT).
         [[nodiscard]] D3DFORMAT GetFormatEXT() const;
 
     private:

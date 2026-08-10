@@ -40,7 +40,7 @@ namespace Microsoft::Xna::Framework::Graphics
                          RenderTargetUsage usage = RenderTargetUsage::DiscardContents);
 
         /** @brief Destructor. */
-        NOXNA ~RenderTargetCube() override = default;
+        CNAEXT ~RenderTargetCube() override = default;
 
         /**
          * @brief Releases the cube render target after rejecting disposal while it is bound.
@@ -49,7 +49,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
         /** @brief Returns the fully qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         // IRenderTarget
         /** @brief Returns the width of each cube face in pixels. */
@@ -72,7 +72,7 @@ namespace Microsoft::Xna::Framework::Graphics
         System::EventHandler<System::EventArgs> ContentLost;
 
         /** @brief Returns the renderer cube render target handle (CNA extension). */
-        NOXNA [[nodiscard]] CNA::Internal::Renderers::IRenderTargetCubeRenderer* GetRenderTargetCubeRenderer() const;
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::IRenderTargetCubeRenderer* GetRenderTargetCubeRenderer() const;
 
     private:
         int size_;

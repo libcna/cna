@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx/DrawIndexedPrimitivesEx dispatch
-// for CNA's own NOXNA "SkinnedVertexColor3D" shader (stride 56 -- SkinnedEffect + a vertex Color
+// for CNA's own CNAEXT "SkinnedVertexColor3D" shader (stride 56 -- SkinnedEffect + a vertex Color
 // real XNA's own compiled SkinnedEffect.fx bytecode never carries), porting
 // EasyGLRenderer.cpp's EnsureSkinnedProgram() vertex-color wiring (aColor/vColor/
 // uVertexColorEnabled, multiplied into the combined diffuse+specular output AFTER the specular add)

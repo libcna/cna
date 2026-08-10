@@ -6,12 +6,12 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — the position of a joystick's POV hat (D-pad-like 8-way switch).
+     * @brief CNAEXT — the position of a joystick's POV hat (D-pad-like 8-way switch).
      *
      * Mirrors SDL3's `SDL_HAT_*` values, which combine an up/down bit with a left/right bit; the
      * nine reachable combinations are enumerated here rather than exposed as a bit flag set.
      */
-    NOXNA enum class JoystickHatPositionEXT
+    CNAEXT enum class JoystickHatPositionEXT
     {
         /** @brief The hat is not pressed in any direction. */
         Centered,

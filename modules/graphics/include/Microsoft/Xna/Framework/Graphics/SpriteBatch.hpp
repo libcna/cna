@@ -76,23 +76,23 @@ namespace Microsoft::Xna::Framework::Graphics
         explicit SpriteBatch(GraphicsDevice& graphicsDevice);
 
         /** @brief Creates an empty sprite batch. */
-        NOXNA SpriteBatch();
+        CNAEXT SpriteBatch();
 
         /**
-         * @brief NOXNA test-only: creates a sprite batch bound directly to an explicit renderer,
+         * @brief CNAEXT test-only: creates a sprite batch bound directly to an explicit renderer,
          *        bypassing GraphicsDevice entirely. Enables deterministic unit testing of
          *        Begin/Draw/End batching and sort-mode logic against a mock/recording renderer
          *        without a real graphics context.
          *
          * @param renderer Renderer implementation to receive Begin/End/Draw calls.
          */
-        NOXNA explicit SpriteBatch(std::unique_ptr<ISpriteBatchRenderer> renderer);
+        CNAEXT explicit SpriteBatch(std::unique_ptr<ISpriteBatchRenderer> renderer);
 
         /** @brief Destructor. */
-        NOXNA ~SpriteBatch() override;
+        CNAEXT ~SpriteBatch() override;
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Begins a sprite batch with default settings (AlphaBlend, LinearClamp, no depth). */
         void Begin();
@@ -168,7 +168,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws System::ArgumentOutOfRangeException if @p x or @p y is non-finite or cannot
          *         be represented by SpriteBatch's Int32 destination rectangle.
          */
-        NOXNA void Draw(const Texture2D& texture, float x, float y);
+        CNAEXT void Draw(const Texture2D& texture, float x, float y);
 
         /**
          * @brief Draws a region of a texture into a destination rectangle with a tint color.
@@ -178,7 +178,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param sourceRectangle      Rectangle that selects the region of the texture to draw.
          * @param color                Tint color; use Color::White for no tint.
          */
-        NOXNA void Draw(const Texture2D& texture,
+        CNAEXT void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   const Rectangle& sourceRectangle,
                   Color color);
@@ -195,7 +195,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param effect               Sprite flipping flags.
          * @param layerDepth           Depth value for sort ordering (0 = front, 1 = back).
          */
-        NOXNA void Draw(const Texture2D& texture,
+        CNAEXT void Draw(const Texture2D& texture,
                   const Rectangle& destinationRectangle,
                   const Rectangle& sourceRectangle,
                   Color color,
@@ -452,7 +452,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * quad; @p colors/@p uvs may be null when @p effect's own compiled program needs neither
          * (e.g. a colour-only effect with no texture children).
          *
-         * @note NOXNA -- not part of the XNA 4.0 API. Currently supported only under
+         * @note CNAEXT -- not part of the XNA 4.0 API. Currently supported only under
          *       `SpriteSortMode::Immediate`: unlike ordinary sprite `Draw()` calls, a mesh draw
          *       does not participate in the deferred sort/batch queue, so it throws if the active
          *       `Begin()` used any other sort mode -- a declared, tested scope boundary, not a
@@ -474,7 +474,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws std::invalid_argument if @p positions/@p indices are null or the counts are
          *         non-positive/malformed.
          */
-        NOXNA void DrawMeshEXT(Effect& effect,
+        CNAEXT void DrawMeshEXT(Effect& effect,
                                const Vector2* positions, const Color* colors, const Vector2* uvs,
                                int vertexCount, const std::uint16_t* indices, int indexCount);
     };

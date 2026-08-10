@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// D3D9 skinned-vertex-color porting task: real vs_3_0/ps_3_0 bytecode for CNA's own NOXNA
+// D3D9 skinned-vertex-color porting task: real vs_3_0/ps_3_0 bytecode for CNA's own CNAEXT
 // "SkinnedVertexColor3D" shader (src/CNA/Internal/Renderers/DirectX9/shaders/cna/SkinnedVertexColor3D.hlsl
 // -- see that file's own header comment for why this is a separate custom shader and the empirical
 // ps_2_0-fails(X5608)/ps_3_0-fits finding), compiled through the same real d3dcompiler_47.dll

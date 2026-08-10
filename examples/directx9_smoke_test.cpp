@@ -1054,7 +1054,7 @@ protected:
         // ZENABLE/ZWRITEENABLE and incorrectly expected DepthStencilState.Default behavior. That
         // made the far draw pass correctly under Always and was a test-harness defect, not a
         // production depth defect. Establish the reachable public XNA state first, then prove the
-        // NOXNA helper's A(disabled)->B(enabled)->A transition while preserving LessEqual.
+        // CNAEXT helper's A(disabled)->B(enabled)->A transition while preserving LessEqual.
         {
             struct VPCd { float x, y, z; uint32_t color; };
             const uint32_t kRedD = 0xFF0000FFu;   // R=255

@@ -71,14 +71,14 @@ namespace Microsoft::Xna::Framework::Input
          * @param playerIndex The player index of the controller.
          * @return The GUID string.
          */
-        NOXNA static std::string GetGUIDEXT(PlayerIndex playerIndex);
+        CNAEXT static std::string GetGUIDEXT(PlayerIndex playerIndex);
 
         /**
          * @brief Sets the light bar color (PS4/PS5 controllers, FNA extension).
          * @param playerIndex The player index of the controller.
          * @param color The color to set on the light bar.
          */
-        NOXNA static void SetLightBarEXT(PlayerIndex playerIndex,
+        CNAEXT static void SetLightBarEXT(PlayerIndex playerIndex,
                                          const Microsoft::Xna::Framework::Color& color);
 
         /**
@@ -88,7 +88,7 @@ namespace Microsoft::Xna::Framework::Input
          * @param rightTrigger Right trigger motor speed in [0, 1].
          * @return True if trigger vibration was set; false if not supported.
          */
-        NOXNA static bool SetTriggerVibrationEXT(PlayerIndex playerIndex,
+        CNAEXT static bool SetTriggerVibrationEXT(PlayerIndex playerIndex,
                                                   float leftTrigger, float rightTrigger);
 
         /**
@@ -97,7 +97,7 @@ namespace Microsoft::Xna::Framework::Input
          * @param gyro Output parameter receiving the gyroscope vector.
          * @return True if data is available; false otherwise.
          */
-        NOXNA static bool GetGyroEXT(PlayerIndex playerIndex,
+        CNAEXT static bool GetGyroEXT(PlayerIndex playerIndex,
                                       Microsoft::Xna::Framework::Vector3& gyro);
 
         /**
@@ -106,99 +106,99 @@ namespace Microsoft::Xna::Framework::Input
          * @param accel Output parameter receiving the accelerometer vector.
          * @return True if data is available; false otherwise.
          */
-        NOXNA static bool GetAccelerometerEXT(PlayerIndex playerIndex,
+        CNAEXT static bool GetAccelerometerEXT(PlayerIndex playerIndex,
                                                Microsoft::Xna::Framework::Vector3& accel);
 
         /**
-         * @brief NOXNA/EXT: gets the controller's SDL player index (the 0-based player-number LED).
+         * @brief CNAEXT/EXT: gets the controller's SDL player index (the 0-based player-number LED).
          * @param playerIndex The player index (slot) of the controller.
          * @return The device player index, or -1 if the controller is disconnected or the index is unset.
          */
-        NOXNA static int GetPlayerIndexEXT(PlayerIndex playerIndex);
+        CNAEXT static int GetPlayerIndexEXT(PlayerIndex playerIndex);
 
         /**
-         * @brief NOXNA/EXT: sets the controller's SDL player index (the 0-based player-number LED).
+         * @brief CNAEXT/EXT: sets the controller's SDL player index (the 0-based player-number LED).
          * @param playerIndex The player index (slot) of the controller.
          * @param index The 0-based player-number LED to assign.
          * @return True on success; false if the controller is disconnected or SDL rejected the change.
          */
-        NOXNA static bool SetPlayerIndexEXT(PlayerIndex playerIndex, int index);
+        CNAEXT static bool SetPlayerIndexEXT(PlayerIndex playerIndex, int index);
 
         /**
-         * @brief NOXNA/EXT: reads the controller's battery/charge state.
+         * @brief CNAEXT/EXT: reads the controller's battery/charge state.
          * @param playerIndex The player index (slot) of the controller.
          * @param percent Output receiving the battery charge (0-100), or -1 if unknown/disconnected.
          * @return The power state, or PowerStateEXT::Error if the controller is disconnected.
          */
-        NOXNA static CNA::Input::PowerStateEXT GetPowerInfoEXT(PlayerIndex playerIndex, int& percent);
+        CNAEXT static CNA::Input::PowerStateEXT GetPowerInfoEXT(PlayerIndex playerIndex, int& percent);
 
         /**
-         * @brief NOXNA/EXT: returns the printed glyph label for a face button on this controller.
+         * @brief CNAEXT/EXT: returns the printed glyph label for a face button on this controller.
          * @param playerIndex The player index (slot) of the controller.
          * @param button The XNA button to query (only physical buttons have a label).
          * @return The button's label, or GamePadButtonLabelEXT::Unknown if disconnected or unlabeled.
          */
-        NOXNA static CNA::Input::GamePadButtonLabelEXT GetButtonLabelEXT(PlayerIndex playerIndex, Buttons button);
+        CNAEXT static CNA::Input::GamePadButtonLabelEXT GetButtonLabelEXT(PlayerIndex playerIndex, Buttons button);
 
         /**
-         * @brief NOXNA/EXT: the controller's human-readable name.
+         * @brief CNAEXT/EXT: the controller's human-readable name.
          * @param playerIndex The player index (slot) of the controller.
          * @return The name, or an empty string if disconnected or unknown.
          */
-        NOXNA static std::string GetNameEXT(PlayerIndex playerIndex);
+        CNAEXT static std::string GetNameEXT(PlayerIndex playerIndex);
 
         /**
-         * @brief NOXNA/EXT: the controller's OS device path.
+         * @brief CNAEXT/EXT: the controller's OS device path.
          * @param playerIndex The player index (slot) of the controller.
          * @return The device path, or an empty string if disconnected or unknown.
          */
-        NOXNA static std::string GetPathEXT(PlayerIndex playerIndex);
+        CNAEXT static std::string GetPathEXT(PlayerIndex playerIndex);
 
         /**
-         * @brief NOXNA/EXT: the controller's hardware serial number.
+         * @brief CNAEXT/EXT: the controller's hardware serial number.
          * @param playerIndex The player index (slot) of the controller.
          * @return The serial number, or an empty string if disconnected or unavailable.
          */
-        NOXNA static std::string GetSerialEXT(PlayerIndex playerIndex);
+        CNAEXT static std::string GetSerialEXT(PlayerIndex playerIndex);
 
         /**
-         * @brief NOXNA/EXT: the controller's firmware version.
+         * @brief CNAEXT/EXT: the controller's firmware version.
          * @param playerIndex The player index (slot) of the controller.
          * @return The firmware version, or 0 if disconnected or unavailable.
          */
-        NOXNA static std::uint16_t GetFirmwareVersionEXT(PlayerIndex playerIndex);
+        CNAEXT static std::uint16_t GetFirmwareVersionEXT(PlayerIndex playerIndex);
 
         /**
-         * @brief NOXNA/EXT: the controller's Steam Input handle.
+         * @brief CNAEXT/EXT: the controller's Steam Input handle.
          * @param playerIndex The player index (slot) of the controller.
          * @return The Steam Input handle, or 0 if disconnected or not a Steam virtual controller.
          */
-        NOXNA static std::uint64_t GetSteamHandleEXT(PlayerIndex playerIndex);
+        CNAEXT static std::uint64_t GetSteamHandleEXT(PlayerIndex playerIndex);
 
         /**
-         * @brief NOXNA/EXT: how the controller is physically attached (wired vs. wireless).
+         * @brief CNAEXT/EXT: how the controller is physically attached (wired vs. wireless).
          * @param playerIndex The player index (slot) of the controller.
          * @return The connection state, or GamePadConnectionStateEXT::Unknown if disconnected/unknown.
          */
-        NOXNA static CNA::Input::GamePadConnectionStateEXT GetConnectionStateEXT(PlayerIndex playerIndex);
+        CNAEXT static CNA::Input::GamePadConnectionStateEXT GetConnectionStateEXT(PlayerIndex playerIndex);
 
         /**
-         * @brief NOXNA/EXT: returns the number of touchpads on the controller.
+         * @brief CNAEXT/EXT: returns the number of touchpads on the controller.
          * @param playerIndex The player index (slot) of the controller.
          * @return The touchpad count, or 0 if disconnected or the controller has none.
          */
-        NOXNA static int GetTouchpadCountEXT(PlayerIndex playerIndex);
+        CNAEXT static int GetTouchpadCountEXT(PlayerIndex playerIndex);
 
         /**
-         * @brief NOXNA/EXT: returns how many fingers a touchpad can report at once.
+         * @brief CNAEXT/EXT: returns how many fingers a touchpad can report at once.
          * @param playerIndex The player index (slot) of the controller.
          * @param touchpad The touchpad index.
          * @return The finger capacity, or 0 if disconnected or the index is out of range.
          */
-        NOXNA static int GetTouchpadFingerCountEXT(PlayerIndex playerIndex, int touchpad);
+        CNAEXT static int GetTouchpadFingerCountEXT(PlayerIndex playerIndex, int touchpad);
 
         /**
-         * @brief NOXNA/EXT: reads one touchpad finger's contact state and position.
+         * @brief CNAEXT/EXT: reads one touchpad finger's contact state and position.
          * @param playerIndex The player index (slot) of the controller.
          * @param touchpad The touchpad index.
          * @param finger The finger index.
@@ -208,15 +208,15 @@ namespace Microsoft::Xna::Framework::Input
          * @param pressure Output receiving the finger pressure (0..1).
          * @return True if the finger data was read; false if disconnected or out of range.
          */
-        NOXNA static bool GetTouchpadFingerEXT(PlayerIndex playerIndex, int touchpad, int finger,
+        CNAEXT static bool GetTouchpadFingerEXT(PlayerIndex playerIndex, int touchpad, int finger,
                                                bool& down, float& x, float& y, float& pressure);
 
         /** @brief Left stick dead zone threshold (XInput-based). */
-        NOXNA static constexpr float LeftDeadZone     = 7849.0f / 32768.0f;
+        CNAEXT static constexpr float LeftDeadZone     = 7849.0f / 32768.0f;
         /** @brief Right stick dead zone threshold (XInput-based). */
-        NOXNA static constexpr float RightDeadZone    = 8689.0f / 32768.0f;
+        CNAEXT static constexpr float RightDeadZone    = 8689.0f / 32768.0f;
         /** @brief Trigger pressed threshold (XInput-based). */
-        NOXNA static constexpr float TriggerThreshold = 30.0f / 255.0f;
+        CNAEXT static constexpr float TriggerThreshold = 30.0f / 255.0f;
 
         /**
          * @brief Applies dead zone exclusion to a single axis value.
@@ -224,6 +224,6 @@ namespace Microsoft::Xna::Framework::Input
          * @param deadZone The dead zone threshold.
          * @return The processed axis value.
          */
-        NOXNA static float ExcludeAxisDeadZone(float value, float deadZone);
+        CNAEXT static float ExcludeAxisDeadZone(float value, float deadZone);
     };
 }

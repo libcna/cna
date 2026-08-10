@@ -136,7 +136,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_SkinnedEffect_Golden COMMAND cna_test_easygl_skinnedeffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # CNB-67 (Phase 13C): SkinnedEffect's new NOXNA VertexColorEnabled property.
+        # CNB-67 (Phase 13C): SkinnedEffect's new CNAEXT VertexColorEnabled property.
         cna_easygl_test(cna_test_easygl_skinnedeffect_vertexcolor
                         examples/easygl_skinnedeffect_vertexcolor_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SkinnedEffect_VertexColor COMMAND cna_test_easygl_skinnedeffect_vertexcolor
@@ -243,7 +243,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 10.14: AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT real GPU-skinned
-        # rendering (Phase 10 — Avatar real-rendering NOXNA/EXT extension). Needs
+        # rendering (Phase 10 — Avatar real-rendering CNAEXT/EXT extension). Needs
         # CNA_GamerServices (AvatarRenderer lives there), so it's only built when networking
         # (and thus GamerServices) is enabled.
         if(CNA_ENABLE_NET)

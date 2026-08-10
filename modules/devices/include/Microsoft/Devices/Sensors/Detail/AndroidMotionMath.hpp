@@ -101,7 +101,7 @@ namespace Microsoft::Devices::Sensors::Detail
      *   fields" argument for adding a matching remap to this `Quaternion`
      *   could not actually be implemented as a quaternion multiply. Not
      *   fixed here: `ConvertAndroidPortraitToXnaLandscape()` is
-     *   already-shipped, already-tested, deliberate `NOXNA` behavior with
+     *   already-shipped, already-tested, deliberate `CNAEXT` behavior with
      *   its own maintainer-made decision (`ACCEL-008`, 2026-07-07) this task
      *   has no mandate to unilaterally revisit — flagged as a genuinely new
      *   finding for whoever next touches `ACCEL-004`/`ACCEL-008`/`MOTION-012`,

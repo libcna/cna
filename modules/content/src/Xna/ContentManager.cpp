@@ -2504,7 +2504,7 @@ namespace Microsoft::Xna::Framework::Content
                                 // stride==20 case) rather than stride-32.
                                 fx = std::make_shared<Graphics::DualTextureEffect>(device);
                             } else if (effectStr == "PbrEffect") {
-                                // CNB-56/58 (Phase 13A): NOXNA metallic-roughness PBR effect --
+                                // CNB-56/58 (Phase 13A): CNAEXT metallic-roughness PBR effect --
                                 // its vertex buffer must be the stride-48
                                 // VertexPositionNormalTangentTexture shape (Position+Normal+
                                 // Tangent+TextureCoordinate), never stride-32.
@@ -2625,7 +2625,7 @@ namespace Microsoft::Xna::Framework::Content
                             // already uploads -- both BasicEffect and SkinnedEffect default
                             // VertexColorEnabled to false, so without this the color bytes are
                             // present in the vertex buffer but the shader ignores them.
-                            // SkinnedEffect's VertexColorEnabled is a NOXNA addition (real XNA's
+                            // SkinnedEffect's VertexColorEnabled is a CNAEXT addition (real XNA's
                             // SkinnedEffect has no such property at all).
                             if (vertexColorEnabled) {
                                 if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
@@ -2665,7 +2665,7 @@ namespace Microsoft::Xna::Framework::Content
 
         // ---------------------------------------------------------------------------
         // .skinnedmodel.json descriptor reader
-        // NOXNA — loads a GPU-skinned mesh + skeleton + animation clips for the real-rendering
+        // CNAEXT — loads a GPU-skinned mesh + skeleton + animation clips for the real-rendering
         // Avatar extension (see AvatarRenderer::EnableRealRenderingEXT). Not part of the XNA
         // 4.0 content pipeline.
         // ---------------------------------------------------------------------------
@@ -3030,7 +3030,7 @@ namespace Microsoft::Xna::Framework::Content
         return reader.Read(resolvedPath, *this);
     }
 
-    // Task 934: TextureCube is move-only (NOXNA, copy constructor deleted -- unlike Texture2D,
+    // Task 934: TextureCube is move-only (CNAEXT, copy constructor deleted -- unlike Texture2D,
     // which supports reference-counted renderer sharing via its own weak-cache specialisation
     // above), so it cannot be held in the generic strong (std::any-based) cache either. Mirrors
     // SoundEffect's own identical not-cached specialisation immediately above: reader.Read()

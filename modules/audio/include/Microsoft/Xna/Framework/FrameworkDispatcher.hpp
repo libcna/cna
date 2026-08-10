@@ -24,12 +24,12 @@ namespace Microsoft::Xna::Framework
         static void Update();
 
         /** @brief Pending active-song-changed notification flag (internal use). */
-        NOXNA static bool ActiveSongChanged;
+        CNAEXT static bool ActiveSongChanged;
         /** @brief Pending media-state-changed notification flag (internal use). */
-        NOXNA static bool MediaStateChanged;
+        CNAEXT static bool MediaStateChanged;
         /** @brief Dynamic sound effect instances registered for update (internal use). */
-        NOXNA static std::vector<Audio::DynamicSoundEffectInstance*> Streams;
+        CNAEXT static std::vector<Audio::DynamicSoundEffectInstance*> Streams;
         /** @brief Mutex protecting the Streams list (internal use). */
-        NOXNA static std::mutex StreamsMutex;
+        CNAEXT static std::mutex StreamsMutex;
     };
 }

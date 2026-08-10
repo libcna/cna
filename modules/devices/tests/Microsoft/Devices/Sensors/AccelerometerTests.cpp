@@ -454,7 +454,7 @@ TEST(AccelerometerTests, ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstan
 // Dispose(bool) with instanceCount_/subsystemHeld_/the open sensor never
 // released. This test deterministically reproduces the interleaving (real
 // thread scheduling alone cannot reliably hit the narrow window between
-// ClaimDisposalOnce() succeeding and Stop() being called) via a NOXNA test
+// ClaimDisposalOnce() succeeding and Stop() being called) via a CNAEXT test
 // hook that pauses the winner right after it claims disposal, until this
 // test confirms a concurrently-racing loser is genuinely blocked — proving
 // the loser actually waits rather than racing ahead. If this regresses, the

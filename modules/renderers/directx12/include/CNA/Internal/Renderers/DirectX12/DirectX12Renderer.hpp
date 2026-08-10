@@ -238,7 +238,7 @@ namespace CNA::Internal::Renderers::DirectX12
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
                                        const GpuDrawParams& params) override;
 
-        // ---- NOXNA (DX-102/DX-103/DX-104/DX-105): real device-lifetime accessors for tests and
+        // ---- CNAEXT (DX-102/DX-103/DX-104/DX-105): real device-lifetime accessors for tests and
         // for whichever Phase DX12 task lands next (DX-106 onward) to build on without duplicating
         // this renderer's own device/heap/command-list/fence creation. ----
 
@@ -370,7 +370,7 @@ namespace CNA::Internal::Renderers::DirectX12
          *  window was supplied. Honest scope boundary: this recreation logic is real and directly
          *  callable/testable (see examples/directx12_smoke_test.cpp), but this dev loop cannot trigger
          *  a genuine DXGI_ERROR_DEVICE_REMOVED to prove the *trigger* path -- only DX-90/DX-114's
-         *  real hardware can. NOXNA -- not part of any IGraphicsRenderer contract. */
+         *  real hardware can. CNAEXT -- not part of any IGraphicsRenderer contract. */
         void RecreateDeviceEXT();
 
         /** @brief DX-111: binds an off-screen color target for Clear()/DrawColoredPrimitives()/
@@ -382,7 +382,7 @@ namespace CNA::Internal::Renderers::DirectX12
          *  scaffolding, not a full public D3D12RenderTargetRenderer (still owed, matches DX-109's own
          *  honest triage of render targets out of that task's first pass) -- the real swap-chain
          *  back buffer would be the production equivalent once DX-100's Wine/vkd3d-proton
-         *  presentation gap is resolved on real Windows hardware (DX-114). NOXNA. */
+         *  presentation gap is resolved on real Windows hardware (DX-114). CNAEXT. */
         /// @param dsv/@p dsvFormat DX-118: optional real depth-stencil view to bind alongside the
         /// color target -- defaults to an unbound handle/DXGI_FORMAT_UNKNOWN, so every existing
         /// caller (tests, and this class's own pre-DX-118 call sites) is completely unaffected. The
@@ -398,12 +398,12 @@ namespace CNA::Internal::Renderers::DirectX12
          *  completely unaffected), and @p resources[1..count-1]/@p rtvs[1..count-1] (up to 7 more)
          *  are recorded as additional targets Clear() also independently clears. Every resource
          *  must already be registered with GetResourceStateTrackerEXT() by its owner (same
-         *  convention BindOffscreenColorTargetEXT() itself documents). NOXNA. */
+         *  convention BindOffscreenColorTargetEXT() itself documents). CNAEXT. */
         void BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
                                           const D3D12_CPU_DESCRIPTOR_HANDLE* rtvs,
                                           int count, DXGI_FORMAT format, int width, int height);
         /** @brief Clears the off-screen binding set by BindOffscreenColorTargetEXT() -- subsequent
-         *  Clear()/draw calls fall back to the honest "not yet implemented" throw. NOXNA. */
+         *  Clear()/draw calls fall back to the honest "not yet implemented" throw. CNAEXT. */
         void UnbindOffscreenColorTargetEXT();
         /** @brief DX-117: restores the real swap-chain back buffer as the bound color target (the
          *  current back-buffer index, re-resolved every call since it changes on every Present())
@@ -411,29 +411,29 @@ namespace CNA::Internal::Renderers::DirectX12
          *  UnbindOffscreenColorTargetEXT()'s honest "nothing bound" state -- matches this renderer's
          *  existing off-screen-test convention exactly. Used by D3D12RenderTargetRenderer's/
          *  D3D12RenderTargetCubeRenderer's own UnbindAsRenderTarget(), mirroring
-         *  DirectX11Renderer::RestoreBackBufferRenderTargetEXT(). NOXNA. */
+         *  DirectX11Renderer::RestoreBackBufferRenderTargetEXT(). CNAEXT. */
         void RestoreBackBufferRenderTargetEXT();
-        /** @brief Whether an off-screen color target is currently bound (NOXNA diagnostics/tests). */
+        /** @brief Whether an off-screen color target is currently bound (CNAEXT diagnostics/tests). */
         [[nodiscard]] bool HasBoundColorTargetEXT() const { return boundColorResource_ != nullptr; }
-        /** @brief The currently bound off-screen color resource, or nullptr (NOXNA --
+        /** @brief The currently bound off-screen color resource, or nullptr (CNAEXT --
          *  D3D12SpriteBatchRenderer needs this for its own resource-state transition). */
         [[nodiscard]] ID3D12Resource* GetBoundColorResourceEXT() const { return boundColorResource_; }
-        /** @brief The currently bound off-screen color target's RTV handle (NOXNA). */
+        /** @brief The currently bound off-screen color target's RTV handle (CNAEXT). */
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetBoundColorRtvEXT() const { return boundColorRtv_; }
-        /** @brief The currently bound off-screen color target's DXGI_FORMAT (NOXNA -- PSO creation
+        /** @brief The currently bound off-screen color target's DXGI_FORMAT (CNAEXT -- PSO creation
          *  bakes RTV format in, D3D12SpriteBatchRenderer's own PSO needs this). */
         [[nodiscard]] DXGI_FORMAT GetBoundColorFormatEXT() const { return boundColorFormat_; }
-        /** @brief The currently bound off-screen color target's width/height in pixels (NOXNA --
+        /** @brief The currently bound off-screen color target's width/height in pixels (CNAEXT --
          *  D3D12SpriteBatchRenderer uses this as sprite2d's ViewportSize, and for the D3D12_VIEWPORT/
          *  D3D12_RECT it must set up itself, exactly mirroring how DrawPrimitivesExImpl does it). */
         [[nodiscard]] int GetBoundColorWidthEXT() const { return boundColorWidth_; }
         [[nodiscard]] int GetBoundColorHeightEXT() const { return boundColorHeight_; } ///< @copydoc GetBoundColorWidthEXT
-        /** @brief The shared root-signature cache (NOXNA -- D3D12SpriteBatchRenderer reuses the
+        /** @brief The shared root-signature cache (CNAEXT -- D3D12SpriteBatchRenderer reuses the
          *  (1,1,1) shape already established by alpha_test3d, same binding-slot layout sprite2d
          *  needs: 1 CBV @ b0, 1 SRV @ t0, 1 static sampler @ s0). */
         [[nodiscard]] D3D12RootSignatureCache& GetRootSignatureCacheEXT() { return rootSigCache_; }
 
-        /** @brief DX-120 NOXNA: sets/clears the currently-active occlusion query heap (slot 0)
+        /** @brief DX-120 CNAEXT: sets/clears the currently-active occlusion query heap (slot 0)
          *  that every draw-recording method (DrawColoredPrimitives/DrawIndexedColoredPrimitives/
          *  DrawPrimitivesExImpl/DrawInstancedPrimitivesEx) brackets its own single command-list
          *  recording with (BeginQuery right after Reset(), EndQuery right before Close()) -- a

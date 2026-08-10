@@ -18,11 +18,11 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief Describes a vertex with position, normal, tangent, and one texture coordinate --
      * the layout normal-mapped (PBR) rendering needs to build a per-pixel tangent-space basis.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. Real XNA predates the PBR/normal-mapping
+     * @note CNAEXT — not part of the XNA 4.0 API. Real XNA predates the PBR/normal-mapping
      * content pipeline this describes. Mirrors VertexPositionNormalTextureSkinned's own
      * established precedent for a CNA-original vertex format (plan_cnj.md CNB-57, Phase 13A).
      */
-    NOXNA struct VertexPositionNormalTangentTexture : public IVertexType
+    CNAEXT struct VertexPositionNormalTangentTexture : public IVertexType
     {
         /** @brief Position of the vertex in object space. */
         Microsoft::Xna::Framework::Vector3 Position;

@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Virtual destructor. */
-        NOXNA virtual ~IEffectFog() = default;
+        CNAEXT virtual ~IEffectFog() = default;
 
         /**
          * @brief Gets the fog color.

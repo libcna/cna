@@ -16,14 +16,14 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Constructs a default bone. */
-        NOXNA ModelBone() = default;
+        CNAEXT ModelBone() = default;
 
         /**
          * @brief Constructs a bone with the given index and name.
          * @param index The index of this bone in the model's Bones collection.
          * @param name The name of this bone.
          */
-        NOXNA ModelBone(int index, std::string name);
+        CNAEXT ModelBone(int index, std::string name);
 
         /**
          * @brief Gets the name of this bone.
@@ -65,7 +65,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Adds a child bone to this bone.
          * @param child Pointer to the child ModelBone to add.
          */
-        NOXNA void AddChild(ModelBone* child);
+        CNAEXT void AddChild(ModelBone* child);
 
     private:
         std::string name_;

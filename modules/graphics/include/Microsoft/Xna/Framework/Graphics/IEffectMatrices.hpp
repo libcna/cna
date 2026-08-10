@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Virtual destructor. */
-        NOXNA virtual ~IEffectMatrices() = default;
+        CNAEXT virtual ~IEffectMatrices() = default;
 
         /**
          * @brief Gets the projection matrix.

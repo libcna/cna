@@ -41,7 +41,7 @@ namespace CNA::Internal::Renderers::Diligent
     // just that header without needing this file's DiligentCore include path (DILIGENT-57).
 
     /**
-     * @brief NOXNA. Converts XNA's `RasterizerState.DepthBias` (a small float, "r" units) into the
+     * @brief CNAEXT. Converts XNA's `RasterizerState.DepthBias` (a small float, "r" units) into the
      * raw `Int32` units `Dg::RasterizerStateDesc::DepthBias` stores, exactly as
      * `DiligentRenderer::ApplyRasterizerState()` uses it -- exposed as a free function
      * (`DILIGENT-3`'s own established reason for doing this: testable with no GPU present).
@@ -54,10 +54,10 @@ namespace CNA::Internal::Renderers::Diligent
      * @param depthBias XNA-style depth bias value.
      * @return The raw Diligent `DepthBias` unit, clamped to `[INT32_MIN, INT32_MAX]`.
      */
-    NOXNA [[nodiscard]] std::int32_t ComputeDiligentDepthBiasRawUnits(float depthBias);
+    CNAEXT [[nodiscard]] std::int32_t ComputeDiligentDepthBiasRawUnits(float depthBias);
 
     /**
-     * @brief NOXNA. Decides `SupportsCapability()`'s answer from already-queried device facts,
+     * @brief CNAEXT. Decides `SupportsCapability()`'s answer from already-queried device facts,
      * exposed as a free function so the decision logic itself is testable with no GPU present
      * (`DILIGENT-3`'s own established reason for doing this) -- `DiligentRenderer`'s own
      * `SupportsCapability()` is a thin wrapper that fetches @p features /
@@ -70,7 +70,7 @@ namespace CNA::Internal::Renderers::Diligent
      *                              formats CNA render targets/back buffers actually use.
      * @return True if @p capability is genuinely usable given these facts.
      */
-    NOXNA [[nodiscard]] bool EvaluateCapability(CNA::GraphicsCapability capability,
+    CNAEXT [[nodiscard]] bool EvaluateCapability(CNA::GraphicsCapability capability,
                                                 const Dg::DeviceFeatures& features,
                                                 Dg::Uint8 maxAnisotropy, bool multiSampleSupported);
 
@@ -153,8 +153,8 @@ namespace CNA::Internal::Renderers::Diligent
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. Returns the shader resource view used when this texture is sampled. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
+        /** @brief CNAEXT. Returns the shader resource view used when this texture is sampled. */
+        CNAEXT [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
 
     private:
         DiligentRenderer& owner_;
@@ -223,8 +223,8 @@ namespace CNA::Internal::Renderers::Diligent
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. Returns the shader resource view used when this cube map is sampled. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
+        /** @brief CNAEXT. Returns the shader resource view used when this cube map is sampled. */
+        CNAEXT [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
 
     private:
         DiligentRenderer& owner_;
@@ -291,8 +291,8 @@ namespace CNA::Internal::Renderers::Diligent
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. Returns the shader resource view used when this volume is sampled. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const { return srv_; }
+        /** @brief CNAEXT. Returns the shader resource view used when this volume is sampled. */
+        CNAEXT [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const { return srv_; }
 
     private:
         DiligentRenderer& owner_;
@@ -394,8 +394,8 @@ namespace CNA::Internal::Renderers::Diligent
             return appliedMultiSampleCount_ > 1 ? appliedMultiSampleCount_ : 0;
         }
 
-        /** @brief NOXNA. Returns the Diligent-native sample count (always >= 1, unlike `GetMultiSampleCount()`). */
-        NOXNA [[nodiscard]] int GetDiligentSampleCount() const { return appliedMultiSampleCount_; }
+        /** @brief CNAEXT. Returns the Diligent-native sample count (always >= 1, unlike `GetMultiSampleCount()`). */
+        CNAEXT [[nodiscard]] int GetDiligentSampleCount() const { return appliedMultiSampleCount_; }
 
         /**
          * @brief Reports whether this target really has depth-stencil storage.
@@ -405,16 +405,16 @@ namespace CNA::Internal::Renderers::Diligent
          */
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override;
 
-        /** @brief NOXNA. Returns the view drawn into when this target is bound. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetRenderTargetView() const { return rtv_; }
-        /** @brief NOXNA. Returns the depth-stencil view, or nullptr when none was allocated. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetDepthStencilView() const { return dsv_; }
-        /** @brief NOXNA. Returns the shader resource view used when this target is sampled. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
-        /** @brief NOXNA. Returns the colour texture's pixel format. */
-        NOXNA [[nodiscard]] Dg::TEXTURE_FORMAT GetColorFormat() const;
-        /** @brief NOXNA. Returns the depth-stencil format, or `TEX_FORMAT_UNKNOWN` when there is none. */
-        NOXNA [[nodiscard]] Dg::TEXTURE_FORMAT GetDepthStencilFormat() const;
+        /** @brief CNAEXT. Returns the view drawn into when this target is bound. */
+        CNAEXT [[nodiscard]] Dg::ITextureView* GetRenderTargetView() const { return rtv_; }
+        /** @brief CNAEXT. Returns the depth-stencil view, or nullptr when none was allocated. */
+        CNAEXT [[nodiscard]] Dg::ITextureView* GetDepthStencilView() const { return dsv_; }
+        /** @brief CNAEXT. Returns the shader resource view used when this target is sampled. */
+        CNAEXT [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
+        /** @brief CNAEXT. Returns the colour texture's pixel format. */
+        CNAEXT [[nodiscard]] Dg::TEXTURE_FORMAT GetColorFormat() const;
+        /** @brief CNAEXT. Returns the depth-stencil format, or `TEX_FORMAT_UNKNOWN` when there is none. */
+        CNAEXT [[nodiscard]] Dg::TEXTURE_FORMAT GetDepthStencilFormat() const;
 
     private:
         DiligentRenderer& owner_;
@@ -504,19 +504,19 @@ namespace CNA::Internal::Renderers::Diligent
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief NOXNA. Returns the render-target view for face @p face (0..5). */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetFaceRenderTargetView(int face) const
+        /** @brief CNAEXT. Returns the render-target view for face @p face (0..5). */
+        CNAEXT [[nodiscard]] Dg::ITextureView* GetFaceRenderTargetView(int face) const
         {
             return faceRtv_[face].RawPtr();
         }
-        /** @brief NOXNA. Returns the depth-stencil view, or nullptr when none was allocated. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetDepthStencilView() const { return dsv_; }
-        /** @brief NOXNA. Returns the shader resource view used when this cube map is sampled. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
-        /** @brief NOXNA. Returns the colour texture's pixel format. */
-        NOXNA [[nodiscard]] Dg::TEXTURE_FORMAT GetColorFormat() const;
-        /** @brief NOXNA. Returns the depth-stencil format, or `TEX_FORMAT_UNKNOWN` when there is none. */
-        NOXNA [[nodiscard]] Dg::TEXTURE_FORMAT GetDepthStencilFormat() const;
+        /** @brief CNAEXT. Returns the depth-stencil view, or nullptr when none was allocated. */
+        CNAEXT [[nodiscard]] Dg::ITextureView* GetDepthStencilView() const { return dsv_; }
+        /** @brief CNAEXT. Returns the shader resource view used when this cube map is sampled. */
+        CNAEXT [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
+        /** @brief CNAEXT. Returns the colour texture's pixel format. */
+        CNAEXT [[nodiscard]] Dg::TEXTURE_FORMAT GetColorFormat() const;
+        /** @brief CNAEXT. Returns the depth-stencil format, or `TEX_FORMAT_UNKNOWN` when there is none. */
+        CNAEXT [[nodiscard]] Dg::TEXTURE_FORMAT GetDepthStencilFormat() const;
 
     private:
         DiligentRenderer& owner_;
@@ -579,20 +579,20 @@ namespace CNA::Internal::Renderers::Diligent
         /** @brief Returns the number of vertices currently stored. */
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
-        /** @brief NOXNA. Returns the size of one vertex in bytes, or 0 before the first upload. */
-        NOXNA [[nodiscard]] std::size_t GetStride() const { return stride_; }
-        /** @brief NOXNA. Returns the underlying Diligent buffer, or nullptr before the first upload. */
-        NOXNA [[nodiscard]] Dg::IBuffer* GetBuffer() const { return buffer_; }
+        /** @brief CNAEXT. Returns the size of one vertex in bytes, or 0 before the first upload. */
+        CNAEXT [[nodiscard]] std::size_t GetStride() const { return stride_; }
+        /** @brief CNAEXT. Returns the underlying Diligent buffer, or nullptr before the first upload. */
+        CNAEXT [[nodiscard]] Dg::IBuffer* GetBuffer() const { return buffer_; }
 
         /**
-         * @brief NOXNA. REMED-GFX-DECL-GUARD: the declaration this buffer last had propagated.
+         * @brief CNAEXT. REMED-GFX-DECL-GUARD: the declaration this buffer last had propagated.
          *
          * Empty until `SetVertexDeclaration` runs, which is exactly the case the draw-time guard
          * treats as "nothing was declared, so there is nothing to contradict".
          *
          * @return The remembered elements and stride.
          */
-        NOXNA [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout&
+        CNAEXT [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout&
         GetDeclarationEXT() const { return declaration_; }
 
     private:
@@ -664,8 +664,8 @@ namespace CNA::Internal::Renderers::Diligent
         /** @brief Returns true when this buffer holds 32-bit indices. */
         [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
-        /** @brief NOXNA. Returns the underlying Diligent buffer, or nullptr before the first upload. */
-        NOXNA [[nodiscard]] Dg::IBuffer* GetBuffer() const { return buffer_; }
+        /** @brief CNAEXT. Returns the underlying Diligent buffer, or nullptr before the first upload. */
+        CNAEXT [[nodiscard]] Dg::IBuffer* GetBuffer() const { return buffer_; }
 
     private:
         void Upload(const void* data, int indexCount, std::size_t elementSize,
@@ -1368,8 +1368,8 @@ namespace CNA::Internal::Renderers::Diligent
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
                                        const GpuDrawParams& params) override;
 
-        /** @brief NOXNA. Returns the device type this renderer actually created. */
-        NOXNA [[nodiscard]] DiligentDeviceType GetDeviceType() const { return deviceType_; }
+        /** @brief CNAEXT. Returns the device type this renderer actually created. */
+        CNAEXT [[nodiscard]] DiligentDeviceType GetDeviceType() const { return deviceType_; }
 
     private:
         /** @brief Built-in shader programs, selected by vertex stride and draw parameters. */
@@ -1555,7 +1555,7 @@ namespace CNA::Internal::Renderers::Diligent
         [[nodiscard]] Dg::ITextureView* GetCurrentDepthStencilView() const;
         [[nodiscard]] Dg::TEXTURE_FORMAT CurrentColorFormat() const;
         [[nodiscard]] Dg::TEXTURE_FORMAT CurrentDepthStencilFormat() const;
-        /// NOXNA. Picks the largest sample count <= @p requested that @p colorFormat (and
+        /// CNAEXT. Picks the largest sample count <= @p requested that @p colorFormat (and
         /// @p depthFormat, when it is not `TEX_FORMAT_UNKNOWN`) reports support for via
         /// `GetTextureFormatInfoExt()`; 1 (no MSAA) if @p requested is <= 1 or the device supports
         /// nothing higher. Shared by the back buffer (`ApplyMultiSampleCount()`/the constructor,
@@ -1565,20 +1565,20 @@ namespace CNA::Internal::Renderers::Diligent
         /// caused a real OpenGL `RenderTarget2D` MSAA-resolve failure before `DILIGENT-62`).
         [[nodiscard]] int ClampSampleCount(int requested, Dg::TEXTURE_FORMAT colorFormat,
                                            Dg::TEXTURE_FORMAT depthFormat = Dg::TEX_FORMAT_UNKNOWN) const;
-        /// NOXNA. The sample count a pipeline drawing into whatever is currently bound must be
+        /// CNAEXT. The sample count a pipeline drawing into whatever is currently bound must be
         /// created with: 1 for a cube-target face (no cube MSAA yet), a render target's own applied
         /// count, or the back buffer's `sampleCount_`.
         [[nodiscard]] int CurrentSampleCount() const;
-        /// NOXNA. (Re)allocates `msaaBackBufferColor_`/`msaaBackBufferDepth_` to the current physical
+        /// CNAEXT. (Re)allocates `msaaBackBufferColor_`/`msaaBackBufferDepth_` to the current physical
         /// size when `sampleCount_ > 1`, or releases them when it is not. Called after the sample
         /// count changes (`ApplyMultiSampleCount()`) and after every swap chain resize
         /// (`SyncSwapChainSize()`), since both invalidate a texture sized to the old dimensions.
         void RecreateMsaaBackBufferTargets();
-        /// NOXNA. Resolves `msaaBackBufferColor_` into the swap chain's current back buffer texture
+        /// CNAEXT. Resolves `msaaBackBufferColor_` into the swap chain's current back buffer texture
         /// when `sampleCount_ > 1`; a no-op otherwise. Shared by `Present()` (so the presented image
         /// is resolved) and `ReadBackbuffer()` (so a mid-frame readback is too).
         void ResolveMsaaBackBufferIfNeeded();
-        /// NOXNA. Resolves mip level 0, array slice 0 of a multisampled @p src into a single-sampled
+        /// CNAEXT. Resolves mip level 0, array slice 0 of a multisampled @p src into a single-sampled
         /// @p dst of the same dimensions and format. Shared by `ResolveMsaaBackBufferIfNeeded()` and
         /// every `DiligentRenderTargetRenderer` with a `resolveTexture_`.
         void ResolveTextureSubresource(Dg::ITexture* src, Dg::ITexture* dst);

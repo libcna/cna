@@ -165,6 +165,6 @@ namespace Microsoft::Xna::Framework::Audio
 
         // Tests need to inspect fireAndForget_'s size and backdate entries to exercise the sweep
         // logic's time-based branches without a real-time wait.
-        NOXNA friend struct SoundBankTestAccess;
+        CNAEXT friend struct SoundBankTestAccess;
     };
 }

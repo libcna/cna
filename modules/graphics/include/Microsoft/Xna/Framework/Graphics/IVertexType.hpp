@@ -12,7 +12,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Virtual destructor. */
-        NOXNA virtual ~IVertexType() = default;
+        CNAEXT virtual ~IVertexType() = default;
 
         /** @brief Returns the vertex declaration describing the layout of this vertex type. */
         [[nodiscard]] virtual const VertexDeclaration& getVertexDeclarationProperty() const = 0;

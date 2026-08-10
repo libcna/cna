@@ -91,11 +91,11 @@ namespace Microsoft::Xna::Framework::Content
         /** @brief FNA's `ContentReader.AssetName` property. */
         [[nodiscard]] const std::string& getAssetNameProperty() const { return assetName_; }
 
-        /** @brief NOXNA diagnostic accessor for FNA's `internal int version` field. */
-        NOXNA [[nodiscard]] int getVersionProperty() const { return version_; }
+        /** @brief CNAEXT diagnostic accessor for FNA's `internal int version` field. */
+        CNAEXT [[nodiscard]] int getVersionProperty() const { return version_; }
 
-        /** @brief NOXNA diagnostic accessor for FNA's `internal char platform` field. */
-        NOXNA [[nodiscard]] char getPlatformProperty() const { return platform_; }
+        /** @brief CNAEXT diagnostic accessor for FNA's `internal char platform` field. */
+        CNAEXT [[nodiscard]] char getPlatformProperty() const { return platform_; }
 
         // -- Public Read Methods (FNA's own "Public Read Methods" region) --
 
@@ -282,7 +282,7 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] BoundingSphere ReadBoundingSphere();
 
         /**
-         * @brief NOXNA bounds check for a collection reader's (`ArrayReader<T>`/`ListReader<T>`/
+         * @brief CNAEXT bounds check for a collection reader's (`ArrayReader<T>`/`ListReader<T>`/
          *        `DictionaryReader<TKey,TValue>`) declared element count against
          *        `XnbReadLimits::maxCollectionElementCount` (plan_xnb.md XNB-43), called before
          *        any collection allocation/reservation is attempted -- a corrupt or adversarial
@@ -297,10 +297,10 @@ namespace Microsoft::Xna::Framework::Content
          * @param readerName Canonical reader name, used only for the exception message.
          * @throws ContentLoadException if @p count is negative or exceeds the configured limit.
          */
-        NOXNA void CheckCollectionElementCount(int64_t count, const std::string& readerName) const;
+        CNAEXT void CheckCollectionElementCount(int64_t count, const std::string& readerName) const;
 
         /**
-         * @brief NOXNA bounds check for a decoded pixel/voxel buffer's byte size (e.g.
+         * @brief CNAEXT bounds check for a decoded pixel/voxel buffer's byte size (e.g.
          *        `width * height * 4` for an uncompressed `Texture2D`) against
          *        `XnbReadLimits::maxDecompressedSize` (plan_xnb.md XNB-43), called before any
          *        texture-sized allocation is attempted.
@@ -318,10 +318,10 @@ namespace Microsoft::Xna::Framework::Content
          * @param readerName Canonical reader name, used only for the exception message.
          * @throws ContentLoadException if @p byteSize is negative or exceeds the configured limit.
          */
-        NOXNA void CheckDecodedByteSize(int64_t byteSize, const std::string& readerName) const;
+        CNAEXT void CheckDecodedByteSize(int64_t byteSize, const std::string& readerName) const;
 
         /**
-         * @brief NOXNA hardened counterpart of `BinaryReader::ReadBytes(int)` for `.xnb` readers
+         * @brief CNAEXT hardened counterpart of `BinaryReader::ReadBytes(int)` for `.xnb` readers
          *        that read a declared-length raw byte blob (texture pixel data, audio data,
          *        vertex/index buffer data) and require getting back *exactly* that many bytes
          *        (plan_xnb.md XNB-43).
@@ -339,7 +339,7 @@ namespace Microsoft::Xna::Framework::Content
          * @throws ContentLoadException if @p count is negative.
          * @throws System::IO::EndOfStreamException if fewer than @p count bytes were available.
          */
-        NOXNA [[nodiscard]] std::vector<uint8_t> ReadBytesExactOrThrow(int32_t count, const std::string& readerName);
+        CNAEXT [[nodiscard]] std::vector<uint8_t> ReadBytesExactOrThrow(int32_t count, const std::string& readerName);
 
     private:
         /**

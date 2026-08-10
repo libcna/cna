@@ -37,7 +37,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         void Dispose() override;
 
         /** @brief Creates a FriendCollection for CNA internal use. */
-        NOXNA static FriendCollection CreateInternal(std::vector<FriendGamer*> friends);
+        CNAEXT static FriendCollection CreateInternal(std::vector<FriendGamer*> friends);
 
     private:
         explicit FriendCollection(std::vector<FriendGamer*> friends);

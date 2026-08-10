@@ -20,21 +20,21 @@ namespace Microsoft::Xna::Framework::Input
      * process-lifetime singletons (each getXProperty() below constructs its SDL cursor on first
      * access, matching MonoGame's static-constructor-triggered lazy initialization).
      *
-     * @note NOXNA — this is a MonoGame-derived CNA extension. No MouseCursor type exists
+     * @note CNAEXT — this is a MonoGame-derived CNA extension. No MouseCursor type exists
      * in XNA 4.0 or FNA.
      */
-    NOXNA class MouseCursor : public System::IDisposable
+    CNAEXT class MouseCursor : public System::IDisposable
     {
     public:
         /** @brief Creates a default Arrow cursor. */
-        NOXNA MouseCursor();
+        CNAEXT MouseCursor();
 
         /**
          * @brief Creates a cursor wrapping the given SDL cursor.
          * @param sdlCursor The SDL cursor to wrap.
          * @param owning If true, this object takes ownership of the SDL cursor.
          */
-        NOXNA explicit MouseCursor(SDL_Cursor* sdlCursor, bool owning = false);
+        CNAEXT explicit MouseCursor(SDL_Cursor* sdlCursor, bool owning = false);
 
         /**
          * @brief Creates a cursor from the specified texture.
@@ -43,7 +43,7 @@ namespace Microsoft::Xna::Framework::Input
          * @param originY Y coordinate of the image that will be used for the mouse position (the cursor's hot spot).
          * @return A new MouseCursor built from the texture's pixels.
          */
-        NOXNA static MouseCursor FromTexture2D(const Graphics::Texture2D& texture, int originX, int originY);
+        CNAEXT static MouseCursor FromTexture2D(const Graphics::Texture2D& texture, int originX, int originY);
 
         MouseCursor(const MouseCursor&)            = delete;
         MouseCursor& operator=(const MouseCursor&) = delete;
@@ -63,74 +63,74 @@ namespace Microsoft::Xna::Framework::Input
          *       must not free the SDL cursor out from under every other user. Do not `std::move`
          *       a stock-cursor reference either; obtain and use it in place.
          */
-        NOXNA void Dispose() override;
+        CNAEXT void Dispose() override;
 
         /**
          * @brief Returns the underlying SDL_Cursor pointer (not owned by the caller).
          * @return The SDL_Cursor pointer.
          */
-        NOXNA [[nodiscard]] SDL_Cursor* GetSDLCursor() const { return sdlCursor_; }
+        CNAEXT [[nodiscard]] SDL_Cursor* GetSDLCursor() const { return sdlCursor_; }
 
         /**
          * @brief Gets the default arrow cursor.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getArrowProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getArrowProperty();
         /**
          * @brief Gets the crosshair ("+") cursor.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getCrosshairProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getCrosshairProperty();
         /**
          * @brief Gets the hand cursor, usually used for web links.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getHandProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getHandProperty();
         /**
          * @brief Gets the cursor that appears when the mouse is over text editing regions.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getIBeamProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getIBeamProperty();
         /**
          * @brief Gets the cursor that points that something is invalid, usually a cross.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getNoProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getNoProperty();
         /**
          * @brief Gets the size-all cursor which points in all directions.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getSizeAllProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getSizeAllProperty();
         /**
          * @brief Gets the northeast/southwest ("/") cursor.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getSizeNESWProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getSizeNESWProperty();
         /**
          * @brief Gets the vertical north/south ("|") cursor.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getSizeNSProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getSizeNSProperty();
         /**
          * @brief Gets the northwest/southeast ("\") cursor.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getSizeNWSEProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getSizeNWSEProperty();
         /**
          * @brief Gets the horizontal west/east ("-") cursor.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getSizeWEProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getSizeWEProperty();
         /**
          * @brief Gets the waiting cursor that appears while the application/system is busy.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getWaitProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getWaitProperty();
         /**
          * @brief Gets the cross between Arrow and Wait cursors.
          * @return Reference to the shared stock cursor instance.
          */
-        NOXNA [[nodiscard]] static MouseCursor& getWaitArrowProperty();
+        CNAEXT [[nodiscard]] static MouseCursor& getWaitArrowProperty();
 
     private:
         SDL_Cursor* sdlCursor_        = nullptr;
@@ -143,6 +143,6 @@ namespace Microsoft::Xna::Framework::Input
 
         // Takes the SDL_SystemCursor value as a plain int so the enum stays out of this public header
         // (the .cpp casts it back). id values come from SDL_SYSTEM_CURSOR_* in MouseCursor.cpp.
-        NOXNA static MouseCursor MakeSystem(int systemCursorId);
+        CNAEXT static MouseCursor MakeSystem(int systemCursorId);
     };
 }

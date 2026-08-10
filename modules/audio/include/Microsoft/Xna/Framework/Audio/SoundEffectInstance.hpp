@@ -30,10 +30,10 @@ namespace Microsoft::Xna::Framework::Audio
         friend class SoundEffect;
         // Cue::Play() wires real per-track XACT filter data into INTERNAL_applyXactTrackFilter
         // (P9-XACT-011) -- see that method's declaration below.
-        NOXNA friend class Cue;
+        CNAEXT friend class Cue;
         // Tests need read access to the underlying MIX_Track handle to verify Play() idempotency
         // (that a repeated call while already playing doesn't restart the track).
-        NOXNA friend struct SoundEffectInstanceTestAccess;
+        CNAEXT friend struct SoundEffectInstanceTestAccess;
 
     protected:
         /** @brief Default constructor for use by DynamicSoundEffectInstance. */
@@ -174,7 +174,7 @@ namespace Microsoft::Xna::Framework::Audio
         // own format (sample rate, needed to convert `frequencyHz`) is a device-level property
         // available as soon as the shared mixer exists, independent of whether this particular
         // instance has a track yet.
-        NOXNA void INTERNAL_applyXactTrackFilter(uint8_t filterType, float frequencyHz, uint8_t qfactorRaw);
+        CNAEXT void INTERNAL_applyXactTrackFilter(uint8_t filterType, float frequencyHz, uint8_t qfactorRaw);
 
         // P11-XACT-003: same role as INTERNAL_applyXactTrackFilter above (establishes this
         // filter's base frequency/Q; itself only ever called once per fresh Play()), but for a
@@ -185,7 +185,7 @@ namespace Microsoft::Xna::Framework::Audio
         // `rngQFactor = 1.0f / (...)`, assigned directly to `activeWave.baseQFactor` with no
         // further transformation downstream) -- so this method must NOT take another reciprocal.
         // P14-ORDER-002: order-independent of Play(), same as INTERNAL_applyXactTrackFilter above.
-        NOXNA void INTERNAL_applyEffectVariationFilter(uint8_t filterType, float frequencyHz, float oneOverQ);
+        CNAEXT void INTERNAL_applyEffectVariationFilter(uint8_t filterType, float frequencyHz, float oneOverQ);
 
         // P10-FILTER-002/003: continuous per-tick RPC targeting for filter frequency/Q, called
         // every tick from Cue::ReconcileState() (the same continuous-tick infra P9-XACT-016
@@ -207,7 +207,7 @@ namespace Microsoft::Xna::Framework::Audio
         // independent of Play() too, same as the base filter above -- a non-`None` filter `kind`
         // already implies a base filter was established (which itself requires the mixer to
         // already exist), so this is safe to apply regardless of whether a track exists yet.
-        NOXNA void INTERNAL_applyRpcFilterOverride(float rpcFrequencyHz, float rpcQFactor);
+        CNAEXT void INTERNAL_applyRpcFilterOverride(float rpcFrequencyHz, float rpcQFactor);
 
         // P11-PAN-001 (RFC-1): lazily allocates filterState_ if this is the first DSP-affecting
         // call for this instance (matching the existing INTERNAL_apply*Filter lazy-allocation
@@ -224,8 +224,8 @@ namespace Microsoft::Xna::Framework::Audio
         // sample rate. Both match FAudio's exact formulas (FACT_internal.c,
         // FACT_INTERNAL_CalculateFilterFrequency and the inline `1.0f / (qfactor / 3.0f)` at the
         // SOUND_FLAG_COMPLEX track-init site).
-        NOXNA static float INTERNAL_calculateFilterCutoff(float frequencyHz, float sampleRate);
-        NOXNA static float INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw);
+        CNAEXT static float INTERNAL_calculateFilterCutoff(float frequencyHz, float sampleRate);
+        CNAEXT static float INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw);
 
         // P12-PITCH-001: converts the XNA `Pitch` property (range [-1,1], "-1 octave to +1
         // octave") to the playback-rate ratio SDL3_mixer's `MIX_SetTrackFrequencyRatio` expects.
@@ -235,14 +235,14 @@ namespace Microsoft::Xna::Framework::Audio
         // so it's independently unit-testable and has exactly one implementation shared by
         // setPitchProperty(), Play()/Apply3D()'s ApplyTrackProperties(), and
         // SoundEffect::Play(volume,pitch,pan)'s fire-and-forget path (a friend of this class).
-        NOXNA static float INTERNAL_calculatePitchRatio(float pitch);
+        CNAEXT static float INTERNAL_calculatePitchRatio(float pitch);
 
         // P9-3D-010: computes the listener's own world-space right axis from Forward/Up
         // (Cross(Forward, Up), normalized; falls back to Vector3::Right if degenerate), split out
         // so `Apply3D`'s orientation-aware pan projection is independently unit-testable without
         // a real SoundEffectInstance/track. Used by `Apply3D` to project the emitter's relative
         // position before calling `INTERNAL_calculatePan` below.
-        NOXNA static Microsoft::Xna::Framework::Vector3 INTERNAL_calculateListenerRight(
+        CNAEXT static Microsoft::Xna::Framework::Vector3 INTERNAL_calculateListenerRight(
             const Microsoft::Xna::Framework::Vector3& forward,
             const Microsoft::Xna::Framework::Vector3& up);
 
@@ -254,7 +254,7 @@ namespace Microsoft::Xna::Framework::Audio
         // the emitter's position projected onto the listener's own Forward/Up-derived right axis
         // (computed by the caller, `Apply3D`, via `INTERNAL_calculateListenerRight` above), not
         // raw world-space X.
-        NOXNA static float INTERNAL_calculatePan(float rightDisplacement, float distance);
+        CNAEXT static float INTERNAL_calculatePan(float rightDisplacement, float distance);
 
         // P11-PAN-001 (RFC-1): computes FNA's exact 4-coefficient stereo crossfeed pan matrix
         // for a 2-source-channel/2-destination-channel track (SoundEffectInstance.cs's
@@ -266,7 +266,7 @@ namespace Microsoft::Xna::Framework::Audio
         // uses the same left-speaker-first, source-major layout. This same matrix also produces
         // FNA's separate mono-source formula exactly when fed a duplicated-mono signal
         // (L == R), so no separate mono branch is needed by the caller.
-        NOXNA static void INTERNAL_calculatePanCrossfeedMatrix(
+        CNAEXT static void INTERNAL_calculatePanCrossfeedMatrix(
             float pan, float& ll, float& rl, float& lr, float& rr);
 
         // Test-only hook (SoundEffectInstanceTestAccess): runs this instance's filter state
@@ -310,10 +310,10 @@ namespace Microsoft::Xna::Framework::Audio
         SoundEffectInstance& operator=(const SoundEffectInstance&) = delete;
 
         /** @brief Move-constructs a SoundEffectInstance, transferring ownership of the audio track. */
-        NOXNA SoundEffectInstance(SoundEffectInstance&& other) noexcept;
+        CNAEXT SoundEffectInstance(SoundEffectInstance&& other) noexcept;
 
         /** @brief Move-assigns a SoundEffectInstance, transferring ownership of the audio track. */
-        NOXNA SoundEffectInstance& operator=(SoundEffectInstance&& other) noexcept;
+        CNAEXT SoundEffectInstance& operator=(SoundEffectInstance&& other) noexcept;
 
         /** @brief Starts or resumes playback of this instance. */
         virtual void Play();
@@ -385,7 +385,7 @@ namespace Microsoft::Xna::Framework::Audio
         void setVolumeProperty(const float& volume);
 
         /** @brief Sets the playback volume (move overload). */
-        NOXNA void setVolumeProperty(float&& volume);
+        CNAEXT void setVolumeProperty(float&& volume);
 
         /**
          * @brief Gets the stereo pan. Range [-1 (left), 1 (right)].
@@ -404,7 +404,7 @@ namespace Microsoft::Xna::Framework::Audio
         void setPanProperty(const float& pan);
 
         /** @brief Sets the stereo pan (move overload). */
-        NOXNA void setPanProperty(float&& pan);
+        CNAEXT void setPanProperty(float&& pan);
 
         /**
          * @brief Gets the pitch adjustment. Range [-1, 1].
@@ -421,7 +421,7 @@ namespace Microsoft::Xna::Framework::Audio
         void setPitchProperty(const float& pitch);
 
         /** @brief Sets the pitch adjustment (move overload). */
-        NOXNA void setPitchProperty(float&& pitch);
+        CNAEXT void setPitchProperty(float&& pitch);
 
         /**
          * @brief Gets whether the sound loops continuously.
@@ -439,7 +439,7 @@ namespace Microsoft::Xna::Framework::Audio
         virtual void setIsLoopedProperty(const bool& looped);
 
         /** @brief Sets whether the sound loops (move overload). */
-        NOXNA virtual void setIsLoopedProperty(bool&& looped);
+        CNAEXT virtual void setIsLoopedProperty(bool&& looped);
 
         /**
          * @brief Gets the current playback state.

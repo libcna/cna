@@ -270,7 +270,7 @@ TEST_F(DualTextureEffectDefaultsTest, CloneCopiesAllProperties)
 }
 
 // -----------------------------------------------------------------------
-// GetTypeName — NOXNA extension, reports the fully-qualified FNA type name.
+// GetTypeName — CNAEXT extension, reports the fully-qualified FNA type name.
 
 TEST_F(DualTextureEffectDefaultsTest, GetTypeNameReturnsFullyQualifiedName)
 {

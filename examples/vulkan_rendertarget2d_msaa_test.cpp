@@ -34,7 +34,7 @@
 //
 // Fixing GraphicsDeviceManager's device-reset plumbing generally is out of scope here (a
 // separate, large, not-yet-scoped architectural task, mirroring Task 896's precedent for a
-// similarly deep pre-existing gap) -- so this test instead uses a new, narrow, NOXNA test-only
+// similarly deep pre-existing gap) -- so this test instead uses a new, narrow, CNAEXT test-only
 // hook, GraphicsDevice::RecreateRendererForMultiSampleCount(), added specifically to unblock this
 // verification: it tears down and rebuilds the renderer (same window) with the requested
 // MultiSampleCount, called from Initialize() before any GPU resources exist yet.

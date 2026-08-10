@@ -63,22 +63,22 @@ namespace CNA::Internal::Renderers::Skia
         [[nodiscard]] sk_sp<SkImage> SnapshotMipLevelEXT(
             int level, SkiaSourceAlphaConvention alphaConvention) const override;
 
-        NOXNA [[nodiscard]] int MipLevelCountEXT() const noexcept override
+        CNAEXT [[nodiscard]] int MipLevelCountEXT() const noexcept override
         {
             if (compressedChain_) return compressedChain_->LevelCount();
             return mipChain_ ? mipChain_->LevelCount() : 0;
         }
-        NOXNA [[nodiscard]] const SkiaMipChain2D& MipChainEXT() const noexcept
+        CNAEXT [[nodiscard]] const SkiaMipChain2D& MipChainEXT() const noexcept
         {
             return *mipChain_;
         }
         /** Block-compressed counterpart of MipChainEXT(); only valid for Dxt1/Dxt3/Dxt5. */
-        NOXNA [[nodiscard]] const SkiaCompressedMipChain2D& CompressedMipChainEXT() const noexcept
+        CNAEXT [[nodiscard]] const SkiaCompressedMipChain2D& CompressedMipChainEXT() const noexcept
         {
             return *compressedChain_;
         }
-        NOXNA [[nodiscard]] std::uint64_t MipGenerationCountEXT(int level) const;
-        NOXNA [[nodiscard]] Microsoft::Xna::Framework::Graphics::SurfaceFormat FormatEXT() const
+        CNAEXT [[nodiscard]] std::uint64_t MipGenerationCountEXT(int level) const;
+        CNAEXT [[nodiscard]] Microsoft::Xna::Framework::Graphics::SurfaceFormat FormatEXT() const
             noexcept
         {
             return format_;

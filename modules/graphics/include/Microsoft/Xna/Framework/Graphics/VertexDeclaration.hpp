@@ -20,7 +20,7 @@ namespace Microsoft::Xna::Framework::Graphics
         VertexDeclaration() = default;
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Constructs a VertexDeclaration from an element list, computing stride automatically.

@@ -3,7 +3,7 @@
 // Task 899) correctly selects the MSAA-aware render pass when backbuffer MSAA is engaged.
 //
 // Direct port of vulkan_basiceffect_texture_enabled_test.cpp (Task 366) with backbuffer MSAA
-// forced via GraphicsDevice::RecreateRendererForMultiSampleCount(8) (the same NOXNA test-only hook
+// forced via GraphicsDevice::RecreateRendererForMultiSampleCount(8) (the same CNAEXT test-only hook
 // Task 878/879's MSAA test uses, since GraphicsDeviceManager.PreferMultiSampling never actually
 // reaches the Vulkan renderer -- Task 902).
 //

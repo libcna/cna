@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // PBR + skinning combo: default-value and getter/setter coverage for SkinnedPbrEffect, the new
-// NOXNA effect combining PbrEffect's own metallic-roughness BRDF with SkinnedEffect's own
+// CNAEXT effect combining PbrEffect's own metallic-roughness BRDF with SkinnedEffect's own
 // bone-transform API (no FNA/XNA equivalent to audit against -- real XNA predates PBR entirely).
 // See SkinnedPbrEffect.hpp's own doc comment for the design rationale.
 

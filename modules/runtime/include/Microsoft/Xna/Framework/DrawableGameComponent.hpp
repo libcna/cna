@@ -77,7 +77,7 @@ namespace Microsoft::Xna::Framework
          * @brief Returns the fully-qualified .NET type name of this class.
          * @return A const reference to the type name string.
          */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Initializes the component and loads content when a graphics device is available. */
         void Initialize() override;

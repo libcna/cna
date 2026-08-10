@@ -20,7 +20,7 @@ namespace CNA::Internal::Renderers::Llgl
     class LlglRenderer;
 
     /**
-     * @brief A 2D texture living in LLGL. NOXNA.
+     * @brief A 2D texture living in LLGL. CNAEXT.
      *
      * Backs `Microsoft::Xna::Framework::Graphics::Texture2D`. Pixels are always stored as RGBA8,
      * the format the shared texture layer hands every renderer.
@@ -121,7 +121,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief A cube texture living in LLGL. NOXNA.
+     * @brief A cube texture living in LLGL. CNAEXT.
      *
      * Backs `Microsoft::Xna::Framework::Graphics::TextureCube`. One `LLGL::TextureType::TextureCube`
      * resource with 6 array layers, one per face, in the project-wide face order (0=+X, 1=-X, 2=+Y,
@@ -182,7 +182,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief A volume (3D) texture living in LLGL. NOXNA.
+     * @brief A volume (3D) texture living in LLGL. CNAEXT.
      *
      * Backs `Microsoft::Xna::Framework::Graphics::Texture3D`. One `LLGL::TextureType::Texture3D`
      * resource with a real depth extent (not array layers). Pixels are always RGBA8, matching
@@ -241,7 +241,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief A vertex buffer living in LLGL. NOXNA.
+     * @brief A vertex buffer living in LLGL. CNAEXT.
      *
      * Uploads are real: the data reaches GPU memory and the vertex count round-trips. Drawing from
      * one is a 3D-pipeline operation, which this renderer does not implement yet -- see
@@ -335,7 +335,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief An index buffer living in LLGL. NOXNA.
+     * @brief An index buffer living in LLGL. CNAEXT.
      *
      * Like `LlglVertexBufferRenderer`, uploads are real; consuming one in a draw call belongs to the
      * not-yet-implemented 3D pipeline.
@@ -414,7 +414,7 @@ namespace CNA::Internal::Renderers::Llgl
     /**
      * @brief What `LlglRenderer::currentRenderTargetRenderer_` needs from whatever is
      * currently bound, regardless of whether that is a `RenderTarget2D` or one face of a
-     * `RenderTargetCube`. NOXNA.
+     * `RenderTargetCube`. CNAEXT.
      *
      * `QueueClear`/`QueueSpriteEXT`/`QueuePrimitives`/`GetActiveDrawRect` only ever need these
      * four things from the bound target -- this lets `currentRenderTargetRenderer_` point at
@@ -455,7 +455,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief An off-screen 2D render target living in LLGL. NOXNA.
+     * @brief An off-screen 2D render target living in LLGL. CNAEXT.
      *
      * Backs `Microsoft::Xna::Framework::Graphics::RenderTarget2D`. Owns a colour texture (and,
      * when requested, a depth/stencil texture) plus the `LLGL::RenderTarget` that binds them
@@ -603,7 +603,7 @@ namespace CNA::Internal::Renderers::Llgl
 
     /**
      * @brief One face of an `LlglRenderTargetCubeRenderer`, as seen by
-     * `LlglRenderer::currentRenderTargetRenderer_`. NOXNA.
+     * `LlglRenderer::currentRenderTargetRenderer_`. CNAEXT.
      *
      * A thin, non-owning view -- all 6 of these live as plain value members of the cube renderer
      * that owns the real LLGL resources; this class exists only so `currentRenderTargetRenderer_`
@@ -661,7 +661,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief An off-screen cube-map render target living in LLGL. NOXNA.
+     * @brief An off-screen cube-map render target living in LLGL. CNAEXT.
      *
      * Backs `Microsoft::Xna::Framework::Graphics::RenderTargetCube`. Owns ONE
      * `LLGL::TextureType::TextureCube` colour texture (`arrayLayers=6`, sampled as a whole cube
@@ -790,7 +790,7 @@ namespace CNA::Internal::Renderers::Llgl
 
     /**
      * @brief A multiple-render-target (MRT) bind, combining N independently-owned
-     * `RenderTarget2D`s into ONE `LLGL::RenderTarget` for the duration of the bind. NOXNA.
+     * `RenderTarget2D`s into ONE `LLGL::RenderTarget` for the duration of the bind. CNAEXT.
      *
      * Unlike `RenderTarget2D`/`RenderTargetCube`, which each own a real, explicit XNA-level C++
      * object (`RenderTarget2D`/`RenderTargetCube`) with its own construction/destruction lifetime,
@@ -858,7 +858,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief An occlusion query living in LLGL. NOXNA.
+     * @brief An occlusion query living in LLGL. CNAEXT.
      *
      * Backs `Microsoft::Xna::Framework::Graphics::OcclusionQuery`. `Begin()`/`End()` record
      * `LLGL::CommandBuffer::BeginQuery()`/`EndQuery()` into the owning renderer's deferred frame,
@@ -924,7 +924,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief A custom, hand-authored GLSL shader living in LLGL. NOXNA.
+     * @brief A custom, hand-authored GLSL shader living in LLGL. CNAEXT.
      *
      * Backs `Microsoft::Xna::Framework::Graphics::ShaderEffect`. Scoped to `SpriteBatch` draws
      * only (the same scope the project's native Vulkan renderer's own `VulkanEffectRenderer`
@@ -1034,7 +1034,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief Sprite rendering for `Microsoft::Xna::Framework::Graphics::SpriteBatch`. NOXNA.
+     * @brief Sprite rendering for `Microsoft::Xna::Framework::Graphics::SpriteBatch`. CNAEXT.
      *
      * Each `Draw` turns into six vertices appended to the owning renderer's frame, so sprites from
      * one Begin/End block reach the GPU in submission order together with the frame's clears.
@@ -1142,7 +1142,7 @@ namespace CNA::Internal::Renderers::Llgl
     };
 
     /**
-     * @brief CNA graphics renderer built on LLGL. NOXNA.
+     * @brief CNA graphics renderer built on LLGL. CNAEXT.
      *
      * Unlike the other renderers in this project, this one names no native graphics API: LLGL is
      * itself an abstraction layer, and the module it drives (OpenGL or Vulkan) is chosen when the
@@ -2334,7 +2334,7 @@ namespace CNA::Internal::Renderers::Llgl
         /// has. See AcquirePrimitiveSkinnedVertexShader() and shaders/skinned3d.vert.glsl.
         LLGL::PipelineLayout*       primitiveSkinnedLayout_ = nullptr;
         LLGL::Shader*               primitiveSkinnedFragmentShader_ = nullptr;
-        /// `SkinnedEffect.VertexColorEnabled` (LLGL-37, NOXNA extension property): a SEPARATE
+        /// `SkinnedEffect.VertexColorEnabled` (LLGL-37, CNAEXT extension property): a SEPARATE
         /// fragment shader reading the extra `vColor` varying, selected instead of
         /// `primitiveSkinnedFragmentShader_` only when the bound vertex layout carries a colour
         /// attribute (stride 56) -- see AcquirePrimitiveSkinnedVertexShader()'s own doc comment for

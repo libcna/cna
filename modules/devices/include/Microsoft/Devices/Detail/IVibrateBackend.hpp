@@ -18,7 +18,7 @@ namespace Microsoft::Devices::Detail
      * concepts that a single hardcoded SDL-haptic implementation previously
      * conflated: "the phone/device's own vibration motor" (what the strict
      * XNA `Start(TimeSpan)` targets) versus "any SDL haptic device"
-     * (a broader `NOXNA` concept — see `SdlHapticVibrateBackend`'s own doc
+     * (a broader `CNAEXT` concept — see `SdlHapticVibrateBackend`'s own doc
      * comment for why, on desktop, those two currently resolve to the same
      * underlying SDL API without contradicting this distinction). Making the
      * backend swappable also lets tests inject a fake implementation

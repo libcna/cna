@@ -85,7 +85,7 @@ class MyHeadlessTest : public Game
 };
 ```
 
-Key APIs on `HeadlessRenderer` (all `NOXNA`, not part of the XNA surface):
+Key APIs on `HeadlessRenderer` (all `CNAEXT`, not part of the XNA surface):
 
 - `GetStatistics()` / `GetLastFrameStatistics()` — cumulative and per-frame draw-call, primitive,
   clear, present, state-change, and resource-creation counters.

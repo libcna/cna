@@ -11,13 +11,13 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — a snapshot of a raw joystick's current axis/button/hat/trackball state.
+     * @brief CNAEXT — a snapshot of a raw joystick's current axis/button/hat/trackball state.
      *
      * Unlike `GamePadState`, values here are raw and unmapped: axis order, button numbering, and hat
      * count are whatever the hardware/driver reports, with no XNA-style semantic assignment
      * (LeftThumbstick, A button, …). Games that need mapped semantics should use `GamePad` instead.
      */
-    NOXNA struct JoystickStateEXT
+    CNAEXT struct JoystickStateEXT
     {
         /** @brief Raw axis values, in SDL's native range (-32768 to 32767), one per axis. */
         std::vector<std::int16_t> axes;

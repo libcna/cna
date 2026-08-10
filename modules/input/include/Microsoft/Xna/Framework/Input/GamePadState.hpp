@@ -37,7 +37,7 @@ namespace Microsoft::Xna::Framework::Input
          * (platform-layer use only), not part of the public XNA API.
          * @param value The new packet number.
          */
-        NOXNA void setPacketNumberProperty(int value);
+        CNAEXT void setPacketNumberProperty(int value);
 
         /**
          * @brief Returns a structure identifying which buttons on the controller are pressed.
@@ -64,7 +64,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] const GamePadTriggers& getTriggersProperty() const;
 
         /** @brief Constructs a disconnected state with all values at rest. */
-        NOXNA GamePadState();
+        CNAEXT GamePadState();
 
         /**
          * @brief Constructs a fully specified connected gamepad state.

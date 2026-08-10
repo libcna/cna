@@ -283,7 +283,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param friends  Whether this reader represents a friends-only leaderboard.
          * @return A new LeaderboardReader wrapping the given page.
          */
-        NOXNA static LeaderboardReader CreateInternal(
+        CNAEXT static LeaderboardReader CreateInternal(
             const LeaderboardIdentity& identity,
             int start,
             int size,

@@ -78,7 +78,7 @@ below, see `docs/graphics-renderer-feature-matrix.md` (Task 451, the authoritati
 and `AUDIT.md`'s own per-class FNA-vs-CNA rows (`AUDIT.md` lines ~110–1341); this table does not
 re-derive either, only summarizes and points to them. Legend matches the feature matrix: ✅ correct/
 verified · ⚠️ partial/emulated/known gap · ❌ known gap, not fixed · ⛔ BLOCKED (needs a
-project-owner decision) · N/A not applicable (e.g. a NOXNA class has no "FNA-compatible" axis).
+project-owner decision) · N/A not applicable (e.g. a CNAEXT class has no "FNA-compatible" axis).
 Every row below was checked against the real header/`.cpp` and its own `AUDIT.md` entry before
 being rated — not filled in from memory (see Task 482's own post-merge correction above for why
 that check matters).
@@ -98,7 +98,7 @@ that check matters).
 | `DualTextureEffect` | ✅ | ✅ | ✅ | ⚠️ | `VertexColorEnabled` missing on all 3 3D renderers (889) |
 | `EnvironmentMapEffect` | ✅ | ✅ | ✅ | ⚠️ | `DirectionalLight1`/`2` (890) and base-lerp alpha scaling (891) missing on Vulkan/Bgfx |
 | `SkinnedEffect` | ✅ | ✅ | ✅ | ⚠️ | `DirectionalLight1`/`2` (893), `SpecularColor`/`Power` (894), `WeightsPerVertex` GPU enforcement (895) missing on Vulkan/Bgfx |
-| `ShaderEffect` (NOXNA) | ✅ | ⚠️ | ✅ | N/A — not XNA API | Only EasyGL honors the documented "load from GLSL source" contract; Vulkan/Bgfx expect pre-compiled SPIR-V/binary despite the shared constructor signature |
+| `ShaderEffect` (CNAEXT) | ✅ | ⚠️ | ✅ | N/A — not XNA API | Only EasyGL honors the documented "load from GLSL source" contract; Vulkan/Bgfx expect pre-compiled SPIR-V/binary despite the shared constructor signature |
 | `BlendState` | ✅ | ✅ | ✅ | ⚠️ | Vulkan (868) and Bgfx (923) both closed 2026-07-09 with real per-`Blend`/`BlendFunction` mapping; Bgfx's alpha-factor-independence half is fixed in code (verified correct against bgfx's own decode logic) but could not be independently pixel-verified in this sandbox (a confirmed renderer/environment limitation, not a CNA defect); EasyGL/SDL_Renderer already correct |
 | `DepthStencilState` | ✅ | ✅ | ✅ | ⚠️ | Compare-op + full stencil ops real on Vulkan (870, fixed); `ReferenceStencil` also fixed on Vulkan (872, EasyGL/Bgfx still open); `ClearOptions::Stencil` gap is tracked under `GraphicsDevice` above (871) |
 | `RasterizerState` | ✅ | ✅ | ✅ | ⚠️ | One isolated Vulkan `DepthBias=-1e6` sub-case failure, unresolved; `FillMode::WireFrame` correctly feature-gated on Vulkan (454) |
@@ -159,7 +159,7 @@ FNA/XNA" table or the cited `AUDIT.md` section; not re-derived here.
 |---|---|
 | `GetHashCode()` returns `std::size_t`, not C#'s `int` | C++ has no fixed 32-bit hash convention; platform-native size is used project-wide (`CHECKLIST.md`) |
 | `ref`/`out` parameters become value-reference pairs (e.g. `TryGetValue`-style overloads) | No C# `ref`/`out` mechanism exists in C++ (`CHECKLIST.md`) |
-| `IEnumerable<T>` replaced by `begin()`/`end()` (NOXNA), e.g. on `ModelBoneCollection` | C++ iterator idiom, not a C# `IEnumerable` port (`CHECKLIST.md`) |
+| `IEnumerable<T>` replaced by `begin()`/`end()` (CNAEXT), e.g. on `ModelBoneCollection` | C++ iterator idiom, not a C# `IEnumerable` port (`CHECKLIST.md`) |
 | `Model::Draw()` defaults a mesh's parent-bone index to `0` when `ModelMesh::ParentBone` is `nullptr`, instead of FNA's `NullReferenceException` | A null dereference is undefined behavior in C++, not a catchable exception like C#'s; defaulting to bone 0 is a strictly safer failure mode (`CHECKLIST.md`, Task 431) |
 | `ModelMesh::Draw()` silently skips a mesh part whose `Effect` is `nullptr`, instead of FNA's `NullReferenceException` on `effect.CurrentTechnique` | Same rationale as the `Model::Draw()` row above — safer failure mode than a null-pointer dereference (`CHECKLIST.md`, Task 431, corrects an earlier inaccurate claim in Task 728) |
 | `Model::CopyBoneTransformsFrom`/`CopyBoneTransformsTo` loop over `Bones.Count`, not the caller-supplied array's length like FNA does | FNA's own loop bound (`sourceBoneTransforms.Length`) makes it throw partway through for an array larger than `Bones.Count`; CNA's bound is a deliberately safer, non-fragile alternative (`CHECKLIST.md`, Task 436) |
@@ -848,7 +848,7 @@ maturity levels.
 | `StorageDevice / StorageContainer` | ~90 % | Native filesystem; full XNA API shape |
 | `GamePad / Keyboard / Mouse` (XNA 4.0 core) | ~100 % behavior | SDL3 renderer; FNA-faithful `GetHashCode`/`ToString`/ordering, keycode/scancode maps, dead-zone math, button/axis mapping — all wired and tested (`feature/input` Phases I3–I5, I9–I10). `Mouse::SetPosition` now converts logical→window for scaled/letterboxed windows (a-0001, task 846) — no remaining input-layer gap; residual items are platform/hardware-gated only. |
 | `TextInputEXT` / `Mouse`+`GamePad` EXT / `Keyboard` scancode EXT | ~95 % behavior | FNA extensions, all implemented and FNA-faithful (`feature/input` Phases I1, I3–I5, I9): `TextInputEXT` is `char16_t`/UTF-16 with Unicode/IME tests; relative mouse, `ClickedEXT`, rumble, `GetGUIDEXT` (format fixed, task 816), gyro/accel. Untested slice is hardware/IME-gated. |
-| `MouseCursor` (MonoGame-inspired, `NOXNA`) | ~100 % of exposed surface | 12 stock cursors, `FromTexture2D`, `IDisposable` singleton-safe dispose; no XNA/FNA equivalent. |
+| `MouseCursor` (MonoGame-inspired, `CNAEXT`) | ~100 % of exposed surface | 12 stock cursors, `FromTexture2D`, `IDisposable` singleton-safe dispose; no XNA/FNA equivalent. |
 | `Input::Touch` | ~98 % behavior | Gesture pipeline (Tap…PinchComplete) byte-faithful FNA port, wired end-to-end and tested with a deterministic clock (`feature/input` Phase I2, I9). Documented deviations only: event-driven vs. poll-based `GetState()`. `MaximumTouchCount` reports 4 and `GetState()` caps at `MAX_TOUCHES` (8), both matching FNA (DEC-09/DEC-10). |
 | `GamerServices` | ~85 % | **Updated (`feature/net`):** real implementation across Achievements/Avatar/Friends/Presence/Leaderboards/Privileges/Profile/SignedInGamer; see §9 for the per-feature breakdown. `Guide` itself remains a minimal stub (no system UI exists to show). |
 | `Audio (XACT)` — AudioEngine/SoundBank/WaveBank/Cue | ~97 % | Real `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; category/lifecycle/3D/instance-limit+fade (both category- and cue-level)/continuous RPC volume+pitch all real, including the built-in `AttackTime`/`ReleaseTime` envelope variables (`P10-RPC-002/003/004`); gaps are documented accepted deviations (no HRTF/elevation, no DSP-preset RPC destination), not missing implementation |
@@ -863,7 +863,7 @@ Per-feature status for the two namespaces §5 used to describe as "not planned"/
 excluded" (decision 1a superseded that framing — see §5). Categories: **Implemented** (real
 behavior matching the Xbox 360 XNA 4.0 reference) / **Locally persisted** (real disk-backed state
 via CNA's own storage layer, not a live online service — none exists to connect to, and none is
-planned) / **CNA extension** (`NOXNA`/`*EXT`, beyond the XNA 4.0 API surface) / **No-op** (present,
+planned) / **CNA extension** (`CNAEXT`/`*EXT`, beyond the XNA 4.0 API surface) / **No-op** (present,
 callable, does nothing) / **Documented stub** (throws, matching either FNA's own acknowledged stub
 behavior or a genuinely unimplemented feature).
 
@@ -907,7 +907,7 @@ behavior or a genuinely unimplemented feature).
    `plan_input.md` tasks 700–840), not stubs. Coverage is assessed **by category, not blended**
    (per the input review): **XNA 4.0 core** ~99% behavior / ~99% tested (complete & faithful);
    **FNA `*EXT`** ~95% (all implemented; untested slice hardware/IME-gated); **MonoGame
-   `MouseCursor`** (`NOXNA`) complete for the exposed surface; **platform-dependent** items
+   `MouseCursor`** (`CNAEXT`) complete for the exposed surface; **platform-dependent** items
    (Wayland global-mouse, live sensors/rumble, gamepad hotplug slot-assignment, `SetPosition`
    letterbox) documented, not headless-verifiable. See `plan_input.md`'s "final split" table,
    `AUDIT.md`, `docs/platform-input-notes.md`, and `docs/demo-input-checklist.md` for detail.

@@ -81,7 +81,7 @@ namespace Microsoft::Devices::Sensors::Detail
     }
 
     /**
-     * Task ACCEL-008: process-wide, NOXNA opt-out for the landscape remap above.
+     * Task ACCEL-008: process-wide, CNAEXT opt-out for the landscape remap above.
      * Defaults to `true`, preserving this codebase's existing Accelerometer/Gyroscope
      * behavior unchanged.
      *
@@ -104,7 +104,7 @@ namespace Microsoft::Devices::Sensors::Detail
     void SetAndroidLandscapeRemapEnabled(bool enabled);
 
     /**
-     * @brief NOXNA: see `SetAndroidLandscapeRemapEnabled()`. Defaults to `true`.
+     * @brief CNAEXT: see `SetAndroidLandscapeRemapEnabled()`. Defaults to `true`.
      * @return Whether the landscape remap is currently applied.
      */
     bool IsAndroidLandscapeRemapEnabled();

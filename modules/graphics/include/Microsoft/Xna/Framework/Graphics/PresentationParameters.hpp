@@ -99,13 +99,13 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return true if the device should be created off-screen, with no window.
          */
-        NOXNA [[nodiscard]] bool getHeadlessEXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHeadlessEXTProperty() const;
 
         /**
          * @brief Sets whether the device should be created without any real window (off-screen).
          * @param value true to create the device off-screen, with no window. Defaults to false.
          */
-        NOXNA void setHeadlessEXTProperty(bool value);
+        CNAEXT void setHeadlessEXTProperty(bool value);
 
         /**
          * @brief Gets the depth/stencil buffer format.
@@ -186,14 +186,14 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] PresentationParameters Clone() const;
 
         /** @brief Returns the fully-qualified .NET type name for this class. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         SurfaceFormat backBufferFormat_;
         SharpRuntime::intcs backBufferHeight_;
         SharpRuntime::intcs backBufferWidth_;
         IntPtr deviceWindowHandle_;
-        NOXNA bool headlessEXT_ = false; ///< Off-screen (no-window) device -- see getHeadlessEXTProperty().
+        CNAEXT bool headlessEXT_ = false; ///< Off-screen (no-window) device -- see getHeadlessEXTProperty().
         DepthFormat depthStencilFormat_;
         bool isFullScreen_;
         SharpRuntime::intcs multiSampleCount_;

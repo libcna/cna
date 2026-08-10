@@ -68,7 +68,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param other The session to compare against.
          * @return true if the comparable fields are all equal.
          */
-        NOXNA [[nodiscard]] bool operator==(const AvailableNetworkSession& other) const;
+        CNAEXT [[nodiscard]] bool operator==(const AvailableNetworkSession& other) const;
 
         /**
          * @brief Determines whether this session listing differs from another.
@@ -76,7 +76,7 @@ namespace Microsoft::Xna::Framework::Net
          * @param other The session to compare against.
          * @return true if any comparable field differs.
          */
-        NOXNA [[nodiscard]] bool operator!=(const AvailableNetworkSession& other) const;
+        CNAEXT [[nodiscard]] bool operator!=(const AvailableNetworkSession& other) const;
 
         /**
          * @brief Gets the network address to connect to in order to join this session.
@@ -87,7 +87,7 @@ namespace Microsoft::Xna::Framework::Net
          * @return The host's address, or empty if this instance wasn't built from a real
          *         discovery reply.
          */
-        NOXNA [[nodiscard]] const std::string& GetConnectAddress() const;
+        CNAEXT [[nodiscard]] const std::string& GetConnectAddress() const;
 
         /**
          * @brief Gets the network port to connect to in order to join this session.
@@ -95,7 +95,7 @@ namespace Microsoft::Xna::Framework::Net
          * @return The host's real ENet connect port, or 0 if this instance wasn't built from a
          *         real discovery reply.
          */
-        NOXNA [[nodiscard]] uint16_t GetConnectPort() const;
+        CNAEXT [[nodiscard]] uint16_t GetConnectPort() const;
 
         /**
          * @brief Gets the NetworkSessionType this listing was discovered under.
@@ -109,10 +109,10 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @return The session type this listing was found under.
          */
-        NOXNA [[nodiscard]] NetworkSessionType GetSessionType() const;
+        CNAEXT [[nodiscard]] NetworkSessionType GetSessionType() const;
 
         /** @brief Creates an AvailableNetworkSession for CNA internal use. */
-        NOXNA static AvailableNetworkSession CreateInternal(
+        CNAEXT static AvailableNetworkSession CreateInternal(
             int numGamers,
             const std::string& host,
             int privateSlots,

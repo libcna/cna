@@ -153,7 +153,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     /// SKIA-140/141: Dxt1/Dxt3/Dxt5/Bc7EXT/Bc7SrgbEXT transfer raw compressed blocks through the
-    /// same NOXNA byte-array overloads ByteEXT uses, matching how real XNA/FNA upload compressed
+    /// same CNAEXT byte-array overloads ByteEXT uses, matching how real XNA/FNA upload compressed
     /// content through the generic SetData<byte>/GetData<byte> overload rather than a dedicated
     /// method.
     [[nodiscard]] static bool IsCompressedTransferFormatEXT(SurfaceFormat format) noexcept
@@ -2636,7 +2636,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     // -----------------------------------------------------------------------
-    // NOXNA helpers
+    // CNAEXT helpers
     // -----------------------------------------------------------------------
 
     SDL_Texture* Texture2D::GetNativeTextureInternal() const

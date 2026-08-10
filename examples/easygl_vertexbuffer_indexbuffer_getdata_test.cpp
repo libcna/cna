@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 930: Verify that VertexBuffer/IndexBuffer::GetData() round-trips exactly what was
 // previously uploaded via SetData(), for every typed vertex overload (VertexPositionColor,
-// VertexPositionColorTexture, VertexPositionNormalTexture, VertexPositionTexture, NOXNA
+// VertexPositionColorTexture, VertexPositionNormalTexture, VertexPositionTexture, CNAEXT
 // VertexPositionNormalTextureSkinned) and both 16-bit/32-bit IndexBuffer widths. Also verifies
 // the WriteOnly-buffer NotSupportedException guard and the out-of-range ArgumentOutOfRangeException
 // guard on both buffer kinds.
@@ -143,7 +143,7 @@ protected:
                   "VertexPositionTexture: GetData(startIndex, count) round-trips slice");
         }
 
-        // --- VertexPositionNormalTextureSkinned (NOXNA) ---
+        // --- VertexPositionNormalTextureSkinned (CNAEXT) ---
         {
             VertexPositionNormalTextureSkinned src[3] = {
                 VertexPositionNormalTextureSkinned(Vector3(1, 2, 3), Vector3(0, 1, 0), Vector2(0.1f, 0.2f),

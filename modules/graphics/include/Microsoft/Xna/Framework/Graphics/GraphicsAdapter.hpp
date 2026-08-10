@@ -153,7 +153,7 @@ namespace Microsoft::Xna::Framework::Graphics
         static void AdaptersChanged();
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         GraphicsAdapter(SharpRuntime::intcs displayIndex, DisplayModeCollection modes, std::string name,

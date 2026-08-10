@@ -21,11 +21,11 @@ namespace Microsoft::Xna::Framework::Graphics
      * coordinate, and up to four bone blend weights/indices -- the layout normal-mapped (PBR)
      * rendering needs on a skinned mesh (SkinnedPbrEffect).
      *
-     * @note NOXNA — not part of the XNA 4.0 API. Mirrors VertexPositionNormalTextureSkinned's own
+     * @note CNAEXT — not part of the XNA 4.0 API. Mirrors VertexPositionNormalTextureSkinned's own
      * established precedent, extended with VertexPositionNormalTangentTexture's own Tangent field
      * (plan_cnj.md CNB-57/Phase 13A follow-up: PBR + skinning combination).
      */
-    NOXNA struct VertexPositionNormalTangentTextureSkinned : public IVertexType
+    CNAEXT struct VertexPositionNormalTangentTextureSkinned : public IVertexType
     {
         /** @brief Position of the vertex in object space. */
         Microsoft::Xna::Framework::Vector3 Position;

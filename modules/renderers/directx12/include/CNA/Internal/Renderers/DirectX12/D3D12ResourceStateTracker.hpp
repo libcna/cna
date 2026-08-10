@@ -56,15 +56,15 @@ namespace CNA::Internal::Renderers::DirectX12
         /// never registered via TrackResource().
         [[nodiscard]] D3D12_RESOURCE_STATES GetTrackedStateEXT(ID3D12Resource* resource) const;
 
-        /// Returns whether @p resource currently has any tracked state at all (NOXNA diagnostics/
+        /// Returns whether @p resource currently has any tracked state at all (CNAEXT diagnostics/
         /// tests -- distinguishes "never tracked" from "tracked, and happens to be in state X").
         [[nodiscard]] bool IsTrackedEXT(ID3D12Resource* resource) const;
 
-        /// Drops all tracked state (NOXNA -- device-lost recovery, DX-110, will need this once every
+        /// Drops all tracked state (CNAEXT -- device-lost recovery, DX-110, will need this once every
         /// tracked resource's D3D12 object is itself being recreated from scratch).
         void Clear() { states_.clear(); }
 
-        /// Number of currently-tracked resources (NOXNA diagnostics).
+        /// Number of currently-tracked resources (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetTrackedCountEXT() const { return states_.size(); }
 
     private:

@@ -69,7 +69,7 @@ TEST(MouseStateTest, DefaultConstructorAllValuesAtRest)
     EXPECT_EQ(state.getXButton1Property(), ButtonState::Released);
     EXPECT_EQ(state.getXButton2Property(), ButtonState::Released);
 
-    // P1-018: the NOXNA/EXT horizontal wheel also defaults to 0 through the true (parameterless)
+    // P1-018: the CNAEXT/EXT horizontal wheel also defaults to 0 through the true (parameterless)
     // default constructor, not just through the 8-arg XNA ctor (already covered separately below).
     EXPECT_EQ(state.getHorizontalScrollWheelValueEXTProperty(), 0);
 }
@@ -91,11 +91,11 @@ TEST(MouseStateTest, EightArgConstructorSetsEveryFieldInTheRightSlot)
     EXPECT_EQ(state.getXButton1Property(), ButtonState::Released);
     EXPECT_EQ(state.getXButton2Property(), ButtonState::Pressed);
 
-    // N-005: the 8-arg XNA ctor leaves the NOXNA/EXT horizontal wheel at 0.
+    // N-005: the 8-arg XNA ctor leaves the CNAEXT/EXT horizontal wheel at 0.
     EXPECT_EQ(state.getHorizontalScrollWheelValueEXTProperty(), 0);
 }
 
-// N-005: the 9-arg NOXNA/EXT ctor sets the horizontal wheel while keeping every XNA field in the same slot.
+// N-005: the 9-arg CNAEXT/EXT ctor sets the horizontal wheel while keeping every XNA field in the same slot.
 TEST(MouseStateTest, NineArgConstructorAlsoSetsHorizontalScrollWheelEXT)
 {
     const MouseState state(10, 20, 30,
@@ -108,7 +108,7 @@ TEST(MouseStateTest, NineArgConstructorAlsoSetsHorizontalScrollWheelEXT)
     EXPECT_EQ(state.getHorizontalScrollWheelValueEXTProperty(), 240);
 }
 
-// N-005: the horizontal wheel is a NOXNA/EXT extra field deliberately EXCLUDED from Equals and GetHashCode,
+// N-005: the horizontal wheel is a CNAEXT/EXT extra field deliberately EXCLUDED from Equals and GetHashCode,
 // so those stay byte-identical to FNA (which has no horizontal wheel). Two states differing only in the
 // horizontal wheel are equal and hash equal.
 TEST(MouseStateTest, HorizontalScrollWheelEXTIsExcludedFromEqualityAndHash)

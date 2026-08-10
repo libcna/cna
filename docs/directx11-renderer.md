@@ -93,7 +93,7 @@ XNA-level entry point (custom `ShaderEffect` and the public `SpriteBatch`/`Textu
 real and tested; some lower-level XNA convenience paths are not yet exercised — see "Known
 limitations"). Most D3D11 correctness tests instead talk to the real `ID3D11Device`/
 `ID3D11DeviceContext` fairly directly, going through `DirectX11Renderer::GetDeviceEXT()` (a
-`NOXNA` accessor added specifically so tests/`D3DCommon` callers can reach the real device without
+`CNAEXT` accessor added specifically so tests/`D3DCommon` callers can reach the real device without
 duplicating its creation path) and `D3DCommon`'s shader/input-layout/constant-buffer helpers. See
 `examples/directx11_smoke_test.cpp` (`DirectX11_Smoke` CTest, the primary GPU-facing pixel-correctness
 suite — Checks A through AC as of `DX-85`) and `examples/directx11_common_test.cpp` (`DirectX11_Common`
@@ -161,7 +161,7 @@ vertex-stride inference, cbuffer `static_assert` layout checks already caught at
   failure (found while verifying the fix above; `Game1.cpp` called raw SDL directly for
   minimize/restore/resize with no XNA equivalent, and never linked `SDL3::SDL3` itself — native
   Linux builds never noticed since a system-wide SDL3 install covered it there) **is also fixed**,
-  at the root rather than by adding a link dependency: two new `GameWindow` NOXNA methods,
+  at the root rather than by adding a link dependency: two new `GameWindow` CNAEXT methods,
   `MinimizeEXT()`/`RestoreEXT()` (mirroring the existing `IsBorderlessEXT` pattern), plus switching
   the resize call to the existing XNA `EndScreenDeviceChange()` API — `Game1.cpp` no longer includes
   `<SDL3/SDL.h>` at all. Verified via real `cna_reference_dump.exe`/`cna_demo_2d.exe` links under

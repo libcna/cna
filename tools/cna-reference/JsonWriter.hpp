@@ -4,7 +4,7 @@
 // comparable JSON without either side depending on a vendored JSON library.
 //
 // Not part of the Microsoft::Xna public API surface -- internal dev tooling only, so this is
-// deliberately outside both the Microsoft::Xna and CNA namespaces and carries no Doxygen/NOXNA
+// deliberately outside both the Microsoft::Xna and CNA namespaces and carries no Doxygen/CNAEXT
 // requirements (CLAUDE.md's comment rules apply to the XNA API surface and CNA library code,
 // not one-off internal tools).
 #pragma once

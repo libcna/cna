@@ -14,12 +14,12 @@
 namespace Microsoft::Xna::Framework::Net
 {
     /**
-     * @brief NOXNA base-from-member helper that owns PacketReader's backing buffer.
+     * @brief CNAEXT base-from-member helper that owns PacketReader's backing buffer.
      *
      * Listed before System::IO::BinaryReader in PacketReader's base list so the buffer
      * is fully constructed before BinaryReader's constructor receives a pointer to it.
      */
-    class NOXNA PacketReaderStream
+    class CNAEXT PacketReaderStream
     {
     protected:
         /** @brief Constructs an empty backing buffer. */

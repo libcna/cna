@@ -233,7 +233,7 @@ TEST(VibrateControllerTests, TwoConsecutiveStartsDoNotCrash)
     EXPECT_NO_THROW(VibrateController::getDefaultProperty()->Start(TimeSpan::FromMilliseconds(50)));
 }
 
-// Phase 6 NOXNA extensions (Tasks P2-10 through P2-13). Same silent-no-op
+// Phase 6 CNAEXT extensions (Tasks P2-10 through P2-13). Same silent-no-op
 // contract as the plain Start()/Stop() above when no suitable device is
 // found; these tests only assert no-throw/no-crash behavior, not that a
 // device was actually found or actuated (this environment's haptic

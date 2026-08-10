@@ -74,7 +74,7 @@ namespace CNA::Internal::Renderers::DirectX9
         };
 
         // plan_cnj.md CNB-58/CNB-67-equivalent D3D9 porting task: VertexPositionNormalTangentTexture
-        // (stride 48), used by the CNA NOXNA "Pbr3D" custom shader (PbrEffect, unskinned). Byte
+        // (stride 48), used by the CNA CNAEXT "Pbr3D" custom shader (PbrEffect, unskinned). Byte
         // offsets match EasyGLRenderer.cpp's own ApplyLayout() `case 48:` exactly: POSITION0
         // (FLOAT3, 0), NORMAL0 (FLOAT3, 12), TANGENT0 (FLOAT4, 24 -- xyz=tangent, w=bitangent sign,
         // glTF convention), TEXCOORD0 (FLOAT2, 40).
@@ -89,7 +89,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // D3D9 porting task (CNB-67-equivalent): the stride-52 SkinnedVertex layout above with a
         // per-vertex Color (normalized ubyte4) appended at the end (offset 52), matching
         // EasyGLRenderer.cpp's own ApplyLayout() `case 56:` byte-for-byte -- used by CNA's own
-        // NOXNA "SkinnedVertexColor3D" custom shader (real XNA SkinnedEffect has no vertex-color
+        // CNAEXT "SkinnedVertexColor3D" custom shader (real XNA SkinnedEffect has no vertex-color
         // input at all; Microsoft's own compiled SkinnedEffect.fx bytecode is never modified to add
         // one, see D3D9EffectDraw.cpp's own header comment on staying byte-identical to Microsoft's
         // shipped shaders).
@@ -104,7 +104,7 @@ namespace CNA::Internal::Renderers::DirectX9
         };
 
         // plan_cnj.md CNB-75..79-equivalent D3D9 porting task: VertexPositionNormalTangentTextureSkinned
-        // (stride 68), used by the CNA NOXNA "PbrSkinned3D" custom shader (SkinnedPbrEffect). The
+        // (stride 68), used by the CNA CNAEXT "PbrSkinned3D" custom shader (SkinnedPbrEffect). The
         // stride-48 PBR layout above with the stride-52/56 skinning suffix (BlendWeight, BlendIndices)
         // appended, matching EasyGLRenderer.cpp's own ApplyLayout() `case 68:` exactly.
         constexpr D3DVERTEXELEMENT9 kStride68[] = {

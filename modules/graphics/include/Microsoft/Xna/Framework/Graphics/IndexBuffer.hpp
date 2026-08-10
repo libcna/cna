@@ -31,7 +31,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param device     The graphics device.
          * @param indexCount Number of indices the buffer can hold.
          */
-        NOXNA IndexBuffer(GraphicsDevice& device, int indexCount);
+        CNAEXT IndexBuffer(GraphicsDevice& device, int indexCount);
 
         /**
          * @brief Creates an index buffer with explicit element size and usage hint.
@@ -46,7 +46,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     BufferUsage bufferUsage);
 
         /** @brief Destructor. */
-        NOXNA ~IndexBuffer() override;
+        CNAEXT ~IndexBuffer() override;
 
         /** @brief Copying is not allowed. */
         IndexBuffer(const IndexBuffer&) = delete;
@@ -58,7 +58,7 @@ namespace Microsoft::Xna::Framework::Graphics
         IndexBuffer& operator=(IndexBuffer&&) noexcept;
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         using GraphicsResource::Dispose;
 
@@ -161,14 +161,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Internal accessor used by the renderer draw paths.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Renderers::IIndexBufferRenderer& GetRenderer() const { return *renderer_; }
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::IIndexBufferRenderer& GetRenderer() const { return *renderer_; }
 
         /**
          * @brief Returns true while the GPU index buffer handle is allocated.
          *
          * Becomes false immediately after `Dispose()` is called.
          */
-        NOXNA [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
+        CNAEXT [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
 
     protected:
         /**

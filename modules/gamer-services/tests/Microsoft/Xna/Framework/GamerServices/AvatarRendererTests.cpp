@@ -190,7 +190,7 @@ TEST(AvatarRendererTest, DrawThrowsAfterDispose) {
     EXPECT_THROW(renderer.Draw(bones, expression), System::ObjectDisposedException);
 }
 
-// --- Real-rendering extension (NOXNA) ---
+// --- Real-rendering extension (CNAEXT) ---
 // EnableRealRenderingEXT itself needs a real GraphicsDevice, which (consistent with every
 // other GPU-resource-touching type in this codebase) is exercised via an examples/ integration
 // test, not a CnaTests unit test. These tests cover the parts reachable without a device.

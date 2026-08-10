@@ -48,7 +48,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Effect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode);
 
         /** @brief Destroys the effect and releases its GPU resources. */
-        NOXNA ~Effect() override;
+        CNAEXT ~Effect() override;
 
         /** @brief Copying is not allowed. */
         Effect(const Effect&) = delete;
@@ -103,10 +103,10 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Calls OnApply() on the active technique's current pass.
          *
-         * @note NOXNA — FNA has no public Effect::Apply(); it only exposes
+         * @note CNAEXT — FNA has no public Effect::Apply(); it only exposes
          * EffectPass::Apply() (which internally calls Effect.OnApply()).
          */
-        NOXNA void Apply();
+        CNAEXT void Apply();
 
         /**
          * @brief Creates an independent clone of this effect.
@@ -118,7 +118,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Owning pointer to the cloned effect, with the same concrete runtime type as
          * this object. Caller takes ownership.
          *
-         * @note NOXNA return-type deviation — FNA's Clone() returns a GC-managed Effect
+         * @note CNAEXT return-type deviation — FNA's Clone() returns a GC-managed Effect
          * reference; CNA has no garbage collector, so ownership is transferred to the caller
          * via a raw owning pointer instead, matching this codebase's established pattern for
          * factory-shaped methods that hand off a new heap object.
@@ -130,14 +130,14 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return The string "Microsoft.Xna.Framework.Graphics.Effect".
          */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Returns the graphics device that owns this effect.
          *
          * @return Reference to the owning GraphicsDevice.
          */
-        NOXNA [[nodiscard]] GraphicsDevice& getGraphicsDeviceInternal() const;
+        CNAEXT [[nodiscard]] GraphicsDevice& getGraphicsDeviceInternal() const;
 
         /**
          * @brief Returns the GLSL vertex shader source if this is a source-based effect, or empty string.
@@ -145,7 +145,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * Overridden by ShaderEffect. Used by renderers to compile custom programs without
          * a dependency on the concrete ShaderEffect type.
          */
-        NOXNA [[nodiscard]] virtual const std::string& GetVertexSource() const;
+        CNAEXT [[nodiscard]] virtual const std::string& GetVertexSource() const;
 
         /**
          * @brief Returns the GLSL fragment shader source if this is a source-based effect, or empty string.
@@ -153,7 +153,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * Overridden by ShaderEffect. Used by renderers to compile custom programs without
          * a dependency on the concrete ShaderEffect type.
          */
-        NOXNA [[nodiscard]] virtual const std::string& GetFragmentSource() const;
+        CNAEXT [[nodiscard]] virtual const std::string& GetFragmentSource() const;
 
         /**
          * @brief Returns the renderer-specific compiled program for this effect, if it is a
@@ -163,7 +163,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * program the effect itself uses, instead of maintaining a redundant separate copy that
          * a caller's SetUniformXxx() calls would never actually reach.
          */
-        NOXNA [[nodiscard]] virtual CNA::Internal::Renderers::IEffectRenderer* GetEffectRendererPtr() const;
+        CNAEXT [[nodiscard]] virtual CNA::Internal::Renderers::IEffectRenderer* GetEffectRendererPtr() const;
 
         /**
          * @brief Returns true only for an exact stock SpriteEffect instance.
@@ -172,7 +172,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * concrete SpriteEffect RTTI. The base answer is false; SpriteEffect's override also
          * rejects derived runtime types so custom OnApply behavior is never silently discarded.
          */
-        NOXNA [[nodiscard]] virtual bool IsExactStockSpriteEffectEXT() const noexcept
+        CNAEXT [[nodiscard]] virtual bool IsExactStockSpriteEffectEXT() const noexcept
         {
             return false;
         }
@@ -187,7 +187,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param params Output struct to populate.
          */
-        NOXNA virtual void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const;
+        CNAEXT virtual void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const;
 
     protected:
         /**

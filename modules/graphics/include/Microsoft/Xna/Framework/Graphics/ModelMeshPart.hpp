@@ -30,7 +30,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param startIndex The location in the index buffer at which to start reading.
          * @param vertexOffset The offset in vertices from the top of the vertex buffer.
          */
-        NOXNA ModelMeshPart(VertexBuffer* vb, IndexBuffer* ib,
+        CNAEXT ModelMeshPart(VertexBuffer* vb, IndexBuffer* ib,
                             int numVertices, int primitiveCount,
                             int startIndex, int vertexOffset);
 
@@ -97,48 +97,48 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Sets the offset in vertices from the top of the vertex buffer.
          *
-         * NOXNA: real XNA's `ModelMeshPart.VertexOffset` setter is content-pipeline-only
+         * CNAEXT: real XNA's `ModelMeshPart.VertexOffset` setter is content-pipeline-only
          * (`internal set`) rather than a public game-facing API; the content pipeline is the only
-         * real caller (plan_xnb.md XNB-38's `ModelReader`), so this stays a NOXNA-marked method
+         * real caller (plan_xnb.md XNB-38's `ModelReader`), so this stays a CNAEXT-marked method
          * rather than a bare public setter.
          * @param value The new vertex offset.
          */
-        NOXNA void SetVertexOffset(int value);
+        CNAEXT void SetVertexOffset(int value);
 
         /**
          * @brief Sets the number of vertices used during a draw call. See `SetVertexOffset()`'s
-         *        own note on why this is NOXNA rather than a bare public setter.
+         *        own note on why this is CNAEXT rather than a bare public setter.
          * @param value The new vertex count.
          */
-        NOXNA void SetNumVertices(int value);
+        CNAEXT void SetNumVertices(int value);
 
         /**
          * @brief Sets the location in the index buffer at which to start reading. See
-         *        `SetVertexOffset()`'s own note on why this is NOXNA rather than a bare public setter.
+         *        `SetVertexOffset()`'s own note on why this is CNAEXT rather than a bare public setter.
          * @param value The new start index.
          */
-        NOXNA void SetStartIndex(int value);
+        CNAEXT void SetStartIndex(int value);
 
         /**
          * @brief Sets the number of primitives to render. See `SetVertexOffset()`'s own note on
-         *        why this is NOXNA rather than a bare public setter.
+         *        why this is CNAEXT rather than a bare public setter.
          * @param value The new primitive count.
          */
-        NOXNA void SetPrimitiveCount(int value);
+        CNAEXT void SetPrimitiveCount(int value);
 
         /**
          * @brief Sets the vertex buffer for this mesh part. See `SetVertexOffset()`'s own note on
-         *        why this is NOXNA rather than a bare public setter.
+         *        why this is CNAEXT rather than a bare public setter.
          * @param value Pointer to the new VertexBuffer.
          */
-        NOXNA void SetVertexBuffer(VertexBuffer* value);
+        CNAEXT void SetVertexBuffer(VertexBuffer* value);
 
         /**
          * @brief Sets the index buffer for this mesh part. See `SetVertexOffset()`'s own note on
-         *        why this is NOXNA rather than a bare public setter.
+         *        why this is CNAEXT rather than a bare public setter.
          * @param value Pointer to the new IndexBuffer.
          */
-        NOXNA void SetIndexBuffer(IndexBuffer* value);
+        CNAEXT void SetIndexBuffer(IndexBuffer* value);
 
     private:
         int numVertices_    = 0;

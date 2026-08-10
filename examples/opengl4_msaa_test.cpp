@@ -19,7 +19,7 @@
 // reconfiguring an EXISTING renderer at runtime via GraphicsDeviceManager.ApplyChanges()),
 // OpenGL4's backbuffer MSAA -- like EasyGL's own equivalent -- is fixed at renderer construction
 // time only (a manually-managed multisample FBO; see OpenGL4Renderer's own
-// ApplyMultiSampleCount doc comment for why). This test therefore uses the same NOXNA-only
+// ApplyMultiSampleCount doc comment for why). This test therefore uses the same CNAEXT-only
 // `GraphicsDevice::RecreateRendererForMultiSampleCount()` escape hatch Vulkan's own pre-Task-902
 // MSAA tests used for the identical reason (vulkan_rendertarget2d_msaa_test.cpp,
 // vulkan_basiceffect_textured_msaa_test.cpp): Check A's triangle draw+readback happens entirely

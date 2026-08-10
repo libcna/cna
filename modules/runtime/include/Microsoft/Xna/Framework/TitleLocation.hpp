@@ -25,7 +25,7 @@ namespace Microsoft::Xna::Framework
          * @brief Sets the base directory for title content. Useful for tests and custom launchers.
          * @param value The new base content path.
          */
-        NOXNA static void setPathProperty(const std::string& value);
+        CNAEXT static void setPathProperty(const std::string& value);
 
         /**
          * @brief Gets the base directory for title content (matches XNA property name).

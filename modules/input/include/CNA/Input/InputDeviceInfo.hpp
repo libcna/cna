@@ -9,13 +9,13 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — identity of one enumerated input device (mouse, keyboard, or touch device).
+     * @brief CNAEXT — identity of one enumerated input device (mouse, keyboard, or touch device).
      *
      * XNA 4.0 assumes a single keyboard/mouse and four gamepads; it has no device enumeration. This
      * CNA extension descriptor pairs an SDL device instance id with its human-readable name. It is
      * metadata only — XNA input state stays merged across devices.
      */
-    NOXNA struct InputDeviceInfoEXT
+    CNAEXT struct InputDeviceInfoEXT
     {
         /** @brief The SDL device instance id (SDL_MouseID / SDL_KeyboardID / SDL_TouchID). */
         std::uint64_t id = 0;

@@ -63,7 +63,7 @@ target_compile_definitions(cna_build_flags INTERFACE
         SOUND_ENABLED
         XNA5
         ${CNA_RENDERER_DEFINE}
-        $<$<BOOL:${CNA_NOXNA}>:CNA_NOXNA>
+        $<$<BOOL:${CNA_CNAEXT}>:CNA_CNAEXT>
         $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
         $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>
         $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_FFMPEG_AVAILABLE>
@@ -102,14 +102,15 @@ if(CNA_ENABLE_NET)
 endif()
 add_subdirectory(renderers)
 
-# --- CNA::NoXna compatibility umbrella. The former cna_noxna STATIC library's implementation
+# --- CNA::CnaExt extension umbrella (cna_cnaext; named cna_noxna/CNA::NoXna before the
+# 2026-08 CNAEXT naming normalization). The former cna_noxna STATIC library's implementation
 # is now the graphics-ext module; the historical target name survives as an INTERFACE
 # composition over the actual extension modules so existing consumers keep linking it
 # unchanged (and now also receive the device extensions that used to hide inside
 # cna_devices).
-add_library(cna_noxna INTERFACE)
-add_library(CNA::NoXna ALIAS cna_noxna)
-target_link_libraries(cna_noxna INTERFACE cna_graphics_ext cna_devices_ext)
+add_library(cna_cnaext INTERFACE)
+add_library(CNA::CnaExt ALIAS cna_cnaext)
+target_link_libraries(cna_cnaext INTERFACE cna_graphics_ext cna_devices_ext)
 
 # --- Compatible umbrella. `CNA` keeps its historical meaning for every consumer: the whole
 # framework plus the selected renderer, with the aggregate public include surface (via the
@@ -120,7 +121,7 @@ target_link_libraries(CNA INTERFACE
         cna_devices
         cna_devices_ext
         cna_graphics_ext
-        cna_noxna
+        cna_cnaext
         cna_storage
         cna_content
         cna_media

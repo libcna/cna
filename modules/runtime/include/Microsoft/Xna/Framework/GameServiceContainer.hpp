@@ -23,13 +23,13 @@ namespace Microsoft::Xna::Framework
         ~GameServiceContainer() override = default;
 
         /** @brief Copying is disabled; services are registered by pointer identity. */
-        NOXNA GameServiceContainer(const GameServiceContainer&) = delete;
+        CNAEXT GameServiceContainer(const GameServiceContainer&) = delete;
         /** @brief Copy assignment is disabled. */
-        NOXNA GameServiceContainer& operator=(const GameServiceContainer&) = delete;
+        CNAEXT GameServiceContainer& operator=(const GameServiceContainer&) = delete;
         /** @brief Move constructor. */
-        NOXNA GameServiceContainer(GameServiceContainer&&) = default;
+        CNAEXT GameServiceContainer(GameServiceContainer&&) = default;
         /** @brief Move assignment operator. */
-        NOXNA GameServiceContainer& operator=(GameServiceContainer&&) = default;
+        CNAEXT GameServiceContainer& operator=(GameServiceContainer&&) = default;
 
         /**
          * @brief Adds a service provider for the specified service type.

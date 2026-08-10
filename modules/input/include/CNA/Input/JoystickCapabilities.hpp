@@ -10,9 +10,9 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — the static hardware shape and identity of a raw joystick device.
+     * @brief CNAEXT — the static hardware shape and identity of a raw joystick device.
      */
-    NOXNA struct JoystickCapabilitiesEXT
+    CNAEXT struct JoystickCapabilitiesEXT
     {
         /** @brief True if a joystick with this instance id is currently connected. */
         bool isConnected = false;

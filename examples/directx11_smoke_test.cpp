@@ -220,7 +220,7 @@ namespace
     /// technique as ReadTexture2DRegion() above. D3D11 has no separate depth/stencil "plane"
     /// subresource index like D3D12 -- a D24_UNORM_S8_UINT resource is one packed 32-bit-per-pixel
     /// value (little-endian: byte 3 = the S8 stencil byte, bytes 0-2 = the 24-bit depth value), so
-    /// this reads the raw bytes directly rather than needing a plane-slice copy (NOXNA, test-only,
+    /// this reads the raw bytes directly rather than needing a plane-slice copy (CNAEXT, test-only,
     /// plan_dx.md DX-130).
     std::vector<uint8_t> ReadDepthStencilPlane(ID3D11Device* device, ID3D11DeviceContext* context,
                                                ID3D11Texture2D* dsTexture, int w, int h)
@@ -258,7 +258,7 @@ namespace
     /// Reads a w*h RGBA8 region starting at (x,y) out of an arbitrary subresource index (mip level,
     /// or mip+face for a texture array) of an arbitrary ID3D11Texture2D -- same staging-texture
     /// technique as ReadTexture2DRegion() above, but Map()'d at `subresource` instead of always 0
-    /// (NOXNA, test-only -- DX-144's real mip-chain-content proof needs to read back mip levels > 0
+    /// (CNAEXT, test-only -- DX-144's real mip-chain-content proof needs to read back mip levels > 0
     /// directly, since there is no public sampling path in this raw-renderer-level smoke test).
     std::vector<uint8_t> ReadTexture2DMipRegion(ID3D11Device* device, ID3D11DeviceContext* context,
                                                 ID3D11Texture2D* texture, UINT subresource,

@@ -120,7 +120,7 @@ namespace Microsoft::Xna::Framework::Audio
         // FACT_internal.c's play_sound(), where a triggered check unconditionally overwrites
         // fade_in_ms with the (possibly zero) authored fadeInMS, discarding whatever an earlier
         // check set it to; `fadeInMS` is only meaningful when `triggered` is true.
-        NOXNA struct InstanceLimitDecision
+        CNAEXT struct InstanceLimitDecision
         {
             bool     allowed;
             bool     triggered;
@@ -244,8 +244,8 @@ namespace Microsoft::Xna::Framework::Audio
         // already-registered cue. XactEngineImpl (and therefore activeCues) is only defined in
         // AudioEngine.cpp, so a test-only friend struct can't read it directly the way
         // SoundBankTestAccess reads SoundBank::fireAndForget_.
-        NOXNA [[nodiscard]] std::size_t ActiveCueCountForTest() const;
+        CNAEXT [[nodiscard]] std::size_t ActiveCueCountForTest() const;
 
-        NOXNA friend struct AudioEngineTestAccess;
+        CNAEXT friend struct AudioEngineTestAccess;
     };
 }

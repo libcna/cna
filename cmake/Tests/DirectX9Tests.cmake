@@ -114,7 +114,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_SkinnedEffect_Fog COMMAND ${_directx9_skinnedeffect_fog_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # D9-83: real hardware instancing via SetStreamSourceFreq (CNA's own NOXNA Instanced3D shader).
+    # D9-83: real hardware instancing via SetStreamSourceFreq (CNA's own CNAEXT Instanced3D shader).
     cna_directx9_test(cna_test_directx9_instanced examples/directx9_instanced_test.cpp)
     cna_directx9_ctest_command(_directx9_instanced_cmd cna_test_directx9_instanced)
     cna_register_renderer_test(NAME DirectX9_Instanced COMMAND ${_directx9_instanced_cmd}
@@ -128,7 +128,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_DrawOffset COMMAND ${_directx9_drawoffset_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # D3D9 PBR porting task: real DrawPrimitivesEx dispatch for CNA's own NOXNA PbrEffect/
+    # D3D9 PBR porting task: real DrawPrimitivesEx dispatch for CNA's own CNAEXT PbrEffect/
     # SkinnedPbrEffect (params.pbr) through CNA's own custom Pbr3D/PbrSkinned3D vs_3_0/ps_3_0
     # shaders (D3D9PbrDraw.cpp).
     cna_directx9_test(cna_test_directx9_pbr examples/directx9_pbr_test.cpp)
@@ -136,7 +136,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_Pbr COMMAND ${_directx9_pbr_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx dispatch for CNA's own NOXNA
+    # D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx dispatch for CNA's own CNAEXT
     # SkinnedVertexColor3D shader (stride 56 -- SkinnedEffect + a vertex Color real XNA's own
     # compiled SkinnedEffect.fx bytecode never carries).
     cna_directx9_test(cna_test_directx9_skinnedvertexcolor examples/directx9_skinnedvertexcolor_test.cpp)

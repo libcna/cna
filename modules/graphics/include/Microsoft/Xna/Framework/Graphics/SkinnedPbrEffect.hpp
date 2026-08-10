@@ -21,7 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief PbrEffect's GPU-skinned sibling: the same real glTF metallic-roughness BRDF, applied
      * to a mesh with up to 72 bone transforms (SkinnedEffect's own MaxBones).
      *
-     * @note NOXNA — not part of the XNA 4.0 API, same as PbrEffect itself (real XNA predates both
+     * @note CNAEXT — not part of the XNA 4.0 API, same as PbrEffect itself (real XNA predates both
      * PBR and this combination entirely). A separate class rather than a boolean "skinned" flag
      * on PbrEffect, mirroring real XNA's own BasicEffect/SkinnedEffect precedent (distinct classes
      * per major shader variant, not one class with a mode flag). Requires the stride-68
@@ -55,7 +55,7 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] Effect* Clone() override;
 
         /** @brief Returns the fully qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         // IEffectMatrices
 
@@ -136,50 +136,50 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Sets the base color (albedo) map. @param value Pointer to the Texture2D to use. */
         void setTextureProperty(Texture2D* value);
         /** @brief Gives this effect shared ownership of its base color texture. @param texture The texture to take shared ownership of. */
-        NOXNA void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
+        CNAEXT void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
 
         /** @brief Gets the tangent-space normal map. @return Pointer to the Texture2D, or nullptr. */
-        NOXNA [[nodiscard]] Texture2D* getNormalMapProperty() const;
+        CNAEXT [[nodiscard]] Texture2D* getNormalMapProperty() const;
         /** @brief Sets the tangent-space normal map. @param value Pointer to the Texture2D to use. */
-        NOXNA void setNormalMapProperty(Texture2D* value);
+        CNAEXT void setNormalMapProperty(Texture2D* value);
         /** @brief Gives this effect shared ownership of its normal map. @param texture The texture to take shared ownership of. */
-        NOXNA void SetOwnedNormalMap(std::shared_ptr<Texture2D> texture);
+        CNAEXT void SetOwnedNormalMap(std::shared_ptr<Texture2D> texture);
 
         /** @brief Gets the metallic-roughness map (glTF's own packing: G=roughness, B=metallic). @return Pointer to the Texture2D, or nullptr. */
-        NOXNA [[nodiscard]] Texture2D* getMetallicRoughnessMapProperty() const;
+        CNAEXT [[nodiscard]] Texture2D* getMetallicRoughnessMapProperty() const;
         /** @brief Sets the metallic-roughness map. @param value Pointer to the Texture2D to use. */
-        NOXNA void setMetallicRoughnessMapProperty(Texture2D* value);
+        CNAEXT void setMetallicRoughnessMapProperty(Texture2D* value);
         /** @brief Gives this effect shared ownership of its metallic-roughness map. @param texture The texture to take shared ownership of. */
-        NOXNA void SetOwnedMetallicRoughnessMap(std::shared_ptr<Texture2D> texture);
+        CNAEXT void SetOwnedMetallicRoughnessMap(std::shared_ptr<Texture2D> texture);
 
         /** @brief Gets the emissive map. @return Pointer to the Texture2D, or nullptr. */
-        NOXNA [[nodiscard]] Texture2D* getEmissiveMapProperty() const;
+        CNAEXT [[nodiscard]] Texture2D* getEmissiveMapProperty() const;
         /** @brief Sets the emissive map. @param value Pointer to the Texture2D to use. */
-        NOXNA void setEmissiveMapProperty(Texture2D* value);
+        CNAEXT void setEmissiveMapProperty(Texture2D* value);
         /** @brief Gives this effect shared ownership of its emissive map. @param texture The texture to take shared ownership of. */
-        NOXNA void SetOwnedEmissiveMap(std::shared_ptr<Texture2D> texture);
+        CNAEXT void SetOwnedEmissiveMap(std::shared_ptr<Texture2D> texture);
 
         /** @brief Gets the occlusion map (R channel: 1=fully lit .. 0=fully occluded). @return Pointer to the Texture2D, or nullptr. */
-        NOXNA [[nodiscard]] Texture2D* getOcclusionMapProperty() const;
+        CNAEXT [[nodiscard]] Texture2D* getOcclusionMapProperty() const;
         /** @brief Sets the occlusion map. @param value Pointer to the Texture2D to use. */
-        NOXNA void setOcclusionMapProperty(Texture2D* value);
+        CNAEXT void setOcclusionMapProperty(Texture2D* value);
         /** @brief Gives this effect shared ownership of its occlusion map. @param texture The texture to take shared ownership of. */
-        NOXNA void SetOwnedOcclusionMap(std::shared_ptr<Texture2D> texture);
+        CNAEXT void SetOwnedOcclusionMap(std::shared_ptr<Texture2D> texture);
 
         /** @brief Gets the metallic factor [0,1]. @return The metallic factor. */
-        NOXNA [[nodiscard]] float getMetallicFactorProperty() const;
+        CNAEXT [[nodiscard]] float getMetallicFactorProperty() const;
         /** @brief Sets the metallic factor [0,1]. @param value The new metallic factor. */
-        NOXNA void setMetallicFactorProperty(float value);
+        CNAEXT void setMetallicFactorProperty(float value);
 
         /** @brief Gets the roughness factor [0,1]. @return The roughness factor. */
-        NOXNA [[nodiscard]] float getRoughnessFactorProperty() const;
+        CNAEXT [[nodiscard]] float getRoughnessFactorProperty() const;
         /** @brief Sets the roughness factor [0,1]. @param value The new roughness factor. */
-        NOXNA void setRoughnessFactorProperty(float value);
+        CNAEXT void setRoughnessFactorProperty(float value);
 
         /** @brief Gets the emissive factor, multiplied with the emissive map's RGB. @return The emissive factor. */
-        NOXNA [[nodiscard]] Vector3 getEmissiveFactorProperty() const;
+        CNAEXT [[nodiscard]] Vector3 getEmissiveFactorProperty() const;
         /** @brief Sets the emissive factor. @param value The new emissive factor. */
-        NOXNA void setEmissiveFactorProperty(const Vector3& value);
+        CNAEXT void setEmissiveFactorProperty(const Vector3& value);
 
         /**
          * @brief Gets the number of bone weights used per vertex (1, 2, or 4).
@@ -214,7 +214,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param params Output struct to populate.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
+        CNAEXT void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /** @brief Applies shader parameters to the graphics device before drawing. */

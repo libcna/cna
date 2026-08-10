@@ -21,7 +21,7 @@ namespace Microsoft::Xna::Framework::Audio
     class SoundEffect final : public System::Object, public System::IDisposable
     {
         friend class SoundEffectInstance;
-        NOXNA friend struct SoundEffectTestAccess;
+        CNAEXT friend struct SoundEffectTestAccess;
 
     private:
         class Impl;
@@ -63,7 +63,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param assetName Path to the audio file (WAV or other supported format).
          */
-        NOXNA explicit SoundEffect(const std::string& assetName);
+        CNAEXT explicit SoundEffect(const std::string& assetName);
 
         /**
          * @brief Constructs a SoundEffect from a raw 16-bit PCM buffer.
@@ -159,7 +159,7 @@ namespace Microsoft::Xna::Framework::Audio
         void setNameProperty(const std::string& value);
 
         /** @brief Sets the display name of this sound effect (move overload). */
-        NOXNA void setNameProperty(std::string&& value);
+        CNAEXT void setNameProperty(std::string&& value);
 
         // --- Static properties ---
 
@@ -180,7 +180,7 @@ namespace Microsoft::Xna::Framework::Audio
         static void setMasterVolumeProperty(const float& v);
 
         /** @brief Sets the global master volume (move overload). */
-        NOXNA static void setMasterVolumeProperty(float&& v);
+        CNAEXT static void setMasterVolumeProperty(float&& v);
 
         /**
          * @brief Gets the distance scaling factor used in Apply3D attenuation approximations.

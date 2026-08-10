@@ -42,7 +42,7 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] Effect* Clone() override;
 
         /** @brief Returns the fully qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets the world matrix.
@@ -314,7 +314,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture The texture to take shared ownership of; also becomes the effect's
          *                current texture (as if passed to `setTextureProperty()`).
          */
-        NOXNA void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
+        CNAEXT void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
 
         /**
          * @brief Gets the number of bone weights used per vertex (1, 2, or 4).
@@ -348,12 +348,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Gets or sets whether per-vertex color is used for rendering.
          *
-         * @note NOXNA — not part of the XNA 4.0 API. Real XNA's SkinnedEffect has no
+         * @note CNAEXT — not part of the XNA 4.0 API. Real XNA's SkinnedEffect has no
          * VertexColorEnabled property at all (unlike BasicEffect/AlphaTestEffect/
          * DualTextureEffect); added so glTF-imported skinned meshes with a COLOR_0 attribute
          * (see CNB-66/67) have a shader path, mirroring BasicEffect::VertexColorEnabled's shape.
          */
-        NOXNA bool VertexColorEnabled = false;
+        CNAEXT bool VertexColorEnabled = false;
 
         /**
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
@@ -363,7 +363,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param params Output struct to populate.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
+        CNAEXT void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /**

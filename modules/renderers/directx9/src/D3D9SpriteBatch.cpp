@@ -206,7 +206,7 @@ namespace CNA::Internal::Renderers::DirectX9
         //
         // Unlike the stock path's real XNA "MatrixTransform" register, a custom shader receives
         // the current viewport size via a "vpSize" uniform instead (mirrors
-        // D3D11SpriteBatchRenderer's own established, NOXNA, documented CNA convention for this
+        // D3D11SpriteBatchRenderer's own established, CNAEXT, documented CNA convention for this
         // mechanism -- SetViewportSizeEXT() there, the generic per-name SetUniformVec2() here,
         // since D3D9EffectRenderer's name-based lookup makes a dedicated method unnecessary): the
         // custom vertex shader is expected to build its own 2D->clip-space transform from

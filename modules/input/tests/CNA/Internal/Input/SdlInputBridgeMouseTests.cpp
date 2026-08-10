@@ -294,7 +294,7 @@ namespace
         return Mouse::GetState().getScrollWheelValueProperty() - before;
     }
 
-    // N-005: drives a horizontal-only wheel event (wheel.x) and returns the delta applied to the NOXNA/EXT
+    // N-005: drives a horizontal-only wheel event (wheel.x) and returns the delta applied to the CNAEXT/EXT
     // horizontal accumulator.
     int horizontalWheelDelta(const float x)
     {
@@ -322,7 +322,7 @@ TEST(SdlInputBridgeMouseWheelTest, ZeroDeltaLeavesValueUnchanged)
     EXPECT_EQ(wheelDelta(0.0f), 0);
 }
 
-// N-005 (was DEC-18): SDL's horizontal wheel.x is now surfaced as the NOXNA/EXT horizontal scroll wheel,
+// N-005 (was DEC-18): SDL's horizontal wheel.x is now surfaced as the CNAEXT/EXT horizontal scroll wheel,
 // routed to a SEPARATE accumulator from the vertical XNA ScrollWheelValue. A horizontal-only event must
 // leave the vertical value untouched.
 TEST(SdlInputBridgeMouseWheelTest, HorizontalWheelDoesNotAffectVerticalScrollWheel)

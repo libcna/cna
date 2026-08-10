@@ -1,4 +1,4 @@
-# Header-only surface of the core module: the NOXNA marker (CNAHelper.hpp), the
+# Header-only surface of the core module: the CNAEXT marker (CNAHelper.hpp), the
 # framework-root leaf enums (PlayerIndex) and header-only internals (PathContainment).
 # Modules whose PUBLIC headers name these without using any core SYMBOL (math, storage)
 # link this interface instead of the archive, keeping their accepted link closures exact.

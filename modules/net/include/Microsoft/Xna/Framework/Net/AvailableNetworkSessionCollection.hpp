@@ -36,7 +36,7 @@ namespace Microsoft::Xna::Framework::Net
         void Dispose() override;
 
         /** @brief Creates an AvailableNetworkSessionCollection for CNA internal use. */
-        NOXNA static AvailableNetworkSessionCollection CreateInternal(std::vector<AvailableNetworkSession> sessions);
+        CNAEXT static AvailableNetworkSessionCollection CreateInternal(std::vector<AvailableNetworkSession> sessions);
 
     private:
         explicit AvailableNetworkSessionCollection(std::vector<AvailableNetworkSession> sessions);

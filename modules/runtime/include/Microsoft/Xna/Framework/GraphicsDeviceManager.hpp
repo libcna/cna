@@ -31,7 +31,7 @@ namespace Microsoft::Xna::Framework
     class Game;
 
     /** @brief CNA-specific presentation/scaling policy for the rendering renderer. */
-    NOXNA enum class PresentationMode
+    CNAEXT enum class PresentationMode
     {
         /** @brief Scale with black bars to preserve aspect ratio. */
         Letterbox = 0,
@@ -76,7 +76,7 @@ namespace Microsoft::Xna::Framework
         System::EventHandler<PreparingDeviceSettingsEventArgs> PreparingDeviceSettings;
 
         /** @brief Creates an empty graphics device manager with no associated Game. */
-        NOXNA GraphicsDeviceManager();
+        CNAEXT GraphicsDeviceManager();
 
         /**
          * @brief Creates a graphics device manager for the specified game.
@@ -229,13 +229,13 @@ namespace Microsoft::Xna::Framework
          * @brief Gets the CNA presentation/scaling policy.
          * @return The current presentation mode.
          */
-        NOXNA [[nodiscard]] PresentationMode getPreferredPresentationModeProperty() const;
+        CNAEXT [[nodiscard]] PresentationMode getPreferredPresentationModeProperty() const;
 
         /**
          * @brief Sets the CNA presentation/scaling policy.
          * @param value The desired presentation mode.
          */
-        NOXNA void setPreferredPresentationModeProperty(PresentationMode value);
+        CNAEXT void setPreferredPresentationModeProperty(PresentationMode value);
 
         /** @brief Applies pending graphics setting changes. */
         void ApplyChanges();
@@ -262,7 +262,7 @@ namespace Microsoft::Xna::Framework
          * @brief Returns the fully-qualified .NET type name of this class.
          * @return A const reference to the type name string.
          */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     protected:
         /**

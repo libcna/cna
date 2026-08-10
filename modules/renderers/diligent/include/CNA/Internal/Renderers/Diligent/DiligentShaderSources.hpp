@@ -499,7 +499,7 @@ void main(in VSInput vsIn, out PSInput psIn)
 }
 )";
 
-        /// DILIGENT-36 (PbrEffect, NOXNA): stride 48 (position + normal + tangent [xyz + glTF
+        /// DILIGENT-36 (PbrEffect, CNAEXT): stride 48 (position + normal + tangent [xyz + glTF
         /// bitangent-handedness sign in w] + UV), HLSL port of this project's own established
         /// PBR reference (src/CNA/Internal/Renderers/D3DCommon/shaders/pbr3d.vert.hlsl), unchanged
         /// except for Diligent's shared-cbuffer naming (g_WorldViewProj/g_World in place of a

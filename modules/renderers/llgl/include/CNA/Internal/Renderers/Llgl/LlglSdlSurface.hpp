@@ -13,7 +13,7 @@ struct SDL_Window;
 namespace CNA::Internal::Renderers::Llgl
 {
     /**
-     * @brief Presents an existing SDL window to LLGL as an LLGL::Surface. NOXNA.
+     * @brief Presents an existing SDL window to LLGL as an LLGL::Surface. CNAEXT.
      *
      * LLGL ships its own windowing layer (LLGL::Window/LLGL::Display) and will create a window for
      * a swap chain if none is supplied. CNA never lets it: the window belongs to

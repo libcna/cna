@@ -26,7 +26,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] float getRightProperty() const;
 
         /** @brief Constructs with both triggers at rest. */
-        NOXNA GamePadTriggers();
+        CNAEXT GamePadTriggers();
 
         /**
          * @brief Constructs with clamped trigger values.

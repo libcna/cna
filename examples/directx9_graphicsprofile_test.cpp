@@ -231,7 +231,7 @@ protected:
         // GraphicsDeviceManager::setGraphicsProfileProperty(HiDef) had NO path to ever reach the
         // real device: GraphicsDeviceManager::applyToExistingRenderer() carried the requested
         // profile into a transient GraphicsDeviceInformation but never wrote it back onto the
-        // live GraphicsDevice before this fix. Fixed with a new NOXNA
+        // live GraphicsDevice before this fix. Fixed with a new CNAEXT
         // GraphicsDevice::SetGraphicsProfileEXT(), called from applyToExistingRenderer() right
         // before Reset(). Without this fix, dev.getGraphicsProfileProperty() here would
         // incorrectly report Reach even though this Game's own constructor requested HiDef --

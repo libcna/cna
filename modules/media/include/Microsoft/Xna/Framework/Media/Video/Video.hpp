@@ -33,7 +33,7 @@ namespace Microsoft::Xna::Framework::Media
          * @param fileName File path to the video file.
          * @param device   GraphicsDevice used for frame rendering.
          */
-        NOXNA Video(std::string fileName, Graphics::GraphicsDevice* device);
+        CNAEXT Video(std::string fileName, Graphics::GraphicsDevice* device);
 
         /**
          * @brief Creates a Video with explicit, trusted metadata (XNB constructor).
@@ -49,7 +49,7 @@ namespace Microsoft::Xna::Framework::Media
          * @param framesPerSecond Frame rate.
          * @param soundtrackType Type of audio content in the video.
          */
-        NOXNA Video(std::string fileName, Graphics::GraphicsDevice* device,
+        CNAEXT Video(std::string fileName, Graphics::GraphicsDevice* device,
               SharpRuntime::intcs durationMS, SharpRuntime::intcs width,
               SharpRuntime::intcs height, float framesPerSecond,
               VideoSoundtrackType soundtrackType);
@@ -97,7 +97,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param value New duration.
          */
-        NOXNA void setDurationProperty(System::TimeSpan value);
+        CNAEXT void setDurationProperty(System::TimeSpan value);
 
         /**
          * @brief Creates a Video from a URI and a graphics device.
@@ -109,7 +109,7 @@ namespace Microsoft::Xna::Framework::Media
          * @param device GraphicsDevice used for frame rendering.
          * @return Pointer to the newly created Video.
          */
-        NOXNA static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);
+        CNAEXT static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);
 
         /**
          * @brief Selects which audio stream to use when the file contains multiple audio tracks.
@@ -119,7 +119,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param track Zero-based audio stream index.
          */
-        NOXNA void SetAudioTrackEXT(SharpRuntime::intcs track);
+        CNAEXT void SetAudioTrackEXT(SharpRuntime::intcs track);
 
         /**
          * @brief Selects which video stream to use when the file contains multiple video tracks.
@@ -129,24 +129,24 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param track Zero-based video stream index.
          */
-        NOXNA void SetVideoTrackEXT(SharpRuntime::intcs track);
+        CNAEXT void SetVideoTrackEXT(SharpRuntime::intcs track);
 
         /**
          * @brief Returns the file path this Video was loaded from.
          *
          * @return File path string.
          */
-        NOXNA [[nodiscard]] const std::string& getFileNameProperty() const;
+        CNAEXT [[nodiscard]] const std::string& getFileNameProperty() const;
 
         /**
          * @brief Returns the associated GraphicsDevice (may be null).
          *
          * @return Pointer to the GraphicsDevice, or nullptr.
          */
-        NOXNA [[nodiscard]] Graphics::GraphicsDevice* getGraphicsDeviceProperty() const;
+        CNAEXT [[nodiscard]] Graphics::GraphicsDevice* getGraphicsDeviceProperty() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         friend class VideoPlayer;

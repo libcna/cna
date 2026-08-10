@@ -14,7 +14,7 @@ namespace Microsoft::Xna::Framework
     {
     public:
         /** @brief Deleted; MathHelper is a static utility class. */
-        NOXNA MathHelper() = delete;
+        CNAEXT MathHelper() = delete;
 
         /** @brief Mathematical constant e. */
         static constexpr float E = 2.71828175f;

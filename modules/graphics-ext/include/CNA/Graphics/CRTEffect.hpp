@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/CRTMaskType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
@@ -37,7 +37,7 @@ namespace CNA::Graphics {
      * multi-pass pattern above, just with `DepthEffect` as the first pass instead of a plain
      * scene draw.
      *
-     * NOXNA extension — no XNA/FNA precedent; this is a from-scratch CNA post-process effect,
+     * CNAEXT extension — no XNA/FNA precedent; this is a from-scratch CNA post-process effect,
      * not a port.
      */
     class CRTEffect : public Microsoft::Xna::Framework::Graphics::ShaderEffect
@@ -99,4 +99,4 @@ namespace CNA::Graphics {
 
 } // namespace CNA::Graphics
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

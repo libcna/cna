@@ -13,7 +13,7 @@ namespace Microsoft::Devices::Sensors
      * This is a C++ counterpart of the .NET
      * Microsoft.Devices.Sensors.SensorState enumeration. `Accelerometer::State`
      * is the one real, strict-XNA-API member of this enum's real WP7 users
-     * (`Gyroscope`/`Compass`/`Motion`'s own `State` properties are `NOXNA`
+     * (`Gyroscope`/`Compass`/`Motion`'s own `State` properties are `CNAEXT`
      * extensions added for symmetry — see each class's own `getStateProperty()`
      * doc comment).
      *

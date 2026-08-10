@@ -46,15 +46,15 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] int GetWidthEXT() const { return width_; }
         [[nodiscard]] int GetHeightEXT() const { return height_; }
         [[nodiscard]] int GetDepthEXT() const { return depth_; }
-        /// Raw GPU-resident ID3D12Resource* (NOXNA -- future draw-path/readback-test consumers).
+        /// Raw GPU-resident ID3D12Resource* (CNAEXT -- future draw-path/readback-test consumers).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return texture_.Get(); }
-        /// Shader-visible-heap GPU handle for this texture's SRV (NOXNA -- SetGraphicsRootDescriptorTable).
+        /// Shader-visible-heap GPU handle for this texture's SRV (CNAEXT -- SetGraphicsRootDescriptorTable).
         /// REMED-GFX-177: resolved on every call against whichever heap is current, never cached.
         [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const
         {
             return heaps_ ? heaps_->cbvSrvUav.GpuHandle(srvIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
         }
-        /// REMED-GFX-177: the stable shader-visible-heap slot index this volume owns (NOXNA).
+        /// REMED-GFX-177: the stable shader-visible-heap slot index this volume owns (CNAEXT).
         [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
 
     private:

@@ -124,7 +124,7 @@ namespace CNA::Internal::Input
         static void AddScrollWheelDelta(int delta);
 
         /**
-         * @brief NOXNA/EXT: adds a horizontal mouse wheel delta (SDL wheel.x) to internal state.
+         * @brief CNAEXT/EXT: adds a horizontal mouse wheel delta (SDL wheel.x) to internal state.
          */
         static void AddHorizontalScrollWheelDelta(int delta);
 
@@ -151,7 +151,7 @@ namespace CNA::Internal::Input
          * @param touchId The touch id.
          * @param state The touch location state.
          * @param position The touch position in pixels.
-         * @param pressure NOXNA/EXT: SDL finger pressure (0..1); surfaced via TouchLocation::getPressureEXT.
+         * @param pressure CNAEXT/EXT: SDL finger pressure (0..1); surfaced via TouchLocation::getPressureEXT.
          */
         static void SetTouchState(
             int touchId,

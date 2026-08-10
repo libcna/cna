@@ -28,19 +28,19 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Constructs disconnected capabilities with zero touch count.
-         * @note NOXNA — FNA has no explicit parameterless constructor for this type.
+         * @note CNAEXT — FNA has no explicit parameterless constructor for this type.
          */
-        NOXNA TouchPanelCapabilities();
+        CNAEXT TouchPanelCapabilities();
 
         /**
          * @brief Constructs with explicit connected state and maximum touch count.
-         * @note NOXNA — mirrors FNA's sole constructor, which is `internal`
+         * @note CNAEXT — mirrors FNA's sole constructor, which is `internal`
          *       (see the class-level note); exposed publicly here since C++ has no
          *       assembly-internal visibility, but not part of the public XNA API.
          * @param isConnected Whether a touch device is connected.
          * @param maximumTouchCount The maximum number of simultaneous touch points.
          */
-        NOXNA TouchPanelCapabilities(bool isConnected, int maximumTouchCount);
+        CNAEXT TouchPanelCapabilities(bool isConnected, int maximumTouchCount);
 
     private:
         bool isConnected_;

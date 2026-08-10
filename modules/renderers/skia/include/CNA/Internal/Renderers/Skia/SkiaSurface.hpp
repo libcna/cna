@@ -50,9 +50,9 @@ namespace CNA::Internal::Renderers::Skia
         /// Process-local identity of this logical target. It remains stable across Resize().
         [[nodiscard]] std::uint64_t Identity() const noexcept { return identity_; }
         [[nodiscard]] SkCanvas* Canvas() const noexcept;
-        NOXNA [[nodiscard]] SkColorType NativeColorTypeEXT() const noexcept { return colorType_; }
-        NOXNA [[nodiscard]] SkAlphaType NativeAlphaTypeEXT() const noexcept { return alphaType_; }
-        NOXNA [[nodiscard]] std::size_t NativeBytesPerPixelEXT() const noexcept
+        CNAEXT [[nodiscard]] SkColorType NativeColorTypeEXT() const noexcept { return colorType_; }
+        CNAEXT [[nodiscard]] SkAlphaType NativeAlphaTypeEXT() const noexcept { return alphaType_; }
+        CNAEXT [[nodiscard]] std::size_t NativeBytesPerPixelEXT() const noexcept
         {
             return bytesPerPixel_;
         }

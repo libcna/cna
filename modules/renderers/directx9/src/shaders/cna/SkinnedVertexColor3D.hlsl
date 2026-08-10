@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// D3D9 skinned-vertex-color porting task: CNA's own NOXNA "SkinnedVertexColor3D" shader -- a
+// D3D9 skinned-vertex-color porting task: CNA's own CNAEXT "SkinnedVertexColor3D" shader -- a
 // per-pixel-lit, textured, skinned mesh shader with an added vertex-color modulate, mirroring
 // EasyGLRenderer.cpp's EnsureSkinnedProgram() (GLSL/GLES 3.00) wiring for the stride-56
 // vertex format (VertexPositionNormalTextureSkinned + a trailing normalized ubyte4 Color, see

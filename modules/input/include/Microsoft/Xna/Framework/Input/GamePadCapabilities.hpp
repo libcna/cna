@@ -10,9 +10,9 @@ namespace Microsoft::Xna::Framework::Input
      * @brief Describes the capabilities of a gamepad controller.
      *
      * FNA declares every property here `{ get; internal set; }`; CNA maps the internal
-     * setter to a `NOXNA`-tagged public setter (only `CNA::Internal::Input::SdlInputBridge`
+     * setter to a `CNAEXT`-tagged public setter (only `CNA::Internal::Input::SdlInputBridge`
      * populates a connected instance in practice). The 10 EXT properties are FNA extensions,
-     * so both their getters and setters are `NOXNA`.
+     * so both their getters and setters are `CNAEXT`.
      */
     struct GamePadCapabilities
     {
@@ -22,184 +22,184 @@ namespace Microsoft::Xna::Framework::Input
         /** @brief Indicates whether the controller is connected. */
         [[nodiscard]] bool getIsConnectedProperty() const;
         /** @brief Sets whether the controller is connected. */
-        NOXNA void setIsConnectedProperty(bool value);
+        CNAEXT void setIsConnectedProperty(bool value);
 
         /** @brief Indicates whether the controller has an A button. */
         [[nodiscard]] bool getHasAButtonProperty() const;
         /** @brief Sets whether the controller has an A button. */
-        NOXNA void setHasAButtonProperty(bool value);
+        CNAEXT void setHasAButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a Back button. */
         [[nodiscard]] bool getHasBackButtonProperty() const;
         /** @brief Sets whether the controller has a Back button. */
-        NOXNA void setHasBackButtonProperty(bool value);
+        CNAEXT void setHasBackButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a B button. */
         [[nodiscard]] bool getHasBButtonProperty() const;
         /** @brief Sets whether the controller has a B button. */
-        NOXNA void setHasBButtonProperty(bool value);
+        CNAEXT void setHasBButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a DPad Down button. */
         [[nodiscard]] bool getHasDPadDownButtonProperty() const;
         /** @brief Sets whether the controller has a DPad Down button. */
-        NOXNA void setHasDPadDownButtonProperty(bool value);
+        CNAEXT void setHasDPadDownButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a DPad Left button. */
         [[nodiscard]] bool getHasDPadLeftButtonProperty() const;
         /** @brief Sets whether the controller has a DPad Left button. */
-        NOXNA void setHasDPadLeftButtonProperty(bool value);
+        CNAEXT void setHasDPadLeftButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a DPad Right button. */
         [[nodiscard]] bool getHasDPadRightButtonProperty() const;
         /** @brief Sets whether the controller has a DPad Right button. */
-        NOXNA void setHasDPadRightButtonProperty(bool value);
+        CNAEXT void setHasDPadRightButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a DPad Up button. */
         [[nodiscard]] bool getHasDPadUpButtonProperty() const;
         /** @brief Sets whether the controller has a DPad Up button. */
-        NOXNA void setHasDPadUpButtonProperty(bool value);
+        CNAEXT void setHasDPadUpButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a left shoulder button. */
         [[nodiscard]] bool getHasLeftShoulderButtonProperty() const;
         /** @brief Sets whether the controller has a left shoulder button. */
-        NOXNA void setHasLeftShoulderButtonProperty(bool value);
+        CNAEXT void setHasLeftShoulderButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a left stick button. */
         [[nodiscard]] bool getHasLeftStickButtonProperty() const;
         /** @brief Sets whether the controller has a left stick button. */
-        NOXNA void setHasLeftStickButtonProperty(bool value);
+        CNAEXT void setHasLeftStickButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a right shoulder button. */
         [[nodiscard]] bool getHasRightShoulderButtonProperty() const;
         /** @brief Sets whether the controller has a right shoulder button. */
-        NOXNA void setHasRightShoulderButtonProperty(bool value);
+        CNAEXT void setHasRightShoulderButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a right stick button. */
         [[nodiscard]] bool getHasRightStickButtonProperty() const;
         /** @brief Sets whether the controller has a right stick button. */
-        NOXNA void setHasRightStickButtonProperty(bool value);
+        CNAEXT void setHasRightStickButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a Start button. */
         [[nodiscard]] bool getHasStartButtonProperty() const;
         /** @brief Sets whether the controller has a Start button. */
-        NOXNA void setHasStartButtonProperty(bool value);
+        CNAEXT void setHasStartButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has an X button. */
         [[nodiscard]] bool getHasXButtonProperty() const;
         /** @brief Sets whether the controller has an X button. */
-        NOXNA void setHasXButtonProperty(bool value);
+        CNAEXT void setHasXButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a Y button. */
         [[nodiscard]] bool getHasYButtonProperty() const;
         /** @brief Sets whether the controller has a Y button. */
-        NOXNA void setHasYButtonProperty(bool value);
+        CNAEXT void setHasYButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a big button. */
         [[nodiscard]] bool getHasBigButtonProperty() const;
         /** @brief Sets whether the controller has a big button. */
-        NOXNA void setHasBigButtonProperty(bool value);
+        CNAEXT void setHasBigButtonProperty(bool value);
 
         /** @brief Indicates whether the controller has a left X thumb stick axis. */
         [[nodiscard]] bool getHasLeftXThumbStickProperty() const;
         /** @brief Sets whether the controller has a left X thumb stick axis. */
-        NOXNA void setHasLeftXThumbStickProperty(bool value);
+        CNAEXT void setHasLeftXThumbStickProperty(bool value);
 
         /** @brief Indicates whether the controller has a left Y thumb stick axis. */
         [[nodiscard]] bool getHasLeftYThumbStickProperty() const;
         /** @brief Sets whether the controller has a left Y thumb stick axis. */
-        NOXNA void setHasLeftYThumbStickProperty(bool value);
+        CNAEXT void setHasLeftYThumbStickProperty(bool value);
 
         /** @brief Indicates whether the controller has a right X thumb stick axis. */
         [[nodiscard]] bool getHasRightXThumbStickProperty() const;
         /** @brief Sets whether the controller has a right X thumb stick axis. */
-        NOXNA void setHasRightXThumbStickProperty(bool value);
+        CNAEXT void setHasRightXThumbStickProperty(bool value);
 
         /** @brief Indicates whether the controller has a right Y thumb stick axis. */
         [[nodiscard]] bool getHasRightYThumbStickProperty() const;
         /** @brief Sets whether the controller has a right Y thumb stick axis. */
-        NOXNA void setHasRightYThumbStickProperty(bool value);
+        CNAEXT void setHasRightYThumbStickProperty(bool value);
 
         /** @brief Indicates whether the controller has a left trigger. */
         [[nodiscard]] bool getHasLeftTriggerProperty() const;
         /** @brief Sets whether the controller has a left trigger. */
-        NOXNA void setHasLeftTriggerProperty(bool value);
+        CNAEXT void setHasLeftTriggerProperty(bool value);
 
         /** @brief Indicates whether the controller has a right trigger. */
         [[nodiscard]] bool getHasRightTriggerProperty() const;
         /** @brief Sets whether the controller has a right trigger. */
-        NOXNA void setHasRightTriggerProperty(bool value);
+        CNAEXT void setHasRightTriggerProperty(bool value);
 
         /** @brief Indicates whether the controller has a left vibration motor. */
         [[nodiscard]] bool getHasLeftVibrationMotorProperty() const;
         /** @brief Sets whether the controller has a left vibration motor. */
-        NOXNA void setHasLeftVibrationMotorProperty(bool value);
+        CNAEXT void setHasLeftVibrationMotorProperty(bool value);
 
         /** @brief Indicates whether the controller has a right vibration motor. */
         [[nodiscard]] bool getHasRightVibrationMotorProperty() const;
         /** @brief Sets whether the controller has a right vibration motor. */
-        NOXNA void setHasRightVibrationMotorProperty(bool value);
+        CNAEXT void setHasRightVibrationMotorProperty(bool value);
 
         /** @brief Indicates whether the controller supports voice. */
         [[nodiscard]] bool getHasVoiceSupportProperty() const;
         /** @brief Sets whether the controller supports voice. */
-        NOXNA void setHasVoiceSupportProperty(bool value);
+        CNAEXT void setHasVoiceSupportProperty(bool value);
 
         /** @brief Gets the type of this gamepad. */
         [[nodiscard]] GamePadType getGamePadTypeProperty() const;
         /** @brief Sets the type of this gamepad. */
-        NOXNA void setGamePadTypeProperty(GamePadType value);
+        CNAEXT void setGamePadTypeProperty(GamePadType value);
 
-        // FNA extensions — both getter and setter are NOXNA (not part of the XNA 4.0 API).
+        // FNA extensions — both getter and setter are CNAEXT (not part of the XNA 4.0 API).
 
         /** @brief Indicates whether the controller has a light bar (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasLightBarEXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasLightBarEXTProperty() const;
         /** @brief Sets whether the controller has a light bar (FNA extension). */
-        NOXNA void setHasLightBarEXTProperty(bool value);
+        CNAEXT void setHasLightBarEXTProperty(bool value);
 
         /** @brief Indicates whether the controller has trigger vibration motors (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasTriggerVibrationMotorsEXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasTriggerVibrationMotorsEXTProperty() const;
         /** @brief Sets whether the controller has trigger vibration motors (FNA extension). */
-        NOXNA void setHasTriggerVibrationMotorsEXTProperty(bool value);
+        CNAEXT void setHasTriggerVibrationMotorsEXTProperty(bool value);
 
         /** @brief Indicates whether the controller has a Misc1 button (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasMisc1EXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasMisc1EXTProperty() const;
         /** @brief Sets whether the controller has a Misc1 button (FNA extension). */
-        NOXNA void setHasMisc1EXTProperty(bool value);
+        CNAEXT void setHasMisc1EXTProperty(bool value);
 
         /** @brief Indicates whether the controller has a Paddle1 button (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasPaddle1EXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasPaddle1EXTProperty() const;
         /** @brief Sets whether the controller has a Paddle1 button (FNA extension). */
-        NOXNA void setHasPaddle1EXTProperty(bool value);
+        CNAEXT void setHasPaddle1EXTProperty(bool value);
 
         /** @brief Indicates whether the controller has a Paddle2 button (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasPaddle2EXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasPaddle2EXTProperty() const;
         /** @brief Sets whether the controller has a Paddle2 button (FNA extension). */
-        NOXNA void setHasPaddle2EXTProperty(bool value);
+        CNAEXT void setHasPaddle2EXTProperty(bool value);
 
         /** @brief Indicates whether the controller has a Paddle3 button (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasPaddle3EXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasPaddle3EXTProperty() const;
         /** @brief Sets whether the controller has a Paddle3 button (FNA extension). */
-        NOXNA void setHasPaddle3EXTProperty(bool value);
+        CNAEXT void setHasPaddle3EXTProperty(bool value);
 
         /** @brief Indicates whether the controller has a Paddle4 button (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasPaddle4EXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasPaddle4EXTProperty() const;
         /** @brief Sets whether the controller has a Paddle4 button (FNA extension). */
-        NOXNA void setHasPaddle4EXTProperty(bool value);
+        CNAEXT void setHasPaddle4EXTProperty(bool value);
 
         /** @brief Indicates whether the controller has a touch pad (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasTouchPadEXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasTouchPadEXTProperty() const;
         /** @brief Sets whether the controller has a touch pad (FNA extension). */
-        NOXNA void setHasTouchPadEXTProperty(bool value);
+        CNAEXT void setHasTouchPadEXTProperty(bool value);
 
         /** @brief Indicates whether the controller has a gyroscope (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasGyroEXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasGyroEXTProperty() const;
         /** @brief Sets whether the controller has a gyroscope (FNA extension). */
-        NOXNA void setHasGyroEXTProperty(bool value);
+        CNAEXT void setHasGyroEXTProperty(bool value);
 
         /** @brief Indicates whether the controller has an accelerometer (FNA extension). */
-        NOXNA [[nodiscard]] bool getHasAccelerometerEXTProperty() const;
+        CNAEXT [[nodiscard]] bool getHasAccelerometerEXTProperty() const;
         /** @brief Sets whether the controller has an accelerometer (FNA extension). */
-        NOXNA void setHasAccelerometerEXTProperty(bool value);
+        CNAEXT void setHasAccelerometerEXTProperty(bool value);
 
     private:
         bool isConnected_              = false;

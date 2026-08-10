@@ -109,7 +109,7 @@ TEST(AvatarAnimationTest, ImplementsIAvatarAnimationInterface) {
     EXPECT_EQ(asInterface.getBoneTransformsProperty().getCountProperty(), 71);
 }
 
-// --- Real-rendering extension (NOXNA) ---
+// --- Real-rendering extension (CNAEXT) ---
 
 TEST(AvatarAnimationTest, RealClipNameDefaultsToPresetName) {
     AvatarAnimation wave(AvatarAnimationPreset::Wave);

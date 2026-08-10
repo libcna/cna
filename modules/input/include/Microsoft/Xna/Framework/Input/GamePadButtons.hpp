@@ -83,7 +83,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] ButtonState getBigButtonProperty() const;
 
         /** @brief Constructs with no buttons pressed. */
-        NOXNA GamePadButtons();
+        CNAEXT GamePadButtons();
 
         /**
          * @brief Constructs from a combined Buttons flags value.
@@ -96,7 +96,7 @@ namespace Microsoft::Xna::Framework::Input
          * @param btns The list of button flags to combine.
          * @return The resulting GamePadButtons.
          */
-        NOXNA static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns);
+        CNAEXT static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns);
 
         /**
          * @brief Compares this instance with another for equality.
@@ -131,7 +131,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] ButtonState ButtonStateFromFlag(Buttons flag) const;
 
         /** @brief Packed button flags. For internal library use only. */
-        NOXNA Buttons buttons_;
+        CNAEXT Buttons buttons_;
 
         friend struct GamePadState;
     };

@@ -134,7 +134,7 @@ protected:
             dev.ResourceCreated += [&](System::Object*, const ResourceCreatedEventArgs&) { ++createCount; };
 
             {
-                BlendState bs;  // no device — NOXNA extension, device=nullptr
+                BlendState bs;  // no device — CNAEXT extension, device=nullptr
                 (void)bs;
             }
 

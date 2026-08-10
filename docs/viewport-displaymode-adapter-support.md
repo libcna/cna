@@ -23,7 +23,7 @@ validation/clamping in both FNA and CNA, by design (matches FNA's own unguarded 
 Task 345's `GraphicsAdapter` audit found FNA has a real `this[SurfaceFormat format]` indexer on
 `DisplayModeCollection` that CNA was missing entirely. Task 347 added it as a second
 `operator[](SurfaceFormat)` overload (coexisting with the pre-existing `operator[](int)`), and
-retroactively wrapped CNA's own `getCountProperty()`/integer indexer in `NOXNA` (neither exists in
+retroactively wrapped CNA's own `getCountProperty()`/integer indexer in `CNAEXT` (neither exists in
 FNA's real API).
 
 ## 3. `GraphicsAdapter` audit (Tasks 345–346) — real bugs fixed

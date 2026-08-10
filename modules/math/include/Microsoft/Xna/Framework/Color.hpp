@@ -358,7 +358,7 @@ namespace Microsoft::Xna::Framework
         /**
          * @brief Returns a debug string @c "R G B A" for display purposes.
          */
-        NOXNA [[nodiscard]] std::string getDebugDisplayStringProperty() const;
+        CNAEXT [[nodiscard]] std::string getDebugDisplayStringProperty() const;
 
         // ------------------------------------------------------------------
         // Constructors
@@ -435,9 +435,9 @@ namespace Microsoft::Xna::Framework
          * @param g Green component value from 0 to 255.
          * @param b Blue component value from 0 to 255.
          *
-         * @note NOXNA — not part of the XNA 4.0 API. CNA convenience overload.
+         * @note CNAEXT — not part of the XNA 4.0 API. CNA convenience overload.
          */
-        NOXNA Color(bytecs r, bytecs g, bytecs b);
+        CNAEXT Color(bytecs r, bytecs g, bytecs b);
 
         /**
          * @brief Constructs an RGBA color from 8-bit byte components including alpha.
@@ -447,9 +447,9 @@ namespace Microsoft::Xna::Framework
          * @param b Blue component value from 0 to 255.
          * @param alpha Alpha component value from 0 to 255.
          *
-         * @note NOXNA — not part of the XNA 4.0 API. CNA convenience overload.
+         * @note CNAEXT — not part of the XNA 4.0 API. CNA convenience overload.
          */
-        NOXNA Color(bytecs r, bytecs g, bytecs b, bytecs alpha);
+        CNAEXT Color(bytecs r, bytecs g, bytecs b, bytecs alpha);
 
         // ------------------------------------------------------------------
         // Public instance methods
@@ -595,7 +595,7 @@ namespace Microsoft::Xna::Framework
      * @param value Source Color.
      * @return Multiplication result.
      *
-     * @note NOXNA — commutative form not present in XNA 4.0 / FNA. CNA convenience overload.
+     * @note CNAEXT — commutative form not present in XNA 4.0 / FNA. CNA convenience overload.
      */
-    NOXNA [[nodiscard]] Color operator*(float scale, const Color& value);
+    CNAEXT [[nodiscard]] Color operator*(float scale, const Color& value);
 } // namespace Microsoft::Xna::Framework

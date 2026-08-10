@@ -116,11 +116,11 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] std::string ToString() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         // MediaLibrary is the only component that knows which member song carries embedded art;
         // this stays internal rather than widening the public XNA surface (plan_media.md MEDIA-208).
-        NOXNA friend class MediaLibrary;
+        CNAEXT friend class MediaLibrary;
 
         /** @brief Returns whether two albums are equal. */
         friend bool operator==(const Album& lhs, const Album& rhs);

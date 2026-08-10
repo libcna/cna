@@ -45,7 +45,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param device      Owning graphics device.
          * @param vertexCount Number of vertices the buffer can hold.
          */
-        NOXNA VertexBuffer(GraphicsDevice& device, int vertexCount);
+        CNAEXT VertexBuffer(GraphicsDevice& device, int vertexCount);
 
         /**
          * @brief Constructs a vertex buffer from a vertex declaration.
@@ -63,7 +63,7 @@ namespace Microsoft::Xna::Framework::Graphics
                      BufferUsage bufferUsage);
 
         /** @brief Destructor. */
-        NOXNA ~VertexBuffer() override;
+        CNAEXT ~VertexBuffer() override;
 
         /** @brief Copying is not allowed. */
         VertexBuffer(const VertexBuffer&) = delete;
@@ -75,7 +75,7 @@ namespace Microsoft::Xna::Framework::Graphics
         VertexBuffer& operator=(VertexBuffer&&) noexcept;
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         using GraphicsResource::Dispose;
 
@@ -220,128 +220,128 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads VertexPositionNormalTextureSkinned vertex data to the GPU buffer.
          *
-         * NOXNA overload for the GPU-skinned vertex type.
+         * CNAEXT overload for the GPU-skinned vertex type.
          *
          * @param data  Pointer to the source vertex array.
          * @param count Number of vertices to upload.
          */
-        NOXNA void SetData(const VertexPositionNormalTextureSkinned* data, int count);
+        CNAEXT void SetData(const VertexPositionNormalTextureSkinned* data, int count);
 
         /**
          * @brief Uploads a slice of VertexPositionNormalTextureSkinned vertex data to the GPU buffer.
          *
-         * NOXNA overload for the GPU-skinned vertex type.
+         * CNAEXT overload for the GPU-skinned vertex type.
          *
          * @param data         Pointer to the source vertex array.
          * @param startIndex   Index of the first element to read from @p data.
          * @param elementCount Number of vertices to upload.
          */
-        NOXNA void SetData(const VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount);
+        CNAEXT void SetData(const VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount);
 
         /**
          * @brief Reads back VertexPositionNormalTextureSkinned vertex data previously uploaded via `SetData`.
          *
-         * NOXNA overload for the GPU-skinned vertex type.
+         * CNAEXT overload for the GPU-skinned vertex type.
          *
          * @param data  Destination array to receive the vertex data.
          * @param count Number of vertices to read.
          */
-        NOXNA void GetData(VertexPositionNormalTextureSkinned* data, int count);
+        CNAEXT void GetData(VertexPositionNormalTextureSkinned* data, int count);
 
         /**
          * @brief Reads back a slice of VertexPositionNormalTextureSkinned vertex data previously uploaded via `SetData`.
          *
-         * NOXNA overload for the GPU-skinned vertex type.
+         * CNAEXT overload for the GPU-skinned vertex type.
          *
          * @param data         Destination array to receive the vertex data.
          * @param startIndex   Index of the first element to write in @p data.
          * @param elementCount Number of vertices to read.
          */
-        NOXNA void GetData(VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount);
+        CNAEXT void GetData(VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads VertexPositionNormalTangentTexture vertex data to the GPU buffer.
          *
-         * NOXNA overload for PbrEffect's tangent-space vertex type.
+         * CNAEXT overload for PbrEffect's tangent-space vertex type.
          *
          * @param data  Pointer to the source vertex array.
          * @param count Number of vertices to upload.
          */
-        NOXNA void SetData(const VertexPositionNormalTangentTexture* data, int count);
+        CNAEXT void SetData(const VertexPositionNormalTangentTexture* data, int count);
 
         /**
          * @brief Uploads a slice of VertexPositionNormalTangentTexture vertex data to the GPU buffer.
          *
-         * NOXNA overload for PbrEffect's tangent-space vertex type.
+         * CNAEXT overload for PbrEffect's tangent-space vertex type.
          *
          * @param data         Pointer to the source vertex array.
          * @param startIndex   Index of the first element to read from @p data.
          * @param elementCount Number of vertices to upload.
          */
-        NOXNA void SetData(const VertexPositionNormalTangentTexture* data, int startIndex, int elementCount);
+        CNAEXT void SetData(const VertexPositionNormalTangentTexture* data, int startIndex, int elementCount);
 
         /**
          * @brief Reads back VertexPositionNormalTangentTexture vertex data previously uploaded via `SetData`.
          *
-         * NOXNA overload for PbrEffect's tangent-space vertex type.
+         * CNAEXT overload for PbrEffect's tangent-space vertex type.
          *
          * @param data  Destination array to receive the vertex data.
          * @param count Number of vertices to read.
          */
-        NOXNA void GetData(VertexPositionNormalTangentTexture* data, int count);
+        CNAEXT void GetData(VertexPositionNormalTangentTexture* data, int count);
 
         /**
          * @brief Reads back a slice of VertexPositionNormalTangentTexture vertex data previously uploaded via `SetData`.
          *
-         * NOXNA overload for PbrEffect's tangent-space vertex type.
+         * CNAEXT overload for PbrEffect's tangent-space vertex type.
          *
          * @param data         Destination array to receive the vertex data.
          * @param startIndex   Index of the first element to write in @p data.
          * @param elementCount Number of vertices to read.
          */
-        NOXNA void GetData(VertexPositionNormalTangentTexture* data, int startIndex, int elementCount);
+        CNAEXT void GetData(VertexPositionNormalTangentTexture* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads VertexPositionNormalTangentTextureSkinned vertex data to the GPU buffer.
          *
-         * NOXNA overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
+         * CNAEXT overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
          *
          * @param data  Pointer to the source vertex array.
          * @param count Number of vertices to upload.
          */
-        NOXNA void SetData(const VertexPositionNormalTangentTextureSkinned* data, int count);
+        CNAEXT void SetData(const VertexPositionNormalTangentTextureSkinned* data, int count);
 
         /**
          * @brief Uploads a slice of VertexPositionNormalTangentTextureSkinned vertex data to the GPU buffer.
          *
-         * NOXNA overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
+         * CNAEXT overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
          *
          * @param data         Pointer to the source vertex array.
          * @param startIndex   Index of the first element to read from @p data.
          * @param elementCount Number of vertices to upload.
          */
-        NOXNA void SetData(const VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount);
+        CNAEXT void SetData(const VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount);
 
         /**
          * @brief Reads back VertexPositionNormalTangentTextureSkinned vertex data previously uploaded via `SetData`.
          *
-         * NOXNA overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
+         * CNAEXT overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
          *
          * @param data  Destination array to receive the vertex data.
          * @param count Number of vertices to read.
          */
-        NOXNA void GetData(VertexPositionNormalTangentTextureSkinned* data, int count);
+        CNAEXT void GetData(VertexPositionNormalTangentTextureSkinned* data, int count);
 
         /**
          * @brief Reads back a slice of VertexPositionNormalTangentTextureSkinned vertex data previously uploaded via `SetData`.
          *
-         * NOXNA overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
+         * CNAEXT overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
          *
          * @param data         Destination array to receive the vertex data.
          * @param startIndex   Index of the first element to write in @p data.
          * @param elementCount Number of vertices to read.
          */
-        NOXNA void GetData(VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount);
+        CNAEXT void GetData(VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads raw vertex data with an explicit per-vertex byte stride.
@@ -353,19 +353,19 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param count  Number of vertices.
          * @param stride Size of one vertex in bytes.
          */
-        NOXNA void SetDataRaw(const void* data, int count, int stride);
+        CNAEXT void SetDataRaw(const void* data, int count, int stride);
 
         /**
          * @brief Internal accessor used by the renderer draw paths.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Renderers::IVertexBufferRenderer& GetRenderer() const { return *renderer_; }
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::IVertexBufferRenderer& GetRenderer() const { return *renderer_; }
 
         /**
          * @brief Returns true while the GPU buffer handle is allocated.
          *
          * Becomes false immediately after `Dispose()` is called.
          */
-        NOXNA [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
+        CNAEXT [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
 
     protected:
         /**

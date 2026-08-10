@@ -58,7 +58,7 @@ a starting sketch, re-verify before actually implementing):
   renderer, matching this project's general "don't require proprietary vendor services
   for a core feature" posture (see e.g. `VibrateController`'s SDL3-only approach, no
   vendor-specific rumble APIs).
-- **Optional, `NOXNA`/opt-in enhancement:** Google's Fused Location Provider API
+- **Optional, `CNAEXT`/opt-in enhancement:** Google's Fused Location Provider API
   (`com.google.android.gms.location.FusedLocationProviderClient`) — better accuracy/
   battery behavior, but requires Google Play Services, so it must be a strictly
   optional, separately-buildable renderer, never the only path, to keep AOSP/no-GMS
@@ -113,6 +113,6 @@ sketched above, `Compass`'s consumption of it should be:
   in this codebase yet. This document is a placeholder for a future, separately-scoped
   task — not a task itself.
 - No GPS/location member should be added to any `Microsoft::Devices::Sensors` class
-  under any circumstances, including as a `NOXNA` extension — the real WP7 API draws
+  under any circumstances, including as a `CNAEXT` extension — the real WP7 API draws
   this line clearly (separate assembly), and this codebase should preserve that
   separation even where CNA takes liberties elsewhere.

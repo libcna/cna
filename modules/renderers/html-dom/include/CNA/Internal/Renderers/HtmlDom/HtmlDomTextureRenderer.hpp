@@ -79,7 +79,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
         /**
-         * @brief NOXNA. Returns this texture's id into `Module['cnaDomTextures']`.
+         * @brief CNAEXT. Returns this texture's id into `Module['cnaDomTextures']`.
          *
          * Used by HtmlDomSpriteBatchRenderer to name the source texture in a draw command, and by
          * HtmlDomRenderTargetRenderer for its own bind/readback.

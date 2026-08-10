@@ -129,7 +129,7 @@ TEST_F(TextInputEXTTest, TextEditingWithoutSubscriberIsSafe)
     EXPECT_NO_THROW(TextInputEXT::INTERNAL_OnTextEditing("x", 0, 1));
 }
 
-// NOXNA/EXT (input_noxna.md N-014): SDL3-new IME candidate list, no FNA counterpart to compare
+// CNAEXT/EXT (input_noxna.md N-014): SDL3-new IME candidate list, no FNA counterpart to compare
 // against. Dispatches the candidate strings, the pre-selected index, and the layout orientation.
 TEST_F(TextInputEXTTest, TextEditingCandidatesDispatchesListSelectedAndHorizontal)
 {

@@ -53,7 +53,7 @@ if(EMSCRIPTEN)
 endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
-option(CNA_NOXNA "Enable CNA NOXNA extended graphics layer (beyond XNA 4.0)" OFF)
+option(CNA_CNAEXT "Enable CNA CNAEXT extended graphics layer (beyond XNA 4.0)" OFF)
 option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
 # On a Linux cross-build, Direct2D tests normally use the project's dedicated system-Wine prefix.

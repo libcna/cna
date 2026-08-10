@@ -2,7 +2,7 @@
 //
 // plan_xnb.md XNB-42 (Phase G): proves the public extension point a real CNA game uses to load
 // its own custom, non-built-in .xnb content. There is no separate wrapper API to add here --
-// `ContentTypeReaderManager::AddTypeCreator()` (XNB-14/14A) is already public/NOXNA-callable and
+// `ContentTypeReaderManager::AddTypeCreator()` (XNB-14/14A) is already public/CNAEXT-callable and
 // generic over any `ContentTypeReader<T>` subclass a game defines outside CNA entirely, matching
 // FNA's own real internal method of the same name/shape (see that method's own doc comment).
 // `.cnj`'s `RegisterCnjLoader<T>()` is the equivalent extension point for CNA's own JSON-based

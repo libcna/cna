@@ -33,36 +33,36 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format);
 
         /** @brief Destructor. */
-        NOXNA ~Texture3D() override;
+        CNAEXT ~Texture3D() override;
 
         /**
          * @brief Copying is not allowed.
          *
-         * NOXNA, explicit for clarity: `renderer_`'s `std::unique_ptr` member already makes this
+         * CNAEXT, explicit for clarity: `renderer_`'s `std::unique_ptr` member already makes this
          * implicit, but plan_xnb.md XNB-25 needed a real move path added (see below) and every
          * other similarly-shaped GPU-resource class in this codebase (`VertexBuffer`,
          * `IndexBuffer`, `TextureCube`) already declares both explicitly rather than relying on
          * what the compiler happens to imply.
          */
-        NOXNA Texture3D(const Texture3D&) = delete;
+        CNAEXT Texture3D(const Texture3D&) = delete;
         /** @brief Copy-assignment is not allowed. */
-        NOXNA Texture3D& operator=(const Texture3D&) = delete;
+        CNAEXT Texture3D& operator=(const Texture3D&) = delete;
         /**
          * @brief Move-constructs a Texture3D, transferring GPU handle ownership.
          *
-         * NOXNA: this class had no move path at all until plan_xnb.md XNB-25's `Texture3DReader`
+         * CNAEXT: this class had no move path at all until plan_xnb.md XNB-25's `Texture3DReader`
          * needed one -- a user-declared destructor already suppressed the implicit move
          * constructor the compiler would otherwise have generated, and the pre-existing
          * `std::unique_ptr` member independently blocks the implicit copy constructor, so this
          * type could not previously be returned by value at all (not even via NRVO, which the
          * standard never guarantees).
          */
-        NOXNA Texture3D(Texture3D&&) noexcept;
+        CNAEXT Texture3D(Texture3D&&) noexcept;
         /** @brief Move-assigns a Texture3D, transferring GPU handle ownership. */
-        NOXNA Texture3D& operator=(Texture3D&&) noexcept;
+        CNAEXT Texture3D& operator=(Texture3D&&) noexcept;
 
         /** @brief Returns the fully qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns the texture width in texels. */
         [[nodiscard]] int getWidthProperty() const;
@@ -138,7 +138,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws System::NotSupportedException if this renderer did not store the whole box.
          * @throws std::invalid_argument if @p data is null.
          */
-        NOXNA void SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
+        CNAEXT void SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
                                      const void* data, int dataLength);
 
         /**
@@ -195,7 +195,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return Reference to the renderer ITexture3DRenderer.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Renderers::ITexture3DRenderer& GetRenderer() const { return *renderer_; }
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::ITexture3DRenderer& GetRenderer() const { return *renderer_; }
 
     protected:
         /** @brief Releases the renderer 3D texture handle when the resource is disposed. */

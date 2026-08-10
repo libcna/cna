@@ -543,7 +543,7 @@ namespace CNA::Internal::Renderers::Bgfx
         [[nodiscard]] int GetVertexCount() const override { return vertexCount; }
         /// The declaration this buffer's current native layout was derived from. Empty until the
         /// first SetVertexDeclaration call. Diagnostics and tests only.
-        NOXNA [[nodiscard]] const VertexDeclaration& GetVertexDeclarationEXT() const noexcept
+        CNAEXT [[nodiscard]] const VertexDeclaration& GetVertexDeclarationEXT() const noexcept
         {
             return declaration_;
         }

@@ -86,7 +86,7 @@ namespace Microsoft::Devices::Sensors
             // Task DEV-AUD-006 (2026-07-16, external audit `audit_devices.md`):
             // previously read backend_ here without holding the lock, while
             // SetBackendForTesting() replaces the same unique_ptr under it -- a
-            // concurrent setTimeBetweenUpdatesProperty() call and the NOXNA
+            // concurrent setTimeBetweenUpdatesProperty() call and the CNAEXT
             // test seam could race on the pointer. The new interval is
             // captured first (getTimeBetweenUpdatesProperty() takes its own,
             // separate SensorBase<T>::mutex_, already released by the time this

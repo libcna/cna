@@ -689,7 +689,7 @@ namespace
 
     // CNB-66/67/68 (Phase 13C): a skinned mesh with a COLOR_0 attribute must import through the
     // new stride-56 (skinned + Color) layout, with "vertexColorEnabled": true wired to
-    // SkinnedEffect's new NOXNA VertexColorEnabled property. One bone (identity inverse bind
+    // SkinnedEffect's new CNAEXT VertexColorEnabled property. One bone (identity inverse bind
     // matrix), 3 vertices each fully weighted to that bone, distinct RGBA colors per vertex.
     const char* kSkinnedVertexColorGltf = R"GLTF({
   "asset": { "version": "2.0" },
@@ -1337,7 +1337,7 @@ TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffe
 }
 
 // CNB-66/67/68: a skinned mesh with a COLOR_0 attribute must import through the new stride-56
-// (skinned + Color) layout, wiring "vertexColorEnabled": true to SkinnedEffect's new NOXNA
+// (skinned + Color) layout, wiring "vertexColorEnabled": true to SkinnedEffect's new CNAEXT
 // VertexColorEnabled property, and the loaded vertex buffer must carry the real per-vertex colors.
 TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEffect)
 {

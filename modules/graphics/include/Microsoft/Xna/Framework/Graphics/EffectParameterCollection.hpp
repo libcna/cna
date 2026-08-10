@@ -115,7 +115,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param param The EffectParameter to add.
          */
-        NOXNA void Add(EffectParameter param);
+        CNAEXT void Add(EffectParameter param);
 
         /**
          * @brief Gets the first parameter whose semantic matches the given string.
@@ -134,13 +134,13 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] const EffectParameter* GetParameterBySemantic(const std::string& semantic) const;
 
         /** @brief Returns a mutable iterator to the first parameter. */
-        NOXNA iterator begin();
+        CNAEXT iterator begin();
         /** @brief Returns a mutable iterator past the last parameter. */
-        NOXNA iterator end();
+        CNAEXT iterator end();
         /** @brief Returns a const iterator to the first parameter. */
-        NOXNA const_iterator begin() const;
+        CNAEXT const_iterator begin() const;
         /** @brief Returns a const iterator past the last parameter. */
-        NOXNA const_iterator end() const;
+        CNAEXT const_iterator end() const;
 
     private:
         std::vector<std::unique_ptr<EffectParameter>> elements_;

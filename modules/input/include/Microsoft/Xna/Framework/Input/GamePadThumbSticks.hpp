@@ -27,7 +27,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] const Microsoft::Xna::Framework::Vector2& getRightProperty() const;
 
         /** @brief Constructs with both sticks at rest. */
-        NOXNA GamePadThumbSticks();
+        CNAEXT GamePadThumbSticks();
 
         /**
          * @brief Constructs with given positions; applies square clamp to [-1, 1].

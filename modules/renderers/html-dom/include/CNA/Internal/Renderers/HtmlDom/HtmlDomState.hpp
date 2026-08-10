@@ -127,7 +127,7 @@ namespace CNA::Internal::Renderers::HtmlDom
                                                             int colorBlendFunc, int alphaBlendFunc);
 
     /**
-     * @brief NOXNA. Returns the composite operation the most recent ApplyBlendState selected.
+     * @brief CNAEXT. Returns the composite operation the most recent ApplyBlendState selected.
      *
      * Shared between HtmlDomRenderer (which sets it) and HtmlDomSpriteBatchRenderer (which
      * encodes it into every draw command). Kept as plain C++ state rather than a JS-side flag so
@@ -139,14 +139,14 @@ namespace CNA::Internal::Renderers::HtmlDom
     [[nodiscard]] DomCompositeOp GetCurrentCompositeOpEXT();
 
     /**
-     * @brief NOXNA. Records the composite operation subsequent draws must use.
+     * @brief CNAEXT. Records the composite operation subsequent draws must use.
      *
      * @param op The composite operation selected by ApplyBlendState.
      */
     void SetCurrentCompositeOpEXT(DomCompositeOp op);
 
     /**
-     * @brief NOXNA. Returns whether the most recent ApplyRasterizerState enabled scissor testing.
+     * @brief CNAEXT. Returns whether the most recent ApplyRasterizerState enabled scissor testing.
      *
      * plan_html_dom.md HTMLDOM-102: RasterizerState.ScissorTestEnable was previously never read by
      * this renderer at all -- SetScissorRect's clip-path/Canvas2D clip applied unconditionally,
@@ -162,14 +162,14 @@ namespace CNA::Internal::Renderers::HtmlDom
     [[nodiscard]] bool GetCurrentScissorEnableEXT();
 
     /**
-     * @brief NOXNA. Records whether subsequent draws should honour the scissor rect.
+     * @brief CNAEXT. Records whether subsequent draws should honour the scissor rect.
      *
      * @param enabled The scissor-test-enable bit selected by ApplyRasterizerState.
      */
     void SetCurrentScissorEnableEXT(bool enabled);
 
     /**
-     * @brief NOXNA. Returns the JS-side canvas id of the currently bound render target.
+     * @brief CNAEXT. Returns the JS-side canvas id of the currently bound render target.
      *
      * plan_html_dom.md design decision 10: while a render target is bound, draws cannot go to the
      * DOM (a `<div>` cannot render into an off-screen surface) and route through the target's own
@@ -180,7 +180,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     [[nodiscard]] int GetBoundRenderTargetIdEXT();
 
     /**
-     * @brief NOXNA. Records which render target is bound, or 0 for the DOM backbuffer.
+     * @brief CNAEXT. Records which render target is bound, or 0 for the DOM backbuffer.
      *
      * @param canvasId The target's JS-side canvas id, or 0 to restore the DOM backbuffer.
      */

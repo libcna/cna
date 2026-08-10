@@ -36,7 +36,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
         virtual void PackFromVector4(const Microsoft::Xna::Framework::Vector4& vector) = 0;
 
         /** @brief Virtual destructor. */
-        NOXNA virtual ~IPackedVector() = default;
+        CNAEXT virtual ~IPackedVector() = default;
     };
 
     /**

@@ -708,7 +708,7 @@ TEST(SoundEffectTest, FromStreamTruncatedDataChunkThrowsNotSupported)
     }
 }
 
-// ===================== path constructor (NOXNA) =====================
+// ===================== path constructor (CNAEXT) =====================
 
 TEST(SoundEffectTest, ConstructFromEmptyPathIsNoOp)
 {

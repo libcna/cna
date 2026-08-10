@@ -1,0 +1,10 @@
+NOXNA.md	CNAEXT.md
+examples/noxna_settings_example.cpp	examples/cnaext_settings_example.cpp
+modules/input/src/NoXna/Clipboard.cpp	modules/input/src/CnaExt/Clipboard.cpp
+modules/input/src/NoXna/HapticDevice.cpp	modules/input/src/CnaExt/HapticDevice.cpp
+modules/input/src/NoXna/Haptics.cpp	modules/input/src/CnaExt/Haptics.cpp
+modules/input/src/NoXna/InputDevices.cpp	modules/input/src/CnaExt/InputDevices.cpp
+modules/input/src/NoXna/Joysticks.cpp	modules/input/src/CnaExt/Joysticks.cpp
+modules/input/src/NoXna/Power.cpp	modules/input/src/CnaExt/Power.cpp
+modules/input/src/NoXna/Sensors.cpp	modules/input/src/CnaExt/Sensors.cpp
+tests/modules/probe_noxna.cpp	tests/modules/probe_cnaext.cpp

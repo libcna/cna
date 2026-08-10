@@ -56,7 +56,7 @@ namespace Microsoft::Xna::Framework::Net
          * a session listing not built from a real discovery reply); real production discovery
          * replies use the measured overload below instead.
          */
-        NOXNA static QualityOfService CreateInternal();
+        CNAEXT static QualityOfService CreateInternal();
 
         /**
          * @brief Task 4.2: creates a QualityOfService reflecting a real measurement, with
@@ -72,7 +72,7 @@ namespace Microsoft::Xna::Framework::Net
          * fields, since a single query/reply exchange yields exactly one sample, not a running
          * series to average or take a minimum over.
          */
-        NOXNA static QualityOfService CreateInternal(System::TimeSpan roundtripTime);
+        CNAEXT static QualityOfService CreateInternal(System::TimeSpan roundtripTime);
 
     private:
         QualityOfService();

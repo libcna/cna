@@ -131,7 +131,7 @@ namespace Microsoft::Xna::Framework::Audio
         void Stop();
 
         /** @brief Calls CheckBuffer() on every known microphone (used by FrameworkDispatcher::Update). */
-        NOXNA static void CheckAllBuffers();
+        CNAEXT static void CheckAllBuffers();
 
         GetTypeNameHPP()
 
@@ -141,12 +141,12 @@ namespace Microsoft::Xna::Framework::Audio
         // sanctioned bridge for FrameworkDispatcher is the static CheckAllBuffers() above, which
         // already has private-member access to every instance's CheckBuffer() as a same-class
         // static method, so it doesn't need CheckBuffer() itself to be public.
-        NOXNA void CheckBuffer();
+        CNAEXT void CheckBuffer();
 
         // Production Microphone instances are constructed directly by getAllProperty() from
         // the enumerated SDL3 capture devices; tests need a way to construct an isolated
         // instance directly, independent of whatever the current machine/driver enumerates.
-        NOXNA friend struct MicrophoneTestAccess;
+        CNAEXT friend struct MicrophoneTestAccess;
 
         Microphone(SharpRuntime::uintcs id, std::string name);
 

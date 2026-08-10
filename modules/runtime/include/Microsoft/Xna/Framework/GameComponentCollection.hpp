@@ -20,11 +20,11 @@ namespace Microsoft::Xna::Framework
     {
     public:
         /** @brief Element count type for C++ container compatibility. */
-        NOXNA using size_type = std::vector<IGameComponent*>::size_type;
+        CNAEXT using size_type = std::vector<IGameComponent*>::size_type;
         /** @brief Mutable iterator over components (replaces IEnumerable<IGameComponent>). */
-        NOXNA using iterator = std::vector<IGameComponent*>::iterator;
+        CNAEXT using iterator = std::vector<IGameComponent*>::iterator;
         /** @brief Read-only iterator over components. */
-        NOXNA using const_iterator = std::vector<IGameComponent*>::const_iterator;
+        CNAEXT using const_iterator = std::vector<IGameComponent*>::const_iterator;
 
         /**
          * @brief Event that is triggered when a GameComponent is added to this collection.
@@ -104,31 +104,31 @@ namespace Microsoft::Xna::Framework
          * @brief Returns an iterator to the first component.
          * @return A mutable iterator pointing to the first component.
          */
-        NOXNA [[nodiscard]] iterator begin();
+        CNAEXT [[nodiscard]] iterator begin();
 
         /**
          * @brief Returns an iterator past the last component.
          * @return A mutable iterator one past the last component.
          */
-        NOXNA [[nodiscard]] iterator end();
+        CNAEXT [[nodiscard]] iterator end();
 
         /**
          * @brief Returns a const iterator to the first component.
          * @return An immutable iterator pointing to the first component.
          */
-        NOXNA [[nodiscard]] const_iterator begin() const;
+        CNAEXT [[nodiscard]] const_iterator begin() const;
 
         /**
          * @brief Returns a const iterator past the last component.
          * @return An immutable iterator one past the last component.
          */
-        NOXNA [[nodiscard]] const_iterator end() const;
+        CNAEXT [[nodiscard]] const_iterator end() const;
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.
          * @return A const reference to the type name string.
          */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         std::vector<IGameComponent*> items_;

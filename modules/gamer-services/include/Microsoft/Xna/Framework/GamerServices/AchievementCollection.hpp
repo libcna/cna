@@ -52,14 +52,14 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @return Begin iterator.
          */
-        NOXNA [[nodiscard]] auto begin() const { return collection_.begin(); }
+        CNAEXT [[nodiscard]] auto begin() const { return collection_.begin(); }
 
         /**
          * @brief Returns a C++ iterator past the end (for range-for).
          *
          * @return End iterator.
          */
-        NOXNA [[nodiscard]] auto end() const { return collection_.end(); }
+        CNAEXT [[nodiscard]] auto end() const { return collection_.end(); }
 
         /**
          * @brief Releases the achievements held by this collection.
@@ -165,7 +165,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] bool getIsReadOnlyProperty() const;
 
         /** @brief Creates an AchievementCollection for CNA internal use. */
-        NOXNA static AchievementCollection CreateInternal(std::vector<Achievement> achievements);
+        CNAEXT static AchievementCollection CreateInternal(std::vector<Achievement> achievements);
 
     private:
         explicit AchievementCollection(std::vector<Achievement> achievements);

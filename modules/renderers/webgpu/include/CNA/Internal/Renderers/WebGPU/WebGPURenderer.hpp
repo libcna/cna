@@ -41,7 +41,7 @@ namespace CNA::Internal::Renderers::WebGPU
     /// it into a safe dynamic_cast that degrades to "treat as unbound" for any incompatible type,
     /// which is never worse than before and is now also correct for a RenderTarget2D.
     /**
-     * @brief One native reference on a sampleable texture and its view (REMED-GFX-167). NOXNA.
+     * @brief One native reference on a sampleable texture and its view (REMED-GFX-167). CNAEXT.
      *
      * This renderer records a whole frame and replays it later — a draw queued now is issued at
      * `SetRenderTarget()`'s flush or, for a backbuffer destination, not until `Present()`. The
@@ -75,7 +75,7 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
-     * @brief The one bindable form of a sampled texture in this renderer (REMED-GFX-167). NOXNA.
+     * @brief The one bindable form of a sampled texture in this renderer (REMED-GFX-167). CNAEXT.
      *
      * Every deferred command stores this by value instead of a pointer to the resource's renderer
      * object. That closes both halves of the same defect at once: the view is resolved once, at

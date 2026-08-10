@@ -295,7 +295,7 @@ namespace CNA::Internal::Renderers::Magnum
     };
 
     /**
-     * @brief NOXNA. REMED-GFX-DECL-GUARD: refuses a declaration the stock route would misread.
+     * @brief CNAEXT. REMED-GFX-DECL-GUARD: refuses a declaration the stock route would misread.
      *
      * The stock route resolves its attribute layout from `StockAttributesForStride()` -- the
      * combined byte stride alone -- and its program's input semantics are fixed by that layout, so

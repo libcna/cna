@@ -250,7 +250,7 @@ namespace CNA::Internal::Renderers::Vulkan
          *
          * @return The shared destination description; never null for a constructed target.
          */
-        NOXNA [[nodiscard]] const std::shared_ptr<VulkanTargetPassEXT>& PassEXT() const { return pass_; }
+        CNAEXT [[nodiscard]] const std::shared_ptr<VulkanTargetPassEXT>& PassEXT() const { return pass_; }
         // Task 878/879: true once this instance actually engaged MSAA (msaaFramebuffer_ created).
         bool            WantsMsaa()                const { return msaaFramebuffer_ != VK_NULL_HANDLE; }
         // Real, renderer-clamped applied MultiSampleCount (0 if MSAA wasn't engaged — see the
@@ -793,7 +793,7 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return static_cast<const void*>(image_);
         }
-        /// REMED-GFX-141: this cube's per-face multisample colour view (NOXNA -- test/diagnostics).
+        /// REMED-GFX-141: this cube's per-face multisample colour view (CNAEXT -- test/diagnostics).
         /// There are six now, one per array layer of `msaaColorImage_`, where there used to be one
         /// shared by every face. VK_NULL_HANDLE when this target did not engage MSAA.
         [[nodiscard]] VkImageView GetMsaaColorViewEXT(int face) const
@@ -1103,7 +1103,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /// 128-byte push constant, so toggling it must reuse the variant an otherwise-identical
         /// draw already built, while a geometry declaration that carries a COLOR0 element must not
         /// share a pipeline with one that does not.
-        NOXNA [[nodiscard]] std::size_t GetInstancedPipelineCacheSizeEXT() const noexcept
+        CNAEXT [[nodiscard]] std::size_t GetInstancedPipelineCacheSizeEXT() const noexcept
         {
             return pipelinesInstanced3D_.size();
         }
@@ -1121,7 +1121,7 @@ namespace CNA::Internal::Renderers::Vulkan
          *
          * @return Read-only dependency-selection diagnostics for REMED-GFX-194 tests.
          */
-        NOXNA [[nodiscard]] const std::vector<std::pair<uint64_t, uint32_t>>&
+        CNAEXT [[nodiscard]] const std::vector<std::pair<uint64_t, uint32_t>>&
         GetLastMrtReadbackMatchesEXT() const noexcept
         {
             return lastMrtReadbackMatchesEXT_;
@@ -1156,7 +1156,7 @@ namespace CNA::Internal::Renderers::Vulkan
          *
          * @return Message-ID names captured since renderer construction.
          */
-        NOXNA [[nodiscard]] const std::vector<std::string>& GetValidationMessageIdNamesEXT() const noexcept
+        CNAEXT [[nodiscard]] const std::vector<std::string>& GetValidationMessageIdNamesEXT() const noexcept
         {
             return validationMessageIdNames_;
         }
@@ -1171,7 +1171,7 @@ namespace CNA::Internal::Renderers::Vulkan
          *
          * @param enabled True to request synchronization validation.
          */
-        NOXNA static void SetSyncValidationEnabledEXT(bool enabled) noexcept;
+        CNAEXT static void SetSyncValidationEnabledEXT(bool enabled) noexcept;
 
         /**
          * @brief Reports whether the Khronos validation layer is actually active.
@@ -1181,46 +1181,46 @@ namespace CNA::Internal::Renderers::Vulkan
          *
          * @return True when the layer was found and the debug messenger was installed.
          */
-        NOXNA [[nodiscard]] static bool IsValidationActiveEXT() noexcept;
+        CNAEXT [[nodiscard]] static bool IsValidationActiveEXT() noexcept;
 
         /** @brief Number of vkAcquireNextImageKHR calls that returned an image. */
-        NOXNA [[nodiscard]] uint64_t GetAcquireCountEXT() const noexcept { return acquireCountEXT_; }
+        CNAEXT [[nodiscard]] uint64_t GetAcquireCountEXT() const noexcept { return acquireCountEXT_; }
         /** @brief Number of per-frame vkQueueSubmit calls made by SubmitFrame. */
-        NOXNA [[nodiscard]] uint64_t GetFrameSubmitCountEXT() const noexcept { return frameSubmitCountEXT_; }
+        CNAEXT [[nodiscard]] uint64_t GetFrameSubmitCountEXT() const noexcept { return frameSubmitCountEXT_; }
         /** @brief Number of vkQueuePresentKHR calls, deferred presents included. */
-        NOXNA [[nodiscard]] uint64_t GetPresentCountEXT() const noexcept { return presentCountEXT_; }
+        CNAEXT [[nodiscard]] uint64_t GetPresentCountEXT() const noexcept { return presentCountEXT_; }
         /** @brief Number of frame-fence waits, including the deferred-readback hold. */
-        NOXNA [[nodiscard]] uint64_t GetFrameFenceWaitCountEXT() const noexcept { return frameFenceWaitCountEXT_; }
+        CNAEXT [[nodiscard]] uint64_t GetFrameFenceWaitCountEXT() const noexcept { return frameFenceWaitCountEXT_; }
         /** @brief Number of completed swapchain recreations. */
-        NOXNA [[nodiscard]] uint64_t GetSwapchainRecreateCountEXT() const noexcept { return swapchainRecreateCountEXT_; }
+        CNAEXT [[nodiscard]] uint64_t GetSwapchainRecreateCountEXT() const noexcept { return swapchainRecreateCountEXT_; }
         /** @brief Count of distinct swapchain image indices an acquire has returned. */
-        NOXNA [[nodiscard]] int GetDistinctAcquiredImageCountEXT() const noexcept;
+        CNAEXT [[nodiscard]] int GetDistinctAcquiredImageCountEXT() const noexcept;
         /** @brief Count of distinct frame slots a submit has used. */
-        NOXNA [[nodiscard]] int GetUsedFrameSlotCountEXT() const noexcept;
+        CNAEXT [[nodiscard]] int GetUsedFrameSlotCountEXT() const noexcept;
         /** @brief Number of images in the current swapchain. */
-        NOXNA [[nodiscard]] int GetSwapchainImageCountEXT() const noexcept
+        CNAEXT [[nodiscard]] int GetSwapchainImageCountEXT() const noexcept
         {
             return static_cast<int>(swapchainImages_.size());
         }
         /** @brief Number of frame slots the renderer cycles through. */
-        NOXNA [[nodiscard]] static constexpr int GetFramesInFlightEXT() noexcept { return MaxFramesInFlight; }
+        CNAEXT [[nodiscard]] static constexpr int GetFramesInFlightEXT() noexcept { return MaxFramesInFlight; }
         /** @brief Live image-available semaphores; must stay equal to the frame-slot count. */
-        NOXNA [[nodiscard]] int GetImageAvailableSemaphoreCountEXT() const noexcept
+        CNAEXT [[nodiscard]] int GetImageAvailableSemaphoreCountEXT() const noexcept
         {
             return static_cast<int>(imageAvailableSemaphores_.size());
         }
         /** @brief Live render-finished semaphores; must stay equal to the frame-slot count. */
-        NOXNA [[nodiscard]] int GetRenderFinishedSemaphoreCountEXT() const noexcept
+        CNAEXT [[nodiscard]] int GetRenderFinishedSemaphoreCountEXT() const noexcept
         {
             return static_cast<int>(renderFinishedSemaphores_.size());
         }
         /** @brief Live frame fences; must stay equal to the frame-slot count. */
-        NOXNA [[nodiscard]] int GetFrameFenceCountEXT() const noexcept
+        CNAEXT [[nodiscard]] int GetFrameFenceCountEXT() const noexcept
         {
             return static_cast<int>(inFlightFences_.size());
         }
         /** @brief Live frame command buffers; must stay equal to the frame-slot count. */
-        NOXNA [[nodiscard]] int GetFrameCommandBufferCountEXT() const noexcept
+        CNAEXT [[nodiscard]] int GetFrameCommandBufferCountEXT() const noexcept
         {
             return static_cast<int>(commandBuffers_.size());
         }
@@ -1974,11 +1974,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // per-frame effect descriptor-set caches. The resource-identity regression uses it to prove
         // a destroyed sampled resource's cached sets are evicted (count returns to baseline). No
         // effect on rendering.
-        NOXNA [[nodiscard]] std::size_t TotalEffectDescSetEntriesForTests() const;
+        CNAEXT [[nodiscard]] std::size_t TotalEffectDescSetEntriesForTests() const;
         // REMED-GFX-076: read-only test introspection -- number of effect-cache entries that
         // reference the given VkImageView handle value (cast to uint64_t). Proves a specific view's
         // entries are gone after its resource dies, and detects a later resource reusing the handle.
-        NOXNA [[nodiscard]] std::size_t EffectDescSetEntriesForViewInTests(uint64_t rawImageViewHandle) const;
+        CNAEXT [[nodiscard]] std::size_t EffectDescSetEntriesForViewInTests(uint64_t rawImageViewHandle) const;
     private:
         // REMED-GFX-075: free every retirement bucket whose consuming frame's fence has certainly
         // completed (generation + MaxFramesInFlight < frameGeneration_); `force` frees all of them
@@ -2423,7 +2423,7 @@ namespace CNA::Internal::Renderers::Vulkan
          * @param view    Its sampled VkImageView.
          * @param fb      Its VkFramebuffer, VK_NULL_HANDLE for a non-destination resource.
          */
-        NOXNA void TraceTargetDisposalEXT(const char* kind, const void* renderer, const void* dest,
+        CNAEXT void TraceTargetDisposalEXT(const char* kind, const void* renderer, const void* dest,
                                          VkImage image, VkImageView view, VkFramebuffer fb) const;
 
         // REMED-GFX-074: if `rt` has pending deferred work, record + submit ONLY its off-screen

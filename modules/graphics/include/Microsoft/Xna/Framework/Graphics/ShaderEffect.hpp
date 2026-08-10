@@ -20,9 +20,9 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief GLSL-source-based effect loaded from vertex and fragment shader strings.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. CNA extension.
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension.
      */
-    NOXNA class ShaderEffect : public Effect, public IEffectMatrices
+    CNAEXT class ShaderEffect : public Effect, public IEffectMatrices
     {
     public:
         /**
@@ -32,7 +32,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertSrc  Contents of the GLSL vertex shader source (not a file path).
          * @param fragSrc  Contents of the GLSL fragment shader source (not a file path).
          */
-        NOXNA ShaderEffect(GraphicsDevice& device,
+        CNAEXT ShaderEffect(GraphicsDevice& device,
                            const std::string& vertSrc,
                            const std::string& fragSrc);
 
@@ -40,31 +40,31 @@ namespace Microsoft::Xna::Framework::Graphics
         ~ShaderEffect();
 
         /** @brief Returns true if the renderer compiled the shader program successfully. */
-        NOXNA [[nodiscard]] bool IsEffectValid() const;
+        CNAEXT [[nodiscard]] bool IsEffectValid() const;
 
         /** @brief Returns true while the native compiled-program renderer is still alive. */
-        NOXNA [[nodiscard]] bool HasRenderer() const { return effectRenderer_ != nullptr; }
+        CNAEXT [[nodiscard]] bool HasRenderer() const { return effectRenderer_ != nullptr; }
 
         /** @brief Sets a column-major 4×4 matrix uniform by name. */
-        NOXNA void SetUniformMat4(const char* name, const float* matrix);
+        CNAEXT void SetUniformMat4(const char* name, const float* matrix);
         /** @brief Sets a vec4 uniform by name (x, y, z, w). */
-        NOXNA void SetUniformVec4(const char* name, float x, float y, float z, float w);
+        CNAEXT void SetUniformVec4(const char* name, float x, float y, float z, float w);
         /** @brief Sets a vec3 uniform by name (x, y, z). */
-        NOXNA void SetUniformVec3(const char* name, float x, float y, float z);
+        CNAEXT void SetUniformVec3(const char* name, float x, float y, float z);
         /** @brief Sets a vec2 uniform by name (x, y). */
-        NOXNA void SetUniformVec2(const char* name, float x, float y);
+        CNAEXT void SetUniformVec2(const char* name, float x, float y);
         /** @brief Sets a scalar float uniform by name. */
-        NOXNA void SetUniformFloat(const char* name, float value);
+        CNAEXT void SetUniformFloat(const char* name, float value);
         /** @brief Sets a scalar int uniform by name. */
-        NOXNA void SetUniformInt(const char* name, int value);
+        CNAEXT void SetUniformInt(const char* name, int value);
         /** @brief Sets a float array uniform by name. `count` is the number of scalar elements. */
-        NOXNA void SetUniformFloatArray(const char* name, const float* values, int count);
+        CNAEXT void SetUniformFloatArray(const char* name, const float* values, int count);
         /**
          * @brief Sets a vec2 array uniform by name.
          *
          * @param count Number of vec2 elements (`values` holds `count * 2` floats).
          */
-        NOXNA void SetUniformVec2Array(const char* name, const float* values, int count);
+        CNAEXT void SetUniformVec2Array(const char* name, const float* values, int count);
         /**
          * @brief Binds a texture to an additional sampler unit for this effect's shader.
          *
@@ -75,7 +75,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param unit    0-based sampler unit.
          * @param texture Texture to bind.
          */
-        NOXNA void SetTexture(int unit, Texture2D& texture);
+        CNAEXT void SetTexture(int unit, Texture2D& texture);
 
         /**
          * @brief Task 1081: binds a cube texture to an additional sampler unit, for a custom
@@ -84,7 +84,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param unit    0-based sampler unit.
          * @param texture Cube texture to bind.
          */
-        NOXNA void SetTexture(int unit, TextureCube& texture);
+        CNAEXT void SetTexture(int unit, TextureCube& texture);
 
         /**
          * @brief plan_graphics.md Task 863: binds a volume (3D) texture to an additional sampler
@@ -93,7 +93,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param unit    0-based sampler unit.
          * @param texture Volume texture to bind.
          */
-        NOXNA void SetTexture(int unit, Texture3D& texture);
+        CNAEXT void SetTexture(int unit, Texture3D& texture);
 
         /**
          * @brief Task 1079: enables a `ShaderEffect` to drive a real 3D `GraphicsDevice::
@@ -105,48 +105,48 @@ namespace Microsoft::Xna::Framework::Graphics
          * program (matching the uniform names every original XNA sample's own `.fx` source
          * already uses) when this effect is the one currently applied.
          */
-        NOXNA [[nodiscard]] Matrix getWorldProperty() const override { return world_; }
+        CNAEXT [[nodiscard]] Matrix getWorldProperty() const override { return world_; }
         /** @brief See getWorldProperty(). */
-        NOXNA void setWorldProperty(const Matrix& value) override { world_ = value; }
+        CNAEXT void setWorldProperty(const Matrix& value) override { world_ = value; }
         /** @brief See getWorldProperty(). */
-        NOXNA [[nodiscard]] Matrix getViewProperty() const override { return view_; }
+        CNAEXT [[nodiscard]] Matrix getViewProperty() const override { return view_; }
         /** @brief See getWorldProperty(). */
-        NOXNA void setViewProperty(const Matrix& value) override { view_ = value; }
+        CNAEXT void setViewProperty(const Matrix& value) override { view_ = value; }
         /** @brief See getWorldProperty(). */
-        NOXNA [[nodiscard]] Matrix getProjectionProperty() const override { return projection_; }
+        CNAEXT [[nodiscard]] Matrix getProjectionProperty() const override { return projection_; }
         /** @brief See getWorldProperty(). */
-        NOXNA void setProjectionProperty(const Matrix& value) override { projection_ = value; }
+        CNAEXT void setProjectionProperty(const Matrix& value) override { projection_ = value; }
 
         /**
          * @brief Gets the GLSL vertex shader source string.
          *
          * @return The vertex shader source.
          */
-        NOXNA [[nodiscard]] const std::string& getVertexSourceProperty() const;
+        CNAEXT [[nodiscard]] const std::string& getVertexSourceProperty() const;
 
         /**
          * @brief Gets the GLSL fragment shader source string.
          *
          * @return The fragment shader source.
          */
-        NOXNA [[nodiscard]] const std::string& getFragmentSourceProperty() const;
+        CNAEXT [[nodiscard]] const std::string& getFragmentSourceProperty() const;
 
         /**
          * @brief Returns the GLSL vertex shader source (Effect base override).
          *
          * Allows renderers to access source without depending on the ShaderEffect type.
          */
-        NOXNA [[nodiscard]] const std::string& GetVertexSource() const override;
+        CNAEXT [[nodiscard]] const std::string& GetVertexSource() const override;
 
         /**
          * @brief Returns the GLSL fragment shader source (Effect base override).
          *
          * Allows renderers to access source without depending on the ShaderEffect type.
          */
-        NOXNA [[nodiscard]] const std::string& GetFragmentSource() const override;
+        CNAEXT [[nodiscard]] const std::string& GetFragmentSource() const override;
 
         /** @brief Returns the fully qualified CNA type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Creates a clone of this effect.
@@ -157,7 +157,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * stock-effect pipelines are cached globally by state, not per-instance):
          * ShaderEffect uniquely owns a per-instance compiled program
          * (`std::unique_ptr<IEffectRenderer>`), so genuine sharing would need a reference-counted
-         * renderer-ownership model, out of scope for this NOXNA extension.
+         * renderer-ownership model, out of scope for this CNAEXT extension.
          *
          * @return Pointer to the cloned Effect.
          */
@@ -169,7 +169,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * Lets a renderer (e.g. SpriteBatch) bind the same compiled program this ShaderEffect
          * uses, instead of maintaining a redundant separate copy.
          */
-        NOXNA [[nodiscard]] CNA::Internal::Renderers::IEffectRenderer* GetEffectRendererPtr() const override;
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::IEffectRenderer* GetEffectRendererPtr() const override;
 
         /**
          * @brief Task 1079: marks `GpuDrawParams::customEffectRenderer` so a renderer's 3D draw
@@ -178,7 +178,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * effects, a `ShaderEffect`'s own uniforms are set directly by the caller via
          * `SetUniformXxx()`/`SetTexture()`, not translated from XNA-shaped effect properties.
          */
-        NOXNA void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
+        CNAEXT void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
         /**

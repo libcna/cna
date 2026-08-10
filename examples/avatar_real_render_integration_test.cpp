@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 10.14: AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT — real GPU-skinned mesh
-// deformation driven through the NOXNA real-rendering Avatar extension, exercising the full
+// deformation driven through the CNAEXT real-rendering Avatar extension, exercising the full
 // SkinnedModelEXT -> ComputeBoneTransformsEXT -> SkinnedEffect -> GraphicsDevice draw path.
 //
 // Mirrors examples/skinned_effect_integration_test.cpp's synthetic-fixture approach (no real

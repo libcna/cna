@@ -44,10 +44,10 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Constructs an empty touch collection.
-         * @note NOXNA — FNA's `TouchCollection` has no explicit parameterless constructor
+         * @note CNAEXT — FNA's `TouchCollection` has no explicit parameterless constructor
          *       (only the one taking a touch array).
          */
-        NOXNA TouchCollection();
+        CNAEXT TouchCollection();
 
         /**
          * @brief Constructs from a vector of touch locations.
@@ -84,10 +84,10 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Returns true if the collection has no touch locations.
-         * @note NOXNA STL-ergonomics helper; not part of the XNA `TouchCollection` API.
+         * @note CNAEXT STL-ergonomics helper; not part of the XNA `TouchCollection` API.
          * @return True if empty; false otherwise.
          */
-        NOXNA [[nodiscard]] bool empty() const;
+        CNAEXT [[nodiscard]] bool empty() const;
 
         /**
          * @brief Returns true if the collection contains the given touch location.
@@ -155,15 +155,15 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Returns a mutable iterator to the beginning of the collection.
-         * @note NOXNA — replaces FNA's `IEnumerable<TouchLocation>::GetEnumerator()`.
+         * @note CNAEXT — replaces FNA's `IEnumerable<TouchLocation>::GetEnumerator()`.
          */
-        NOXNA std::vector<TouchLocation>::iterator begin();
+        CNAEXT std::vector<TouchLocation>::iterator begin();
         /** @brief Returns a mutable iterator past the end of the collection. */
-        NOXNA std::vector<TouchLocation>::iterator end();
+        CNAEXT std::vector<TouchLocation>::iterator end();
         /** @brief Returns a const iterator to the beginning of the collection. */
-        NOXNA [[nodiscard]] std::vector<TouchLocation>::const_iterator begin() const;
+        CNAEXT [[nodiscard]] std::vector<TouchLocation>::const_iterator begin() const;
         /** @brief Returns a const iterator past the end of the collection. */
-        NOXNA [[nodiscard]] std::vector<TouchLocation>::const_iterator end() const;
+        CNAEXT [[nodiscard]] std::vector<TouchLocation>::const_iterator end() const;
 
     private:
         std::vector<TouchLocation> touches_;

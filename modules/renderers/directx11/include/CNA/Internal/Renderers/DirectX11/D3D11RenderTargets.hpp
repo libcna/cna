@@ -85,23 +85,23 @@ namespace CNA::Internal::Renderers::DirectX11
         /// each bound target individually when the MRT set itself is replaced/unbound, without
         /// also triggering UnbindAsRenderTarget()'s own back-buffer-restore side effect (MRT's own
         /// caller already handles that once, not per-target). UnbindAsRenderTarget() itself now
-        /// just calls this plus the restore, so single-target behavior is unchanged. NOXNA.
+        /// just calls this plus the restore, so single-target behavior is unchanged. CNAEXT.
         void ResolveAndGenerateMipsEXT();
 
-        /// Real ID3D11RenderTargetView for this target's color attachment (NOXNA).
+        /// Real ID3D11RenderTargetView for this target's color attachment (CNAEXT).
         [[nodiscard]] ID3D11RenderTargetView* GetRTVEXT() const { return rtv_.Get(); }
-        /// Real ID3D11DepthStencilView, or null if depthFormat was None/unrecognized (NOXNA).
+        /// Real ID3D11DepthStencilView, or null if depthFormat was None/unrecognized (CNAEXT).
         [[nodiscard]] ID3D11DepthStencilView* GetDSVEXT() const { return dsv_.Get(); }
-        /// SRV of the sampleable (non-MSAA, post-resolve if MSAA) color texture (NOXNA, Phase DIRECTX8).
+        /// SRV of the sampleable (non-MSAA, post-resolve if MSAA) color texture (CNAEXT, Phase DIRECTX8).
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
         [[nodiscard]] bool IsMsaaEXT() const { return isMsaa_; }
         /// The texture srv_ actually points at -- resolveTexture_ when isMsaa_, else colorTexture_
-        /// itself (NOXNA, test/diagnostics readback).
+        /// itself (CNAEXT, test/diagnostics readback).
         [[nodiscard]] ID3D11Texture2D* GetSampleableTextureEXT() const
         {
             return isMsaa_ ? resolveTexture_.Get() : colorTexture_.Get();
         }
-        /// Real mip-chain level count (1 when `mipMap` was false) -- NOXNA, DX-144 subresource math.
+        /// Real mip-chain level count (1 when `mipMap` was false) -- CNAEXT, DX-144 subresource math.
         [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
     private:
@@ -155,7 +155,7 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
-        /// The underlying 6-slice texture-array resource actually bound for rendering (NOXNA --
+        /// The underlying 6-slice texture-array resource actually bound for rendering (CNAEXT --
         /// test/diagnostics) -- the MSAA array itself when `GetMultiSampleCount() > 0` (matches
         /// what the RTV binding points at); use `GetSampleableTextureEXT()` instead for
         /// readback/sampling/mip-subresource math, which is always the resolved single-sample
@@ -165,14 +165,14 @@ namespace CNA::Internal::Renderers::DirectX11
         /// The resource tests/shaders should actually read from -- `resolveTexture_` when MSAA
         /// (post-`ResolveSubresource()`, only valid for the active face after
         /// `UnbindAsRenderTarget()` has run at least once), else the same object
-        /// `GetColorTextureEXT()` already returns (NOXNA, mirrors D3D11RenderTargetRenderer's own
+        /// `GetColorTextureEXT()` already returns (CNAEXT, mirrors D3D11RenderTargetRenderer's own
         /// `GetSampleableTextureEXT()` naming/behavior exactly).
         [[nodiscard]] ID3D11Texture2D* GetSampleableTextureEXT() const
         {
             return isMsaa_ ? resolveTexture_.Get() : texture_.Get();
         }
         [[nodiscard]] bool IsMsaaEXT() const { return isMsaa_; }
-        /// Real mip-chain level count (1 when `mipMap` was false) -- NOXNA, DX-144 subresource math.
+        /// Real mip-chain level count (1 when `mipMap` was false) -- CNAEXT, DX-144 subresource math.
         [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
         /**

@@ -77,7 +77,7 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] std::string ToString() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Returns whether two picture albums are equal. */
         friend bool operator==(const PictureAlbum& lhs, const PictureAlbum& rhs);

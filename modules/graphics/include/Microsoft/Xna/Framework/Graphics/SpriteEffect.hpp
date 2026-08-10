@@ -32,10 +32,10 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] Effect* Clone() override;
 
         /** @brief Returns the fully qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief Identifies only this exact stock runtime type to 2D renderers. */
-        NOXNA [[nodiscard]] bool IsExactStockSpriteEffectEXT() const noexcept override
+        CNAEXT [[nodiscard]] bool IsExactStockSpriteEffectEXT() const noexcept override
         {
             return typeid(*this) == typeid(SpriteEffect);
         }

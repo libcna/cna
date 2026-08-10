@@ -20,7 +20,7 @@ namespace CNA::Internal::Renderers::Sokol
     class SokolRenderer;
 
     /**
-     * @brief Identifies the native API sokol_gfx was compiled to dispatch onto. NOXNA.
+     * @brief Identifies the native API sokol_gfx was compiled to dispatch onto. CNAEXT.
      *
      * Mirrors the CNA_SOKOL_API CMake option (cmake/RendererSelection.cmake) so a caller can read
      * back which API this build actually resolved to without including sokol_gfx.h itself.
@@ -122,16 +122,16 @@ namespace CNA::Internal::Renderers::Sokol
                                    void* data, int dataLength) const override;
 
         /**
-         * @brief Returns the raw sokol_gfx image handle id backing this texture. NOXNA.
+         * @brief Returns the raw sokol_gfx image handle id backing this texture. CNAEXT.
          * @return sg_image id, or 0 when creation failed.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetImageIdEXT() const { return imageId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetImageIdEXT() const { return imageId_; }
 
         /**
-         * @brief Returns the raw sokol_gfx texture-view handle id used to bind this texture. NOXNA.
+         * @brief Returns the raw sokol_gfx texture-view handle id used to bind this texture. CNAEXT.
          * @return sg_view id, or 0 when creation failed.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetViewIdEXT() const { return viewId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetViewIdEXT() const { return viewId_; }
 
     private:
         void RecreateImage();
@@ -265,45 +265,45 @@ namespace CNA::Internal::Renderers::Sokol
          * @brief Regenerates every mip level above 0 from the current level-0 content via a raw
          * `glGenerateMipmap`, GL-only. No-op when this target was not created with `mipMap=true`.
          * Called on unbind, mirroring `EasyGLRenderTargetRenderer`'s identical "auto-generate on
-         * unbind" contract (plan_sokol.md SOKOL-39). NOXNA.
+         * unbind" contract (plan_sokol.md SOKOL-39). CNAEXT.
          */
-        NOXNA void RegenerateMipmapsIfNeededEXT() const;
+        CNAEXT void RegenerateMipmapsIfNeededEXT() const;
 
         /**
          * @brief Returns the raw sokol_gfx colour image handle id -- the single-sample image that
-         * is sampled as a texture (the MSAA resolve target when MSAA is active). NOXNA.
+         * is sampled as a texture (the MSAA resolve target when MSAA is active). CNAEXT.
          * @return sg_image id, or 0 when creation failed.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetColorImageIdEXT() const { return colorImageId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetColorImageIdEXT() const { return colorImageId_; }
 
         /**
          * @brief Returns the raw sokol_gfx colour-attachment view handle id, used when this
          * target is the active render target. This names the multisample image's attachment view
-         * when MSAA is active, and the single-sample image's otherwise. NOXNA.
+         * when MSAA is active, and the single-sample image's otherwise. CNAEXT.
          * @return sg_view id, or 0 when creation failed.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetColorAttachmentViewIdEXT() const { return colorAttachmentViewId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetColorAttachmentViewIdEXT() const { return colorAttachmentViewId_; }
 
         /**
          * @brief Returns the raw sokol_gfx resolve-attachment view handle id, wired into a pass's
          * `attachments.resolves[0]` so sokol_gfx resolves the MSAA colour image into the
-         * single-sample image at `sg_end_pass()`. NOXNA.
+         * single-sample image at `sg_end_pass()`. CNAEXT.
          * @return sg_view id, or 0 when this target is not multisampled.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetResolveAttachmentViewIdEXT() const { return resolveAttachmentViewId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetResolveAttachmentViewIdEXT() const { return resolveAttachmentViewId_; }
 
         /**
          * @brief Returns the raw sokol_gfx texture-view handle id, used to sample this target as
-         * an ordinary texture in a later pass. NOXNA.
+         * an ordinary texture in a later pass. CNAEXT.
          * @return sg_view id, or 0 when creation failed.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetColorTextureViewIdEXT() const { return colorTextureViewId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetColorTextureViewIdEXT() const { return colorTextureViewId_; }
 
         /**
-         * @brief Returns the raw sokol_gfx depth-stencil-attachment view handle id. NOXNA.
+         * @brief Returns the raw sokol_gfx depth-stencil-attachment view handle id. CNAEXT.
          * @return sg_view id, or 0 when this target has no depth-stencil attachment.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetDepthStencilAttachmentViewIdEXT() const { return depthStencilAttachmentViewId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetDepthStencilAttachmentViewIdEXT() const { return depthStencilAttachmentViewId_; }
 
     private:
         int width_ = 0;
@@ -400,39 +400,39 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief Regenerates every mip level above 0 (on all six faces) from the current level-0
          * content via a raw `glGenerateMipmap`, GL-only. No-op when this target was not created
-         * with `mipMap=true`. Called on unbind (plan_sokol.md SOKOL-39). NOXNA.
+         * with `mipMap=true`. Called on unbind (plan_sokol.md SOKOL-39). CNAEXT.
          */
-        NOXNA void RegenerateMipmapsIfNeededEXT() const;
+        CNAEXT void RegenerateMipmapsIfNeededEXT() const;
 
         /**
-         * @brief Returns the raw sokol_gfx cube image handle id. NOXNA.
+         * @brief Returns the raw sokol_gfx cube image handle id. CNAEXT.
          * @return sg_image id, or 0 when creation failed.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetImageIdEXT() const { return imageId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetImageIdEXT() const { return imageId_; }
 
         /**
-         * @brief Returns the raw sokol_gfx colour-attachment view handle id for one face. NOXNA.
+         * @brief Returns the raw sokol_gfx colour-attachment view handle id for one face. CNAEXT.
          * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
          * @return sg_view id, or 0 when creation failed or @p face is out of range.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetColorAttachmentViewIdEXT(int face) const
+        CNAEXT [[nodiscard]] std::uint32_t GetColorAttachmentViewIdEXT(int face) const
         {
             return (face >= 0 && face < 6) ? colorAttachmentViewIds_[static_cast<std::size_t>(face)] : 0;
         }
 
         /**
          * @brief Returns the raw sokol_gfx texture-view handle id, used to sample the whole cube.
-         * NOXNA.
+         * CNAEXT.
          * @return sg_view id, or 0 when creation failed.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetTextureViewIdEXT() const { return textureViewId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetTextureViewIdEXT() const { return textureViewId_; }
 
         /**
          * @brief Returns the raw sokol_gfx depth-stencil-attachment view handle id, shared by every
-         * face. NOXNA.
+         * face. CNAEXT.
          * @return sg_view id, or 0 when this target has no depth-stencil attachment.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetDepthStencilAttachmentViewIdEXT() const
+        CNAEXT [[nodiscard]] std::uint32_t GetDepthStencilAttachmentViewIdEXT() const
         {
             return depthStencilAttachmentViewId_;
         }
@@ -518,23 +518,23 @@ namespace CNA::Internal::Renderers::Sokol
                                    void* data, int dataLength) const override;
 
         /**
-         * @brief Returns the edge length of mip level 0 in texels. NOXNA.
+         * @brief Returns the edge length of mip level 0 in texels. CNAEXT.
          * @return Cube face edge length.
          */
-        NOXNA [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
+        CNAEXT [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
 
         /**
          * @brief Returns the raw sokol_gfx texture-view handle id used to sample the whole cube.
-         * NOXNA.
+         * CNAEXT.
          * @return sg_view id, or 0 when creation failed.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetViewIdEXT() const { return viewId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetViewIdEXT() const { return viewId_; }
 
         /**
-         * @brief Returns the raw sokol_gfx image handle id backing this cube texture. NOXNA.
+         * @brief Returns the raw sokol_gfx image handle id backing this cube texture. CNAEXT.
          * @return sg_image id, or 0 when creation failed.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetImageIdEXT() const { return imageId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetImageIdEXT() const { return imageId_; }
 
     private:
         /// Face edge length at @p level, never below 1 -- mirrors TextureCube.cpp's own mip
@@ -647,7 +647,7 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief Creates an empty vertex buffer handle with the given capacity hint.
          * @param vertexCapacity Number of vertices the owning VertexBuffer was created for.
-         * @param owner NOXNA (plan_sokol.md SOKOL-24). Owning renderer, consulted for the current
+         * @param owner CNAEXT (plan_sokol.md SOKOL-24). Owning renderer, consulted for the current
          *              frame index so repeated same-shape uploads can reuse the sokol_gfx buffer
          *              via `sg_update_buffer()` instead of recreating it every time. Null falls
          *              back to always recreating (still correct, just not the cheap path).
@@ -687,25 +687,25 @@ namespace CNA::Internal::Renderers::Sokol
         [[nodiscard]] int GetVertexCount() const override;
 
         /**
-         * @brief Returns the byte stride of the last uploaded vertex data. NOXNA.
+         * @brief Returns the byte stride of the last uploaded vertex data. CNAEXT.
          * @return Stride in bytes, or 0 if nothing has been uploaded.
          */
-        NOXNA [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
+        CNAEXT [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
 
         /**
-         * @brief Returns the vertex declaration recorded by SetVertexDeclaration(). NOXNA.
+         * @brief Returns the vertex declaration recorded by SetVertexDeclaration(). CNAEXT.
          * @return The declaration, or null when the owning VertexBuffer supplied none.
          */
-        NOXNA [[nodiscard]] const VertexDeclaration* GetDeclarationEXT() const
+        CNAEXT [[nodiscard]] const VertexDeclaration* GetDeclarationEXT() const
         {
             return hasDeclaration_ ? &declaration_ : nullptr;
         }
 
         /**
-         * @brief Returns the raw sokol_gfx buffer handle id. NOXNA.
+         * @brief Returns the raw sokol_gfx buffer handle id. CNAEXT.
          * @return sg_buffer id, or 0 when no data has been uploaded.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetBufferIdEXT() const { return bufferId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetBufferIdEXT() const { return bufferId_; }
 
     private:
         int capacity_ = 0;
@@ -794,7 +794,7 @@ namespace CNA::Internal::Renderers::Sokol
     }
 
     /**
-     * @brief NOXNA. REMED-GFX-DECL-GUARD: refuses a vertex declaration this renderer cannot
+     * @brief CNAEXT. REMED-GFX-DECL-GUARD: refuses a vertex declaration this renderer cannot
      *        represent faithfully, at draw time and before any native object exists.
      *
      * The shared `RequireFaithfulVertexDeclaration()` helper is deliberately NOT reused here: it
@@ -911,7 +911,7 @@ namespace CNA::Internal::Renderers::Sokol
          * @brief Creates an empty index buffer handle with the given capacity hint.
          * @param indexCapacity  Number of indices the owning IndexBuffer was created for.
          * @param thirtyTwoBit   True when the owning IndexBuffer uses 32-bit indices.
-         * @param owner NOXNA (plan_sokol.md SOKOL-24). Same role as
+         * @param owner CNAEXT (plan_sokol.md SOKOL-24). Same role as
          *              `SokolVertexBufferRenderer`'s own `owner` parameter.
          */
         SokolIndexBufferRenderer(int indexCapacity, bool thirtyTwoBit,
@@ -950,10 +950,10 @@ namespace CNA::Internal::Renderers::Sokol
         [[nodiscard]] bool IsThirtyTwoBit() const override;
 
         /**
-         * @brief Returns the raw sokol_gfx buffer handle id. NOXNA.
+         * @brief Returns the raw sokol_gfx buffer handle id. CNAEXT.
          * @return sg_buffer id, or 0 when no data has been uploaded.
          */
-        NOXNA [[nodiscard]] std::uint32_t GetBufferIdEXT() const { return bufferId_; }
+        CNAEXT [[nodiscard]] std::uint32_t GetBufferIdEXT() const { return bufferId_; }
 
     private:
         void Upload(const void* data, int indexCount, std::size_t indexSize);
@@ -1245,7 +1245,7 @@ namespace CNA::Internal::Renderers::Sokol
 
         /**
          * @brief Issues the raw `glActiveTexture`/`glBindTexture`/`glBindSampler` calls for every
-         * texture unit `BindTexture()`/`BindTextureCube()` recorded since the last call. NOXNA,
+         * texture unit `BindTexture()`/`BindTextureCube()` recorded since the last call. CNAEXT,
          * called by `SokolRenderer::DrawCustomEffect3D`/`DrawSpriteRunEXT`.
          *
          * `BindTexture()`/`BindTextureCube()` only ever RECORD a pending bind rather than applying
@@ -1265,7 +1265,7 @@ namespace CNA::Internal::Renderers::Sokol
          * object's own uniform storage, independent of any current GL binding state), immune to
          * this timing issue by construction.
          */
-        NOXNA void ApplyPendingTextureBindsEXT();
+        CNAEXT void ApplyPendingTextureBindsEXT();
 
     private:
         /// One texture unit's pending raw-GL bind, recorded by BindTexture()/BindTextureCube() and
@@ -1320,7 +1320,7 @@ namespace CNA::Internal::Renderers::Sokol
         explicit SokolRenderer(const GraphicsRendererCreateArgs& args);
 
         /**
-         * @brief NOXNA test-only constructor (plan_sokol.md SOKOL-45) that can force the first
+         * @brief CNAEXT test-only constructor (plan_sokol.md SOKOL-45) that can force the first
          * `SDL_GL_MakeCurrent()` call this instance makes to fail regardless of its real return
          * value, and counts every `SDL_GL_DestroyContext()` call this instance makes -- so a
          * regression test can prove construction stays fully transactional even when
@@ -1333,7 +1333,7 @@ namespace CNA::Internal::Renderers::Sokol
          *                               `SDL_GL_DestroyContext()` call this instance makes; left
          *                               untouched when null.
          */
-        NOXNA SokolRenderer(const GraphicsRendererCreateArgs& args,
+        CNAEXT SokolRenderer(const GraphicsRendererCreateArgs& args,
                                     bool forceMakeCurrentFailureEXT,
                                     int* contextDestroyCountEXT);
 
@@ -1500,7 +1500,7 @@ namespace CNA::Internal::Renderers::Sokol
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         /**
-         * @brief NOXNA (plan_sokol.md SOKOL-43). Claims this context's one `GL_SAMPLES_PASSED`
+         * @brief CNAEXT (plan_sokol.md SOKOL-43). Claims this context's one `GL_SAMPLES_PASSED`
          * active-query slot for @p query.
          *
          * OpenGL permits only one active occlusion query per context, not per query object, so
@@ -1513,10 +1513,10 @@ namespace CNA::Internal::Renderers::Sokol
          * @return True if @p query now owns the slot (no other query was active); false if a
          *         different query already holds it.
          */
-        NOXNA bool TryActivateOcclusionQueryEXT(SokolOcclusionQueryRenderer* query);
+        CNAEXT bool TryActivateOcclusionQueryEXT(SokolOcclusionQueryRenderer* query);
 
         /**
-         * @brief NOXNA (plan_sokol.md SOKOL-43). Releases this context's active-query slot if
+         * @brief CNAEXT (plan_sokol.md SOKOL-43). Releases this context's active-query slot if
          * @p query currently owns it (a no-op otherwise -- e.g. @p query never held the slot, or
          * this is a redundant release).
          *
@@ -1526,10 +1526,10 @@ namespace CNA::Internal::Renderers::Sokol
          *
          * @param query The query object releasing the slot.
          */
-        NOXNA void ReleaseOcclusionQueryEXT(SokolOcclusionQueryRenderer* query);
+        CNAEXT void ReleaseOcclusionQueryEXT(SokolOcclusionQueryRenderer* query);
 
         /**
-         * @brief NOXNA (plan_sokol.md SOKOL-24). Monotonic counter incremented once per
+         * @brief CNAEXT (plan_sokol.md SOKOL-24). Monotonic counter incremented once per
          * `Present()`/`sg_commit()`.
          *
          * `SokolVertexBufferRenderer`/`SokolIndexBufferRenderer` compare this against the frame
@@ -1542,7 +1542,7 @@ namespace CNA::Internal::Renderers::Sokol
          *         `_sg.frame_index` convention; never 0, used as this renderer's own "no update
          *         yet" sentinel).
          */
-        NOXNA [[nodiscard]] std::uint64_t GetFrameIndexEXT() const { return frameIndexEXT_; }
+        CNAEXT [[nodiscard]] std::uint64_t GetFrameIndexEXT() const { return frameIndexEXT_; }
 
         /**
          * @brief Compiles a custom `ShaderEffect` from raw GLSL source (plan_sokol.md SOKOL-28).
@@ -1917,23 +1917,23 @@ namespace CNA::Internal::Renderers::Sokol
         [[nodiscard]] int GetMultiSampleCount() const override;
 
         /**
-         * @brief Returns the native API sokol_gfx was compiled to dispatch onto. NOXNA.
+         * @brief Returns the native API sokol_gfx was compiled to dispatch onto. CNAEXT.
          * @return The resolved SokolApiEXT value for this build.
          */
-        NOXNA [[nodiscard]] static SokolApiEXT GetApiEXT();
+        CNAEXT [[nodiscard]] static SokolApiEXT GetApiEXT();
 
         /**
-         * @brief Returns the maximum number of sprite quads one frame may draw. NOXNA.
+         * @brief Returns the maximum number of sprite quads one frame may draw. CNAEXT.
          *
          * The sprite streaming buffer is allocated once at construction, so a frame that exceeds
          * this cap raises an error rather than silently dropping sprites.
          *
          * @return Per-frame sprite quad capacity.
          */
-        NOXNA [[nodiscard]] static int GetMaxSpriteQuadsPerFrameEXT();
+        CNAEXT [[nodiscard]] static int GetMaxSpriteQuadsPerFrameEXT();
 
         /**
-         * @brief Draws one flushed run of sprite quads. NOXNA, called by SokolSpriteBatchRenderer.
+         * @brief Draws one flushed run of sprite quads. CNAEXT, called by SokolSpriteBatchRenderer.
          *
          * @param texture  Source texture for the run.
          * @param vertices Quad vertices, four per quad in top-left, top-right, bottom-right,
@@ -1948,25 +1948,25 @@ namespace CNA::Internal::Renderers::Sokol
          *                     built-in shader too, matching `EasyGLSpriteBatchRenderer::FlushBatch`'s
          *                     own `renderer && renderer->IsValid()` gate.
          */
-        NOXNA void DrawSpriteRunEXT(const ITextureRenderer& texture,
+        CNAEXT void DrawSpriteRunEXT(const ITextureRenderer& texture,
                                     const std::vector<SokolSpriteBatchRenderer::Vertex>& vertices,
                                     const Matrix& transform,
                                     int filter, int addressU, int addressV,
                                     Effect* customEffect = nullptr);
 
         /**
-         * @brief Returns the logical (virtual) presentation size. NOXNA.
+         * @brief Returns the logical (virtual) presentation size. CNAEXT.
          * @param width  Receives the logical width in pixels.
          * @param height Receives the logical height in pixels.
          */
-        NOXNA void GetLogicalSizeEXT(int& width, int& height) const;
+        CNAEXT void GetLogicalSizeEXT(int& width, int& height) const;
 
         /**
-         * @brief Returns the physical window size in pixels. NOXNA.
+         * @brief Returns the physical window size in pixels. CNAEXT.
          * @param width  Receives the physical width.
          * @param height Receives the physical height.
          */
-        NOXNA void GetPhysicalSizeEXT(int& width, int& height) const;
+        CNAEXT void GetPhysicalSizeEXT(int& width, int& height) const;
 
     private:
         struct PipelineKey
@@ -2248,7 +2248,7 @@ namespace CNA::Internal::Renderers::Sokol
                            int primitiveCount,
                            const GpuDrawParams& params);
         /**
-         * @brief NOXNA (plan_sokol.md SOKOL-23). Builds a doubled-edge index list (a-b, b-c, c-a
+         * @brief CNAEXT (plan_sokol.md SOKOL-23). Builds a doubled-edge index list (a-b, b-c, c-a
          * per triangle) for `RasterizerState.FillMode == WireFrame` -- the same CPU-side
          * triangle-to-`GL_LINES` re-expansion `EasyGLRenderer::DrawWireframe()` uses.
          * sokol_gfx has no native polygon-fill-mode API, but this technique needs none: it only
@@ -2287,7 +2287,7 @@ namespace CNA::Internal::Renderers::Sokol
                                 int primitiveCount,
                                 const GpuDrawParams& params);
         /**
-         * @brief NOXNA (plan_sokol.md SOKOL-41). Applies the device's full current graphics state
+         * @brief CNAEXT (plan_sokol.md SOKOL-41). Applies the device's full current graphics state
          * -- depth test/write, stencil, blend (including the constant colour), face culling and
          * winding, and depth bias -- as raw GL calls, for the two draw paths that bypass
          * `sg_pipeline` entirely (`DrawCustomEffect3D` and `DrawSpriteRunEXT`'s custom-effect
@@ -2302,7 +2302,7 @@ namespace CNA::Internal::Renderers::Sokol
          */
         void ApplyCustomEffectRasterStateEXT();
         /**
-         * @brief NOXNA (plan_sokol.md SOKOL-41/SOKOL-26 MRT). Applies `ColorWriteChannels0..3` via
+         * @brief CNAEXT (plan_sokol.md SOKOL-41/SOKOL-26 MRT). Applies `ColorWriteChannels0..3` via
          * `glColorMaski` per active colour-attachment slot, for the same two raw-GL draw paths
          * ApplyCustomEffectRasterStateEXT() serves.
          *
@@ -2371,7 +2371,7 @@ namespace CNA::Internal::Renderers::Sokol
 
         SDL_Window* window_ = nullptr;
         void* glContext_ = nullptr;
-        /// plan_sokol.md SOKOL-45 test-only failure injection -- see the NOXNA constructor's doc
+        /// plan_sokol.md SOKOL-45 test-only failure injection -- see the CNAEXT constructor's doc
         /// comment. Always false/null via the public constructor.
         bool forceMakeCurrentFailureEXT_ = false;
         int* contextDestroyCountEXT_ = nullptr;

@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief One morph-weight animation keyframe: a full weight vector (one entry per morph
      * target) at a point in time.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. plan_cnj.md CNB-64 (Phase 13B).
+     * @note CNAEXT — not part of the XNA 4.0 API. plan_cnj.md CNB-64 (Phase 13B).
      */
     struct MorphWeightKeyframeEXT
     {
@@ -42,7 +42,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief A morph-weight animation track: a sequence of keyframed weight vectors driving one
      * mesh part's morph targets over time.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. Deliberately independent of AnimationPlayer/
+     * @note CNAEXT — not part of the XNA 4.0 API. Deliberately independent of AnimationPlayer/
      * SkinningData's own bone-track timeline: glTF's own "weights" animation channel targets a
      * mesh-instance node directly, not a skeleton joint, so it has no bone index to key against.
      * EvaluateMorphWeightsEXT supports LINEAR and STEP interpolation (real hold-last-value
@@ -64,7 +64,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief Per-vertex position/normal deltas for every morph target on a mesh part, the
      * current blend weights, and (optionally) a time-varying weight animation track.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. Mirrors SkinningData's own established
+     * @note CNAEXT — not part of the XNA 4.0 API. Mirrors SkinningData's own established
      * precedent (plan_cnj.md CNB-70/Task 941): attached to a loaded ModelMeshPart's own real
      * XNA `Tag` property (real XNA's ModelMeshPart has no dedicated morph-target property of its
      * own) -- game code retrieves it via `static_cast<MorphTargetDataEXT*>(part.getTagProperty())`.
@@ -74,10 +74,10 @@ namespace Microsoft::Xna::Framework::Graphics
      * change -- a deliberate simplicity-over-throughput tradeoff (see plan_cnj.md CNB-62's own
      * design-decision notes for the full reasoning).
      */
-    NOXNA struct MorphTargetDataEXT : public System::Object
+    CNAEXT struct MorphTargetDataEXT : public System::Object
     {
         /** @brief Returns the fully-qualified .NET-style type name of this object. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /** @brief The mesh part's base (all weights zero) vertex bytes, exactly as first uploaded. */
         std::vector<std::uint8_t> BaseVertexBytes;
@@ -106,7 +106,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @param weights Weight vector; must have exactly as many entries as morph has targets.
      * @return The blended vertex bytes, same size/stride as morph.BaseVertexBytes.
      */
-    NOXNA [[nodiscard]] std::vector<std::uint8_t> BlendMorphTargetsEXT(
+    CNAEXT [[nodiscard]] std::vector<std::uint8_t> BlendMorphTargetsEXT(
         const MorphTargetDataEXT& morph, const std::vector<float>& weights);
 
     /**
@@ -116,7 +116,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @param part The mesh part to re-blend; must have a MorphTargetDataEXT attached via its own Tag property.
      * @param weights New weight vector; must have exactly as many entries as the part has morph targets.
      */
-    NOXNA void SetMorphWeightsEXT(ModelMeshPart& part, const std::vector<float>& weights);
+    CNAEXT void SetMorphWeightsEXT(ModelMeshPart& part, const std::vector<float>& weights);
 
     /**
      * @brief Evaluates a morph-weight animation track at a point in time: real Hermite
@@ -128,5 +128,5 @@ namespace Microsoft::Xna::Framework::Graphics
      * @param timeSeconds Time within the clip, in seconds.
      * @return The interpolated weight vector, or an empty vector if the track has no keyframes.
      */
-    NOXNA [[nodiscard]] std::vector<float> EvaluateMorphWeightsEXT(const MorphWeightTrackEXT& track, double timeSeconds);
+    CNAEXT [[nodiscard]] std::vector<float> EvaluateMorphWeightsEXT(const MorphWeightTrackEXT& track, double timeSeconds);
 }

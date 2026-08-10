@@ -131,7 +131,7 @@ namespace Microsoft::Xna::Framework::Content
                        const std::string& rootDirectory);
 
         /** @brief Constructs a ContentManager with a default root directory of "Content". */
-        NOXNA ContentManager();
+        CNAEXT ContentManager();
 
         /** @brief Destroys the content manager and releases all loaded assets. */
         ~ContentManager() override = default;
@@ -164,7 +164,7 @@ namespace Microsoft::Xna::Framework::Content
         void Unload();
 
         /**
-         * @brief NOXNA: (re)scans the content root and rebuilds the content manifest
+         * @brief CNAEXT: (re)scans the content root and rebuilds the content manifest
          *        (plan_xnb.md XNB-65/65A), replacing any previous scan. Not called
          *        automatically after construction -- the first call to GetContentManifest()/
          *        GetXnbReaderUsageSummary() triggers it lazily if it hasn't run yet.
@@ -173,26 +173,26 @@ namespace Microsoft::Xna::Framework::Content
          * call is not reflected until RefreshContentManifest() runs again. There is no
          * filesystem-watch/hot-reload mechanism.
          */
-        NOXNA void RefreshContentManifest();
+        CNAEXT void RefreshContentManifest();
 
         /**
-         * @brief NOXNA: returns the content manifest (plan_xnb.md XNB-66), one entry per logical
+         * @brief CNAEXT: returns the content manifest (plan_xnb.md XNB-66), one entry per logical
          *        asset name found under the content root, building it via RefreshContentManifest()
          *        first if it hasn't been built yet.
          *
          * @return The current manifest snapshot.
          */
-        NOXNA [[nodiscard]] const std::vector<ContentManifestEntry>& GetContentManifest();
+        CNAEXT [[nodiscard]] const std::vector<ContentManifestEntry>& GetContentManifest();
 
         /**
-         * @brief NOXNA: aggregates the manifest's per-file `.xnb` reader-name inventories
+         * @brief CNAEXT: aggregates the manifest's per-file `.xnb` reader-name inventories
          *        (plan_xnb.md XNB-67) into one row per distinct reader name -- how many files
          *        reference it, and whether `ContentTypeReaderManager` currently has a reader
          *        registered for it. Builds the manifest first via GetContentManifest() if needed.
          *
          * @return One ContentManifestReaderUsage row per distinct reader name found, unordered.
          */
-        NOXNA [[nodiscard]] std::vector<ContentManifestReaderUsage> GetXnbReaderUsageSummary();
+        CNAEXT [[nodiscard]] std::vector<ContentManifestReaderUsage> GetXnbReaderUsageSummary();
 
         /**
          * @brief Registers a custom type reader for assets of type T.
@@ -215,7 +215,7 @@ namespace Microsoft::Xna::Framework::Content
          * recursively loading any files it references), and returns a constructed T.
          */
         template <typename T>
-        NOXNA using CnjLoaderFn = std::function<T(const std::string& cnjJson, ContentManager& cm)>;
+        CNAEXT using CnjLoaderFn = std::function<T(const std::string& cnjJson, ContentManager& cm)>;
 
         /**
          * @brief Registers a named .cnj loader for asset type T, selected by the .cnj
@@ -245,7 +245,7 @@ namespace Microsoft::Xna::Framework::Content
          *         already registered for T.
          */
         template <typename T>
-        NOXNA void RegisterCnjLoader(const std::string& typeName, CnjLoaderFn<T> factory)
+        CNAEXT void RegisterCnjLoader(const std::string& typeName, CnjLoaderFn<T> factory)
         {
             if (typeName.empty())
             {
@@ -558,7 +558,7 @@ namespace Microsoft::Xna::Framework::Content
     template<>
     Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& assetName);
 
-    // Explicit specialisation: TextureCube is move-only (NOXNA, copy constructor deleted --
+    // Explicit specialisation: TextureCube is move-only (CNAEXT, copy constructor deleted --
     // unlike Texture2D, which supports reference-counted renderer sharing via its own weak-cache
     // specialisation above), so it cannot be held in the generic strong (std::any-based) cache
     // either. Mirrors SoundEffect's own identical not-cached specialisation: each call gets its

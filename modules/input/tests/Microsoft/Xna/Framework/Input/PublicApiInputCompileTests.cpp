@@ -56,14 +56,14 @@
 
 // INPUT-API-029 — GetTypeName() policy guard.
 //
-// CLAUDE.md requires every *concrete* System::Object subclass to override `NOXNA GetTypeName()`
+// CLAUDE.md requires every *concrete* System::Object subclass to override `CNAEXT GetTypeName()`
 // (Object declares it pure-virtual, so a concrete Object subclass that omitted it would not even
 // compile). Audit result: NO public Input type inherits System::Object — the value structs, the
 // static classes, and the enums are all non-Object, and the one type with a base (`MouseCursor :
 // System::IDisposable`) inherits IDisposable, which is itself NOT an Object subclass. So GetTypeName()
 // does not apply to any Input type; every type is exempt. These static_asserts pin that exemption: if a
 // future change makes any public Input type derive from System::Object, this stops compiling — the
-// signal to add the required `NOXNA GetTypeName()` override at that point.
+// signal to add the required `CNAEXT GetTypeName()` override at that point.
 namespace
 {
     template <class T>

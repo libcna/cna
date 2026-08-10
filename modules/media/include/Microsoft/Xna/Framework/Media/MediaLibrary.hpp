@@ -148,7 +148,7 @@ namespace Microsoft::Xna::Framework::Media
         Picture* SavePicture(std::string name, System::IO::Stream* source);
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         void BuildFromRoots(const std::string& musicRoot, const std::string& pictureRoot);

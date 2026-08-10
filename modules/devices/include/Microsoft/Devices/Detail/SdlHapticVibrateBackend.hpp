@@ -34,7 +34,7 @@ namespace Microsoft::Devices::Detail
      * no Android-specific code needed (re-confirmed by `VIB-003`). On
      * desktop, the same code instead opens whatever generic force-feedback
      * hardware SDL enumerates (e.g. a USB wheel), which is not "a phone
-     * vibrating" at all — this is accepted, documented `NOXNA`-flavored
+     * vibrating" at all — this is accepted, documented `CNAEXT`-flavored
      * desktop behavior (there being no phone to vibrate on a desktop in the
      * first place), not a compatibility risk: strict XNA `Start(TimeSpan)`
      * on a real Windows Phone device has no desktop code path to begin with,

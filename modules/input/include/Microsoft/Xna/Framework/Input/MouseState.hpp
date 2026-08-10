@@ -62,7 +62,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] int getScrollWheelValueProperty() const;
 
         /**
-         * @brief NOXNA/EXT: the cumulative HORIZONTAL scroll wheel value since the game started.
+         * @brief CNAEXT/EXT: the cumulative HORIZONTAL scroll wheel value since the game started.
          *
          * XNA 4.0 / FNA `MouseState` have no horizontal wheel member, so this is a CNA extension backed by
          * SDL's `wheel.x` (the vertical `getScrollWheelValueProperty` handles `wheel.y`). Scaled to the same
@@ -70,10 +70,10 @@ namespace Microsoft::Xna::Framework::Input
          * byte-identical to FNA — it is a pure additive readable field.
          * @return The cumulative horizontal scroll wheel value.
          */
-        NOXNA [[nodiscard]] int getHorizontalScrollWheelValueEXTProperty() const;
+        CNAEXT [[nodiscard]] int getHorizontalScrollWheelValueEXTProperty() const;
 
         /** @brief Constructs a MouseState with all values at rest. */
-        NOXNA MouseState();
+        CNAEXT MouseState();
 
         /**
          * @brief Constructs a MouseState with all pointer and button values specified.
@@ -92,7 +92,7 @@ namespace Microsoft::Xna::Framework::Input
                    ButtonState xButton1, ButtonState xButton2);
 
         /**
-         * @brief NOXNA/EXT: constructs a MouseState including the horizontal scroll wheel value.
+         * @brief CNAEXT/EXT: constructs a MouseState including the horizontal scroll wheel value.
          *
          * Mirrors the 8-arg XNA constructor but adds `horizontalScrollWheel` as a 9th parameter so CNA's
          * event pipeline can populate the extension field. The 8-arg constructor above leaves it at 0.
@@ -106,7 +106,7 @@ namespace Microsoft::Xna::Framework::Input
          * @param xButton2 The XButton2 state.
          * @param horizontalScrollWheel The horizontal scroll wheel value.
          */
-        NOXNA MouseState(int x, int y, int scrollWheel,
+        CNAEXT MouseState(int x, int y, int scrollWheel,
                          ButtonState leftButton, ButtonState middleButton,
                          ButtonState rightButton,
                          ButtonState xButton1, ButtonState xButton2,
@@ -156,6 +156,6 @@ namespace Microsoft::Xna::Framework::Input
         ButtonState xButton1_;
         ButtonState xButton2_;
         int scrollWheelValue_;
-        int horizontalScrollWheelValue_ = 0; // NOXNA/EXT — see getHorizontalScrollWheelValueEXTProperty
+        int horizontalScrollWheelValue_ = 0; // CNAEXT/EXT — see getHorizontalScrollWheelValueEXTProperty
     };
 }

@@ -33,20 +33,20 @@ namespace Microsoft::Xna::Framework::Input::Touch
         [[nodiscard]] const Microsoft::Xna::Framework::Vector2& getPositionProperty() const;
 
         /**
-         * @brief NOXNA/EXT: gets the touch pressure of this point, in the range 0..1.
+         * @brief CNAEXT/EXT: gets the touch pressure of this point, in the range 0..1.
          * @note XNA 4.0 dropped `TouchLocation.Pressure`; this restores the SDL finger pressure
          *       without changing the type's XNA shape. It is 0 when the device reports no pressure.
          * @return The pressure in 0..1.
          */
-        NOXNA [[nodiscard]] float getPressureEXT() const;
+        CNAEXT [[nodiscard]] float getPressureEXT() const;
 
         /**
          * @brief Constructs an invalid touch location.
-         * @note NOXNA — FNA's `TouchLocation` has no explicit parameterless constructor
+         * @note CNAEXT — FNA's `TouchLocation` has no explicit parameterless constructor
          *       (only the two below); this exists because C++ has no implicit
          *       struct-default equivalent to write behavior into.
          */
-        NOXNA TouchLocation();
+        CNAEXT TouchLocation();
 
         /**
          * @brief Constructs with id, state, and position. Previous state is Invalid.
@@ -71,18 +71,18 @@ namespace Microsoft::Xna::Framework::Input::Touch
                       const Microsoft::Xna::Framework::Vector2& previousPosition);
 
         /**
-         * @brief NOXNA/EXT: constructs with id, state, position, and pressure. Previous state is Invalid.
+         * @brief CNAEXT/EXT: constructs with id, state, position, and pressure. Previous state is Invalid.
          * @param id The touch id.
          * @param state The current touch state.
          * @param position The current touch position.
          * @param pressure The touch pressure in 0..1.
          */
-        NOXNA TouchLocation(int id, TouchLocationState state,
+        CNAEXT TouchLocation(int id, TouchLocationState state,
                             const Microsoft::Xna::Framework::Vector2& position,
                             float pressure);
 
         /**
-         * @brief NOXNA/EXT: constructs with full previous location information and pressure.
+         * @brief CNAEXT/EXT: constructs with full previous location information and pressure.
          * @param id The touch id.
          * @param state The current touch state.
          * @param position The current touch position.
@@ -90,7 +90,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
          * @param previousPosition The previous touch position.
          * @param pressure The touch pressure in 0..1.
          */
-        NOXNA TouchLocation(int id, TouchLocationState state,
+        CNAEXT TouchLocation(int id, TouchLocationState state,
                             const Microsoft::Xna::Framework::Vector2& position,
                             TouchLocationState previousState,
                             const Microsoft::Xna::Framework::Vector2& previousPosition,
@@ -144,7 +144,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
         Microsoft::Xna::Framework::Vector2 position_;
         TouchLocationState prevState_;
         Microsoft::Xna::Framework::Vector2 prevPosition_;
-        // NOXNA/EXT: SDL finger pressure (0..1). Excluded from Equals/GetHashCode/ToString so those
+        // CNAEXT/EXT: SDL finger pressure (0..1). Excluded from Equals/GetHashCode/ToString so those
         // stay FNA-frozen; defaults to 0 for the XNA constructors and the parameterless one.
         float pressure_ = 0.0f;
     };

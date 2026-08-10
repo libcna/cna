@@ -63,7 +63,7 @@ directly from the table's own ✅/⚠️/❌/N/A marks (not from memory):
 | Present | 26 | 0 | 0 | 0 | 26/26 = **100%** |
 | Implemented | 22 | 4 (`Texture2D`, `ShaderEffect`, `BlendState`, `OcclusionQuery`) | 0 | 0 | 22/26 = **84.6%** fully clean, 4/26 = 15.4% partial |
 | Tested | 26 | 0 | 0 | 0 | 26/26 = **100%** (tested on *at least one* renderer — see caveat below) |
-| FNA-compatible | 12 | 11 | 2 (`BlendState`, `IndexBuffer`) | 1 (`ShaderEffect`, NOXNA) | 12/26 = **46.2%** fully clean, 11/26 = 42.3% partial, 2/26 = 7.7% confirmed bug |
+| FNA-compatible | 12 | 11 | 2 (`BlendState`, `IndexBuffer`) | 1 (`ShaderEffect`, CNAEXT) | 12/26 = **46.2%** fully clean, 11/26 = 42.3% partial, 2/26 = 7.7% confirmed bug |
 
 **Important honest caveat, not glossed over**: the "Tested" axis in Task 483's table is a single
 blended column — "is this class exercised by at least one automated test on at least one renderer"
@@ -101,7 +101,7 @@ against.
 
 **"46.2% of major Graphics classes (12/26) have zero known FNA-compatibility gap on any tested
 renderer; 42.3% (11/26) have a narrow, named partial gap; 7.7% (2/26) have a confirmed bug; the
-remaining 3.8% (1/26) is a NOXNA extension with no FNA-compatible axis at all."** This is the one
+remaining 3.8% (1/26) is a CNAEXT extension with no FNA-compatible axis at all."** This is the one
 number in this report closest to "how compatible is Graphics," and it is explicitly a percentage of
 **classes**, not of API surface area, lines of code, or test count — those would each give a
 different number, and this report deliberately does not average them into one score, matching Task
@@ -152,7 +152,7 @@ unqualified "1.0"/"100%" claim, which the real numbers in this report do not yet
     equation regardless of request), Task 918 (EasyGL `TextureFilter::Anisotropic` silently falls
     back to trilinear), Task 916 (`Model`'s non-default constructor auto-defaults `Root` to
     `bones[0]`, no way to specify otherwise), Task 922 (`SpriteBatch::Draw`'s 7th overload is
-    `NOXNA`-tagged with a **required** `Rectangle source`, where real FNA's equivalent overload
+    `CNAEXT`-tagged with a **required** `Rectangle source`, where real FNA's equivalent overload
     takes an **optional** `Rectangle?`).
   - **5 BLOCKED tasks**, each needing a project-owner architecture decision before implementation
     (not just engineering time): Task 447 (Vulkan `OcclusionQuery` — the deferred-draw-recording

@@ -16,7 +16,7 @@ namespace Microsoft::Xna::Framework::Content
     class ContentTypeReaderManager;
 
     /**
-     * @brief NOXNA non-generic base for ContentTypeReader<T>.
+     * @brief CNAEXT non-generic base for ContentTypeReader<T>.
      *
      * Corresponds to FNA's non-generic `Microsoft.Xna.Framework.Content.ContentTypeReader`
      * (`src/Content/ContentTypeReader.cs`). C++ cannot declare both a plain class and a template
@@ -34,7 +34,7 @@ namespace Microsoft::Xna::Framework::Content
      * gives C# -- a bare `shared_ptr<void>` would need a hand-rolled parallel type tag to get
      * that same guarantee instead of silently reinterpreting the wrong type.
      */
-    class NOXNA ContentTypeReaderBase
+    class CNAEXT ContentTypeReaderBase
     {
     public:
         virtual ~ContentTypeReaderBase() = default;
@@ -49,7 +49,7 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] virtual int getTypeVersionProperty() const { return 0; }
 
         /**
-         * @brief NOXNA reader-version enforcement (plan_xnb.md XNB-16B) -- FNA has no equivalent
+         * @brief CNAEXT reader-version enforcement (plan_xnb.md XNB-16B) -- FNA has no equivalent
          * (it never checks the serialized version against `TypeVersion`, only ever parses and
          * discards it). Default "Strict" mode requires an exact match against
          * @ref getTypeVersionProperty(); a reader supporting multiple on-disk versions

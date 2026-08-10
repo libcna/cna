@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 205: Validate primitive count and vertex/index ranges in draw calls.
 //
-// Guards added (NOXNA — FNA does not validate at this level):
+// Guards added (CNAEXT — FNA does not validate at this level):
 //   DrawPrimitives:          primitiveCount < 1, vertexStart < 0
 //   DrawIndexedPrimitives:   primitiveCount < 1, startIndex < 0, baseVertex < 0
 //   DrawInstancedPrimitives: primitiveCount < 1, instanceCount < 1

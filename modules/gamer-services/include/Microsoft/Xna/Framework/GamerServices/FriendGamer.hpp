@@ -104,7 +104,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] const std::string& getPresenceProperty() const;
 
         /** @brief Creates a FriendGamer for CNA internal use. */
-        NOXNA static FriendGamer CreateInternal(
+        CNAEXT static FriendGamer CreateInternal(
             const std::string& gamertag,
             const std::string& displayName,
             bool online,

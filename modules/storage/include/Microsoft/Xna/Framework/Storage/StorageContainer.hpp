@@ -24,7 +24,7 @@ namespace Microsoft::Xna::Framework::Storage
     {
     public:
         /** @brief Destroys the container. */
-        NOXNA ~StorageContainer() override;
+        CNAEXT ~StorageContainer() override;
 
         /** @brief Releases the resources used by this container. */
         void Dispose() override;
@@ -54,7 +54,7 @@ namespace Microsoft::Xna::Framework::Storage
         System::EventHandler<System::EventArgs> Disposing;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         // ---- Directory operations ----
 

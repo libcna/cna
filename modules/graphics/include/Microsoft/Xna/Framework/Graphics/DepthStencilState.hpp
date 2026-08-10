@@ -23,7 +23,7 @@ namespace Microsoft::Xna::Framework::Graphics
         DepthStencilState();
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Gets whether depth buffering is enabled.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_cnj.md CNB-56/60 (Phase 13A): default-value and getter/setter coverage for PbrEffect, the
-// new NOXNA metallic-roughness PBR effect (no FNA/XNA equivalent to audit against -- real XNA
+// new CNAEXT metallic-roughness PBR effect (no FNA/XNA equivalent to audit against -- real XNA
 // predates the PBR content pipeline entirely). See PbrEffect.hpp's own doc comment for the design
 // rationale (glTF 2.0's own reference BRDF, CNA's established 3-light + ambient convention).
 

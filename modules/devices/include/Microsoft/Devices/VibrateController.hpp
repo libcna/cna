@@ -103,7 +103,7 @@ namespace Microsoft::Devices
          * @throws System::ArgumentOutOfRangeException If duration is
          * negative or greater than 5 seconds.
          */
-        NOXNA void Start(const System::TimeSpan& duration, float intensity);
+        CNAEXT void Start(const System::TimeSpan& duration, float intensity);
 
         /**
          * @brief Immediately stops any vibration started via Start().
@@ -125,7 +125,7 @@ namespace Microsoft::Devices
          *
          * @return true if a suitable haptic device is available; otherwise false.
          */
-        NOXNA [[nodiscard]] bool getIsSupportedProperty();
+        CNAEXT [[nodiscard]] bool getIsSupportedProperty();
 
         /**
          * @brief Gets the name of the haptic device that Start() would use.
@@ -136,7 +136,7 @@ namespace Microsoft::Devices
          *
          * @return Device name, or an empty string if no suitable device is available.
          */
-        NOXNA [[nodiscard]] std::string getDeviceNameProperty();
+        CNAEXT [[nodiscard]] std::string getDeviceNameProperty();
 
         /**
          * @brief Starts independent large/small motor vibration for the specified duration.
@@ -170,7 +170,7 @@ namespace Microsoft::Devices
          * @throws System::ArgumentOutOfRangeException If duration is
          * negative or greater than 5 seconds.
          */
-        NOXNA void StartLeftRight(float largeMotor, float smallMotor, const System::TimeSpan& duration);
+        CNAEXT void StartLeftRight(float largeMotor, float smallMotor, const System::TimeSpan& duration);
 
     public:
         /**
@@ -178,7 +178,7 @@ namespace Microsoft::Devices
          *
          * Only ever runs once (Task P5-11), when the process-lifetime
          * singleton returned by getDefaultProperty() is itself destroyed
-         * as part of normal program termination. NOXNA in spirit (the real
+         * as part of normal program termination. CNAEXT in spirit (the real
          * WP7 VibrateController has no Dispose/destructor concept at all —
          * it's a fire-and-forget static design), but not tagged since it's
          * not a new *public API surface* addition a game would ever call
@@ -209,7 +209,7 @@ namespace Microsoft::Devices
          * @param backend Replacement backend; pass nullptr to restore the
          * platform-default (`Detail::SdlHapticVibrateBackend`) behavior.
          */
-        NOXNA void SetBackendForTesting(std::unique_ptr<Detail::IVibrateBackend> backend);
+        CNAEXT void SetBackendForTesting(std::unique_ptr<Detail::IVibrateBackend> backend);
 
     private:
         /** @brief Private constructor; use getDefaultProperty() to obtain the singleton instance. */

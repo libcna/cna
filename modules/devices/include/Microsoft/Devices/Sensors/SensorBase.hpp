@@ -122,7 +122,7 @@ namespace Microsoft::Devices::Sensors
          * only a derived sensor class, not game code, needs to subscribe to
          * it.
          */
-        NOXNA System::EventHandler<System::EventArgs> TimeBetweenUpdatesChanged;
+        CNAEXT System::EventHandler<System::EventArgs> TimeBetweenUpdatesChanged;
 
         /**
          * @brief Gets whether this instance has already been disposed.
@@ -486,7 +486,7 @@ namespace Microsoft::Devices::Sensors
          * integer conversion, no floating-point rounding) into a
          * `std::chrono` duration for the comparison.
          *
-         * Not applied to the NOXNA synthetic-injection test hooks
+         * Not applied to the CNAEXT synthetic-injection test hooks
          * (InjectSyntheticSensorUpdate(), DispatchToInstancesForTesting())
          * on either class — those deliberately bypass ProcessSensorUpdateEvent()
          * entirely (see its own doc comment) so tests can exercise dispatch
@@ -676,7 +676,7 @@ namespace Microsoft::Devices::Sensors
          * `Gyroscope` now honor this value as a real dispatch-rate throttle
          * via `ShouldAcceptUpdateAt()`, called from each class's own
          * `ProcessSensorUpdateEvent()` (the real SDL event path only — the
-         * NOXNA synthetic-injection test hooks deliberately bypass it, see
+         * CNAEXT synthetic-injection test hooks deliberately bypass it, see
          * `ShouldAcceptUpdateAt()`'s doc comment). SDL's own underlying
          * sensor polling rate is not adjusted based on this value — SDL3 has
          * no public API to do so for `SDL_SENSOR_ACCEL`/`SDL_SENSOR_GYRO` —
@@ -722,10 +722,10 @@ namespace Microsoft::Devices::Sensors
             }
 
             // Task VERIFY-003/DEV-API-002: this class's own internal use of its
-            // own NOXNA-tagged TimeBetweenUpdatesChanged is not the kind of
+            // own CNAEXT-tagged TimeBetweenUpdatesChanged is not the kind of
             // "leak into strict XNA API surface" the strict-mode check
             // (CNA_STRICT_XNA_API, CNAHelper.hpp) exists to catch — only an
-            // *external* caller referencing a NOXNA member is. Suppressed
+            // *external* caller referencing a CNAEXT member is. Suppressed
             // here so this genuinely-real XNA method (setTimeBetweenUpdatesProperty())
             // stays callable from tools/devices/StrictXnaApiSurfaceCheck.cpp
             // without that check flagging this internal implementation detail.

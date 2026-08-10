@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::Input
         [[nodiscard]] ButtonState getUpProperty() const;
 
         /** @brief Constructs a GamePadDPad with all directions released. */
-        NOXNA GamePadDPad();
+        CNAEXT GamePadDPad();
 
         /**
          * @brief Constructs a GamePadDPad with explicit direction states.
@@ -58,7 +58,7 @@ namespace Microsoft::Xna::Framework::Input
          * @param buttons The list of button flags to combine.
          * @return The resulting GamePadDPad.
          */
-        NOXNA static GamePadDPad FromButtonArray(std::initializer_list<Buttons> buttons);
+        CNAEXT static GamePadDPad FromButtonArray(std::initializer_list<Buttons> buttons);
 
         /**
          * @brief Compares this instance with another for equality.

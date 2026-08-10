@@ -10,7 +10,7 @@ namespace Microsoft::Xna::Framework::GamerServices
      * @brief Returns the ContentManager asset name for the procedurally-generated avatar
      * body matching the given AvatarBodyType.
      *
-     * @note NOXNA — not part of the XNA 4.0 API. CNA extension. Phase 8's faithful
+     * @note CNAEXT — not part of the XNA 4.0 API. CNA extension. Phase 8's faithful
      * AvatarDescription::getBodyTypeProperty() never carries real body-type data — it
      * always lazily defaults to AvatarBodyType::Female, matching the real XNA
      * implementation's undocumented, never-populated 1021-byte description format — so
@@ -28,5 +28,5 @@ namespace Microsoft::Xna::Framework::GamerServices
      * `"avatar/male/avatar"`, resolving to `Content/avatar/male/avatar.skinnedmodel.json`).
      * @throws System::ArgumentException if bodyType is not a recognized enumerator value.
      */
-    NOXNA [[nodiscard]] std::string AvatarBodyTypeToContentNameEXT(AvatarBodyType bodyType);
+    CNAEXT [[nodiscard]] std::string AvatarBodyTypeToContentNameEXT(AvatarBodyType bodyType);
 }

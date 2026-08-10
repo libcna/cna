@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// Manual verification harness for CNA::Graphics::DepthEffect (NOXNA) — draws a colourful
+// Manual verification harness for CNA::Graphics::DepthEffect (CNAEXT) — draws a colourful
 // deterministic scene (reusing demo_2d's player.png sprite, tinted across a full hue sweep, plus
 // a rainbow gradient strip) through SpriteBatch with DepthEffect bound, once per colour-depth
 // mode, capturing a screenshot after each pass. Not registered as a ctest (visual output only) —
-// see CNA_NOXNA guard below.
+// see CNA_CNAEXT guard below.
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include <cmath>
 #include <cstdio>
@@ -224,13 +224,13 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-#else // CNA_NOXNA
+#else // CNA_CNAEXT
 
 #include <cstdio>
 int main()
 {
-    std::puts("depth_effect_demo_test requires -DCNA_NOXNA=ON.");
+    std::puts("depth_effect_demo_test requires -DCNA_CNAEXT=ON.");
     return 0;
 }
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

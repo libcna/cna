@@ -821,7 +821,7 @@ namespace CNA::Internal::Renderers::DirectX9
     // D9-64 fix: these were silent-throw stubs left over from D9-11's skeleton, never wired up by
     // D9-61/D9-82 (which only ever push depth/stencil state through the multi-field
     // ApplyDepthStencilState() path). GraphicsDevice::SetDepthTestEnabled()/SetDepthWriteEnabled()
-    // are real public (NOXNA) API that EasyGL honours and D3D11/D3D12 both wire up -- a game (or,
+    // are real public (CNAEXT) API that EasyGL honours and D3D11/D3D12 both wire up -- a game (or,
     // as found here, the reused easygl_blendstate_opaque_test.cpp CTest) calling
     // dev.SetDepthTestEnabled(false) on D3D9 threw instead of taking effect. Unlike D3D11 (which
     // must rebuild a whole cached ID3D11DepthStencilState object from tracked fields), D3D9's

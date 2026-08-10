@@ -45,7 +45,7 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] std::string ToString() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         friend class MediaLibrary;

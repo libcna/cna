@@ -67,7 +67,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @return The cumulative number of previous-generation gamers freed.
          */
-        NOXNA [[nodiscard]] static std::size_t GetFreedGamerCountForTesting();
+        CNAEXT [[nodiscard]] static std::size_t GetFreedGamerCountForTesting();
 
     private:
         static bool isInitialized_;

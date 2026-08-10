@@ -132,7 +132,7 @@ Kept for their investigation methodology and root-cause detail, not as current s
 `demo-input-checklist.md`, `platform-input-notes.md` — not in scope for the 2026-07-11 Graphics
 documentation-accuracy pass; check each file's own date before relying on it.
 
-## Devices namespace (`Microsoft.Devices.Sensors`, NOXNA)
+## Devices namespace (`Microsoft.Devices.Sensors`, CNAEXT)
 
 `devices-android.md`, `devices-api-coverage.md`, `devices-build.md`, `devices-hardware-checklist.md`,
 `devices-native-backend-design.md`, `devices_sensor_hardware_qa_template.md`,

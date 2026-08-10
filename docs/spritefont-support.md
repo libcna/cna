@@ -66,7 +66,7 @@ both renderers (Tasks 424–429 mirroring 690–694).
 
 CNA has **no XNB content pipeline**. FNA's `SpriteFont` constructor is `internal`, invoked only by
 the content pipeline's `SpriteFontReader`; CNA exposes the equivalent constructor publicly with
-`NOXNA`, since there is no reader to invoke it on the caller's behalf. Any application (or a future
+`CNAEXT`, since there is no reader to invoke it on the caller's behalf. Any application (or a future
 content-reader implementation) must build the glyph/cropping/kerning tables itself.
 
 Every SpriteFont test in this project — from the original SDL_Renderer pass (Tasks 690–694) through

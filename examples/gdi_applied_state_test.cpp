@@ -78,7 +78,7 @@ namespace
         ok &= Expect(SameColor(readback, stored),
                      "normalized backbuffer property agrees with actual RGBA8 readback storage");
 
-        // SetPresentationParameters is intentionally a store-only NOXNA path. It must therefore
+        // SetPresentationParameters is intentionally a store-only CNAEXT path. It must therefore
         // keep the already active sample count rather than claim an unapplied new request.
         PresentationParameters storedOnly = device.getPresentationParametersProperty().Clone();
         storedOnly.setBackBufferFormatProperty(SurfaceFormat::Bgra4444);

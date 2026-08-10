@@ -111,7 +111,7 @@ namespace CNA::Internal::Renderers::DirectX12
                                                  const D3D12PipelineStateDesc& desc,
                                                  DXGI_FORMAT rtvFormat, DXGI_FORMAT dsvFormat);
 
-        /// Number of distinct PSOs created so far (NOXNA diagnostics).
+        /// Number of distinct PSOs created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:

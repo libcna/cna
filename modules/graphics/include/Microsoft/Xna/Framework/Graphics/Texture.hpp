@@ -65,7 +65,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param fmt The SurfaceFormat to validate.
          */
-        NOXNA static void ValidateFormat(SurfaceFormat fmt);
+        CNAEXT static void ValidateFormat(SurfaceFormat fmt);
 
     protected:
         explicit Texture(GraphicsDevice* device = nullptr);

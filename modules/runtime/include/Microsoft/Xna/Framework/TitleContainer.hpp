@@ -40,12 +40,12 @@ namespace Microsoft::Xna::Framework
          * @param size Output parameter that receives the size of the allocated buffer.
          * @return A raw pointer to the allocated buffer; caller must release with FreePointer.
          */
-        NOXNA [[nodiscard]] static void* ReadToPointer(const std::string& name, IntPtr& size);
+        CNAEXT [[nodiscard]] static void* ReadToPointer(const std::string& name, IntPtr& size);
 
         /**
          * @brief Releases a pointer returned by ReadToPointer.
          * @param pointer The pointer to release.
          */
-        NOXNA static void FreePointer(void* pointer);
+        CNAEXT static void FreePointer(void* pointer);
     };
 }

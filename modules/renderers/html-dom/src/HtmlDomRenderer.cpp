@@ -154,7 +154,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // write's own comment for the full rationale and its one narrow, accepted caveat.
     Module['cnaDomAnyNamedRegionEverCreated'] = false;
     // plan_html_dom.md HTMLDOM-110: total CSS property writes / total flush calls
-    // CNA_HtmlDom_FlushSprites has issued this session -- NOXNA instrumentation only, read (and
+    // CNA_HtmlDom_FlushSprites has issued this session -- CNAEXT instrumentation only, read (and
     // optionally reset) via Module['cnaDomStyleWriteCount']/['cnaDomFlushCallCount'] directly by
     // test code. Never read by the renderer itself.
     Module['cnaDomStyleWriteCount'] = 0;

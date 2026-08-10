@@ -50,10 +50,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param mode The presence mode string.
          */
-        NOXNA void SetPresenceModeStringEXT(const std::string& mode);
+        CNAEXT void SetPresenceModeStringEXT(const std::string& mode);
 
         /** @brief Creates a GamerPresence instance for CNA internal use. */
-        NOXNA static GamerPresence CreateInternal();
+        CNAEXT static GamerPresence CreateInternal();
 
     private:
         GamerPresence();

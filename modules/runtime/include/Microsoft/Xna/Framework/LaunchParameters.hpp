@@ -21,7 +21,7 @@ namespace Microsoft::Xna::Framework
          * @brief Creates launch parameters from an explicit argument list.
          * @param args The argument strings to parse into key/value pairs.
          */
-        NOXNA explicit LaunchParameters(const std::vector<std::string>& args);
+        CNAEXT explicit LaunchParameters(const std::vector<std::string>& args);
 
         /**
          * @brief Returns true when the dictionary contains the specified key.

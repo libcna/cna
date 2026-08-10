@@ -11,7 +11,7 @@ namespace Microsoft::Xna::Framework::Content
     class ContentManager; // forward declaration
 
     /**
-     * @brief NOXNA abstract base for type-specific loose-file asset loaders used by
+     * @brief CNAEXT abstract base for type-specific loose-file asset loaders used by
      *        ContentManager's `.cnj`/native-extension loading scheme (see cnj.md).
      *
      * Renamed 2026-07-16 from `ContentTypeReader<T>` (which this class was originally called)
@@ -24,7 +24,7 @@ namespace Microsoft::Xna::Framework::Content
      * @tparam T The asset type this reader produces.
      */
     template <typename T>
-    class NOXNA LooseFileContentTypeReader
+    class CNAEXT LooseFileContentTypeReader
     {
     public:
         /** @brief Virtual destructor. */

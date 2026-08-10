@@ -7,7 +7,7 @@
 // CreateGpuContext() with no catch handler around it yet, leaking the just-created GL context: the
 // only cleanup path (the try/catch around SetupSokol()/CreateSpriteResources()) was never entered.
 //
-// This test uses the NOXNA test-only constructor overload to force exactly that: a real
+// This test uses the CNAEXT test-only constructor overload to force exactly that: a real
 // SDL_GL_CreateContext() success immediately followed by a forced SDL_GL_MakeCurrent() failure, and
 // counts every SDL_GL_DestroyContext() call the instance makes via contextDestroyCountEXT.
 //

@@ -27,7 +27,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param graphicsDevice A valid reference to the GraphicsDevice.
          * @param parts The mesh parts that make up this mesh.
          */
-        NOXNA ModelMesh(GraphicsDevice* graphicsDevice, std::vector<ModelMeshPart*> parts);
+        CNAEXT ModelMesh(GraphicsDevice* graphicsDevice, std::vector<ModelMeshPart*> parts);
 
         /**
          * @brief Constructs a named mesh from a graphics device and parts.
@@ -35,7 +35,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param name The name of this mesh.
          * @param parts The mesh parts that make up this mesh.
          */
-        NOXNA ModelMesh(GraphicsDevice* graphicsDevice, std::string name,
+        CNAEXT ModelMesh(GraphicsDevice* graphicsDevice, std::string name,
                         std::vector<ModelMeshPart*> parts);
 
         /**
@@ -65,7 +65,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets a mutable reference to the effect collection.
          * @return A mutable reference to the effect collection.
          */
-        NOXNA [[nodiscard]] ModelEffectCollection& getEffectsPropertyMutable();
+        CNAEXT [[nodiscard]] ModelEffectCollection& getEffectsPropertyMutable();
 
         /**
          * @brief Gets the ModelMeshPart objects that make up this mesh.

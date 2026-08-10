@@ -661,7 +661,7 @@ namespace Microsoft::Devices::Sensors::Detail
          * in order, via `dispatchOne` (Task P7-3, revised Task SDLCORE-004).
          *
          * Shared by the real SDL_EventFilter path (SensorEventWatch(),
-         * below) and the NOXNA test-only dispatch hooks that TSensor
+         * below) and the CNAEXT test-only dispatch hooks that TSensor
          * exposes — both funnel through this one method so the bookkeeping
          * can never diverge between the real path and a test simulating it.
          *

@@ -177,13 +177,13 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] System::Collections::Generic::IEnumerator<std::optional<int>>* GetEnumerator() override;
 
         /** @brief Returns an iterator to the beginning of the list (STL/range-for interop). */
-        NOXNA [[nodiscard]] auto begin()       { return properties_.begin(); }
+        CNAEXT [[nodiscard]] auto begin()       { return properties_.begin(); }
         /** @brief Returns an iterator past the end of the list (STL/range-for interop). */
-        NOXNA [[nodiscard]] auto end()         { return properties_.end(); }
+        CNAEXT [[nodiscard]] auto end()         { return properties_.end(); }
         /** @brief Returns a const iterator to the beginning of the list (STL/range-for interop). */
-        NOXNA [[nodiscard]] auto begin() const { return properties_.cbegin(); }
+        CNAEXT [[nodiscard]] auto begin() const { return properties_.cbegin(); }
         /** @brief Returns a const iterator past the end of the list (STL/range-for interop). */
-        NOXNA [[nodiscard]] auto end()   const { return properties_.cend(); }
+        CNAEXT [[nodiscard]] auto end()   const { return properties_.cend(); }
 
     private:
         class Enumerator : public System::Collections::Generic::IEnumerator<std::optional<int>>

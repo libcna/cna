@@ -10,7 +10,7 @@ side.
 
 The comparison is intentionally one-directional: for every key present on the FNA side, the same
 key path must exist on the CNA side with an equal (or, for floats, sufficiently close) value.
-Keys that exist only on the CNA side are NOT reported as mismatches -- CNA has real NOXNA
+Keys that exist only on the CNA side are NOT reported as mismatches -- CNA has real CNAEXT
 extensions with no FNA equivalent (e.g. PrimitiveType.PointListEXT, several SurfaceFormat *EXT
 values), and requiring the reverse direction too would make this script reject legitimate,
 intentional CNA extensions as false failures.

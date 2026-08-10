@@ -48,19 +48,19 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] Genre* operator[](SharpRuntime::intcs index) const;
 
         /** @brief Returns an iterator to the first genre. */
-        NOXNA [[nodiscard]] iterator begin();
+        CNAEXT [[nodiscard]] iterator begin();
 
         /** @brief Returns an iterator past the last genre. */
-        NOXNA [[nodiscard]] iterator end();
+        CNAEXT [[nodiscard]] iterator end();
 
         /** @brief Returns a const iterator to the first genre. */
-        NOXNA [[nodiscard]] const_iterator begin() const;
+        CNAEXT [[nodiscard]] const_iterator begin() const;
 
         /** @brief Returns a const iterator past the last genre. */
-        NOXNA [[nodiscard]] const_iterator end() const;
+        CNAEXT [[nodiscard]] const_iterator end() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
         friend class MediaLibrary;

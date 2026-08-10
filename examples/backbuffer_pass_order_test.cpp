@@ -499,7 +499,7 @@ class BackbufferPassOrderTest : public Game
     {
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.setBlendStateProperty(BlendState::Opaque);
-        // DepthStencilState, not the NOXNA SetDepthTestEnabled/SetDepthWriteEnabled pair: bgfx
+        // DepthStencilState, not the CNAEXT SetDepthTestEnabled/SetDepthWriteEnabled pair: bgfx
         // raises outright from those ("not yet wired into bgfx state flags"), and this is the XNA
         // route anyway. Default = test and write enabled, None = neither.
         DepthStencilState ds = depth ? DepthStencilState::Default : DepthStencilState::None;

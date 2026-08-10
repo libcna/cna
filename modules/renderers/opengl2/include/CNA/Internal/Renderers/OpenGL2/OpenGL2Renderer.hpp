@@ -59,7 +59,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         /// Reached only through the validating descriptor override above.
         void SetRenderTargetsArray(IRenderTargetRenderer* const* rts, int count);
 
-        // NOXNA: renderer-internal helper (not part of IGraphicsRenderer) mirroring
+        // CNAEXT: renderer-internal helper (not part of IGraphicsRenderer) mirroring
         // EasyGLRenderer::GetCurrentRenderTarget2DSize -- lets Sprite::Draw size its
         // screen->clip mapping to the bound render target instead of the window/virtual
         // resolution when one is active.
@@ -140,13 +140,13 @@ namespace CNA::Internal::Renderers::OpenGL2
         void DebugRestoreContext() override;
         void SetContextRecoveryEnabled(bool enabled) override;
 
-        // NOXNA: called by every recoverable resource's constructor/destructor (VB/IB/Tex/
+        // CNAEXT: called by every recoverable resource's constructor/destructor (VB/IB/Tex/
         // RenderTarget/RenderTargetCubeRenderer/OcclusionQuery) -- not part of IGraphicsRenderer.
         void RegisterRecoverable(RecoverableResource* resource);
         void UnregisterRecoverable(RecoverableResource* resource);
         [[nodiscard]] bool IsContextRecoveryEnabled() const { return contextRecoveryEnabled_; }
 
-        // NOXNA: mirrors SdlGpuRenderer::LogicalViewport/ComputeLogicalViewport exactly
+        // CNAEXT: mirrors SdlGpuRenderer::LogicalViewport/ComputeLogicalViewport exactly
         // (see that renderer's own implementation -- the established reference for real
         // Letterbox/Overscan/Stretch semantics in this codebase; EasyGL's own equivalent is a
         // documented no-op fallback, not a model to follow here). `x`/`y`/`width`/`height` are

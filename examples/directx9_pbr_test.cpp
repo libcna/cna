@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// D3D9 PBR porting task: real DrawPrimitivesEx dispatch for CNA's own NOXNA PbrEffect/
+// D3D9 PBR porting task: real DrawPrimitivesEx dispatch for CNA's own CNAEXT PbrEffect/
 // SkinnedPbrEffect (params.pbr), via CNA's own custom "Pbr3D"/"PbrSkinned3D" vs_3_0/ps_3_0 shaders
 // (D3D9PbrDraw.cpp, shaders/cna/Pbr3D.hlsl, shaders/cna/PbrSkinned3D.hlsl).
 //

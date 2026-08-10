@@ -54,13 +54,13 @@ namespace CNA::Internal::Renderers::DirectX12
         void SetUniformInt(const char* name, int value) override;
 
         /// DX-121: mirrors D3D11EffectRenderer::SetViewportSizeEXT -- writes the [0..15]-byte vpSize
-        /// slot this class's own fixed-slot convention reserves for it. NOXNA.
+        /// slot this class's own fixed-slot convention reserves for it. CNAEXT.
         void SetViewportSizeEXT(float width, float height);
 
-        /// NOXNA: the real, compiled PSO -- D3D12SpriteBatchRenderer::FlushBatch() binds this in
+        /// CNAEXT: the real, compiled PSO -- D3D12SpriteBatchRenderer::FlushBatch() binds this in
         /// place of its own stock sprite2d PSO when a valid custom effect is active.
         [[nodiscard]] ID3D12PipelineState* GetPipelineStateEXT() const { return pso_.Get(); }
-        /// NOXNA: the real, mapped 128-byte constant buffer Bind() writes into.
+        /// CNAEXT: the real, mapped 128-byte constant buffer Bind() writes into.
         [[nodiscard]] ID3D12Resource* GetConstantBufferEXT() const { return constantBuffer_.Get(); }
 
     private:

@@ -24,7 +24,7 @@ public:
  void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override{declaration_.Remember(vertexDeclaration);}
  int GetVertexCount() const override{return count_;}
  const std::vector<std::uint8_t>& Data() const{return data_;} std::size_t Stride()const{return stride_;}
- // NOXNA. The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+ // CNAEXT. The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
  [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT()const{return declaration_;}
 private:int capacity_=0,count_=0;std::size_t stride_=0;std::vector<std::uint8_t> data_;
  CNA::Internal::Graphics::DeclaredVertexLayout declaration_;

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// NOXNA Example — compile-time demonstration of CNA extended graphics API.
+// CNAEXT Example — compile-time demonstration of CNA extended graphics API.
 //
-// Build with: cmake -DCNA_NOXNA=ON -DCNA_GRAPHICS_RENDERER=OPENGLES3 ..
+// Build with: cmake -DCNA_CNAEXT=ON -DCNA_GRAPHICS_RENDERER=OPENGLES3 ..
 //
-// This example does not draw anything.  It exercises the NOXNA settings
+// This example does not draw anything.  It exercises the CNAEXT settings
 // API so the compiler verifies that all declarations compile correctly.
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/PbrMaterial.hpp"
@@ -94,20 +94,20 @@ static void testPbrMaterial()
 
 int main()
 {
-    std::puts("=== NOXNA settings example ===");
+    std::puts("=== CNAEXT settings example ===");
     testRenderPipelineSettings();
     testPbrMaterial();
     std::puts("=== All PASS ===");
     return 0;
 }
 
-#else // CNA_NOXNA
+#else // CNA_CNAEXT
 
 #include <cstdio>
 int main()
 {
-    std::puts("NOXNA is disabled (compile with -DCNA_NOXNA=ON to enable).");
+    std::puts("CNAEXT is disabled (compile with -DCNA_CNAEXT=ON to enable).");
     return 0;
 }
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

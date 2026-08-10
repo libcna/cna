@@ -6,7 +6,7 @@
 namespace CNA::Internal::Media
 {
     /// Resolves the real per-OS Music/Pictures root folders via SDL's SDL_GetUserFolder(), with
-    /// NOXNA static override hooks so tests don't depend on the real user's actual folder
+    /// CNAEXT static override hooks so tests don't depend on the real user's actual folder
     /// contents -- plan_media.md MEDIA-46/D1.
     class MediaLibraryPaths
     {

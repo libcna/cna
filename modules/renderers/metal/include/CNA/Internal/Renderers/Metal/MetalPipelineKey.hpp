@@ -116,7 +116,7 @@ namespace CNA::Internal::Renderers::Metal
     // most, each holding one lightweight `id<MTLRenderPipelineState>` reference -- not a real
     // memory or lookup-cost concern. If a genuinely pathological case (e.g. a game that
     // procedurally constructs thousands of distinct one-off `BlendState`s) is ever observed in
-    // practice, an LRU eviction policy would be the right NOXNA follow-up then, not something to
+    // practice, an LRU eviction policy would be the right CNAEXT follow-up then, not something to
     // design speculatively now.
     // plan_metal.md METAL-113: `colorAttachmentCount` joins `kind`/`blend` in the key once MRT
     // (METAL-112) lands -- a render pipeline's `MTLRenderPipelineDescriptor.colorAttachments[i]`

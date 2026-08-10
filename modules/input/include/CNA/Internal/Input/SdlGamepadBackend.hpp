@@ -41,9 +41,9 @@ namespace CNA::Internal::Input
         virtual bool GamepadHasAxis(SDL_Gamepad* gamepad, SDL_GamepadAxis axis) = 0;
         /** @brief Number of touchpads on the gamepad (SDL_GetNumGamepadTouchpads). */
         virtual int GetNumGamepadTouchpads(SDL_Gamepad* gamepad) = 0;
-        /** @brief NOXNA/EXT: number of simultaneous fingers a touchpad supports (SDL_GetNumGamepadTouchpadFingers). */
+        /** @brief CNAEXT/EXT: number of simultaneous fingers a touchpad supports (SDL_GetNumGamepadTouchpadFingers). */
         virtual int GetNumGamepadTouchpadFingers(SDL_Gamepad* gamepad, int touchpad) = 0;
-        /** @brief NOXNA/EXT: one touchpad finger's down/x/y/pressure (SDL_GetGamepadTouchpadFinger). Returns success. */
+        /** @brief CNAEXT/EXT: one touchpad finger's down/x/y/pressure (SDL_GetGamepadTouchpadFinger). Returns success. */
         virtual bool GetGamepadTouchpadFinger(SDL_Gamepad* gamepad, int touchpad, int finger,
                                               bool* down, float* x, float* y, float* pressure) = 0;
         /** @brief Whether the gamepad has the given sensor (SDL_GamepadHasSensor). */
@@ -69,30 +69,30 @@ namespace CNA::Internal::Input
         /** @brief High-level gamepad type (SDL_GetGamepadType). */
         virtual SDL_GamepadType GetGamepadType(SDL_Gamepad* gamepad) = 0;
 
-        /** @brief NOXNA/EXT: the device's SDL player index (LED number, 0-based), or -1 if unset. */
+        /** @brief CNAEXT/EXT: the device's SDL player index (LED number, 0-based), or -1 if unset. */
         virtual int GetGamepadPlayerIndex(SDL_Gamepad* gamepad) = 0;
 
-        /** @brief NOXNA/EXT: sets the device's SDL player index (LED number). Returns success. */
+        /** @brief CNAEXT/EXT: sets the device's SDL player index (LED number). Returns success. */
         virtual bool SetGamepadPlayerIndex(SDL_Gamepad* gamepad, int playerIndex) = 0;
 
-        /** @brief NOXNA/EXT: battery/charge state; fills `*percent` (0-100, or -1 unknown). SDL_GetGamepadPowerInfo. */
+        /** @brief CNAEXT/EXT: battery/charge state; fills `*percent` (0-100, or -1 unknown). SDL_GetGamepadPowerInfo. */
         virtual SDL_PowerState GetGamepadPowerInfo(SDL_Gamepad* gamepad, int* percent) = 0;
 
-        /** @brief NOXNA/EXT: printed glyph label for a face button on this controller. SDL_GetGamepadButtonLabel. */
+        /** @brief CNAEXT/EXT: printed glyph label for a face button on this controller. SDL_GetGamepadButtonLabel. */
         virtual SDL_GamepadButtonLabel GetGamepadButtonLabel(SDL_Gamepad* gamepad, SDL_GamepadButton button) = 0;
 
-        /** @brief NOXNA/EXT: human-readable controller name, or "" if unknown. SDL_GetGamepadName. */
+        /** @brief CNAEXT/EXT: human-readable controller name, or "" if unknown. SDL_GetGamepadName. */
         virtual std::string GetGamepadName(SDL_Gamepad* gamepad) = 0;
-        /** @brief NOXNA/EXT: OS device path, or "" if unknown. SDL_GetGamepadPath. */
+        /** @brief CNAEXT/EXT: OS device path, or "" if unknown. SDL_GetGamepadPath. */
         virtual std::string GetGamepadPath(SDL_Gamepad* gamepad) = 0;
-        /** @brief NOXNA/EXT: hardware serial number, or "" if unavailable. SDL_GetGamepadSerial. */
+        /** @brief CNAEXT/EXT: hardware serial number, or "" if unavailable. SDL_GetGamepadSerial. */
         virtual std::string GetGamepadSerial(SDL_Gamepad* gamepad) = 0;
-        /** @brief NOXNA/EXT: firmware version, or 0 if unavailable. SDL_GetGamepadFirmwareVersion. */
+        /** @brief CNAEXT/EXT: firmware version, or 0 if unavailable. SDL_GetGamepadFirmwareVersion. */
         virtual Uint16 GetGamepadFirmwareVersion(SDL_Gamepad* gamepad) = 0;
-        /** @brief NOXNA/EXT: Steam Input handle, or 0 if not a Steam virtual controller. SDL_GetGamepadSteamHandle. */
+        /** @brief CNAEXT/EXT: Steam Input handle, or 0 if not a Steam virtual controller. SDL_GetGamepadSteamHandle. */
         virtual Uint64 GetGamepadSteamHandle(SDL_Gamepad* gamepad) = 0;
 
-        /** @brief NOXNA/EXT: wired/wireless connection state. SDL_GetGamepadConnectionState. */
+        /** @brief CNAEXT/EXT: wired/wireless connection state. SDL_GetGamepadConnectionState. */
         virtual SDL_JoystickConnectionState GetGamepadConnectionState(SDL_Gamepad* gamepad) = 0;
     };
 

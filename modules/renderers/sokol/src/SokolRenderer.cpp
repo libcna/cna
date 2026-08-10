@@ -443,7 +443,7 @@ namespace CNA::Internal::Renderers::Sokol
         /// (plan_sokol.md SOKOL-28): from the real VertexDeclaration when one was supplied, else
         /// the same fixed set of recognised undeclared-VertexBuffer byte strides
         /// EasyGLRenderer::ApplyLayout()'s own fallback switch uses (in the same field
-        /// order) -- VertexBuffer's own NOXNA-tagged auto-detect constructor stores a
+        /// order) -- VertexBuffer's own CNAEXT-tagged auto-detect constructor stores a
         /// default-constructed, ELEMENT-LESS VertexDeclaration (see DrawColored3D's own identical
         /// comment on this), which is what examples/easygl_shadereffect_3d_test.cpp's
         /// VertexPositionNormalTexture buffer actually has. Returns empty for neither case, so the
@@ -4416,7 +4416,7 @@ namespace CNA::Internal::Renderers::Sokol
         key.blendIndicesOffset = -1;
         key.blendIndicesFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
 
-        // VertexBuffer's own NOXNA-tagged auto-detect constructor (VertexBuffer(device, count),
+        // VertexBuffer's own CNAEXT-tagged auto-detect constructor (VertexBuffer(device, count),
         // used by GraphicsDevice::SetVertexBuffer callers who never pass an explicit
         // VertexDeclaration) stores a default-constructed, ELEMENT-LESS VertexDeclaration --
         // UploadValidatedData still calls SetVertexDeclaration with it before every real upload
@@ -4476,7 +4476,7 @@ namespace CNA::Internal::Renderers::Sokol
             // DrawUserPrimitives()/DrawUserIndexedPrimitives() overloads for VertexPositionColor,
             // VertexPositionTexture, VertexPositionColorTexture and VertexPositionNormalTexture --
             // and their *Colored convenience wrappers -- never call SetVertexDeclaration on the
-            // temp buffer at all) OR with an element-less one (VertexBuffer's NOXNA auto-detect
+            // temp buffer at all) OR with an element-less one (VertexBuffer's CNAEXT auto-detect
             // constructor, see the comment above). Either way there is no usable per-call
             // declaration to read, only the upload stride, which uniquely identifies which of the
             // four built-in layouts this is.

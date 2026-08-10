@@ -9,7 +9,7 @@
 namespace Microsoft::Xna::Framework::Content
 {
     /**
-     * @brief NOXNA introspection record for one logical asset found by a `ContentManager`
+     * @brief CNAEXT introspection record for one logical asset found by a `ContentManager`
      *        content-root scan (plan_xnb.md Phase B3, XNB-65/XNB-66).
      *
      * Not part of the XNA 4.0 API -- a CNA-specific tooling/diagnostic surface (asset
@@ -17,7 +17,7 @@ namespace Microsoft::Xna::Framework::Content
      * (the relative path with its final extension stripped), aggregating every file found
      * under that name.
      */
-    struct NOXNA ContentManifestEntry
+    struct CNAEXT ContentManifestEntry
     {
         /** @brief Logical asset name relative to the content root, forward-slash separated, no extension. */
         std::string relativePath;
@@ -42,10 +42,10 @@ namespace Microsoft::Xna::Framework::Content
     };
 
     /**
-     * @brief NOXNA aggregate view of every `.xnb` reader name referenced across an entire
+     * @brief CNAEXT aggregate view of every `.xnb` reader name referenced across an entire
      *        content-manifest scan (plan_xnb.md XNB-67).
      */
-    struct NOXNA ContentManifestReaderUsage
+    struct CNAEXT ContentManifestReaderUsage
     {
         /** @brief The canonical `.xnb` reader name (see NormalizeXnbTypeReaderName()). */
         std::string readerName;

@@ -56,7 +56,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
                                        double m0, double m1, double m2, double m3, double m4, double m5,
                                        int hasMatrix, int scissorEnabled), {
     if (count <= 0) return;
-    // plan_html_dom.md HTMLDOM-110: NOXNA instrumentation -- every real (non-empty) flush crosses
+    // plan_html_dom.md HTMLDOM-110: CNAEXT instrumentation -- every real (non-empty) flush crosses
     // the wasm/JS boundary and runs this function's own body once per SpriteBatch Begin/End batch,
     // REGARDLESS of whether any of it turns into an actual CSS write below (cnaDomStyleWriteCount
     // is the separate counter for that). A real XNA game resubmits its static sprites every frame,

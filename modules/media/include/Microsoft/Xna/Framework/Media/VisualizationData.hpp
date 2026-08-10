@@ -15,13 +15,13 @@ namespace Microsoft::Xna::Framework::Media
     {
     public:
         /** @brief Number of frequency and sample values in each visualization buffer. */
-        NOXNA static constexpr SharpRuntime::intcs Size = 256;
+        CNAEXT static constexpr SharpRuntime::intcs Size = 256;
 
         /** @brief Frequency-domain values used by the media visualization API. */
-        NOXNA std::array<float, Size> freq;
+        CNAEXT std::array<float, Size> freq;
 
         /** @brief Sample-domain values used by the media visualization API. */
-        NOXNA std::array<float, Size> samp;
+        CNAEXT std::array<float, Size> samp;
 
         /** @brief Creates visualization buffers initialized to zero. */
         VisualizationData();
@@ -41,6 +41,6 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] const std::array<float, Size>& getSamplesProperty() const;
 
         /** @brief Returns the fully-qualified .NET type name. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
     };
 }

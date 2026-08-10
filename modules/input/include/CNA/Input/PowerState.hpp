@@ -6,12 +6,12 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — battery / charge state of a power source (gamepad or the host system).
+     * @brief CNAEXT — battery / charge state of a power source (gamepad or the host system).
      *
      * XNA 4.0 has no battery API; this is a CNA extension shared by `GamePad::GetPowerInfoEXT`
      * (per-controller) and `CNA::Input::Power` (host system). It mirrors SDL3's `SDL_PowerState`.
      */
-    NOXNA enum class PowerStateEXT
+    CNAEXT enum class PowerStateEXT
     {
         /** @brief The power state could not be determined (error querying the source). */
         Error,

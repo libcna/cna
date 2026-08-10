@@ -98,7 +98,7 @@ namespace Microsoft::Xna::Framework::Graphics
                        const PresentationParameters& presentationParameters);
 
         /** @brief Destructor. */
-        NOXNA ~GraphicsDevice() override;
+        CNAEXT ~GraphicsDevice() override;
 
         GraphicsDevice(const GraphicsDevice&) = delete;
         GraphicsDevice& operator=(const GraphicsDevice&) = delete;
@@ -882,7 +882,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                        int primitiveCount,
                                        const VertexDeclaration& vertexDeclaration);
 
-        // --- NOXNA helpers (not in XNA 4.0) ---
+        // --- CNAEXT helpers (not in XNA 4.0) ---
 
         /**
          * @brief Returns the number of vertices required to draw @p primitiveCount primitives
@@ -896,7 +896,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Total vertex count.
          * @throws System::InvalidOperationException if @p primitiveType is unrecognised.
          */
-        NOXNA static int PrimitiveVerts(PrimitiveType primitiveType, int primitiveCount);
+        CNAEXT static int PrimitiveVerts(PrimitiveType primitiveType, int primitiveCount);
 
         /**
          * @brief Fires ResourceCreated for the given resource.
@@ -904,7 +904,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * Called by GraphicsResource constructors when a device is attached.
          * @param resource The newly created resource.
          */
-        NOXNA void OnResourceCreated(System::Object* resource);
+        CNAEXT void OnResourceCreated(System::Object* resource);
 
         /**
          * @brief Fires ResourceDestroyed with the given name and tag.
@@ -913,7 +913,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param name The Name of the resource being destroyed.
          * @param tag  The Tag of the resource being destroyed (may be nullptr).
          */
-        NOXNA void OnResourceDestroyed(const std::string& name, System::Object* tag);
+        CNAEXT void OnResourceDestroyed(const std::string& name, System::Object* tag);
 
         /**
          * @brief Registers a resource for tracking.
@@ -922,7 +922,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * resources before its own renderer is destroyed, preventing use-after-free.
          * @param resource The resource to track.
          */
-        NOXNA void AddResourceReference(GraphicsResource* resource);
+        CNAEXT void AddResourceReference(GraphicsResource* resource);
 
         /**
          * @brief Unregisters a previously tracked resource.
@@ -931,7 +931,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * (the tracking list is cleared before iteration).
          * @param resource The resource to remove.
          */
-        NOXNA void RemoveResourceReference(GraphicsResource* resource);
+        CNAEXT void RemoveResourceReference(GraphicsResource* resource);
 
         /**
          * @brief Returns the number of live resources currently tracked by this device.
@@ -939,14 +939,14 @@ namespace Microsoft::Xna::Framework::Graphics
          * Intended for debug and test use only.
          * @return Count of registered, not-yet-disposed resources.
          */
-        NOXNA [[nodiscard]] std::size_t GetTrackedResourceCount() const { return resources_.size(); }
+        CNAEXT [[nodiscard]] std::size_t GetTrackedResourceCount() const { return resources_.size(); }
 
         /** @brief Enables or disables depth testing. */
-        NOXNA void SetDepthTestEnabled(bool enabled);
+        CNAEXT void SetDepthTestEnabled(bool enabled);
         /** @brief Enables or disables blending. */
-        NOXNA void SetBlendEnabled(bool enabled);
+        CNAEXT void SetBlendEnabled(bool enabled);
         /** @brief Enables or disables depth writes. */
-        NOXNA void SetDepthWriteEnabled(bool enabled);
+        CNAEXT void SetDepthWriteEnabled(bool enabled);
         /**
          * @brief Task/plan_dx9.md D9-103 finding: real XNA fixes GraphicsProfile at device
          * construction (the public GraphicsDevice.GraphicsProfile property is read-only), but
@@ -960,7 +960,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * GraphicsDeviceManager::applyToExistingRenderer() right before Reset() -- not exposed as
          * a general public runtime profile-switch (real XNA has none either).
          */
-        NOXNA void SetGraphicsProfileEXT(GraphicsProfile profile);
+        CNAEXT void SetGraphicsProfileEXT(GraphicsProfile profile);
         /**
          * @brief Disables GL context-loss recovery (CPU shadow copies + ResourceRegistry).
          *
@@ -969,7 +969,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param enabled Pass false to disable context recovery.
          */
-        NOXNA void SetContextRecoveryEnabled(bool enabled);
+        CNAEXT void SetContextRecoveryEnabled(bool enabled);
 
         /**
          * @brief Inserts a named debug marker at the current point in the GPU command stream.
@@ -980,13 +980,13 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param marker The label string to insert.
          */
-        NOXNA void SetStringMarkerEXT(const std::string& marker);
+        CNAEXT void SetStringMarkerEXT(const std::string& marker);
 
         /** @brief Returns a reference to the active graphics renderer. */
-        NOXNA [[nodiscard]] CNA::Internal::Renderers::IGraphicsRenderer& GetRenderer() const;
+        CNAEXT [[nodiscard]] CNA::Internal::Renderers::IGraphicsRenderer& GetRenderer() const;
 
         /** @brief Returns which graphics renderer was compiled into this build (see CNA_GRAPHICS_RENDERER). */
-        NOXNA [[nodiscard]] inline constexpr CNA::GraphicsRendererType GetGraphicsRendererType() const
+        CNAEXT [[nodiscard]] inline constexpr CNA::GraphicsRendererType GetGraphicsRendererType() const
         {
             return CNA::getCurrentGraphicsRendererType();
         }
@@ -1000,7 +1000,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return The active renderer's name.
          */
-        NOXNA [[nodiscard]] inline constexpr std::string_view GetGraphicsRendererName() const
+        CNAEXT [[nodiscard]] inline constexpr std::string_view GetGraphicsRendererName() const
         {
             return CNA::getCurrentGraphicsRendererName();
         }
@@ -1016,7 +1016,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param capability The capability to check.
          * @return True if supported by the active renderer/device.
          */
-        NOXNA [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const;
+        CNAEXT [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const;
 
         /**
          * @brief Returns the active renderer's real maximum single-axis texture dimension.
@@ -1027,7 +1027,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return The maximum width or height, in pixels, this device's renderer supports.
          */
-        NOXNA [[nodiscard]] int GetMaxTextureDimension() const;
+        CNAEXT [[nodiscard]] int GetMaxTextureDimension() const;
 
         /**
          * @brief Configures how permanently unsupported 3D calls are handled by a 2D-only
@@ -1038,11 +1038,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * null-object resource. This setting does not change SupportsCapability() results and
          * does not suppress argument, lifetime, driver, or implementation errors.
          */
-        NOXNA void SetUnsupported3DGraphicsCallBehavior(
+        CNAEXT void SetUnsupported3DGraphicsCallBehavior(
             CNA::Unsupported3DGraphicsCallBehavior behavior);
 
         /** @brief Returns the active unsupported-3D-call policy (Throw by default). */
-        NOXNA [[nodiscard]] CNA::Unsupported3DGraphicsCallBehavior
+        CNAEXT [[nodiscard]] CNA::Unsupported3DGraphicsCallBehavior
         GetUnsupported3DGraphicsCallBehavior() const;
 
         /**
@@ -1054,7 +1054,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param effect The effect to use, or nullptr.
          */
-        NOXNA void SetCurrentEffect(Effect* effect);
+        CNAEXT void SetCurrentEffect(Effect* effect);
 
         /** @brief Returns the currently bound index buffer. */
         [[nodiscard]] const IndexBuffer* Indices() const;
@@ -1065,7 +1065,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void Indices(const IndexBuffer* indexBuffer);
 
         /** @brief Returns the fully qualified .NET type name of this class. */
-        NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
          * @brief Stores the given presentation parameters without triggering a full device reset.
@@ -1076,7 +1076,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param pp The presentation parameters to store.
          */
-        NOXNA void SetPresentationParameters(const PresentationParameters& pp);
+        CNAEXT void SetPresentationParameters(const PresentationParameters& pp);
 
         /**
          * @brief Test-only: tears down and rebuilds the active graphics renderer (same window)
@@ -1099,7 +1099,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param multiSampleCount The new preferred MultiSampleCount to request from the renderer.
          */
-        NOXNA void RecreateRendererForMultiSampleCount(int multiSampleCount);
+        CNAEXT void RecreateRendererForMultiSampleCount(int multiSampleCount);
 
     private:
         SDL_Window* window_;

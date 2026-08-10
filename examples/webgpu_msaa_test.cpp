@@ -25,7 +25,7 @@
 //   transition.
 // Check B -- backbuffer, PreferMultiSampling toggled + GraphicsDeviceManager.ApplyChanges() called
 //   AFTER the renderer already exists (the real runtime-reconfigure path, exactly like
-//   vulkan_msaa_test.cpp's own Task 902 verification -- NOT the NOXNA
+//   vulkan_msaa_test.cpp's own Task 902 verification -- NOT the CNAEXT
 //   GraphicsDevice::RecreateRendererForMultiSampleCount() test-only escape hatch, which does not
 //   work for this renderer since WebGPURenderer's constructor never reads
 //   GraphicsRendererCreateArgs::multiSampleCount at all, unlike VulkanRenderer's): diagonal

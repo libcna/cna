@@ -150,6 +150,6 @@ namespace Microsoft::Xna::Framework::Audio
 
         // Tests need to observe streaming-vs-in-memory internal state (T-3F) without a public
         // XNA-surface way to distinguish them.
-        NOXNA friend struct WaveBankTestAccess;
+        CNAEXT friend struct WaveBankTestAccess;
     };
 }

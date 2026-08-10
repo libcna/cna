@@ -115,16 +115,16 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param technique The EffectTechnique to add.
          */
-        NOXNA void Add(EffectTechnique technique);
+        CNAEXT void Add(EffectTechnique technique);
 
         /** @brief Returns a mutable iterator to the first technique. */
-        NOXNA iterator begin();
+        CNAEXT iterator begin();
         /** @brief Returns a mutable iterator past the last technique. */
-        NOXNA iterator end();
+        CNAEXT iterator end();
         /** @brief Returns a const iterator to the first technique. */
-        NOXNA const_iterator begin() const;
+        CNAEXT const_iterator begin() const;
         /** @brief Returns a const iterator past the last technique. */
-        NOXNA const_iterator end() const;
+        CNAEXT const_iterator end() const;
 
     private:
         std::vector<std::unique_ptr<EffectTechnique>> elements_;

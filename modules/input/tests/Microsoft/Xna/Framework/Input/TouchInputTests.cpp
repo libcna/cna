@@ -730,7 +730,7 @@ TEST(TouchLocationTest, ToStringMatchesFnaFormatExactly)
     EXPECT_EQ(location.ToString(), "{Position:{X:7 Y:8}}");
 }
 
-// N-006: the XNA constructors leave getPressureEXT at 0 (XNA 4.0 dropped Pressure); the NOXNA
+// N-006: the XNA constructors leave getPressureEXT at 0 (XNA 4.0 dropped Pressure); the CNAEXT
 // pressure-carrying constructors set it.
 TEST(TouchLocationTest, PressureDefaultsToZeroForXnaConstructorsAndIsSetByEXTConstructors)
 {

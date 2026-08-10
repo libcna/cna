@@ -63,7 +63,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param annotation The EffectAnnotation to add.
          */
-        NOXNA void Add(EffectAnnotation annotation);
+        CNAEXT void Add(EffectAnnotation annotation);
 
         /** @brief Mutable iterator type for range-for support. */
         using iterator = std::vector<EffectAnnotation>::iterator;
@@ -76,13 +76,13 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Begin iterator.
          */
         /** @brief Returns a mutable iterator to the first annotation. */
-        NOXNA iterator begin();
+        CNAEXT iterator begin();
         /** @brief Returns a mutable iterator past the last annotation. */
-        NOXNA iterator end();
+        CNAEXT iterator end();
         /** @brief Returns a const iterator to the first annotation. */
-        NOXNA const_iterator begin() const;
+        CNAEXT const_iterator begin() const;
         /** @brief Returns a const iterator past the last annotation. */
-        NOXNA const_iterator end() const;
+        CNAEXT const_iterator end() const;
 
     private:
         std::vector<EffectAnnotation> elements_;

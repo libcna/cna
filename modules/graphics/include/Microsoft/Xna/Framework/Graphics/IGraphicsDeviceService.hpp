@@ -14,7 +14,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Virtual destructor. */
-        NOXNA virtual ~IGraphicsDeviceService() = default;
+        CNAEXT virtual ~IGraphicsDeviceService() = default;
 
         /** @brief Returns the current graphics device. */
         [[nodiscard]] virtual GraphicsDevice* getGraphicsDeviceProperty() const = 0;

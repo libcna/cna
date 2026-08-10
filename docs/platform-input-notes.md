@@ -143,7 +143,7 @@ a fundamental XNA limitation, not a CNA bug — games needing these must read `T
 the composed Unicode text), not `Keyboard`. Exceptions: a few Nordic keys whose *physical position* is a
 US OEM key still map to that OEM key (e.g. the codepoints for `æ`/`ø` resolve to `Keys::OemQuotes` /
 `Keys::OemSemicolon`), matching FNA. Tested by `NonUsLayoutAccentedKeysAreUnmappedInKeycodeMode`.
-- **Horizontal scroll wheel is a NOXNA/EXT extension** (all platforms): XNA 4.0 `MouseState` exposes
+- **Horizontal scroll wheel is a CNAEXT/EXT extension** (all platforms): XNA 4.0 `MouseState` exposes
   only the vertical `ScrollWheelValue`, so `event.wheel.x` has no strict-XNA property to route to.
   N-005 (2026-07-17/P1-018) added `MouseState::getHorizontalScrollWheelValueEXTProperty()`: `wheel.x`
   is scaled to the same 120-unit notch and surfaced there, deliberately excluded from

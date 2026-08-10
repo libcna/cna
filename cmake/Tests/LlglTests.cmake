@@ -150,7 +150,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # LLGL-37: SkinnedEffect.VertexColorEnabled (NOXNA extension property) -- a genuinely new
+    # LLGL-37: SkinnedEffect.VertexColorEnabled (CNAEXT extension property) -- a genuinely new
     # skinned3d_color.vert/frag.glsl shader pair, selected instead of skinned3d.vert/frag.glsl only
     # for a stride-56 (colour-carrying) vertex layout. Plain SkinnedEffect works on both modules, so
     # this gets an _OpenGL variant below too.

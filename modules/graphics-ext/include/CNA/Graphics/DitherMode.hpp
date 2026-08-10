@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 namespace CNA::Graphics {
 
@@ -11,7 +11,7 @@ namespace CNA::Graphics {
      * Error-diffusion dithering (Floyd-Steinberg, Atkinson) is deliberately not offered here:
      * it is inherently sequential (each pixel's quantization error is propagated into
      * not-yet-processed neighbours), which does not parallelize onto a single-pass GPU fragment
-     * shader without compute-shader support (tracked long-term as NOXNA.md task N70). Ordered
+     * shader without compute-shader support (tracked long-term as CNAEXT.md task N70). Ordered
      * (Bayer matrix) dithering is single-pass GPU friendly — the same real-time substitute used
      * by RetroArch-style CRT/retro shaders — and is what real-time engines use instead.
      */
@@ -27,4 +27,4 @@ namespace CNA::Graphics {
 
 } // namespace CNA::Graphics
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

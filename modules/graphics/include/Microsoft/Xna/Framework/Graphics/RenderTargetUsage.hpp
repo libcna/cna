@@ -66,7 +66,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @return True when the renderer must load this target's existing colour, depth and stencil
      *         contents when it is bound.
      */
-    NOXNA [[nodiscard]] constexpr bool RenderTargetUsagePreservesContentsEXT(RenderTargetUsage usage) noexcept
+    CNAEXT [[nodiscard]] constexpr bool RenderTargetUsagePreservesContentsEXT(RenderTargetUsage usage) noexcept
     {
         return usage != RenderTargetUsage::DiscardContents;
     }

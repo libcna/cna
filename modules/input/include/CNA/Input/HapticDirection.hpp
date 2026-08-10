@@ -9,10 +9,10 @@
 namespace CNA::Input
 {
     /**
-     * @brief NOXNA — the coordinate system used to encode a haptic effect's direction. Mirrors
+     * @brief CNAEXT — the coordinate system used to encode a haptic effect's direction. Mirrors
      *        SDL3's `SDL_HapticDirectionType`.
      */
-    NOXNA enum class HapticDirectionTypeEXT
+    CNAEXT enum class HapticDirectionTypeEXT
     {
         /** @brief Direction is a single polar angle (hundredths of a degree, clockwise from north). */
         Polar,
@@ -25,10 +25,10 @@ namespace CNA::Input
     };
 
     /**
-     * @brief NOXNA — the direction a haptic effect's force comes from. Mirrors SDL3's
+     * @brief CNAEXT — the direction a haptic effect's force comes from. Mirrors SDL3's
      *        `SDL_HapticDirection`.
      */
-    NOXNA struct HapticDirectionEXT
+    CNAEXT struct HapticDirectionEXT
     {
         /** @brief The coordinate system the `values` are encoded in. */
         HapticDirectionTypeEXT type = HapticDirectionTypeEXT::Polar;

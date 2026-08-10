@@ -165,7 +165,7 @@ namespace Microsoft::Devices::Sensors
         /**
          * Converts raw sensor floats into an AccelerometerReading and
          * raises CurrentValueChanged/ReadingChanged. No hardware-presence
-         * guard — callers (ProcessSensorUpdateEvent() and the NOXNA
+         * guard — callers (ProcessSensorUpdateEvent() and the CNAEXT
          * synthetic-injection hook below) are responsible for deciding
          * whether this call is legitimate. Timestamp is always the real
          * wall-clock time of the call (Task P4-7), not derived from any
@@ -250,7 +250,7 @@ namespace Microsoft::Devices::Sensors
          * @param y Raw Y-axis sensor value, in m/s^2.
          * @param z Raw Z-axis sensor value, in m/s^2.
          */
-        NOXNA void InjectSyntheticSensorUpdate(float x, float y, float z);
+        CNAEXT void InjectSyntheticSensorUpdate(float x, float y, float z);
 
         /**
          * @brief Test-only hook (Task P4-2): directly sets the internal
@@ -263,7 +263,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param started New value for the internal started flag.
          */
-        NOXNA void SetStartedForTesting(bool started);
+        CNAEXT void SetStartedForTesting(bool started);
 
         /**
          * @brief Test-only hook (Task P5-6): directly sets the base
@@ -285,7 +285,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param supported New value for the base class's isSupported_ flag.
          */
-        NOXNA void SetSupportedForTesting(bool supported);
+        CNAEXT void SetSupportedForTesting(bool supported);
 
         /**
          * @brief Test-only hook (Task P6-2): exposes whether this instance
@@ -298,7 +298,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @return True if this instance currently holds the subsystem open.
          */
-        NOXNA [[nodiscard]] bool GetSubsystemHeldForTesting() const;
+        CNAEXT [[nodiscard]] bool GetSubsystemHeldForTesting() const;
 
         /**
          * @brief Test-only hook (Task P7-2): sets a callback invoked once by
@@ -309,7 +309,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param hook Callback to invoke; pass an empty std::function to clear it.
          */
-        NOXNA void SetDisposalCleanupHookForTesting(std::function<void()> hook);
+        CNAEXT void SetDisposalCleanupHookForTesting(std::function<void()> hook);
 
         /**
          * @brief Test-only hook (Task P7-3): registers this instance into
@@ -325,7 +325,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param instance Instance to register.
          */
-        NOXNA static void RegisterStartedInstanceForTesting(Accelerometer& instance);
+        CNAEXT static void RegisterStartedInstanceForTesting(Accelerometer& instance);
 
         /**
          * @brief Test-only hook (Task P7-3): removes this instance from the
@@ -334,7 +334,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param instance Instance to unregister.
          */
-        NOXNA static void UnregisterStartedInstanceForTesting(Accelerometer& instance);
+        CNAEXT static void UnregisterStartedInstanceForTesting(Accelerometer& instance);
 
         /**
          * @brief Test-only hook (Task P7-3): simulates the multi-instance
@@ -362,7 +362,7 @@ namespace Microsoft::Devices::Sensors
          * @param y Raw Y-axis sensor value.
          * @param z Raw Z-axis sensor value.
          */
-        NOXNA static void DispatchToInstancesForTesting(
+        CNAEXT static void DispatchToInstancesForTesting(
             const std::vector<Accelerometer*>& instances, float x, float y, float z);
 
         /**
@@ -384,7 +384,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @param shouldFail true to force the next registration attempt to fail.
          */
-        NOXNA static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
+        CNAEXT static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
 
         /**
          * @brief Test-only hook (Task SDLCORE-009): total callback exceptions swallowed so far.
@@ -397,14 +397,14 @@ namespace Microsoft::Devices::Sensors
          *
          * @return The number of exceptions Detail::SdlSensorSubsystem<Accelerometer>::DispatchToInstances() has ever swallowed.
          */
-        NOXNA static int GetDispatchExceptionCountForTesting();
+        CNAEXT static int GetDispatchExceptionCountForTesting();
 
         /**
          * @brief Test-only hook (Task SDLCORE-009): message from the most recently swallowed callback exception.
          *
          * @return `ex.what()` for a swallowed `std::exception`, a fixed placeholder for any other thrown value, or empty if none has been swallowed yet.
          */
-        NOXNA static std::string GetLastDispatchExceptionMessageForTesting();
+        CNAEXT static std::string GetLastDispatchExceptionMessageForTesting();
 
         /**
          * @brief Test-only hook (Task SDLCORE-005): true if `sensorId` is still enumerated by `SDL_GetSensors()`.
@@ -422,7 +422,7 @@ namespace Microsoft::Devices::Sensors
          * @param sensorId The SDL sensor id to check.
          * @return true if still present in the current SDL_GetSensors() list.
          */
-        NOXNA static bool IsSensorConnectedForTesting(std::int64_t sensorId);
+        CNAEXT static bool IsSensorConnectedForTesting(std::int64_t sensorId);
 
         /**
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.

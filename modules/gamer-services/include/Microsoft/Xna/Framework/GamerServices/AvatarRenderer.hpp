@@ -62,11 +62,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Destructor.
          *
-         * NOXNA: declared (rather than defaulted inline) so that the real-rendering
+         * CNAEXT: declared (rather than defaulted inline) so that the real-rendering
          * extension's std::unique_ptr<Graphics::SkinnedEffect> member can be destroyed
          * where Graphics::SkinnedEffect is a complete type.
          */
-        NOXNA ~AvatarRenderer();
+        CNAEXT ~AvatarRenderer();
 
         /** @brief Gets the world transform matrix. */
         [[nodiscard]] Microsoft::Xna::Framework::Matrix getWorldProperty() const;
@@ -152,7 +152,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Opts this instance into real (non-XNA-spec) GPU-skinned mesh rendering.
          *
-         * NOXNA — CNA extension. The faithful Draw() overloads above remain permanent no-ops
+         * CNAEXT — CNA extension. The faithful Draw() overloads above remain permanent no-ops
          * regardless of this call; only DrawRealEXT() renders real geometry, and only after
          * this method has been called. Not part of the real XNA 4.0 Avatar API — the real
          * implementation never renders anything off-Xbox (see the class remarks).
@@ -162,30 +162,30 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @throws System::ArgumentNullException if model is null.
          * @throws System::ObjectDisposedException if this instance has been disposed.
          */
-        NOXNA void EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
+        CNAEXT void EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
                                            std::shared_ptr<Graphics::SkinnedModelEXT> model);
 
         /**
          * @brief Gets whether EnableRealRenderingEXT has been called.
          *
-         * @note NOXNA — CNA extension.
+         * @note CNAEXT — CNA extension.
          * @return true if real rendering is enabled.
          */
-        NOXNA [[nodiscard]] bool IsRealRenderingEnabledEXT() const;
+        CNAEXT [[nodiscard]] bool IsRealRenderingEnabledEXT() const;
 
         /**
          * @brief Sets the skin/hair/clothing tint used by DrawRealEXT.
          *
-         * @note NOXNA — CNA extension.
+         * @note CNAEXT — CNA extension.
          * @param appearance The appearance to apply on subsequent DrawRealEXT calls.
          */
-        NOXNA void SetAppearanceEXT(const AvatarAppearanceEXT& appearance);
+        CNAEXT void SetAppearanceEXT(const AvatarAppearanceEXT& appearance);
 
         /**
          * @brief Really renders the avatar's mesh using GPU skinning, using World/View/Projection
          * as already set via setWorldProperty/setViewProperty/setProjectionProperty.
          *
-         * NOXNA — CNA extension; not part of the real XNA 4.0 Avatar API (which never renders
+         * CNAEXT — CNA extension; not part of the real XNA 4.0 Avatar API (which never renders
          * anything off-Xbox). Rendering happens through the standard GraphicsDevice/SkinnedEffect
          * path, so on backends without 3D support this throws whatever error that backend already
          * raises for any 3D draw call.
@@ -196,7 +196,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @throws System::ObjectDisposedException if this instance has been disposed.
          * @throws System::InvalidOperationException if real rendering has not been enabled.
          */
-        NOXNA void DrawRealEXT(const std::string& animationClipName,
+        CNAEXT void DrawRealEXT(const std::string& animationClipName,
                                System::TimeSpan position, bool loop);
 
         /** @brief Releases all resources used by this instance. */
@@ -216,20 +216,20 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @brief Resolves the AvatarAppearanceEXT tint for a SkinnedModelEXT part, by
          * substring match against the part's name (e.g. "CNAAvatarShirt").
          *
-         * @note NOXNA — CNA extension helper for DrawRealEXT. Substring match, not exact
+         * @note CNAEXT — CNA extension helper for DrawRealEXT. Substring match, not exact
          * equality: part names are Blender object names baked through by the content
          * pipeline, not a fixed vocabulary CNA itself defines.
          * @param partName The SkinnedModelEXT part's name.
          * @return The matching hair/shirt/pants/shoes tint, or the skin tint if no
          * garment-slot keyword is found in @p partName.
          */
-        NOXNA [[nodiscard]] Microsoft::Xna::Framework::Color PartTintEXT(const std::string& partName) const;
+        CNAEXT [[nodiscard]] Microsoft::Xna::Framework::Color PartTintEXT(const std::string& partName) const;
 
         // Task 13.1: PartTintEXT's substring-match routing has no non-GPU-dependent test access
         // otherwise - the only existing coverage goes through DrawRealEXT + real pixel readback,
         // which only ever exercised Hair/Shirt. Grants direct access for thorough Pants/Shoes/
         // skin-fallback/case-sensitivity/substring-collision coverage without needing a GPU.
-        NOXNA friend struct AvatarRendererTestAccess;
+        CNAEXT friend struct AvatarRendererTestAccess;
 
         Microsoft::Xna::Framework::Matrix world_;
         Microsoft::Xna::Framework::Matrix view_;
@@ -246,7 +246,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         Microsoft::Xna::Framework::Vector3 ambientLightColor_{0.35f, 0.35f, 0.35f};
         bool isDisposed_{false};
 
-        // --- Real-rendering extension state (NOXNA) ---
+        // --- Real-rendering extension state (CNAEXT) ---
         Graphics::GraphicsDevice* realDevice_ = nullptr;
         std::shared_ptr<Graphics::SkinnedModelEXT> realModel_;
         std::unique_ptr<Graphics::SkinnedEffect> realEffect_;

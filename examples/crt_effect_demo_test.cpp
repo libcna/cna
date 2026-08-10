@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// Manual verification harness for CNA::Graphics::CRTEffect (NOXNA) — renders the same colourful
+// Manual verification harness for CNA::Graphics::CRTEffect (CNAEXT) — renders the same colourful
 // deterministic scene as depth_effect_demo_test.cpp (demo_2d's player.png sprite tinted across a
 // hue sweep, plus a rainbow gradient strip) into an offscreen RenderTarget2D once, then redraws
 // that single composited frame full-screen through SpriteBatch with CRTEffect bound, once per
 // parameter combination, capturing a screenshot after each pass (see RenderSceneToTexture()'s own
 // comment for why CRTEffect needs a single full-screen source, unlike DepthEffect). Not
-// registered as a ctest (visual output only) — see CNA_NOXNA guard below.
+// registered as a ctest (visual output only) — see CNA_CNAEXT guard below.
 
-#ifdef CNA_NOXNA
+#ifdef CNA_CNAEXT
 
 #include <cmath>
 #include <cstdio>
@@ -249,13 +249,13 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-#else // CNA_NOXNA
+#else // CNA_CNAEXT
 
 #include <cstdio>
 int main()
 {
-    std::puts("crt_effect_demo_test requires -DCNA_NOXNA=ON.");
+    std::puts("crt_effect_demo_test requires -DCNA_CNAEXT=ON.");
     return 0;
 }
 
-#endif // CNA_NOXNA
+#endif // CNA_CNAEXT

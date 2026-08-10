@@ -111,7 +111,7 @@ namespace Microsoft::Devices::Sensors
          * @param other The instance to compare against.
          * @return true if equal; otherwise false.
          */
-        NOXNA bool operator==(const AccelerometerReadingEventArgs& other) const;
+        CNAEXT bool operator==(const AccelerometerReadingEventArgs& other) const;
 
         /**
          * @brief Returns true if the instances differ in X, Y, Z, or Timestamp.
@@ -121,7 +121,7 @@ namespace Microsoft::Devices::Sensors
          * @param other The instance to compare against.
          * @return true if not equal; otherwise false.
          */
-        NOXNA bool operator!=(const AccelerometerReadingEventArgs& other) const;
+        CNAEXT bool operator!=(const AccelerometerReadingEventArgs& other) const;
 
         /**
          * @brief Returns a string representation of the reading.
@@ -133,7 +133,7 @@ namespace Microsoft::Devices::Sensors
          *
          * @return String in the format "{X:0 Y:0 Z:0}".
          */
-        NOXNA [[nodiscard]] std::string ToString() const;
+        CNAEXT [[nodiscard]] std::string ToString() const;
 
         /**
          * @brief Returns a hash code for this instance.
@@ -144,13 +144,13 @@ namespace Microsoft::Devices::Sensors
          *
          * @return Hash derived from X, Y, Z, and Timestamp.
          */
-        NOXNA [[nodiscard]] std::size_t GetHashCode() const;
+        CNAEXT [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns the fully-qualified .NET type name of this class.
          *
          * @return "Microsoft.Devices.Sensors.AccelerometerReadingEventArgs"
          */
-        NOXNA [[nodiscard]] std::string GetTypeName() const;
+        CNAEXT [[nodiscard]] std::string GetTypeName() const;
     };
 } // namespace Microsoft::Devices::Sensors

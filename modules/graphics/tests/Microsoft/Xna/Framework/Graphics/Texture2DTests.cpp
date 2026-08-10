@@ -885,7 +885,7 @@ TEST_F(SetDataSimpleGuardTest, ExactElementCountDoesNotThrow)
 // -----------------------------------------------------------------------
 // Context-recovery interaction with the CPU pixel shadow (Task 270)
 //
-// GraphicsDevice::SetContextRecoveryEnabled(false) is a NOXNA optimization:
+// GraphicsDevice::SetContextRecoveryEnabled(false) is a CNAEXT optimization:
 // Texture2D::MaybeFreeCpuPixels() frees the CPU-side pixel shadow
 // (cpuPixels_) after every full upload to save ~1x texture RAM. CNA has no
 // GPU pixel-readback path, so GetData() depends entirely on that shadow —
@@ -1155,7 +1155,7 @@ TEST_F(Texture2DFromStreamResizeTest, ZoomFillsExactRequestedSize)
 // by SaveAsPng, using a single solid colour. These tests go further: error
 // guards, multi-pixel spatial correctness (catches row/column transposition
 // bugs a solid-colour test can't), alpha preservation, non-square sizes, the
-// save-time resize path, and the filename-based NOXNA overload.
+// save-time resize path, and the filename-based CNAEXT overload.
 // -----------------------------------------------------------------------
 
 class SaveAsPngTest : public ::testing::Test

@@ -261,21 +261,21 @@ if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-# ---- NOXNA settings example (no window needed — pure API test) ---------------
-if(CNA_BUILD_EXAMPLES AND CNA_NOXNA)
-    add_executable(cna_example_noxna_settings examples/noxna_settings_example.cpp)
-    target_link_libraries(cna_example_noxna_settings PRIVATE CNA)
+# ---- CNAEXT settings example (no window needed — pure API test) ---------------
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT)
+    add_executable(cna_example_cnaext_settings examples/cnaext_settings_example.cpp)
+    target_link_libraries(cna_example_cnaext_settings PRIVATE CNA)
     if(TARGET SDL3::SDL3main)
-        target_link_libraries(cna_example_noxna_settings PRIVATE SDL3::SDL3main)
+        target_link_libraries(cna_example_cnaext_settings PRIVATE SDL3::SDL3main)
     endif()
     if(CNA_BUILD_TESTS)
-        add_test(NAME NOXNA_Settings_Compile_Run
-                 COMMAND cna_example_noxna_settings)
+        add_test(NAME CNAEXT_Settings_Compile_Run
+                 COMMAND cna_example_cnaext_settings)
     endif()
 endif()
 
 # ---- DepthEffect manual verification demo (renders + screenshots each colour-depth mode) -----
-if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_depth_effect_demo examples/depth_effect_demo_test.cpp)
     target_include_directories(cna_depth_effect_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     target_compile_definitions(cna_depth_effect_demo PRIVATE
@@ -296,7 +296,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLE
 endif()
 
 # ---- CRTEffect manual verification demo (renders + screenshots each CRT parameter set) --------
-if(CNA_BUILD_EXAMPLES AND CNA_NOXNA AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_crt_effect_demo examples/crt_effect_demo_test.cpp)
     target_include_directories(cna_crt_effect_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     target_compile_definitions(cna_crt_effect_demo PRIVATE

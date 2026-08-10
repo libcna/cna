@@ -3,7 +3,7 @@
 This is the single, explicit statement of what CNA promises about the five
 `System::EventHandler<T>` events declared across `Microsoft::Devices::Sensors`:
 `SensorBase<T>::CurrentValueChanged` (all four sensor classes),
-`SensorBase<T>::TimeBetweenUpdatesChanged` (`NOXNA`, all four),
+`SensorBase<T>::TimeBetweenUpdatesChanged` (`CNAEXT`, all four),
 `Accelerometer::ReadingChanged` (`Accelerometer`-only, real XNA API),
 `Compass::Calibrate`, and `Motion::Calibrate`. Each class's own header
 cross-references this file instead of repeating the policy inline. See
@@ -26,7 +26,7 @@ these five events adds anything beyond that baseline. Everything in this
 document is therefore either **matching that inherited .NET baseline exactly**
 (marked "WP7 baseline" below) or a **CNA-specific decision** where CNA had to
 choose a policy the real API leaves unspecified for a native, multi-backend
-runtime with no direct WP7 equivalent (marked "CNA policy" below, `NOXNA` in
+runtime with no direct WP7 equivalent (marked "CNA policy" below, `CNAEXT` in
 spirit even where not literally tagged in code).
 
 ## 1. Dispatch thread identity — CNA policy, unspecified by WP7

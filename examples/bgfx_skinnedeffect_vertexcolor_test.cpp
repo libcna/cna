@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// CNB-67 (Phase 13C), Bgfx port: pixel test for SkinnedEffect's NOXNA VertexColorEnabled property
+// CNB-67 (Phase 13C), Bgfx port: pixel test for SkinnedEffect's CNAEXT VertexColorEnabled property
 // (see SkinnedEffect.hpp) -- proves the stride-56 skinned+Color vertex layout's a_color0
 // attribute (BgfxRenderer's MakeBgfxLayout stride==56 case) is actually read by both
 // vs_skinned3d.sc/fs_skinned3d.sc (per-pixel-lit) and vs_skinned3d_vertexlit.sc/

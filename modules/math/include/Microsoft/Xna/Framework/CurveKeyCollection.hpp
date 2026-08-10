@@ -14,11 +14,11 @@ namespace Microsoft::Xna::Framework
     {
     public:
         /** @brief Underlying container type. */
-        NOXNA using container_type = std::vector<CurveKey>;
+        CNAEXT using container_type = std::vector<CurveKey>;
         /** @brief Mutable iterator over the key sequence. */
-        NOXNA using iterator = container_type::iterator;
+        CNAEXT using iterator = container_type::iterator;
         /** @brief Immutable iterator over the key sequence. */
-        NOXNA using const_iterator = container_type::const_iterator;
+        CNAEXT using const_iterator = container_type::const_iterator;
 
         /**
          * @brief Returns the count of keys in this collection.
@@ -123,37 +123,37 @@ namespace Microsoft::Xna::Framework
          * @brief Returns an iterator to the first key.
          * @return A mutable iterator pointing to the first key.
          */
-        NOXNA [[nodiscard]] iterator begin();
+        CNAEXT [[nodiscard]] iterator begin();
 
         /**
          * @brief Returns an iterator past the last key.
          * @return A mutable iterator one past the last key.
          */
-        NOXNA [[nodiscard]] iterator end();
+        CNAEXT [[nodiscard]] iterator end();
 
         /**
          * @brief Returns a const iterator to the first key.
          * @return An immutable iterator pointing to the first key.
          */
-        NOXNA [[nodiscard]] const_iterator begin() const;
+        CNAEXT [[nodiscard]] const_iterator begin() const;
 
         /**
          * @brief Returns a const iterator past the last key.
          * @return An immutable iterator one past the last key.
          */
-        NOXNA [[nodiscard]] const_iterator end() const;
+        CNAEXT [[nodiscard]] const_iterator end() const;
 
         /**
          * @brief Returns a const iterator to the first key.
          * @return An immutable iterator pointing to the first key.
          */
-        NOXNA [[nodiscard]] const_iterator cbegin() const;
+        CNAEXT [[nodiscard]] const_iterator cbegin() const;
 
         /**
          * @brief Returns a const iterator past the last key.
          * @return An immutable iterator one past the last key.
          */
-        NOXNA [[nodiscard]] const_iterator cend() const;
+        CNAEXT [[nodiscard]] const_iterator cend() const;
 
     private:
         bool isReadOnly;
