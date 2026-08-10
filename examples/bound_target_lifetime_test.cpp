@@ -168,12 +168,12 @@ namespace
     constexpr const char* kRendererName = "SDL_GPU";
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr const char* kRendererName = "SDL_RENDERER";
-#elif defined(CNA_RENDERER_D3D9)
-    constexpr const char* kRendererName = "D3D9";
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr const char* kRendererName = "D3D11";
-#elif defined(CNA_RENDERER_D3D12)
-    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_DIRECTX9)
+    constexpr const char* kRendererName = "DIRECTX9";
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr const char* kRendererName = "DIRECTX11";
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr const char* kRendererName = "DIRECTX12";
 #elif defined(CNA_RENDERER_LLGL)
     constexpr const char* kRendererName = "LLGL";
 #else

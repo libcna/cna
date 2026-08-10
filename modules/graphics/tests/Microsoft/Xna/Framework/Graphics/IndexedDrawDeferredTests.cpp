@@ -472,7 +472,7 @@ namespace
 // once, primitiveCount limiting the consumed range, and hints that never change addressing.
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
@@ -659,8 +659,8 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
-    defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_SOFTWARE)
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
     RequireIndexedRendering();
@@ -699,7 +699,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_SDL_GPU) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderExactGeometry)
 {
@@ -1094,8 +1094,8 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
-    defined(CNA_RENDERER_D3D11)
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX11)
     const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
     ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
@@ -1108,8 +1108,8 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
-    defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_SOFTWARE)
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
     RequireIndexedRendering();
@@ -1232,7 +1232,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
     ExpectExactColor(pixels.AtNdc(0.68f), Color::Red, "static vertex A restore");
 }
 
-#if !defined(CNA_RENDERER_D3D9) && !defined(CNA_RENDERER_D3D11)
+#if !defined(CNA_RENDERER_DIRECTX9) && !defined(CNA_RENDERER_DIRECTX11)
 TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueuedVersion)
 {
     RequireIndexedRendering();
@@ -1316,7 +1316,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainInde
     ExpectExactColor(pixels.AtNdc(0.55f), Color::Blue, "independent identical buffer");
 }
 
-#if !defined(CNA_RENDERER_D3D9) && !defined(CNA_RENDERER_D3D11)
+#if !defined(CNA_RENDERER_DIRECTX9) && !defined(CNA_RENDERER_DIRECTX11)
 TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedVersion)
 {
     RequireIndexedRendering();
@@ -2236,8 +2236,8 @@ TEST_F(IndexedDrawDeferredTest, BgfxNativeBufferVersionCountsRemainBounded)
 #endif
 
 #if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
-    defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_SOFTWARE)
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclaration)
 {
     RequireIndexedRendering();
@@ -2308,8 +2308,8 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
 #endif
 
 #if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
-    defined(CNA_RENDERER_D3D11)
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX11)
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffsetsAndSources)
 {
     RequireIndexedRendering();
@@ -2383,8 +2383,8 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
 
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D9) || \
-    defined(CNA_RENDERER_D3D11)
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX11)
 TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRangesAndPixels)
 {
     RequireIndexedRendering();

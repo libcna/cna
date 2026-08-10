@@ -238,14 +238,14 @@ namespace
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, false, false, true, false};
-#elif defined(CNA_RENDERER_D3D9)
-    constexpr Contract kContract{"D3D9", true, Support::Exact, true, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX9)
+    constexpr Contract kContract{"DIRECTX9", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, true};
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr Contract kContract{"D3D11", true, Support::Exact, true, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_RENDERER_D3D12)
-    constexpr Contract kContract{"D3D12", true, Support::Exact, true, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
 #elif defined(CNA_RENDERER_SOKOL)
     // plan_sokol.md SOKOL-25/26/38: both RenderTarget2D and RenderTargetCube can be created and

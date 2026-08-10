@@ -23,7 +23,7 @@
 # non-DXVK diagnostic run (e.g. reproducing DX-1's own original vanilla-Wine
 # spike) -- do not set this for normal test runs. Set CNA_D3D11_SKIP_DXVK_GATE=1
 # for a binary that legitimately never creates a D3D11 device at all (e.g.
-# D3D11_Common's pure-function D3DCommon mapping-table checks, DX-11-fmt/
+# DirectX11_Common's pure-function D3DCommon mapping-table checks, DX-11-fmt/
 # DX-12-state/DX-16-vtx) -- such a run never prints a DXVK line for entirely
 # unrelated, legitimate reasons, and this gate would otherwise misreport it as
 # a WineD3D fallback.

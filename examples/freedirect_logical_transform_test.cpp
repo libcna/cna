@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_freedirect.md Phase X7 (DX3-68): TransformWindowToLogical/TransformLogicalToWindow (real
-// letterbox scale+offset) tests for the DX3 (DirectDraw, via the ../free-direct sibling)
+// letterbox scale+offset) tests for the DIRECTX3 (DirectDraw, via the ../free-direct sibling)
 // graphics renderer.
 //
 // The game requests a 64x64 logical/virtual resolution. Rather than forcing a specific physical

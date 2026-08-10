@@ -126,15 +126,15 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "SDL_GPU";
-#elif defined(CNA_RENDERER_D3D9)
+#elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "D3D9";
-#elif defined(CNA_RENDERER_D3D11)
+    constexpr const char* kRendererName = "DIRECTX9";
+#elif defined(CNA_RENDERER_DIRECTX11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "D3D11";
-#elif defined(CNA_RENDERER_D3D12)
+    constexpr const char* kRendererName = "DIRECTX11";
+#elif defined(CNA_RENDERER_DIRECTX12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "D3D12";
+    constexpr const char* kRendererName = "DIRECTX12";
 #else
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "UNKNOWN";
@@ -875,7 +875,7 @@ class DescriptorCapacityContractTest : public Game
     // environment -- the D3D12 renderer has no swap chain under this dev loop (DX-100/DX-102) and
     // throws from Present -- and the property being measured is reclamation between rounds, which
     // does not need one. The fence-gated, submission-crossing half of that property is measured
-    // natively instead, in examples/d3d12_descriptor_allocator_test.cpp's own frame leg.
+    // natively instead, in examples/directx12_descriptor_allocator_test.cpp's own frame leg.
 
     void RunK(GraphicsDevice& dev)
     {

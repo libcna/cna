@@ -207,17 +207,17 @@ namespace
     constexpr Contract kContract{"HEADLESS", true, false, false, true, false,
                                  true, false, false,
                                  true, true, true, true, false, false, false};
-#elif defined(CNA_RENDERER_D3D9)
+#elif defined(CNA_RENDERER_DIRECTX9)
     // `clearIgnoresViewport` / `clearIgnoresScissor` BOTH false, and both measured: D3D9's
     // IDirect3DDevice9::Clear is bounded by the current viewport and, with scissor testing enabled,
     // by the scissor rectangle -- which is real XNA's own behaviour, since XNA ran on D3D9. It
     // disagrees with REMED-GFX-018's cross-renderer contract and with the five other measurable
     // renderers; recorded as an independent finding rather than standardised away here.
-    constexpr Contract kContract{"D3D9", true, true, true, true, true,
+    constexpr Contract kContract{"DIRECTX9", true, true, true, true, true,
                                  true, true, true,
                                  true, true, false, false, false, true, true};
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr Contract kContract{"D3D11", true, true, true, true, true,
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr Contract kContract{"DIRECTX11", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_LLGL)

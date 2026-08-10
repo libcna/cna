@@ -41,9 +41,9 @@
 
 // plan_dx9.md Phase D9-10 (D9-103): GraphicsProfile.Reach/HiDef texture-size ceilings are real,
 // enforced-at-creation-time, ONLY on this renderer -- the other 9 CNA renderers have no profile
-// distinction to enforce (matches GraphicsAdapter.cpp's own #ifdef CNA_RENDERER_D3D9 convention).
-#ifdef CNA_RENDERER_D3D9
-#include "CNA/Internal/Renderers/D3D9/D3D9ProfileCapabilities.hpp"
+// distinction to enforce (matches GraphicsAdapter.cpp's own #ifdef CNA_RENDERER_DIRECTX9 convention).
+#ifdef CNA_RENDERER_DIRECTX9
+#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -55,7 +55,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // Private helpers
     // -----------------------------------------------------------------------
 
-#ifdef CNA_RENDERER_D3D9
+#ifdef CNA_RENDERER_DIRECTX9
     // D9-103: a HiDef-only size requested on a Reach device (or a size exceeding even HiDef's own
     // 4096 ceiling) throws the XNA-correct exception (System::NotSupportedException, matching
     // this file's own established convention for other unsupported-request cases) -- D9-100's own
@@ -65,7 +65,7 @@ namespace Microsoft::Xna::Framework::Graphics
     static void ValidateTextureSizeForProfileEXT(const GraphicsDevice& device, int w, int h)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxSize = CNA::Internal::Renderers::D3D9::MaxTextureSizeForProfileEXT(profile);
+        const int maxSize = CNA::Internal::Renderers::DirectX9::MaxTextureSizeForProfileEXT(profile);
         if (w > maxSize || h > maxSize)
         {
             throw System::NotSupportedException(
@@ -275,7 +275,7 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h)
         : Texture(&graphicsDevice), width(w), height(h)
     {
-#ifdef CNA_RENDERER_D3D9
+#ifdef CNA_RENDERER_DIRECTX9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
 #endif
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
@@ -300,7 +300,7 @@ namespace Microsoft::Xna::Framework::Graphics
                          bool mipMap, SurfaceFormat format)
         : Texture(&graphicsDevice), width(w), height(h)
     {
-#ifdef CNA_RENDERER_D3D9
+#ifdef CNA_RENDERER_DIRECTX9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
 #endif
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
@@ -2316,7 +2316,7 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice& device, int w, int h,
         std::vector<std::vector<std::uint8_t>>&& rgbaLevels)
     {
-#ifdef CNA_RENDERER_D3D9
+#ifdef CNA_RENDERER_DIRECTX9
         ValidateTextureSizeForProfileEXT(device, w, h);
 #endif
         ValidateTextureDimensionEXT(device, w, h);

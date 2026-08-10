@@ -116,7 +116,7 @@ Kept for their investigation methodology and root-cause detail, not as current s
   backed by a real headless-browser run, not only a structural review.
 - **[`ascii-renderer.md`](ascii-renderer.md)** — current status for the `ASCII` (SDL-windowed retro
   glyph-grid) renderer; see `../plan_ascii.md` for full task-by-task detail.
-- `freedirect-renderer.md` — FreeDirect (formerly `DX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,
+- `freedirect-renderer.md` — FreeDirect (formerly `DIRECTX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,
   current as of `plan_freedirect.md`'s Phase X1-X7 closure (2026-07-15).
 - `glide-renderer.md` — Glide 3.x's native-API SpriteBatch and constrained color-vertex 3D path;
   runtime verification needs a separately supplied `glide3x.dll`, so this repository does not

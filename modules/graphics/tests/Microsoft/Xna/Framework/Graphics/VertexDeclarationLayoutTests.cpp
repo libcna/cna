@@ -113,7 +113,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
     defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_SDL_GPU) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_D3D12) || \
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12) || \
     defined(CNA_RENDERER_WICKED)
 #define CNA_DECLARATION_LAYOUT_ORACLE 1
 #endif
@@ -144,12 +144,12 @@ namespace
         "Software";
 #elif defined(CNA_RENDERER_SDL_GPU)
         "SDL_GPU";
-#elif defined(CNA_RENDERER_D3D9)
-        "D3D9";
-#elif defined(CNA_RENDERER_D3D11)
-        "D3D11";
-#elif defined(CNA_RENDERER_D3D12)
-        "D3D12";
+#elif defined(CNA_RENDERER_DIRECTX9)
+        "DIRECTX9";
+#elif defined(CNA_RENDERER_DIRECTX11)
+        "DIRECTX11";
+#elif defined(CNA_RENDERER_DIRECTX12)
+        "DIRECTX12";
 #elif defined(CNA_RENDERER_WICKED)
         "Wicked";
 #else

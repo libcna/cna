@@ -152,15 +152,15 @@ namespace
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "FREEDIRECT";
-#elif defined(CNA_RENDERER_D3D9)
+#elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "D3D9";
-#elif defined(CNA_RENDERER_D3D11)
+    constexpr const char* kRendererName = "DIRECTX9";
+#elif defined(CNA_RENDERER_DIRECTX11)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "D3D11";
-#elif defined(CNA_RENDERER_D3D12)
+    constexpr const char* kRendererName = "DIRECTX11";
+#elif defined(CNA_RENDERER_DIRECTX12)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "D3D12";
+    constexpr const char* kRendererName = "DIRECTX12";
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "CANVAS";
@@ -234,7 +234,7 @@ namespace
      * "not SpriteBatch-only" claim on D3D9.
      */
     constexpr bool kDualTextureAcceptsPositionTexture =
-#if defined(CNA_RENDERER_D3D9)
+#if defined(CNA_RENDERER_DIRECTX9)
         false;
 #elif defined(CNA_RENDERER_SOKOL)
         // Not a vertex-layout rejection: SokolRenderer::DrawColored3D refuses ANY

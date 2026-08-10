@@ -33,7 +33,7 @@
 # CNA_D3D9_ALLOW_WINED3D=1 to bypass this gate for a deliberate one-off
 # non-DXVK diagnostic run -- do not set this for normal test runs. Set
 # CNA_D3D9_SKIP_DXVK_GATE=1 for a binary that legitimately never creates a D3D9
-# device at all (e.g. a future D3D9_Common pure-function mapping-table check,
+# device at all (e.g. a future DirectX9_Common pure-function mapping-table check,
 # D9-23) -- such a run never prints a DXVK line for entirely unrelated,
 # legitimate reasons, and this gate would otherwise misreport it as a WineD3D
 # fallback.

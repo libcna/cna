@@ -23,7 +23,7 @@
 // introduced by or fixable within this OPENGL1-scoped change -- see plan_opengl1.md item 22.
 //
 // What DOES work (and is what this test exercises, following the direct-construction pattern
-// examples/d3d12_smoke_test.cpp's own windowless-device test already established): a
+// examples/directx12_smoke_test.cpp's own windowless-device test already established): a
 // PresentationParameters with MultiSampleCount already set BEFORE being passed to GraphicsDevice's
 // own (adapter, profile, presentationParameters) constructor -- a real, valid XNA construction
 // path independent of Game/GraphicsDeviceManager.

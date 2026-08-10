@@ -163,7 +163,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_DX1) || defined(CNA_RENDERER_DX2) || defined(CNA_RENDERER_DX3) || defined(CNA_RENDERER_DX5) || defined(CNA_RENDERER_DX6) || defined(CNA_RENDERER_DX7) || defined(CNA_RENDERER_DX8) || defined(CNA_RENDERER_GDI)
+#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_DIRECTX1) || defined(CNA_RENDERER_DIRECTX2) || defined(CNA_RENDERER_DIRECTX3) || defined(CNA_RENDERER_DIRECTX5) || defined(CNA_RENDERER_DIRECTX6) || defined(CNA_RENDERER_DIRECTX7) || defined(CNA_RENDERER_DIRECTX8) || defined(CNA_RENDERER_GDI)
     // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports

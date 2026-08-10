@@ -206,19 +206,19 @@ namespace
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_RENDERER_D3D9)
+#elif defined(CNA_RENDERER_DIRECTX9)
     // D3D9RenderTargetCubeRenderer reports GetMultiSampleCount() == 0 unconditionally and its
     // Recreate() allocates exactly ONE level whatever `mipMap` asked for, so this target is
     // single-sample and level-0-only -- while RenderTargetCube::LevelCount still reports the whole
     // chain. `MipTargets::LevelsWithoutStorage` records that mismatch as an independent finding and
     // pins what GetData must do about it: refuse the levels that were never allocated.
-    constexpr Contract kContract{"D3D9", true, Support::Exact, Support::Unsupported,
+    constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Unsupported,
                                  true, false, Support::Exact, MipTargets::LevelsWithoutStorage, true, true, false, false, true};
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr Contract kContract{"D3D11", true, Support::Exact, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
-#elif defined(CNA_RENDERER_D3D12)
-    constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_RENDERER_LLGL)
     // `msaaCubeTargets` true (LLGL-34): unlike Vulkan's own renderer-wide sampleCount_ piggyback,

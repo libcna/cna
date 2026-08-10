@@ -278,22 +278,22 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_FALSE(reported)
         << "WebGPU claims WireFrame support again -- WEBGPU-115's capability override is gone, and "
            "the renderer has no polygon mode to back the claim with";
-#elif defined(CNA_RENDERER_DX1)
-    // DX1 is 2D-only by design -- DirectX 1 has no Direct3D at all, so there is no polygon fill
-    // mode to report on and Dx1Renderer::SupportsCapability answers false for every
+#elif defined(CNA_RENDERER_DIRECTX1)
+    // DIRECTX1 is 2D-only by design -- DirectX 1 has no Direct3D at all, so there is no polygon fill
+    // mode to report on and DirectX1Renderer::SupportsCapability answers false for every
     // capability, WireFrame included. Same truthful-false shape as WebGPU above, for the opposite
-    // reason: nothing here could rasterize a triangle in the first place. (DX2..DX8 and D3D10
+    // reason: nothing here could rasterize a triangle in the first place. (DIRECTX2..DIRECTX8 and D3D10
     // report true and take the default arm below -- their fill mode is real, spike-verified on
-    // DX2's own software RGB device and on DX8/D3D10's DXVK GPU path.)
+    // DIRECTX2's own software RGB device and on DIRECTX8/D3D10's DXVK GPU path.)
     EXPECT_FALSE(reported)
-        << "DX1 claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
+        << "DIRECTX1 claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
 #elif defined(CNA_RENDERER_SKIA)
     // Skia's selected artifact is a CPU raster 2D surface: SkCanvas has no polygon fill mode, and
     // there is no vertex/primitive route for one to apply to. The refusal half of REMED-GFX-209 is
     // satisfied more strongly than it asks -- Ensure3DSupported() rejects every 3D draw before any
     // vertex input is inspected, so no polygon topology can reach a raster queue to be silently
-    // filled solid. Same truthful-false shape as DX1 and Stub, and like Stub it has no pixel route
+    // filled solid. Same truthful-false shape as DIRECTX1 and Stub, and like Stub it has no pixel route
     // to measure, which is why WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE
     // undefined here.
     EXPECT_FALSE(reported)
@@ -302,7 +302,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
 #elif defined(CNA_RENDERER_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that
     // rasterizes nothing and keeps no state, so there is no rendering path a true report could
-    // stand on. Same truthful-false shape as DX1 above.
+    // stand on. Same truthful-false shape as DIRECTX1 above.
     //
     // Note what this arm is NOT. Stub is not in the rejection set: unlike WebGPU, it does not throw
     // on a WireFrame draw, because its declared contract is that a real Game loop runs to

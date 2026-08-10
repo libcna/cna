@@ -163,16 +163,16 @@ namespace
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
-#elif defined(CNA_RENDERER_D3D9)
+#elif defined(CNA_RENDERER_DIRECTX9)
     // plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
     // Texture3D half of this file needs a HiDef device to have anything to measure.
-    constexpr Contract kContract{"D3D9", true, Support::Exact, Support::Exact,
+    constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr Contract kContract{"D3D11", true, Support::Exact, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
-#elif defined(CNA_RENDERER_D3D12)
-    constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
 #elif defined(CNA_RENDERER_LLGL)
     constexpr Contract kContract{"LLGL", true, Support::Exact, Support::Exact,

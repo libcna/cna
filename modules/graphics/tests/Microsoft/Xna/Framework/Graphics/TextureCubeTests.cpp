@@ -59,7 +59,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // a renderer that had read nothing at all. The tests below therefore assert the real outcome for
 // this renderer rather than merely that the call returned.
 //
-// SDL_Renderer, ASCII, Canvas and DX3 keep IGraphicsRenderer::CreateTextureCube's nullptr default
+// SDL_Renderer, ASCII, Canvas and DIRECTX3 keep IGraphicsRenderer::CreateTextureCube's nullptr default
 // (no cube resource exists at all); Headless stores no pixel data by design. Every other renderer
 // reads level 0 back exactly -- Software only at level 0, since it stores no cube mip levels.
 // -----------------------------------------------------------------------

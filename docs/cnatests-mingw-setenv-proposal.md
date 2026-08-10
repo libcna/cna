@@ -119,7 +119,7 @@ needs is already shipped and already exercised by other code paths.
    process spawn costs ~1.2s; the 4367 individually-discovered test cases would cost ~87 minutes
    of pure process overhead if each became its own separately-spawned CTest entry) before choosing
    an approach. Set `CROSSCOMPILING_EMULATOR` on the `CnaTests` target — the same CMake-native
-   mechanism `plan_dx.md` `DX-80`'s own `cna_d3d11_ctest_command` macro already uses for D3D11/
+   mechanism `plan_dx.md` `DX-80`'s own `cna_directx11_ctest_command` macro already uses for D3D11/
    D3D12's own CTests — selecting the correct per-renderer Wine wrapper
    (`run-wine-dxvk9.sh`/`run-wine-dxvk.sh`/`run-wine-vkd3d.sh`) with that wrapper's own
    authenticity gate deliberately disabled inline (`env CNA_D3D9_SKIP_DXVK_GATE=1 <wrapper>`, no
@@ -136,7 +136,7 @@ needs is already shipped and already exercised by other code paths.
 5. **Not independently re-verified on `D3D11`/`D3D12`'s own build directories** (not configured in
    this worktree) — `sharp-runtime`'s `Environment.cpp` was already confirmed compiling there
    before this change, and the `CROSSCOMPILING_EMULATOR` fix mirrors D3D11/D3D12's own already-
-   proven `cna_d3d11_ctest_command` pattern exactly, so no regression is expected, but this
+   proven `cna_directx11_ctest_command` pattern exactly, so no regression is expected, but this
    specific commit's effect there is unconfirmed. Coordinate with whoever is working
    `feature/graphics` before assuming this is also resolved there.
 

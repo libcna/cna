@@ -1677,7 +1677,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Creates a custom-`ShaderEffect` renderer (Phase `SDLGPU-10`, `SDLGPU-42`/`SDLGPU-43`),
          * compiling @p vertSrc/@p fragSrc (GLSL source) to SPIR-V at runtime via `libshaderc`.
          * Compilation failure is reported via the returned renderer's `IsValid()`/`GetCompileError()`
-         * (matches `VulkanRenderer`/`D3D11Renderer`'s own convention), not an
+         * (matches `VulkanRenderer`/`DirectX11Renderer`'s own convention), not an
          * exception.
          */
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
@@ -1740,7 +1740,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Whether `SDL_CreateGPUDevice`'s `debug_mode` was requested for this device.
          *
-         * Mirrors `D3D11Renderer::IsDebugLayerEnabledEXT()`'s identical `#ifndef NDEBUG`
+         * Mirrors `DirectX11Renderer::IsDebugLayerEnabledEXT()`'s identical `#ifndef NDEBUG`
          * CNA-side toggle rationale (SDLGPU-6) — a debug build asks the Vulkan driver for
          * `SDL_gpu`'s own validation layer, a release build does not. NOXNA.
          */
@@ -2226,7 +2226,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUTextureFormat backbufferProxyFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
         bool backbufferReadbackEnabled_ = false;
         /// SDLGPU-6: whether SDL_CreateGPUDevice's debug_mode was requested (an #ifndef NDEBUG
-        /// CNA-side toggle, mirroring D3D11Renderer::debugLayerEnabled_'s identical rationale).
+        /// CNA-side toggle, mirroring DirectX11Renderer::debugLayerEnabled_'s identical rationale).
         bool debugModeEnabled_ = false;
 
         SDL_GPUShader* spriteVertexShader_ = nullptr;

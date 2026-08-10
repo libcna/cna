@@ -194,17 +194,17 @@ namespace
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, false, false,
                                  false, Support::Unsupported, false, true, false};
-#elif defined(CNA_RENDERER_D3D9)
+#elif defined(CNA_RENDERER_DIRECTX9)
     // `mipMapCubeTargets` true only in the sense that construction and level-0 rendering work:
     // D3D9RenderTargetCubeRenderer::Recreate() allocates ONE level whatever mipMap asked for
     // (REMED-GFX-139). This file only ever asserts level 0, so that boundary is untouched here.
-    constexpr Contract kContract{"D3D9", true, Support::Exact, true, true,
+    constexpr Contract kContract{"DIRECTX9", true, Support::Exact, true, true,
                                  false, Support::Exact, false, true, true};
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr Contract kContract{"D3D11", true, Support::Exact, true, true,
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
-#elif defined(CNA_RENDERER_D3D12)
-    constexpr Contract kContract{"D3D12", true, Support::Exact, true, true,
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
 #elif defined(CNA_RENDERER_LLGL)
     // `preserves`/`msaaPreserves` true, but not for the usual reason: this renderer's own

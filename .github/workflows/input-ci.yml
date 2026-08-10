@@ -35,27 +35,27 @@ jobs:
       matrix:
         include:
           - name: EasyGL
-            backend: EASYGL
+            renderer: EASYGL
             sanitize: ""
             asan_options: ""
             ubsan_options: ""
           - name: ASan+UBSan
-            backend: EASYGL
+            renderer: EASYGL
             sanitize: "address,undefined"
             asan_options: "detect_leaks=0:halt_on_error=1"
             ubsan_options: "print_stacktrace=1:halt_on_error=1"
           - name: SDL_RENDERER
-            backend: SDL_RENDERER
+            renderer: SDL_RENDERER
             sanitize: ""
             asan_options: ""
             ubsan_options: ""
           - name: Vulkan
-            backend: VULKAN
+            renderer: VULKAN
             sanitize: ""
             asan_options: ""
             ubsan_options: ""
           - name: bgfx
-            backend: BGFX
+            renderer: BGFX
             sanitize: ""
             asan_options: ""
             ubsan_options: ""
@@ -103,7 +103,7 @@ jobs:
       - name: Configure
         run: |
           cmake -S . -B build -G Ninja \
-            -DCNA_GRAPHICS_RENDERER=${{ matrix.backend }} \
+            -DCNA_GRAPHICS_RENDERER=${{ matrix.renderer }} \
             -DCNA_BUILD_TESTS=ON \
             -DCNA_SANITIZE=${{ matrix.sanitize }}
 

@@ -137,10 +137,10 @@ open. Treat GDI as a compatibility renderer under validation, not yet as a relea
   RGB uses `min(sourceAlpha, 1-destinationAlpha)` and alpha uses one. The 2D regression uses
   asymmetric RGB plus distinct nontrivial source/destination alpha values so substituting inverse
   source alpha cannot pass. Current GDI and Software blend controls pass.
-- REMED-GFX-232 keeps the integration branch's depth-only DX3 renderer truthful after introducing
+- REMED-GFX-232 keeps the integration branch's depth-only DIRECTX3 renderer truthful after introducing
   the standalone stencil hook: `SupportsStencilBuffer()` now returns false, matching its
   `GraphicsCapability::StencilBuffer` answer and documented lack of a stencil plane. The focused
-  DX3 capability executable compares the two answers directly and passes 1/1 through Wine/Xvfb
+  DIRECTX3 capability executable compares the two answers directly and passes 1/1 through Wine/Xvfb
   after the x64 MinGW build, with the DirectDraw-engagement wrapper active.
 - REMED-GFX-233 restores shared Software's legacy persistent-buffer compatibility. The NOXNA
   `VertexBuffer(device, count)` constructor deliberately carries an empty, zero-stride public
@@ -389,7 +389,7 @@ CNA_GDI_DIRTY_PRESENTATION=1 CNA_GDI_PRESENT_FILTER=halftone CNA_GDI_DWM_FLUSH=0
   actual `CnjCacheIsolationTest` passed **2/2** on Mesa OpenGL ES 3.2 llvmpipe/Xvfb display `:105`.
   Shared Texture2D cache code is unchanged, REMED-GFX-223 is preserved, and REMED-GFX-224 remains
   open.
-- DX3 built for x64 MinGW and its `Dx3_GraphicsCapability` runtime passed **1/1** through
+- DIRECTX3 built for x64 MinGW and its `DirectX3_GraphicsCapability` runtime passed **1/1** through
   Wine/Xvfb with the DirectDraw-engagement wrapper, closing REMED-GFX-232 validation. Sokol at
   pinned `27b4960` received a current-source native GLCORE build and passed Smoke, Instanced3D, and
   WireFrame **3/3** on llvmpipe/Xvfb.

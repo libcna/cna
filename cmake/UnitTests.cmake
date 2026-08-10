@@ -295,7 +295,7 @@ if(CNA_BUILD_TESTS)
     # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12/Direct2D MinGW cross-targets,
     # gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate tests
     # -- and any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below) does the
-    # same at run time. All three need the same Wine wrapper D3D9_Smoke/D3D11_Smoke/D3D12_Smoke
+    # same at run time. All three need the same Wine wrapper DirectX9_Smoke/DirectX11_Smoke/DirectX12_Smoke
     # already use, or every ctest invocation in this build tree fails outright trying to exec a
     # Windows PE natively on the Linux host. *_SKIP_*_GATE=1 because a bare --gtest_list_tests (or
     # most individual unit tests) never creates a real graphics device, so the DXVK/vkd3d-presence
@@ -306,59 +306,59 @@ if(CNA_BUILD_TESTS)
     # are only ever built via the MinGW cross-toolchain) so a D3D9 branch could be added without
     # touching D3D11/D3D12's own already-working invocation style.
     if(CMAKE_CROSSCOMPILING)
-        if(CNA_GRAPHICS_RENDERER STREQUAL "D3D9")
+        if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
             # D9-123: this renderer's own wrapper takes a simpler `env;VAR=1;script` form (no
             # `${CMAKE_COMMAND} -E env`/explicit `bash` prefix) -- proven end-to-end for D3D9
             # (`ctest -L D3D9` green) and for D3D11 when reused verbatim there too (Task 1106).
             set_target_properties(CnaTests PROPERTIES CROSSCOMPILING_EMULATOR
                 "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D11")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D12")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX1")
-            # plan_dx2.md DX2-84 follow-up: this gap pre-dates DX2 (DX1 never got this wiring
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
+            # plan_dx2.md DX2-84 follow-up: this gap pre-dates DIRECTX2 (DIRECTX1 never got this wiring
             # either, plan_dx1.md's own DX1-88 full-suite regression must have run CnaTests.exe
-            # directly through run-wine-dx1.sh by hand rather than via `ctest -L DX1`'s
+            # directly through run-wine-directx1.sh by hand rather than via `ctest -L DIRECTX1`'s
             # gtest_discover_tests(PRE_TEST) step) -- fixed here for both renderers together, same
             # skip-gate reasoning as D3D9/D3D11/D3D12 above (a bare --gtest_list_tests never opens
             # a real DirectDraw object).
             set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX1_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx1.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX2")
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX1_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx1.sh")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX2")
             set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX2_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx2.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX3")
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX2_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx2.sh")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
             # plan_dx3.md: wired proactively (not discovered by a from-scratch regression this
             # time) -- same DX2-84 finding/fix, applied up front for this new renderer.
             set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX3_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx3.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX5")
-            # plan_dx5.md: same proactive wiring as DX3.
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX3_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx3.sh")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
+            # plan_dx5.md: same proactive wiring as DIRECTX3.
             set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX5_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx5.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX6")
-            # plan_dx6.md: same proactive wiring as DX3/DX5.
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX5_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx5.sh")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
+            # plan_dx6.md: same proactive wiring as DIRECTX3/DIRECTX5.
             set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX6_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx6.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX7")
-            # plan_dx7.md: same proactive wiring as DX3/DX5/DX6.
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX6_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx6.sh")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
+            # plan_dx7.md: same proactive wiring as DIRECTX3/DIRECTX5/DIRECTX6.
             set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX7_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx7.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX8")
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX7_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx7.sh")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8")
             # plan_dx8.md: DXVK-delivered (not DirectDraw-based), same proactive wiring shape as
             # D3D9's own run-wine-dxvk9.sh gate -- CNA_DX8_SKIP_DXVK_GATE for a binary that
             # legitimately never opens a real D3D8 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX8_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx8.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D10")
-            # plan_d3d10.md: DXVK-delivered (via d3d10core), same proactive wiring shape as DX8's
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX8_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx8.sh")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10")
+            # plan_d3d10.md: DXVK-delivered (via d3d10core), same proactive wiring shape as DIRECTX8's
             # own gate -- CNA_D3D10_SKIP_DXVK_GATE for a binary that legitimately never opens a
             # real D3D10 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-d3d10.sh")
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx10.sh")
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
             # Direct2D needs the normal/dedicated prefix selected by run-wine-direct2d.sh, not the
             # D3D11-only DXVK prefix (which may not contain Wine's d2d1 runtime). Pure unit tests

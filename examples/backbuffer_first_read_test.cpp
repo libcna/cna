@@ -88,14 +88,14 @@ namespace
 #elif defined(CNA_RENDERER_SKIA)
     constexpr const char* kRendererName = "SKIA";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_D3D9)
-    constexpr const char* kRendererName = "D3D9";
+#elif defined(CNA_RENDERER_DIRECTX9)
+    constexpr const char* kRendererName = "DIRECTX9";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr const char* kRendererName = "D3D11";
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr const char* kRendererName = "DIRECTX11";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_D3D12)
-    constexpr const char* kRendererName = "D3D12";
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr const char* kRendererName = "DIRECTX12";
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_LLGL)
     constexpr const char* kRendererName = "LLGL";

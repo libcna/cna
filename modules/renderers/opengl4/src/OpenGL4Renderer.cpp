@@ -485,7 +485,7 @@ void main()
         // env_map3d.frag.glsl (per-fragment Fresnel instead of EasyGL's per-vertex Gouraud
         // interpolation -- a documented, accepted, strictly-more-accurate deviation kept here in
         // its EasyGL per-vertex form since this is the closer sibling GLSL renderer to port from).
-        // Real XNA EnvironmentMapEffect.fx formula (src/CNA/Internal/Renderers/D3D9/shaders/xna/
+        // Real XNA EnvironmentMapEffect.fx formula (src/CNA/Internal/Renderers/DirectX9/shaders/xna/
         // EnvironmentMapEffect.fx): reflection vector reflect(-eyeVector, worldNormal); Fresnel
         // blend factor pow(max(1-|dot(eye,normal)|,0), FresnelFactor)*EnvironmentMapAmount; final
         // colour is a LERP (not additive) between the lit diffuse*texture colour and the

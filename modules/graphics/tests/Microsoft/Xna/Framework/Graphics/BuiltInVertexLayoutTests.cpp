@@ -569,7 +569,7 @@ TEST(BuiltInVertexLayout, ObjectMemberOffsetsDoNotMatchTheDeclaredElementOffsets
 
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_SOFTWARE)
 
 // The core reproduction. An array of the built-in objects plus that same type's own public

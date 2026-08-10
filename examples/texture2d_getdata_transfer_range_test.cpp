@@ -122,7 +122,7 @@ namespace
      * @brief The exact policy used when an application requests a 2D mip chain.
      *
      * Declared, not probed, for the same reason as RtContract: three renderers document that their
-     * 2D texture API has no mip chain (SDL_Renderer, the ASCII renderer that wraps it, and DX3's
+     * 2D texture API has no mip chain (SDL_Renderer, the ASCII renderer that wraps it, and DIRECTX3's
      * IDirectDrawSurface), and Canvas the same. Most still create a mipmapped resource and reject
      * `SetData(level=1, ...)`. SKIA-127 now implements that upload/readback path after SKIA-126
      * opened construction. These honest policies must not be conflated by a test that terminates
@@ -177,17 +177,17 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "FREEDIRECT";
     constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
-#elif defined(CNA_RENDERER_D3D9)
+#elif defined(CNA_RENDERER_DIRECTX9)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "D3D9";
+    constexpr const char* kRendererName = "DIRECTX9";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_D3D11)
+#elif defined(CNA_RENDERER_DIRECTX11)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "D3D11";
+    constexpr const char* kRendererName = "DIRECTX11";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_D3D12)
+#elif defined(CNA_RENDERER_DIRECTX12)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "D3D12";
+    constexpr const char* kRendererName = "DIRECTX12";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr RtContract kRtContract = RtContract::Exact;

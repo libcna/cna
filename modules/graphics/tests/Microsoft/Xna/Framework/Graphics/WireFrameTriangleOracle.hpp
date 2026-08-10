@@ -45,7 +45,7 @@
 #if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_SOFTWARE) || \
     defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_BGFX) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_SDL_GPU) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_D3D12) || \
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12) || \
     defined(CNA_RENDERER_OPENGL4) || defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGL2) || \
     defined(CNA_RENDERER_WICKED) || defined(CNA_RENDERER_MAGNUM) || defined(CNA_RENDERER_SOKOL) || \
     defined(CNA_RENDERER_DILIGENT)
@@ -56,7 +56,7 @@
 // environment: its device creation aborts under Wine for every device test in this file, including
 // the untouched `SupportsThreeD`, so calling it clean would be a fabrication. It still compiles
 // the oracle, and gains its reading the day a D3D12 runtime is available.
-#if defined(CNA_WIREFRAME_PIXEL_ORACLE) && !defined(CNA_RENDERER_D3D12)
+#if defined(CNA_WIREFRAME_PIXEL_ORACLE) && !defined(CNA_RENDERER_DIRECTX12)
 #define CNA_WIREFRAME_MEASURED 1
 #endif
 
@@ -92,12 +92,12 @@ namespace CnaTest::WireFrameOracle
         "Software";
 #elif defined(CNA_RENDERER_SDL_GPU)
         "SDL_GPU";
-#elif defined(CNA_RENDERER_D3D9)
-        "D3D9";
-#elif defined(CNA_RENDERER_D3D11)
-        "D3D11";
-#elif defined(CNA_RENDERER_D3D12)
-        "D3D12";
+#elif defined(CNA_RENDERER_DIRECTX9)
+        "DIRECTX9";
+#elif defined(CNA_RENDERER_DIRECTX11)
+        "DIRECTX11";
+#elif defined(CNA_RENDERER_DIRECTX12)
+        "DIRECTX12";
 #elif defined(CNA_RENDERER_OPENGL4)
         "OpenGL4";
 #elif defined(CNA_RENDERER_OPENGL1)

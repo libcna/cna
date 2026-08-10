@@ -122,8 +122,8 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 // The portable pixel oracle: rasterizes 3D triangles and implements RenderTarget2D::GetData.
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
-    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_SOFTWARE) || \
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
+    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_SOFTWARE) || \
     defined(CNA_RENDERER_SDL_GPU)
 #define CNA_ORDINARY_BINDING_OFFSET_ORACLE 1
 #endif
@@ -131,7 +131,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 // REMED-GFX-113's renderer set: the above, minus the renderers without backbuffer readback.
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_SOFTWARE)
 #define CNA_ORDINARY_BINDING_OFFSET_BACKBUFFER_ORACLE 1
 #endif
@@ -139,13 +139,13 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 // REMED-GFX-118's instanced suite set: the renderers whose instanced route renders the geometry.
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
-    defined(CNA_RENDERER_D3D12)
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
+    defined(CNA_RENDERER_DIRECTX12)
 #define CNA_ORDINARY_BINDING_OFFSET_INSTANCED_TRANSITION 1
 #endif
 
 // The renderers whose INSTANCED route consumes VertexBufferBinding.VertexOffset.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_D3D12)
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
 #define CNA_ORDINARY_BINDING_OFFSET_INSTANCED_OFFSET_ORACLE 1
 #endif
 

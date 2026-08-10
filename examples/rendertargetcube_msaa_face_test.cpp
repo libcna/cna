@@ -114,7 +114,7 @@ namespace
          * A `multiSampleCount = 4` RenderTargetCube really reports an applied count > 0 here.
          * False is a declared capability boundary, not a defect: WebGPU ignores the parameter
          * (WEBGPU-114's own scope), D3D9's cube target allocates no multisampling at all, and
-         * Software/SDL_Renderer/ASCII/Canvas/DX3 have no cube target to multisample.
+         * Software/SDL_Renderer/ASCII/Canvas/DIRECTX3 have no cube target to multisample.
          */
         bool    msaaEngages;
         /**
@@ -182,19 +182,19 @@ namespace
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
-#elif defined(CNA_RENDERER_D3D9)
+#elif defined(CNA_RENDERER_DIRECTX9)
     // `msaaEngages` false: D3D9RenderTargetCubeRenderer::Recreate() allocates a plain
     // D3DUSAGE_RENDERTARGET cube texture and GetMultiSampleCount() reports 0 by construction.
-    constexpr Contract kContract{"D3D9", true, Support::Exact, false,
+    constexpr Contract kContract{"DIRECTX9", true, Support::Exact, false,
                                  Support::Exact, false, true};
-#elif defined(CNA_RENDERER_D3D11)
+#elif defined(CNA_RENDERER_DIRECTX11)
     // Already correct: a six-slice DXGI_SAMPLE_DESC array with one Texture2DMSArray RTV per slice.
-    constexpr Contract kContract{"D3D11", true, Support::Exact, true,
+    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_RENDERER_D3D12)
+#elif defined(CNA_RENDERER_DIRECTX12)
     // Already correct: DepthOrArraySize = 6 at the requested sample count, one
     // D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY view per face.
-    constexpr Contract kContract{"D3D12", true, Support::Exact, true,
+    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true,
                                  Support::Exact, false, false};
 #elif defined(CNA_RENDERER_SOKOL)
     // `msaaEngages` false: sokol_gfx's own validation layer hard-rejects a CUBE image with

@@ -75,7 +75,7 @@ Common helper targets (deliberate sharing, not public identities):
   they compile into the GDI archive. Physical ownership stays with the software module — this
   is the one documented target-membership exception to location==ownership.
 - **d3d9 effect sub-target** — `cna_renderer_d3d9_effect` (the isolated
-  d3dcompiler-carrying custom-ShaderEffect path) lives inside modules/renderers/d3d9.
+  d3dcompiler-carrying custom-ShaderEffect path) lives inside modules/renderers/directx9.
 - **metal + glide header interfaces** — `cna_renderer_metal_headers` /
   `cna_renderer_glide_headers` are defined unconditionally: those families' policy/ABI test
   suites deliberately compile into the CnaTests corpus on every renderer, so their

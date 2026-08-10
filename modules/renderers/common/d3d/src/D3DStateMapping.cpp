@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX3 (DX-12-state).
+// plan_dx.md Phase DIRECTX3 (DX-12-state).
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"

@@ -56,10 +56,10 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_ASCII
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_D3D11
+#ifdef CNA_RENDERER_DIRECTX11
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_D3D12
+#ifdef CNA_RENDERER_DIRECTX12
     ++enabled;
 #endif
 #ifdef CNA_RENDERER_DIRECT2D
@@ -73,37 +73,37 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     // feature/sdlgpu). The full unfiltered CnaTests suite was never run under
     // CNA_GRAPHICS_RENDERER=D3D9 (NEXT.md's own D9-123 note says as much), so this would have
     // silently failed EXPECT_EQ(enabled, 1) the first time anyone actually did.
-#ifdef CNA_RENDERER_D3D9
+#ifdef CNA_RENDERER_DIRECTX9
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_DX1
+#ifdef CNA_RENDERER_DIRECTX1
     ++enabled;
 #endif
     // plan_dx2.md DX2-84: the same class of gap the D3D9 comment above documents -- no commit in
-    // this file's history ever added a DX2 entry either, so the full CnaTests suite's first-ever
-    // run under CNA_GRAPHICS_RENDERER=DX2 (this regression pass) would have silently failed
+    // this file's history ever added a DIRECTX2 entry either, so the full CnaTests suite's first-ever
+    // run under CNA_GRAPHICS_RENDERER=DIRECTX2 (this regression pass) would have silently failed
     // EXPECT_EQ(enabled, 1) the same way D3D9's did.
-#ifdef CNA_RENDERER_DX2
+#ifdef CNA_RENDERER_DIRECTX2
     ++enabled;
 #endif
-    // plan_dx3.md: same class of gap DX2-84's own comment above documents -- DX3 needs its own
+    // plan_dx3.md: same class of gap DX2-84's own comment above documents -- DIRECTX3 needs its own
     // entry here too, added proactively this time rather than discovered by a from-scratch regression.
-#ifdef CNA_RENDERER_DX3
+#ifdef CNA_RENDERER_DIRECTX3
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_DX5
+#ifdef CNA_RENDERER_DIRECTX5
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_DX6
+#ifdef CNA_RENDERER_DIRECTX6
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_DX7
+#ifdef CNA_RENDERER_DIRECTX7
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_DX8
+#ifdef CNA_RENDERER_DIRECTX8
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_D3D10
+#ifdef CNA_RENDERER_DIRECTX10
     ++enabled;
 #endif
 #ifdef CNA_RENDERER_SDL_GPU

@@ -35,13 +35,13 @@
 #endif
 
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach's own MaxRenderTargets=1
-// ceiling, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_D3D9
+// ceiling, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_DIRECTX9
 // convention exactly. Distinct from MAX_RENDERTARGET_BINDINGS below (XNA's own general 4-target
 // ceiling, renderer-agnostic) and from D9-54's own NumSimultaneousRTs hardware-cap enforcement
-// inside D3D9Renderer::SetRenderTargets() -- this is the profile's own, separately lower,
+// inside DirectX9Renderer::SetRenderTargets() -- this is the profile's own, separately lower,
 // software-imposed ceiling.
-#ifdef CNA_RENDERER_D3D9
-#include "CNA/Internal/Renderers/D3D9/D3D9ProfileCapabilities.hpp"
+#ifdef CNA_RENDERER_DIRECTX9
+#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 #endif
 
 #include <SDL3/SDL.h>
@@ -577,7 +577,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // REMED-GFX-029: a renderer resize is a failed Reset, not a partially successful one.
             // Restore all public presentation bookkeeping before rethrowing the original native
             // diagnostic. Viewport/scissor, active target, and depth state have not been touched
-            // yet at this point. The DX3 transaction guarantees its native A surface set is still
+            // yet at this point. The DIRECTX3 transaction guarantees its native A surface set is still
             // live, so restoring the former window/presentation values makes the entire
             // GraphicsDevice state agree with that same A set.
             const std::exception_ptr resizeFailure = std::current_exception();
@@ -2914,14 +2914,14 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::invalid_argument("SetRenderTargets: at most " +
                 std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
 
-#ifdef CNA_RENDERER_D3D9
+#ifdef CNA_RENDERER_DIRECTX9
         // D9-103 follow-up: GraphicsProfile.Reach's own MaxRenderTargets=1 ceiling (D9-100's own
         // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
         // above (XNA's own general 4-target ceiling) and from D9-54's own hardware-cap
         // enforcement inside the renderer (NumSimultaneousRTs, which could be higher).
         {
             const int profile = static_cast<int>(graphicsProfile_);
-            const int maxForProfile = CNA::Internal::Renderers::D3D9::MaxRenderTargetsForProfileEXT(profile);
+            const int maxForProfile = CNA::Internal::Renderers::DirectX9::MaxRenderTargetsForProfileEXT(profile);
             if (static_cast<int>(renderTargets.size()) > maxForProfile)
             {
                 throw System::NotSupportedException(

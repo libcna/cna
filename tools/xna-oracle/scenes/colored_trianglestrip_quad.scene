@@ -2,7 +2,7 @@
 # Every scene in this corpus so far uses primitive=TriangleList (grep-verified: it's the ONLY
 # PrimitiveType value any .scene file has ever set), even though the scene format has supported
 # TriangleStrip/LineList/LineStrip since D9-A3's own original design (Oracle.cs's PrimitiveVerts()
-# already handles all 4) and CNA's own D3D9EffectDraw.cpp/D3D9Renderer.cpp already have a
+# already handles all 4) and CNA's own D3D9EffectDraw.cpp/DirectX9Renderer.cpp already have a
 # real, non-stub PrimitiveType->D3DPT_* mapping (ToD3D9Topology(), used unconditionally by every
 # draw call this whole corpus issues) -- but the TriangleStrip-specific vertex-count/
 # primitive-count conversion chain (GraphicsDevice::PrimitiveVerts(), the inverse of

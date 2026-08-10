@@ -239,7 +239,7 @@ threw `System::NotSupportedException` unconditionally.
 
 The full `CnaTests` suite also runs under this renderer. `SetRenderTargets_FourTargets_DoesNotThrow`
 (`GraphicsDeviceValidationTests.cpp`) no longer lists `CNA_RENDERER_SOKOL` among the single-target-
-only renderers (`SDL_RENDERER`/`ASCII`/`DX3`) as of `SOKOL-26`'s MRT support -- 4 real targets bind
+only renderers (`SDL_RENDERER`/`ASCII`/`DIRECTX3`) as of `SOKOL-26`'s MRT support -- 4 real targets bind
 cleanly here now, exactly like EasyGL/Vulkan/D3D11.
 
 ### Environment note

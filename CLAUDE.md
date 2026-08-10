@@ -451,9 +451,9 @@ individual task. Do not push unless the user explicitly asks to push.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
-`MAGNUM` | `HEADLESS` | `SOFTWARE` | `STUB` | `D3D11` | `D3D12` | `DIRECT2D` | `CANVAS` |
-`HTML_DOM` | `SKIA` | `ASCII` | `FREEDIRECT` | `D3D9` | `DX1` | `DX2` | `DX3` | `DX5` | `DX6` |
-`DX7` | `DX8` | `D3D10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
+`MAGNUM` | `HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `DIRECT2D` | `CANVAS` |
+`HTML_DOM` | `SKIA` | `ASCII` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
+`DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL`). These are exactly 41
 public identities; EasyGL remains an internal implementation shared by four GL profiles. `WEBGPU`
 is experimental and has a functional native

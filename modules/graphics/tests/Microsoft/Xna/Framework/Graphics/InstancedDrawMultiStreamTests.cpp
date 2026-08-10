@@ -147,8 +147,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // public transport group below still runs there and still asserts the shared validation contract.
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
-    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_MAGNUM)
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
+    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_MAGNUM)
 #define CNA_INSTANCED_MULTI_STREAM_ORACLE 1
 #endif
 
@@ -165,8 +165,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // legs themselves stay -- they still print what every renderer consumed -- and their remaining
 // `#else` arm covers D3D9, which is outside this set only because no D3D display was reachable to
 // measure it, and an unmeasured renderer must not be asserted either way.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D11) || \
-    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_VULKAN) || \
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX11) || \
+    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_VULKAN) || \
     defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
     defined(CNA_RENDERER_MAGNUM)
 #define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
@@ -1590,12 +1590,12 @@ namespace
         "bgfx";
 #elif defined(CNA_RENDERER_WEBGPU)
         "WebGPU";
-#elif defined(CNA_RENDERER_D3D9)
-        "D3D9";
-#elif defined(CNA_RENDERER_D3D11)
-        "D3D11";
-#elif defined(CNA_RENDERER_D3D12)
-        "D3D12";
+#elif defined(CNA_RENDERER_DIRECTX9)
+        "DIRECTX9";
+#elif defined(CNA_RENDERER_DIRECTX11)
+        "DIRECTX11";
+#elif defined(CNA_RENDERER_DIRECTX12)
+        "DIRECTX12";
 #else
         "unknown";
 #endif

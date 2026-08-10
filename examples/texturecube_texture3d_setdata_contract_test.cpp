@@ -20,7 +20,7 @@
 // "this renderer creates no cube/volume resource at all" into a successful-looking call. Three
 // distinct silent-discard routes are reachable through the public API today:
 //
-//   * NO RESOURCE -- SDL_Renderer, ASCII, Canvas and DX3 keep IGraphicsRenderer::CreateTextureCube's
+//   * NO RESOURCE -- SDL_Renderer, ASCII, Canvas and DIRECTX3 keep IGraphicsRenderer::CreateTextureCube's
 //     nullptr default, so `renderer_` is null and the upload is dropped by the `if` itself;
 //   * NO STORAGE -- Headless's cube renderer validates its arguments, records a trace entry and
 //     stores nothing, and RenderTargetCube renderers without an explicit upload override inherit
@@ -191,23 +191,23 @@ namespace
     constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
-#elif defined(CNA_RENDERER_D3D9)
+#elif defined(CNA_RENDERER_DIRECTX9)
     // plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
     // Texture3D half of this file needs a HiDef device to have anything to measure.
-    constexpr Contract kContract{"D3D9", true, Support::Exact, Support::Exact,
+    constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, true};
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr Contract kContract{"D3D11", true, Support::Exact, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
-#elif defined(CNA_RENDERER_D3D12)
+#elif defined(CNA_RENDERER_DIRECTX12)
     // D3D12TextureCubeRenderer's own constructor pins mipLevels_ to 1 whatever `mipMap` says (its
     // header states so explicitly), so a cube mip level has no subresource to be written into here
     // -- declared Unsupported rather than assumed, since this renderer's Game-harness tests are
     // compile-verified only under this dev loop's Wine dxgi.dll. Texture3D does build its full
     // chain.
-    constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Unsupported,
+    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Unsupported,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
 #elif defined(CNA_RENDERER_LLGL)

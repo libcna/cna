@@ -328,16 +328,16 @@ namespace
     constexpr Contract kContract{"FREEDIRECT", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
                                  true, true, false, false, true, false, false, false};
-#elif defined(CNA_RENDERER_D3D9)
-    constexpr Contract kContract{"D3D9", Support::Exact, true, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX9)
+    constexpr Contract kContract{"DIRECTX9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, false, false, true, true, false, true};
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr Contract kContract{"D3D11", Support::Exact, true, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr Contract kContract{"DIRECTX11", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
-#elif defined(CNA_RENDERER_D3D12)
-    constexpr Contract kContract{"D3D12", Support::Exact, true, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr Contract kContract{"DIRECTX12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
 #elif defined(CNA_RENDERER_SOKOL)

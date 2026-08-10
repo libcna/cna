@@ -1,10 +1,10 @@
 #pragma once
 
-// plan_dx.md Phase DX3 (DX-15-embed): wires hlsl_shaders.hpp's checked-in, compiler-verified DXBC
+// plan_dx.md Phase DIRECTX3 (DX-15-embed): wires hlsl_shaders.hpp's checked-in, compiler-verified DXBC
 // byte arrays (DX-14-compile) into real ID3D11VertexShader/ID3D11PixelShader objects, one pair per
 // DX-13-hlsl stock shader variant. Deliberately narrow scope: this only proves/exposes the
 // DXBC -> D3D11-shader-object path. Full pipeline wiring (constant buffers, input layouts, draw
-// calls) is Phase DX8/DX-32 -- this cache is what that later phase calls into, not a replacement
+// calls) is Phase DIRECTX8/DX-32 -- this cache is what that later phase calls into, not a replacement
 // for it.
 
 #include <d3d11.h>
@@ -59,9 +59,9 @@ namespace CNA::Internal::Renderers::D3DCommon
     };
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.
-    /// Exposed separately from CreateVertexShaderForVariant() because D3D11_CreateInputLayout also
+    /// Exposed separately from CreateVertexShaderForVariant() because DirectX11_CreateInputLayout also
     /// needs the vertex shader's raw bytecode (its input signature), not just the shader object --
-    /// Phase DX5's input-layout cache will call this directly.
+    /// Phase DIRECTX5's input-layout cache will call this directly.
     void GetVertexShaderBytecode(D3DShaderVariant variant, const uint8_t*& bytes, std::size_t& size);
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's pixel shader stage.

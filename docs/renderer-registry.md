@@ -21,23 +21,23 @@ LLGL, or another abstraction likewise do not add CNA identities.
 | 10 | `Headless` | `HEADLESS` | `CNA_RENDERER_HEADLESS` | Headless / `HeadlessRenderer` | none |
 | 11 | `Software` | `SOFTWARE` | `CNA_RENDERER_SOFTWARE` | Software / `SoftwareRenderer` | none |
 | 12 | `Stub` | `STUB` | `CNA_RENDERER_STUB` | Stub / `StubRenderer` | none |
-| 13 | `D3D11` | `D3D11` | `CNA_RENDERER_D3D11` | D3D11 / `D3D11Renderer` | Windows |
-| 14 | `D3D12` | `D3D12` | `CNA_RENDERER_D3D12` | D3D12 / `D3D12Renderer` | Windows |
+| 13 | `DirectX11` | `DIRECTX11` | `CNA_RENDERER_DIRECTX11` | Direct3D 11 / `DirectX11Renderer` | Windows |
+| 14 | `DirectX12` | `DIRECTX12` | `CNA_RENDERER_DIRECTX12` | Direct3D 12 / `DirectX12Renderer` | Windows |
 | 15 | `Direct2D` | `DIRECT2D` | `CNA_RENDERER_DIRECT2D` | Direct2D / `Direct2DRenderer` | Windows |
 | 16 | `Canvas` | `CANVAS` | `CNA_RENDERER_CANVAS` | Canvas / `CanvasRenderer` | Emscripten |
 | 17 | `HtmlDom` | `HTML_DOM` | `CNA_RENDERER_HTML_DOM` | HTML DOM / `HtmlDomRenderer` | Emscripten |
 | 18 | `Skia` | `SKIA` | `CNA_RENDERER_SKIA` | Skia / `SkiaRenderer` | pinned Skia artifact |
 | 19 | `Ascii` | `ASCII` | `CNA_RENDERER_ASCII` | ASCII / `AsciiRenderer` | none |
 | 20 | `FreeDirect` | `FREEDIRECT` | `CNA_RENDERER_FREEDIRECT` | FreeDirect / `FreeDirectRenderer` | free-direct dependency |
-| 21 | `D3D9` | `D3D9` | `CNA_RENDERER_D3D9` | D3D9 / `D3D9Renderer` | Windows |
-| 22 | `Dx1` | `DX1` | `CNA_RENDERER_DX1` | DX1 / `Dx1Renderer` | Windows |
-| 23 | `Dx2` | `DX2` | `CNA_RENDERER_DX2` | DX2 / `Dx2Renderer` | Windows |
-| 24 | `Dx3` | `DX3` | `CNA_RENDERER_DX3` | DX3 / `Dx3Renderer` | Windows |
-| 25 | `Dx5` | `DX5` | `CNA_RENDERER_DX5` | DX5 / `Dx5Renderer` | Windows |
-| 26 | `Dx6` | `DX6` | `CNA_RENDERER_DX6` | DX6 / `Dx6Renderer` | Windows |
-| 27 | `Dx7` | `DX7` | `CNA_RENDERER_DX7` | DX7 / `Dx7Renderer` | Windows |
-| 28 | `Dx8` | `DX8` | `CNA_RENDERER_DX8` | DX8 / `Dx8Renderer` | Windows |
-| 29 | `D3D10` | `D3D10` | `CNA_RENDERER_D3D10` | D3D10 / `D3D10Renderer` | Windows |
+| 21 | `DirectX9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Direct3D 9 / `DirectX9Renderer` | Windows |
+| 22 | `DirectX1` | `DIRECTX1` | `CNA_RENDERER_DIRECTX1` | DIRECTX1 / `DirectX1Renderer` | Windows |
+| 23 | `DirectX2` | `DIRECTX2` | `CNA_RENDERER_DIRECTX2` | DIRECTX2 / `DirectX2Renderer` | Windows |
+| 24 | `DirectX3` | `DIRECTX3` | `CNA_RENDERER_DIRECTX3` | DIRECTX3 / `DirectX3Renderer` | Windows |
+| 25 | `DirectX5` | `DIRECTX5` | `CNA_RENDERER_DIRECTX5` | DIRECTX5 / `DirectX5Renderer` | Windows |
+| 26 | `DirectX6` | `DIRECTX6` | `CNA_RENDERER_DIRECTX6` | DIRECTX6 / `DirectX6Renderer` | Windows |
+| 27 | `DirectX7` | `DIRECTX7` | `CNA_RENDERER_DIRECTX7` | DIRECTX7 / `DirectX7Renderer` | Windows |
+| 28 | `DirectX8` | `DIRECTX8` | `CNA_RENDERER_DIRECTX8` | DIRECTX8 / `DirectX8Renderer` | Windows |
+| 29 | `DirectX10` | `DIRECTX10` | `CNA_RENDERER_DIRECTX10` | Direct3D 10 / `DirectX10Renderer` | Windows |
 | 30 | `SdlGpu` | `SDL_GPU` | `CNA_RENDERER_SDL_GPU` | SDL GPU / `SdlGpuRenderer` | SDL GPU runtime |
 | 31 | `OpenGLES1` | `OPENGLES1` | `CNA_RENDERER_OPENGLES1` | GLES 1.1 / `OpenGLES1Renderer` | system GLESv1_CM |
 | 32 | `OpenGL4` | `OPENGL4` | `CNA_RENDERER_OPENGL4` | OpenGL 4 / `OpenGL4Renderer` | system OpenGL |
@@ -54,20 +54,20 @@ LLGL, or another abstraction likewise do not add CNA identities.
 The four GL profiles share one implementation target, macro, and factory, so 41 public identities
 map to 38 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
-renamed free-direct-backed identity; current `DX3` is the genuine DirectX 3 implementation.
+renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
 `EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.
 
 ## Capability classes
 
 - **No renderer:** `STUB` is a no-op; `HEADLESS` is validation/trace-oriented and makes no pixel
   fidelity claim.
-- **2D-oriented:** `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SKIA`, `ASCII`, `FREEDIRECT`, `DX1`,
+- **2D-oriented:** `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SKIA`, `ASCII`, `FREEDIRECT`, `DIRECTX1`,
   `DIRECT2D`, and `GDI`.
 - **CPU bounded 3D:** `SOFTWARE`.
-- **Legacy or fixed-function bounded 3D:** `OPENGLES1`, `OPENGL1`, `DX2`, `DX3`, `DX5`, `DX6`,
-  `DX7`, `DX8`, and `GLIDE`.
+- **Legacy or fixed-function bounded 3D:** `OPENGLES1`, `OPENGL1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`,
+  `DIRECTX7`, `DIRECTX8`, and `GLIDE`.
 - **Programmable/modern, with renderer-specific limits:** `OPENGLES`, `OPENGL33`, `WEBGL1`,
-  `WEBGL2`, `BGFX`, `VULKAN`, `WEBGPU`, `MAGNUM`, `D3D9`, `D3D10`, `D3D11`, `D3D12`, `SDL_GPU`,
+  `WEBGL2`, `BGFX`, `VULKAN`, `WEBGPU`, `MAGNUM`, `DIRECTX9`, `DIRECTX10`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU`,
   `OPENGL4`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `LLGL`, and `METAL`.
 
 These classes are descriptive, not blanket parity claims. `WEBGPU` remains experimental. The

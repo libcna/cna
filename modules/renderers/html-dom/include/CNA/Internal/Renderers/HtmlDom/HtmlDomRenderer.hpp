@@ -182,7 +182,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * @brief Restricts rendering to a sub-rectangle of the current render target.
          *
          * plan_html_dom.md HTMLDOM-98. Confirmed non-gap against every other 2D-only sibling
-         * (`SDL_RENDERER`/`CANVAS`/`DX3` all leave this as the inherited no-op too), but a real,
+         * (`SDL_RENDERER`/`CANVAS`/`DIRECTX3` all leave this as the inherited no-op too), but a real,
          * closeable one against `EASYGL`, which supports a genuine GL sub-region `Viewport`
          * (split-screen/sub-panel rendering) -- nothing about DOM/CSS compositing rules that out.
          *

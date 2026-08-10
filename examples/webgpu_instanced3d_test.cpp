@@ -6,7 +6,7 @@
 // level (bypassing GraphicsDevice's own VertexBufferBinding/instance-frequency plumbing, which is
 // pre-existing and renderer-agnostic -- GraphicsDevice::DrawInstancedPrimitives() already forwards
 // to IGraphicsRenderer::DrawInstancedPrimitivesEx() unchanged), matching
-// examples/d3d9_instanced_test.cpp's own established test-authoring convention for this exact API.
+// examples/directx9_instanced_test.cpp's own established test-authoring convention for this exact API.
 // Deliberately uses only the renderer-agnostic IGraphicsRenderer/IVertexBufferRenderer/
 // IIndexBufferRenderer interfaces (Common/IGraphicsRenderer.hpp) rather than the concrete
 // WebGPURenderer class -- unlike D3D9/D3D11/Vulkan, this renderer's own header transitively
@@ -26,7 +26,7 @@
 // Check E -- a binding set with no per-instance stream falls back to a real (non-instanced)
 //   DrawIndexedPrimitivesEx() draw (stride-16 VertexPositionColor, VertexColorEnabled=false, a
 //   distinct pure-component DiffuseColor overriding the per-vertex colour) instead of throwing or
-//   corrupting the frame -- matches D3D11Renderer::DrawInstancedPrimitivesEx()'s own
+//   corrupting the frame -- matches DirectX11Renderer::DrawInstancedPrimitivesEx()'s own
 //   identical fallback contract.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.

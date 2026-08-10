@@ -6,7 +6,7 @@
 # using DualTextureEffect would have to).
 #
 # texture0 = solid white (255,255,255,255), texture1 = solid (100,60,20,255), DiffuseColor=
-# (0.5,0.5,0.5). Real formula (verified live against D9-82d's own D3D9_DrawEx check): result =
+# (0.5,0.5,0.5). Real formula (verified live against D9-82d's own DirectX9_DrawEx check): result =
 # texture0 * texture1 * 2 * DiffuseColor -- the "*2*0.5" cancels out, so the expected quad color is
 # exactly texture1's own color, (100,60,20,255). 1x1 textures deliberately avoid any point-filter
 # tie-break ambiguity (textured_quad.scene's own concern) entirely, since there is only one texel.

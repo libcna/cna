@@ -192,11 +192,11 @@ namespace
     // falsifiable in both directions rather than being an untested exemption.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, Support::Unsupported, true,
                                  true, true, true, true, true, false};
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr Contract kContract{"D3D11", Support::Exact, Support::Exact, true,
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr Contract kContract{"DIRECTX11", Support::Exact, Support::Exact, true,
                                  true, true, true, true, false, false};
-#elif defined(CNA_RENDERER_D3D9)
-    constexpr Contract kContract{"D3D9", Support::Exact, Support::Exact, true,
+#elif defined(CNA_RENDERER_DIRECTX9)
+    constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true,
                                  true, true, true, true, false, true};
 #elif defined(CNA_RENDERER_LLGL)
     constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true,

@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX3 (DX-16-vtx).
+// plan_dx.md Phase DIRECTX3 (DX-16-vtx).
 #include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
 #include <iterator>

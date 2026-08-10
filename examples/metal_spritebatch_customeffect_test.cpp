@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_metal.md Phase 14 (METAL-142-152): SpriteBatch::Begin(effect) wiring, real runtime-compiled
-// MSL. Mirrors D3D9's own d3d9_spritebatch_customeffect_test.cpp exactly (same 4 checks, same
+// MSL. Mirrors D3D9's own directx9_spritebatch_customeffect_test.cpp exactly (same 4 checks, same
 // deliberate RGB-inversion methodology), adapted to Metal's own fixed vertex/uniform contract (see
 // docs/metal-shader-effect-contract.md and MetalEffectRenderer's own header comment in
 // MetalRenderer.mm) rather than D3D9's stride-24 SpriteVertex/HLSL shape.

@@ -8,7 +8,7 @@
 //
 // Per-instance world matrix (input slot 1, per-instance step rate, stride = 64): one float4 "row"
 // per semantic, INSTANCEWORLD0..3 -- a project-local semantic name (D3D11_INPUT_ELEMENT_DESC for
-// this instanced input layout is Phase DX5 scope, not yet written; whoever wires it up must use
+// this instanced input layout is Phase DIRECTX5 scope, not yet written; whoever wires it up must use
 // these exact 4 semantic names/indices to match this shader's input signature).
 
 cbuffer PerDraw : register(b0)

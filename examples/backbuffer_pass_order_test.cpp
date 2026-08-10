@@ -245,14 +245,14 @@ namespace
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr Contract kContract{"FREEDIRECT", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, false, false, false, false, false};
-#elif defined(CNA_RENDERER_D3D9)
-    constexpr Contract kContract{"D3D9", Support::Exact, true, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX9)
+    constexpr Contract kContract{"DIRECTX9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
-#elif defined(CNA_RENDERER_D3D11)
-    constexpr Contract kContract{"D3D11", Support::Exact, true, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr Contract kContract{"DIRECTX11", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
-#elif defined(CNA_RENDERER_D3D12)
-    constexpr Contract kContract{"D3D12", Support::Exact, true, Support::Exact,
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr Contract kContract{"DIRECTX12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_LLGL)
     // `orderedBackbufferSegments` is true (LLGL-45, 2026-08-03): GroupFrameCommandsByTargetEXT()

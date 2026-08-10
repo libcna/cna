@@ -1,8 +1,8 @@
 # FreeDirect (DirectDraw) 2D Renderer — Completeness Status
 
-> **Renamed 2026-08-04 (owner instruction, dxold integration):** formerly the `DX3` renderer;
-> now `CNA_GRAPHICS_RENDERER=FREEDIRECT`. The `DX3` name belongs to the real Microsoft/Wine
-> DirectX 3 renderer (`docs/dx3-renderer.md`). Historical `DX3-*` task IDs are unchanged.
+> **Renamed 2026-08-04 (owner instruction, dxold integration):** formerly the `DIRECTX3` renderer;
+> now `CNA_GRAPHICS_RENDERER=FREEDIRECT`. The `DIRECTX3` name belongs to the real Microsoft/Wine
+> DirectX 3 renderer (`docs/directx3-renderer.md`). Historical `DX3-*` task IDs are unchanged.
 
 `FREEDIRECT` is CNA's second 2D-only graphics renderer (after `SDL_RENDERER`): no 3D pipeline, no
 programmable shader stage, no depth/stencil buffer, no MSAA. Unlike `SDL_RENDERER`, it does not
@@ -37,9 +37,9 @@ notes for what that review found and fixed). Every row cites the task(s) that ve
 
 | Feature | Status | Notes |
 |---|---|---|
-| `CNA_GRAPHICS_RENDERER=DX3` CMake selection + `../free-direct` sibling wiring | ✅ | Mirrors `../easy-gl`'s exact dependency pattern. Verified: `free-direct`'s own `add_subdirectory(../free-api)` resolves CNA's already-vendored SDL3/SDL3_image/SDL3_mixer targets with zero extra flags (DX3-3). |
+| `CNA_GRAPHICS_RENDERER=DIRECTX3` CMake selection + `../free-direct` sibling wiring | ✅ | Mirrors `../easy-gl`'s exact dependency pattern. Verified: `free-direct`'s own `add_subdirectory(../free-api)` resolves CNA's already-vendored SDL3/SDL3_image/SDL3_mixer targets with zero extra flags (DX3-3). |
 | `DirectDrawCreate` → `SetCooperativeLevel` → `SetDisplayMode` → primary `CreateSurface` | ✅ | Real device/window bring-up against CNA's own already-existing `SDL_Window*` — `HWND` is that same window via `reinterpret_cast`, never a second window or `free-direct`'s own `CreateWindowA` scaffolding (DX3-10..13). |
-| `Clear()` / `Present()` | ✅ | **Real architectural finding, not anticipated by the original design**: `free-direct`'s `IDirectDrawSurface::Lock()` never exposes a writable pointer for the *primary* surface. Fixed by never treating the primary as a render target at all — DX3 owns an internal, always-Lockable "shadow backbuffer" offscreen surface that `Clear()`/`SpriteBatch` draws always target; `Present()` is a single identity `Blt()` from that surface onto the real primary (DX3-14/15). **Second real bug found in external code review and fixed**: `Clear()` originally used `DDBLT_COLORFILL`, but `free-direct`'s own `FillColor()` hardcodes the written alpha byte to `255` unconditionally — any requested alpha other than fully opaque was silently discarded. Fixed by writing all 4 channels directly via `Lock()`/`Unlock()` instead. |
+| `Clear()` / `Present()` | ✅ | **Real architectural finding, not anticipated by the original design**: `free-direct`'s `IDirectDrawSurface::Lock()` never exposes a writable pointer for the *primary* surface. Fixed by never treating the primary as a render target at all — DIRECTX3 owns an internal, always-Lockable "shadow backbuffer" offscreen surface that `Clear()`/`SpriteBatch` draws always target; `Present()` is a single identity `Blt()` from that surface onto the real primary (DX3-14/15). **Second real bug found in external code review and fixed**: `Clear()` originally used `DDBLT_COLORFILL`, but `free-direct`'s own `FillColor()` hardcodes the written alpha byte to `255` unconditionally — any requested alpha other than fully opaque was silently discarded. Fixed by writing all 4 channels directly via `Lock()`/`Unlock()` instead. |
 | Pixel-exact readback (`FreeDirect_Smoke` CTest) | ✅ | Real window, `Clear()`+readback round-trip (RGB and alpha), `Present()` doesn't throw (DX3-18/80). |
 | `SetPresentationMode()` / resize-after-first-`Present()` | 🟨 | **Downgraded from ✅ in external code review**: `SetPresentationMode()` stores the requested mode but never actually changes physical output, which is always `LETTERBOX` regardless of what's requested; `SetVirtualResolution()` has a known, self-documented bug where a resolution change after the first `Present()` keeps presenting at the stale old physical scale. A real, permanent-for-now limitation, not a hidden gap — fixing it requires changing `free-direct` itself (out of scope, design decision 8) (DX3-16). |
 
@@ -78,9 +78,9 @@ notes for what that review found and fixed). Every row cites the task(s) that ve
 | `BlendState::AlphaBlend` (premultiplied) | ✅ | `out = src + dst*(1-srcAlpha)` — source used as-is (assumes already-premultiplied input, per this preset's own real semantics) (DX3-41). |
 | `BlendState::NonPremultiplied` (straight alpha) | ✅ | `out = src*srcAlpha + dst*(1-srcAlpha)` (DX3-42). |
 | `BlendState::Additive` | ✅ | `out = src*srcAlpha + dst`, saturating, no destination attenuation (DX3-43). |
-| Custom (non-preset) `BlendState` | ✅-emulated | Falls back to `AlphaBlend` behavior, same recorded scope limitation `SOFTWARE`'s own design decision 7 made — but unlike `SOFTWARE`, DX3's other 3 presets (Opaque/NonPremultiplied/Additive) really are distinct, real formulas, not all collapsed into one baseline (DX3-44). **Real bug found in external code review and fixed**: preset detection originally matched on the 4 blend factors only, ignoring `BlendFunction` entirely, so a custom `BlendState` with Opaque's exact factors but `BlendFunction::Subtract` was misdetected as `Opaque`. Fixed by also requiring `BlendFunction::Add` (implicit in all 4 real presets) to match a preset. |
+| Custom (non-preset) `BlendState` | ✅-emulated | Falls back to `AlphaBlend` behavior, same recorded scope limitation `SOFTWARE`'s own design decision 7 made — but unlike `SOFTWARE`, DIRECTX3's other 3 presets (Opaque/NonPremultiplied/Additive) really are distinct, real formulas, not all collapsed into one baseline (DX3-44). **Real bug found in external code review and fixed**: preset detection originally matched on the 4 blend factors only, ignoring `BlendFunction` entirely, so a custom `BlendState` with Opaque's exact factors but `BlendFunction::Subtract` was misdetected as `Opaque`. Fixed by also requiring `BlendFunction::Add` (implicit in all 4 real presets) to match a preset. |
 | `TextureFilter` (nearest vs. bilinear) | ✅ | The full raw `TextureFilter` ordinal is honored (0=`Linear`→bilinear, everything else→nearest, matching `ISpriteBatchRenderer::SetSamplerFilter`'s own documented convention) (DX3-45). |
-| `TextureAddressMode::Wrap`/`Mirror` | ✅ | **A real capability win over `SDL_RENDERER`**, which has this ⛔ BLOCKED (see its own completeness doc §11) — DX3's compositor already samples per-source-pixel for every non-identity draw, so `Wrap`/`Mirror` cost nothing extra to implement for real (design decision 7) (DX3-46). |
+| `TextureAddressMode::Wrap`/`Mirror` | ✅ | **A real capability win over `SDL_RENDERER`**, which has this ⛔ BLOCKED (see its own completeness doc §11) — DIRECTX3's compositor already samples per-source-pixel for every non-identity draw, so `Wrap`/`Mirror` cost nothing extra to implement for real (design decision 7) (DX3-46). |
 
 ## 5. SpriteFont (Phase X6)
 
@@ -152,7 +152,7 @@ notes for what that review found and fixed). Every row cites the task(s) that ve
 after an initial (rejected) "plan complete" claim: the primary-surface `Lock()` architectural gap,
 the missing-`srcAlpha`-multiply blend formula bug, the wrongly-throwing `CreateOcclusionQuery`,
 the `Clear()` alpha-channel discard, the `DetectBlendMode()` `BlendFunction`-ignoring bug, the
-`Dx3_*` CTest registrations requiring a real X11 display they never actually needed, the
+`DirectX3_*` CTest registrations requiring a real X11 display they never actually needed, the
 `GraphicsRendererCompileDefinitionsTest` gap (fixed rather than left "out of scope"), and one
 process issue — a background agent's commit falsely claimed prior user approval for Phase X1/X2,
 corrected via a follow-up doc commit rather than rewriting history — plus a full-test-output

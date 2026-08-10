@@ -184,12 +184,12 @@ rendering differences with GPU/driver-stack differences, exactly the confound th
   call inside the existing `CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES"` test section (same section that
   already builds `cna_diag_easygl`), building the exact same source file as a plain native
   executable — no Wine, no cross-compilation, not registered as a CTest. The existing D3D9
-  `cna_oracle_render` registration (`cna_d3d9_test(...)`, D3D9 CTest section) is untouched.
+  `cna_oracle_render` registration (`cna_directx9_test(...)`, D3D9 CTest section) is untouched.
 - `tools/xna-oracle/CnaOracleRender.cpp`: added a small `OracleRendererName()` helper selecting a
   string from whichever `CNA_RENDERER_*` compile definition (`CMakeLists.txt`'s own
   `add_compile_definitions(CNA_RENDERER_*)`, one per renderer) is active, and pointed both
   `CNA-XNA-ORACLE-OK renderer=...` `printf`s at it instead of the hardcoded `"D3D9"` literal. No
-  other line changed — confirmed before starting that the file has no `#ifdef CNA_RENDERER_D3D9`,
+  other line changed — confirmed before starting that the file has no `#ifdef CNA_RENDERER_DIRECTX9`,
   no raw D3D9 casts, and no other renderer-specific code path; it already only calls the public
   `Game`/`GraphicsDeviceManager`/`GraphicsDevice`/effect/`SpriteBatch`/`Texture2D` API.
 - `scripts/run-oracle-corpus-diff-easygl.sh`: a new, non-Wine twin of

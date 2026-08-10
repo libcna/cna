@@ -1877,7 +1877,7 @@ namespace CNA::Internal::Renderers::Sokol
          * vertex colour, texturing or lighting -- the same established scope reduction every other
          * CNA renderer with real instancing already makes. When `params.instanceVb` is null this
          * falls back to a real, working `DrawIndexedPrimitivesEx()` draw instead of throwing,
-         * matching `VulkanRenderer`/`D3D11Renderer`'s own identical fallback
+         * matching `VulkanRenderer`/`DirectX11Renderer`'s own identical fallback
          * contract.
          *
          * @param vb             Per-vertex mesh buffer; only its Position element is read.

@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX3 (DX-12-state): XNA Blend/BlendFunction/CompareFunction/CullMode/FillMode/
+// plan_dx.md Phase DIRECTX3 (DX-12-state): XNA Blend/BlendFunction/CompareFunction/CullMode/FillMode/
 // TextureAddressMode/TextureFilter -> D3D11_* equivalents, shared between D3D11 and D3D12 (design
 // decision 4).
 //
@@ -56,8 +56,8 @@ namespace CNA::Internal::Renderers::D3DCommon
     /// cast to int) to the corresponding D3D11_STENCIL_OP. XNA's Increment/Decrement (wrapping) map
     /// to D3D11_STENCIL_OP_INCR/DECR; XNA's IncrementSaturation/DecrementSaturation (clamping) map
     /// to D3D11_STENCIL_OP_INCR_SAT/DECR_SAT -- these are two genuinely distinct D3D11 ops, not
-    /// interchangeable. Returns D3D11_STENCIL_OP_KEEP for an unrecognized ordinal (Phase DX7,
-    /// DX-51 -- used by Phase DX3's D3D12 consumer too, design decision 4: D3D11_STENCIL_OP and
+    /// interchangeable. Returns D3D11_STENCIL_OP_KEEP for an unrecognized ordinal (Phase DIRECTX7,
+    /// DX-51 -- used by Phase DIRECTX3's D3D12 consumer too, design decision 4: D3D11_STENCIL_OP and
     /// D3D12_STENCIL_OP share identical enumerator values, verified against both SDK headers).
     D3D11_STENCIL_OP StencilOperationToD3D11(int stencilOperation);
 }

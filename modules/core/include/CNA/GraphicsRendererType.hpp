@@ -44,10 +44,10 @@ namespace CNA
         Stub,
 
         /** @brief Direct3D 11. */
-        D3D11,
+        DirectX11,
 
         /** @brief Direct3D 12. */
-        D3D12,
+        DirectX12,
 
         /** @brief Direct2D 1.1 (Windows, 2D-only). */
         Direct2D,
@@ -64,39 +64,39 @@ namespace CNA
         /** @brief ASCII (SDL-windowed glyph grid). */
         Ascii,
 
-        /** @brief FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DX3). */
+        /** @brief FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DIRECTX3). */
         FreeDirect,
 
         /** @brief Direct3D 9. */
-        D3D9,
+        DirectX9,
 
-        /** @brief DX1 (real DirectDraw v1, no ../free-direct). */
-        Dx1,
+        /** @brief DIRECTX1 (real DirectDraw v1, no ../free-direct). */
+        DirectX1,
 
-        /** @brief DX2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive, no execute buffers). */
-        Dx2,
+        /** @brief DIRECTX2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive, no execute buffers). */
+        DirectX2,
 
-        /** @brief DX3 (real DirectX 3 -- DirectDraw v2 + Direct3D v2 DrawPrimitive; originally
-         * landed as DX30 while the free-direct renderer still owned the DX3 name, renamed once
+        /** @brief DIRECTX3 (real DirectX 3 -- DirectDraw v2 + Direct3D v2 DrawPrimitive; originally
+         * landed as DX30 while the free-direct renderer still owned the DIRECTX3 name, renamed once
          * that renderer became FreeDirect). */
-        Dx3,
+        DirectX3,
 
-        /** @brief DX5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, no execute buffers). */
-        Dx5,
+        /** @brief DIRECTX5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, no execute buffers). */
+        DirectX5,
 
-        /** @brief DX6 (real DirectDraw v4 + Direct3D v3, real stencil buffer operations). */
-        Dx6,
+        /** @brief DIRECTX6 (real DirectDraw v4 + Direct3D v3, real stencil buffer operations). */
+        DirectX6,
 
-        /** @brief DX7 (real DirectDraw v7 + Direct3D v7, flattened device model -- no viewport
+        /** @brief DIRECTX7 (real DirectDraw v7 + Direct3D v7, flattened device model -- no viewport
          * object, direct texture binding). */
-        Dx7,
+        DirectX7,
 
-        /** @brief DX8 (real Direct3D 8, DXVK-delivered, fixed-function only -- no DirectDraw). */
-        Dx8,
+        /** @brief DIRECTX8 (real Direct3D 8, DXVK-delivered, fixed-function only -- no DirectDraw). */
+        DirectX8,
 
         /** @brief Direct3D 10 (real ID3D10Device, DXVK-delivered via d3d10core, real HLSL shaders
-         * -- no fixed-function pipeline at all, unlike DX1..DX8). */
-        D3D10,
+         * -- no fixed-function pipeline at all, unlike DIRECTX1..DIRECTX8). */
+        DirectX10,
 
         /** @brief SDL_GPU. */
         SdlGpu,
@@ -173,10 +173,10 @@ namespace CNA
         return GraphicsRendererType::Software;
 #elif defined(CNA_RENDERER_STUB)
         return GraphicsRendererType::Stub;
-#elif defined(CNA_RENDERER_D3D11)
-        return GraphicsRendererType::D3D11;
-#elif defined(CNA_RENDERER_D3D12)
-        return GraphicsRendererType::D3D12;
+#elif defined(CNA_RENDERER_DIRECTX11)
+        return GraphicsRendererType::DirectX11;
+#elif defined(CNA_RENDERER_DIRECTX12)
+        return GraphicsRendererType::DirectX12;
 #elif defined(CNA_RENDERER_DIRECT2D)
         return GraphicsRendererType::Direct2D;
 #elif defined(CNA_RENDERER_CANVAS)
@@ -189,24 +189,24 @@ namespace CNA
         return GraphicsRendererType::Ascii;
 #elif defined(CNA_RENDERER_FREEDIRECT)
         return GraphicsRendererType::FreeDirect;
-#elif defined(CNA_RENDERER_D3D9)
-        return GraphicsRendererType::D3D9;
-#elif defined(CNA_RENDERER_DX1)
-        return GraphicsRendererType::Dx1;
-#elif defined(CNA_RENDERER_DX2)
-        return GraphicsRendererType::Dx2;
-#elif defined(CNA_RENDERER_DX3)
-        return GraphicsRendererType::Dx3;
-#elif defined(CNA_RENDERER_DX5)
-        return GraphicsRendererType::Dx5;
-#elif defined(CNA_RENDERER_DX6)
-        return GraphicsRendererType::Dx6;
-#elif defined(CNA_RENDERER_DX7)
-        return GraphicsRendererType::Dx7;
-#elif defined(CNA_RENDERER_DX8)
-        return GraphicsRendererType::Dx8;
-#elif defined(CNA_RENDERER_D3D10)
-        return GraphicsRendererType::D3D10;
+#elif defined(CNA_RENDERER_DIRECTX9)
+        return GraphicsRendererType::DirectX9;
+#elif defined(CNA_RENDERER_DIRECTX1)
+        return GraphicsRendererType::DirectX1;
+#elif defined(CNA_RENDERER_DIRECTX2)
+        return GraphicsRendererType::DirectX2;
+#elif defined(CNA_RENDERER_DIRECTX3)
+        return GraphicsRendererType::DirectX3;
+#elif defined(CNA_RENDERER_DIRECTX5)
+        return GraphicsRendererType::DirectX5;
+#elif defined(CNA_RENDERER_DIRECTX6)
+        return GraphicsRendererType::DirectX6;
+#elif defined(CNA_RENDERER_DIRECTX7)
+        return GraphicsRendererType::DirectX7;
+#elif defined(CNA_RENDERER_DIRECTX8)
+        return GraphicsRendererType::DirectX8;
+#elif defined(CNA_RENDERER_DIRECTX10)
+        return GraphicsRendererType::DirectX10;
 #elif defined(CNA_RENDERER_SDL_GPU)
         return GraphicsRendererType::SdlGpu;
 #elif defined(CNA_RENDERER_OPENGLES1)
@@ -240,7 +240,7 @@ namespace CNA
      * @brief Returns the human-readable name of the graphics renderer compiled into this build.
      *
      * The returned view matches the CNA_GRAPHICS_RENDERER CMake option value exactly
-     * (e.g. "OPENGLES", "SDL_RENDERER", "D3D9") and points at static storage (a string literal),
+     * (e.g. "OPENGLES", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string literal),
      * so it stays valid for the lifetime of the program. Like getCurrentGraphicsRendererType(),
      * this is a compile-time constant.
      *
@@ -262,23 +262,23 @@ namespace CNA
             case GraphicsRendererType::Headless:     return "HEADLESS";
             case GraphicsRendererType::Software:     return "SOFTWARE";
             case GraphicsRendererType::Stub:          return "STUB";
-            case GraphicsRendererType::D3D11:        return "D3D11";
-            case GraphicsRendererType::D3D12:        return "D3D12";
+            case GraphicsRendererType::DirectX11:        return "DIRECTX11";
+            case GraphicsRendererType::DirectX12:        return "DIRECTX12";
             case GraphicsRendererType::Direct2D:     return "DIRECT2D";
             case GraphicsRendererType::Canvas:       return "CANVAS";
             case GraphicsRendererType::HtmlDom:      return "HTML_DOM";
             case GraphicsRendererType::Skia:         return "SKIA";
             case GraphicsRendererType::Ascii:        return "ASCII";
             case GraphicsRendererType::FreeDirect:           return "FREEDIRECT";
-            case GraphicsRendererType::D3D9:          return "D3D9";
-            case GraphicsRendererType::Dx1:            return "DX1";
-            case GraphicsRendererType::Dx2:            return "DX2";
-            case GraphicsRendererType::Dx3:           return "DX3";
-            case GraphicsRendererType::Dx5:            return "DX5";
-            case GraphicsRendererType::Dx6:            return "DX6";
-            case GraphicsRendererType::Dx7:            return "DX7";
-            case GraphicsRendererType::Dx8:            return "DX8";
-            case GraphicsRendererType::D3D10:          return "D3D10";
+            case GraphicsRendererType::DirectX9:          return "DIRECTX9";
+            case GraphicsRendererType::DirectX1:            return "DIRECTX1";
+            case GraphicsRendererType::DirectX2:            return "DIRECTX2";
+            case GraphicsRendererType::DirectX3:           return "DIRECTX3";
+            case GraphicsRendererType::DirectX5:            return "DIRECTX5";
+            case GraphicsRendererType::DirectX6:            return "DIRECTX6";
+            case GraphicsRendererType::DirectX7:            return "DIRECTX7";
+            case GraphicsRendererType::DirectX8:            return "DIRECTX8";
+            case GraphicsRendererType::DirectX10:          return "DIRECTX10";
             case GraphicsRendererType::SdlGpu:        return "SDL_GPU";
             case GraphicsRendererType::OpenGLES1:     return "OPENGLES1";
             case GraphicsRendererType::OpenGL4:       return "OPENGL4";

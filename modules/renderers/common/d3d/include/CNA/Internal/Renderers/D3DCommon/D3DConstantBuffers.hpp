@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX8 (DX-60/DX-60a): explicit GPU-side constant-buffer POD structs matching the
+// plan_dx.md Phase DIRECTX8 (DX-60/DX-60a): explicit GPU-side constant-buffer POD structs matching the
 // real HLSL `cbuffer` declarations DX-13-hlsl already wrote (register scheme recorded in that
 // task's own plan row) -- NOT a raw memcpy of the whole-surface GpuDrawParams convenience struct.
 // Each struct's field order/offsets are verified via static_assert against the actual HLSL source

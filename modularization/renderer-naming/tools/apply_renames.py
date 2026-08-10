@@ -76,6 +76,8 @@ PROTECT = [
     r"WrapBackendRenderTarget",
     # sokol upstream
     r"sg_query_backend", r"sg_backend", r"SG_BACKEND_[A-Z0-9_]+",
+    # bgfx upstream renderer-type vocabulary (RendererType::OpenGLES and its name string)
+    r"bgfx::RendererType::\w+", r"\"OpenGLES\"",
     # other CNA subsystems' backend concepts that may be referenced from FULL-scope files
     r"I?Sdl(?:Gamepad|Joystick|Haptic|Camera|FileDialog|MessageBox|Tray)Backend\w*",
     r"FakeSdl(?:Gamepad|Joystick|Haptic)Backend\w*", r"FakeSystemDeviceBackend",
@@ -215,13 +217,14 @@ RULES_B1 = [
 # Quoted public-selector strings -- applied only in registry/registration/test files
 # (never on lines that carry sokol's native-API axis).
 RULES_B1_QUOTED = [
-    (r"\"DX([1-8])\"", r"\"DIRECTX\1\""),
-    (r"\"D3D(9|10|11|12)\"", r"\"DIRECTX\1\""),
+    (r'"DX([1-8])"', r'"DIRECTX\1"'),
+    (r'"D3D(9|10|11|12)"', r'"DIRECTX\1"'),
     (r"'D3D(9|10|11|12)'", r"'DIRECTX\1'"),
     (r"'DX([1-8])'", r"'DIRECTX\1'"),
 ]
 QUOTED_FILES = re.compile(
     r"^(cmake/RendererSelection\.cmake|cmake/Tests/[^/]+\.cmake|CMakePresets\.json"
+    r"|cmake/Harnesses\.cmake|cmake/UnitTests\.cmake|cmake/Examples\.cmake"
     r"|\.github/workflows/[^/]+\.yml|scripts/[^/]+"
     r"|modules/CMakeLists\.txt|modules/renderers/CMakeLists\.txt"
     r"|modules/core/include/CNA/GraphicsRendererType\.hpp"

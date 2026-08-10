@@ -3817,7 +3817,7 @@ namespace CNA::Internal::Renderers::Sokol
 
         // GraphicsDevice.GetBackBufferData reads from whatever is CURRENTLY BOUND, matching the
         // established cross-renderer convention in this codebase (EasyGLRenderer::
-        // ReadBackbuffer reads from whatever FBO is bound_; the DX3/ASCII/Software renderers document
+        // ReadBackbuffer reads from whatever FBO is bound_; the DIRECTX3/ASCII/Software renderers document
         // the identical behaviour) -- not "always the literal presented window surface", which an
         // earlier version of this method assumed and refused to honour instead. sokol_gfx's own GL
         // renderer does not rebind GL_FRAMEBUFFER back to 0 inside sg_end_pass() for an offscreen
@@ -5365,7 +5365,7 @@ namespace CNA::Internal::Renderers::Sokol
         if (instanceStream == nullptr || instanceStream->buffer == nullptr)
         {
             // No per-instance stream -- fall back to a real, working non-instanced draw rather
-            // than throwing, matching VulkanRenderer/D3D11Renderer's own identical
+            // than throwing, matching VulkanRenderer/DirectX11Renderer's own identical
             // fallback contract.
             DrawColored3D(vbIn, &ibIn, world, view, projection, primitive, primitiveCount, params);
             return;

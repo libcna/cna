@@ -5,7 +5,7 @@
 // for *linking* only, not a native Linux implementation (design decision 5). So this cannot be a
 // native Linux/Python tool shelling out to fxc: it is a small Windows .exe, cross-built via this
 // project's existing MinGW-w64 toolchain and run through scripts/run-wine-dxvk.sh (DX-3), exactly
-// like the DX-1 spike and the D3D11_Smoke/D3D11_Common CTests already do.
+// like the DX-1 spike and the DirectX11_Smoke/DirectX11_Common CTests already do.
 //
 // Usage: hlsl_compiler_tool.exe <input.hlsl> <entry_point> <target_profile> <output.dxbc>
 // Exit code 0 = compiled OK, 1 = compile error (message printed to stderr), 2 = usage/IO error.

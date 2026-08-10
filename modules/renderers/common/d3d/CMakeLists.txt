@@ -1,5 +1,5 @@
-# plan_dx.md design decision 4: D3DCommon shared core, consumed by cna_renderer_d3d11
-# and cna_renderer_d3d12. Only built when actually needed -- the renderers
+# plan_dx.md design decision 4: D3DCommon shared core, consumed by cna_renderer_directx11
+# and cna_renderer_directx12. Only built when actually needed -- the renderers
 # composition adds this directory for the D3D11/D3D12 configurations only.
 # plan_dx9.md design decision 12: D3D9 deliberately does NOT join this condition. D3DFORMAT is a
 # different enum space from DXGI_FORMAT and D3D9 has no state objects at all -- D3D9 gets its own

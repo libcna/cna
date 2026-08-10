@@ -6,7 +6,7 @@
 # top-left alpha=255 (passes, drawn red), top-right alpha=0 (fails, clip() discards -> background
 # shows through), bottom-left alpha=255 (passes, drawn white), bottom-right alpha=64 (fails, also
 # clipped). This directly exercises clip()'s real discard behavior end to end against the oracle,
-# not just a hand-computed expected pixel (D9-82c's own D3D9_DrawEx checks' own bar).
+# not just a hand-computed expected pixel (D9-82c's own DirectX9_DrawEx checks' own bar).
 width=256
 height=256
 profile=HiDef

@@ -174,7 +174,7 @@ include(cmake/Tests/StubTests.cmake)
 # plan_ascii.md Phase G2+: ASCII (SDL-windowed glyph-grid) renderer test registration.
 include(cmake/Tests/AsciiTests.cmake)
 
-# plan_freedirect.md Phase X2/X8 (DX3-18/DX3-80): DX3 (DirectDraw via free-direct) CTest registration.
+# plan_freedirect.md Phase X2/X8 (DX3-18/DX3-80): DIRECTX3 (DirectDraw via free-direct) CTest registration.
 # Unlike SDL_RENDERER's own window-based ctests, these do NOT need a real/virtual X11 display:
 # every pixel assertion reads back through the shadow-backbuffer surface directly
 # (FreeDirectRenderer::ReadBackbuffer/GetBackBufferData), never through real physical
@@ -194,20 +194,20 @@ include(cmake/Tests/FreeDirectTests.cmake)
 # .exe directly (see .github/workflows/d3d-windows-ci.yml, added specifically to exercise this
 # path for real; it only covers MSVC-compile/unit-test/shader-generation-check, not a substitute
 # for plan_dx.md DX-90's real swap-chain/tearing/device-lost/driver-parity items).
-include(cmake/Tests/D3D11Tests.cmake)
+include(cmake/Tests/DirectX11Tests.cmake)
 
 # plan_dx.md DX-102/103/104/105: D3D12 CTest registration, mirroring DX-80's own D3D11 macro
 # exactly, including the CMAKE_CROSSCOMPILING-aware command selection above (native MSVC runs the
 # .exe directly; a Linux-hosted cross-compile wraps it with scripts/run-wine-vkd3d.sh, DX-100's own
 # Wine+vkd3d-proton dev loop, a distinct Wine prefix from D3D11's DXVK one).
-include(cmake/Tests/D3D12Tests.cmake)
+include(cmake/Tests/DirectX12Tests.cmake)
 
 # Direct2D 1.1 is a Windows-only 2D renderer. Its tests use the same native-Windows/Wine+DXVK
 # execution model as D3D11 because Direct2D owns a real D3D11/DXGI presentation surface.
 include(cmake/Tests/Direct2DTests.cmake)
 
 # plan_canvas.md CANVAS-15: structural smoke-test build for the CANVAS (HTML Canvas 2D) renderer.
-# Deliberately NOT registered as a CTest (mirrors cna_diag_software's/d3d12_swapchain_diag's own
+# Deliberately NOT registered as a CTest (mirrors cna_diag_software's/directx12_swapchain_diag's own
 # "real executable, not a ctest" precedent above): SDL_Init(SDL_INIT_VIDEO) itself throws under
 # `node CnaTests.js` (no real browser DOM -- confirmed empirically, "window is not defined"),
 # before any Canvas-specific code even runs. This target only proves the smoke test configures and
@@ -227,51 +227,51 @@ include(cmake/Tests/HtmlDomTests.cmake)
 # configures rather than one.
 include(cmake/Tests/CrossRendererBenchmark.cmake)
 
-# plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_d3d11_test/
-# cna_d3d12_test macros (design decision: mirror the shape, don't invent a new pattern). Uses the
+# plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_directx11_test/
+# cna_directx12_test macros (design decision: mirror the shape, don't invent a new pattern). Uses the
 # new scripts/run-wine-dxvk9.sh (D9-5), not the shared run-wine-dxvk.sh (cold-start Sec.4).
-include(cmake/Tests/D3D9Tests.cmake)
+include(cmake/Tests/DirectX9Tests.cmake)
 
 # plan_sdlgpu.md SDLGPU-12: first end-to-end proof for the SDL_GPU graphics renderer -- a real
 # window, a real SDL_GPUDevice, and a 60-frame Clear()+Present() loop. Needs a real
 # display/GPU, same as the Vulkan/Bgfx/D3D11 CTest entries above -- run with a real DISPLAY.
 include(cmake/Tests/SdlGpuTests.cmake)
 
-# plan_dx1.md: DX1 (real DirectDraw v1, no ../free-direct) CTest registration, mirroring D3D9's
-# own cna_d3d9_test/cna_d3d9_ctest_command shape (Windows-only, MinGW cross-compile + Wine
-# wrapper) rather than DX3's native-Linux shape, since DX1 genuinely needs real ddraw.h.
-include(cmake/Tests/Dx1Tests.cmake)
+# plan_dx1.md: DIRECTX1 (real DirectDraw v1, no ../free-direct) CTest registration, mirroring D3D9's
+# own cna_directx9_test/cna_directx9_ctest_command shape (Windows-only, MinGW cross-compile + Wine
+# wrapper) rather than DIRECTX3's native-Linux shape, since DIRECTX1 genuinely needs real ddraw.h.
+include(cmake/Tests/DirectX1Tests.cmake)
 
-# plan_dx2.md Phase O1/O2: DX2 (real DirectDraw v1 2D layer ported from DX1 + Direct3D v2
-# DrawPrimitive 3D layer, landing in a later phase) CTest registration, mirroring Dx1Tests.cmake's
+# plan_dx2.md Phase O1/O2: DIRECTX2 (real DirectDraw v1 2D layer ported from DIRECTX1 + Direct3D v2
+# DrawPrimitive 3D layer, landing in a later phase) CTest registration, mirroring DirectX1Tests.cmake's
 # own shape (Windows-only, MinGW cross-compile + Wine wrapper).
-include(cmake/Tests/Dx2Tests.cmake)
+include(cmake/Tests/DirectX2Tests.cmake)
 
 # plan_dx3.md: real DirectX 3 renderer (originally landed under the temporary DX30 name; renamed
-# to DX3 on 2026-08-04 once the free-direct renderer released the name as FREEDIRECT) -- a
-# mechanical port of DX2's own 2D+3D layers upgraded to IDirectDraw2, same
-# Windows-only/MinGW-cross-compile/Wine-wrapper shape as Dx2Tests.cmake.
-include(cmake/Tests/Dx3Tests.cmake)
+# to DIRECTX3 on 2026-08-04 once the free-direct renderer released the name as FREEDIRECT) -- a
+# mechanical port of DIRECTX2's own 2D+3D layers upgraded to IDirectDraw2, same
+# Windows-only/MinGW-cross-compile/Wine-wrapper shape as DirectX2Tests.cmake.
+include(cmake/Tests/DirectX3Tests.cmake)
 
 # plan_dx5.md: real DirectX 5 renderer -- DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, a further
-# port of DX3's own 2D+3D layers, same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
-include(cmake/Tests/Dx5Tests.cmake)
+# port of DIRECTX3's own 2D+3D layers, same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+include(cmake/Tests/DirectX5Tests.cmake)
 
-# plan_dx6.md: real DirectX 6 renderer -- same DirectDraw v4 + Direct3D v3 interfaces as DX5, with
+# plan_dx6.md: real DirectX 6 renderer -- same DirectDraw v4 + Direct3D v3 interfaces as DIRECTX5, with
 # real stencil buffer operations added; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
-include(cmake/Tests/Dx6Tests.cmake)
+include(cmake/Tests/DirectX6Tests.cmake)
 
 # plan_dx7.md: real DirectX 7 renderer -- new IDirectDraw7/IDirect3D7 interfaces, viewport object
 # removed, texture binding simplified; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
-include(cmake/Tests/Dx7Tests.cmake)
+include(cmake/Tests/DirectX7Tests.cmake)
 
 # plan_dx8.md: real DirectX 8 renderer -- DXVK-delivered (not DirectDraw-based), fixed-function 3D
 # only, real GPU-quad SpriteBatch; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
-include(cmake/Tests/Dx8Tests.cmake)
+include(cmake/Tests/DirectX8Tests.cmake)
 
 # plan_d3d10.md: real Direct3D 10 renderer -- no fixed-function at all, real HLSL vs_4_0/ps_4_0
 # shaders throughout, DXVK-delivered via d3d10core.
-include(cmake/Tests/D3D10Tests.cmake)
+include(cmake/Tests/DirectX10Tests.cmake)
 
 # plan_opengles1.md: OPENGLES1 (fixed-function OpenGL ES 1.1) CTest registration. Needs a real
 # EGL/GLESv1_CM driver capable of creating an actual ES1 context -- not every EGL implementation

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X1/X2 (DX3-1..DX3-18): smoke test for the DX3 (DirectDraw, via the
+// plan_freedirect.md Phase X1/X2 (DX3-1..DX3-18): smoke test for the DIRECTX3 (DirectDraw, via the
 // ../free-direct sibling) graphics renderer's foundation -- real DirectDrawCreate/
 // SetCooperativeLevel/SetDisplayMode/CreateSurface device bring-up, real Clear()/Present(), real
 // pixel readback. SpriteBatch/Texture2D draws are not yet implemented (Phase X3/X4).
 //
-// Check A -- GetWindowInternal() returns a real, non-null window (unlike HEADLESS/SOFTWARE, DX3
+// Check A -- GetWindowInternal() returns a real, non-null window (unlike HEADLESS/SOFTWARE, DIRECTX3
 //   genuinely needs one -- free-direct's SetCooperativeLevel wraps it via reinterpret_cast).
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color
-//   (RGB and alpha), read from DX3's own Lockable shadow-backbuffer surface (design decision 5's
+//   (RGB and alpha), read from DIRECTX3's own Lockable shadow-backbuffer surface (design decision 5's
 //   fix for free-direct's IDirectDrawSurface::Lock() never exposing a writable pointer for the
 //   *primary* surface).
 // Check D -- Clear() honors a non-opaque requested alpha (128) exactly, not silently forced to
@@ -56,7 +56,7 @@ protected:
         auto& renderer = static_cast<FreeDirectRenderer&>(dev.GetRenderer());
 
         // Check A: real window.
-        check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DX3 renderer");
+        check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DIRECTX3 renderer");
 
         // Check B: real, correct pixel readback after Clear(), via the shadow-backbuffer surface,
         // including the alpha channel.

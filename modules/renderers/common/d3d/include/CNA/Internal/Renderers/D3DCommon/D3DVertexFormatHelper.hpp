@@ -1,11 +1,11 @@
 #pragma once
 
-// plan_dx.md Phase DX3 (DX-16-vtx): stride-keyed vertex layout inference, mirroring the exact
+// plan_dx.md Phase DIRECTX3 (DX-16-vtx): stride-keyed vertex layout inference, mirroring the exact
 // convention this project already established for WebGPU/Software (16/20/24/32/52-byte strides
 // map to VertexPositionColor/VertexPositionTexture/VertexPositionColorTexture/
 // VertexPositionNormalTexture/VertexPositionNormalTextureSkinned) -- not a new convention.
 // HLSL semantic names (POSITION/COLOR/TEXCOORD/NORMAL/BLENDWEIGHT/BLENDINDICES) match this
-// project's own stock-effect shader semantics (Phase DX8).
+// project's own stock-effect shader semantics (Phase DIRECTX8).
 
 #include <d3d11.h>
 #include <d3d12.h>

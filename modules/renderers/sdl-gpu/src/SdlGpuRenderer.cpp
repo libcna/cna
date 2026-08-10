@@ -1208,7 +1208,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // plan_sdlgpu.md SDLGPU-6: request SPIR-V first -- the only shader format this device's
         // vendored SDL3 compiles a driver for on Linux (Vulkan). DXBC/DXIL/MSL support (Windows/
         // macOS drivers) is deferred to plan_sdlgpu.md's Phase SDLGPU-13.
-        // debug_mode mirrors D3D11Renderer::CreateDeviceResources()'s own #ifndef NDEBUG
+        // debug_mode mirrors DirectX11Renderer::CreateDeviceResources()'s own #ifndef NDEBUG
         // CNA-side toggle (design decision 12: the validation/debug layer is a debug-build
         // convenience, never a hard requirement) -- a debug build asks the Vulkan driver for
         // SDL_gpu's own validation layer, a release build does not.

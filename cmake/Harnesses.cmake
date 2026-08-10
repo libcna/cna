@@ -177,7 +177,7 @@ if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
     if(MINGW)
         # REMED-BUILD-013: without this, the .exe links fine but fails to *run* under Wine --
         # "libgcc_s_seh-1.dll/libstdc++-6.dll not found" (status c0000135) -- matching the same
-        # MinGW-runtime treatment every cna_d3d9_test()/cna_d3d11_test() executable already gets.
+        # MinGW-runtime treatment every cna_directx9_test()/cna_directx11_test() executable already gets.
         target_link_options(cna_strict_xna_api_check PRIVATE -static-libgcc -static-libstdc++)
         target_link_options(cna_strict_xna_api_check PRIVATE -Wl,--allow-multiple-definition)
         cna_copy_mingw_runtime(cna_strict_xna_api_check)
@@ -192,13 +192,13 @@ if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
     # D3D9/D3D11/D3D12 device (pure link-time API-surface check, no window/GPU), so it needs the same
     # *_SKIP_*_GATE=1 each renderer's own device-free CnaTests invocation already uses.
     if(CMAKE_CROSSCOMPILING)
-        if(CNA_GRAPHICS_RENDERER STREQUAL "D3D9")
+        if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
             set_target_properties(cna_strict_xna_api_check PROPERTIES CROSSCOMPILING_EMULATOR
                 "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D11")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
             set_target_properties(cna_strict_xna_api_check PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D12")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
             set_target_properties(cna_strict_xna_api_check PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
         endif()

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-029: DX3 backbuffer resize must be an all-or-nothing surface-set transaction.
+// REMED-GFX-029: DIRECTX3 backbuffer resize must be an all-or-nothing surface-set transaction.
 //
 // This regression uses real free-direct IDirectDraw surfaces. Instance-local hooks inject one
 // failure at every meaningful replacement stage and report native COM pointer identities plus
@@ -274,7 +274,7 @@ namespace
             depthFormat == DepthFormat::None ? "depthless constructor" : "depth-backed request";
         ResourceTracker tracker;
         Check(SDL_InitSubSystem(SDL_INIT_VIDEO), prefix + " initializes SDL video");
-        SDL_Window* window = SDL_CreateWindow("DX3 resize lifecycle", 48, 32, SDL_WINDOW_HIDDEN);
+        SDL_Window* window = SDL_CreateWindow("DIRECTX3 resize lifecycle", 48, 32, SDL_WINDOW_HIDDEN);
         Check(window != nullptr, prefix + " creates caller-owned SDL window");
         if (window == nullptr)
         {
@@ -308,7 +308,7 @@ namespace
                 prefix + " acquires each constructor resource exactly once");
             Check(
                 !renderer.SupportsDepthStencil(),
-                prefix + " retains DX3's established depthless capability");
+                prefix + " retains DIRECTX3's established depthless capability");
         }
 
         Check(
@@ -333,7 +333,7 @@ namespace
         ResourceTracker tracker;
         Check(SDL_InitSubSystem(SDL_INIT_VIDEO), "constructor-failure case initializes SDL video");
         SDL_Window* window = SDL_CreateWindow(
-            "DX3 resize constructor failure", 48, 32, SDL_WINDOW_HIDDEN);
+            "DIRECTX3 resize constructor failure", 48, 32, SDL_WINDOW_HIDDEN);
         Check(window != nullptr, "constructor-failure case creates caller-owned SDL window");
         if (window == nullptr)
         {
@@ -405,7 +405,7 @@ namespace
         Check(
             !depthless.GetRenderTargetRenderer()->HasRealDepthBuffer(false) &&
                 !depthBacked.GetRenderTargetRenderer()->HasRealDepthBuffer(true),
-            prefix + " covers depthless and depth-requested targets without inventing DX3 depth");
+            prefix + " covers depthless and depth-requested targets without inventing DIRECTX3 depth");
 
         device.Clear(Color(11, 22, 33, 255));
         device.SetRenderTarget(&depthBacked);

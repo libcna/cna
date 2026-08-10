@@ -6,7 +6,7 @@
 # declaration byte-for-byte, D9-82f's own "no new vertex declaration needed" finding).
 #
 # Deliberately uses a SINGLE Identity bone at 100% vertex weight, the same simplification
-# D9-82f's own D3D9_DrawEx CTest used: skinning becomes a mathematical no-op, so the expected
+# D9-82f's own DirectX9_DrawEx CTest used: skinning becomes a mathematical no-op, so the expected
 # pixel math reduces to exactly the same lit-textured formula lit_textured_quad.scene already
 # established (same dim light, same white texture, same (255,0,0)->(128,0,0)-style halving) --
 # while still genuinely exercising the real per-vertex BLENDWEIGHT0/BLENDINDICES0 upload and the

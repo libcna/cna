@@ -5,7 +5,7 @@
 # shape (VSInputNmTx, matches the existing stride-32 layout exactly, D9-82e's own "no new vertex
 # declaration needed" finding).
 #
-# Real formula (D9-82e's own D3D9_DrawEx check, verified live): result = lerp(texture*diffuseSum,
+# Real formula (D9-82e's own DirectX9_DrawEx check, verified live): result = lerp(texture*diffuseSum,
 # environmentMap, environmentMapAmount). A 1x1 white base texture and a 1x1 environment (cube) map
 # -- every face deliberately the SAME color, sidestepping any need to hand-compute reflect()
 # geometry, the same trick D9-82e's own CTest already used -- lit by one dim directional light

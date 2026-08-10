@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Cross-renderer integration test for Unsupported3DGraphicsCallBehavior on CNA's permanently
-// 2D-only graphics renderers (SDL_RENDERER, DX3, CANVAS and ASCII).
+// 2D-only graphics renderers (SDL_RENDERER, DIRECTX3, CANVAS and ASCII).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

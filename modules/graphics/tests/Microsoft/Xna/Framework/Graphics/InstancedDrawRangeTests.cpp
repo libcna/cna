@@ -116,8 +116,8 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 // WebGPU (REMED-GFX-211/213). D3D9 runs the index-range contract above and nothing here; whether
 // it honours the binding offsets is a separate question that belongs to its own measurement, not
 // to this file's compiled expectations, and no D3D display has been reachable to take it.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D11) || \
-    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_VULKAN) || \
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX11) || \
+    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_VULKAN) || \
     defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU)
 #define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
 #endif
@@ -870,9 +870,9 @@ namespace
 }
 
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_D3D9) || \
-    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_D3D11) || \
-    defined(CNA_RENDERER_D3D12)
+    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX11) || \
+    defined(CNA_RENDERER_DIRECTX12)
 
 // Zero-offset control. Identical state, buffers and instance stream to every case below, with
 // startIndex = baseVertex = 0 and the geometry range covering the complete first three slots. It
@@ -2330,7 +2330,7 @@ TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 }
 #endif
 
-#if defined(CNA_RENDERER_D3D11) || defined(CNA_RENDERER_D3D12)
+#if defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
 // REMED-GFX-123's D3D binding oracle: the same contract REMED-GFX-122 pinned on EasyGL, asserted on
 // the two renderers whose instanced path hardcoded every offset. D3D11 converts the element offsets
 // with each stream's own stride for IASetVertexBuffers; D3D12 folds them into each

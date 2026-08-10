@@ -459,7 +459,7 @@ coverage is now COMPLETE) is now represented in the corpus:
   confirmed the scene is genuinely sensitive to this bug class, then restored and reconfirmed
   green.
 - `colored_trianglestrip_quad` — the first scene to ever use `primitive=TriangleStrip` (every
-  earlier scene, and every existing `D3D9_Draw`/`D3D9_DrawEx` CTest check, only ever used
+  earlier scene, and every existing `DirectX9_Draw`/`DirectX9_DrawEx` CTest check, only ever used
   `TriangleList`) — a genuinely previously-untested code path, not a new feature: the scene
   format has supported all 4 `PrimitiveType` values since `D9-A3`'s own original design, and
   CNA's `GraphicsDevice::PrimitiveVerts()`/`ToD3D9Topology()` already handle them unconditionally,
@@ -470,7 +470,7 @@ coverage is now COMPLETE) is now represented in the corpus:
   vertex-count↔primitiveCount conversion (off-by-one, a dropped second triangle, or a degenerate
   single-triangle misread) would show up as a missing quadrant or wrong Gouraud gradient, not
   merely "did it crash". `0/65536` pixels differ, pixel-perfect on the first attempt. Also added a
-  dedicated offline `D3D9_Draw` Check D (an oversized full-viewport strip quad, sampling the first
+  dedicated offline `DirectX9_Draw` Check D (an oversized full-viewport strip quad, sampling the first
   triangle's own corner and the second triangle's own corner separately) — mutation-verified
   (hardcoding `primitiveCount=1` instead of `2` made exactly that check go red, confirming it's
   genuinely sensitive to the conversion being wrong, then restored).
@@ -491,7 +491,7 @@ coverage is now COMPLETE) is now represented in the corpus:
   the left segment's own midpoint and the right segment's own midpoint independently reading pure
   RED. `0/65536` pixels differ, pixel-perfect on the first attempt.
 
-Both `LineList`/`LineStrip` scenes also got dedicated offline `D3D9_Draw` Checks E/F (axis-aligned
+Both `LineList`/`LineStrip` scenes also got dedicated offline `DirectX9_Draw` Checks E/F (axis-aligned
 segments on the CTest's own small 64×64 canvas, to avoid diagonal-line rasterization-rounding risk
 that the already-oracle-proven 256×256 scenes don't have to worry about). **Real bug found and
 fixed in the CTest's OWN color-packing, not CNA**: `Check E`'s green vertex color was written as
@@ -512,8 +512,8 @@ every scene: `sprite_basic_quad.scene` stayed pixel-perfect even with the offset
 `sprite_flipped_quad.scene` (both using the four-color texture) diverged from real XNA by
 `4800/65536` pixels — confirming the offset is genuinely necessary, and that a multi-texel,
 crisp-content-boundary scene is required to actually observe its effect. See
-`src/CNA/Internal/Renderers/D3D9/D3D9SpriteBatch.cpp`'s own `BuildMatrixTransformEXT()` comment
-and the new `D3D9_SpriteBatch` CTest for the full record.
+`src/CNA/Internal/Renderers/DirectX9/D3D9SpriteBatch.cpp`'s own `BuildMatrixTransformEXT()` comment
+and the new `DirectX9_SpriteBatch` CTest for the full record.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the

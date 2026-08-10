@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports that
-// DX3 (DirectDraw, 2D-only by design) supports none of the currently-enumerated capabilities,
+// DIRECTX3 (DirectDraw, 2D-only by design) supports none of the currently-enumerated capabilities,
 // and that calling the corresponding 3D methods anyway still throws (SupportsCapability() is a
 // way to check ahead of time, not a way to make the underlying call itself succeed). Twin of
 // sdlrenderer_graphics_capability_test.cpp/canvas_graphics_capability_test.cpp.

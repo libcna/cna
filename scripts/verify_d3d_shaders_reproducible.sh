@@ -13,7 +13,7 @@
 #        script: compile_shaders_hlsl.py
 #
 #   2. D3D9 (custom NOXNA shaders)  d3d9_pbr_shaders.hpp / d3d9_skinned_vertex_color_shader.hpp
-#        tool  : modules/renderers/d3d9/src/shaders/fxc_tool.cpp (D3DCompile)
+#        tool  : modules/renderers/directx9/src/shaders/fxc_tool.cpp (D3DCompile)
 #        DLL   : REAL Microsoft d3dcompiler_47.dll in ~/.wine-cna-d3d9-spike
 #        flags : D3DCOMPILE_OPTIMIZATION_LEVEL3, profiles vs_3_0/ps_3_0
 #
@@ -28,7 +28,7 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 D3DC="$REPO_ROOT/modules/renderers/common/d3d/src/shaders"
-D9="$REPO_ROOT/modules/renderers/d3d9/src/shaders"
+D9="$REPO_ROOT/modules/renderers/directx9/src/shaders"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cna-d3d-repro.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 D3DCOMMON_ONLY=0

@@ -11,7 +11,7 @@ in-process the way libshaderc is called for SPIR-V. So this script:
      with; this script invokes the mingw compiler directly, no CMake configure needed for this
      narrow purpose),
   2. runs that .exe once per shader file through scripts/run-wine-dxvk.sh (DX-3's established
-     Wine+DXVK harness -- the same one D3D11_Smoke/D3D11_Common CTests use), producing real DXBC
+     Wine+DXVK harness -- the same one DirectX11_Smoke/DirectX11_Common CTests use), producing real DXBC
      bytecode,
   3. embeds the resulting bytes as C++ arrays into hlsl_shaders.hpp, next to the .hlsl sources.
 

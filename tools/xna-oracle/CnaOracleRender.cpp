@@ -91,15 +91,15 @@ namespace
     // stays accurate as this file is built against additional renderers (EASYGL first, D9-A6).
     const char* OracleRendererName()
     {
-#if defined(CNA_RENDERER_D3D9)
+#if defined(CNA_RENDERER_DIRECTX9)
         return "D3D9";
 #elif defined(CNA_RENDERER_EASYGL)
         return "EASYGL";
 #elif defined(CNA_RENDERER_VULKAN)
         return "VULKAN";
-#elif defined(CNA_RENDERER_D3D11)
+#elif defined(CNA_RENDERER_DIRECTX11)
         return "D3D11";
-#elif defined(CNA_RENDERER_D3D12)
+#elif defined(CNA_RENDERER_DIRECTX12)
         return "D3D12";
 #elif defined(CNA_RENDERER_BGFX)
         return "BGFX";

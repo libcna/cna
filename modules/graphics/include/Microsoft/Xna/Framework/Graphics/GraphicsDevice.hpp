@@ -1010,7 +1010,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * current runtime device/driver) supports the given CNA::GraphicsCapability.
          *
          * Query this before relying on a feature that isn't universally supported (e.g. 3D on
-         * the 2D-only SDL_Renderer/DX3/Canvas/GDI renderers), instead of calling it and handling the
+         * the 2D-only SDL_Renderer/DIRECTX3/Canvas/GDI renderers), instead of calling it and handling the
          * resulting exception.
          *
          * @param capability The capability to check.

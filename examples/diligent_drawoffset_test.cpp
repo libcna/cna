@@ -3,7 +3,7 @@
 // plan_diligent.md DILIGENT-45: real-device proof that the Diligent renderer honors non-zero
 // XNA DrawPrimitives(vertexStart) / DrawIndexedPrimitives(baseVertex, startIndex) offsets, rather
 // than silently drawing from the start of the bound buffer regardless of what the caller asked
-// for. This is the Diligent counterpart of d3d9_drawoffset_test.cpp, adapted to the public XNA API
+// for. This is the Diligent counterpart of directx9_drawoffset_test.cpp, adapted to the public XNA API
 // (BasicEffect/GraphicsDevice) and to the vertex formats this renderer actually supports (stride 16
 // Colored3D; no PbrEffect and no stride-56 SkinnedVertexColor here, both unimplemented on this
 // renderer).

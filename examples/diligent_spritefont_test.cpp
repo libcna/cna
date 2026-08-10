@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_diligent.md DILIGENT-53: real-device SpriteFont glyph placement/spacing/newline/flip pixel
-// test, mirroring D3D11's own already-closed DX-127 (examples/d3d11_smoke_test.cpp) and D3D12's
+// test, mirroring D3D11's own already-closed DX-127 (examples/directx11_smoke_test.cpp) and D3D12's
 // DX-132/DX-148, and EasyGL's established fixture (Tasks 424-429). Shared, renderer-agnostic C++
 // (SpriteFont/SpriteBatch) has been pixel-verified on EasyGL, D3D11 and D3D12 already, per
 // docs/graphics-renderer-feature-matrix.md, but no Diligent equivalent existed before this task.

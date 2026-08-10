@@ -12,8 +12,8 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_renderer "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer}" CACHE STRING "Graphics renderer to use (SDL_RENDERER, OPENGLES, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, D3D11, D3D12, DIRECT2D, CANVAS, HTML_DOM, SKIA, ASCII, FREEDIRECT, D3D9, DX1, DX2, DX3, DX5, DX6, DX7, DX8, D3D10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, DILIGENT, GLIDE, GDI, LLGL, or METAL)")
-set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS "SDL_RENDERER" "OPENGLES" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "D3D11" "D3D12" "DIRECT2D" "CANVAS" "HTML_DOM" "SKIA" "ASCII" "FREEDIRECT" "D3D9" "DX1" "DX2" "DX3" "DX5" "DX6" "DX7" "DX8" "D3D10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT" "GLIDE" "GDI" "LLGL" "METAL")
+set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer}" CACHE STRING "Graphics renderer to use (SDL_RENDERER, OPENGLES, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, DIRECTX11, DIRECTX12, DIRECT2D, CANVAS, HTML_DOM, SKIA, ASCII, FREEDIRECT, DIRECTX9, DIRECTX1, DIRECTX2, DIRECTX3, DIRECTX5, DIRECTX6, DIRECTX7, DIRECTX8, DIRECTX10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, DILIGENT, GLIDE, GDI, LLGL, or METAL)")
+set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS "SDL_RENDERER" "OPENGLES" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "DIRECTX11" "DIRECTX12" "DIRECT2D" "CANVAS" "HTML_DOM" "SKIA" "ASCII" "FREEDIRECT" "DIRECTX9" "DIRECTX1" "DIRECTX2" "DIRECTX3" "DIRECTX5" "DIRECTX6" "DIRECTX7" "DIRECTX8" "DIRECTX10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT" "GLIDE" "GDI" "LLGL" "METAL")
 
 option(CNA_RENDERER_SDL_RENDERER "Enable SDL_Renderer graphics renderer" OFF)
 option(CNA_RENDERER_OPENGLES "Enable OpenGL ES graphics renderer (internally: EasyGL)" OFF)
@@ -33,8 +33,8 @@ option(CNA_RENDERER_SOFTWARE "Enable Software (CPU rasterizer) graphics renderer
 # validation modes/counters or SOFTWARE's real CPU rasterizer). Named "Stub" rather than "Null" to
 # avoid colliding with the <cstddef>/<cstdlib> NULL macro (see plan_stub.md's naming section).
 option(CNA_RENDERER_STUB "Enable Stub (no-op) graphics renderer" OFF)
-option(CNA_RENDERER_D3D11 "Enable Direct3D 11 graphics renderer (Windows only)" OFF)
-option(CNA_RENDERER_D3D12 "Enable Direct3D 12 graphics renderer (Windows only)" OFF)
+option(CNA_RENDERER_DIRECTX11 "Enable Direct3D 11 graphics renderer (Windows only)" OFF)
+option(CNA_RENDERER_DIRECTX12 "Enable Direct3D 12 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_DIRECT2D "Enable Direct2D 1.1 graphics renderer (Windows only, 2D-only)" OFF)
 # plan_canvas.md: HTML Canvas 2D renderer -- Emscripten-only (design decision 1), a browser-native,
 # GPU-free 2D-only renderer using canvas.getContext('2d') instead of WEBGL2's WebGL context.
@@ -47,14 +47,14 @@ option(CNA_RENDERER_SKIA "Enable Skia 2D raster graphics renderer" OFF)
 # SDL_RENDERER's own SdlRenderer (see the shared cna_renderer_sdl_renderer_core
 # library below), not a real terminal/TTY renderer.
 option(CNA_RENDERER_ASCII "Enable ASCII (SDL-windowed glyph-grid) graphics renderer" OFF)
-option(CNA_RENDERER_FREEDIRECT "Enable FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DX3) graphics renderer" OFF)
-option(CNA_RENDERER_D3D9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
+option(CNA_RENDERER_FREEDIRECT "Enable FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DIRECTX3) graphics renderer" OFF)
+option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
 # plan_dx1.md: real DirectX 1 (DirectDraw v1) graphics renderer -- genuine ddraw.h v1 COM
 # interfaces (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC, never IDirectDraw2+), Windows-only,
-# same MinGW-cross-compile + Wine delivery route as D3D9/D3D11/D3D12 (Route B). Unlike FreeDirect (formerly DX3), this
+# same MinGW-cross-compile + Wine delivery route as DIRECTX9/DIRECTX11/DIRECTX12 (Route B). Unlike FreeDirect (formerly DIRECTX3), this
 # renderer deliberately does NOT use ../free-direct -- see plan_dxold.md's roadmap.
-option(CNA_RENDERER_DX1 "Enable Direct X 1 (real DirectDraw v1) graphics renderer (Windows only)" OFF)
-# plan_dx2.md: real DirectX 2 graphics renderer -- 2D layer is a verbatim port of DX1's real
+option(CNA_RENDERER_DIRECTX1 "Enable Direct X 1 (real DirectDraw v1) graphics renderer (Windows only)" OFF)
+# plan_dx2.md: real DirectX 2 graphics renderer -- 2D layer is a verbatim port of DIRECTX1's real
 # DirectDraw v1 (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC, still never IDirectDraw2+). 3D layer
 # uses IDirect3D2/IDirectDrawSurface2::DrawPrimitive (immediate-mode, no execute buffers) -- the
 # literal DirectX-2-SDK execute-buffer Direct3D model (IDirect3D/IDirect3DDevice::Execute/
@@ -63,34 +63,34 @@ option(CNA_RENDERER_DX1 "Enable Direct X 1 (real DirectDraw v1) graphics rendere
 # proven to work (real Gouraud interpolation, real Z-test occlusion, real texture sampling) -- see
 # plan_dx2.md's status note and `dx2-spike/README.md` for the full spike record and the project
 # owner's confirmation of this scope choice.
-option(CNA_RENDERER_DX2 "Enable Direct X 2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive) graphics renderer (Windows only)" OFF)
+option(CNA_RENDERER_DIRECTX2 "Enable Direct X 2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive) graphics renderer (Windows only)" OFF)
 # plan_dx3.md: real DirectX 3 graphics renderer. Originally landed under the temporary DX30 name
-# because the free-direct-backed renderer owned "DX3" at the time; renamed to DX3 on 2026-08-04
+# because the free-direct-backed renderer owned "DIRECTX3" at the time; renamed to DIRECTX3 on 2026-08-04
 # when that renderer became FREEDIRECT (owner instruction -- see plan_dxold.md's naming-transition
-# section). Mechanical port of DX2's own 2D layer (upgraded to IDirectDraw2) + 3D layer
+# section). Mechanical port of DIRECTX2's own 2D layer (upgraded to IDirectDraw2) + 3D layer
 # (verbatim, including Phase O9's CPU lighting).
-option(CNA_RENDERER_DX3 "Enable Direct X 3 (real DirectDraw v2 + Direct3D v2 DrawPrimitive) graphics renderer (Windows only)" OFF)
+option(CNA_RENDERER_DIRECTX3 "Enable Direct X 3 (real DirectDraw v2 + Direct3D v2 DrawPrimitive) graphics renderer (Windows only)" OFF)
 # plan_dx5.md: real DirectX 5 graphics renderer -- DirectDraw v4 (IDirectDraw4/IDirectDrawSurface4/
 # DDSURFACEDESC2/DDSCAPS2, every surface not just the top object) + Direct3D v3 (IDirect3D3/
 # IDirect3DDevice3/IDirect3DViewport3), the first release where execute buffers are gone entirely
 # (DrawPrimitive/DrawIndexedPrimitive only, selected via the D3DFVF_TLVERTEX FVF bitmask instead
-# of the old D3DVERTEXTYPE enum). Mechanical port of DX3's own 2D+3D layers (including Phase O9's
+# of the old D3DVERTEXTYPE enum). Mechanical port of DIRECTX3's own 2D+3D layers (including Phase O9's
 # CPU lighting), upgraded further.
-option(CNA_RENDERER_DX5 "Enable Direct X 5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive) graphics renderer (Windows only)" OFF)
-# plan_dx6.md: real DirectX 6 graphics renderer -- the EXACT SAME COM interfaces DX5 already uses
+option(CNA_RENDERER_DIRECTX5 "Enable Direct X 5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive) graphics renderer (Windows only)" OFF)
+# plan_dx6.md: real DirectX 6 graphics renderer -- the EXACT SAME COM interfaces DIRECTX5 already uses
 # (IDirectDraw4/IDirect3D3/IDirect3DDevice3/IDirect3DViewport3, no new interface revision at this
 # DirectX era). Its own delta: real stencil buffer operations (D3DRENDERSTATE_STENCIL*, spike-
 # confirmed genuine write+test behavior) against a combined depth+stencil Z-buffer surface,
-# resolving the "no real stencil until DX6" boundary DX2/DX3/DX5 all documented. Multitexture
+# resolving the "no real stencil until DIRECTX6" boundary DIRECTX2/DIRECTX3/DIRECTX5 all documented. Multitexture
 # stays accepted-and-ignored (D3DTLVERTEX only carries one texture-coordinate pair).
-option(CNA_RENDERER_DX6 "Enable Direct X 6 (real DirectDraw v4 + Direct3D v3, real stencil) graphics renderer (Windows only)" OFF)
-# plan_dx7.md: real DirectX 7 graphics renderer -- genuinely new interfaces vs DX6: IDirectDraw7/
-# IDirectDrawSurface7 (created via DirectDrawCreateEx) + IDirect3D7/IDirect3DDevice7. DX7 REMOVES
+option(CNA_RENDERER_DIRECTX6 "Enable Direct X 6 (real DirectDraw v4 + Direct3D v3, real stencil) graphics renderer (Windows only)" OFF)
+# plan_dx7.md: real DirectX 7 graphics renderer -- genuinely new interfaces vs DIRECTX6: IDirectDraw7/
+# IDirectDrawSurface7 (created via DirectDrawCreateEx) + IDirect3D7/IDirect3DDevice7. DIRECTX7 REMOVES
 # the whole viewport-object concept (IDirect3DViewport3 no longer exists at all --
 # IDirect3DDevice7::SetViewport/Clear are direct device methods instead) and simplifies texture
 # binding to a direct SetTexture(stage, surface) call (no more texture-handle indirection). Stencil
-# is unchanged from DX6, ported verbatim.
-option(CNA_RENDERER_DX7 "Enable Direct X 7 (real DirectDraw v7 + Direct3D v7, flattened device model) graphics renderer (Windows only)" OFF)
+# is unchanged from DIRECTX6, ported verbatim.
+option(CNA_RENDERER_DIRECTX7 "Enable Direct X 7 (real DirectDraw v7 + Direct3D v7, flattened device model) graphics renderer (Windows only)" OFF)
 # plan_dx8.md: real DirectX 8 graphics renderer -- "DirectDraw+Direct3D merged" (no DirectDraw at
 # all): a single IDirect3D8::CreateDevice call creates both the device and its own swap chain.
 # Delivered via DXVK (D8VK, merged into DXVK 2.0+), not Wine's own d3d8.dll -- mingw-w64 ships no
@@ -98,14 +98,14 @@ option(CNA_RENDERER_DX7 "Enable Direct X 7 (real DirectDraw v7 + Direct3D v7, fl
 # Fixed-function 3D only (scope decision): real XNA effects need ps_2_0+ regardless of Shader
 # Model 1.x support, so a real SM1.x pipeline would not make CreateEffectRenderer usable for actual
 # XNA content. The 2D SpriteBatch layer is real GPU-rendered textured quads (DirectDraw does not
-# exist at this era at all), not a CPU compositor like DX1..DX7's own.
-option(CNA_RENDERER_DX8 "Enable Direct X 8 (real Direct3D 8, DXVK-delivered, fixed-function) graphics renderer (Windows only)" OFF)
-# plan_d3d10.md: real Direct3D 10 renderer -- unlike DX1..DX8, D3D10 removed the fixed-function
+# exist at this era at all), not a CPU compositor like DIRECTX1..DIRECTX7's own.
+option(CNA_RENDERER_DIRECTX8 "Enable Direct X 8 (real Direct3D 8, DXVK-delivered, fixed-function) graphics renderer (Windows only)" OFF)
+# plan_d3d10.md: real Direct3D 10 renderer -- unlike DIRECTX1..DIRECTX8, D3D10 removed the fixed-function
 # pipeline entirely, so every draw needs a real HLSL vs_4_0/ps_4_0 shader pair (D3DCompile,
-# following D3D9/D3D11's own precedent), real state OBJECTS (ID3D10BlendState/etc, not per-call
+# following DIRECTX9/DIRECTX11's own precedent), real state OBJECTS (ID3D10BlendState/etc, not per-call
 # render states), and real MRT support. Delivered via Wine's own builtin d3d10.dll/d3d10_1.dll
 # (DXVK 2.6.0 ships no d3d10.dll at all) forwarding to DXVK's real d3d10core.dll + dxgi.dll.
-option(CNA_RENDERER_D3D10 "Enable Direct3D 10 (real ID3D10Device, DXVK-delivered via d3d10core, real HLSL shaders) graphics renderer (Windows only)" OFF)
+option(CNA_RENDERER_DIRECTX10 "Enable Direct3D 10 (real ID3D10Device, DXVK-delivered via d3d10core, real HLSL shaders) graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_SDL_GPU "Enable SDL_gpu graphics renderer" OFF)
 # plan_opengles1.md design decision 1: a genuinely separate renderer from EASYGL -- EASYGL targets
 # WebGL2/OpenGL ES 3.0 (shader-based) and cannot create an OpenGL ES 1.1 (fixed-function "Common"
@@ -156,7 +156,7 @@ option(CNA_RENDERER_LLGL "Enable LLGL graphics renderer" OFF)
 option(CNA_RENDERER_METAL "Enable native Apple Metal graphics renderer (macOS only)" OFF)
 
 set(_cna_explicit_renderer_selection OFF)
-if(CNA_RENDERER_SDL_RENDERER OR CNA_RENDERER_OPENGLES OR CNA_RENDERER_OPENGL33 OR CNA_RENDERER_WEBGL1 OR CNA_RENDERER_WEBGL2 OR CNA_RENDERER_BGFX OR CNA_RENDERER_VULKAN OR CNA_RENDERER_WEBGPU OR CNA_RENDERER_MAGNUM OR CNA_RENDERER_HEADLESS OR CNA_RENDERER_SOFTWARE OR CNA_RENDERER_STUB OR CNA_RENDERER_D3D11 OR CNA_RENDERER_D3D12 OR CNA_RENDERER_DIRECT2D OR CNA_RENDERER_CANVAS OR CNA_RENDERER_HTML_DOM OR CNA_RENDERER_SKIA OR CNA_RENDERER_ASCII OR CNA_RENDERER_FREEDIRECT OR CNA_RENDERER_D3D9 OR CNA_RENDERER_DX1 OR CNA_RENDERER_DX2 OR CNA_RENDERER_DX3 OR CNA_RENDERER_DX5 OR CNA_RENDERER_DX6 OR CNA_RENDERER_DX7 OR CNA_RENDERER_DX8 OR CNA_RENDERER_D3D10 OR CNA_RENDERER_OPENGLES1 OR CNA_RENDERER_OPENGL4 OR CNA_RENDERER_OPENGL1 OR CNA_RENDERER_OPENGL2 OR CNA_RENDERER_SDL_GPU OR CNA_RENDERER_WICKED OR CNA_RENDERER_SOKOL OR CNA_RENDERER_DILIGENT OR CNA_RENDERER_GLIDE OR CNA_RENDERER_GDI OR CNA_RENDERER_LLGL OR CNA_RENDERER_METAL)
+if(CNA_RENDERER_SDL_RENDERER OR CNA_RENDERER_OPENGLES OR CNA_RENDERER_OPENGL33 OR CNA_RENDERER_WEBGL1 OR CNA_RENDERER_WEBGL2 OR CNA_RENDERER_BGFX OR CNA_RENDERER_VULKAN OR CNA_RENDERER_WEBGPU OR CNA_RENDERER_MAGNUM OR CNA_RENDERER_HEADLESS OR CNA_RENDERER_SOFTWARE OR CNA_RENDERER_STUB OR CNA_RENDERER_DIRECTX11 OR CNA_RENDERER_DIRECTX12 OR CNA_RENDERER_DIRECT2D OR CNA_RENDERER_CANVAS OR CNA_RENDERER_HTML_DOM OR CNA_RENDERER_SKIA OR CNA_RENDERER_ASCII OR CNA_RENDERER_FREEDIRECT OR CNA_RENDERER_DIRECTX9 OR CNA_RENDERER_DIRECTX1 OR CNA_RENDERER_DIRECTX2 OR CNA_RENDERER_DIRECTX3 OR CNA_RENDERER_DIRECTX5 OR CNA_RENDERER_DIRECTX6 OR CNA_RENDERER_DIRECTX7 OR CNA_RENDERER_DIRECTX8 OR CNA_RENDERER_DIRECTX10 OR CNA_RENDERER_OPENGLES1 OR CNA_RENDERER_OPENGL4 OR CNA_RENDERER_OPENGL1 OR CNA_RENDERER_OPENGL2 OR CNA_RENDERER_SDL_GPU OR CNA_RENDERER_WICKED OR CNA_RENDERER_SOKOL OR CNA_RENDERER_DILIGENT OR CNA_RENDERER_GLIDE OR CNA_RENDERER_GDI OR CNA_RENDERER_LLGL OR CNA_RENDERER_METAL)
     set(_cna_explicit_renderer_selection ON)
 endif()
 
@@ -198,11 +198,11 @@ if(_cna_explicit_renderer_selection)
     if(CNA_RENDERER_STUB)
         list(APPEND _cna_enabled_renderers "STUB")
     endif()
-    if(CNA_RENDERER_D3D11)
-        list(APPEND _cna_enabled_renderers "D3D11")
+    if(CNA_RENDERER_DIRECTX11)
+        list(APPEND _cna_enabled_renderers "DIRECTX11")
     endif()
-    if(CNA_RENDERER_D3D12)
-        list(APPEND _cna_enabled_renderers "D3D12")
+    if(CNA_RENDERER_DIRECTX12)
+        list(APPEND _cna_enabled_renderers "DIRECTX12")
     endif()
     if(CNA_RENDERER_DIRECT2D)
         list(APPEND _cna_enabled_renderers "DIRECT2D")
@@ -222,32 +222,32 @@ if(_cna_explicit_renderer_selection)
     if(CNA_RENDERER_FREEDIRECT)
         list(APPEND _cna_enabled_renderers "FREEDIRECT")
     endif()
-    if(CNA_RENDERER_D3D9)
-        list(APPEND _cna_enabled_renderers "D3D9")
+    if(CNA_RENDERER_DIRECTX9)
+        list(APPEND _cna_enabled_renderers "DIRECTX9")
     endif()
-    if(CNA_RENDERER_DX1)
-        list(APPEND _cna_enabled_renderers "DX1")
+    if(CNA_RENDERER_DIRECTX1)
+        list(APPEND _cna_enabled_renderers "DIRECTX1")
     endif()
-    if(CNA_RENDERER_DX2)
-        list(APPEND _cna_enabled_renderers "DX2")
+    if(CNA_RENDERER_DIRECTX2)
+        list(APPEND _cna_enabled_renderers "DIRECTX2")
     endif()
-    if(CNA_RENDERER_DX3)
-        list(APPEND _cna_enabled_renderers "DX3")
+    if(CNA_RENDERER_DIRECTX3)
+        list(APPEND _cna_enabled_renderers "DIRECTX3")
     endif()
-    if(CNA_RENDERER_DX5)
-        list(APPEND _cna_enabled_renderers "DX5")
+    if(CNA_RENDERER_DIRECTX5)
+        list(APPEND _cna_enabled_renderers "DIRECTX5")
     endif()
-    if(CNA_RENDERER_DX6)
-        list(APPEND _cna_enabled_renderers "DX6")
+    if(CNA_RENDERER_DIRECTX6)
+        list(APPEND _cna_enabled_renderers "DIRECTX6")
     endif()
-    if(CNA_RENDERER_DX7)
-        list(APPEND _cna_enabled_renderers "DX7")
+    if(CNA_RENDERER_DIRECTX7)
+        list(APPEND _cna_enabled_renderers "DIRECTX7")
     endif()
-    if(CNA_RENDERER_DX8)
-        list(APPEND _cna_enabled_renderers "DX8")
+    if(CNA_RENDERER_DIRECTX8)
+        list(APPEND _cna_enabled_renderers "DIRECTX8")
     endif()
-    if(CNA_RENDERER_D3D10)
-        list(APPEND _cna_enabled_renderers "D3D10")
+    if(CNA_RENDERER_DIRECTX10)
+        list(APPEND _cna_enabled_renderers "DIRECTX10")
     endif()
     if(CNA_RENDERER_SDL_GPU)
         list(APPEND _cna_enabled_renderers "SDL_GPU")
@@ -294,13 +294,13 @@ if(_cna_explicit_renderer_selection)
     list(GET _cna_enabled_renderers 0 CNA_GRAPHICS_RENDERER)
 endif()
 
-# plan_dx.md design decision 2: D3D11/D3D12 genuinely cannot build anywhere but Windows (native or
+# plan_dx.md design decision 2: DIRECTX11/DIRECTX12 genuinely cannot build anywhere but Windows (native or
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
 # WARNING-only platform check below, this is a hard FATAL_ERROR. plan_dx9.md design decision 1
-# extends this same gate to D3D9 (d3d9.h is equally Windows-only). plan_dx1.md design decision 1
-# extends it again to DX1: unlike FreeDirect (formerly DX3; SDL3-backed ../free-direct, genuinely native-Linux-buildable),
-# DX1 uses the real Windows ddraw.h, so it needs the exact same gate.
-if((CNA_GRAPHICS_RENDERER STREQUAL "D3D11" OR CNA_GRAPHICS_RENDERER STREQUAL "D3D12" OR CNA_GRAPHICS_RENDERER STREQUAL "D3D9" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D" OR CNA_GRAPHICS_RENDERER STREQUAL "DX1" OR CNA_GRAPHICS_RENDERER STREQUAL "DX2" OR CNA_GRAPHICS_RENDERER STREQUAL "DX3" OR CNA_GRAPHICS_RENDERER STREQUAL "DX5" OR CNA_GRAPHICS_RENDERER STREQUAL "DX6" OR CNA_GRAPHICS_RENDERER STREQUAL "DX7" OR CNA_GRAPHICS_RENDERER STREQUAL "DX8" OR CNA_GRAPHICS_RENDERER STREQUAL "D3D10" OR CNA_GRAPHICS_RENDERER STREQUAL "GLIDE" OR CNA_GRAPHICS_RENDERER STREQUAL "GDI")
+# extends this same gate to DIRECTX9 (d3d9.h is equally Windows-only). plan_dx1.md design decision 1
+# extends it again to DIRECTX1: unlike FreeDirect (formerly DIRECTX3; SDL3-backed ../free-direct, genuinely native-Linux-buildable),
+# DIRECTX1 uses the real Windows ddraw.h, so it needs the exact same gate.
+if((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX2" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10" OR CNA_GRAPHICS_RENDERER STREQUAL "GLIDE" OR CNA_GRAPHICS_RENDERER STREQUAL "GDI")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_RENDERER} renderer only builds when targeting Windows. Either build "
@@ -325,7 +325,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Da
 endif()
 
 # plan_canvas.md design decision 1: HTML Canvas 2D is a browser DOM API and cannot exist outside
-# an Emscripten/WebAssembly build -- same hard-gate shape as the D3D11/D3D12 Windows-only check
+# an Emscripten/WebAssembly build -- same hard-gate shape as the DIRECTX11/DIRECTX12 Windows-only check
 # just above, new condition.
 if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGL1" AND NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows"))
     message(FATAL_ERROR "CNA: OPENGL1 renderer is intentionally supported only on desktop Linux and Windows.")
@@ -423,7 +423,7 @@ endif()
 
 # plan_wicked.md design decision 3: Wicked Engine builds a native Vulkan (Linux/Windows) or D3D12
 # (Windows) device from vendored headers -- there is no web/Emscripten target for it at all, so this
-# is a hard gate in the same shape as the CANVAS/D3D11 ones above rather than a soft WARNING.
+# is a hard gate in the same shape as the CANVAS/DIRECTX11 ones above rather than a soft WARNING.
 if(CNA_GRAPHICS_RENDERER STREQUAL "WICKED")
     if(EMSCRIPTEN)
         message(FATAL_ERROR
@@ -442,13 +442,13 @@ endif()
 # renderer) is the default and the only value verified on this project's Linux dev machine; the
 # rest are wired but unproven, and say so at configure time rather than pretending otherwise.
 set(CNA_SOKOL_API "GLCORE" CACHE STRING "Native API sokol_gfx dispatches onto (GLCORE, GLES3, D3D11, METAL, WGPU)")
-set_property(CACHE CNA_SOKOL_API PROPERTY STRINGS "GLCORE" "GLES3" "D3D11" "METAL" "WGPU")
+set_property(CACHE CNA_SOKOL_API PROPERTY STRINGS "GLCORE" "GLES3" "DIRECTX11" "METAL" "WGPU")
 if(CNA_GRAPHICS_RENDERER STREQUAL "SOKOL")
     if(CNA_SOKOL_API STREQUAL "GLCORE")
         set(CNA_SOKOL_API_DEFINE "SOKOL_GLCORE")
     elseif(CNA_SOKOL_API STREQUAL "GLES3")
         set(CNA_SOKOL_API_DEFINE "SOKOL_GLES3")
-    elseif(CNA_SOKOL_API STREQUAL "D3D11")
+    elseif(CNA_SOKOL_API STREQUAL "DIRECTX11")
         set(CNA_SOKOL_API_DEFINE "SOKOL_D3D11")
     elseif(CNA_SOKOL_API STREQUAL "METAL")
         set(CNA_SOKOL_API_DEFINE "SOKOL_METAL")
@@ -566,18 +566,18 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "STUB")
     set(RENDERER_TARGET "cna_renderer_stub")
     add_compile_definitions(CNA_RENDERER_STUB)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_STUB")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D11")
-    message(STATUS "CNA: Using D3D11 graphics renderer")
-    set(RENDERER_DIR "modules/renderers/d3d11")
-    set(RENDERER_TARGET "cna_renderer_d3d11")
-    add_compile_definitions(CNA_RENDERER_D3D11)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_D3D11")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D12")
-    message(STATUS "CNA: Using D3D12 graphics renderer")
-    set(RENDERER_DIR "modules/renderers/d3d12")
-    set(RENDERER_TARGET "cna_renderer_d3d12")
-    add_compile_definitions(CNA_RENDERER_D3D12)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_D3D12")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
+    message(STATUS "CNA: Using DIRECTX11 graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx11")
+    set(RENDERER_TARGET "cna_renderer_directx11")
+    add_compile_definitions(CNA_RENDERER_DIRECTX11)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX11")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
+    message(STATUS "CNA: Using DIRECTX12 graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx12")
+    set(RENDERER_TARGET "cna_renderer_directx12")
+    add_compile_definitions(CNA_RENDERER_DIRECTX12)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX12")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
     message(STATUS "CNA: Using DIRECT2D graphics renderer (Windows-only, 2D-only)")
     set(RENDERER_DIR "modules/renderers/direct2d")
@@ -631,65 +631,65 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "ASCII")
     add_compile_definitions(CNA_RENDERER_ASCII)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_ASCII")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "FREEDIRECT")
-    message(STATUS "CNA: Using FreeDirect (DirectDraw via free-direct; formerly DX3) graphics renderer")
+    message(STATUS "CNA: Using FreeDirect (DirectDraw via free-direct; formerly DIRECTX3) graphics renderer")
     set(RENDERER_DIR "modules/renderers/freedirect")
     set(RENDERER_TARGET "cna_renderer_freedirect")
     add_compile_definitions(CNA_RENDERER_FREEDIRECT)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_FREEDIRECT")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D9")
-    message(STATUS "CNA: Using D3D9 graphics renderer")
-    set(RENDERER_DIR "modules/renderers/d3d9")
-    set(RENDERER_TARGET "cna_renderer_d3d9")
-    add_compile_definitions(CNA_RENDERER_D3D9)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_D3D9")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX1")
-    message(STATUS "CNA: Using DX1 (real DirectDraw v1) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/dx1")
-    set(RENDERER_TARGET "cna_renderer_dx1")
-    add_compile_definitions(CNA_RENDERER_DX1)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DX1")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX2")
-    message(STATUS "CNA: Using DX2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/dx2")
-    set(RENDERER_TARGET "cna_renderer_dx2")
-    add_compile_definitions(CNA_RENDERER_DX2)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DX2")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX3")
-    message(STATUS "CNA: Using DX3 (real DirectX 3 -- DirectDraw v2 + Direct3D v2 DrawPrimitive) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/dx3")
-    set(RENDERER_TARGET "cna_renderer_dx3")
-    add_compile_definitions(CNA_RENDERER_DX3)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DX3")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX5")
-    message(STATUS "CNA: Using DX5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/dx5")
-    set(RENDERER_TARGET "cna_renderer_dx5")
-    add_compile_definitions(CNA_RENDERER_DX5)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DX5")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX6")
-    message(STATUS "CNA: Using DX6 (real DirectDraw v4 + Direct3D v3, real stencil) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/dx6")
-    set(RENDERER_TARGET "cna_renderer_dx6")
-    add_compile_definitions(CNA_RENDERER_DX6)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DX6")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX7")
-    message(STATUS "CNA: Using DX7 (real DirectDraw v7 + Direct3D v7, flattened device model) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/dx7")
-    set(RENDERER_TARGET "cna_renderer_dx7")
-    add_compile_definitions(CNA_RENDERER_DX7)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DX7")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DX8")
-    message(STATUS "CNA: Using DX8 (real Direct3D 8, DXVK-delivered, fixed-function) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/dx8")
-    set(RENDERER_TARGET "cna_renderer_dx8")
-    add_compile_definitions(CNA_RENDERER_DX8)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DX8")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "D3D10")
-    message(STATUS "CNA: Using D3D10 (real Direct3D 10, DXVK-delivered via d3d10core, real HLSL shaders) graphics renderer")
-    set(RENDERER_DIR "modules/renderers/d3d10")
-    set(RENDERER_TARGET "cna_renderer_d3d10")
-    add_compile_definitions(CNA_RENDERER_D3D10)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_D3D10")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
+    message(STATUS "CNA: Using DIRECTX9 graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx9")
+    set(RENDERER_TARGET "cna_renderer_directx9")
+    add_compile_definitions(CNA_RENDERER_DIRECTX9)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX9")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
+    message(STATUS "CNA: Using DIRECTX1 (real DirectDraw v1) graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx1")
+    set(RENDERER_TARGET "cna_renderer_directx1")
+    add_compile_definitions(CNA_RENDERER_DIRECTX1)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX1")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX2")
+    message(STATUS "CNA: Using DIRECTX2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive) graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx2")
+    set(RENDERER_TARGET "cna_renderer_directx2")
+    add_compile_definitions(CNA_RENDERER_DIRECTX2)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX2")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
+    message(STATUS "CNA: Using DIRECTX3 (real DirectX 3 -- DirectDraw v2 + Direct3D v2 DrawPrimitive) graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx3")
+    set(RENDERER_TARGET "cna_renderer_directx3")
+    add_compile_definitions(CNA_RENDERER_DIRECTX3)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX3")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
+    message(STATUS "CNA: Using DIRECTX5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive) graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx5")
+    set(RENDERER_TARGET "cna_renderer_directx5")
+    add_compile_definitions(CNA_RENDERER_DIRECTX5)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX5")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
+    message(STATUS "CNA: Using DIRECTX6 (real DirectDraw v4 + Direct3D v3, real stencil) graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx6")
+    set(RENDERER_TARGET "cna_renderer_directx6")
+    add_compile_definitions(CNA_RENDERER_DIRECTX6)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX6")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
+    message(STATUS "CNA: Using DIRECTX7 (real DirectDraw v7 + Direct3D v7, flattened device model) graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx7")
+    set(RENDERER_TARGET "cna_renderer_directx7")
+    add_compile_definitions(CNA_RENDERER_DIRECTX7)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX7")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8")
+    message(STATUS "CNA: Using DIRECTX8 (real Direct3D 8, DXVK-delivered, fixed-function) graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx8")
+    set(RENDERER_TARGET "cna_renderer_directx8")
+    add_compile_definitions(CNA_RENDERER_DIRECTX8)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX8")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10")
+    message(STATUS "CNA: Using DIRECTX10 (real Direct3D 10, DXVK-delivered via d3d10core, real HLSL shaders) graphics renderer")
+    set(RENDERER_DIR "modules/renderers/directx10")
+    set(RENDERER_TARGET "cna_renderer_directx10")
+    add_compile_definitions(CNA_RENDERER_DIRECTX10)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX10")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DILIGENT")
     message(STATUS "CNA: Using DILIGENT (Diligent Engine) graphics renderer")
     set(RENDERER_DIR "modules/renderers/diligent")

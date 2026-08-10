@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString tests for the DX3 (DirectDraw,
+// plan_freedirect.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString tests for the DIRECTX3 (DirectDraw,
 // via the ../free-direct sibling) graphics renderer.
 //
 // SpriteBatch::DrawString (shared, renderer-agnostic SpriteBatch.cpp) lays out each glyph as a
@@ -10,7 +10,7 @@
 //
 // A 2-glyph atlas is used throughout: glyph 'A' = solid Red 8x8 at atlas (0,0,8,8), glyph 'B' =
 // solid Green 8x8 at atlas (8,0,8,8). Unlike the existing SDL_Renderer SpriteFont tests (which use
-// a color-match tolerance to work around that renderer's own physical/logical scaling), DX3's CPU
+// a color-match tolerance to work around that renderer's own physical/logical scaling), DIRECTX3's CPU
 // compositor is exact-pixel, so every check here asserts an exact color match.
 //
 // Check A (DX3-50) -- a single glyph lands at exactly the expected destination rect.

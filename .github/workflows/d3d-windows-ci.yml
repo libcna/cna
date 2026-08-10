@@ -22,8 +22,8 @@
 # Windows toolchain, MSVC included -- roughly 10 test files call POSIX-only ::setenv(), which MSVC
 # also lacks (see plan_dx.md DX-15's own row; fixing this project-wide is a separate, much larger
 # task, not attempted here). This job does not build or run CnaTests -- only the D3D11/D3D12
-# renderers' own self-contained smoke/common CTest executables (registered by the cna_d3d11_test()/
-# cna_d3d12_test() CMake macros), which do not depend on CnaTests at all.
+# renderers' own self-contained smoke/common CTest executables (registered by the cna_directx11_test()/
+# cna_directx12_test() CMake macros), which do not depend on CnaTests at all.
 
 name: Windows graphics CI (D3D11/D3D12/Direct2D, MSVC)
 
@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        renderer: [D3D11, D3D12, DIRECT2D]
+        renderer: [DIRECTX11, DIRECTX12, DIRECT2D]
     defaults:
       run:
         shell: bash
@@ -208,6 +208,6 @@ jobs:
       # and hlsl_compiler_tool.cpp are shared D3DCommon content, not renderer-specific), so gated to
       # the D3D11 matrix leg to avoid doing it twice.
       - name: Verify all 20 HLSL shaders against a real D3DCOMPILER_47.dll
-        if: matrix.renderer == 'D3D11'
+        if: matrix.renderer == 'DIRECTX11'
         working-directory: cna_graphics
         run: python scripts/verify_hlsl_shaders_native_msvc.py

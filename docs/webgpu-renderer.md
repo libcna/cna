@@ -331,7 +331,7 @@ cache key genuinely includes both the per-vertex and per-instance buffer strides
 binding always matches whatever the caller's buffers actually declare. `params.instanceVb ==
 nullptr` falls back to a real `DrawIndexedPrimitivesEx()` draw rather than throwing, matching
 `VulkanRenderer`'s identical fallback. `WebGPU_Instanced3D` (5/5, tested directly at the
-`IGraphicsRenderer` level, matching `examples/d3d9_instanced_test.cpp`'s own established
+`IGraphicsRenderer` level, matching `examples/directx9_instanced_test.cpp`'s own established
 test-authoring convention for this API): 3 instances in ONE draw call each paint their own small
 quad at their own independently-predicted screen location with the shared `DiffuseColor` — proving
 the per-instance buffer is genuinely read per-instance, not e.g. always instance 0 or a hardcoded

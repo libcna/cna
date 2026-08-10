@@ -44,7 +44,7 @@ BGFX and WebGPU followed their existing renderer-specific dependency resolution 
 | `SDL_RENDERER` | pass | pass | vendored SDL target |
 | `ASCII` | pass | pass | ASCII archive plus the composed SDL_Renderer core archive |
 | `EASYGL` | pass | pass | adjacent `../easy-gl` checkout |
-| `DX3` | pass | pass | adjacent `../free-direct` and `../free-api` checkouts; generated source remained in the build tree |
+| `DIRECTX3` | pass | pass | adjacent `../free-direct` and `../free-api` checkouts; generated source remained in the build tree |
 | `VULKAN` | pass | pass | system Vulkan 1.4.309; absent optional `glslc`/`glslangValidator` did not affect this target |
 | `SDL_GPU` | pass | pass | vendored SDL GPU API plus `/usr/lib/x86_64-linux-gnu/libshaderc.so.1` |
 | `BGFX` | pass | pass | `bgfx.cmake` `99752df38e40179cf998bb880fe4c16c0b3d60ca`; bgfx `c7684e20d`, bimg `3b4baab01`, bx `0b001f5f3` |

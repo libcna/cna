@@ -62,10 +62,10 @@ get_filename_component(CNA_SELECTED_RENDERER "${RENDERER_DIR}" NAME)
 add_subdirectory(metal)
 add_subdirectory(glide)
 
-# plan_dx.md design decision 4: D3DCommon shared core, consumed by the d3d11 and d3d12
-# families only -- D3D9 and D3D10 are confirmed independent (design decisions 12 and the
+# plan_dx.md design decision 4: D3DCommon shared core, consumed by the directx11 and directx12
+# families only -- DIRECTX9 and DIRECTX10 are confirmed independent (design decisions 12 and the
 # plan_d3d10.md link audit).
-if(CNA_GRAPHICS_RENDERER STREQUAL "D3D11" OR CNA_GRAPHICS_RENDERER STREQUAL "D3D12")
+if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     add_subdirectory(common/d3d)
 endif()
 

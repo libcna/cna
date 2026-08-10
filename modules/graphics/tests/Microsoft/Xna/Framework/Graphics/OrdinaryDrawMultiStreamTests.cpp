@@ -130,8 +130,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // REMED-GFX-200's own set, which this file's geometry and readback path are taken from.
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_D3D9) || defined(CNA_RENDERER_D3D11) || \
-    defined(CNA_RENDERER_D3D12) || defined(CNA_RENDERER_SOFTWARE) || \
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
+    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_SOFTWARE) || \
     defined(CNA_RENDERER_SDL_GPU)
 #define CNA_ORDINARY_MULTI_STREAM_ORACLE 1
 #endif
