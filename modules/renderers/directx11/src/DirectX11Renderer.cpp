@@ -520,7 +520,7 @@ namespace CNA::Internal::Renderers::DirectX11
                                  // of RenderTargetUsage as a hint GraphicsDevice.SetRenderTarget()
                                  // itself acts on (an explicit Clear() call), not something the
                                  // renderer needs to special-case at creation time.
-        return std::make_unique<D3D11::D3D11RenderTargetRenderer>(
+        return std::make_unique<DirectX11::D3D11RenderTargetRenderer>(
             this, device_.Get(), context_.Get(), w, h, depthFormat, mipMap, multiSampleCount);
     }
 
@@ -595,7 +595,7 @@ namespace CNA::Internal::Renderers::DirectX11
         // it, and the only unrequested clear is GraphicsDevice::SetRenderTargets' DiscardContents
         // one.
         (void) preserveContents;
-        return std::make_unique<D3D11::D3D11RenderTargetCubeRenderer>(
+        return std::make_unique<DirectX11::D3D11RenderTargetCubeRenderer>(
             this, device_.Get(), context_.Get(), size, depthFormat, mipMap, multiSampleCount);
     }
 
@@ -1996,6 +1996,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<D3D11::DirectX11Renderer>(args);
+        return std::make_unique<DirectX11::DirectX11Renderer>(args);
     }
 }

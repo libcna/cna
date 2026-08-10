@@ -2556,6 +2556,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<D3D12::DirectX12Renderer>(args);
+        return std::make_unique<DirectX12::DirectX12Renderer>(args);
     }
 }

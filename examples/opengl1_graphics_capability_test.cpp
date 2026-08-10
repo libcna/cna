@@ -5,7 +5,7 @@
 // cross-checked against OpenGL1Renderer's own runtime extension detection (not a static
 // guess), and the "false" capabilities are cross-checked against the shared-default behavior
 // (CreateOcclusionQuery() returning nullptr) that backs each "false" claim, the same way
-// sdlrenderer_graphics_capability_test.cpp/dx3_graphics_capability_test.cpp/
+// sdlrenderer_graphics_capability_test.cpp/directx3_graphics_capability_test.cpp/
 // canvas_graphics_capability_test.cpp do for their own (much narrower) 2D-only renderers.
 //
 // plan_opengl1.md item 23 (EasyGL parity, found 2026-07-20): OcclusionQuery is no longer

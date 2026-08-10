@@ -3,7 +3,7 @@
 // plan_diligent.md DILIGENT-63: real-device proof that DiligentRenderer::ReadBackbuffer()
 // is valid and bounded for every CnaPresentationMode -- constructed directly against
 // IGraphicsRenderer (bypassing GraphicsDevice/GraphicsDeviceManager, matching
-// dx3_resize_transaction_test.cpp's own established low-level pattern), since the physical
+// directx3_resize_transaction_test.cpp's own established low-level pattern), since the physical
 // (window) vs. virtual (logical) resolution mismatch this test needs cannot be produced through
 // the public XNA API alone: SDL_SetWindowSize is a no-op under the headless Xvfb this renderer runs
 // on (see backbuffer_readback_dimension_test.cpp's own note), but a mismatch can be requested

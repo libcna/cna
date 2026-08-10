@@ -3,7 +3,7 @@
 // Wine -- no ../free-direct anywhere in this renderer) graphics renderer's foundation -- real
 // DirectDrawCreate/SetCooperativeLevel(DDSCL_NORMAL)/CreateSurface device bring-up, real
 // Clear()/Present(), real pixel readback. SpriteBatch/Texture2D draws are covered by
-// dx2_spritebatch_test.cpp (Phase O4).
+// directx2_spritebatch_test.cpp (Phase O4).
 //
 // Check A -- GetWindowInternal() returns a real, non-null window (DIRECTX2 needs a genuine Win32 HWND,
 //   obtained from it via SDL_PROP_WINDOW_WIN32_HWND_POINTER, design decision 3).

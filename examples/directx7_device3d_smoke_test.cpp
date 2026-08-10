@@ -4,8 +4,8 @@
 // object at all, plan_dx7.md design decision 4), a real attached 32-bit depth+stencil Z-buffer, and
 // the ClearColorAndDepth/ClearDepth/ClearStencil/etc entry points. VertexBuffer/IndexBuffer storage,
 // the 3D draw path, and state application (SetDepthTestEnabled/ApplyRasterizerState/etc) are all
-// real now -- pixel-verified 3D rendering is covered by dx7_colored_primitives_test.cpp/
-// dx7_ztest_test.cpp/etc, and real stencil write-then-test is covered by dx7_stencil_test.cpp, not
+// real now -- pixel-verified 3D rendering is covered by directx7_colored_primitives_test.cpp/
+// directx7_ztest_test.cpp/etc, and real stencil write-then-test is covered by directx7_stencil_test.cpp, not
 // this file. Check D below only confirms the simple state-toggle methods don't throw (a
 // smoke-level check).
 //
@@ -20,7 +20,7 @@
 //   stencil) with all three flags) does not throw and clears color correctly -- DIRECTX7's stencil
 //   clear is real (unchanged from DIRECTX6, via a direct device-level Clear(D3DCLEAR_STENCIL) call, no
 //   viewport object involved), but this smoke test only checks the color result;
-//   dx7_stencil_test.cpp is the dedicated real stencil write/test proof.
+//   directx7_stencil_test.cpp is the dedicated real stencil write/test proof.
 // Check D -- SetDepthTestEnabled/SetDepthWriteEnabled no longer throw -- a smoke-level check;
 //   DirectX7_ZTest covers real depth-test pixel behavior.
 //
@@ -96,7 +96,7 @@ protected:
         }
 
         // Check C: ClearColorDepthAndStencil path (all three flags) does not throw and clears
-        // color correctly; DIRECTX7's stencil clear is real (see dx7_stencil_test.cpp for the
+        // color correctly; DIRECTX7's stencil clear is real (see directx7_stencil_test.cpp for the
         // dedicated write/test proof).
         {
             bool threw = false;

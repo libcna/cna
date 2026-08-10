@@ -1,6 +1,6 @@
 # FreeDirect (DirectDraw) 2D Renderer — Completeness Status
 
-> **Renamed 2026-08-04 (owner instruction, dxold integration):** formerly the `DX3` renderer;
+> **Renamed 2026-08-04 (owner instruction, dxold integration):** formerly the `DIRECTX3` renderer;
 > now `CNA_GRAPHICS_RENDERER=FREEDIRECT`. The `DIRECTX3` name belongs to the real Microsoft/Wine
 > DirectX 3 renderer (`docs/directx3-renderer.md`). Historical `DX3-*` task IDs are unchanged.
 

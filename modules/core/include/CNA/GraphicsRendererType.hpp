@@ -64,7 +64,7 @@ namespace CNA
         /** @brief ASCII (SDL-windowed glyph grid). */
         Ascii,
 
-        /** @brief FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DX3). */
+        /** @brief FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DIRECTX3). */
         FreeDirect,
 
         /** @brief Direct3D 9. */
@@ -77,7 +77,7 @@ namespace CNA
         DirectX2,
 
         /** @brief DIRECTX3 (real DirectX 3 -- DirectDraw v2 + Direct3D v2 DrawPrimitive; originally
-         * landed as DX30 while the free-direct renderer still owned the DX3 name, renamed once
+         * landed as DX30 while the free-direct renderer still owned the DIRECTX3 name, renamed once
          * that renderer became FreeDirect). */
         DirectX3,
 

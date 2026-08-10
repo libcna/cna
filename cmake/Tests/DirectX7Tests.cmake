@@ -39,39 +39,39 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
 
     # Phase O2 (DX2-10, 2D layer ported from DX1-10..DX1-18): device/window bring-up +
     # Clear/Present/readback foundation CTest.
-    cna_directx7_test(cna_test_directx7_smoke examples/dx7_smoke_test.cpp)
+    cna_directx7_test(cna_test_directx7_smoke examples/directx7_smoke_test.cpp)
     cna_directx7_ctest_command(_directx7_smoke_cmd cna_test_directx7_smoke)
     cna_register_renderer_test(NAME DirectX7_Smoke COMMAND ${_directx7_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture/render-target renderer CTest.
-    cna_directx7_test(cna_test_directx7_texture_rendertarget examples/dx7_texture_rendertarget_test.cpp)
+    cna_directx7_test(cna_test_directx7_texture_rendertarget examples/directx7_texture_rendertarget_test.cpp)
     cna_directx7_ctest_command(_directx7_texture_rendertarget_cmd cna_test_directx7_texture_rendertarget)
     cna_register_renderer_test(NAME DirectX7_TextureRenderTarget COMMAND ${_directx7_texture_rendertarget_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-30..DX1-39): CPU compositor / SpriteBatch draw
     # path CTest.
-    cna_directx7_test(cna_test_directx7_spritebatch examples/dx7_spritebatch_test.cpp)
+    cna_directx7_test(cna_test_directx7_spritebatch examples/directx7_spritebatch_test.cpp)
     cna_directx7_ctest_command(_directx7_spritebatch_cmd cna_test_directx7_spritebatch)
     cna_register_renderer_test(NAME DirectX7_SpriteBatch COMMAND ${_directx7_spritebatch_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-40..DX1-44): blend-mode compositing math CTest.
-    cna_directx7_test(cna_test_directx7_blend examples/dx7_blend_test.cpp)
+    cna_directx7_test(cna_test_directx7_blend examples/directx7_blend_test.cpp)
     cna_directx7_ctest_command(_directx7_blend_cmd cna_test_directx7_blend)
     cna_register_renderer_test(NAME DirectX7_Blend COMMAND ${_directx7_blend_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-45/DX1-46): TextureFilter + TextureAddressMode
     # sampling CTest.
-    cna_directx7_test(cna_test_directx7_sampling examples/dx7_sampling_test.cpp)
+    cna_directx7_test(cna_test_directx7_sampling examples/directx7_sampling_test.cpp)
     cna_directx7_ctest_command(_directx7_sampling_cmd cna_test_directx7_sampling)
     cna_register_renderer_test(NAME DirectX7_AddressMode COMMAND ${_directx7_sampling_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O2 (DX2-13, 2D layer ported from DX1-50..DX1-54): SpriteFont / DrawString CTest.
-    cna_directx7_test(cna_test_directx7_spritefont examples/dx7_spritefont_test.cpp)
+    cna_directx7_test(cna_test_directx7_spritefont examples/directx7_spritefont_test.cpp)
     cna_directx7_ctest_command(_directx7_spritefont_cmd cna_test_directx7_spritefont)
     cna_register_renderer_test(NAME DirectX7_SpriteFont COMMAND ${_directx7_spritefont_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
@@ -80,13 +80,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
     # post-Phase-O9 state -- no "3D lands later" scope gap the way DIRECTX2's own Phase O1/O2 history
     # had) -- SupportsCapability() reports which capabilities are genuinely unavailable at this
     # DirectX era vs. real.
-    cna_directx7_test(cna_test_directx7_graphics_capability examples/dx7_graphics_capability_test.cpp)
+    cna_directx7_test(cna_test_directx7_graphics_capability examples/directx7_graphics_capability_test.cpp)
     cna_directx7_ctest_command(_directx7_graphics_capability_cmd cna_test_directx7_graphics_capability)
     cna_register_renderer_test(NAME DirectX7_GraphicsCapability COMMAND ${_directx7_graphics_capability_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O2 (DX2-14, 2D layer ported from DX1-68): logical/window coordinate transform CTest.
-    cna_directx7_test(cna_test_directx7_logical_transform examples/dx7_logical_transform_test.cpp)
+    cna_directx7_test(cna_test_directx7_logical_transform examples/directx7_logical_transform_test.cpp)
     cna_directx7_ctest_command(_directx7_logical_transform_cmd cna_test_directx7_logical_transform)
     cna_register_renderer_test(NAME DirectX7_LogicalTransform COMMAND ${_directx7_logical_transform_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
@@ -99,65 +99,65 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
     # construction and the newly-real ClearColorAndDepth/ClearDepth/ClearColorDepthAndStencil entry
     # points. The 3D DRAW path (VertexBuffer/DrawColoredPrimitives) is still Phase O4/O5 -- this
     # test's own Check D confirms CreateVertexBuffer still throws, rather than over-claiming.
-    cna_directx7_test(cna_test_directx7_device3d_smoke examples/dx7_device3d_smoke_test.cpp)
+    cna_directx7_test(cna_test_directx7_device3d_smoke examples/directx7_device3d_smoke_test.cpp)
     cna_directx7_ctest_command(_directx7_device3d_smoke_cmd cna_test_directx7_device3d_smoke)
     cna_register_renderer_test(NAME DirectX7_Device3DSmoke COMMAND ${_directx7_device3d_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O5 (DX2-40..DX2-42): DirectX2VertexBufferRenderer/DirectX2IndexBufferRenderer CTest.
-    cna_directx7_test(cna_test_directx7_vertex_index_buffer examples/dx7_vertex_index_buffer_test.cpp)
+    cna_directx7_test(cna_test_directx7_vertex_index_buffer examples/directx7_vertex_index_buffer_test.cpp)
     cna_directx7_ctest_command(_directx7_vertex_index_buffer_cmd cna_test_directx7_vertex_index_buffer)
     cna_register_renderer_test(NAME DirectX7_VertexIndexBuffer COMMAND ${_directx7_vertex_index_buffer_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O4 (DX2-30..DX2-35): real CPU transform/clip -> D3DTLVERTEX -> DrawIndexedPrimitive
     # pipeline CTest -- pixel-verified triangle rendering through the real Direct3D v2 device.
-    cna_directx7_test(cna_test_directx7_colored_primitives examples/dx7_colored_primitives_test.cpp)
+    cna_directx7_test(cna_test_directx7_colored_primitives examples/directx7_colored_primitives_test.cpp)
     cna_directx7_ctest_command(_directx7_colored_primitives_cmd cna_test_directx7_colored_primitives)
     cna_register_renderer_test(NAME DirectX7_ColoredPrimitives COMMAND ${_directx7_colored_primitives_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O4 (DX2-33, DX2-36): DrawIndexedPrimitives (16-bit and 32-bit indices) CTest.
-    cna_directx7_test(cna_test_directx7_indexed_primitives examples/dx7_indexed_primitives_test.cpp)
+    cna_directx7_test(cna_test_directx7_indexed_primitives examples/directx7_indexed_primitives_test.cpp)
     cna_directx7_ctest_command(_directx7_indexed_primitives_cmd cna_test_directx7_indexed_primitives)
     cna_register_renderer_test(NAME DirectX7_IndexedPrimitives COMMAND ${_directx7_indexed_primitives_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O4 (DX2-37): real depth-test occlusion CTest, order-independent.
-    cna_directx7_test(cna_test_directx7_ztest examples/dx7_ztest_test.cpp)
+    cna_directx7_test(cna_test_directx7_ztest examples/directx7_ztest_test.cpp)
     cna_directx7_ctest_command(_directx7_ztest_cmd cna_test_directx7_ztest)
     cna_register_renderer_test(NAME DirectX7_ZTest COMMAND ${_directx7_ztest_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O4 (DX2-34, DX2-38): real texture0 sampling via D3DRENDERSTATE_TEXTUREHANDLE CTest.
-    cna_directx7_test(cna_test_directx7_texture3d examples/dx7_texture3d_test.cpp)
+    cna_directx7_test(cna_test_directx7_texture3d examples/directx7_texture3d_test.cpp)
     cna_directx7_ctest_command(_directx7_texture3d_cmd cna_test_directx7_texture3d)
     cna_register_renderer_test(NAME DirectX7_Texture3D COMMAND ${_directx7_texture3d_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O4 (DX2-30, DX2-39): near-plane clipping CTest.
-    cna_directx7_test(cna_test_directx7_clipping examples/dx7_clipping_test.cpp)
+    cna_directx7_test(cna_test_directx7_clipping examples/directx7_clipping_test.cpp)
     cna_directx7_ctest_command(_directx7_clipping_cmd cna_test_directx7_clipping)
     cna_register_renderer_test(NAME DirectX7_Clipping COMMAND ${_directx7_clipping_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O7 (DX2-60..DX2-66): remaining IGraphicsRenderer entry points genuinely unavailable at
     # this DirectX era -- occlusion query, volume/cube textures, custom effects, instancing.
-    cna_directx7_test(cna_test_directx7_remaining_defaults examples/dx7_remaining_defaults_test.cpp)
+    cna_directx7_test(cna_test_directx7_remaining_defaults examples/directx7_remaining_defaults_test.cpp)
     cna_directx7_ctest_command(_directx7_remaining_defaults_cmd cna_test_directx7_remaining_defaults)
     cna_register_renderer_test(NAME DirectX7_RemainingDefaults COMMAND ${_directx7_remaining_defaults_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O9 (DX2-91..DX2-96): real CPU-side BasicEffect lighting (ambient + directional
     # Lambertian/Blinn-Phong specular) for the normal-bearing vertex layouts, design decision 13.
-    cna_directx7_test(cna_test_directx7_lighting examples/dx7_lighting_test.cpp)
+    cna_directx7_test(cna_test_directx7_lighting examples/directx7_lighting_test.cpp)
     cna_directx7_ctest_command(_directx7_lighting_cmd cna_test_directx7_lighting)
     cna_register_renderer_test(NAME DirectX7_Lighting COMMAND ${_directx7_lighting_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
     # Phase O9 (DX2-95, DX2-97): WireFrame/AnisotropicFiltering re-verification -- WireFrame now
     # real (SupportsCapability flipped true), AnisotropicFiltering empirically confirmed absent.
-    cna_directx7_test(cna_test_directx7_wireframe_aniso examples/dx7_wireframe_aniso_test.cpp)
+    cna_directx7_test(cna_test_directx7_wireframe_aniso examples/directx7_wireframe_aniso_test.cpp)
     cna_directx7_ctest_command(_directx7_wireframe_aniso_cmd cna_test_directx7_wireframe_aniso)
     cna_register_renderer_test(NAME DirectX7_WireframeAniso COMMAND ${_directx7_wireframe_aniso_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
@@ -167,7 +167,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
     # viewport object -- mirrors the DX7-0 spike's own Test E/F shape (write REPLACE on half the
     # target, then test EQUAL against the full target and confirm the untouched half is correctly
     # rejected).
-    cna_directx7_test(cna_test_directx7_stencil examples/dx7_stencil_test.cpp)
+    cna_directx7_test(cna_test_directx7_stencil examples/directx7_stencil_test.cpp)
     cna_directx7_ctest_command(_directx7_stencil_cmd cna_test_directx7_stencil)
     cna_register_renderer_test(NAME DirectX7_Stencil COMMAND ${_directx7_stencil_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")

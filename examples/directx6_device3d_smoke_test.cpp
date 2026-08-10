@@ -4,8 +4,8 @@
 // a real attached 32-bit depth+stencil Z-buffer (plan_dx6.md design decision 4), and the
 // ClearColorAndDepth/ClearDepth/ClearStencil/etc entry points. VertexBuffer/IndexBuffer storage,
 // the 3D draw path, and state application (SetDepthTestEnabled/ApplyRasterizerState/etc) are all
-// real now -- pixel-verified 3D rendering is covered by dx6_colored_primitives_test.cpp/
-// dx6_ztest_test.cpp/etc, and real stencil write-then-test is covered by dx6_stencil_test.cpp, not
+// real now -- pixel-verified 3D rendering is covered by directx6_colored_primitives_test.cpp/
+// directx6_ztest_test.cpp/etc, and real stencil write-then-test is covered by directx6_stencil_test.cpp, not
 // this file. Check D below only confirms the simple state-toggle methods don't throw (a
 // smoke-level check).
 //
@@ -19,7 +19,7 @@
 // Check C -- ClearColorDepthAndStencil (via GraphicsDevice::Clear(ClearOptions, color, depth,
 //   stencil) with all three flags) does not throw and clears color correctly -- DIRECTX6's stencil
 //   clear is real (design decision 4/5, via Clear2 D3DCLEAR_STENCIL), but this smoke test only
-//   checks the color result; dx6_stencil_test.cpp is the dedicated real stencil write/test proof.
+//   checks the color result; directx6_stencil_test.cpp is the dedicated real stencil write/test proof.
 // Check D -- SetDepthTestEnabled/SetDepthWriteEnabled no longer throw -- a smoke-level check;
 //   DirectX6_ZTest covers real depth-test pixel behavior.
 //
@@ -95,7 +95,7 @@ protected:
         }
 
         // Check C: ClearColorDepthAndStencil path (all three flags) does not throw and clears
-        // color correctly; DIRECTX6's stencil clear is real (see dx6_stencil_test.cpp for the
+        // color correctly; DIRECTX6's stencil clear is real (see directx6_stencil_test.cpp for the
         // dedicated write/test proof).
         {
             bool threw = false;

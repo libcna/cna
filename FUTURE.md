@@ -16,7 +16,8 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | Horizon | Item | State |
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
-| **CURRENT** | Public CNA renderer identities | **41** — mechanically counted from `CNA/GraphicsBackendType.hpp` (modules/core) |
+| **CURRENT** | Public CNA renderer identities | **41** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core) |
+| **CURRENT** | Phase 1.5 — naming normalization (backend→renderer, DIRECTX*, OPENGLES3, CNAEXT) | implemented on `feature/renderer-naming-normalization`, awaiting owner review/promotion — see `docs/RendererNamingMigration.md`. Renderer count unchanged at 41 |
 | **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** in three stages, all now on public `develop`: target graph + physical `src/` layout (`41028e995`), modular sharp-runtime consumption (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, MODULARIZATION_PLAN.md §11–§11.2) promoted 2026-08-10 by fast-forward to `3ecbbce72` (tree unchanged by the promotion). The modularization campaign is DONE |
 | **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**, and no longer blocked by modularization: its base is the promoted physical-modules `develop` head. Like every phase here it still requires a fresh explicit owner instruction before any work begins |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |

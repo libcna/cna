@@ -1545,6 +1545,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<D3D9::DirectX9Renderer>(args);
+        return std::make_unique<DirectX9::DirectX9Renderer>(args);
     }
 }

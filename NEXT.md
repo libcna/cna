@@ -1,5 +1,33 @@
 # NEXT.md
 
+## RENDERER NAMING NORMALIZATION IMPLEMENTED — awaiting owner review/promotion (2026-08-10)
+
+> The owner-directed pre-expansion naming campaign is implemented and validated on
+> **`feature/renderer-naming-normalization`** (base: public `develop` `25db3ccbe`).
+> One canonical terminology now holds across the active tree:
+> graphics "backend" → **renderer** (`CNA_GRAPHICS_RENDERER`, `IGraphicsRenderer`,
+> `cna_renderer_*`, `cmake/RendererSelection.cmake`), the 11 historical DX*/D3D*
+> public identities → **DIRECTX1..DIRECTX12** (no DIRECTX4), **OPENGLES → OPENGLES3**
+> (OPENGLES2 deliberately not created yet), and **NOXNA → CNAEXT** /
+> **CNA_NOXNA → CNA_CNAEXT** (umbrella `CNA::CnaExt`). Renderer identity count is
+> unchanged at **41** (`scripts/check_renderer_identities.py` green on both
+> registries); renderer behavior, module boundaries and SharpRuntime component
+> mappings are untouched. Full mapping: `docs/RendererNamingMigration.md`;
+> campaign evidence + mechanical-replay reconciliation:
+> `modularization/renderer-naming/` (RECONCILIATION: OK — 3509/3521 baseline
+> files byte-identical to the committed engine's replay, 12 enumerated manual
+> edits, 0 unexplained public-API or file changes).
+>
+> **NEXT action:** owner review of `feature/renderer-naming-normalization`,
+> then a dedicated promotion/publication session. Only the resulting public
+> `develop` SHA becomes the common base for Phase 2 (OPENGLES2 + 13 new
+> renderer implementations, FUTURE.md). Nothing was pushed from the
+> implementation session; owner-local `develop` work (the two ad hoc xvfb
+> registrations, `AGENTS.md`, `examples/xvfb_screenshot_demo.cpp`) still uses
+> the old selector/macro names and needs the mechanical migration described in
+> `docs/RendererNamingMigration.md` §6 when it is next touched.
+
+
 ## PHYSICAL MODULARIZATION PROMOTED — **CNA MODULARIZATION CAMPAIGN CLOSED** (2026-08-10)
 
 > `develop` was fast-forwarded to the accepted Phase-3 head: `ea61123e6` → **`3ecbbce72`**, tree

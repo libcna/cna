@@ -1,5 +1,13 @@
 # CNA Modularization Plan
 
+> **Naming note (2026-08):** after this campaign closed, the renderer-naming
+> normalization renamed the graphics "backend" surface to "renderer"
+> (`CNA_GRAPHICS_BACKEND` → `CNA_GRAPHICS_RENDERER`, `BackendSelection.cmake` →
+> `RendererSelection.cmake`, `GraphicsBackendType.hpp` → `GraphicsRendererType.hpp`),
+> the DX*/D3D* identities to `DIRECTX*`, `OPENGLES` to `OPENGLES3`, and `NOXNA` to
+> `CNAEXT` — see `docs/RendererNamingMigration.md`. The names below are the ones that
+> were accurate during this campaign and are preserved as historical record.
+
 Campaign: **CNA MODULARIZATION** (FUTURE.md Phase 1) · Branch: `feature/modularization`
 Start HEAD: `5f2c4e94162735c781570209a476400dacbd01b1` (tree `40494b21bcafee517307c932bf588cc2367e7c47`)
 Date started: 2026-08-09

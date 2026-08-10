@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plan_opengl2.md: real context-loss recovery proof via IGraphicsRenderer::DebugSimulateContextLoss()
 // -- no existing EasyGL reference test exercises this specific channel directly (only
-// dx3_no3d_test.cpp/directx9_smoke_test.cpp do, for their own very different -- 2D-only no-op, and
+// directx3_no3d_test.cpp/directx9_smoke_test.cpp do, for their own very different -- 2D-only no-op, and
 // D3D9's two-phase DeviceLostException -- models), so this scene is authored fresh for OpenGL2's
 // own atomic loss+restore model (matches EasyGLRenderer::DebugSimulateContextLoss's
 // identical "destroys the SDL GL context and immediately recreates it" design, NOT D3D9's

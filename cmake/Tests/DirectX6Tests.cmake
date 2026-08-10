@@ -39,39 +39,39 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
 
     # Phase O2 (DX2-10, 2D layer ported from DX1-10..DX1-18): device/window bring-up +
     # Clear/Present/readback foundation CTest.
-    cna_directx6_test(cna_test_directx6_smoke examples/dx6_smoke_test.cpp)
+    cna_directx6_test(cna_test_directx6_smoke examples/directx6_smoke_test.cpp)
     cna_directx6_ctest_command(_directx6_smoke_cmd cna_test_directx6_smoke)
     cna_register_renderer_test(NAME DirectX6_Smoke COMMAND ${_directx6_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture/render-target renderer CTest.
-    cna_directx6_test(cna_test_directx6_texture_rendertarget examples/dx6_texture_rendertarget_test.cpp)
+    cna_directx6_test(cna_test_directx6_texture_rendertarget examples/directx6_texture_rendertarget_test.cpp)
     cna_directx6_ctest_command(_directx6_texture_rendertarget_cmd cna_test_directx6_texture_rendertarget)
     cna_register_renderer_test(NAME DirectX6_TextureRenderTarget COMMAND ${_directx6_texture_rendertarget_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-30..DX1-39): CPU compositor / SpriteBatch draw
     # path CTest.
-    cna_directx6_test(cna_test_directx6_spritebatch examples/dx6_spritebatch_test.cpp)
+    cna_directx6_test(cna_test_directx6_spritebatch examples/directx6_spritebatch_test.cpp)
     cna_directx6_ctest_command(_directx6_spritebatch_cmd cna_test_directx6_spritebatch)
     cna_register_renderer_test(NAME DirectX6_SpriteBatch COMMAND ${_directx6_spritebatch_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-40..DX1-44): blend-mode compositing math CTest.
-    cna_directx6_test(cna_test_directx6_blend examples/dx6_blend_test.cpp)
+    cna_directx6_test(cna_test_directx6_blend examples/directx6_blend_test.cpp)
     cna_directx6_ctest_command(_directx6_blend_cmd cna_test_directx6_blend)
     cna_register_renderer_test(NAME DirectX6_Blend COMMAND ${_directx6_blend_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-45/DX1-46): TextureFilter + TextureAddressMode
     # sampling CTest.
-    cna_directx6_test(cna_test_directx6_sampling examples/dx6_sampling_test.cpp)
+    cna_directx6_test(cna_test_directx6_sampling examples/directx6_sampling_test.cpp)
     cna_directx6_ctest_command(_directx6_sampling_cmd cna_test_directx6_sampling)
     cna_register_renderer_test(NAME DirectX6_AddressMode COMMAND ${_directx6_sampling_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O2 (DX2-13, 2D layer ported from DX1-50..DX1-54): SpriteFont / DrawString CTest.
-    cna_directx6_test(cna_test_directx6_spritefont examples/dx6_spritefont_test.cpp)
+    cna_directx6_test(cna_test_directx6_spritefont examples/directx6_spritefont_test.cpp)
     cna_directx6_ctest_command(_directx6_spritefont_cmd cna_test_directx6_spritefont)
     cna_register_renderer_test(NAME DirectX6_SpriteFont COMMAND ${_directx6_spritefont_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
@@ -80,13 +80,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
     # post-Phase-O9 state -- no "3D lands later" scope gap the way DIRECTX2's own Phase O1/O2 history
     # had) -- SupportsCapability() reports which capabilities are genuinely unavailable at this
     # DirectX era vs. real.
-    cna_directx6_test(cna_test_directx6_graphics_capability examples/dx6_graphics_capability_test.cpp)
+    cna_directx6_test(cna_test_directx6_graphics_capability examples/directx6_graphics_capability_test.cpp)
     cna_directx6_ctest_command(_directx6_graphics_capability_cmd cna_test_directx6_graphics_capability)
     cna_register_renderer_test(NAME DirectX6_GraphicsCapability COMMAND ${_directx6_graphics_capability_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O2 (DX2-14, 2D layer ported from DX1-68): logical/window coordinate transform CTest.
-    cna_directx6_test(cna_test_directx6_logical_transform examples/dx6_logical_transform_test.cpp)
+    cna_directx6_test(cna_test_directx6_logical_transform examples/directx6_logical_transform_test.cpp)
     cna_directx6_ctest_command(_directx6_logical_transform_cmd cna_test_directx6_logical_transform)
     cna_register_renderer_test(NAME DirectX6_LogicalTransform COMMAND ${_directx6_logical_transform_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
@@ -99,65 +99,65 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
     # construction and the newly-real ClearColorAndDepth/ClearDepth/ClearColorDepthAndStencil entry
     # points. The 3D DRAW path (VertexBuffer/DrawColoredPrimitives) is still Phase O4/O5 -- this
     # test's own Check D confirms CreateVertexBuffer still throws, rather than over-claiming.
-    cna_directx6_test(cna_test_directx6_device3d_smoke examples/dx6_device3d_smoke_test.cpp)
+    cna_directx6_test(cna_test_directx6_device3d_smoke examples/directx6_device3d_smoke_test.cpp)
     cna_directx6_ctest_command(_directx6_device3d_smoke_cmd cna_test_directx6_device3d_smoke)
     cna_register_renderer_test(NAME DirectX6_Device3DSmoke COMMAND ${_directx6_device3d_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O5 (DX2-40..DX2-42): DirectX2VertexBufferRenderer/DirectX2IndexBufferRenderer CTest.
-    cna_directx6_test(cna_test_directx6_vertex_index_buffer examples/dx6_vertex_index_buffer_test.cpp)
+    cna_directx6_test(cna_test_directx6_vertex_index_buffer examples/directx6_vertex_index_buffer_test.cpp)
     cna_directx6_ctest_command(_directx6_vertex_index_buffer_cmd cna_test_directx6_vertex_index_buffer)
     cna_register_renderer_test(NAME DirectX6_VertexIndexBuffer COMMAND ${_directx6_vertex_index_buffer_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O4 (DX2-30..DX2-35): real CPU transform/clip -> D3DTLVERTEX -> DrawIndexedPrimitive
     # pipeline CTest -- pixel-verified triangle rendering through the real Direct3D v2 device.
-    cna_directx6_test(cna_test_directx6_colored_primitives examples/dx6_colored_primitives_test.cpp)
+    cna_directx6_test(cna_test_directx6_colored_primitives examples/directx6_colored_primitives_test.cpp)
     cna_directx6_ctest_command(_directx6_colored_primitives_cmd cna_test_directx6_colored_primitives)
     cna_register_renderer_test(NAME DirectX6_ColoredPrimitives COMMAND ${_directx6_colored_primitives_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O4 (DX2-33, DX2-36): DrawIndexedPrimitives (16-bit and 32-bit indices) CTest.
-    cna_directx6_test(cna_test_directx6_indexed_primitives examples/dx6_indexed_primitives_test.cpp)
+    cna_directx6_test(cna_test_directx6_indexed_primitives examples/directx6_indexed_primitives_test.cpp)
     cna_directx6_ctest_command(_directx6_indexed_primitives_cmd cna_test_directx6_indexed_primitives)
     cna_register_renderer_test(NAME DirectX6_IndexedPrimitives COMMAND ${_directx6_indexed_primitives_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O4 (DX2-37): real depth-test occlusion CTest, order-independent.
-    cna_directx6_test(cna_test_directx6_ztest examples/dx6_ztest_test.cpp)
+    cna_directx6_test(cna_test_directx6_ztest examples/directx6_ztest_test.cpp)
     cna_directx6_ctest_command(_directx6_ztest_cmd cna_test_directx6_ztest)
     cna_register_renderer_test(NAME DirectX6_ZTest COMMAND ${_directx6_ztest_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O4 (DX2-34, DX2-38): real texture0 sampling via D3DRENDERSTATE_TEXTUREHANDLE CTest.
-    cna_directx6_test(cna_test_directx6_texture3d examples/dx6_texture3d_test.cpp)
+    cna_directx6_test(cna_test_directx6_texture3d examples/directx6_texture3d_test.cpp)
     cna_directx6_ctest_command(_directx6_texture3d_cmd cna_test_directx6_texture3d)
     cna_register_renderer_test(NAME DirectX6_Texture3D COMMAND ${_directx6_texture3d_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O4 (DX2-30, DX2-39): near-plane clipping CTest.
-    cna_directx6_test(cna_test_directx6_clipping examples/dx6_clipping_test.cpp)
+    cna_directx6_test(cna_test_directx6_clipping examples/directx6_clipping_test.cpp)
     cna_directx6_ctest_command(_directx6_clipping_cmd cna_test_directx6_clipping)
     cna_register_renderer_test(NAME DirectX6_Clipping COMMAND ${_directx6_clipping_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O7 (DX2-60..DX2-66): remaining IGraphicsRenderer entry points genuinely unavailable at
     # this DirectX era -- occlusion query, volume/cube textures, custom effects, instancing.
-    cna_directx6_test(cna_test_directx6_remaining_defaults examples/dx6_remaining_defaults_test.cpp)
+    cna_directx6_test(cna_test_directx6_remaining_defaults examples/directx6_remaining_defaults_test.cpp)
     cna_directx6_ctest_command(_directx6_remaining_defaults_cmd cna_test_directx6_remaining_defaults)
     cna_register_renderer_test(NAME DirectX6_RemainingDefaults COMMAND ${_directx6_remaining_defaults_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O9 (DX2-91..DX2-96): real CPU-side BasicEffect lighting (ambient + directional
     # Lambertian/Blinn-Phong specular) for the normal-bearing vertex layouts, design decision 13.
-    cna_directx6_test(cna_test_directx6_lighting examples/dx6_lighting_test.cpp)
+    cna_directx6_test(cna_test_directx6_lighting examples/directx6_lighting_test.cpp)
     cna_directx6_ctest_command(_directx6_lighting_cmd cna_test_directx6_lighting)
     cna_register_renderer_test(NAME DirectX6_Lighting COMMAND ${_directx6_lighting_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
     # Phase O9 (DX2-95, DX2-97): WireFrame/AnisotropicFiltering re-verification -- WireFrame now
     # real (SupportsCapability flipped true), AnisotropicFiltering empirically confirmed absent.
-    cna_directx6_test(cna_test_directx6_wireframe_aniso examples/dx6_wireframe_aniso_test.cpp)
+    cna_directx6_test(cna_test_directx6_wireframe_aniso examples/directx6_wireframe_aniso_test.cpp)
     cna_directx6_ctest_command(_directx6_wireframe_aniso_cmd cna_test_directx6_wireframe_aniso)
     cna_register_renderer_test(NAME DirectX6_WireframeAniso COMMAND ${_directx6_wireframe_aniso_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
@@ -166,7 +166,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
     # API (GraphicsDevice.DepthStencilState) -- DIRECTX6's primary new deliverable over DIRECTX5, mirroring
     # the DX6-0 spike's own Test B/C shape (write REPLACE on half the target, then test EQUAL
     # against the full target and confirm the untouched half is correctly rejected).
-    cna_directx6_test(cna_test_directx6_stencil examples/dx6_stencil_test.cpp)
+    cna_directx6_test(cna_test_directx6_stencil examples/directx6_stencil_test.cpp)
     cna_directx6_ctest_command(_directx6_stencil_cmd cna_test_directx6_stencil)
     cna_register_renderer_test(NAME DirectX6_Stencil COMMAND ${_directx6_stencil_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")

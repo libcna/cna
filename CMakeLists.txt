@@ -248,7 +248,7 @@ include(cmake/Tests/DirectX1Tests.cmake)
 include(cmake/Tests/DirectX2Tests.cmake)
 
 # plan_dx3.md: real DirectX 3 renderer (originally landed under the temporary DX30 name; renamed
-# to DX3 on 2026-08-04 once the free-direct renderer released the name as FREEDIRECT, and to
+# to DIRECTX3 on 2026-08-04 once the free-direct renderer released the name as FREEDIRECT, and to
 # DIRECTX3 in the 2026-08 naming normalization) -- a
 # mechanical port of DIRECTX2's own 2D+3D layers upgraded to IDirectDraw2, same
 # Windows-only/MinGW-cross-compile/Wine-wrapper shape as DirectX2Tests.cmake.

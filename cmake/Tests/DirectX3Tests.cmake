@@ -39,39 +39,39 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
 
     # Phase O2 (DX2-10, 2D layer ported from DX1-10..DX1-18): device/window bring-up +
     # Clear/Present/readback foundation CTest.
-    cna_dx30_test(cna_test_directx3_smoke examples/dx3_smoke_test.cpp)
+    cna_dx30_test(cna_test_directx3_smoke examples/directx3_smoke_test.cpp)
     cna_dx30_ctest_command(_dx30_smoke_cmd cna_test_directx3_smoke)
     cna_register_renderer_test(NAME DirectX3_Smoke COMMAND ${_dx30_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture/render-target renderer CTest.
-    cna_dx30_test(cna_test_directx3_texture_rendertarget examples/dx3_texture_rendertarget_test.cpp)
+    cna_dx30_test(cna_test_directx3_texture_rendertarget examples/directx3_texture_rendertarget_test.cpp)
     cna_dx30_ctest_command(_dx30_texture_rendertarget_cmd cna_test_directx3_texture_rendertarget)
     cna_register_renderer_test(NAME DirectX3_TextureRenderTarget COMMAND ${_dx30_texture_rendertarget_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-30..DX1-39): CPU compositor / SpriteBatch draw
     # path CTest.
-    cna_dx30_test(cna_test_directx3_spritebatch examples/dx3_spritebatch_test.cpp)
+    cna_dx30_test(cna_test_directx3_spritebatch examples/directx3_spritebatch_test.cpp)
     cna_dx30_ctest_command(_dx30_spritebatch_cmd cna_test_directx3_spritebatch)
     cna_register_renderer_test(NAME DirectX3_SpriteBatch COMMAND ${_dx30_spritebatch_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-40..DX1-44): blend-mode compositing math CTest.
-    cna_dx30_test(cna_test_directx3_blend examples/dx3_blend_test.cpp)
+    cna_dx30_test(cna_test_directx3_blend examples/directx3_blend_test.cpp)
     cna_dx30_ctest_command(_dx30_blend_cmd cna_test_directx3_blend)
     cna_register_renderer_test(NAME DirectX3_Blend COMMAND ${_dx30_blend_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-45/DX1-46): TextureFilter + TextureAddressMode
     # sampling CTest.
-    cna_dx30_test(cna_test_directx3_sampling examples/dx3_sampling_test.cpp)
+    cna_dx30_test(cna_test_directx3_sampling examples/directx3_sampling_test.cpp)
     cna_dx30_ctest_command(_dx30_sampling_cmd cna_test_directx3_sampling)
     cna_register_renderer_test(NAME DirectX3_AddressMode COMMAND ${_dx30_sampling_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O2 (DX2-13, 2D layer ported from DX1-50..DX1-54): SpriteFont / DrawString CTest.
-    cna_dx30_test(cna_test_directx3_spritefont examples/dx3_spritefont_test.cpp)
+    cna_dx30_test(cna_test_directx3_spritefont examples/directx3_spritefont_test.cpp)
     cna_dx30_ctest_command(_dx30_spritefont_cmd cna_test_directx3_spritefont)
     cna_register_renderer_test(NAME DirectX3_SpriteFont COMMAND ${_dx30_spritefont_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
@@ -80,13 +80,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
     # post-Phase-O9 state -- no "3D lands later" scope gap the way DIRECTX2's own Phase O1/O2 history
     # had) -- SupportsCapability() reports which capabilities are genuinely unavailable at this
     # DirectX era vs. real.
-    cna_dx30_test(cna_test_directx3_graphics_capability examples/dx3_graphics_capability_test.cpp)
+    cna_dx30_test(cna_test_directx3_graphics_capability examples/directx3_graphics_capability_test.cpp)
     cna_dx30_ctest_command(_dx30_graphics_capability_cmd cna_test_directx3_graphics_capability)
     cna_register_renderer_test(NAME DirectX3_GraphicsCapability COMMAND ${_dx30_graphics_capability_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O2 (DX2-14, 2D layer ported from DX1-68): logical/window coordinate transform CTest.
-    cna_dx30_test(cna_test_directx3_logical_transform examples/dx3_logical_transform_test.cpp)
+    cna_dx30_test(cna_test_directx3_logical_transform examples/directx3_logical_transform_test.cpp)
     cna_dx30_ctest_command(_dx30_logical_transform_cmd cna_test_directx3_logical_transform)
     cna_register_renderer_test(NAME DirectX3_LogicalTransform COMMAND ${_dx30_logical_transform_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
@@ -99,65 +99,65 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
     # construction and the newly-real ClearColorAndDepth/ClearDepth/ClearColorDepthAndStencil entry
     # points. The 3D DRAW path (VertexBuffer/DrawColoredPrimitives) is still Phase O4/O5 -- this
     # test's own Check D confirms CreateVertexBuffer still throws, rather than over-claiming.
-    cna_dx30_test(cna_test_directx3_device3d_smoke examples/dx3_device3d_smoke_test.cpp)
+    cna_dx30_test(cna_test_directx3_device3d_smoke examples/directx3_device3d_smoke_test.cpp)
     cna_dx30_ctest_command(_dx30_device3d_smoke_cmd cna_test_directx3_device3d_smoke)
     cna_register_renderer_test(NAME DirectX3_Device3DSmoke COMMAND ${_dx30_device3d_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O5 (DX2-40..DX2-42): DirectX2VertexBufferRenderer/DirectX2IndexBufferRenderer CTest.
-    cna_dx30_test(cna_test_directx3_vertex_index_buffer examples/dx3_vertex_index_buffer_test.cpp)
+    cna_dx30_test(cna_test_directx3_vertex_index_buffer examples/directx3_vertex_index_buffer_test.cpp)
     cna_dx30_ctest_command(_dx30_vertex_index_buffer_cmd cna_test_directx3_vertex_index_buffer)
     cna_register_renderer_test(NAME DirectX3_VertexIndexBuffer COMMAND ${_dx30_vertex_index_buffer_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O4 (DX2-30..DX2-35): real CPU transform/clip -> D3DTLVERTEX -> DrawIndexedPrimitive
     # pipeline CTest -- pixel-verified triangle rendering through the real Direct3D v2 device.
-    cna_dx30_test(cna_test_directx3_colored_primitives examples/dx3_colored_primitives_test.cpp)
+    cna_dx30_test(cna_test_directx3_colored_primitives examples/directx3_colored_primitives_test.cpp)
     cna_dx30_ctest_command(_dx30_colored_primitives_cmd cna_test_directx3_colored_primitives)
     cna_register_renderer_test(NAME DirectX3_ColoredPrimitives COMMAND ${_dx30_colored_primitives_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O4 (DX2-33, DX2-36): DrawIndexedPrimitives (16-bit and 32-bit indices) CTest.
-    cna_dx30_test(cna_test_directx3_indexed_primitives examples/dx3_indexed_primitives_test.cpp)
+    cna_dx30_test(cna_test_directx3_indexed_primitives examples/directx3_indexed_primitives_test.cpp)
     cna_dx30_ctest_command(_dx30_indexed_primitives_cmd cna_test_directx3_indexed_primitives)
     cna_register_renderer_test(NAME DirectX3_IndexedPrimitives COMMAND ${_dx30_indexed_primitives_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O4 (DX2-37): real depth-test occlusion CTest, order-independent.
-    cna_dx30_test(cna_test_directx3_ztest examples/dx3_ztest_test.cpp)
+    cna_dx30_test(cna_test_directx3_ztest examples/directx3_ztest_test.cpp)
     cna_dx30_ctest_command(_dx30_ztest_cmd cna_test_directx3_ztest)
     cna_register_renderer_test(NAME DirectX3_ZTest COMMAND ${_dx30_ztest_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O4 (DX2-34, DX2-38): real texture0 sampling via D3DRENDERSTATE_TEXTUREHANDLE CTest.
-    cna_dx30_test(cna_test_directx3_texture3d examples/dx3_texture3d_test.cpp)
+    cna_dx30_test(cna_test_directx3_texture3d examples/directx3_texture3d_test.cpp)
     cna_dx30_ctest_command(_dx30_texture3d_cmd cna_test_directx3_texture3d)
     cna_register_renderer_test(NAME DirectX3_Texture3D COMMAND ${_dx30_texture3d_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O4 (DX2-30, DX2-39): near-plane clipping CTest.
-    cna_dx30_test(cna_test_directx3_clipping examples/dx3_clipping_test.cpp)
+    cna_dx30_test(cna_test_directx3_clipping examples/directx3_clipping_test.cpp)
     cna_dx30_ctest_command(_dx30_clipping_cmd cna_test_directx3_clipping)
     cna_register_renderer_test(NAME DirectX3_Clipping COMMAND ${_dx30_clipping_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O7 (DX2-60..DX2-66): remaining IGraphicsRenderer entry points genuinely unavailable at
     # this DirectX era -- occlusion query, volume/cube textures, custom effects, instancing.
-    cna_dx30_test(cna_test_directx3_remaining_defaults examples/dx3_remaining_defaults_test.cpp)
+    cna_dx30_test(cna_test_directx3_remaining_defaults examples/directx3_remaining_defaults_test.cpp)
     cna_dx30_ctest_command(_dx30_remaining_defaults_cmd cna_test_directx3_remaining_defaults)
     cna_register_renderer_test(NAME DirectX3_RemainingDefaults COMMAND ${_dx30_remaining_defaults_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O9 (DX2-91..DX2-96): real CPU-side BasicEffect lighting (ambient + directional
     # Lambertian/Blinn-Phong specular) for the normal-bearing vertex layouts, design decision 13.
-    cna_dx30_test(cna_test_directx3_lighting examples/dx3_lighting_test.cpp)
+    cna_dx30_test(cna_test_directx3_lighting examples/directx3_lighting_test.cpp)
     cna_dx30_ctest_command(_dx30_lighting_cmd cna_test_directx3_lighting)
     cna_register_renderer_test(NAME DirectX3_Lighting COMMAND ${_dx30_lighting_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
     # Phase O9 (DX2-95, DX2-97): WireFrame/AnisotropicFiltering re-verification -- WireFrame now
     # real (SupportsCapability flipped true), AnisotropicFiltering empirically confirmed absent.
-    cna_dx30_test(cna_test_directx3_wireframe_aniso examples/dx3_wireframe_aniso_test.cpp)
+    cna_dx30_test(cna_test_directx3_wireframe_aniso examples/directx3_wireframe_aniso_test.cpp)
     cna_dx30_ctest_command(_dx30_wireframe_aniso_cmd cna_test_directx3_wireframe_aniso)
     cna_register_renderer_test(NAME DirectX3_WireframeAniso COMMAND ${_dx30_wireframe_aniso_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")

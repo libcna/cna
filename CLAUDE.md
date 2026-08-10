@@ -30,7 +30,7 @@ When implementing code in the `Microsoft::Xna` namespace:
 - If implementing functionality that is **NOT** part of the XNA 4.0 API within the `Microsoft::Xna` namespace,
   you **MUST** wrap it with the `CNAEXT` macro.
 
-`CNAEXT` is defined in `include/CNA/CNAHelper.hpp` as an empty marker macro used to visually tag non-XNA extensions.
+`CNAEXT` is defined in `modules/core/include/CNA/CNAHelper.hpp` as an empty marker macro used to visually tag non-XNA extensions.
 
 ---
 

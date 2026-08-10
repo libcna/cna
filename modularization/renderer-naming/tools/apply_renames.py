@@ -195,6 +195,8 @@ RULES_B1 = [
     (r"(?<![A-Za-z0-9_])_dx([1-8])_(?=[a-z0-9_]+\b)", r"_directx\1_"),
     (r"Internal/Renderers/D3D(9|10|11|12)/", r"Internal/Renderers/DirectX\1/"),
     (r"Internal::Renderers::D3D(9|10|11|12)\b", r"Internal::Renderers::DirectX\1"),
+    # bare old-family-namespace qualifiers (the namespace itself is now DirectX<N>)
+    (r"\bD3D(9|10|11|12)::", r"DirectX\1::"),
     (r"modules/renderers/d3d(9|10|11|12)\b", r"modules/renderers/directx\1"),
     (r"modules/renderers/dx([1-8])\b", r"modules/renderers/directx\1"),
     (r"\bD3D(9|10|11|12)_(?=[A-Z][a-z])", r"DirectX\1_"),
@@ -203,6 +205,8 @@ RULES_B1 = [
     # (?!-) keeps plan-ledger task IDs (DX2-46, DX7-0, ...) and SDK-era references intact
     (r"\bDX([1-8])\b(?!-)", r"DIRECTX\1"),
     (r"examples/d3d(9|10|11|12)_", r"examples/directx\1_"),
+    (r"examples/dx([1-8])_", r"examples/directx\1_"),
+    (r"\bdx([1-8])_((?:[a-z0-9]+_)*(?:test|diag|smoke))", r"directx\1_\2"),
     (r"\bd3d(9|10|11|12)_((?:[a-z0-9]+_)*(?:test|diag|smoke))", r"directx\1_\2"),
     (r"run-wine-dx([1-8])\.sh", r"run-wine-directx\1.sh"),
     (r"run-wine-d3d10\.sh", "run-wine-directx10.sh"),
@@ -284,6 +288,8 @@ PATH_RULES = {
         (r"D3D(9|10|11|12)Renderer\.(hpp|cpp)", r"DirectX\1Renderer.\2"),
         (r"examples/dx([1-8])_", r"examples/directx\1_"),
         (r"examples/d3d(9|10|11|12)_", r"examples/directx\1_"),
+    (r"examples/dx([1-8])_", r"examples/directx\1_"),
+    (r"\bdx([1-8])_((?:[a-z0-9]+_)*(?:test|diag|smoke))", r"directx\1_\2"),
         (r"cmake/Tests/Dx([1-8])Tests\.cmake", r"cmake/Tests/DirectX\1Tests.cmake"),
         (r"cmake/Tests/D3D(9|10|11|12)Tests\.cmake", r"cmake/Tests/DirectX\1Tests.cmake"),
         (r"scripts/run-wine-dx([1-8])\.sh", r"scripts/run-wine-directx\1.sh"),

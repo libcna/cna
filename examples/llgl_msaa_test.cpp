@@ -11,7 +11,7 @@
 // through the ordinary Game + GraphicsDeviceManager.ApplyChanges() flow -- confirmed with a
 // throwaway probe before writing this test (GetMultiSampleCount() stayed 0 even with
 // PreferMultiSampling=true). This test therefore constructs two independent, raw GraphicsDevice
-// objects directly (mirroring examples/dx3_resize_transaction_test.cpp's own established pattern
+// objects directly (mirroring examples/directx3_resize_transaction_test.cpp's own established pattern
 // for exactly this reason), one requesting MultiSampleCount=0 and one requesting 4.
 //
 // A single right triangle -- vertices at (0,0), (kSize,0), (0,kSize) -- puts a diagonal edge along

@@ -39,39 +39,39 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
 
     # Phase O2 (DX2-10, 2D layer ported from DX1-10..DX1-18): device/window bring-up +
     # Clear/Present/readback foundation CTest.
-    cna_directx5_test(cna_test_directx5_smoke examples/dx5_smoke_test.cpp)
+    cna_directx5_test(cna_test_directx5_smoke examples/directx5_smoke_test.cpp)
     cna_directx5_ctest_command(_directx5_smoke_cmd cna_test_directx5_smoke)
     cna_register_renderer_test(NAME DirectX5_Smoke COMMAND ${_directx5_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture/render-target renderer CTest.
-    cna_directx5_test(cna_test_directx5_texture_rendertarget examples/dx5_texture_rendertarget_test.cpp)
+    cna_directx5_test(cna_test_directx5_texture_rendertarget examples/directx5_texture_rendertarget_test.cpp)
     cna_directx5_ctest_command(_directx5_texture_rendertarget_cmd cna_test_directx5_texture_rendertarget)
     cna_register_renderer_test(NAME DirectX5_TextureRenderTarget COMMAND ${_directx5_texture_rendertarget_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-30..DX1-39): CPU compositor / SpriteBatch draw
     # path CTest.
-    cna_directx5_test(cna_test_directx5_spritebatch examples/dx5_spritebatch_test.cpp)
+    cna_directx5_test(cna_test_directx5_spritebatch examples/directx5_spritebatch_test.cpp)
     cna_directx5_ctest_command(_directx5_spritebatch_cmd cna_test_directx5_spritebatch)
     cna_register_renderer_test(NAME DirectX5_SpriteBatch COMMAND ${_directx5_spritebatch_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-40..DX1-44): blend-mode compositing math CTest.
-    cna_directx5_test(cna_test_directx5_blend examples/dx5_blend_test.cpp)
+    cna_directx5_test(cna_test_directx5_blend examples/directx5_blend_test.cpp)
     cna_directx5_ctest_command(_directx5_blend_cmd cna_test_directx5_blend)
     cna_register_renderer_test(NAME DirectX5_Blend COMMAND ${_directx5_blend_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O2 (DX2-12, 2D layer ported from DX1-45/DX1-46): TextureFilter + TextureAddressMode
     # sampling CTest.
-    cna_directx5_test(cna_test_directx5_sampling examples/dx5_sampling_test.cpp)
+    cna_directx5_test(cna_test_directx5_sampling examples/directx5_sampling_test.cpp)
     cna_directx5_ctest_command(_directx5_sampling_cmd cna_test_directx5_sampling)
     cna_register_renderer_test(NAME DirectX5_AddressMode COMMAND ${_directx5_sampling_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O2 (DX2-13, 2D layer ported from DX1-50..DX1-54): SpriteFont / DrawString CTest.
-    cna_directx5_test(cna_test_directx5_spritefont examples/dx5_spritefont_test.cpp)
+    cna_directx5_test(cna_test_directx5_spritefont examples/directx5_spritefont_test.cpp)
     cna_directx5_ctest_command(_directx5_spritefont_cmd cna_test_directx5_spritefont)
     cna_register_renderer_test(NAME DirectX5_SpriteFont COMMAND ${_directx5_spritefont_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
@@ -80,13 +80,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
     # post-Phase-O9 state -- no "3D lands later" scope gap the way DIRECTX2's own Phase O1/O2 history
     # had) -- SupportsCapability() reports which capabilities are genuinely unavailable at this
     # DirectX era vs. real.
-    cna_directx5_test(cna_test_directx5_graphics_capability examples/dx5_graphics_capability_test.cpp)
+    cna_directx5_test(cna_test_directx5_graphics_capability examples/directx5_graphics_capability_test.cpp)
     cna_directx5_ctest_command(_directx5_graphics_capability_cmd cna_test_directx5_graphics_capability)
     cna_register_renderer_test(NAME DirectX5_GraphicsCapability COMMAND ${_directx5_graphics_capability_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O2 (DX2-14, 2D layer ported from DX1-68): logical/window coordinate transform CTest.
-    cna_directx5_test(cna_test_directx5_logical_transform examples/dx5_logical_transform_test.cpp)
+    cna_directx5_test(cna_test_directx5_logical_transform examples/directx5_logical_transform_test.cpp)
     cna_directx5_ctest_command(_directx5_logical_transform_cmd cna_test_directx5_logical_transform)
     cna_register_renderer_test(NAME DirectX5_LogicalTransform COMMAND ${_directx5_logical_transform_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
@@ -99,65 +99,65 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
     # construction and the newly-real ClearColorAndDepth/ClearDepth/ClearColorDepthAndStencil entry
     # points. The 3D DRAW path (VertexBuffer/DrawColoredPrimitives) is still Phase O4/O5 -- this
     # test's own Check D confirms CreateVertexBuffer still throws, rather than over-claiming.
-    cna_directx5_test(cna_test_directx5_device3d_smoke examples/dx5_device3d_smoke_test.cpp)
+    cna_directx5_test(cna_test_directx5_device3d_smoke examples/directx5_device3d_smoke_test.cpp)
     cna_directx5_ctest_command(_directx5_device3d_smoke_cmd cna_test_directx5_device3d_smoke)
     cna_register_renderer_test(NAME DirectX5_Device3DSmoke COMMAND ${_directx5_device3d_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O5 (DX2-40..DX2-42): DirectX2VertexBufferRenderer/DirectX2IndexBufferRenderer CTest.
-    cna_directx5_test(cna_test_directx5_vertex_index_buffer examples/dx5_vertex_index_buffer_test.cpp)
+    cna_directx5_test(cna_test_directx5_vertex_index_buffer examples/directx5_vertex_index_buffer_test.cpp)
     cna_directx5_ctest_command(_directx5_vertex_index_buffer_cmd cna_test_directx5_vertex_index_buffer)
     cna_register_renderer_test(NAME DirectX5_VertexIndexBuffer COMMAND ${_directx5_vertex_index_buffer_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O4 (DX2-30..DX2-35): real CPU transform/clip -> D3DTLVERTEX -> DrawIndexedPrimitive
     # pipeline CTest -- pixel-verified triangle rendering through the real Direct3D v2 device.
-    cna_directx5_test(cna_test_directx5_colored_primitives examples/dx5_colored_primitives_test.cpp)
+    cna_directx5_test(cna_test_directx5_colored_primitives examples/directx5_colored_primitives_test.cpp)
     cna_directx5_ctest_command(_directx5_colored_primitives_cmd cna_test_directx5_colored_primitives)
     cna_register_renderer_test(NAME DirectX5_ColoredPrimitives COMMAND ${_directx5_colored_primitives_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O4 (DX2-33, DX2-36): DrawIndexedPrimitives (16-bit and 32-bit indices) CTest.
-    cna_directx5_test(cna_test_directx5_indexed_primitives examples/dx5_indexed_primitives_test.cpp)
+    cna_directx5_test(cna_test_directx5_indexed_primitives examples/directx5_indexed_primitives_test.cpp)
     cna_directx5_ctest_command(_directx5_indexed_primitives_cmd cna_test_directx5_indexed_primitives)
     cna_register_renderer_test(NAME DirectX5_IndexedPrimitives COMMAND ${_directx5_indexed_primitives_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O4 (DX2-37): real depth-test occlusion CTest, order-independent.
-    cna_directx5_test(cna_test_directx5_ztest examples/dx5_ztest_test.cpp)
+    cna_directx5_test(cna_test_directx5_ztest examples/directx5_ztest_test.cpp)
     cna_directx5_ctest_command(_directx5_ztest_cmd cna_test_directx5_ztest)
     cna_register_renderer_test(NAME DirectX5_ZTest COMMAND ${_directx5_ztest_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O4 (DX2-34, DX2-38): real texture0 sampling via D3DRENDERSTATE_TEXTUREHANDLE CTest.
-    cna_directx5_test(cna_test_directx5_texture3d examples/dx5_texture3d_test.cpp)
+    cna_directx5_test(cna_test_directx5_texture3d examples/directx5_texture3d_test.cpp)
     cna_directx5_ctest_command(_directx5_texture3d_cmd cna_test_directx5_texture3d)
     cna_register_renderer_test(NAME DirectX5_Texture3D COMMAND ${_directx5_texture3d_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O4 (DX2-30, DX2-39): near-plane clipping CTest.
-    cna_directx5_test(cna_test_directx5_clipping examples/dx5_clipping_test.cpp)
+    cna_directx5_test(cna_test_directx5_clipping examples/directx5_clipping_test.cpp)
     cna_directx5_ctest_command(_directx5_clipping_cmd cna_test_directx5_clipping)
     cna_register_renderer_test(NAME DirectX5_Clipping COMMAND ${_directx5_clipping_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O7 (DX2-60..DX2-66): remaining IGraphicsRenderer entry points genuinely unavailable at
     # this DirectX era -- occlusion query, volume/cube textures, custom effects, instancing.
-    cna_directx5_test(cna_test_directx5_remaining_defaults examples/dx5_remaining_defaults_test.cpp)
+    cna_directx5_test(cna_test_directx5_remaining_defaults examples/directx5_remaining_defaults_test.cpp)
     cna_directx5_ctest_command(_directx5_remaining_defaults_cmd cna_test_directx5_remaining_defaults)
     cna_register_renderer_test(NAME DirectX5_RemainingDefaults COMMAND ${_directx5_remaining_defaults_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O9 (DX2-91..DX2-96): real CPU-side BasicEffect lighting (ambient + directional
     # Lambertian/Blinn-Phong specular) for the normal-bearing vertex layouts, design decision 13.
-    cna_directx5_test(cna_test_directx5_lighting examples/dx5_lighting_test.cpp)
+    cna_directx5_test(cna_test_directx5_lighting examples/directx5_lighting_test.cpp)
     cna_directx5_ctest_command(_directx5_lighting_cmd cna_test_directx5_lighting)
     cna_register_renderer_test(NAME DirectX5_Lighting COMMAND ${_directx5_lighting_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")
 
     # Phase O9 (DX2-95, DX2-97): WireFrame/AnisotropicFiltering re-verification -- WireFrame now
     # real (SupportsCapability flipped true), AnisotropicFiltering empirically confirmed absent.
-    cna_directx5_test(cna_test_directx5_wireframe_aniso examples/dx5_wireframe_aniso_test.cpp)
+    cna_directx5_test(cna_test_directx5_wireframe_aniso examples/directx5_wireframe_aniso_test.cpp)
     cna_directx5_ctest_command(_directx5_wireframe_aniso_cmd cna_test_directx5_wireframe_aniso)
     cna_register_renderer_test(NAME DirectX5_WireframeAniso COMMAND ${_directx5_wireframe_aniso_cmd}
         TIMEOUT 60 LABELS "DIRECTX5")

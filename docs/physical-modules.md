@@ -57,10 +57,10 @@ not identities. Exactly one family's `${RENDERER_TARGET}` is configured per buil
 (`RENDERER_DIR = modules/renderers/<family>`); each family's `CMakeLists.txt` owns its
 specific SDK links, carried over branch-for-branch from the former central manifest.
 
-ascii, bgfx, canvas, d3d10, d3d11, d3d12, d3d9, diligent, direct2d, dx1, dx2, dx3, dx5, dx6,
-dx7, dx8, easygl, freedirect, gdi, glide, headless, html-dom, llgl, magnum, metal, opengl1,
-opengl2, opengl4, opengles1, sdl-gpu, sdl-renderer, skia, software, sokol, stub, vulkan,
-webgpu, wicked.
+ascii, bgfx, canvas, diligent, direct2d, directx1, directx2, directx3, directx5, directx6,
+directx7, directx8, directx9, directx10, directx11, directx12, easygl, freedirect, gdi,
+glide, headless, html-dom, llgl, magnum, metal, opengl1, opengl2, opengl4, opengles1,
+sdl-gpu, sdl-renderer, skia, software, sokol, stub, vulkan, webgpu, wicked.
 
 Common helper targets (deliberate sharing, not public identities):
 

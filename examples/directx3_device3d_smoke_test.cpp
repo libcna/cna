@@ -5,7 +5,7 @@
 // points. VertexBuffer/IndexBuffer storage (Phase O5), the 3D draw path itself
 // (DrawColoredPrimitives/DrawPrimitivesEx, Phase O4), and state application (SetDepthTestEnabled/
 // ApplyRasterizerState/etc, Phase O6) are all real now -- pixel-verified 3D rendering is covered
-// by dx2_colored_primitives_test.cpp/dx2_ztest_test.cpp/etc, not this file. Check D below only
+// by directx2_colored_primitives_test.cpp/directx2_ztest_test.cpp/etc, not this file. Check D below only
 // confirms the simple state-toggle methods don't throw anymore (a smoke-level check) -- DirectX3_ZTest
 // already covers real depth-test behavior in depth.
 //

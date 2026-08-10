@@ -47,11 +47,11 @@ option(CNA_RENDERER_SKIA "Enable Skia 2D raster graphics renderer" OFF)
 # SDL_RENDERER's own SdlRenderer (see the shared cna_renderer_sdl_renderer_core
 # library below), not a real terminal/TTY renderer.
 option(CNA_RENDERER_ASCII "Enable ASCII (SDL-windowed glyph-grid) graphics renderer" OFF)
-option(CNA_RENDERER_FREEDIRECT "Enable FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DX3) graphics renderer" OFF)
+option(CNA_RENDERER_FREEDIRECT "Enable FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DIRECTX3) graphics renderer" OFF)
 option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
 # plan_dx1.md: real DirectX 1 (DirectDraw v1) graphics renderer -- genuine ddraw.h v1 COM
 # interfaces (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC, never IDirectDraw2+), Windows-only,
-# same MinGW-cross-compile + Wine delivery route as DIRECTX9/DIRECTX11/DIRECTX12 (Route B). Unlike FreeDirect (formerly DX3), this
+# same MinGW-cross-compile + Wine delivery route as DIRECTX9/DIRECTX11/DIRECTX12 (Route B). Unlike FreeDirect (formerly DIRECTX3), this
 # renderer deliberately does NOT use ../free-direct -- see plan_dxold.md's roadmap.
 option(CNA_RENDERER_DIRECTX1 "Enable Direct X 1 (real DirectDraw v1) graphics renderer (Windows only)" OFF)
 # plan_dx2.md: real DirectX 2 graphics renderer -- 2D layer is a verbatim port of DIRECTX1's real
@@ -65,7 +65,7 @@ option(CNA_RENDERER_DIRECTX1 "Enable Direct X 1 (real DirectDraw v1) graphics re
 # owner's confirmation of this scope choice.
 option(CNA_RENDERER_DIRECTX2 "Enable Direct X 2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive) graphics renderer (Windows only)" OFF)
 # plan_dx3.md: real DirectX 3 graphics renderer. Originally landed under the temporary DX30 name
-# because the free-direct-backed renderer owned "DX3" at the time; renamed to DX3 on 2026-08-04
+# because the free-direct-backed renderer owned "DIRECTX3" at the time; renamed to DIRECTX3 on 2026-08-04
 # (and to DIRECTX3 in the 2026-08 naming normalization)
 # when that renderer became FREEDIRECT (owner instruction -- see plan_dxold.md's naming-transition
 # section). Mechanical port of DIRECTX2's own 2D layer (upgraded to IDirectDraw2) + 3D layer
@@ -299,7 +299,7 @@ endif()
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
 # WARNING-only platform check below, this is a hard FATAL_ERROR. plan_dx9.md design decision 1
 # extends this same gate to DIRECTX9 (d3d9.h is equally Windows-only). plan_dx1.md design decision 1
-# extends it again to DIRECTX1: unlike FreeDirect (formerly DX3; SDL3-backed ../free-direct, genuinely native-Linux-buildable),
+# extends it again to DIRECTX1: unlike FreeDirect (formerly DIRECTX3; SDL3-backed ../free-direct, genuinely native-Linux-buildable),
 # DIRECTX1 uses the real Windows ddraw.h, so it needs the exact same gate.
 if((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX2" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10" OR CNA_GRAPHICS_RENDERER STREQUAL "GLIDE" OR CNA_GRAPHICS_RENDERER STREQUAL "GDI")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -632,7 +632,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "ASCII")
     add_compile_definitions(CNA_RENDERER_ASCII)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_ASCII")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "FREEDIRECT")
-    message(STATUS "CNA: Using FreeDirect (DirectDraw via free-direct; formerly DX3) graphics renderer")
+    message(STATUS "CNA: Using FreeDirect (DirectDraw via free-direct; formerly DIRECTX3) graphics renderer")
     set(RENDERER_DIR "modules/renderers/freedirect")
     set(RENDERER_TARGET "cna_renderer_freedirect")
     add_compile_definitions(CNA_RENDERER_FREEDIRECT)
