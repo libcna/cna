@@ -3,12 +3,14 @@ if(CNA_BUILD_TESTS AND WIN32 AND CNA_GRAPHICS_BACKEND STREQUAL "GLIDE")
     # fake DLL and a loader client directly, so it stays runnable even when an unrelated CNA or
     # sharp-runtime executable dependency is not currently i686-compatible.
     add_library(cna_glide_fake_dll SHARED
-        tests/CNA/Internal/Backends/Glide/FakeGlide3xDll.cpp)
+        modules/renderers/glide/tests/CNA/Internal/Backends/Glide/FakeGlide3xDll.cpp)
     set_target_properties(cna_glide_fake_dll PROPERTIES PREFIX "" OUTPUT_NAME "fake_glide3x")
 
     add_executable(cna_glide_abi_loader_test
-        tests/CNA/Internal/Backends/Glide/GlideAbiLoaderTests.cpp)
-    target_include_directories(cna_glide_abi_loader_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        modules/renderers/glide/tests/CNA/Internal/Backends/Glide/GlideAbiLoaderTests.cpp)
+    # The ABI declarations live in the glide renderer module's always-defined header
+    # interface (GlideAbi.hpp is self-contained: loader decls + <cstdint> only).
+    target_link_libraries(cna_glide_abi_loader_test PRIVATE cna_renderer_glide_headers)
     add_dependencies(cna_glide_abi_loader_test cna_glide_fake_dll)
     if(MINGW)
         # The contract DLL must be independently loadable by Wine; unlike a normal executable,

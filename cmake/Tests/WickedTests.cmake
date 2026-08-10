@@ -32,7 +32,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # key that compares or hashes two different render states as equal makes the cache return a
     # pipeline built for the wrong state, which renders with no error at all.
     cna_wicked_test(cna_test_wicked_pipeline_key
-        tests/CNA/Internal/Backends/Wicked/WickedPipelineKeyTest.cpp)
+        modules/renderers/wicked/tests/CNA/Internal/Backends/Wicked/WickedPipelineKeyTest.cpp)
     add_test(NAME Wicked_PipelineKey COMMAND cna_test_wicked_pipeline_key)
     set_tests_properties(Wicked_PipelineKey PROPERTIES LABELS "Unit;Wicked" TIMEOUT 60)
 
@@ -42,7 +42,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # not run under this backend at all. Needs a real device, window and display, like the smoke
     # test below.
     cna_wicked_test(cna_test_wicked_device_lifecycle
-        tests/CNA/Internal/Backends/Wicked/WickedDeviceLifecycleTest.cpp)
+        modules/renderers/wicked/tests/CNA/Internal/Backends/Wicked/WickedDeviceLifecycleTest.cpp)
     add_test(NAME Wicked_DeviceLifecycle COMMAND cna_test_wicked_device_lifecycle)
     set_tests_properties(Wicked_DeviceLifecycle PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
@@ -52,7 +52,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # backend dropped it at bind time -- an offset-selected record rendered nothing while the
     # identical bytes drew correctly through the ordinary indexed route.
     cna_wicked_test(cna_test_wicked_geometry_offset
-        tests/CNA/Internal/Backends/Wicked/WickedGeometryVertexOffsetTest.cpp)
+        modules/renderers/wicked/tests/CNA/Internal/Backends/Wicked/WickedGeometryVertexOffsetTest.cpp)
     add_test(NAME Wicked_GeometryVertexOffset COMMAND cna_test_wicked_geometry_offset)
     set_tests_properties(Wicked_GeometryVertexOffset PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
@@ -64,7 +64,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # every narrow staging buffer and this matrix corrupts (preserved probe evidence in
     # cmake-build-wicked/wicked-repro/); with the patch it must stay green byte-for-byte.
     cna_wicked_test(cna_test_wicked_texture3d_staged_transfer
-        tests/CNA/Internal/Backends/Wicked/WickedTexture3DStagedTransferTest.cpp)
+        modules/renderers/wicked/tests/CNA/Internal/Backends/Wicked/WickedTexture3DStagedTransferTest.cpp)
     add_test(NAME Wicked_Texture3DStagedTransfer COMMAND cna_test_wicked_texture3d_staged_transfer)
     set_tests_properties(Wicked_Texture3DStagedTransfer PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

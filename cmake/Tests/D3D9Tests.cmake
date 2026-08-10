@@ -164,11 +164,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     # is no longer needed at this step, D9-71 already embedded its output).
     cna_d3d9_test(cna_test_d3d9_shadercache examples/d3d9_shadercache_test.cpp)
     # This one test includes the D3D9 backend's generated shader header
-    # (src/Graphics/Backends/D3D9/shaders/d3d9_shaders.hpp) to compare live-device shader
+    # (modules/renderers/d3d9/src/shaders/d3d9_shaders.hpp) to compare live-device shader
     # creation against the embedded bytecode inventory. That implementation header is
-    # deliberately NOT on any exported include path (cna_backend_graphics_common carries only
-    # include/), so this target gets the implementation root itself, scoped to it alone.
-    target_include_directories(cna_test_d3d9_shadercache PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # deliberately NOT on any exported include path (the d3d9 module exports only its
+    # include/ root), so this target gets the implementation root itself, scoped to it
+    # alone -- the same includer-relative "shaders/..." spelling the backend TUs use.
+    target_include_directories(cna_test_d3d9_shadercache PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/d3d9/src)
     cna_d3d9_ctest_command(_d3d9_shadercache_cmd cna_test_d3d9_shadercache)
     cna_register_backend_test(NAME D3D9_ShaderCache COMMAND ${_d3d9_shadercache_cmd}
         TIMEOUT 60 LABELS "D3D9")

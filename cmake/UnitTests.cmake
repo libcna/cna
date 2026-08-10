@@ -18,7 +18,14 @@ if(CNA_BUILD_TESTS)
 
     enable_testing()
 
+    # Physical module layout: module-owned tests live in modules/<name>/tests (and
+    # modules/renderers/<family>/tests), each preserving its former tests/-relative mirror
+    # path -- which is why every path-tail filter below keeps matching unchanged. The
+    # top-level tests/ tree retains only the shared fixture assets and the cross-module
+    # minimal-link probes.
     file(GLOB_RECURSE CNA_TEST_SOURCES CONFIGURE_DEPENDS
+            "modules/*/tests/*.cpp"
+            "modules/renderers/*/tests/*.cpp"
             "tests/*.cpp"
     )
 
@@ -119,7 +126,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     # plan_wicked.md: the Wicked backend's own regression suites live under
-    # tests/CNA/Internal/Backends/Wicked/, and the pipeline-key test among them includes the
+    # modules/renderers/wicked/tests/, and the pipeline-key test among them includes the
     # backend's header, which resolves only when the WICKED backend is configured (the
     # WickedEngine include directories come with the backend target). Excluded from every other
     # backend's corpus the same way the conditional files above are -- an unconditional glob of
@@ -131,7 +138,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     # plan_magnum.md: the MAGNUM backend's own GTest suite lives under
-    # tests/CNA/Internal/Backends/Magnum/ and includes the backend's headers, which resolve only
+    # modules/renderers/magnum/tests/ and includes the backend's headers, which resolve only
     # when the MAGNUM backend is configured (the Magnum::GL include directories come with the
     # backend target). Excluded from every other backend's corpus by the same convention as the
     # Wicked directory above; under MAGNUM the corpus keeps it.
@@ -177,6 +184,11 @@ if(CNA_BUILD_TESTS)
             gtest_main
             SDL3::SDL3
     )
+
+    # The metal and glide policy suites deliberately compile on every backend (see their own
+    # header comments); their policy headers ride the unconditional header-interface targets
+    # those renderer modules always define.
+    target_link_libraries(CnaTests PRIVATE cna_renderer_metal_headers cna_renderer_glide_headers)
 
     # GltfImportCoreTests.cpp includes CNA/Internal/GltfImport/GltfImportCore.hpp directly (to call
     # ExtractMesh() without spawning the CLI tool), which itself includes cgltf.h -- CNA's own

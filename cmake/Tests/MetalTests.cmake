@@ -5,7 +5,7 @@ if(CNA_BUILD_TESTS)
     # sanitizer jobs can validate the complete portable contract without building unrelated
     # process harnesses.
     file(GLOB CNA_METAL_PORTABLE_TEST_SOURCES CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/CNA/Internal/Backends/Metal/*.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/metal/tests/CNA/Internal/Backends/Metal/*.cpp")
     add_executable(cna_test_metal_portable ${CNA_METAL_PORTABLE_TEST_SOURCES})
     if(UNIX AND NOT APPLE)
         target_link_libraries(cna_test_metal_portable PRIVATE
@@ -15,6 +15,9 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(cna_test_metal_portable
             PRIVATE CNA SHARP_RUNTIME gtest_main SDL3::SDL3)
     endif()
+    # The portable policy suite includes the metal module's policy headers on every
+    # platform; they ride the module's unconditional header-interface target.
+    target_link_libraries(cna_test_metal_portable PRIVATE cna_renderer_metal_headers)
     cna_register_backend_test(NAME Metal_PortableHelpers COMMAND cna_test_metal_portable
         TIMEOUT 30 LABELS "Metal;Portable")
 endif()

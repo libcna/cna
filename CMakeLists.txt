@@ -118,9 +118,11 @@ cna_detect_sharp_runtime_shape()
 
 include(cmake/BackendSelection.cmake)
 
-include(cmake/BackendLibraries.cmake)
-
-include(cmake/CnaLibrary.cmake)
+# Physical module composition (MODULARIZATION_PLAN.md §11): every subsystem and renderer
+# family owns modules/<name>/{CMakeLists.txt,include/,src/,tests/}; the former central
+# cmake/BackendLibraries.cmake + cmake/CnaLibrary.cmake manifests dissolved into the
+# per-module files this directory composes.
+add_subdirectory(modules)
 
 include(cmake/Examples.cmake)
 

@@ -5,7 +5,7 @@
 # FetchContent block in BackendSelection.cmake. Unlike bgfx there is nothing to build -- sokol is
 # a set of STB-style single-file headers, so this only needs to put a directory on the include
 # path; the one translation unit that instantiates the implementation is CNA's own
-# src/Graphics/Backends/Sokol/SokolImpl.cpp.
+# modules/renderers/sokol/src/SokolImpl.cpp.
 #
 # sokol publishes no version tags (its only tags mark historical API breaks), so the pin below is
 # a plain upstream commit SHA. Bump it deliberately: sokol's C API changes without deprecation
