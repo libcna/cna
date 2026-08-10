@@ -63,3 +63,67 @@ closure).
 The committed generated shader headers (`*_shaders.hpp` under backend `shaders/` directories)
 and their generation scripts are hash-identical (contained in the production/build-tooling
 identity above); no generation workflow was touched.
+
+---
+
+# No-loss reconciliation — Phase 2 physical layout
+
+Baseline: `modularization/after-target-split/` at Phase-1 final `b072f0da6` (tree `ef3cc2a91`).
+After: `modularization/after-phase2-layout/` at the Phase-2 branch head.
+Method: identical `capture_inventory.py` runs plus a full old-path→new-path mapping
+reconciliation (`move-map.tsv`, 674 rows, generated from `git diff -M`); every Phase-1
+production file classified.
+
+## Production sources and headers (`include/`, `src/`)
+
+1357 baseline files → 1357 files, zero additions, zero deletions:
+
+- **683 PRESERVED** — same path, same hash: the entire public `include/` tree (public
+  include-path compatibility was a hard constraint; internal-contract headers under
+  `include/CNA/Internal/**` deliberately did not move).
+- **662 MOVED, byte-identical** — R100 renames into the module-first `src/` layout.
+- **12 MOVED_WITH_REQUIRED_EDIT** — the backend files whose src-rooted generated-shader
+  include directives had to become includer-relative when the backend directories moved
+  (15 directives; Sokol ×2 files, D3D9 ×7, D3DCommon, SdlGpu, Vulkan, plus
+  `D3D9CnaShaderRegisters.hpp`). Per-file old-blob/new-blob diffs contain **zero**
+  non-`#include` changed lines — comments and code byte-preserved.
+
+The five move commits were 100% renames (674/674 R100); the directive edits landed in the
+path-update commit, so pure moves and content changes are separated in history.
+
+## Public API
+
+`api-decls.tsv`: **byte-identical** to the Phase-1 snapshot (1300 declarations). `include/`
+is hash-identical, so the public API surface is unchanged by construction.
+
+## Test sources and registered tests
+
+`files-tests.tsv`: byte-identical (483 files — the 478 baseline + Phase-1's 5 probes).
+OPENGLES ctest registration: 6537 names = pristine baseline 6526 + exactly the 11 Phase-1
+module gates; zero removals, zero renames (`ctest-names-opengles.txt`). HEADLESS ctest:
+6130 = pristine control 6118 + the 12 Phase-1 module gates; full run at `-j4` leaves,
+after the serial rerun of the known flake families (ENet, audio timing), exactly the
+control's 2 accepted deterministic residuals (REMED-GFX-133
+`SetRenderTargets_FourTargets`, `Headless_Smoke`).
+
+## Production TU ownership
+
+The source-partition validator now works over the module-first directories (ownership is
+purely directory-based — physical location IS the ownership statement) and still fails the
+configure on unowned or doubly-owned production TUs. Real build-target names (HEADLESS
+configure): 107, identical to Phase 1.
+
+## Build tooling
+
+19 files INTENTIONALLY_REPLACED (modified in place): `cmake/CnaLibrary.cmake` (module
+globs + validator paths + the audio→input edge + include-hygiene), `BackendSelection.cmake`
+(BACKEND_DIR values), `BackendLibraries.cmake` (shared-core paths + include-hygiene),
+`Tests/HtmlDomTests.cmake`, `Tests/D3D9Tests.cmake` (scoped include for the shadercache
+test), `ThirdPartySokol.cmake`, `tools/media/arithmetic32bit/CMakeLists.txt`, 12 scripts,
+and `examples/d3d9_shadercache_test.cpp` (one include directive re-rooted). Zero
+`src/CNA|src/Microsoft` references remain in cmake/scripts/tools.
+
+## Intentionally removed items
+
+None. No file, test, target, sample, tool, generated artifact, API element, or comment was
+removed in Phase 2.

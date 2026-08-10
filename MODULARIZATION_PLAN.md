@@ -445,3 +445,248 @@ pumps MediaPlayer while MediaPlayer plays through the audio mixer; declared. (Th
 "runtime ↔ audio via FrameworkDispatcher" cycle dissolved by assigning the dispatcher TU to
 audio; the audio↔media coupling replaced it as the true minimal form.) No other link-level
 cycle exists.
+
+---
+
+## 9. PHASE 2 — physical layout + architecture hardening (2026-08-10)
+
+Phase-1 final state `b072f0da6` (tree `ef3cc2a91`) is the accepted input; Phase 2 executes the
+physical restructuring Phase 1 deferred (§6), re-reviews the three declared cycles with final
+evidence, and hardens the include/dependency hygiene of the target graph. Public `include/` is
+untouched by design: consumer `#include <...>` source compatibility outranks internal symmetry,
+so the internal-contract headers stay at `include/CNA/Internal/**` while implementation moved.
+
+### 9.1 PROVEN — physical layout (implementation tree only)
+
+Every implementation TU now lives under the module that owns it in the target graph:
+
+    src/
+      Math/                 cna_math          (17 TUs, flat)
+      Core/                 cna_core          (4 TUs, flat)
+      Runtime/              cna_runtime       (15 TUs, flat)
+      Storage/              cna_storage       (3 TUs, flat)
+      Graphics/
+        Xna/                cna_graphics_core (67 TUs — Microsoft::Xna::Framework::Graphics impl)
+        Internal/           cna_graphics_core (3 TUs — CNA::Internal::Graphics)
+        Backends/<X>/       per-backend targets (38 dirs incl. their shaders/ subtrees)
+      Input/
+        Xna/  Internal/  NoXna/    cna_input  (18 + 11 + 7)
+      Audio/
+        Xna/  Internal/            cna_audio  (13 incl. FrameworkDispatcher.cpp + 3)
+      Media/
+        Xna/  Internal/            cna_media  (21 + 11)
+      Content/
+        Xna/  Xnb/  GltfImport/    cna_content (6 + 16 + 1)
+      Devices/
+        Microsoft/  NoXna/         cna_devices (21 + 14)
+      NoXna/
+        Graphics/                  cna_noxna  (4)
+      GamerServices/
+        Xna/  Internal/            CNA_GamerServices (35 + 1)
+      Net/
+        Xna/  Internal/            CNA_Net    (19 + 6)
+
+Naming rule: `<Module>/Xna/` = XNA public-API implementation, `<Module>/Internal/` =
+CNA::Internal engine parts, `<Module>/NoXna/` = NOXNA extension surfaces;
+single-area modules stay flat. `Devices/Microsoft/` (not `Xna/`) because that
+tree implements the WP-era `Microsoft::Devices` namespace, not `Microsoft::Xna`.
+Renderer family grouping (modern/historical/diagnostic) was considered and NOT
+introduced: no such classification exists anywhere in the build or docs today,
+several backends have no unambiguous class (SOFTWARE, SKIA, GDI, MAGNUM), and a
+new taxonomy would be exactly the arbitrary-aesthetics move the campaign brief
+forbids. `Backends/<X>/` keeps the exact established directory names.
+
+Move mechanics: 5 pure `git mv` commits (674/674 files R100 byte-identical),
+then one path-update commit. The only sources whose content changed: 12 backend
+files whose 16 src-rooted `#include "CNA/Internal/Backends/<X>/shaders/…"`
+directives became includer-relative `#include "shaders/…"` (the form Bgfx/Llgl
+already used) plus `examples/d3d9_shadercache_test.cpp` (re-rooted to
+`Graphics/Backends/D3D9/shaders/…`). Comments/documentation inside sources:
+untouched by construction (R100 everywhere else).
+
+### 9.2 PROVEN — include hygiene after the moves
+
+With the shader directives includer-relative, nothing in any configuration
+resolves headers against a `src/` include root any more (mechanically verified
+over every tracked TU/header in src/, tests/, examples/, tools/, main.cpp):
+
+- every module's `PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src` include dir: removed;
+- `cna_backend_graphics_common` INTERFACE include dirs narrowed to `include/`
+  only — the implementation tree is no longer exposed to every consumer;
+- the four backend-side `PRIVATE src` include dirs: removed;
+- single documented exception: `cna_test_d3d9_shadercache` (D3D9Tests.cmake)
+  gets `PRIVATE src/` scoped to that one target — it deliberately includes the
+  D3D9 generated-shader header to audit the embedded bytecode inventory.
+
+### 9.3 PROVEN — symbol-level edge audit + the one hardening fix
+
+New permanent-methodology check this phase: an nm-based audit over the built
+module archives maps every undefined symbol to its uniquely-defining module and
+requires the defining module to be reachable from the referencing module
+through DECLARED edges (direct deps expanded through PUBLIC-only edges — i.e.
+never only through some other module's `$<LINK_ONLY:…>` private closure).
+
+Finding: `FrameworkDispatcher::Update()` pumps
+`Input::Touch::TouchPanel::{getTouchDeviceExistsProperty,Update}` (exactly as
+FNA's `FrameworkDispatcher.Update()` does), giving cna_audio a direct symbol
+edge into cna_input that previously resolved only through
+media→graphics-core→`$<LINK_ONLY:cna_input>` — a link-order-shaped accident of
+the kind the cycle-acceptance rule forbids. Fixed by declaring
+`target_link_libraries(cna_audio PRIVATE cna_input)` (plain DAG edge; input has
+no path back to audio; closure unchanged in practice). Audit result post-fix
+(HEADLESS module set, backend + GamerServices/Net included): 35 cross-module
+symbol-edge pairs, every one declared or PUBLIC-reachable — zero undeclared
+edges; the audit also independently re-confirms the three declared cycle pairs
+and that graphics-core's only backend reference is the single factory symbol.
+
+### 9.4 Final cycle review (the three declared cycles)
+
+**graphics-core ↔ input — ACCEPT_INTENTIONAL.**
+Exact edges: `GraphicsDevice.cpp` → `TouchPanel::setDisplay{Width,Height}Property`
+(3 sites), `TextInputEXT::{set,get}WindowHandleProperty` +
+`Mouse::{set,get}WindowHandleProperty` (device create/reset/dispose);
+`MouseCursor.cpp` → `Texture2D::{getFormatProperty,getWidthProperty,
+getHeightProperty,GetData}` via the public `MouseCursor::FromTexture2D(const
+Graphics::Texture2D&, int, int)` signature. Upstream reality: FNA's
+GraphicsDevice writes `TouchPanel.DisplayWidth/Height` and
+`Mouse.INTERNAL_BackBuffer*` directly (GraphicsDevice.cs:432-437/757-762) — in
+XNA both subsystems are one assembly and mutually aware by design. Candidates
+examined and rejected:
+  (a) static-registration metrics sink — display updates silently vanish when
+      the input TU is not pulled from the archive (symbol-driven archive
+      semantics; gc-sections/LTO worsen it), and it inverts FNA's data flow;
+  (b) relocate the propagation to runtime — breaks fidelity for standalone
+      GraphicsDevice use (no Game object), which FNA supports;
+  (c) one-file `MouseCursor` module — the artificial single-TU split the brief
+      forbids;
+  (d) neutral windowing-state holder module — moves TouchPanel's own property
+      state out of input; conceptually worse, and a mini-"common" module.
+Cost of keeping: none beyond the declared 2-target cycle (CMake repeats the
+archives); no native-SDK leakage; input's public API already references
+Texture2D so no consumer exists that could want input without graphics.
+
+**graphics-core ↔ selected renderer — ACCEPT_INTENTIONAL.**
+Forward edge is ONE symbol: `CNA::Internal::Backends::CreateGraphicsBackend()`
+(declared in the Common contract header, defined by exactly the configured
+backend, called at GraphicsDevice.cpp:2391). This already is dependency
+inversion done correctly for static archives: the interface lives in the
+contract layer, the implementation is injected at configure time, and the
+explicit call is the anchor that guarantees the backend archive participates
+under single-pass linkers on every toolchain (GNU ld, MinGW, MSVC, wasm-ld).
+Replacing it with self-registration removes the only undefined-symbol anchor —
+the registrar object never gets pulled from the archive and device creation
+fails at runtime; the repairs (per-toolchain whole-archive flags across 41
+identities, or a reference anchor) are strictly worse or reintroduce the same
+edge renamed. Reverse edges (Effect::Apply, VertexDeclaration vtable,
+CNA::Logger, named math/colour values, DxtUtil/Bc7Util) are genuine shared
+implementations; duplicating them per-backend or splitting them out of the
+cohesive graphics cluster was already investigated and rejected (§6). The hard
+invariant holds and is re-proven on the new layout: graphics-core depends only
+on the one selected `${BACKEND_TARGET}`; per-configure closures carry exactly
+the selected backend + its SDK family (probe/closure gates green on OPENGLES,
+HEADLESS — incl. `GraphicsNativeSdkFree` — and VULKAN, §9.6; the nm audit
+counts exactly one graphics-core→backend symbol reference: the factory).
+
+**audio ↔ media — ACCEPT_INTENTIONAL.**
+CNA's `FrameworkDispatcher.cpp` is a line-by-line port of FNA's
+FrameworkDispatcher.cs: the `ActiveSongChanged`/`MediaStateChanged` flags are
+dispatcher members that MediaPlayer writes back (upstream design), Update()
+pumps `MediaPlayer::Update()` unconditionally and fires the flag-driven events,
+while MediaPlayer plays through the audio mixer path — audio↔media in both
+directions by upstream architecture. A lazy-registration bridge (MediaPlayer
+registers its pump on first state use; flags relocate into media) would
+preserve observable semantics but relocates upstream-placed state, adds two
+global hook seams with first-call ordering subtleties under the strict
+init-order sanitizer regime, and buys nothing consumers can observe: content
+already links media, runtime links media, and XNA never shipped audio without
+media in the assembly. The bridge is more artificial than the cycle; the brief
+says retain and document in exactly that case.
+
+No fourth link-level cycle exists. [EVIDENCE: edge audit + build.]
+
+### 9.5 PROVEN — no-loss reconciliation (Phase 2)
+
+Full mapping reconciliation of the Phase-1 production inventory (1357 files)
+against the final tree: **683 PRESERVED** (same path, same hash — the entire
+`include/` tree), **662 MOVED byte-identical**, **12 MOVED_WITH_REQUIRED_EDIT**
+(the shader-directive files; per-file old-blob/new-blob diffs show zero
+non-`#include` changed lines), **0 missing, 0 unexpected, 0 removed**. Commit
+evidence: 674/674 moved files were R100 across the five move commits; the
+final `git diff -M` vs the Phase-1 head shows 662 R100 + 12 R09x + 19 modified
+build/tooling files (5 cmake, 12 scripts, 1 tools CMakeLists,
+1 examples TU) + 0 additions + 0 deletions. `api-decls.tsv` and
+`files-tests.tsv` are byte-identical to the Phase-1 snapshots. OPENGLES ctest
+registration: 6537 names = pristine baseline 6526 + exactly the 11 Phase-1
+module gates; zero removals/renames. Real build-target names (HEADLESS
+configure): 107, identical to the Phase-1 snapshot. The source-partition
+validator passes on the new layout and directory-GLOB ownership makes physical
+location itself the ownership statement.
+
+### 9.6 PROVEN — retakes on the new layout
+
+- **OPENGLES (principal corpus):** full tree rebuilt from the new layout; all
+  11 module gates pass; full-suite A/B against the preserved pristine Phase-1
+  binary (`CnaTests-pristine-opengles`, identical command, Xvfb, dummy audio,
+  CWD = repo root): both run 6218 tests with identical per-test outcome sets —
+  6211 pass + 6 skip (same six conditional skips) + 1 fail, and the single
+  failure is a diagnosed A/B-harness environment interaction, not a code
+  difference: this session exported the canonical `SDL_AUDIO_DRIVER=dummy` in
+  addition to the legacy spelling, and `audio_no_hardware_harness` forces only
+  the legacy `SDL_AUDIODRIVER` — the surviving canonical hint opens the dummy
+  device, so the expected NoAudioHardwareException never throws. Under
+  Phase 1's exact env (legacy spelling only) the test passes on BOTH binaries.
+  Net result: byte-equal parity, 6212 effective passes as in Phase 1.
+- **HEADLESS (canonical):** rebuilt; full ctest = 6130 registrations (pristine
+  control 6118 + the 12 module gates, by name); `-j4` failures reduce, after
+  the serial rerun of the known ENet/audio-timing flake families, to exactly
+  the control's 2 accepted deterministic residuals (REMED-GFX-133
+  `SetRenderTargets_FourTargets`, `Headless_Smoke`).
+- **VULKAN (native family):** full tree rebuilt from the new layout; focused
+  run against the configured `CNA_TEST_DISPLAY` Xvfb: 222 registrations
+  (211 `Vulkan_*` + the 11 module gates), 221 pass; the single failure is
+  `Vulkan_DepthBias` failing exactly the Phase-1-recorded arm
+  (`DepthBias=-1e6 (flat)` constant-bias, 3/4 arms green) — the accepted
+  pre-existing llvmpipe/no-DRI3 environmental residual, unchanged.
+  `ModuleLinkClosure_probe_graphics` passes on this configure, re-proving the
+  selected-backend-only closure (backend archive + libvulkan, no other native
+  SDK) after the physical move.
+- **Sanitizers:** the HEADLESS `address,undefined,float-cast-overflow` Debug
+  tree rebuilt from the new layout (`ldd` confirms libasan+libubsan); all five
+  module probes run clean under
+  `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:check_initialization_order=1:strict_init_order=1`;
+  the strict curated corpus (identical Phase-1 filter) = **650 ran, 647 pass +
+  3 skip + 0 fail, exit 0, zero sanitizer reports** — the REMED-GFX-221
+  initialization-order coverage retained and green. Zero NEW CNA-originating
+  findings; the pre-existing P6-recorded findings (Net harness-child leak,
+  `Vector3::GetHashCode` non-finite-hash UB) were not re-opened.
+- **Modular sharp-runtime seam:** the HEADLESS × merge-preview tree
+  (`CNA_SHARP_RUNTIME_ROOT` → the read-only preview worktree, base `e8340b33` +
+  develop `1e51c2d8`) rebuilt green from the new layout; 12/12 module gates
+  pass; the Decimal XNB reader tests are present identically to the
+  monolithic-runtime tree (5 = 5 under `*Decimal*` — the INT128 define port
+  still holds). The remediation branch HEAD moved to `832726e0` during this
+  session, but its module registry is byte-identical to `e8340b33`
+  (§9.7), so the preview remains architecturally current.
+- **Incidental pre-existing finding (recorded, not fixed):** running `CnaTests`
+  with a CWD other than the repo root leaves the `tests/assets/…` fixture tree
+  unresolvable; `MediaLibraryTestFixture` then drives the empty-media-library
+  state into a pre-existing index-out-of-range throw plus a segfault in
+  `ObjectGraphIsInternallyConsistent` — reproduced identically with the
+  pristine Phase-1 binary, and absent under ctest (which runs tests with the
+  correct working directory). A future MediaLibrary robustness ticket of its
+  own, out of Phase-2 scope.
+
+### 9.7 sharp-runtime status (2026-08-10)
+
+Remediation branch `claude/remediation-batch-1804-namespace-b1yjh5` observed at
+`832726e014b41685ac47db1bfdbe1de07502806e` (moved accee955→832726e0 during this
+session; still active). The module registry
+(`cmake/SharpRuntimeComponents.cmake` + `SharpRuntimeModules.cmake`) is
+byte-identical between the Phase-1-studied `e8340b33` and today's HEAD — the
+CNA dual-mode seam and per-module component sets remain valid without change;
+the 33 files that did change are audit tests/docs/source fixes. Merge gate:
+OPEN (no owner-accepted checkpoint exists; the branch received a commit hours
+before this session's check). sharp-runtime develop remains untouched at
+`1e51c2d8`. The `NetworkSessionProperties::operator[]` ↔ `ElementReference<T>`
+merge-time adaptation stays documented (§ P5) and deliberately unapplied while
+the branch API is still moving.
