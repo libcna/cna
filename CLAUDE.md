@@ -182,31 +182,38 @@ C# `internal DebugDisplayString` should **not** become a public C++ API method.
 
 ## File Structure
 
-- Declarations and public documentation: `.hpp` file under `include/`
-- Implementation: `.cpp` file under `src/`
+The repository is a **module-oriented monorepo** (Phase-3 physical layout, see
+`docs/physical-modules.md`): every subsystem and every renderer implementation family owns
+`modules/<name>/{CMakeLists.txt,include/,src/,tests/}`.
 
-The **public header tree mirrors the namespace** (consumer include paths are stable API):
+- Declarations and public documentation: `.hpp` under the owning module's `include/`
+- Implementation: `.cpp` under the owning module's `src/`
+
+Each module's `include/` root **reproduces the public namespace path**, so consumer include
+spelling is stable API and identical across modules:
 
 ```text
-include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp
-include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp
+modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp
+modules/graphics/include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp
+modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffect.hpp
 ```
 
-The **implementation tree mirrors module ownership** (Phase-2 modularization layout):
-`src/<Module>/` named after the owning CMake target, with the XNA API implementation under
-`<Module>/Xna/`, `CNA::Internal` engine parts under `<Module>/Internal/`, and NOXNA extension
-surfaces under `<Module>/NoXna/`; single-area modules stay flat. Renderer implementations live
-in `src/Graphics/Backends/<Backend>/`.
+all still included as `#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"` etc.
+
+The **src/ tree of a module** keeps the Phase-2 area convention: XNA API implementation under
+`src/Xna/`, `CNA::Internal` engine parts under `src/Internal/`, NOXNA extension surfaces under
+`src/NoXna/`; single-area modules stay flat. Renderer implementations live in
+`modules/renderers/<family>/src/`.
 
 ```text
-src/Graphics/Xna/Texture2D.cpp        # Microsoft::Xna::Framework::Graphics::Texture2D
-src/Input/Internal/SdlInputBridge.cpp # CNA::Internal::Input
-src/Math/Vector3.cpp                  # Framework-root math type
-src/Graphics/Backends/Vulkan/…        # one directory per renderer backend
+modules/graphics/src/Xna/Texture2D.cpp        # Microsoft::Xna::Framework::Graphics::Texture2D
+modules/input/src/Internal/SdlInputBridge.cpp # CNA::Internal::Input
+modules/math/src/Vector3.cpp                  # Framework-root math type
+modules/renderers/vulkan/src/…                # one directory per renderer family
 ```
 
 A new production `.cpp` placed outside every module directory fails the configure (the
-source-partition validator in `cmake/CnaLibrary.cmake` keeps ownership total).
+physical source-partition validator in `modules/CMakeLists.txt` keeps ownership total).
 
 Avoid putting non-template implementations in headers.
 
@@ -363,7 +370,9 @@ The table of known acceptable C++ deviations from FNA/XNA (e.g. `GetHashCode()` 
 ## Tests
 
 Every public XNA 4.0 API method, constructor, operator, and constant **must** have at least one unit test.
-Tests live under `tests/` mirroring the namespace path, using Google Test.
+Tests live under the owning module's `modules/<name>/tests/` mirroring the namespace path
+(shared fixture assets and the cross-module minimal-link probes stay under top-level
+`tests/`), using Google Test.
 
 Rules:
 - Every method overload must be covered by at least one test case.
@@ -433,12 +442,12 @@ individual task. Do not push unless the user explicitly asks to push.
 
 ## Internal (CNA) vs XNA Layer
 
-| Layer                     | Location                                      | Purpose                        |
-|---------------------------|-----------------------------------------------|--------------------------------|
-| XNA public API            | `include/Microsoft/Xna/Framework/…`           | Game-facing, must match XNA    |
-| Backend contracts         | `include/CNA/Internal/Backends/Common/…`      | `IGraphicsBackend` etc.        |
-| Backend implementations   | `src/CNA/Internal/Backends/<backend>/`        | Hidden from XNA API           |
-| CNA utilities             | `include/CNA/`, `src/CNA/`                    | NOXNA helpers, logging, etc.   |
+| Layer                     | Location                                                        | Purpose                        |
+|---------------------------|-----------------------------------------------------------------|--------------------------------|
+| XNA public API            | `modules/<module>/include/Microsoft/Xna/Framework/…`            | Game-facing, must match XNA    |
+| Backend contracts         | `modules/graphics/include/CNA/Internal/Backends/Common/…`       | `IGraphicsBackend` etc.        |
+| Backend implementations   | `modules/renderers/<family>/{src,include}/…`                    | Hidden from XNA API            |
+| CNA utilities/extensions  | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | NOXNA helpers, logging, etc.   |
 
 Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
 (`SDL_RENDERER` | `OPENGLES` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |

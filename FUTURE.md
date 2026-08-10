@@ -15,9 +15,9 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | Horizon | Item | State |
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
-| **CURRENT** | Public CNA renderer identities | **41** — mechanically counted from `include/CNA/GraphicsBackendType.hpp` |
-| **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** — fast-forwarded into `develop` on 2026-08-10 at `41028e995` (target graph 2026-08-09 + physical layout/hardening 2026-08-10, no-loss-proven); the former sharp-runtime external gate is closed: modular sharp-runtime is public on its `develop` (`81624983`) and CNA consumes it in modular mode (see `NEXT.md` top section) |
-| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started**; its Phase-1 blocker is cleared, but starting it still requires a fresh explicit owner instruction |
+| **CURRENT** | Public CNA renderer identities | **41** — mechanically counted from `CNA/GraphicsBackendType.hpp` (modules/core) |
+| **CURRENT** | Phase 1 — CNA modularization | **COMPLETE** in three stages: target graph + physical `src/` layout promoted 2026-08-10 (`41028e995`), modular sharp-runtime consumption promoted (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, MODULARIZATION_PLAN.md §11) implemented and validated on `feature/physical-modules` — **READY FOR PROMOTION, not yet merged**; the complete modularization campaign is DONE once the owner promotes that branch |
+| **FUTURE** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **not started and still blocked**: it must base on the promoted physical-modules `develop` head, which requires the owner's dedicated promotion session first |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
 | **FUTURE** | Phase 5 — glTF correctness campaign | **not started**; blocked on Phase 4 |

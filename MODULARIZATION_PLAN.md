@@ -801,3 +801,56 @@ and CNA's modular consumption is live via
 `feature/sharp-runtime-modular-adaptation`; after that branch's promotion, the
 resulting CNA `develop` head supersedes `60c363a7` as the base for FUTURE.md
 Phase 2.
+
+## 11. PHASE 3 — final physical module/package layout (2026-08-10, `feature/physical-modules`)
+
+The owner clarified that the Phase-1/Phase-2 result — complete build modularization plus the
+module-first `src/` regrouping — was still not the desired final architecture while the
+repository kept the two global `src/` + `include/` trees. Phase 3 transforms the repository
+into a module-oriented monorepo: every subsystem and every renderer implementation family
+physically owns `modules/<name>/{CMakeLists.txt,include/,src/,tests/}`. Public include
+spelling is byte-compatible (each module's `include/` root reproduces the `Microsoft/...` /
+`CNA/...` paths), the accepted target graph is unchanged, and the former central manifests
+(`cmake/CnaLibrary.cmake`, `cmake/BackendLibraries.cmake`) dissolved into per-module
+`CMakeLists.txt` files composed by `modules/CMakeLists.txt`. The complete architectural
+inventory (module -> targets/deps/roots, helper targets, cycles, validators) lives in
+`docs/physical-modules.md`; the frozen per-file design decisions and the campaign evidence
+live in `modularization/physical-modules/`.
+
+Highlights, in the same OBSERVED/PROVEN discipline as §9:
+
+- **Move mechanics.** 1776 tracked files moved from `include/` + `src/` + `tests/` into the
+  module tree via 7 pure-rename commits (100% R100), driven by
+  `modularization/tools/physical_move_map.py` (deterministic map, totality- and
+  uniqueness-checked against base `ea61123e6`). Two files were subsequently reassigned with
+  evidence (`IPackedVector.hpp` -> math: interface consumed by Color;
+  `GraphicsBackendType.hpp` -> core: self-contained constexpr identity header, the accepted
+  `probe_core` surface); `D3D9ShaderRegisters.hpp` moved into the d3d9 module's include tree
+  repairing a Phase-2 latent defect (its `CNA/Internal/...` spelling had no physical file
+  under any include root since the Phase-2 `src/` include-root removal — pre-existing,
+  discovered mechanically, fixed with 4 directive-line edits).
+- **Extension split.** The former `cna_noxna` implementation (4 TUs + `CNA/Graphics`
+  headers) became `modules/graphics-ext` (`CNA::GraphicsExt`); the CNA-specific half of the
+  devices sources (`src/Devices/NoXna`, 14 TUs + `CNA/Devices` headers) became
+  `modules/devices-ext` (`CNA::DevicesExt`); `cna_devices` keeps the XNA-compatible
+  Microsoft::Devices base. `cna_noxna` survives as an INTERFACE composition over both
+  extension modules (CNA::NoXna umbrella; `probe_noxna` +
+  `ModuleLinkClosure_NoXnaComposition` REQUIRE both extension archives). Input's NoXna
+  surface stays inside the input module — it was never owned by `cna_noxna` and carving
+  `cna_input` was not authorized.
+- **Include-root distribution.** `cna_build_flags` no longer carries any include directory;
+  each module exposes its own `include/` root PUBLIC, and the umbrella aggregates them by
+  composition. The monolithic include tree had been hiding four real include-contract edges,
+  now declared: math -> core-headers and storage -> core-headers (headers-only:
+  NOXNA marker, PlayerIndex, PathContainment — `cna_core_headers` INTERFACE keeps both
+  modules' accepted link closures byte-exact), media -> input (private; the
+  FrameworkDispatcher pump surface — the input archive was already in every media link
+  closure through audio's own private edge), and the 66 renderer headers that spelled the
+  backend contract as `"../Common/IGraphicsBackend.hpp"` now use the canonical
+  `CNA/Internal/Backends/Common/...` spelling resolved through the graphics module root.
+- **Validators evolved.** The configure-time source-partition validator now enforces
+  physical location == ownership over `modules/**` and rejects a resurrected legacy
+  `src/`/`include/` root; `modularization/tools/check_include_reachability.py` proves every
+  module include (transitively from every TU) resolves through the declared module graph;
+  the probe fleet grew from 5 to 14 modules plus the NoXna composition, Net/ENet, HEADLESS
+  native-SDK-free (graphics/content/graphics-ext/devices-ext) and VULKAN closure gates.
