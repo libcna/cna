@@ -47,7 +47,7 @@ FAMILY = {"Ascii": "ascii", "Bgfx": "bgfx", "Canvas": "canvas", "DirectX10": "di
           "Direct2D": "direct2d", "DirectX1": "directx1", "DirectX2": "directx2",
           "DirectX3": "directx3", "DirectX5": "directx5",
           "DirectX6": "directx6", "DirectX7": "directx7", "DirectX8": "directx8",
-          "EasyGL": "easygl",
+          "EasyGL": "easygl", "Fna3d": "fna3d",
           "FreeDirect": "freedirect", "Gdi": "gdi", "Glide": "glide", "Headless": "headless",
           "HtmlDom": "html-dom", "Llgl": "llgl", "Magnum": "magnum", "Metal": "metal",
           "OpenGL1": "opengl1", "OpenGL2": "opengl2", "OpenGL4": "opengl4",

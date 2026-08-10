@@ -2421,6 +2421,32 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
     EXPECT_NO_THROW(draw())
         << "a renderer that claims MultiStreamVertexInput and implements instanced drawing must "
            "accept a mixed-frequency multi-stream instanced draw";
+#elif defined(CNA_RENDERER_FNA3D)
+    // A FIFTH measured outcome (plan_fna3d.md): this renderer claims MultiStreamVertexInput
+    // because several PER-VERTEX streams genuinely re-slot -- FNA3D_ApplyVertexBufferBindings
+    // takes an array of per-stream declarations natively -- but it has no shader that could
+    // consume a PER-INSTANCE stream. FNA3D's only shader entry point takes a compiled Direct3D 9
+    // Effect binary, so this renderer draws through XNA's own stock effects, and none of them
+    // declares a per-instance vertex input (in real XNA, hardware instancing needs a custom
+    // Effect that does). Rendering it anyway would stack every instance on top of the first, so
+    // the draw must reach that declared boundary with the message naming the exact reason.
+    try
+    {
+        draw();
+        ADD_FAILURE()
+            << "this renderer executes XNA's stock effects, which declare no per-instance vertex "
+               "input, and was expected to refuse rather than stack every instance on the first";
+    }
+    catch (const std::exception& e)
+    {
+        EXPECT_STREQ(
+            "FNA3D renderer: instanced drawing is not supported. FNA3D's only shader entry point "
+            "takes a compiled Direct3D 9 Effect binary, so this renderer draws through XNA's "
+            "stock effects, none of which declares a per-instance vertex input.",
+            e.what())
+            << "the refusal must be this renderer's own declared stock-effect boundary, not a "
+               "different failure";
+    }
 #elif defined(CNA_RENDERER_WICKED)
     // A FOURTH measured outcome (plan_wicked.md WICKED-58 / REMED-GFX-202): this renderer claims
     // MultiStreamVertexInput because several PER-VERTEX streams genuinely re-slot, and it

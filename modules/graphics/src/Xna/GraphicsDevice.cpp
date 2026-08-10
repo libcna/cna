@@ -34,6 +34,13 @@
 #include "CNA/Internal/Renderers/Llgl/LlglRendererSelection.hpp"
 #endif
 
+// plan_fna3d.md: only the window-flag header, deliberately not the renderer header -- FNA3D picks
+// its driver at runtime and reports the SDL flags that driver needs, and this header is free of
+// FNA3D (and therefore of SDL/MojoShader) includes, exactly like the LLGL selection header above.
+#ifdef CNA_RENDERER_FNA3D
+#include "CNA/Internal/Renderers/Fna3d/Fna3dWindowFlags.hpp"
+#endif
+
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach's own MaxRenderTargets=1
 // ceiling, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_DIRECTX9
 // convention exactly. Distinct from MAX_RENDERTARGET_BINDINGS below (XNA's own general 4-target
@@ -238,6 +245,17 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 windowFlags |= SDL_WINDOW_OPENGL;
             }
+#endif
+
+            // plan_fna3d.md: FNA3D selects its driver (SDL_GPU / Direct3D 11 / OpenGL) inside
+            // FNA3D_PrepareWindowAttributes and returns the SDL window flags that driver needs --
+            // SDL_WINDOW_OPENGL for the GL driver, none for the others. That call must happen
+            // before SDL_CreateWindow below, because it also primes the GL attributes the window's
+            // visual is chosen from; same runtime-decides-the-flag shape as LLGL/Diligent/bgfx
+            // above, except that FNA3D makes the decision itself rather than CNA re-deriving it.
+#ifdef CNA_RENDERER_FNA3D
+            windowFlags |= static_cast<SDL_WindowFlags>(
+                CNA::Internal::Renderers::Fna3d::Detail::PrepareWindowFlags());
 #endif
 
             return windowFlags;
