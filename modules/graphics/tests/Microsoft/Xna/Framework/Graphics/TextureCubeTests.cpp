@@ -59,9 +59,10 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // a renderer that had read nothing at all. The tests below therefore assert the real outcome for
 // this renderer rather than merely that the call returned.
 //
-// SDL_Renderer, ASCII, Canvas and DIRECTX3 keep IGraphicsRenderer::CreateTextureCube's nullptr default
-// (no cube resource exists at all); Headless stores no pixel data by design. Every other renderer
-// reads level 0 back exactly -- Software only at level 0, since it stores no cube mip levels.
+// SDL_Renderer, ASCII, Canvas, DIRECTX3 and Blend2D keep IGraphicsRenderer::CreateTextureCube's
+// nullptr default (no cube resource exists at all); Headless stores no pixel data by design.
+// Every other renderer reads level 0 back exactly -- Software only at level 0, since it stores no
+// cube mip levels.
 // -----------------------------------------------------------------------
 //
 // REMED-GFX-135 adds the write-side half of the same question. `TextureCube::SetData` now has
@@ -76,7 +77,8 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // Software), even though nothing on this renderer samples a cube texture as a GPU resource yet.
 #if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || \
     defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
-    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI)
+    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI) || \
+    defined(CNA_RENDERER_BLEND2D)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else

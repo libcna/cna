@@ -61,6 +61,9 @@ namespace CNA
         /** @brief Skia 2D raster renderer. */
         Skia,
 
+        /** @brief Blend2D 2D vector raster renderer. */
+        Blend2D,
+
         /** @brief ASCII (SDL-windowed glyph grid). */
         Ascii,
 
@@ -185,6 +188,8 @@ namespace CNA
         return GraphicsRendererType::HtmlDom;
 #elif defined(CNA_RENDERER_SKIA)
         return GraphicsRendererType::Skia;
+#elif defined(CNA_RENDERER_BLEND2D)
+        return GraphicsRendererType::Blend2D;
 #elif defined(CNA_RENDERER_ASCII)
         return GraphicsRendererType::Ascii;
 #elif defined(CNA_RENDERER_FREEDIRECT)
@@ -268,6 +273,7 @@ namespace CNA
             case GraphicsRendererType::Canvas:       return "CANVAS";
             case GraphicsRendererType::HtmlDom:      return "HTML_DOM";
             case GraphicsRendererType::Skia:         return "SKIA";
+            case GraphicsRendererType::Blend2D:      return "BLEND2D";
             case GraphicsRendererType::Ascii:        return "ASCII";
             case GraphicsRendererType::FreeDirect:           return "FREEDIRECT";
             case GraphicsRendererType::DirectX9:          return "DIRECTX9";

@@ -80,9 +80,10 @@ Unblocked by Phase 1's promotion, but **not started** — and, like every phase 
 fresh explicit owner instruction before any work begins. It must start from the stable modularized
 public `develop` base, not from an older pre-modularization commit.
 
-Current public renderer count before this phase: **41**.
+Current public renderer count before this phase: **42** (`BLEND2D` landed independently of this
+phase — see `docs/blend2d-renderer.md` — and is no longer a planned addition below).
 
-This phase adds one new public OpenGL ES 2 path plus 13 planned new renderer implementations.
+This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer implementations.
 
 ### Planned additions
 
@@ -95,19 +96,18 @@ This phase adds one new public OpenGL ES 2 path plus 13 planned new renderer imp
 | 5 | `IGL` | Facebook IGL — https://github.com/facebook/igl |
 | 6 | `NVRHI` | NVIDIA NVRHI. |
 | 7 | `KORE` | Kode/Kore — https://github.com/Kode/Kore |
-| 8 | `BLEND2D` | Blend2D. |
-| 9 | `METHANEKIT` | MethaneKit RHI. |
-| 10 | `LINAGX` | LinaGX. |
-| 11 | `TEMPEST` | Tempest. |
-| 12 | `THORVG` | ThorVG. |
-| 13 | `PORTABLEGL` | PortableGL. |
-| 14 | `REACT_DOM` | A distinct React/DOM-oriented CNA rendering implementation, **only if** the final architecture proves it can truthfully satisfy a useful CNA graphics contract. It must not be counted merely as a conceptual alias of an existing identity. |
+| 8 | `METHANEKIT` | MethaneKit RHI. |
+| 9 | `LINAGX` | LinaGX. |
+| 10 | `TEMPEST` | Tempest. |
+| 11 | `THORVG` | ThorVG. |
+| 12 | `PORTABLEGL` | PortableGL. |
+| 13 | `REACT_DOM` | A distinct React/DOM-oriented CNA rendering implementation, **only if** the final architecture proves it can truthfully satisfy a useful CNA graphics contract. It must not be counted merely as a conceptual alias of an existing identity. |
 
-That is `OPENGLES2` + 13 new renderer implementations = **14 additions**.
+That is `OPENGLES2` + 12 new renderer implementations = **13 additions**.
 
 ### Target count
 
-    41 + 14 = 55 public CNA renderer identities
+    42 + 13 = 55 public CNA renderer identities
 
 **This 55 count is a TARGET, not an invariant.** After implementation, recount public identities
 mechanically from the actual registry and report the truthful result. If `REACT_DOM` cannot
