@@ -492,11 +492,11 @@ namespace CNA::Internal::Renderers::EasyGL
     // plan_glbackends.md GLB-36: extracts (location, name) pairs from
     // "layout(location=N) in TYPE NAME;" declarations in the ORIGINAL (unmodified) ES 3.00 vertex
     // shader source, so the caller can rebind the same numeric locations via
-    // Program::bind_attrib_location() before linking on WEBGL1 (where the layout qualifier itself
-    // is stripped out of the shader text -- see TransformGlslEs300BodyToEs100). This is what lets
-    // every existing VertexArray/VAO attribute-binding call site in this file (all of which use
-    // hardcoded numeric indices matching these same layout(location=N) values) keep working
-    // completely unmodified regardless of which of the 4 GL profiles is active.
+    // Program::bind_attrib_location() before linking on WEBGL1/OPENGLES2 (where the layout
+    // qualifier itself is stripped out of the shader text -- see TransformGlslEs300BodyToEs100).
+    // This is what lets every existing VertexArray/VAO attribute-binding call site in this file
+    // (all of which use hardcoded numeric indices matching these same layout(location=N) values)
+    // keep working completely unmodified regardless of which of the 5 GL profiles is active.
     static std::vector<std::pair<int, std::string>> ExtractVertexAttribLocations(const std::string& es300VertexSource)
     {
         std::vector<std::pair<int, std::string>> result;

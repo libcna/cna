@@ -111,8 +111,9 @@ migration time** — the future expansion was reserved to add it so the family
 reads OPENGLES1/OPENGLES2/OPENGLES3. (Since realized: the Phase-2 expansion
 added `OPENGLES2` on 2026-08-10 on exactly that reserved name — see
 `plan_opengles2.md` / `docs/opengles2-renderer.md`.)
-EasyGL remains the internal shared implementation of the four GL profiles
-(`CNA_RENDERER_EASYGL`, `cna_renderer_easygl`, `EasyGLRenderer`) and is still not
+EasyGL remains the internal shared implementation of the GL profiles (four at
+migration time, five since the `OPENGLES2` addition:
+`CNA_RENDERER_EASYGL`, `cna_renderer_easygl`, `EasyGLRenderer`) and is still not
 a public identity. bgfx's upstream `RendererType::OpenGLES` is untouched.
 
 ## 4. NOXNA → CNAEXT

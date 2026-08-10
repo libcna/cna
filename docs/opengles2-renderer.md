@@ -38,10 +38,16 @@ CNA OPENGLES2 (public identity)
   against a real driver in this project — `WEBGL1`'s own dialect verification stopped at
   standalone string-transform checks, see `docs/webgl1-renderer.md`), and the profile was
   additionally exercised with `MESA_GLES_VERSION_OVERRIDE=2.0` forcing a strictly
-  ES 2.0-validating context. Five example tests exist solely to exercise ES 3.0-level features
-  this profile truthfully refuses (MSAA resolve ×3, occlusion queries ×2) and are deliberately
-  not registered for it; the hardware-instancing gtest oracles skip themselves on the reported
-  `Instancing = false` capability.
+  ES 2.0-validating context. **Fifteen** example tests exist solely to exercise ES 3.0-level
+  features this profile truthfully refuses and are deliberately not registered for it —
+  Texture3D/volume ×7, MSAA ×4, occlusion queries ×2, MRT ×1, hardware-instanced custom shader
+  ×1 (`modules/renderers/easygl/examples/CMakeLists.txt`, each behind its own
+  `if(NOT CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2")`), so CTest registers **6549** tests here
+  against `OPENGLES3`/`OPENGL33`'s 6564. Two of the fifteen
+  (`EasyGL_CubeVolume_Get/SetDataContract`) are shared `TextureCube` + `Texture3D` contract
+  tests, so their `TextureCube` half is dropped on this profile as well. The
+  hardware-instancing gtest oracles skip themselves on the reported `Instancing = false`
+  capability.
 
 ## What's real today
 
