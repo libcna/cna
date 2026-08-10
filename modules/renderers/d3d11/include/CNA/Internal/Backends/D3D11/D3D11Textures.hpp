@@ -8,7 +8,7 @@
 // caller passed (CreateTexture3D/CreateTextureCube's own `surfaceFormat` parameter is accepted
 // for interface-signature compatibility but not yet honored by any backend, this one included).
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>

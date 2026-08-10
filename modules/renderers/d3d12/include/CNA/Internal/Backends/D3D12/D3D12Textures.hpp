@@ -20,7 +20,7 @@
 // in this pass -- DX-109's own plan row explicitly allows triaging 2D textures + buffers first
 // since they're DX-111's actual prerequisite; see plan_dx.md's DX-109 row for the honest scope note.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>

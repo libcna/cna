@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <Magnum/GL/Mesh.h>
 #include <Magnum/GL/Renderer.h>

@@ -21,7 +21,7 @@
 // evaluated CPU-side instead of GPU-side, and it applies uniformly to both the stock sprite2d path
 // and the custom-Effect path below (both draw from the same already-transformed vertex buffer).
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D11Buffers.hpp"
 
 #include <d3d11.h>

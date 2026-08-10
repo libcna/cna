@@ -12,7 +12,7 @@
 // real SetData() call's (vertex_count/index_count * element size), growing (never shrinking) via
 // Map/Unmap if a later SetData() call needs more bytes than the current allocation.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <d3d11.h>

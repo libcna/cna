@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../Common/IGraphicsBackend.hpp"
-#include "../SdlRenderer/SdlGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.hpp"
 #include "AsciiFontAtlas.hpp"
 #include "AsciiQuantizer.hpp"
 #include <memory>

@@ -28,7 +28,7 @@
 // own no-op default) -- texture unit 0 is bound by the caller, per IEffectBackend's own doc
 // comment.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9ConstantTable.hpp"
 
 #include <d3d9.h>

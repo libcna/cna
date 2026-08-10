@@ -4,7 +4,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Backends/Llgl/LlglRendererSelection.hpp"
 #include "CNA/Internal/Backends/Llgl/LlglSdlSurface.hpp"
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <LLGL/LLGL.h>
 

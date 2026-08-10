@@ -14,7 +14,7 @@
 // needs more bytes than the current allocation -- same discipline D3D11Buffers.hpp already
 // established for this project.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "D3D9DefaultPoolResourceEXT.hpp"
 

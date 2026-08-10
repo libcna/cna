@@ -2,7 +2,7 @@
 
 // plan_dx.md Phase DX6 (DX-47): real D3D11 occlusion query backend.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>

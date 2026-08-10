@@ -10,7 +10,7 @@
 // owns the XNA 4.0 programming model above this boundary and needs a device abstraction below it,
 // not a second engine (plan_wicked.md design decision 1).
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 

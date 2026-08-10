@@ -12,7 +12,7 @@
 // Explicitly triaged out of DX-109's original pass ("prioritize buffers + 2D textures first, they're
 // DX-111's actual prerequisite") -- this is the real, scoped follow-up.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>

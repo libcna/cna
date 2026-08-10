@@ -43,7 +43,7 @@
 // (DX-107/DX-111's own documented depthEnable=false PSO simplification). Real depth-test support
 // against a bound render target is DX-118's job, same as it is for the back buffer.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>

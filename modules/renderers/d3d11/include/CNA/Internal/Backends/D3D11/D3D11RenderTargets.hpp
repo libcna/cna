@@ -8,7 +8,7 @@
 // the owning backend instance knows how to do (mirrors VulkanRenderTargetBackend's identical
 // owner_ pattern, for the identical reason).
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>

@@ -3,7 +3,7 @@
 // plan_dx.md Phase DX2/DX4: D3D11 backend skeleton + device/swap-chain/back-buffer.
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_BACKEND=D3D11).
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D11InputLayoutCache.hpp"
 #include "D3D11SamplerCache.hpp"
 #include "D3D11StateObjectCache.hpp"

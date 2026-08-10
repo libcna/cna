@@ -11,7 +11,7 @@
 // include this backend header. All real free-direct/<ddraw.h> usage lives in
 // FreeDirectGraphicsBackend.cpp behind the Impl pimpl below.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include <SDL3/SDL.h>
 #include <cstdint>
 #include <memory>

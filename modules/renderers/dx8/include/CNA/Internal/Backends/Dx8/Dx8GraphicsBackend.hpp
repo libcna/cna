@@ -17,7 +17,7 @@
 // business leaking into every translation unit that merely wants to hold a Dx8GraphicsBackend
 // pointer. All real <d3d8.h> usage lives in Dx8GraphicsBackend.cpp behind the Impl pimpl below.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include <SDL3/SDL.h>
 #include <memory>
 

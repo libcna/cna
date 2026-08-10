@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"

@@ -9,7 +9,7 @@
 //
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_BACKEND=D3D12).
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 #include "D3D12ResourceStateTracker.hpp"
 #include "D3D12PipelineStateCache.hpp"

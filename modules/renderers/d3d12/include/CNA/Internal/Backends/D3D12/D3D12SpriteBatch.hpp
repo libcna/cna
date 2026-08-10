@@ -31,7 +31,7 @@
 //     state system lands; single non-overlapping sprite draws (this task's own test coverage) are
 //     unaffected by this gap.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D12Buffers.hpp"
 
 #include <d3d12.h>

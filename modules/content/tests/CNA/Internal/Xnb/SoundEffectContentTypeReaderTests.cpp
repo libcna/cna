@@ -31,7 +31,7 @@
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
-#include "../../../Microsoft/Xna/Framework/Audio/SoundEffectInstanceTestAccess.hpp"
+#include "../../../../../audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectInstanceTestAccess.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;

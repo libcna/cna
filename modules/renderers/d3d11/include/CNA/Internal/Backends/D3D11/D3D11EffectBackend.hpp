@@ -20,7 +20,7 @@
 // bound by the caller (SpriteBatch) for both the stock and custom-effect paths, per
 // IEffectBackend::BindTexture()'s own doc comment.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>

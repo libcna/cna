@@ -18,7 +18,7 @@
 // a Dx7GraphicsBackend pointer. All real <ddraw.h> usage lives in Dx7GraphicsBackend.cpp behind the
 // Impl pimpl below.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include <SDL3/SDL.h>
 #include <memory>
 

@@ -2,7 +2,7 @@
 
 // plan_dx9.md Phase D9-5 (D9-55): real D3D9 occlusion query backend.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <d3d9.h>
 #include <wrl/client.h>

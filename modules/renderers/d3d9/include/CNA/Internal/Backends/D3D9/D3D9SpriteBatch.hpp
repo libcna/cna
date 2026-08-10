@@ -26,7 +26,7 @@
 // site -- see D3D9SpriteBatch.cpp's own BuildMatrixTransformEXT() for the formula and its
 // oracle-verified derivation (D9-91).
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
 
 #include <d3d9.h>

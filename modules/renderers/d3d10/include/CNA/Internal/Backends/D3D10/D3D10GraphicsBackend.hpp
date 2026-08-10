@@ -21,7 +21,7 @@
 // containment rule): all real <d3d10.h>/<dxgi.h>/<d3dcompiler.h> usage lives in
 // D3D10GraphicsBackend.cpp behind the Impl pimpl below.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include <SDL3/SDL.h>
 #include <memory>
 

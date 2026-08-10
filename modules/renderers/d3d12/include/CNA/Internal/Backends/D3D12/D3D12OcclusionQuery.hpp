@@ -3,7 +3,7 @@
 // plan_dx.md Phase DX13 (DX-120): real D3D12 occlusion query backend, mirroring D3D11's own
 // D3D11OcclusionQueryBackend (DX-47) XNA-level contract exactly.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>

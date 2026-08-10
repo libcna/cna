@@ -2,7 +2,7 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <SDL3/SDL_gpu.h>

@@ -29,7 +29,7 @@
 // -- `mipMap` is accepted but only a single level is ever allocated. A genuine, named gap
 // (plan_dx9.md's own D9-53 row), not a silent divergence.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D9DefaultPoolResourceEXT.hpp"
 
 #include <d3d9.h>

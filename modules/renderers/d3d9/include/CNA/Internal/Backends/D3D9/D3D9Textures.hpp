@@ -15,7 +15,7 @@
 // ID3D9DefaultPoolResourceEXT registry (D3D9Buffers.hpp's dynamic-buffer/D3DPOOL_DEFAULT
 // recovery path) the way a render target (D9-53, D3DUSAGE_RENDERTARGET + D3DPOOL_DEFAULT) will.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <d3d9.h>
 #include <wrl/client.h>

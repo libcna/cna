@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 namespace CNA::Internal::Backends::Stub
 {

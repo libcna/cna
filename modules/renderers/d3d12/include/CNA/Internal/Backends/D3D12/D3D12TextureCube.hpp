@@ -20,7 +20,7 @@
 // discipline D3D12Texture3DBackend::GetData already established, generalized with this file's own
 // face-aware subresource-index formula.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>

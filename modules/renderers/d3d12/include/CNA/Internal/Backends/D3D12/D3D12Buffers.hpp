@@ -23,7 +23,7 @@
 // intentionally not distinguished -- a documented, honest simplification, not silently dropped
 // semantics; revisit once real per-frame command-list pipelining exists.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <d3d12.h>

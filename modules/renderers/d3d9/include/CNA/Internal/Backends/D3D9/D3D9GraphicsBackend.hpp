@@ -9,7 +9,7 @@
 // Unlike D3D11, D3D9 has no separate device/swap-chain split -- CreateDevice() creates the
 // implicit swap chain (back buffer + optional depth-stencil) in the same call.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "D3D9DefaultPoolResourceEXT.hpp"
 
 #include <d3d9.h>

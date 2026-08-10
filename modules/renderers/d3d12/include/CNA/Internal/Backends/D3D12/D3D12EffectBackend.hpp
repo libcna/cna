@@ -17,7 +17,7 @@
 // target, since CompileProgram() may run before any render target is bound (XNA content loading
 // typically compiles effects up front) -- an honest, documented simplification, not an oversight.
 
-#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>
