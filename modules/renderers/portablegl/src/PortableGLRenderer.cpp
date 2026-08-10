@@ -51,6 +51,48 @@ namespace CNA::Internal::Renderers::PortableGL
             }
         }
 
+        /// Leaves exactly attrib slots [0, usedCount) enabled and every other slot PortableGL has
+        /// disabled. PortableGL's vertex_stage walks ALL GL_MAX_VERTEX_ATTRIBS slots on every draw
+        /// and fetches each one whose `enabled` flag is set, straight out of the buffer/offset/
+        /// stride that slot's last glVertexAttribPointer recorded -- it has no notion of "the
+        /// current program only declares N inputs". A slot left enabled by a previous draw that
+        /// used a different program is therefore still read, at that draw's stride, for as many
+        /// vertices as the CURRENT draw submits, which reads past the end of the older (smaller)
+        /// buffer as soon as the new draw is the longer one. Every draw entry point below states
+        /// its complete attrib-enable set through this helper instead of only enabling the slots
+        /// it wants, so no cross-program state can survive.
+        void SelectVertexAttribArrays(int usedCount)
+        {
+            for (int i = 0; i < GL_MAX_VERTEX_ATTRIBS; ++i)
+            {
+                if (i < usedCount)
+                    glEnableVertexAttribArray(static_cast<GLuint>(i));
+                else
+                    glDisableVertexAttribArray(static_cast<GLuint>(i));
+            }
+        }
+
+        /// Maps a public `Graphics::CompareFunction` ordinal (Always=0, Never=1, Less=2,
+        /// LessEqual=3, Equal=4, GreaterEqual=5, Greater=6, NotEqual=7) to PortableGL's own
+        /// depth/stencil comparison enum.
+        GLenum ToPglCompareFunc(int compareFunctionOrdinal)
+        {
+            switch (compareFunctionOrdinal)
+            {
+            case 0: return GL_ALWAYS;
+            case 1: return GL_NEVER;
+            case 2: return GL_LESS;
+            case 3: return GL_LEQUAL;
+            case 4: return GL_EQUAL;
+            case 5: return GL_GEQUAL;
+            case 6: return GL_GREATER;
+            case 7: return GL_NOTEQUAL;
+            default:
+                throw std::runtime_error(
+                    "PortableGLRenderer::ApplyDepthStencilState: unsupported depth CompareFunction ordinal");
+            }
+        }
+
         GLenum ToPglMode(PrimitiveType pt)
         {
             switch (pt)
@@ -100,9 +142,27 @@ namespace CNA::Internal::Renderers::PortableGL
             vs_output[3] = color.w;
         }
 
+        /// PortableGL converts a fragment's [0,1] float color to bytes by TRUNCATING `v * 255.0f`
+        /// (see its own v4_to_Color, which documents that choice against the rounding
+        /// alternatives). A byte channel that made the round trip through a normalized vertex
+        /// attribute or a texel therefore lands one LSB low whenever `n / 255.0f * 255.0f` falls
+        /// just short of `n` in float32 -- e.g. an ordinary Color(200, 30, 90) rasterizes as
+        /// (199, 29, 89). Every other CNA renderer reproduces a supplied byte color exactly, so
+        /// half an LSB is added here, which turns PortableGL's truncation into round-to-nearest
+        /// without touching the vendored header. Both fragment paths clamp to [0,1] before the
+        /// conversion (blended and unblended alike), so this cannot push a saturated channel out
+        /// of range.
+        vec4 RoundToNearestByte(const vec4& color)
+        {
+            constexpr float kHalfByte = 0.5f / 255.0f;
+            return vec4{color.x + kHalfByte, color.y + kHalfByte,
+                        color.z + kHalfByte, color.w + kHalfByte};
+        }
+
         void ColoredFragmentShader(float* fs_input, Shader_Builtins* builtins, void* /*uniforms*/)
         {
-            builtins->gl_FragColor = vec4{fs_input[0], fs_input[1], fs_input[2], fs_input[3]};
+            builtins->gl_FragColor =
+                RoundToNearestByte(vec4{fs_input[0], fs_input[1], fs_input[2], fs_input[3]});
         }
 
         // ---- Textured 2D shader pair (SpriteBatch quads) ---------------------------------------
@@ -135,15 +195,25 @@ namespace CNA::Internal::Renderers::PortableGL
         {
             const auto* u = static_cast<const TexturedUniforms*>(uniforms);
             const vec4 texel = texture2D(u->texture, fs_input[0], fs_input[1]);
-            builtins->gl_FragColor = vec4{
+            builtins->gl_FragColor = RoundToNearestByte(vec4{
                 texel.x * fs_input[2], texel.y * fs_input[3],
-                texel.z * fs_input[4], texel.w * fs_input[5]};
+                texel.z * fs_input[4], texel.w * fs_input[5]});
         }
     }
 
     // =========================================================================================
     // PortableGLVertexBufferRenderer
     // =========================================================================================
+    //
+    // Resource-lifetime note (verified, not assumed): the three handle classes below keep a raw
+    // pointer to the owning renderer's glContext and re-make it current from their own
+    // destructors. GraphicsDevice::Dispose() disposes every registered GraphicsResource -- which
+    // is what VertexBuffer/IndexBuffer/Texture2D are, and each of their Dispose(bool) overrides
+    // resets the renderer handle this class implements -- BEFORE destroyNativeResources() resets
+    // the IGraphicsRenderer itself. So the context these destructors touch is always still alive.
+    // That ordering is a GraphicsDevice-level guarantee shared by every renderer (EasyGL's
+    // glDeleteTextures and its ResourceRegistry back-pointer have the identical requirement), not
+    // anything PortableGL-specific, so no extra ownership machinery is added here.
 
     PortableGLVertexBufferRenderer::PortableGLVertexBufferRenderer(void* pglContext, int vertexCapacity)
         : pglContext_(pglContext), vertexCount_(vertexCapacity)
@@ -453,16 +523,18 @@ namespace CNA::Internal::Renderers::PortableGL
         const int fbH = virtualHeight_;
         const auto* buf = reinterpret_cast<const std::uint8_t*>(impl_->backbuffer);
 
-        // PortableGL's back_buffer stores row 0 (lowest memory address) as the BOTTOM row of the
-        // image -- ordinary OpenGL bottom-left-origin convention (confirmed by init_glContext's
-        // own `lastrow = buf + (h-1)*w*sizeof(pix_t)` computation). CNA's public ReadBackbuffer
-        // contract is top-row-first (matching every other renderer's documented row order, e.g.
-        // EasyGLRenderer::ReadBackbuffer's own "OpenGL origin is bottom-left; flip y" comment), so
-        // each requested row is remapped here exactly the same way.
+        // PortableGL keeps OpenGL's bottom-left window-coordinate origin in its API but stores the
+        // resulting image TOP row first, so that its back buffer can be handed straight to a
+        // windowing system: every fragment write is
+        // `((pix_t*)back_buffer.lastrow)[-y*w + x]`, with `lastrow = buf + (h-1)*w*sizeof(pix_t)`,
+        // which puts GL y=0 (the bottom of the viewport) in the LAST row of memory and GL y=h-1
+        // (the top) in the first. CNA's public ReadBackbuffer contract is also top-row-first, so
+        // the two agree and no vertical flip belongs here -- an earlier flip in this method
+        // silently mirrored every non-symmetric frame, which only the orientation-sensitive
+        // pixel oracles in the interleave/edge-case tests could see.
         for (int row = 0; row < h; ++row)
         {
-            const int srcY = y + row;
-            const int pglRow = fbH - 1 - srcY;
+            const int pglRow = y + row;
             if (pglRow < 0 || pglRow >= fbH)
             {
                 std::memset(pixels + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4u, 0,
@@ -565,6 +637,35 @@ namespace CNA::Internal::Renderers::PortableGL
         glDepthMask(enabled ? GL_TRUE : GL_FALSE);
     }
 
+    void PortableGLRenderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                                    int depthFunc,
+                                                    bool /*stencilEnable*/, int /*stencilFunc*/,
+                                                    int /*stencilPass*/, int /*stencilFail*/,
+                                                    int /*stencilDepthFail*/,
+                                                    int /*stencilMask*/, int /*stencilWriteMask*/,
+                                                    int /*referenceStencil*/,
+                                                    bool /*twoSidedStencilMode*/,
+                                                    int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
+                                                    int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+    {
+        // Validate before touching any PGL state, so a rejected ordinal cannot leave the context
+        // half-updated -- the same order SoftwareRenderer::ApplyDepthStencilState validates in.
+        const GLenum pglDepthFunc = ToPglCompareFunc(depthFunc);
+
+        MakeCurrent(&impl_->context);
+        impl_->depthTestEnabled = depthEnable;
+        if (depthEnable) glEnable(GL_DEPTH_TEST);
+        else glDisable(GL_DEPTH_TEST);
+        glDepthMask(depthWriteEnable ? GL_TRUE : GL_FALSE);
+        glDepthFunc(pglDepthFunc);
+        // The stencil half of the state is deliberately not mapped in this v1 renderer: only the
+        // ClearStencil/ClearDepthAndStencil/ClearColorAndStencil routes reach PortableGL's real
+        // stencil plane, and SupportsCapability(StencilBuffer) answers for that plane's existence
+        // (PGL_D24S8), not for a per-draw stencil test. Leaving PGL's stencil_test at its default
+        // GL_FALSE keeps it that way rather than half-installing a test the draw paths never
+        // configure a reference value or operation set for.
+    }
+
     std::unique_ptr<IVertexBufferRenderer> PortableGLRenderer::CreateVertexBuffer(int vertex_capacity)
     {
         return std::make_unique<PortableGLVertexBufferRenderer>(&impl_->context, vertex_capacity);
@@ -599,9 +700,8 @@ namespace CNA::Internal::Renderers::PortableGL
 
         glBindBuffer(GL_ARRAY_BUFFER, vb.GLBufferHandle());
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 16, reinterpret_cast<const GLvoid*>(0));
-        glEnableVertexAttribArray(0);
         glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16, reinterpret_cast<const GLvoid*>(12));
-        glEnableVertexAttribArray(1);
+        SelectVertexAttribArrays(2);
 
         const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
         glDrawArrays(ToPglMode(primitive), 0, vertexCount);
@@ -633,9 +733,8 @@ namespace CNA::Internal::Renderers::PortableGL
 
         glBindBuffer(GL_ARRAY_BUFFER, vb.GLBufferHandle());
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 16, reinterpret_cast<const GLvoid*>(0));
-        glEnableVertexAttribArray(0);
         glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16, reinterpret_cast<const GLvoid*>(12));
-        glEnableVertexAttribArray(1);
+        SelectVertexAttribArrays(2);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.GLBufferHandle());
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
@@ -718,11 +817,9 @@ namespace CNA::Internal::Renderers::PortableGL
 
         const GLsizei stride = 8 * sizeof(float);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<const GLvoid*>(0));
-        glEnableVertexAttribArray(0);
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<const GLvoid*>(2 * sizeof(float)));
-        glEnableVertexAttribArray(1);
         glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<const GLvoid*>(4 * sizeof(float)));
-        glEnableVertexAttribArray(2);
+        SelectVertexAttribArrays(3);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }

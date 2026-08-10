@@ -187,6 +187,41 @@ namespace CNA::Internal::Renderers::PortableGL
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
 
+        /**
+         * @brief Installs a `DepthStencilState`'s depth half as real PortableGL state
+         *        (`glEnable`/`glDisable(GL_DEPTH_TEST)`, `glDepthMask`, `glDepthFunc`).
+         *
+         * Without this override the interface default is a no-op, so the depth capability this
+         * renderer reports as supported was reachable only through the direct
+         * `SetDepthTestEnabled()` route and never through the public
+         * `GraphicsDevice.DepthStencilState` property every XNA game actually uses. The stencil
+         * half is not mapped in this v1 renderer -- see the implementation's own note.
+         *
+         * @param depthEnable       Whether the depth test is performed.
+         * @param depthWriteEnable  Whether passing fragments write the depth buffer.
+         * @param depthFunc         Raw `CompareFunction` ordinal for the depth comparison.
+         * @param stencilEnable     Ignored in this v1 renderer.
+         * @param stencilFunc       Ignored in this v1 renderer.
+         * @param stencilPass       Ignored in this v1 renderer.
+         * @param stencilFail       Ignored in this v1 renderer.
+         * @param stencilDepthFail  Ignored in this v1 renderer.
+         * @param stencilMask       Ignored in this v1 renderer.
+         * @param stencilWriteMask  Ignored in this v1 renderer.
+         * @param referenceStencil  Ignored in this v1 renderer.
+         * @param twoSidedStencilMode Ignored in this v1 renderer.
+         * @param ccwStencilFunc      Ignored in this v1 renderer.
+         * @param ccwStencilPass      Ignored in this v1 renderer.
+         * @param ccwStencilFail      Ignored in this v1 renderer.
+         * @param ccwStencilDepthFail Ignored in this v1 renderer.
+         */
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
 

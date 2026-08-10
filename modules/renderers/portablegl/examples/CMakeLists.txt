@@ -30,6 +30,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "PORTABLEGL")
     cna_portablegl_test(cna_test_portablegl_textured_draw portablegl_textured_draw_test.cpp)
     cna_register_renderer_test(NAME PortableGL_TexturedDraw COMMAND cna_test_portablegl_textured_draw
         TIMEOUT 30 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_pipeline_interleave portablegl_pipeline_interleave_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_PipelineInterleave
+        COMMAND cna_test_portablegl_pipeline_interleave
+        TIMEOUT 30 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_depth_resize portablegl_depth_resize_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_DepthResize COMMAND cna_test_portablegl_depth_resize
+        TIMEOUT 30 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_edge_cases portablegl_edge_cases_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_EdgeCases COMMAND cna_test_portablegl_edge_cases
+        TIMEOUT 60 LABELS "PortableGL")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
