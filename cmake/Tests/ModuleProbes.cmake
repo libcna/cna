@@ -3,7 +3,7 @@
 # CNA module alias; the paired ModuleLinkClosure_* test inspects the probe's generated link
 # line and fails when a forbidden archive/library appears, turning every module's real
 # dependency closure into a permanent contract. RendererIdentityRegistry mechanically pins
-# the 41 public renderer identities across both registries.
+# the 42 public renderer identities across both registries.
 #
 # Native-only (the probes exist to inspect host link lines; Emscripten/Android links are
 # covered by their own configurations' full builds).

@@ -1,10 +1,10 @@
 # --- Graphics Renderer Selection ---
 # plan_glbackends.md: EasyGL is an internal implementation family, not a public renderer name.
-# It is selected publicly via one of 4 GL-profile names -- OPENGLES3/OPENGL33 (desktop/mobile,
-# non-Emscripten) and WEBGL1/WEBGL2 (Emscripten only). OPENGLES3 on Linux is the default GL-family
-# choice (was EASYGL); WEBGL2 is the default under Emscripten (was also EASYGL -- Emscripten's
-# GLES 3.0 request already mapped to a WebGL 2 context, it just had no name of its own).
-# Other platforms default to SDL_RENDERER.
+# It is selected publicly via one of 5 GL-profile names -- OPENGLES2/OPENGLES3/OPENGL33
+# (desktop/mobile, non-Emscripten) and WEBGL1/WEBGL2 (Emscripten only). OPENGLES3 on Linux is the
+# default GL-family choice (was EASYGL); WEBGL2 is the default under Emscripten (was also EASYGL --
+# Emscripten's GLES 3.0 request already mapped to a WebGL 2 context, it just had no name of its
+# own). Other platforms default to SDL_RENDERER.
 if(EMSCRIPTEN)
     set(_cna_default_renderer "WEBGL2")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -12,10 +12,11 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_renderer "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer}" CACHE STRING "Graphics renderer to use (SDL_RENDERER, OPENGLES3, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, DIRECTX11, DIRECTX12, DIRECT2D, CANVAS, HTML_DOM, SKIA, ASCII, FREEDIRECT, DIRECTX9, DIRECTX1, DIRECTX2, DIRECTX3, DIRECTX5, DIRECTX6, DIRECTX7, DIRECTX8, DIRECTX10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, DILIGENT, GLIDE, GDI, LLGL, or METAL)")
-set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS "SDL_RENDERER" "OPENGLES3" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "DIRECTX11" "DIRECTX12" "DIRECT2D" "CANVAS" "HTML_DOM" "SKIA" "ASCII" "FREEDIRECT" "DIRECTX9" "DIRECTX1" "DIRECTX2" "DIRECTX3" "DIRECTX5" "DIRECTX6" "DIRECTX7" "DIRECTX8" "DIRECTX10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT" "GLIDE" "GDI" "LLGL" "METAL")
+set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer}" CACHE STRING "Graphics renderer to use (SDL_RENDERER, OPENGLES2, OPENGLES3, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, DIRECTX11, DIRECTX12, DIRECT2D, CANVAS, HTML_DOM, SKIA, ASCII, FREEDIRECT, DIRECTX9, DIRECTX1, DIRECTX2, DIRECTX3, DIRECTX5, DIRECTX6, DIRECTX7, DIRECTX8, DIRECTX10, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, SDL_GPU, WICKED, SOKOL, DILIGENT, GLIDE, GDI, LLGL, or METAL)")
+set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS "SDL_RENDERER" "OPENGLES2" "OPENGLES3" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "DIRECTX11" "DIRECTX12" "DIRECT2D" "CANVAS" "HTML_DOM" "SKIA" "ASCII" "FREEDIRECT" "DIRECTX9" "DIRECTX1" "DIRECTX2" "DIRECTX3" "DIRECTX5" "DIRECTX6" "DIRECTX7" "DIRECTX8" "DIRECTX10" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "SDL_GPU" "WICKED" "SOKOL" "DILIGENT" "GLIDE" "GDI" "LLGL" "METAL")
 
 option(CNA_RENDERER_SDL_RENDERER "Enable SDL_Renderer graphics renderer" OFF)
+option(CNA_RENDERER_OPENGLES2 "Enable OpenGL ES 2.0 graphics renderer (internally: EasyGL)" OFF)
 option(CNA_RENDERER_OPENGLES3 "Enable OpenGL ES graphics renderer (internally: EasyGL)" OFF)
 option(CNA_RENDERER_OPENGL33 "Enable desktop OpenGL 3.3 core graphics renderer (internally: EasyGL)" OFF)
 option(CNA_RENDERER_WEBGL1 "Enable WebGL 1 graphics renderer, Emscripten only (internally: EasyGL)" OFF)
@@ -157,7 +158,7 @@ option(CNA_RENDERER_LLGL "Enable LLGL graphics renderer" OFF)
 option(CNA_RENDERER_METAL "Enable native Apple Metal graphics renderer (macOS only)" OFF)
 
 set(_cna_explicit_renderer_selection OFF)
-if(CNA_RENDERER_SDL_RENDERER OR CNA_RENDERER_OPENGLES3 OR CNA_RENDERER_OPENGL33 OR CNA_RENDERER_WEBGL1 OR CNA_RENDERER_WEBGL2 OR CNA_RENDERER_BGFX OR CNA_RENDERER_VULKAN OR CNA_RENDERER_WEBGPU OR CNA_RENDERER_MAGNUM OR CNA_RENDERER_HEADLESS OR CNA_RENDERER_SOFTWARE OR CNA_RENDERER_STUB OR CNA_RENDERER_DIRECTX11 OR CNA_RENDERER_DIRECTX12 OR CNA_RENDERER_DIRECT2D OR CNA_RENDERER_CANVAS OR CNA_RENDERER_HTML_DOM OR CNA_RENDERER_SKIA OR CNA_RENDERER_ASCII OR CNA_RENDERER_FREEDIRECT OR CNA_RENDERER_DIRECTX9 OR CNA_RENDERER_DIRECTX1 OR CNA_RENDERER_DIRECTX2 OR CNA_RENDERER_DIRECTX3 OR CNA_RENDERER_DIRECTX5 OR CNA_RENDERER_DIRECTX6 OR CNA_RENDERER_DIRECTX7 OR CNA_RENDERER_DIRECTX8 OR CNA_RENDERER_DIRECTX10 OR CNA_RENDERER_OPENGLES1 OR CNA_RENDERER_OPENGL4 OR CNA_RENDERER_OPENGL1 OR CNA_RENDERER_OPENGL2 OR CNA_RENDERER_SDL_GPU OR CNA_RENDERER_WICKED OR CNA_RENDERER_SOKOL OR CNA_RENDERER_DILIGENT OR CNA_RENDERER_GLIDE OR CNA_RENDERER_GDI OR CNA_RENDERER_LLGL OR CNA_RENDERER_METAL)
+if(CNA_RENDERER_SDL_RENDERER OR CNA_RENDERER_OPENGLES2 OR CNA_RENDERER_OPENGLES3 OR CNA_RENDERER_OPENGL33 OR CNA_RENDERER_WEBGL1 OR CNA_RENDERER_WEBGL2 OR CNA_RENDERER_BGFX OR CNA_RENDERER_VULKAN OR CNA_RENDERER_WEBGPU OR CNA_RENDERER_MAGNUM OR CNA_RENDERER_HEADLESS OR CNA_RENDERER_SOFTWARE OR CNA_RENDERER_STUB OR CNA_RENDERER_DIRECTX11 OR CNA_RENDERER_DIRECTX12 OR CNA_RENDERER_DIRECT2D OR CNA_RENDERER_CANVAS OR CNA_RENDERER_HTML_DOM OR CNA_RENDERER_SKIA OR CNA_RENDERER_ASCII OR CNA_RENDERER_FREEDIRECT OR CNA_RENDERER_DIRECTX9 OR CNA_RENDERER_DIRECTX1 OR CNA_RENDERER_DIRECTX2 OR CNA_RENDERER_DIRECTX3 OR CNA_RENDERER_DIRECTX5 OR CNA_RENDERER_DIRECTX6 OR CNA_RENDERER_DIRECTX7 OR CNA_RENDERER_DIRECTX8 OR CNA_RENDERER_DIRECTX10 OR CNA_RENDERER_OPENGLES1 OR CNA_RENDERER_OPENGL4 OR CNA_RENDERER_OPENGL1 OR CNA_RENDERER_OPENGL2 OR CNA_RENDERER_SDL_GPU OR CNA_RENDERER_WICKED OR CNA_RENDERER_SOKOL OR CNA_RENDERER_DILIGENT OR CNA_RENDERER_GLIDE OR CNA_RENDERER_GDI OR CNA_RENDERER_LLGL OR CNA_RENDERER_METAL)
     set(_cna_explicit_renderer_selection ON)
 endif()
 
@@ -165,6 +166,9 @@ if(_cna_explicit_renderer_selection)
     set(_cna_enabled_renderers)
     if(CNA_RENDERER_SDL_RENDERER)
         list(APPEND _cna_enabled_renderers "SDL_RENDERER")
+    endif()
+    if(CNA_RENDERER_OPENGLES2)
+        list(APPEND _cna_enabled_renderers "OPENGLES2")
     endif()
     if(CNA_RENDERER_OPENGLES3)
         list(APPEND _cna_enabled_renderers "OPENGLES3")
@@ -359,16 +363,18 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM" AND EMSCRIPTEN)
         "or CANVAS for browser builds.")
 endif()
 
-# plan_glbackends.md Phase A/GLB-7: all 4 GL-family public renderers (OPENGLES3/OPENGL33 desktop,
-# WEBGL1/WEBGL2 Emscripten) share one internal implementation (EasyGL, on top of the sibling
-# easy-gl library) -- this block sets it up once regardless of which of the 4 was selected.
+# plan_glbackends.md Phase A/GLB-7: all 5 GL-family public renderers (OPENGLES2/OPENGLES3/OPENGL33
+# desktop, WEBGL1/WEBGL2 Emscripten) share one internal implementation (EasyGL, on top of the
+# sibling easy-gl library) -- this block sets it up once regardless of which of the 5 was selected.
 #
 # GLB-38 done: the WebGL1 work (GLB-30..35) landed on easy-gl develop, so this builds against
 # the canonical '../easy-gl' sibling checkout again; the temporary '../easy-glrvc' (branch
 # 'rvc') redirect from GLB-7 is retired.
-if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
+if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
-    if((CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND EMSCRIPTEN)
+    if((CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
+            OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND EMSCRIPTEN)
         message(FATAL_ERROR
             "CNA: ${CNA_GRAPHICS_RENDERER} is a desktop/mobile GL renderer and cannot target "
             "Emscripten -- use WEBGL1 or WEBGL2 instead.")
@@ -377,11 +383,12 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
         message(FATAL_ERROR
             "CNA: ${CNA_GRAPHICS_RENDERER} only builds when targeting Emscripten (WebGL is a "
             "browser API). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/"
-            "cmake/Modules/Platform/Emscripten.cmake (or use emcmake), or use OPENGLES3/OPENGL33 "
-            "for a native desktop/mobile GL build.")
+            "cmake/Modules/Platform/Emscripten.cmake (or use emcmake), or use OPENGLES2/OPENGLES3/"
+            "OPENGL33 for a native desktop/mobile GL build.")
     endif()
-    if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        message(WARNING "CNA: OPENGLES3 renderer is primarily tested on Linux. Other platforms may require additional setup.")
+    if((CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3")
+            AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(WARNING "CNA: ${CNA_GRAPHICS_RENDERER} renderer is primarily tested on Linux. Other platforms may require additional setup.")
     endif()
     # easy-gl is a SIBLING repository checkout, not a git submodule of this
     # repo (Task DEV-BUILD-001) -- see sharp-runtime's identical check above
@@ -479,14 +486,15 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGL1")
     set(RENDERER_TARGET "cna_renderer_opengl1")
     add_compile_definitions(CNA_RENDERER_OPENGL1)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_OPENGL1")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
     message(STATUS "CNA: Using ${CNA_GRAPHICS_RENDERER} graphics renderer (internal implementation: EasyGL)")
     set(RENDERER_DIR "modules/renderers/easygl")
     set(RENDERER_TARGET "cna_renderer_easygl")
     # CNA_RENDERER_EASYGL is the internal implementation identity -- existing #ifdef
     # CNA_RENDERER_EASYGL guards elsewhere in the codebase keep working unmodified regardless of
-    # which of the 4 public GL profiles below was selected (plan_glbackends.md GLB-3).
+    # which of the 5 public GL profiles below was selected (plan_glbackends.md GLB-3).
     add_compile_definitions(CNA_RENDERER_EASYGL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_EASYGL")
     # CNA_GL_PROFILE_* selects the GL context/shader profile within the shared EasyGL
