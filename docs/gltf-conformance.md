@@ -296,15 +296,20 @@ forensic audit, stop and investigate the contradiction.
 | **D5** | **`partially-remediated`** | **`GLTF-071`** (mode read, classified, never reinterpreted) | `GLTF-072` (the per-mode conversion policy) |
 | D6 | `known-failing` | — | `GLTF-284` (after `GLTF-103`…`GLTF-114`) |
 | D7 | `known-failing` | — | `GLTF-217` / `GLTF-228` / `GLTF-229` |
-| D8 | `known-failing` | — | `GLTF-245` → `GLTF-247` → `GLTF-248` → `GLTF-260` |
+| **D8** | **`fixed`** | **`GLTF-245` → `GLTF-247` → `GLTF-248` → `GLTF-260`** | — |
 
-**D8 is not affected by the node-transform work, by design.** Giving the scene a real bone hierarchy
-parents a *skinned* mesh to the identity root rather than to its own node's bone, because glTF
-requires a skinned mesh's own node transform to be ignored — its joints already place the geometry.
-That is the conservative half of the rule and it is what stops `GLTF-114` introducing a second,
-opposite error on top of D8. The `inverse(globalTransform(meshNode))` cancellation term and the
-joint ancestry `BuildSkeleton` still drops remain `GLTF-245` → `GLTF-247` → `GLTF-248`, and
-`GLTF-260` is what proves the two halves do not collide.
+**D8 was closed in its own batch, deliberately after the node-transform work rather than with it.**
+`GLTF-114` only parked a skinned mesh on the identity root — the conservative half of glTF's rule
+that a skinned mesh's own node transform is ignored, which is what stopped it introducing a second,
+opposite error on top of D8. The joint ancestry and the `inverse(globalTransform(meshNode))`
+cancellation were then resolved on their own fixtures: `skin-armature-ancestor` for the ancestry
+above the joint set, and `skin-mesh-node-transform` for the cancellation, which is authored so that
+omitting it, applying it once and applying it twice are three numerically distinct outcomes.
+
+Both terms ride on a per-root prefix (`BoneOut::parentWorldPrefix`, `SkinningData::
+SkeletonRootPrefix`) rather than being folded into the bind pose. Folding them in would have been
+undone the moment an animation clip replaced a root joint's local transform; kept separate, an
+animated root joint substitutes only its own local transform exactly like any other bone.
 
 ### 3.4 Promoted audit fixtures (`GLTF-004`)
 

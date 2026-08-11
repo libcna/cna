@@ -183,7 +183,18 @@ namespace
     {
         const bool hasSkin = group.skin != nullptr;
         SkeletonResult skeleton;
-        if (hasSkin) { skeleton = BuildSkeleton(group.skin, unitScale); }
+        if (hasSkin)
+        {
+            // plan_gltf.md GLTF-245/GLTF-247: same two coordinate spaces the runtime path resolves
+            // -- the joints' full scene ancestry, and the skinned mesh node's own placement, which
+            // glTF cancels rather than applies.
+            Matrix meshNodeWorld = Matrix::getIdentityProperty();
+            for (const MeshInstanceOut& placement : group.instances)
+            {
+                if (placement.skinned) { meshNodeWorld = placement.worldTransform; break; }
+            }
+            skeleton = BuildSkeleton(group.skin, sceneGraph, meshNodeWorld, unitScale);
+        }
 
         struct MeshEntry {
             std::string vertFile, idxFile, textureFile, texture2File;
@@ -388,6 +399,9 @@ namespace
             for (const BoneOut& b : skeleton.bones) { AppendInt32(skelBytes, b.parentIndex); }
             for (const BoneOut& b : skeleton.bones) { AppendMatrix(skelBytes, b.bindPoseLocal); }
             for (const BoneOut& b : skeleton.bones) { AppendMatrix(skelBytes, b.inverseBindGlobal); }
+            // GLTF-245/GLTF-247: the per-root prefix, appended after the two existing matrix
+            // blocks so a reader that stops early still sees the original layout unchanged.
+            for (const BoneOut& b : skeleton.bones) { AppendMatrix(skelBytes, b.parentWorldPrefix); }
 
             skeletonFile = outName + ".skeleton.bin";
             WriteBinaryFile(outputDir / skeletonFile, skelBytes);

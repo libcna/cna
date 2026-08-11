@@ -37,6 +37,7 @@
 #include "GltfFixtureCorpus.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
@@ -273,4 +274,129 @@ TEST(GltfSceneGraphBones, SkinnedMeshAncestryIsPreservedInTheSceneModelButDoesNo
     // ...and none of it transforms the mesh, because glTF says the joints already place it.
     ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
     EXPECT_EQ(bones[0], model.getMeshesProperty()[0]->getParentBoneProperty());
+}
+
+// --- GLTF-245 / GLTF-247 / GLTF-248: the skin coordinate spaces --------------------------------
+
+TEST(GltfSkinSpaces, RootJointCarriesTheSceneAncestryAboveTheJointSet)
+{
+    // D8's fixture, end to end through the real loader. Joint0 has no local transform of its own,
+    // so its global transform is entirely inherited from the Armature above it, and the authored
+    // inverse bind matrix is the true inverse of that global transform. The correct joint matrix is
+    // therefore exactly the identity -- a vertex bound to Joint0 must not move at all.
+    //
+    // Before GLTF-245 this produced translate(0,-100,0): the ancestry was dropped from the bind
+    // pose while the inverse bind matrix still contained it, so every skinned vertex was displaced
+    // by the inverse of what was lost.
+    const LoadedFixture fixture("skin-armature-ancestor");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skin-armature-ancestor");
+
+    auto* skinning = dynamic_cast<Microsoft::Xna::Framework::Graphics::SkinningData*>(
+        model.getTagProperty());
+    ASSERT_NE(nullptr, skinning) << "the skinned model carries no SkinningData";
+    ASSERT_EQ(1, skinning->BoneCount);
+
+    Microsoft::Xna::Framework::Graphics::AnimationPlayer player(*skinning);
+    const std::vector<Matrix>& skin = player.GetSkinTransforms();
+    ASSERT_EQ(1u, skin.size());
+    ExpectMatrixNear(Matrix::getIdentityProperty(), skin[0],
+                     "joint matrix for a joint whose global transform its IBM exactly inverts");
+}
+
+TEST(GltfSkinSpaces, SkinnedVertexLandsWhereTheSpecificationSaysItDoes)
+{
+    // The same claim one layer up, in world space, which is what the owner actually sees. The
+    // fixture's carrier triangle spans mesh-local [0,1] in X and Y; with an identity joint matrix
+    // and a skinned mesh whose node transform is cancelled, the skinned world positions must equal
+    // the mesh-local ones exactly.
+    const LoadedFixture fixture("skin-armature-ancestor");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skin-armature-ancestor");
+
+    auto* skinning = dynamic_cast<Microsoft::Xna::Framework::Graphics::SkinningData*>(
+        model.getTagProperty());
+    ASSERT_NE(nullptr, skinning);
+    Microsoft::Xna::Framework::Graphics::AnimationPlayer player(*skinning);
+
+    // Every vertex is fully weighted to joint 0, so skinnedPosition = position * jointMatrix[0].
+    const Matrix jointMatrix = player.GetSkinTransforms()[0];
+    const Microsoft::Xna::Framework::Vector3 local(1.0f, 0.0f, 0.0f);
+    const Microsoft::Xna::Framework::Vector3 skinned =
+        Microsoft::Xna::Framework::Vector3::Transform(local, jointMatrix);
+
+    EXPECT_NEAR(1.0f, skinned.X, kTolerance);
+    EXPECT_NEAR(0.0f, skinned.Y, kTolerance)
+        << "the armature's [0,100,0] is leaking into the skinned position -- D8 is back";
+    EXPECT_NEAR(0.0f, skinned.Z, kTolerance);
+}
+
+TEST(GltfSkinSpaces, MeshNodeTransformIsCancelledExactlyOnce)
+{
+    // GLTF-260, both halves, on the fixture that isolates them. Joint0 has an identity bind pose
+    // and an identity inverse bind matrix, so the entire joint matrix is the mesh node's own
+    // cancellation: inverse(T(0,0,50)) = T(0,0,-50).
+    //
+    // Three outcomes are distinguishable here, which is the point of the fixture:
+    //   * no cancellation at all      -> joint matrix is the identity  (GLTF-247 missing)
+    //   * cancelled once              -> T(0,0,-50)                    (correct)
+    //   * cancelled AND the node bone -> the mesh renders at -50 in world space rather than 0,
+    //     because Model::Draw would apply the node bone on top of the already-cancelled geometry
+    const LoadedFixture fixture("skin-mesh-node-transform");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skin-mesh-node-transform");
+
+    auto* skinning = dynamic_cast<Microsoft::Xna::Framework::Graphics::SkinningData*>(
+        model.getTagProperty());
+    ASSERT_NE(nullptr, skinning);
+    ASSERT_EQ(1, skinning->BoneCount);
+
+    Microsoft::Xna::Framework::Graphics::AnimationPlayer player(*skinning);
+    const Matrix jointMatrix = player.GetSkinTransforms()[0];
+
+    // (a) the cancellation exists and is applied exactly once
+    EXPECT_NEAR(-50.0f, jointMatrix.M43, kTolerance)
+        << "expected inverse(T(0,0,50)); 0 means GLTF-247's cancellation is missing, -100 means it "
+           "was applied twice";
+    EXPECT_NEAR(0.0f, jointMatrix.M41, kTolerance);
+    EXPECT_NEAR(0.0f, jointMatrix.M42, kTolerance);
+
+    // (b) the node's bone exists and keeps its transform, but does not transform the mesh -- so the
+    //     cancellation is not silently undone by the hierarchy Phase 5 introduced.
+    const auto& bones = model.getBonesProperty();
+    const ModelBone* meshNodeBone = nullptr;
+    for (int i = 0; i < bones.getCountProperty(); ++i)
+    {
+        if (bones[i]->getNameProperty() == "SkinnedMeshNode") { meshNodeBone = bones[i]; }
+    }
+    ASSERT_NE(nullptr, meshNodeBone);
+    EXPECT_NEAR(50.0f, meshNodeBone->getTransformProperty().M43, kTolerance)
+        << "the mesh node's transform was deleted rather than cancelled";
+
+    ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+    ASSERT_NE(nullptr, model.getMeshesProperty()[0]->getParentBoneProperty());
+    EXPECT_EQ(0, model.getMeshesProperty()[0]->getParentBoneProperty()->getIndexProperty())
+        << "the skinned mesh is parented to its own node's bone, so Model::Draw will apply the very "
+           "transform the joint matrix just cancelled -- the double application GLTF-260 forbids";
+
+    // (c) the two together: a vertex at mesh-local (1,0,0) ends up at (1,0,-50) in skin space and
+    //     the identity-rooted mesh adds nothing, so that is also its world position.
+    const Microsoft::Xna::Framework::Vector3 skinned =
+        Microsoft::Xna::Framework::Vector3::Transform(
+            Microsoft::Xna::Framework::Vector3(1.0f, 0.0f, 0.0f), jointMatrix);
+    EXPECT_NEAR(1.0f, skinned.X, kTolerance);
+    EXPECT_NEAR(0.0f, skinned.Y, kTolerance);
+    EXPECT_NEAR(-50.0f, skinned.Z, kTolerance);
 }

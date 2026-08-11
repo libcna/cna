@@ -58,6 +58,20 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<Matrix> BindPose;
         /** @brief Inverse of each bone's bind-pose *global* (world) transform. */
         std::vector<Matrix> InverseBindPose;
+        /**
+         * @brief Transform each **root** bone's own local transform composes against; identity for
+         * a bone with a parent, and identity throughout for a skeleton that has no such context.
+         *
+         * @note CNAEXT — plan_gltf.md GLTF-245/GLTF-247 (Phase 5). A skeleton imported from glTF
+         * hangs somewhere in a larger scene: its root joints may have scene ancestors that are not
+         * themselves joints, and the skinned mesh's own node transform has to be cancelled rather
+         * than applied. Both are properties of the space *above* the skeleton, so they cannot be
+         * expressed as a bone-local transform — and folding them into @ref BindPose would be undone
+         * the instant a clip replaced that root bone's local transform. Kept separately, an
+         * animated root joint substitutes only its own local transform, exactly like any other
+         * bone. May be left empty, which is read as all-identity.
+         */
+        std::vector<Matrix> SkeletonRootPrefix;
         /** @brief Animation clips, keyed by clip name. */
         std::unordered_map<std::string, AnimationClip> AnimationClips;
     };

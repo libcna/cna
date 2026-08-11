@@ -305,18 +305,27 @@ def world_positions(builder: GltfBuilder, mesh_local_positions: dict[int, list[l
     ``mesh_local_positions`` maps a mesh index to its concatenated per-primitive positions.
     """
     instances = scene_mesh_instances(builder)
+    nodes = builder.document.get("nodes", [])
     records: list[dict[str, Any]] = []
     all_points: list[list[float]] = []
     for inst in instances:
         local = mesh_local_positions.get(inst.mesh, [])
-        transformed = [transform_point(inst.world_matrix, p) for p in local]
+        # A SKINNED mesh is not placed by its own node. Specification §3.7.3: the joints place it,
+        # and the joint matrix carries inverse(globalTransform(meshNode)) precisely so that node's
+        # transform cancels out. Reporting the node-placed positions here would make the L4
+        # expectation contradict the skin block computed alongside it, and would ask CNA to apply a
+        # transform the specification says to ignore. The skinned result lives under l4.skin
+        # instead (plan_gltf.md GLTF-247).
+        skinned = "skin" in nodes[inst.node] if inst.node < len(nodes) else False
+        placement = mat_identity() if skinned else inst.world_matrix
+        transformed = [transform_point(placement, p) for p in local]
         all_points.extend(transformed)
         records.append({
             "node": inst.node,
             "nodeName": inst.node_name,
             "mesh": inst.mesh,
             "parentNodePath": inst.parent_path,
-            "worldMatrixColumnMajor": inst.world_matrix,
+            "worldMatrixColumnMajor": placement,
             "worldPositions": transformed,
         })
     bounds: dict[str, Any] = {}

@@ -602,10 +602,17 @@ namespace CnaTest::GltfOracle
                     instance.node = static_cast<int>(&node - data.nodes);
                     instance.nodeName = node.name != nullptr ? node.name : "";
                     instance.mesh = static_cast<int>(node.mesh - data.meshes);
-                    instance.worldMatrix = world;
+                    // A skinned mesh is not placed by its own node: the specification (§3.7.3) has
+                    // the joints place it, and the joint matrix carries
+                    // inverse(globalTransform(meshNode)) precisely so that node's transform cancels
+                    // out. The node's world transform is still computed and self-checked above --
+                    // it is simply not this mesh's placement. The skinned result is a separate
+                    // expectation (l4.skin), not this one.
+                    const GltfMatrix placement = node.skin != nullptr ? IdentityMatrix() : world;
+                    instance.worldMatrix = placement;
                     for (const std::array<float, 3>& p : MeshPositions(*node.mesh))
                     {
-                        instance.worldPositions.push_back(TransformPoint(world, p[0], p[1], p[2]));
+                        instance.worldPositions.push_back(TransformPoint(placement, p[0], p[1], p[2]));
                     }
                     out.instances.push_back(std::move(instance));
                 }

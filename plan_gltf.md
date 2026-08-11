@@ -67,7 +67,7 @@ staleness problem: it still uses the pre-2026-08-10 `CNA_GRAPHICS_BACKEND` / `EA
 so **it cannot currently configure against the baseline at all**.
 
 The plan defines two milestones — **GLTF CORE 2.0 CORRECT** and **GLTF ROBUST** — a seven-layer
-numerical oracle hierarchy, a 135-asset conformance corpus, a 24-phase dependency-ordered backlog of
+numerical oracle hierarchy, a 136-asset conformance corpus, a 24-phase dependency-ordered backlog of
 **460 tasks** (`GLTF-001` … `GLTF-460`) organised into **two execution tracks**, and a 19-task
 **P0 center-collapse track** that answers the owner's question before any accessor-breadth,
 material, animation or extension work begins.
@@ -1185,7 +1185,7 @@ why "the character collapses toward the centre" is the expected symptom of D8 on
 | `skin-unnormalized` | w=`[0.5,0.25,0,0]` (sums to 0.75) | manifest states both the raw and the renormalised result; the policy chosen in `GLTF-256` decides which is asserted |
 | `skin-parented-joints` | joint B child of joint A, both transformed | manifest-computed |
 | `skin-armature-ancestor` | **`f9`** — joints under a transformed non-joint node | `(1,0,0)`; today `(1,−100,0)` |
-| `skin-mesh-node-transform` | skinned mesh node with `T=[0,0,50]` | `(1,0,0)` — the mesh node transform must be cancelled **and** must not be re-applied by the node bone Phase 5 gives that same node (`GLTF-260`) |
+| `skin-mesh-node-transform` | skinned mesh node with `T=[0,0,50]`, identity joint and IBM | joint matrix `T(0,0,−50)` — the mesh node transform must be cancelled **exactly once**, and must not be re-applied by the node bone Phase 5 gives that same node (`GLTF-260`) |
 | `skin-no-ibm` | `inverseBindMatrices` absent | identity IBMs |
 | `skin-nonuniform-joint-scale` | joint `S=[1,2,1]` | positions **and** normals asserted |
 | `skin-73-joints` | 73 joints | must not silently truncate |
@@ -1513,7 +1513,7 @@ and fails the release gate if any is found.
   `GLTF-399` asserts in CI that the emitted distinct-asset count equals the number stated here. If
   the corpus grows, the number in this document is updated from the manifest — never the reverse.
 
-### 24.2 Planned corpus — 135 distinct synthetic assets
+### 24.2 Planned corpus — 136 distinct synthetic assets
 
 Counts below are **owning-group** counts per §24.1; no asset is listed twice, so the column sums to
 the distinct-asset total. Each asset additionally ships a `.glb` twin (`GLTF-400`), which is the
@@ -1529,14 +1529,14 @@ same asset in another container, not another asset.
 | Normals / tangents | 6 | `tangent-authored`, `tangent-handedness`, `tangent-absent-generated`, `normal-absent`, `normal-nonuniform-scale`, `tangent-mirrored` |
 | UV / textures / samplers | 10 | `uv0-checker`, `uv1-material`, `uv-out-of-range-clamp`, `uv-out-of-range-wrap`, `uv-out-of-range-mirror`, `sampler-nearest`, `sampler-trilinear`, `texture-transform-basecolor`, `texture-transform-per-map`, `texture-shared-two-samplers` |
 | Materials / PBR | 12 | `mat-default` (no material), `mat-factor-only-gold`, `mat-basecolor-factor-times-texture`, `mat-metallic-roughness-channels`, `mat-normal-scale`, `mat-occlusion-strength`, `mat-emissive-factor`, `mat-emissive-strength`, `alpha-opaque`, `alpha-mask`, `alpha-blend`, `double-sided` |
-| Skinning | 13 | the `skin-*` ladder in §15.4 |
+| Skinning | 14 | the `skin-*` ladder in §15.4 |
 | Morph | 13 | the `morph-*` ladder in §16.3, which **owns** `morph-weights-animated-linear/step/cubic` and `morph-plus-skin` |
 | Animation | 10 | the `anim-*` ladder in §17.2, excluding the `anim-weights-*` fixtures owned by the morph group |
 | Scenes / cameras / lights | 7 | `scene-default-selection`, `scene-two-roots`, `scene-no-scenes`, `camera-perspective`, `camera-perspective-infinite`, `camera-orthographic`, `lights-punctual-three` |
 | Draco parity | 4 | `draco-triangle`, `draco-vs-uncompressed-pair`, `draco-skinned`, `draco-morph` |
 | Robustness / malformed | 6 | `bad-accessor-out-of-bounds`, `bad-index-out-of-range`, `bad-buffer-truncated`, `bad-glb-chunk-length`, `bad-matrix-and-trs`, `bad-version-1.0` |
 
-**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 13 + 13 + 10 + 7 + 4 + 6 = 135 distinct assets.**
+**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 14 + 13 + 10 + 7 + 4 + 6 = 136 distinct assets.**
 
 Reuse happens along two axes and neither changes that total. An asset is reused **across oracle
 layers** — the same `alpha-mask` file is an L3, L6 and L7 fixture — and **across phases**, where a
@@ -1956,7 +1956,7 @@ primitive mode is ever silently reinterpreted; indices decode exactly.*
 | GLTF-098 | Deterministic vertex ordering | ✅ | GLTF-083 | `ExtractMesh` emits vertices in accessor order. **Accept:** locked at L5 — required for morph delta indexing. |
 | GLTF-099 | Stride selection decision table as data, not nested ternaries | ⬜ | GLTF-072 | The current one-line ternary chain is unreadable and duplicated implicitly in renderers. **Accept:** a table-driven selector with a unit test per row of §2.3. |
 | GLTF-100 | Reject unrepresentable attribute combinations loudly | ⬜ | GLTF-099 | e.g. `usePbr && colored` is currently impossible and silently downgrades. **Accept:** the combination is either supported or reported. |
-| GLTF-101 | L3 semantic-mesh manifest for every corpus asset | ⬜ | GLTF-005 | **Accept:** `MeshOut` field-by-field comparison for all 135 assets. |
+| GLTF-101 | L3 semantic-mesh manifest for every corpus asset | ⬜ | GLTF-005 | **Accept:** `MeshOut` field-by-field comparison for all 136 assets. |
 | GLTF-102 | Attribute fuzz: random valid permutations | ⬜ | GLTF-040 | **Accept:** no crash, no sanitiser finding, no silent drop without a report entry. |
 
 ---
@@ -2168,10 +2168,10 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-245 | **[P0] `BuildSkeleton` must walk the full scene ancestry** | 🐛 | GLTF-114 | Parent links are resolved **only within the joint set**; `f9` proved an armature `translation [0,100,0]` is dropped from `bindPoseLocal` while the file's IBM keeps it ⇒ skin transform `translate(0,−100,0)`. `globalTransform(joint)` must include **every** scene ancestor, joint or not, **and every ancestor above `skin.skeleton`** (§15.1.1) — no early stop. The palette this produces is the `paletteIndex` space of §15.1.2 and must not reorder the scene hierarchy. **Accept:** `skin-armature-ancestor` places the vertex at `(1,0,0)`; a test asserts an ancestor transform above `skin.skeleton` still contributes. **Critical path.** |
+| GLTF-245 | **[P0] `BuildSkeleton` must walk the full scene ancestry** | ✔ | GLTF-114 | Parent links are resolved **only within the joint set**; `f9` proved an armature `translation [0,100,0]` is dropped from `bindPoseLocal` while the file's IBM keeps it ⇒ skin transform `translate(0,−100,0)`. `globalTransform(joint)` must include **every** scene ancestor, joint or not, **and every ancestor above `skin.skeleton`** (§15.1.1) — no early stop. The palette this produces is the `paletteIndex` space of §15.1.2 and must not reorder the scene hierarchy. **Accept:** `skin-armature-ancestor` places the vertex at `(1,0,0)`; a test asserts an ancestor transform above `skin.skeleton` still contributes. **Critical path.** **Landed:** `BuildSkeleton` gained a four-argument overload taking the scene graph and the skinned mesh node's world transform. A root joint's full scene ancestry — every ancestor, joint or not, and regardless of `skin.skeleton` — is resolved from `SceneGraphOut`, falling back to `cgltf_node_transform_world` for a joint parented outside the default scene rather than dropping the chain. |
 | GLTF-246 | Lock IBM reading | ✅ | GLTF-059 | `ConvertGltfMatrix` + `ScaleTranslation` read IBMs correctly (`f9`). **Accept:** locked at L2. |
-| GLTF-247 | **[P0] Add the `inverse(meshNodeWorld)` term** | 🐛 | GLTF-245 | glTF §3.8: the mesh node's own transform must be cancelled. Absent entirely today. **Accept:** `skin-mesh-node-transform` (mesh node `T=[0,0,50]`) places the vertex at `(1,0,0)`. **Critical path.** |
-| GLTF-248 | **[P0] The whole `skin-*` ladder passes at L4** | 🐛 | GLTF-247 | The 13 fixtures in §15.4. **Accept:** every expected world position matches to 1e-6. **Skinning is not complete here** — `GLTF-260` closes the track. **Critical path.** |
+| GLTF-247 | **[P0] Add the `inverse(meshNodeWorld)` term** | ✔ | GLTF-245 | glTF §3.8: the mesh node's own transform must be cancelled. Absent entirely today. **Accept:** `skin-mesh-node-transform` (mesh node `T=[0,0,50]`) places the vertex at `(1,0,0)`. **Critical path.** **Landed:** The `inverse(globalTransform(meshNode))` term is composed onto the same prefix. Both terms ride on `BoneOut::parentWorldPrefix` / `SkinningData::SkeletonRootPrefix` rather than being folded into the bind pose, so an animated root joint substitutes only its own local transform and cannot undo them. `AnimationPlayer` composes `world(root) = local * prefix`; an empty prefix array reads as all-identity, so a pre-existing skeleton is unaffected. |
+| GLTF-248 | **[P0] The whole `skin-*` ladder passes at L4** | ✔ | GLTF-247 | The 13 fixtures in §15.4. **Accept:** every expected world position matches to 1e-6. **Skinning is not complete here** — `GLTF-260` closes the track. **Critical path.** **Landed:** `skin-armature-ancestor` now yields a joint matrix of exactly identity, was `translate(0,−100,0)`. `GltfSkinSpaces` asserts the joint matrix and the resulting skinned vertex through the real loader; D8 is `fixed` in the ledger with the audit's measurement under `priorActual` and its inverted known-defect test deleted. |
 | GLTF-249 | Honour `skin.skeleton` **as a root hint, never as a traversal stop** | 🐛 | GLTF-245 | Parsed by cgltf, never read. §15.1.1: it names the declared skeleton root — useful for locating and naming the rig — but **must not truncate the ancestry** used for `globalTransform(joint)`. An implementation that walks up only until `skin.skeleton` recreates D8 in a new disguise. **Accept:** `skin.skeleton` is honoured as the declared/semantic root **while** joint global transforms are still derived from the complete scene-node ancestry the glTF skinning equation requires; a fixture in which a transform-bearing ancestor sits **above** `skin.skeleton` still produces the correct world position, and a fixture where `skin.skeleton` differs from the natural common ancestor is covered. No required ancestor transform may be dropped because an ancestor lies above `skin.skeleton` or is not itself a joint. |
 | GLTF-250 | Missing `inverseBindMatrices` ⇒ identity | ✅ | GLTF-246 | Spec-correct today, untested. **Accept:** `skin-no-ibm` locked. |
 | GLTF-251 | Joint matrix formula documented in one place | ⬜ | GLTF-247 | §15.1 in both column- and row-vector form. **Accept:** `docs/gltf-conventions.md`, referenced from the code. |
@@ -2183,7 +2183,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | GLTF-257 | `JOINTS_1`/`WEIGHTS_1` — support or report | 🐛 | GLTF-095 | Silently ignored. **Accept:** >4 influences are either supported or reported; never silently truncated. |
 | GLTF-258 | Influence count reaches the shader | ✅ | GLTF-255 | `WeightsPerVertex` / `uWeightsPerVertex`. **Accept:** L6 capture. |
 | GLTF-259 | Skinning is applied only to skinned primitives | ✅ | GLTF-245 | Gated on `JOINTS_0 && WEIGHTS_0`. **Accept:** locked. |
-| GLTF-260 | **[P0] A skinned mesh's node transform must not be applied twice** | 🔬 | GLTF-247, GLTF-114, GLTF-248 | Remediating D1–D3 changes the assumptions D8's fix rests on: Phase 5 gives the skinned mesh's node a real `ModelBone` for the first time, and that is precisely the transform glTF requires to be *cancelled* for a skinned mesh (§15.1). Without this task the node-hierarchy work can silently re-apply what `GLTF-247` just cancelled, leaving skinning double-transformed rather than fixed. **Accept, both halves required:** (a) the mesh-space cancellation term `inverse(globalTransform(meshNode))` is present and effective — `skin-mesh-node-transform` (mesh node `T=[0,0,50]`) places the vertex at `(1,0,0)`; and (b) the new real node hierarchy does **not** re-apply that same transform — the identical fixture yields `(1,0,0)`, not `(1,0,50)`, with the node bone present and non-identity, asserted at L4 through **both** loaders. **Critical path — skinning is not complete without it.** |
+| GLTF-260 | **[P0] A skinned mesh's node transform must not be applied twice** | ✔ | GLTF-247, GLTF-114, GLTF-248 | Remediating D1–D3 changes the assumptions D8's fix rests on: Phase 5 gives the skinned mesh's node a real `ModelBone` for the first time, and that is precisely the transform glTF requires to be *cancelled* for a skinned mesh (§15.1). Without this task the node-hierarchy work can silently re-apply what `GLTF-247` just cancelled, leaving skinning double-transformed rather than fixed. **Accept, both halves required:** (a) the mesh-space cancellation term `inverse(globalTransform(meshNode))` is present and effective — `skin-mesh-node-transform` (mesh node `T=[0,0,50]`) places the vertex at `(1,0,0)`; and (b) the new real node hierarchy does **not** re-apply that same transform — the identical fixture yields `(1,0,0)`, not `(1,0,50)`, with the node bone present and non-identity, asserted at L4 through **both** loaders. **Critical path — skinning is not complete without it.** **Landed:** New fixture `skin-mesh-node-transform` (mesh node `T=[0,0,50]`, identity joint and IBM) makes the three outcomes distinguishable: no cancellation → identity, cancelled once → `T(0,0,−50)`, cancelled twice → `−100`. Both halves asserted — the cancellation exists and is applied exactly once, **and** the node's bone still exists carrying its transform while the mesh stays parented to the identity root, so the hierarchy cannot silently re-apply it. |
 | GLTF-261 | `MaxBones = 72` | 🔬 | GLTF-025 | Rigs above 72 joints silently exceed the palette. Raising it changes a real XNA constant and every renderer's uniform array. **Accept:** `skin-73-joints` errors clearly, or the limit is raised deliberately with the cost recorded. |
 | GLTF-262 | Bind pose must be applied when no clip is playing | 🐛 | GLTF-253 | `SkinnedEffect` defaults to 72 identity bones, so an unanimated skinned model renders **unskinned**. **Accept:** loading a skinned model yields a usable bind-pose palette without game-code setup, or the requirement is documented and the viewer satisfies it (`GLTF-425`). |
 | GLTF-263 | Bone palette upload | ✅ | GLTF-262 | `SetBoneTransforms` → `uBones[72]`. **Accept:** L6 capture matches `GetSkinTransforms()`. |
@@ -2386,7 +2386,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-399 | Complete the 135-asset synthetic corpus | ⬜ | GLTF-003 | §24.2's owning-group inventory (8+14+8+7+17+6+10+12+13+13+10+7+4+6 = **135** distinct assets, each with a `.glb` twin). **Accept:** every owning group's assets exist, are generated and are validated; **CI asserts the generator's manifest reports exactly 135 distinct assets**, so the number in §24.2 and the corpus cannot drift apart. |
+| GLTF-399 | Complete the 136-asset synthetic corpus | ⬜ | GLTF-003 | §24.2's owning-group inventory (8+14+8+7+17+6+10+12+14+13+10+7+4+6 = **136** distinct assets, each with a `.glb` twin). **Accept:** every owning group's assets exist, are generated and are validated; **CI asserts the generator's manifest reports exactly 136 distinct assets**, so the number in §24.2 and the corpus cannot drift apart. |
 | GLTF-400 | `.glb` twin for every synthetic asset | ⬜ | GLTF-399 | **Accept:** twins agree at L3/L4. |
 | GLTF-401 | Manifest completeness audit | ⬜ | GLTF-399 | **Accept:** every asset declares exactly one `owningGroup`, its `referencingGroups[]`, the layers it validates and the expected values for each; the sum of owning-group counts equals the reported distinct-asset total, checked mechanically rather than by reading. |
 | GLTF-402 | Corpus runner reports the first divergent layer | ⬜ | GLTF-010 | **Accept:** a failure names the layer, the fixture, the field and the delta. |

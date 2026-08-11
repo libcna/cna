@@ -12,14 +12,14 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 15,
+  "distinctAssetCount": 16,
   "owningGroupCounts": {
     "accessors": 3,
     "component-types": 2,
     "topology": 2,
     "transforms": 4,
     "materials": 1,
-    "skinning": 1,
+    "skinning": 2,
     "animation": 1,
     "scenes": 1
   },
@@ -184,7 +184,7 @@
     },
     {
       "id": "D8",
-      "summary": "BuildSkeleton walks parent links only inside the skin's own joint set, so the armature transform above the joints is dropped from the bind pose while the authored inverseBindMatrices still contain it. The joint matrix ends up multiplied by the inverse of the dropped transform.",
+      "summary": "BuildSkeleton walked parent links only inside the skin's own joint set, so the armature transform above the joints was dropped from the bind pose while the authored inverseBindMatrices still contained it -- leaving every skinned vertex multiplied by the inverse of what was lost. GLTF-245 walks the full scene ancestry (skin.skeleton is a hint, never a traversal stop) and GLTF-247 adds the inverse(globalTransform(meshNode)) term, both carried on each root bone's parentWorldPrefix so animating a root joint cannot undo them.",
       "owner": "GLTF-SKIN",
       "owningTasks": [
         "GLTF-245",
@@ -192,10 +192,15 @@
         "GLTF-248",
         "GLTF-260"
       ],
-      "closedTasks": [],
+      "closedTasks": [
+        "GLTF-245",
+        "GLTF-247",
+        "GLTF-248",
+        "GLTF-260"
+      ],
       "remainingTasks": [],
       "firstDivergentLayer": "L4",
-      "status": "known-failing",
+      "status": "fixed",
       "fixtures": [
         "skin-armature-ancestor"
       ]
@@ -422,6 +427,26 @@
       "auditFixture": "f9"
     },
     {
+      "id": "skin-mesh-node-transform",
+      "owningGroup": "skinning",
+      "referencingGroups": [
+        "transforms"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "skinned mesh node transform",
+        "mesh-space cancellation",
+        "skin.inverseBindMatrices",
+        "JOINTS_0 / WEIGHTS_0"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "anim-rigid-node",
       "owningGroup": "animation",
       "referencingGroups": [],
@@ -614,8 +639,8 @@
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 11265,
-      "sha256": "70ed98d7280f816cad06489229e7654d91550390b5aeb3c25cf78f00e967b6ab"
+      "bytes": 12058,
+      "sha256": "e90a99dc999e2c05c43298e8309c6616dca155b56905fb64e767c13e0435caa3"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -634,6 +659,31 @@
     },
     {
       "path": "skin-armature-ancestor.vb.bin",
+      "bytes": 156,
+      "sha256": "25fbc45fe26066e3d7e194f6c1c7be32817e2182fdda49a750a69ace04e343f9"
+    },
+    {
+      "path": "skin-mesh-node-transform.expected.json",
+      "bytes": 9967,
+      "sha256": "b54023182a141288087043f4ba049a2c1020d4c14904cdcb94cbf123c8413c1e"
+    },
+    {
+      "path": "skin-mesh-node-transform.glb",
+      "bytes": 1236,
+      "sha256": "2c8329d8519e9fb7ea0c3060882cb593ff2d8dfebc4ebe11a3ba24df173ad917"
+    },
+    {
+      "path": "skin-mesh-node-transform.gltf",
+      "bytes": 2208,
+      "sha256": "58886ce1cfd939a3aa91181dcaf812b2dc11e233f5751b54a9c9a953ddf49984"
+    },
+    {
+      "path": "skin-mesh-node-transform.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-mesh-node-transform.vb.bin",
       "bytes": 156,
       "sha256": "25fbc45fe26066e3d7e194f6c1c7be32817e2182fdda49a750a69ace04e343f9"
     },

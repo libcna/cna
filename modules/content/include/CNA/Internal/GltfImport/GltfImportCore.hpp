@@ -36,6 +36,27 @@ namespace CNA::Internal::GltfImport
         /** @brief World-space inverse bind matrix (glTF's own authored value, unit-scaled). */
         Microsoft::Xna::Framework::Matrix inverseBindGlobal =
             Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        /**
+         * @brief The transform a **root** bone's own local transform composes against; identity
+         * for any bone whose parent is inside the skin's joint set.
+         *
+         * @note CNAEXT — plan_gltf.md GLTF-245/GLTF-247 (Phase 5). glTF's joint matrix is
+         * `inverse(globalTransform(meshNode)) * globalTransform(joint) * inverseBindMatrix`, and
+         * both leading terms live *above* the joint set: `globalTransform(joint)` includes every
+         * scene ancestor -- joints or not, and regardless of `skin.skeleton` -- while
+         * `inverse(globalTransform(meshNode))` cancels the skinned mesh node's own placement.
+         * Neither can be expressed by a bone-local transform, and folding them into
+         * `bindPoseLocal` would be silently undone the moment an animation clip replaced that
+         * bone's local transform. Carrying them separately keeps both correct:
+         *
+         *     world(root) = bindPoseLocal(root) * parentWorldPrefix(root)
+         *     world(bone) = bindPoseLocal(bone) * world(parent)
+         *
+         * so an animated root joint substitutes only its own local transform, exactly as a
+         * non-root joint does.
+         */
+        Microsoft::Xna::Framework::Matrix parentWorldPrefix =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
     };
 
     /** @brief The result of topologically reordering one glTF skin's joints. */
@@ -346,6 +367,33 @@ namespace CNA::Internal::GltfImport
      * @return The reordered skeleton, plus the old-to-new joint index remap.
      */
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale);
+
+    /**
+     * @brief Topologically reorders a glTF skin's joints and resolves the two coordinate spaces the
+     * one-argument overload cannot see: the joints' full scene ancestry and the skinned mesh node's
+     * own placement (plan_gltf.md GLTF-245/GLTF-247, Phase 5).
+     *
+     * A joint's global transform includes **every** scene ancestor, whether or not that ancestor is
+     * itself a joint and whether or not it lies above `skin.skeleton` — the declared skeleton root
+     * is a naming/locating hint, never a traversal stop. Dropping any of that ancestry while
+     * retaining the file's own `inverseBindMatrices` is defect D8: the joint matrix ends up
+     * multiplied by the inverse of whatever was dropped.
+     *
+     * The skinned mesh node's transform is separately *cancelled*, not applied: glTF places a
+     * skinned mesh entirely through its joints. Both terms are returned on each root bone's
+     * @ref BoneOut::parentWorldPrefix rather than folded into its bind pose, so animating a root
+     * joint cannot undo them.
+     *
+     * @param skin The glTF skin to process.
+     * @param scene The graph `BuildSceneGraph` produced for the same file.
+     * @param meshNodeWorld World transform of the node instancing the skinned mesh, in XNA
+     *        row-vector form. Pass the identity when no such node applies.
+     * @param unitScale Uniform scale applied to every bone's translation (see `ScaleTranslation`).
+     * @return The reordered skeleton, plus the old-to-new joint index remap.
+     */
+    SkeletonResult BuildSkeleton(const cgltf_skin* skin, const SceneGraphOut& scene,
+                                  const Microsoft::Xna::Framework::Matrix& meshNodeWorld,
+                                  float unitScale);
 
     /**
      * @brief Extracts every animation in a glTF file as a resampled, per-bone keyframe clip.

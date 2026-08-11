@@ -639,6 +639,16 @@ namespace CNA::Internal::GltfImport
 
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale)
     {
+        // No scene graph available: every root joint keeps an identity prefix, which is only
+        // correct when the joint set already reaches the scene root and the mesh node is
+        // untransformed. Callers that can build the graph must use the four-argument overload --
+        // both model loaders do (plan_gltf.md GLTF-245).
+        return BuildSkeleton(skin, SceneGraphOut{}, Matrix::getIdentityProperty(), unitScale);
+    }
+
+    SkeletonResult BuildSkeleton(const cgltf_skin* skin, const SceneGraphOut& scene,
+                                  const Matrix& meshNodeWorld, float unitScale)
+    {
         SkeletonResult result;
         const std::size_t n = skin->joints_count;
         if (n == 0) { return result; }
@@ -705,6 +715,38 @@ namespace CNA::Internal::GltfImport
             float localMat[16];
             cgltf_node_transform_local(node, localMat);
             bone.bindPoseLocal = ScaleTranslation(ConvertGltfMatrix(localMat), unitScale);
+
+            // GLTF-245/GLTF-247: a root joint -- one whose parent is not itself in this skin's
+            // joint set -- carries the two terms that live above the joint set. Everything the
+            // ancestry contributes is real scene data; skin.skeleton does not truncate it, and an
+            // ancestor that is not a joint contributes exactly as much as one that is.
+            if (bone.parentIndex == -1)
+            {
+                Matrix ancestorWorld = Matrix::getIdentityProperty();
+                if (const cgltf_node* parent = node->parent)
+                {
+                    const auto placed = scene.indexOfNode.find(parent);
+                    if (placed != scene.indexOfNode.end())
+                    {
+                        ancestorWorld = scene.nodes[static_cast<std::size_t>(placed->second)].worldTransform;
+                    }
+                    else
+                    {
+                        // The joint hangs off a node outside the default scene. cgltf can still
+                        // compose the chain, so use it rather than silently dropping the ancestry
+                        // -- dropping it is exactly D8.
+                        float parentWorld[16];
+                        cgltf_node_transform_world(parent, parentWorld);
+                        ancestorWorld = ConvertGltfMatrix(parentWorld);
+                    }
+                }
+                // Ancestor translations are unit-scaled for the same reason bone translations are:
+                // the correction has to apply uniformly across every position-derived quantity, or
+                // an animated bone would jump between two different unit spaces mid-clip.
+                ancestorWorld = ScaleTranslation(ancestorWorld, unitScale);
+                bone.parentWorldPrefix =
+                    ancestorWorld * Matrix::Invert(ScaleTranslation(meshNodeWorld, unitScale));
+            }
 
             if (!ibm.empty())
             {

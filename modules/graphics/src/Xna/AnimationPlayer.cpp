@@ -148,8 +148,16 @@ namespace Microsoft::Xna::Framework::Graphics
                         + ", which must be less than the bone's own index",
                     "skinningData");
             }
+            // A root bone composes against SkeletonRootPrefix rather than nothing: that is where
+            // the scene ancestry above the joint set and the skinned mesh node's cancellation live
+            // (see SkinningData::SkeletonRootPrefix). An empty array reads as all-identity, so a
+            // skeleton built without that context behaves exactly as before.
+            const bool hasPrefix =
+                skinningData_->SkeletonRootPrefix.size() == static_cast<std::size_t>(boneCount);
             worldTransforms_[static_cast<std::size_t>(i)] = parent < 0
-                ? boneTransforms_[static_cast<std::size_t>(i)]
+                ? (hasPrefix ? boneTransforms_[static_cast<std::size_t>(i)] *
+                                   skinningData_->SkeletonRootPrefix[static_cast<std::size_t>(i)]
+                             : boneTransforms_[static_cast<std::size_t>(i)])
                 : boneTransforms_[static_cast<std::size_t>(i)] * worldTransforms_[static_cast<std::size_t>(parent)];
         }
 

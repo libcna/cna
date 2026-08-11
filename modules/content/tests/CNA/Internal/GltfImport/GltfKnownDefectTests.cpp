@@ -22,10 +22,10 @@
 // PARTIALLY REMEDIATED -- GLTF-071 landed, GLTF-072 still owns the topology conversion itself --
 // so its tests assert the new, explicitly rejected behaviour rather than the old silent
 // reinterpretation, and the audit's original measurement stays on record under priorActual.
-// D6, D7 and D8 are untouched. D8 in particular is NOT fixed by the node-transform work: giving
-// the scene a real bone hierarchy deliberately parents a skinned mesh to the identity root,
-// because glTF ignores a skinned mesh's own node transform -- the joint ancestry BuildSkeleton
-// drops is still GLTF-245/247/260.
+// D8 is FIXED too (GLTF-245/247/248/260), in a separate batch from D1-D3 and deliberately so:
+// the node-transform work only parked a skinned mesh on the identity root, and the joint
+// ancestry and mesh-space cancellation were resolved afterwards on their own fixtures.
+// D6 and D7 are untouched.
 
 #include <algorithm>
 #include <cmath>
@@ -371,75 +371,14 @@ TEST(GltfKnownDefect, D7_FactorOnlyPbrMaterialIsDowngradedAndItsStateLost)
 
 // --- D8: the skin ancestor chain ---------------------------------------------------------------------
 
-TEST(GltfKnownDefect, D8_SkinAncestorChainIsDroppedWhileInverseBindMatricesAreKept)
-{
-    // Owned by GLTF-245 -> GLTF-247 -> GLTF-248 -> GLTF-260.
-    using namespace CNA::Internal::GltfImport;
-
-    const LoadedFixture fixture("skin-armature-ancestor");
-    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-    const JsonValue& defect = DefectRecord(fixture, "D8");
-    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D8"));
-    const JsonValue& actualRecord = CurrentActual(defect);
-
-    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().skins_count));
-    const SkeletonResult skeleton = BuildSkeleton(&fixture.Data().skins[0], 1.0f);
-    ASSERT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "boneCount", -1)),
-              skeleton.bones.size());
-    ASSERT_EQ(1u, skeleton.bones.size());
-    const BoneOut& joint = skeleton.bones[0];
-
-    EXPECT_EQ(static_cast<int>(NumberOr(actualRecord, "parentIndex", -99)), joint.parentIndex);
-
-    const std::vector<double> expectedBindLocal =
-        Numbers(Member(actualRecord, "bindPoseLocalTranslation"));
-    ASSERT_EQ(3u, expectedBindLocal.size());
-    EXPECT_NEAR(expectedBindLocal[0], static_cast<double>(joint.bindPoseLocal.M41), kTolerance);
-    EXPECT_NEAR(expectedBindLocal[1], static_cast<double>(joint.bindPoseLocal.M42), kTolerance);
-    EXPECT_NEAR(expectedBindLocal[2], static_cast<double>(joint.bindPoseLocal.M43), kTolerance);
-
-    // The authored inverse bind matrix is kept verbatim and *does* contain the armature transform.
-    const std::vector<double> expectedInverseBind =
-        Numbers(Member(actualRecord, "inverseBindGlobalTranslation"));
-    ASSERT_EQ(3u, expectedInverseBind.size());
-    EXPECT_NEAR(expectedInverseBind[0], static_cast<double>(joint.inverseBindGlobal.M41), kTolerance);
-    EXPECT_NEAR(expectedInverseBind[1], static_cast<double>(joint.inverseBindGlobal.M42), kTolerance);
-    EXPECT_NEAR(expectedInverseBind[2], static_cast<double>(joint.inverseBindGlobal.M43), kTolerance);
-
-    // AnimationPlayer composes skinTransform[i] = InverseBindPose[i] * worldTransform[i], and for
-    // a root bone at bind pose worldTransform is just bindPoseLocal. The correct result is the
-    // identity: the joint's true global transform, translate(0,100,0), exactly cancels the
-    // authored inverse. What CNA produces instead is the inverse of the dropped ancestor.
-    const Matrix skinTransform = joint.inverseBindGlobal * joint.bindPoseLocal;
-    const std::vector<double> expectedSkin =
-        Numbers(Member(actualRecord, "skinTransformTranslation"));
-    ASSERT_EQ(3u, expectedSkin.size());
-    EXPECT_NEAR(expectedSkin[0], static_cast<double>(skinTransform.M41), kTolerance);
-    EXPECT_NEAR(expectedSkin[1], static_cast<double>(skinTransform.M42), kTolerance);
-    EXPECT_NEAR(expectedSkin[2], static_cast<double>(skinTransform.M43), kTolerance);
-
-    const double displacement = std::sqrt(
-        static_cast<double>(skinTransform.M41) * skinTransform.M41 +
-        static_cast<double>(skinTransform.M42) * skinTransform.M42 +
-        static_cast<double>(skinTransform.M43) * skinTransform.M43);
-    EXPECT_GT(displacement, 1.0)
-        << "the bind-pose skin transform is now (near) the identity -- if GLTF-245/247 landed, "
-           "mark D8 fixed in tools/gltf_fixtures and delete this test";
-
-    // And the expectation this is measured against, straight from the manifest: identity.
-    const JsonValue& expectedJoints = Path(fixture.Expected(), "l4.skin.joints");
-    ASSERT_EQ(JsonType::Array, expectedJoints.type);
-    ASSERT_EQ(1u, expectedJoints.arrayValue.size());
-    const std::vector<double> expectedJointMatrix =
-        Numbers(Member(expectedJoints.arrayValue.at(0), "jointMatrixColumnMajor"));
-    ASSERT_EQ(16u, expectedJointMatrix.size());
-    const GltfMatrix identity = IdentityMatrix();
-    for (std::size_t i = 0; i < 16; ++i)
-    {
-        EXPECT_NEAR(static_cast<double>(identity[i]), expectedJointMatrix[i], kTolerance)
-            << "the fixture's expected joint matrix should be the identity";
-    }
-}
+// --- D8: the skin coordinate spaces -----------------------------------------------------------
+//
+// REMEDIATED by GLTF-245 -> GLTF-247 -> GLTF-248 -> GLTF-260. No known-defect test here any more,
+// for the same reason D1-D4 have none: GltfSkinSpaces asserts the joint matrix and the resulting
+// skinned position through the real loader on skin-armature-ancestor (the full scene ancestry above
+// the joint set) and on skin-mesh-node-transform (the mesh-space cancellation, applied exactly
+// once), so D8 reappearing fails an ordinary green test. The audit's original measurement --
+// joint matrix translate(0,-100,0) -- is preserved under the record's priorActual.
 
 // --- Ledger completeness -------------------------------------------------------------------------
 
@@ -449,11 +388,12 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
     // documented but unproven, which is exactly the failure mode this batch exists to remove. The
     // converse matters just as much: a defect the corpus records as remediated must NOT still have
     // a "still broken" test here, or the file would start lying about the state of the code.
-    const std::set<std::string> open = {"D5", "D6", "D7", "D8"};
+    const std::set<std::string> open = {"D5", "D6", "D7"};
     // Remediated defects, and the task that closed each. Their records stay in the corpus as
     // regression witnesses and their fixtures are asserted by the ordinary conformance suites.
     const std::map<std::string, std::string> remediated = {
-        {"D1", "GLTF-114"}, {"D2", "GLTF-114"}, {"D3", "GLTF-114"}, {"D4", "GLTF-063"}};
+        {"D1", "GLTF-114"}, {"D2", "GLTF-114"}, {"D3", "GLTF-114"}, {"D4", "GLTF-063"},
+        {"D8", "GLTF-247"}};
 
     const JsonValue& ledger = Member(CorpusManifest(), "defectLedger");
     ASSERT_EQ(JsonType::Array, ledger.type);

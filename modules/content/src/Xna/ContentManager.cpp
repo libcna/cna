@@ -1177,6 +1177,10 @@ namespace Microsoft::Xna::Framework::Content
             const std::vector<std::uint8_t>& Data;
             std::size_t Pos = 0;
 
+            /// Bytes left unread. Lets a reader tell "this optional trailing block is absent" from
+            /// "this file is truncated" without guessing (plan_gltf.md GLTF-245).
+            [[nodiscard]] std::size_t Remaining() const { return Pos <= Data.size() ? Data.size() - Pos : 0u; }
+
             template <typename T>
             T Read()
             {
@@ -1901,7 +1905,20 @@ namespace Microsoft::Xna::Framework::Content
 
             const bool hasSkin = group.skin != nullptr;
             SkeletonResult skeleton;
-            if (hasSkin) { skeleton = BuildSkeleton(group.skin, 1.0f); }
+            if (hasSkin)
+            {
+                // plan_gltf.md GLTF-245/GLTF-247: the skeleton needs two things the skin alone
+                // cannot supply -- the joints' full scene ancestry, and the world transform of the
+                // node instancing the skinned mesh, which glTF requires to be cancelled. A skin
+                // referenced by several nodes resolves to the first placement in this group, the
+                // same documented simplification ExtractMorphWeightTrack already makes.
+                Matrix meshNodeWorld = Matrix::getIdentityProperty();
+                for (const MeshInstanceOut& placement : group.instances)
+                {
+                    if (placement.skinned) { meshNodeWorld = placement.worldTransform; break; }
+                }
+                skeleton = BuildSkeleton(group.skin, sceneGraph, meshNodeWorld, 1.0f);
+            }
 
             Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
             const fs::path gltfDir = fs::path(path).parent_path();
@@ -1935,12 +1952,14 @@ namespace Microsoft::Xna::Framework::Content
                 skinningData->SkeletonHierarchy.resize(static_cast<std::size_t>(boneCount));
                 skinningData->BindPose.resize(static_cast<std::size_t>(boneCount));
                 skinningData->InverseBindPose.resize(static_cast<std::size_t>(boneCount));
+                skinningData->SkeletonRootPrefix.resize(static_cast<std::size_t>(boneCount));
                 for (int i = 0; i < boneCount; ++i)
                 {
                     const auto ui = static_cast<std::size_t>(i);
                     skinningData->SkeletonHierarchy[ui] = skeleton.bones[ui].parentIndex;
                     skinningData->BindPose[ui] = skeleton.bones[ui].bindPoseLocal;
                     skinningData->InverseBindPose[ui] = skeleton.bones[ui].inverseBindGlobal;
+                    skinningData->SkeletonRootPrefix[ui] = skeleton.bones[ui].parentWorldPrefix;
                 }
 
                 std::vector<std::string> warnings;
@@ -2350,6 +2369,18 @@ namespace Microsoft::Xna::Framework::Content
                     skinningData->InverseBindPose.resize(static_cast<std::size_t>(boneCount));
                     for (int i = 0; i < boneCount; ++i)
                         skinningData->InverseBindPose[static_cast<std::size_t>(i)] = skelReader.ReadMatrix();
+
+                    // plan_gltf.md GLTF-245/GLTF-247: an optional third matrix block, the per-root
+                    // prefix carrying the joints' scene ancestry and the skinned mesh node's
+                    // cancellation. Appended after the original two blocks precisely so a sidecar
+                    // written before it still loads: when the bytes are absent the array is left
+                    // empty, which AnimationPlayer reads as all-identity -- the previous behaviour.
+                    if (skelReader.Remaining() >= static_cast<std::size_t>(boneCount) * 64u)
+                    {
+                        skinningData->SkeletonRootPrefix.resize(static_cast<std::size_t>(boneCount));
+                        for (int i = 0; i < boneCount; ++i)
+                            skinningData->SkeletonRootPrefix[static_cast<std::size_t>(i)] = skelReader.ReadMatrix();
+                    }
 
                     for (const std::string& ag : ParseFlatObjectArrayEXT(json, "animations"))
                     {

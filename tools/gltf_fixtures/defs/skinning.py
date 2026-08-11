@@ -25,6 +25,11 @@ _ARMATURE_TRANSLATION = [0.0, 100.0, 0.0]
 _JOINTS = [(0, 0, 0, 0)] * 3
 _WEIGHTS = [(1.0, 0.0, 0.0, 0.0)] * 3
 
+#: The skinned mesh node's own translation, for the fixture that isolates the mesh-space
+#: cancellation. Deliberately on a different axis from the armature's so a leak of either term is
+#: attributable to that term alone.
+_MESH_NODE_TRANSLATION = [0.0, 0.0, 50.0]
+
 
 def skin_armature_ancestor() -> Fixture:
     """f9 -- a joint under a translated armature node. Proves **D8**.
@@ -103,26 +108,129 @@ def skin_armature_ancestor() -> Fixture:
         l4=l4,
         defects=[Defect(
             id="D8", owner="GLTF-SKIN", first_divergent_layer="L4",
-            summary="BuildSkeleton walks parent links only inside the skin's own joint set, so the "
-                    "armature transform above the joints is dropped from the bind pose while the "
-                    "authored inverseBindMatrices still contain it. The joint matrix ends up "
-                    "multiplied by the inverse of the dropped transform.",
+            summary="BuildSkeleton walked parent links only inside the skin's own joint set, so the "
+                    "armature transform above the joints was dropped from the bind pose while the "
+                    "authored inverseBindMatrices still contained it -- leaving every skinned "
+                    "vertex multiplied by the inverse of what was lost. GLTF-245 walks the full "
+                    "scene ancestry (skin.skeleton is a hint, never a traversal stop) and GLTF-247 "
+                    "adds the inverse(globalTransform(meshNode)) term, both carried on each root "
+                    "bone's parentWorldPrefix so animating a root joint cannot undo them.",
             owning_tasks=["GLTF-245", "GLTF-247", "GLTF-248", "GLTF-260"],
-            divergent_fields=["skin"],
+            closed_tasks=["GLTF-245", "GLTF-247", "GLTF-248", "GLTF-260"], status="fixed",
+            divergent_fields=[],
             current_actual={
+                "boneCount": 1,
+                "parentIndex": -1,
+                "jointMatrixTranslation": [0.0, 0.0, 0.0],
+                "note": "The joint matrix is exactly the identity, as the specification requires "
+                        "for a joint whose authored inverse bind matrix is the true inverse of its "
+                        "global transform. Nothing is suppressed any more: GltfSkinSpaces asserts "
+                        "the joint matrix and the resulting skinned position through the real "
+                        "loader, so D8 reappearing fails an ordinary green test.",
+            },
+            prior_actual={
                 "boneCount": 1,
                 "parentIndex": -1,
                 "bindPoseLocalTranslation": [0.0, 0.0, 0.0],
                 "inverseBindGlobalTranslation": [0.0, -100.0, 0.0],
-                "bindPoseGlobalTranslation": [0.0, 0.0, 0.0],
                 "skinTransformTranslation": [0.0, -100.0, 0.0],
-                "note": "bindPoseGlobal * inverseBindGlobal = I * T(0,-100,0), so every skinned "
-                        "vertex is displaced by -100 on Y. With a uniform scale on the armature "
-                        "instead of a translation, the same mechanism multiplies every vertex by "
-                        "the reciprocal of that scale -- the character collapses toward the origin.",
+                "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+                "note": "What the forensic audit measured before GLTF-245/247: the joint's bind "
+                        "pose was its node-local transform (identity, the armature's [0,100,0] "
+                        "dropped) while the authored inverse bind matrix still carried [0,-100,0], "
+                        "so the joint matrix came out as translate(0,-100,0) -- a 100-unit "
+                        "displacement of every skinned vertex.",
             },
         )],
     )
 
 
-FIXTURES = [skin_armature_ancestor]
+def skin_mesh_node_transform() -> Fixture:
+    """A skinned mesh whose own node is transformed. Owns the second half of **GLTF-260**.
+
+    glTF places a skinned mesh entirely through its joints, so the node that instantiates it
+    contributes ``inverse(globalTransform(meshNode))`` to the joint matrix -- its transform is
+    *cancelled*, never applied. Here ``Joint0`` sits at the scene root with an identity bind pose
+    and an identity inverse bind matrix, so the whole joint matrix reduces to that cancellation:
+    ``inverse(T(0,0,50))`` = ``T(0,0,-50)``.
+
+    That makes this the fixture that separates the two ways of getting a skinned mesh wrong. If the
+    cancellation is missing, the mesh sits 50 units too far along +Z. If the node's bone *also*
+    transforms the mesh -- the double application Phase 5's real bone hierarchy makes newly possible
+    -- the two cancel by accident and the mesh looks right for the wrong reason, which the world
+    positions below detect because they are asserted against the joint matrix, not the eye.
+    """
+    b = GltfBuilder("skin-mesh-node-transform")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    joints = b.add_packed_accessor(usage="JOINTS_0", values=_JOINTS, accessor_type="VEC4",
+                                   component_type=UNSIGNED_BYTE)
+    weights = b.add_packed_accessor(usage="WEIGHTS_0", values=_WEIGHTS, accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+
+    inverse_bind = mat_identity()
+    ibm_offset = b.append_bytes(pack(inverse_bind, FLOAT), alignment=4)
+    ibm = b.add_accessor(usage="inverseBindMatrices", component_type=FLOAT, accessor_type="MAT4",
+                         count=1, expected=list(inverse_bind),
+                         buffer_view=b.add_buffer_view(ibm_offset, 64))
+
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "JOINTS_0": joints, "WEIGHTS_0": weights},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="SkinnedTri")
+
+    joint_node = b.add_node(name="Joint0")
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0,
+                           translation=_MESH_NODE_TRANSLATION)
+    b.add_skin({"name": "Skin", "joints": [joint_node], "inverseBindMatrices": ibm})
+    b.add_scene([joint_node, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    mesh_node_world = mat_translation(_MESH_NODE_TRANSLATION)
+    mesh_node_inverse = mat_translation([-c for c in _MESH_NODE_TRANSLATION])
+    joint_global = mat_identity()
+    joint_matrix = mat_mul(mesh_node_inverse, mat_mul(joint_global, inverse_bind))
+    skinned = [[p[0], p[1], p[2] - _MESH_NODE_TRANSLATION[2]] for p in TRIANGLE_POSITIONS]
+
+    # The mesh node's transform is cancelled, so the mesh's own world placement is NOT its node's.
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = {
+        "jointCount": 1,
+        "meshNodeWorldColumnMajor": mesh_node_world,
+        "joints": [{
+            "joint": 0,
+            "node": joint_node,
+            "nodeName": "Joint0",
+            "parentJoint": -1,
+            "jointGlobalColumnMajor": joint_global,
+            "inverseBindMatrixColumnMajor": inverse_bind,
+            "jointMatrixColumnMajor": joint_matrix,
+        }],
+        "skinnedPositions": skinned,
+        "note": "jointMatrix = inverse(globalTransform(meshNode)) * globalTransform(joint) * "
+                "inverseBindMatrix = T(0,0,-50) * I * I. The cancellation must be applied exactly "
+                "once: omitting it leaves the mesh 50 units along +Z, and applying the mesh node's "
+                "bone as well cancels it a second time and leaves the mesh 50 units along -Z.",
+    }
+    return Fixture(
+        id="skin-mesh-node-transform", owning_group="skinning",
+        description="A skinned mesh whose instancing node carries translation [0,0,50], with an "
+                    "identity joint and an identity inverse bind matrix. The joint matrix is "
+                    "exactly the mesh node's inverse, so this isolates the mesh-space cancellation "
+                    "from the joint ancestry that skin-armature-ancestor covers.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        referencing_groups=["transforms"],
+        features=["skinned mesh node transform", "mesh-space cancellation",
+                  "skin.inverseBindMatrices", "JOINTS_0 / WEIGHTS_0"],
+        spec_anchors=["skins", "joint-hierarchy", "skinned-mesh-attributes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, joints=_JOINTS, weights=_WEIGHTS,
+            indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform]
