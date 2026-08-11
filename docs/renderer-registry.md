@@ -67,7 +67,7 @@ renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3
   `DIRECT2D`, and `GDI`.
 - **CPU bounded 3D:** `SOFTWARE` and `PORTABLEGL` (the latter delegates its rasterization/shading
   pipeline to real `rswinkle/PortableGL` OpenGL-shaped API calls rather than a hand-rolled
-  rasterizer).
+  rasterizer; its boundary is [`portablegl-renderer.md`](portablegl-renderer.md)).
 - **Legacy or fixed-function bounded 3D:** `OPENGLES1`, `OPENGL1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`,
   `DIRECTX7`, `DIRECTX8`, and `GLIDE`.
 - **Programmable/modern, with renderer-specific limits:** `OPENGLES3`, `OPENGL33`, `WEBGL1`,

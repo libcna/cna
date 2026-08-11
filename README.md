@@ -211,7 +211,7 @@ inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 - `GDI` (Windows-only, 2D-only)
 - `LLGL` (experimental; accepted support is OpenGL on Linux/X11/x86_64)
 - `METAL` (macOS only, experimental — see [`docs/metal-renderer.md`](docs/metal-renderer.md))
-- `PORTABLEGL` (CPU software OpenGL 3.x-ish pipeline via `rswinkle/PortableGL`; no GPU/window required)
+- `PORTABLEGL` (CPU software OpenGL 3.x-ish pipeline via `rswinkle/PortableGL`; no GPU/window required -- see [`docs/portablegl-renderer.md`](docs/portablegl-renderer.md))
 
 ### Tradeoffs
 
