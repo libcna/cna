@@ -121,18 +121,21 @@ protected:
 
             VertexBuffer vb(dev, PosColorDecl(), 4, BufferUsage::None);
             const VertexPositionColor verts[4] = {
-                { Vector3(-1.0f, -1.0f, 0.0f), Color(0, 255, 0, 255) }, // 0: bottom-left
-                { Vector3(1.0f, -1.0f, 0.0f),  Color(0, 255, 0, 255) }, // 1: bottom-right
-                { Vector3(1.0f, 1.0f, 0.0f),   Color(0, 255, 0, 255) }, // 2: top-right
-                { Vector3(-1.0f, 1.0f, 0.0f),  Color(0, 255, 0, 255) }, // 3: top-left
+                { Vector3(-1.0f, 1.0f, 0.0f),  Color(0, 255, 0, 255) }, // 0: top-left
+                { Vector3(1.0f, 1.0f, 0.0f),   Color(0, 255, 0, 255) }, // 1: top-right
+                { Vector3(1.0f, -1.0f, 0.0f),  Color(0, 255, 0, 255) }, // 2: bottom-right
+                { Vector3(-1.0f, -1.0f, 0.0f), Color(0, 255, 0, 255) }, // 3: bottom-left
             };
             vb.SetData(verts, 0, 4);
 
+            // Clockwise in XNA's top-left screen space, i.e. front-facing under the default
+            // RasterizerState.CullCounterClockwise a preceding SpriteBatch.Begin installed.
             IndexBuffer ib(dev, IndexElementSize::SixteenBits, 6, BufferUsage::None);
             const std::uint16_t indices[6] = {0, 1, 2, 0, 2, 3};
             ib.SetData(indices, 0, 6);
 
             BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
             fx.Apply();
 
             bool threw = false;

@@ -105,17 +105,22 @@ class PortableGLDepthResizeTest : public Game
     void DrawFullViewportQuad(float ndcZ, const Color& color)
     {
         auto& dev = getGraphicsDeviceProperty();
+        // Clockwise in XNA's top-left screen space (TL, TR, BR / TL, BR, BL), i.e. front-facing
+        // under XNA's own default RasterizerState.CullCounterClockwise.
         const VertexPositionColor verts[6] = {
-            { Vector3(-1.0f, -1.0f, ndcZ), color },
-            { Vector3(1.0f, -1.0f, ndcZ),  color },
-            { Vector3(1.0f, 1.0f, ndcZ),   color },
-            { Vector3(-1.0f, -1.0f, ndcZ), color },
-            { Vector3(1.0f, 1.0f, ndcZ),   color },
             { Vector3(-1.0f, 1.0f, ndcZ),  color },
+            { Vector3(1.0f, 1.0f, ndcZ),   color },
+            { Vector3(1.0f, -1.0f, ndcZ),  color },
+            { Vector3(-1.0f, 1.0f, ndcZ),  color },
+            { Vector3(1.0f, -1.0f, ndcZ),  color },
+            { Vector3(-1.0f, -1.0f, ndcZ), color },
         };
         VertexBuffer vb(dev, PosColorDecl(), 6, BufferUsage::None);
         vb.SetData(verts, 0, 6);
         BasicEffect fx(dev);
+        // BasicEffect.VertexColorEnabled defaults to false and this renderer honours that, so a
+        // check that reads back the packed vertex colour has to enable it explicitly.
+        fx.VertexColorEnabled = true;
         fx.Apply();
         dev.SetVertexBuffer(&vb);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);

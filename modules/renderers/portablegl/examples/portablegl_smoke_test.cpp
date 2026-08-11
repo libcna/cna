@@ -106,18 +106,22 @@ protected:
             dev.Clear(Color::Black);
 
             VertexBuffer vb(dev, PosColorDecl(), 6, BufferUsage::None);
+            // Wound clockwise in XNA's top-left screen space (TL, TR, BR / TL, BR, BL), i.e.
+            // front-facing under XNA's own default RasterizerState.CullCounterClockwise.
             const VertexPositionColor verts[6] = {
-                // Triangle 1: (-1,-1) (1,-1) (1,1)
-                { Vector3(-1.0f, -1.0f, 0.0f), Color(255, 0, 0, 255) },
-                { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 0, 0, 255) },
-                { Vector3(1.0f, 1.0f, 0.0f),   Color(255, 0, 0, 255) },
-                // Triangle 2: (-1,-1) (1,1) (-1,1)
-                { Vector3(-1.0f, -1.0f, 0.0f), Color(255, 0, 0, 255) },
-                { Vector3(1.0f, 1.0f, 0.0f),   Color(255, 0, 0, 255) },
                 { Vector3(-1.0f, 1.0f, 0.0f),  Color(255, 0, 0, 255) },
+                { Vector3(1.0f, 1.0f, 0.0f),   Color(255, 0, 0, 255) },
+                { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 0, 0, 255) },
+                { Vector3(-1.0f, 1.0f, 0.0f),  Color(255, 0, 0, 255) },
+                { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 0, 0, 255) },
+                { Vector3(-1.0f, -1.0f, 0.0f), Color(255, 0, 0, 255) },
             };
             vb.SetData(verts, 0, 6);
             BasicEffect fx(dev);
+            // BasicEffect.VertexColorEnabled defaults to FALSE, and the renderer honours that: an
+            // unlit draw with it off renders DiffuseColor, not the packed vertex colour. A test
+            // that wants the vertex colour has to ask for it, exactly as a real game does.
+            fx.VertexColorEnabled = true;
             fx.Apply();
 
             bool threw = false;

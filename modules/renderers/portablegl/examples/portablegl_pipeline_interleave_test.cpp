@@ -103,12 +103,16 @@ class PortableGLPipelineInterleaveTest : public Game
 
     /// Draws @p vertexCount vertices of @p verts as a colored TriangleList through the real
     /// GraphicsDevice draw route (VertexBuffer + BasicEffect), exactly as game code would.
+    /// VertexColorEnabled is set explicitly because BasicEffect's own default is false and this
+    /// renderer honours that -- the packed vertex colour these checks read back is only consumed
+    /// when the effect actually asks for it.
     void DrawColoredTriangles(const VertexPositionColor* verts, int vertexCount)
     {
         auto& dev = getGraphicsDeviceProperty();
         VertexBuffer vb(dev, PosColorDecl(), vertexCount, BufferUsage::None);
         vb.SetData(verts, 0, vertexCount);
         BasicEffect fx(dev);
+        fx.VertexColorEnabled = true;
         fx.Apply();
         dev.SetVertexBuffer(&vb);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, vertexCount / 3);
@@ -137,14 +141,16 @@ protected:
         dev.setDepthStencilStateProperty(DepthStencilState::None);
         dev.Clear(Color::Black);
 
-        // Stage 1 -- colored 3D program: a full-viewport red quad.
+        // Stage 1 -- colored 3D program: a full-viewport red quad, wound clockwise in XNA's
+        // top-left screen space (TL, TR, BR / TL, BR, BL) so it is front-facing under the default
+        // RasterizerState.CullCounterClockwise that stage 2's SpriteBatch.Begin installs.
         const VertexPositionColor redQuad[6] = {
-            { Vector3(-1.0f, -1.0f, 0.0f), Color(255, 0, 0, 255) },
-            { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 0, 0, 255) },
-            { Vector3(1.0f, 1.0f, 0.0f),   Color(255, 0, 0, 255) },
-            { Vector3(-1.0f, -1.0f, 0.0f), Color(255, 0, 0, 255) },
-            { Vector3(1.0f, 1.0f, 0.0f),   Color(255, 0, 0, 255) },
             { Vector3(-1.0f, 1.0f, 0.0f),  Color(255, 0, 0, 255) },
+            { Vector3(1.0f, 1.0f, 0.0f),   Color(255, 0, 0, 255) },
+            { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 0, 0, 255) },
+            { Vector3(-1.0f, 1.0f, 0.0f),  Color(255, 0, 0, 255) },
+            { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 0, 0, 255) },
+            { Vector3(-1.0f, -1.0f, 0.0f), Color(255, 0, 0, 255) },
         };
         DrawColoredTriangles(redQuad, 6);
         check(RegionIs(Rectangle(28, 28, 8, 8), Color(255, 0, 0, 255)),
@@ -163,17 +169,18 @@ protected:
         // Stage 3 -- back to the colored 3D program, with MORE vertices (9) than the SpriteBatch
         // quad buffer holds (6). This is the stale-attrib regression case; see the file header.
         const VertexPositionColor greenQuadPlusCorner[9] = {
-            // Two triangles tiling the whole viewport, green.
-            { Vector3(-1.0f, -1.0f, 0.0f), Color(0, 255, 0, 255) },
-            { Vector3(1.0f, -1.0f, 0.0f),  Color(0, 255, 0, 255) },
-            { Vector3(1.0f, 1.0f, 0.0f),   Color(0, 255, 0, 255) },
-            { Vector3(-1.0f, -1.0f, 0.0f), Color(0, 255, 0, 255) },
-            { Vector3(1.0f, 1.0f, 0.0f),   Color(0, 255, 0, 255) },
+            // Two triangles tiling the whole viewport, green, clockwise on screen.
             { Vector3(-1.0f, 1.0f, 0.0f),  Color(0, 255, 0, 255) },
+            { Vector3(1.0f, 1.0f, 0.0f),   Color(0, 255, 0, 255) },
+            { Vector3(1.0f, -1.0f, 0.0f),  Color(0, 255, 0, 255) },
+            { Vector3(-1.0f, 1.0f, 0.0f),  Color(0, 255, 0, 255) },
+            { Vector3(1.0f, -1.0f, 0.0f),  Color(0, 255, 0, 255) },
+            { Vector3(-1.0f, -1.0f, 0.0f), Color(0, 255, 0, 255) },
             // A third triangle covering the lower-right corner, yellow, drawn last so it wins.
+            // Also clockwise on screen ((32,64) -> (64,32) -> (64,64) at this 64x64 backbuffer).
             { Vector3(0.0f, -1.0f, 0.0f),  Color(255, 255, 0, 255) },
-            { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 255, 0, 255) },
             { Vector3(1.0f, 0.0f, 0.0f),   Color(255, 255, 0, 255) },
+            { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 255, 0, 255) },
         };
         DrawColoredTriangles(greenQuadPlusCorner, 9);
         check(RegionIs(Rectangle(8, 8, 4, 4), Color(0, 255, 0, 255)),
@@ -187,10 +194,10 @@ protected:
 
             VertexBuffer vb(dev, PosColorDecl(), 4, BufferUsage::None);
             const VertexPositionColor verts[4] = {
-                { Vector3(-1.0f, -1.0f, 0.0f), Color(255, 0, 255, 255) },
-                { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 0, 255, 255) },
-                { Vector3(1.0f, 1.0f, 0.0f),   Color(255, 0, 255, 255) },
                 { Vector3(-1.0f, 1.0f, 0.0f),  Color(255, 0, 255, 255) },
+                { Vector3(1.0f, 1.0f, 0.0f),   Color(255, 0, 255, 255) },
+                { Vector3(1.0f, -1.0f, 0.0f),  Color(255, 0, 255, 255) },
+                { Vector3(-1.0f, -1.0f, 0.0f), Color(255, 0, 255, 255) },
             };
             vb.SetData(verts, 0, 4);
 
@@ -201,6 +208,7 @@ protected:
                   "check D: the IndexBuffer reports the thirty-two-bit element size it was created with");
 
             BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
             fx.Apply();
             dev.SetVertexBuffer(&vb);
             dev.SetIndexBuffer(&ib);

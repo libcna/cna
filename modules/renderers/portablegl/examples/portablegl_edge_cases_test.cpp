@@ -218,16 +218,19 @@ protected:
 
             dev.Clear(Color::Black);
             VertexBuffer vb(dev, PosColorDecl(), 6, BufferUsage::None);
+            // Clockwise on screen, i.e. front-facing under the RasterizerState.CullCounterClockwise
+            // the SpriteBatch.Begin calls above installed on the device.
             const VertexPositionColor verts[6] = {
-                { Vector3(-1.0f, -1.0f, 0.0f), Color(0, 0, 255, 255) },
-                { Vector3(1.0f, -1.0f, 0.0f),  Color(0, 0, 255, 255) },
-                { Vector3(1.0f, 1.0f, 0.0f),   Color(0, 0, 255, 255) },
-                { Vector3(-1.0f, -1.0f, 0.0f), Color(0, 0, 255, 255) },
-                { Vector3(1.0f, 1.0f, 0.0f),   Color(0, 0, 255, 255) },
                 { Vector3(-1.0f, 1.0f, 0.0f),  Color(0, 0, 255, 255) },
+                { Vector3(1.0f, 1.0f, 0.0f),   Color(0, 0, 255, 255) },
+                { Vector3(1.0f, -1.0f, 0.0f),  Color(0, 0, 255, 255) },
+                { Vector3(-1.0f, 1.0f, 0.0f),  Color(0, 0, 255, 255) },
+                { Vector3(1.0f, -1.0f, 0.0f),  Color(0, 0, 255, 255) },
+                { Vector3(-1.0f, -1.0f, 0.0f), Color(0, 0, 255, 255) },
             };
             vb.SetData(verts, 0, 6);
             BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
             fx.Apply();
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
