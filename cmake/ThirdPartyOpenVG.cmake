@@ -93,7 +93,18 @@ typedef ptrdiff_t GLsizeiptr;
     target_include_directories(cna_thirdparty_shivavg PUBLIC "${shivavg_SOURCE_DIR}/include/vg")
     target_include_directories(cna_thirdparty_shivavg PRIVATE "${shivavg_SOURCE_DIR}" "${shivavg_SOURCE_DIR}/src")
     target_compile_definitions(cna_thirdparty_shivavg PRIVATE HAVE_CONFIG_H)
-    target_compile_options(cna_thirdparty_shivavg PRIVATE "-include" "${_cna_shivavg_glintptr_shim}")
+    # P1-8: forced-include is spelled differently per compiler driver -- GCC/Clang take it as two
+    # tokens ("-include", "path"); MSVC (cl.exe, used even under CMake's Ninja/NMake generators on
+    # Windows, not just the Visual Studio generator) needs the single-token "/FI\"path\"" form.
+    # This project's own gap-2 shim only NEEDS to reach ShivaVG's translation units on the
+    # platforms that actually hit gap 2 (Linux GLX headers referencing GLintptr/GLsizeiptr before
+    # glext.h would have supplied them -- see the comment above); applying the wrong flag spelling
+    # on MSVC would otherwise silently fail the whole configure with an "unknown argument" error.
+    if(MSVC)
+        target_compile_options(cna_thirdparty_shivavg PRIVATE "/FI${_cna_shivavg_glintptr_shim}")
+    else()
+        target_compile_options(cna_thirdparty_shivavg PRIVATE "-include" "${_cna_shivavg_glintptr_shim}")
+    endif()
     set_target_properties(cna_thirdparty_shivavg PROPERTIES
         C_STANDARD 99
         POSITION_INDEPENDENT_CODE ON

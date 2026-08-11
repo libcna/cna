@@ -16,8 +16,13 @@ namespace CNA::Internal::Renderers::OpenVg
      * `GenerateVertexInfo` placement formula), expressed through `vgTranslate`/`vgRotate`/
      * `vgScale`/`vgMultMatrix` against `VG_MATRIX_IMAGE_USER_TO_SURFACE` instead of a Canvas2D
      * `CanvasRenderingContext2D`. One extra outer transform (`vgTranslate(0,H); vgScale(1,-1)`,
-     * applied once per draw before the per-sprite stack) compensates for OpenVG's Y-up image space
-     * against XNA's Y-down screen space -- see OpenVgSpriteBatchRenderer.cpp's own comment.
+     * applied once per draw before the per-sprite stack, where H is the CURRENT LOGICAL canvas
+     * height -- `OpenVgRenderer::GetLogicalHeightEXT()`, not the physical framebuffer height)
+     * compensates for OpenVG's Y-up image space against XNA's Y-down screen space -- see
+     * OpenVgSpriteBatchRenderer.cpp's own comment. The logical->physical presentation mapping
+     * (Letterbox/Overscan/Stretch/FixedHeightDynamicWidth) is carried entirely by
+     * OpenVgRenderer's own GL_PROJECTION ortho and glViewport, so this per-draw transform never
+     * needs to know about the physical window at all.
      *
      * `End()` needs no explicit flush: each `Draw()` issues its `vgDrawImage` immediately, matching
      * every other CNA SpriteBatch renderer's "flush model" query (`SetImmediateMode` is a no-op

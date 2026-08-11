@@ -4,11 +4,25 @@
 #include "openvg.h"
 
 #include <stdexcept>
+#include <string>
 
 namespace CNA::Internal::Renderers::OpenVg
 {
     namespace
     {
+        std::string DescribeVgError()
+        {
+            switch (vgGetError())
+            {
+                case VG_NO_ERROR: return "VG_NO_ERROR";
+                case VG_BAD_HANDLE_ERROR: return "VG_BAD_HANDLE_ERROR";
+                case VG_ILLEGAL_ARGUMENT_ERROR: return "VG_ILLEGAL_ARGUMENT_ERROR";
+                case VG_OUT_OF_MEMORY_ERROR: return "VG_OUT_OF_MEMORY_ERROR";
+                case VG_UNSUPPORTED_IMAGE_FORMAT_ERROR: return "VG_UNSUPPORTED_IMAGE_FORMAT_ERROR";
+                default: return "unknown VGErrorCode";
+            }
+        }
+
         // Format choice: VG_sABGR_8888, not the more obviously-named VG_sRGBA_8888. ShivaVG's own
         // shSetupImageFormat (src/shImage.c) maps VG_sRGBA_8888 to `glformat=GL_RGBA,
         // gltype=GL_UNSIGNED_INT_8_8_8_8` (non-REV) -- on this little-endian host, reading 4
@@ -29,7 +43,8 @@ namespace CNA::Internal::Renderers::OpenVg
         // rotation, since texcoord generation is independent of the modelview/rotation matrix).
         // Keeping the upload in ImageData's own top-row-first order and letting the draw-time
         // matrix be the ONLY place orientation is decided is what makes this work under rotation
-        // too -- see OpenVgSpriteBatchRenderer.cpp's ApplyDeviceFlip-area comment.
+        // too -- see OpenVgSpriteBatchRenderer.cpp's ApplyDeviceFlip-area comment. Proven directly
+        // by openvg_texture_orientation_test.cpp's asymmetric-texel pixel oracle (P1-3).
         void UploadTopRowFirstRgba(void* image, const uint8_t* rgba, int width, int height, int strideBytes)
         {
             vgImageSubData(reinterpret_cast<VGImage>(image), rgba, strideBytes,
@@ -44,19 +59,31 @@ namespace CNA::Internal::Renderers::OpenVg
         if (width_ <= 0 || height_ <= 0)
             throw std::runtime_error("OpenVG (ShivaVG): texture width/height must be positive.");
 
+        // P1-2: validate every CPU-side argument BEFORE allocating the VGImage. This used to
+        // happen after vgCreateImage -- a throw there left a real, now-unreachable VGImage handle
+        // with nothing to free it (this object's destructor never runs for a not-yet-constructed
+        // instance), a genuine per-failed-upload leak.
+        const int stride = width_ * 4;
+        if (!data.pixels.empty() &&
+            static_cast<std::size_t>(stride) * static_cast<std::size_t>(height_) > data.pixels.size())
+        {
+            throw std::runtime_error("OpenVG (ShivaVG): ImageData.pixels is smaller than width*height*4.");
+        }
+
         VGImage img = vgCreateImage(VG_sABGR_8888, width_, height_,
                                     VG_IMAGE_QUALITY_FASTER | VG_IMAGE_QUALITY_BETTER);
         if (img == VG_INVALID_HANDLE)
-            throw std::runtime_error("OpenVG (ShivaVG): vgCreateImage failed.");
+        {
+            throw std::runtime_error(
+                "OpenVG (ShivaVG): vgCreateImage failed (" + DescribeVgError() + ").");
+        }
+        // Owned from this point on: this->image_ is set immediately after the only OpenVG
+        // resource-creation call in this constructor, so any later throw still runs the
+        // destructor (which frees it) instead of leaking it.
         image_ = reinterpret_cast<void*>(img);
 
         if (!data.pixels.empty())
-        {
-            const int stride = width_ * 4;
-            if (static_cast<std::size_t>(stride) * static_cast<std::size_t>(height_) > data.pixels.size())
-                throw std::runtime_error("OpenVG (ShivaVG): ImageData.pixels is smaller than width*height*4.");
             UploadTopRowFirstRgba(image_, data.pixels.data(), width_, height_, stride);
-        }
     }
 
     OpenVgTextureRenderer::~OpenVgTextureRenderer()
