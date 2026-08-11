@@ -125,6 +125,16 @@ constexpr bool kExpectCustomEffects         = false;
 constexpr bool kExpectMultipleRenderTargets = true;
 constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_RENDERER_FNA3D)
+// plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a *compiled*
+// Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in the library
+// compiles a GLSL/HLSL source string, which is what IEffectRenderer/CreateEffectRenderer is handed.
+// The false is therefore structural, not not-yet-implemented, and CreateEffectRenderer returns
+// null to match (docs/fna3d-renderer.md). MRT (FNA3D_SetRenderTargets takes the whole ordered set)
+// and occlusion queries (FNA3D_CreateQuery/QueryPixelCount) are genuinely implemented.
+constexpr bool kExpectMultipleRenderTargets = true;
+constexpr bool kExpectOcclusionQuery        = true;
+constexpr bool kExpectCustomEffects         = false;
 #else
 constexpr bool kExpectMultipleRenderTargets = true;
 constexpr bool kExpectOcclusionQuery        = true;

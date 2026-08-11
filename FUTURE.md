@@ -21,7 +21,7 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | **CURRENT** | Phase 1.5 — naming normalization (backend→renderer, DIRECTX*, OPENGLES3, CNAEXT) | **COMPLETE AND PUBLIC** — implemented on `feature/renderer-naming-normalization` (endpoint `16f76cf1a`) and promoted to `develop` on 2026-08-10 as part of the pre-expansion fast-forward. See `docs/RendererNamingMigration.md`. Renderer count unchanged at 41 |
 | **CURRENT** | Phase 1.6 — module-owned examples | **COMPLETE AND PUBLIC** — implemented on `feature/module-examples` (endpoint `675e04c7a`, a descendant of the naming endpoint) and promoted in the same fast-forward. All 1373 tracked example files now live with their owning module, registered by 44 module-local `examples/CMakeLists.txt` files; only the shared `examples/golden/` oracle corpus stays at repository level. See `docs/physical-modules.md` §"Module examples" and `modularization/module-examples/` |
 | **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** in three stages, all now on public `develop`: target graph + physical `src/` layout (`41028e995`), modular sharp-runtime consumption (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, MODULARIZATION_PLAN.md §11–§11.2) promoted 2026-08-10 by fast-forward to `3ecbbce72` (tree unchanged by the promotion). The modularization campaign is DONE |
-| **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **started 2026-08-10 under owner instruction**: `OPENGLES2` (addition #1 below) is implemented on the dedicated `feature/renderer-opengles2` branch rooted at the pre-expansion promotion head — see `plan_opengles2.md` and `docs/opengles2-renderer.md`. The remaining 13 additions are untouched and each still requires its own explicit owner instruction |
+| **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **in progress**: `OPENGLES2`, `BLEND2D` and `FNA3D` are implemented on their own lanes and integrated on the `11branches` integration branch — see the Phase 2 table below, `NEXT.md`, and each lane's plan/renderer doc. The remaining additions are untouched and each still requires its own explicit owner instruction |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
 | **FUTURE** | Phase 5 — glTF correctness campaign | **not started**; blocked on Phase 4 |
@@ -90,7 +90,7 @@ This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer imp
 | # | Public identity | Notes |
 |---:|---|---|
 | 1 | `OPENGLES2` | **DONE (2026-08-10, `feature/renderer-opengles2`)** — public CNA OpenGL ES 2 renderer/profile, reusing the EasyGL/MetaGL ES 2 capability as its own fifth GL profile (`CNA_GL_PROFILE_OPENGLES2`) with truthful ES 2.0 capability and platform reporting. See `plan_opengles2.md` / `docs/opengles2-renderer.md`. |
-| 2 | `FNA3D` | Based on the FNA3D graphics library. |
+| 2 | `FNA3D` | Based on the FNA3D graphics library. **IMPLEMENTED on its own lane** (`feature/renderer-fna3d`), not yet integrated into `develop`: FNA3D pinned at release 26.08, executing XNA's own compiled stock effects through MojoShader. See `docs/fna3d-renderer.md` and `plan_fna3d.md`. Integrating it makes the public count 42. |
 | 3 | `OPENVG` | OpenVG. |
 | 4 | `SVG_DOM` | SVG DOM. |
 | 5 | `IGL` | Facebook IGL — https://github.com/facebook/igl |

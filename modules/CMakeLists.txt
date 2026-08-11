@@ -156,7 +156,7 @@ set(_cna_framework_modules
 set(_cna_renderer_modules
     bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6
     directx7 directx8 directx9 directx10 directx11 directx12
-    easygl freedirect gdi glide headless html-dom llgl magnum metal opengl1
+    easygl fna3d freedirect gdi glide headless html-dom llgl magnum metal opengl1
     opengl2 opengl4 opengles1 sdl-gpu sdl-renderer skia software sokol stub vulkan
     webgpu wicked common/d3d)
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"

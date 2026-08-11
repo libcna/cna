@@ -155,6 +155,9 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_METAL
     ++enabled;
 #endif
+#ifdef CNA_RENDERER_FNA3D
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

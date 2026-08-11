@@ -165,7 +165,7 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 
 ## 6. 🔌 Renderer System
 
-CNA exposes **41 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+CNA exposes **42 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
 configuration). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
@@ -214,6 +214,7 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `GDI` (Windows-only, 2D-only)
 - `LLGL` (experimental; accepted support is OpenGL on Linux/X11/x86_64)
 - `METAL` (macOS only, experimental — see [`docs/metal-renderer.md`](docs/metal-renderer.md))
+- `FNA3D` (FNA's own XNA-shaped graphics library; picks SDL_GPU/Direct3D 11/OpenGL at runtime, and executes XNA's actual stock effects — see [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md))
 
 ### Tradeoffs
 

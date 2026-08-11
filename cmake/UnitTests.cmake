@@ -146,6 +146,15 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Magnum/.*\\.cpp$")
     endif()
 
+    # plan_fna3d.md: the FNA3D renderer's own GTest suites live under
+    # modules/renderers/fna3d/tests/ and include the renderer's headers, which resolve only when
+    # the FNA3D renderer is configured (the FNA3D/MojoShader include roots come with the renderer
+    # target). Excluded from every other renderer's corpus by the same convention as the Wicked
+    # and Magnum directories above; under FNA3D the corpus keeps them.
+    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
+    endif()
+
     add_executable(CnaTests
             ${CNA_TEST_SOURCES}
     )

@@ -131,7 +131,11 @@ namespace CNA
         Llgl,
 
         /** @brief Native Apple Metal. */
-        Metal
+        Metal,
+
+        /** @brief FNA3D (FNA-XNA/FNA3D), the XNA-shaped C graphics library FNA itself renders
+         * through; it selects SDL_GPU, Direct3D 11 or OpenGL internally at runtime. */
+        Fna3d
     };
 
     /**
@@ -235,6 +239,8 @@ namespace CNA
         return GraphicsRendererType::Llgl;
 #elif defined(CNA_RENDERER_METAL)
         return GraphicsRendererType::Metal;
+#elif defined(CNA_RENDERER_FNA3D)
+        return GraphicsRendererType::Fna3d;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -296,6 +302,7 @@ namespace CNA
             case GraphicsRendererType::Gdi:           return "GDI";
             case GraphicsRendererType::Llgl:          return "LLGL";
             case GraphicsRendererType::Metal:          return "METAL";
+            case GraphicsRendererType::Fna3d:         return "FNA3D";
         }
         return "UNKNOWN";
     }

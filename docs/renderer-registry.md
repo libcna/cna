@@ -1,10 +1,10 @@
 # CNA renderer registry
 
-Current as of the eleven-lane renderer integration (2026-08-11): CNA exposes exactly **42 public
+Current as of the eleven-lane renderer integration (2026-08-11): CNA exposes exactly **43 public
 renderer identities**. `ASCII` was removed as a public renderer identity and its reusable
 quantization/glyph-atlas logic migrated to a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) — see
-`docs/ascii-post-process-effect.md`. `OPENGLES2` and `BLEND2D` were added. EasyGL is an internal
+`docs/ascii-post-process-effect.md`. `OPENGLES2`, `BLEND2D` and `FNA3D` were added. EasyGL is an internal
 implementation shared by five public GL profiles and does not add a public identity. Internal
 renderer/API choices made by bgfx, Skia, Sokol, Diligent, LLGL, or another abstraction likewise do
 not add CNA identities.
@@ -55,9 +55,10 @@ not add CNA identities.
 | 40 | `Gdi` | `GDI` | `CNA_RENDERER_GDI` | GDI / `GdiRenderer` | Windows |
 | 41 | `Llgl` | `LLGL` | `CNA_RENDERER_LLGL` | LLGL / `LlglRenderer` | LLGL dependency |
 | 42 | `Metal` | `METAL` | `CNA_RENDERER_METAL` | Metal / `MetalRenderer` | macOS/Darwin |
+| 43 | `Fna3d` | `FNA3D` | `CNA_RENDERER_FNA3D` | FNA3D / `Fna3dRenderer` | FNA3D dependency |
 
-The five GL profiles share one implementation target, macro, and factory, so 42 public identities
-map to 38 concrete implementation factories. Their public contracts remain distinct because the
+The five GL profiles share one implementation target, macro, and factory, so 43 public identities
+map to 39 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
 renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
 `EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.

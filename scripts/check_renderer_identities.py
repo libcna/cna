@@ -60,6 +60,7 @@ IDENTITIES = [
     ("GDI", "Gdi"),
     ("LLGL", "Llgl"),
     ("METAL", "Metal"),
+    ("FNA3D", "Fna3d"),
 ]
 
 
