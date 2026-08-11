@@ -166,6 +166,76 @@ TEST(GltfFixtureCorpus, ManifestMatchesEveryCommittedFileByteForByte)
     }
 }
 
+TEST(GltfFixtureCorpus, TheGeneratorPackageIsCompleteInTheCheckout)
+{
+    // The corpus is only meaningful because a committed generator can reproduce it. That
+    // guarantee failed silently once: .gitignore carried an unanchored 'build*', which matched
+    // tools/gltf_fixtures/builder.py, so the generator's core module was never committed and
+    // 'python3 -m gltf_fixtures' died with ModuleNotFoundError on every clean checkout. Every
+    // other corpus test still passed, because the committed files and the committed manifest
+    // agreed with each other -- neither of them needs the generator to exist.
+    //
+    // This closes that hole without needing a Python interpreter at test time: every module the
+    // generator's own sources import from within the package must be present on disk. A module
+    // that goes missing again fails here, naming the file and the importer.
+    const std::filesystem::path corpus = CorpusDirectory();
+    ASSERT_FALSE(corpus.empty());
+    const std::filesystem::path generator =
+        corpus.parent_path().parent_path().parent_path() / "tools" / "gltf_fixtures";
+    ASSERT_TRUE(std::filesystem::is_directory(generator))
+        << "tools/gltf_fixtures is missing -- the corpus has no generator to reproduce it";
+
+    std::vector<std::filesystem::path> sources;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::recursive_directory_iterator(generator))
+    {
+        if (entry.is_regular_file() && entry.path().extension() == ".py")
+        {
+            sources.push_back(entry.path());
+        }
+    }
+    ASSERT_FALSE(sources.empty()) << "tools/gltf_fixtures contains no Python sources";
+
+    for (const std::filesystem::path& source : sources)
+    {
+        std::ifstream file(source);
+        ASSERT_TRUE(file.is_open()) << source.string();
+        std::string line;
+        while (std::getline(file, line))
+        {
+            // Only intra-package relative imports are checked: "from .x import" resolves against
+            // the importing module's own directory, "from ..x import" against its parent.
+            const std::size_t from = line.find("from .");
+            if (from == std::string::npos || line.find("import") == std::string::npos) { continue; }
+            // The leading dot means "this package", i.e. the importing module's own directory;
+            // each dot after it climbs one level.
+            std::size_t cursor = from + 5;
+            std::filesystem::path base = source.parent_path();
+            ++cursor;
+            while (cursor < line.size() && line[cursor] == '.')
+            {
+                base = base.parent_path();
+                ++cursor;
+            }
+            std::string module;
+            while (cursor < line.size() && (std::isalnum(static_cast<unsigned char>(line[cursor]))
+                                            || line[cursor] == '_'))
+            {
+                module += line[cursor++];
+            }
+            if (module.empty()) { continue; }  // "from . import x" -- the package itself
+
+            const std::filesystem::path asModule = base / (module + ".py");
+            const std::filesystem::path asPackage = base / module / "__init__.py";
+            EXPECT_TRUE(std::filesystem::exists(asModule) || std::filesystem::exists(asPackage))
+                << source.filename().string() << " imports '" << module
+                << "', but neither " << asModule.string() << " nor " << asPackage.string()
+                << " exists. The generator cannot run, so the corpus cannot be regenerated -- "
+                   "check .gitignore is not swallowing the file (plan_gltf.md GLTF-003).";
+        }
+    }
+}
+
 TEST(GltfFixtureCorpus, DistinctAssetCountEqualsTheSumOfOwningGroupCounts)
 {
     // plan_gltf.md §24.1: one asset has exactly one owning group, so the distinct-asset total is
