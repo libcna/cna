@@ -86,7 +86,8 @@ TEST(AsciiPostProcessEffectTest, GetLastGridDimensionsStartsAtZero)
 TEST(AsciiPostProcessEffectTest, ConstructingMultipleIndependentEffectsDoesNotThrow)
 {
     GraphicsDevice gd;
-    EXPECT_NO_THROW({
+    auto exercise = [&gd]()
+    {
         AsciiPostProcessEffect a(gd);
         AsciiPostProcessEffect b(gd);
         a.setCellSize(4, 4);
@@ -96,7 +97,8 @@ TEST(AsciiPostProcessEffectTest, ConstructingMultipleIndependentEffectsDoesNotTh
         b.getCellSize(bw, bh);
         EXPECT_EQ(aw, 4);
         EXPECT_EQ(bw, 32);
-    });
+    };
+    EXPECT_NO_THROW(exercise());
 }
 
 #endif // CNA_CNAEXT

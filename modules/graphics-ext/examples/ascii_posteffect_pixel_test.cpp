@@ -31,7 +31,13 @@
 // Check F -- repeated Draw() calls against the same effect/source produce identical output
 //   (deterministic, no per-call state leak).
 //
-// Exit code 0 = all checks PASS, 1 = any FAILs.
+// Renderers that do not rasterize at all (HEADLESS, STUB) correctly reject
+// GraphicsDevice::GetBackBufferData() with System::NotSupportedException -- a documented capability
+// boundary (see backbuffer_headless_reject_test.cpp), not a defect. This test cannot exercise
+// pixel-level output there; it exits with the project's headless-safe SKIP_RETURN_CODE (77, see
+// cmake/TestHelpers.cmake) instead of treating that rejection as a failure.
+//
+// Exit code 0 = all checks PASS, 1 = any FAILs, 77 = SKIPPED (non-rasterizing renderer).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -39,10 +45,12 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include "CNA/Graphics/AsciiPostProcessEffect.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -90,13 +98,36 @@ protected:
         AsciiPostProcessEffect effect(dev);
         effect.setQuantizeMode(AsciiQuantizeMode::Color);
 
+        // A non-rasterizing renderer (HEADLESS, STUB) rejects the CPU readback Draw() needs
+        // (Texture2D::GetData()) with this same capability-boundary exception -- checked here,
+        // before the "Draw() does not throw" assertion below, so that documented, expected
+        // rejection reads as a clean SKIP rather than a spurious FAIL.
+        try { effect.Draw(scene); }
+        catch (const System::NotSupportedException&)
+        {
+            std::printf("SKIP: this renderer does not rasterize / has no backbuffer to read back "
+                        "(documented capability boundary, not a defect)\n");
+            std::exit(77);
+        }
+
         bool threw = false;
         try { effect.Draw(scene); }
         catch (const std::exception&) { threw = true; }
         check(!threw, "Draw(source) does not throw");
 
-        std::vector<Color> pixels(static_cast<std::size_t>(kSize) * static_cast<std::size_t>(kSize));
-        dev.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size()));
+        std::vector<Color> pixels(static_cast<std::size_t>(kSize) * static_cast<std::size_t>(kSize),
+                                  Color(static_cast<std::uint8_t>(0), static_cast<std::uint8_t>(0),
+                                       static_cast<std::uint8_t>(0), static_cast<std::uint8_t>(0)));
+        try
+        {
+            dev.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size()));
+        }
+        catch (const System::NotSupportedException&)
+        {
+            std::printf("SKIP: this renderer does not rasterize / has no backbuffer to read back "
+                        "(documented capability boundary, not a defect)\n");
+            std::exit(77);
+        }
 
         // Check A: top-left corner of cell (0,0) -- '+' glyph's row 0 is all off -> background.
         check(PixelEquals(pixels, kSize, 1, 1, 35, 35, 35),
@@ -142,13 +173,14 @@ protected:
 
         // Check F: repeated Draw() calls are deterministic.
         effect.Draw(scene);
-        std::vector<Color> firstPass = pixels;
         dev.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size()));
+        std::vector<Color> firstPass = pixels;
         effect.Draw(scene);
-        std::vector<Color> secondPass(pixels.size());
+        std::vector<Color> secondPass(pixels.size(),
+                                      Color(static_cast<std::uint8_t>(0), static_cast<std::uint8_t>(0),
+                                           static_cast<std::uint8_t>(0), static_cast<std::uint8_t>(0)));
         dev.GetBackBufferData(secondPass.data(), static_cast<int>(secondPass.size()));
-        check(PixelEquals(secondPass, kSize, 1, 1, 35, 35, 35) && PixelEquals(secondPass, kSize, 4, 4, 140, 140, 140),
-              "Repeated Draw() calls against the same source produce identical output");
+        check(firstPass == secondPass, "Repeated Draw() calls against the same source produce identical output");
 
         // Check C (destination-rectangle overload): explicit full-viewport rectangle does not throw
         // and reproduces the same corner/center samples.

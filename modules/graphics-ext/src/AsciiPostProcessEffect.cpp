@@ -61,7 +61,12 @@ namespace CNA::Graphics {
         const int srcWidth = source.getWidthProperty();
         const int srcHeight = source.getHeightProperty();
 
-        std::vector<Color> pixels(static_cast<std::size_t>(srcWidth) * static_cast<std::size_t>(srcHeight));
+        // Color has no default constructor (matches every other CNA pixel-buffer convention in
+        // this codebase), so the fill value must be given explicitly -- overwritten in full by
+        // GetData() below regardless.
+        std::vector<Color> pixels(static_cast<std::size_t>(srcWidth) * static_cast<std::size_t>(srcHeight),
+                                  Color(static_cast<std::uint8_t>(0), static_cast<std::uint8_t>(0),
+                                       static_cast<std::uint8_t>(0), static_cast<std::uint8_t>(0)));
         source.GetData(pixels.data(), static_cast<int>(pixels.size()));
 
         const AsciiInternal::AsciiGrid grid = AsciiInternal::QuantizeFrameToGrid(
