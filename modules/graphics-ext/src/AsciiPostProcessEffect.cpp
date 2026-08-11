@@ -5,8 +5,12 @@
 
 #include "CNA/Internal/Graphics/Ascii/AsciiFontAtlas.hpp"
 #include "CNA/Internal/Graphics/Ascii/AsciiQuantizer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 
+#include <cstdint>
 #include <stdexcept>
 #include <vector>
 
@@ -69,26 +73,49 @@ namespace CNA::Graphics {
                                        static_cast<std::uint8_t>(0), static_cast<std::uint8_t>(0)));
         source.GetData(pixels.data(), static_cast<int>(pixels.size()));
 
+        // AsciiQuantizer's QuantizeFrameToGrid() takes tightly-packed raw RGBA8 bytes (the shape
+        // the former ASCII renderer's own IGraphicsRenderer::ReadBackbuffer(uint8_t*) always
+        // produced) -- NOT a reinterpret_cast of the Color array above. Color publicly derives
+        // from IPackedVectorT<UInt32>, a polymorphic base (see IPackedVector.hpp's own comment:
+        // "Inheriting virtual methods adds a vptr"), so sizeof(Color) is larger than 4 bytes and
+        // std::vector<Color> elements are not laid out as tightly-packed RGBA8 -- reinterpreting
+        // them as such silently reads the vtable pointer's bytes as pixel data. Pack explicitly.
+        std::vector<std::uint8_t> rgba(pixels.size() * 4);
+        for (std::size_t i = 0; i < pixels.size(); ++i)
+        {
+            rgba[i * 4 + 0] = pixels[i].getRProperty();
+            rgba[i * 4 + 1] = pixels[i].getGProperty();
+            rgba[i * 4 + 2] = pixels[i].getBProperty();
+            rgba[i * 4 + 3] = pixels[i].getAProperty();
+        }
+
         const AsciiInternal::AsciiGrid grid = AsciiInternal::QuantizeFrameToGrid(
-            reinterpret_cast<const std::uint8_t*>(pixels.data()), srcWidth, srcHeight,
-            cellWidth_, cellHeight_, mode_);
+            rgba.data(), srcWidth, srcHeight, cellWidth_, cellHeight_, mode_);
         lastGridColumns_ = grid.columns;
         lastGridRows_ = grid.rows;
 
         const Rectangle solidSrc(AsciiInternal::kAsciiSolidGlyphIndex * AsciiInternal::kAsciiGlyphWidth, 0,
                                  AsciiInternal::kAsciiGlyphWidth, AsciiInternal::kAsciiGlyphHeight);
 
-        // SpriteBatch::Begin() with no arguments already defaults to real premultiplied
-        // BlendState::AlphaBlend (SpriteSortMode::Deferred) -- exactly the blend factors needed so
-        // a glyph's transparent "off" pixels never overwrite a cell's background fill, with no
-        // renderer-specific blend-state poking required.
-        spriteBatch_.Begin();
-        // Fills the destination rectangle with black first, matching the former ASCII renderer's
-        // own Present() (which cleared its whole target the same way): BlackWhite mode paints no
-        // per-cell background at all, so without this the area outside each glyph's "on" pixels
-        // would show whatever was previously drawn there instead of a clean black field.
-        spriteBatch_.Draw(fontAtlasTexture_, destinationRectangle, solidSrc,
-                          Microsoft::Xna::Framework::Color(0, 0, 0, 255));
+        // Point (nearest) sampling, not SpriteBatch::Begin()'s own LinearClamp default: every quad
+        // here maps its source region 1:1 onto its destination in the common case, but adjacent
+        // glyphs packed edge-to-edge in one atlas texture make bilinear filtering sample across
+        // glyph boundaries at the seam -- the same reason every other pixel-exact CNA test draws
+        // with PointClamp (see e.g. colorspace_midtone_contract_test.cpp's FillRect/BlitPalette).
+        // BlendState::AlphaBlend is SpriteBatch::Begin()'s own default too; named explicitly here
+        // since a non-default sampler forces the longer Begin() overload.
+        static Microsoft::Xna::Framework::Graphics::SamplerState pointClamp =
+            Microsoft::Xna::Framework::Graphics::SamplerState::PointClamp;
+        spriteBatch_.Begin(Microsoft::Xna::Framework::Graphics::SpriteSortMode::Deferred,
+                           Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend,
+                           &pointClamp, nullptr, nullptr);
+        // Every cell draws its own background quad -- BlackWhite mode's cells (hasBackground ==
+        // false) draw solid black instead of skipping the quad, so the area outside each glyph's
+        // "on" pixels is always painted deliberately, never left showing whatever was previously
+        // drawn there. No separate full-destinationRectangle pre-clear quad: cells tile the
+        // destination exactly (see the edge-matching note below), so one full-rect quad plus 64
+        // per-cell quads all sampling the SAME solid atlas region would just be redundant overlap.
+        const Microsoft::Xna::Framework::Color black(0, 0, 0, 255);
         for (int row = 0; row < grid.rows; ++row)
         {
             // Both edges of each cell are computed directly from row/col (not accumulated by
@@ -107,10 +134,7 @@ namespace CNA::Graphics {
                 const Rectangle dest(cellX0, cellY0, cellX1 - cellX0, cellY1 - cellY0);
 
                 const AsciiInternal::AsciiCell& cell = grid.At(col, row);
-                if (cell.hasBackground)
-                {
-                    spriteBatch_.Draw(fontAtlasTexture_, dest, solidSrc, cell.background);
-                }
+                spriteBatch_.Draw(fontAtlasTexture_, dest, solidSrc, cell.hasBackground ? cell.background : black);
 
                 const Rectangle glyphSrc(cell.glyphIndex * AsciiInternal::kAsciiGlyphWidth, 0,
                                          AsciiInternal::kAsciiGlyphWidth, AsciiInternal::kAsciiGlyphHeight);

@@ -99,20 +99,21 @@ protected:
         effect.setQuantizeMode(AsciiQuantizeMode::Color);
 
         // A non-rasterizing renderer (HEADLESS, STUB) rejects the CPU readback Draw() needs
-        // (Texture2D::GetData()) with this same capability-boundary exception -- checked here,
-        // before the "Draw() does not throw" assertion below, so that documented, expected
-        // rejection reads as a clean SKIP rather than a spurious FAIL.
+        // (Texture2D::GetData()/GetBackBufferData()) with System::NotSupportedException -- a
+        // documented capability boundary (see backbuffer_headless_reject_test.cpp), not a defect.
+        // A single Draw() call feeds both the "does not throw" assertion and the pixel read below
+        // it, matching how a real application calls Draw() once per frame.
+        bool threw = false;
+        bool skip = false;
         try { effect.Draw(scene); }
-        catch (const System::NotSupportedException&)
+        catch (const System::NotSupportedException&) { skip = true; }
+        catch (const std::exception&) { threw = true; }
+        if (skip)
         {
             std::printf("SKIP: this renderer does not rasterize / has no backbuffer to read back "
                         "(documented capability boundary, not a defect)\n");
             std::exit(77);
         }
-
-        bool threw = false;
-        try { effect.Draw(scene); }
-        catch (const std::exception&) { threw = true; }
         check(!threw, "Draw(source) does not throw");
 
         std::vector<Color> pixels(static_cast<std::size_t>(kSize) * static_cast<std::size_t>(kSize),
@@ -192,8 +193,8 @@ protected:
         check(PixelEquals(pixels, kSize, 1, 1, 35, 35, 35) && PixelEquals(pixels, kSize, 4, 4, 140, 140, 140),
               "Draw(source, destinationRectangle) reproduces the same corner/center samples as Draw(source)");
 
-        std::printf("=== %d/%d PASS ===\n", passCount_, 11);
-        result_ = (passCount_ == 11) ? 0 : 1;
+        std::printf("=== %d/%d PASS ===\n", passCount_, 12);
+        result_ = (passCount_ == 12) ? 0 : 1;
         Exit();
     }
 
