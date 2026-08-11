@@ -125,14 +125,20 @@ namespace CNA::Internal
      * uses `"type"` as a runtime lookup key instead of an equality check, so it cannot use
      * ValidateCnjEnvelope() directly).
      *
-     * @param envelope Envelope previously returned by ParseCnjEnvelope().
-     * @param path     File path, used only to build exception messages.
+     * @param envelope   Envelope previously returned by ParseCnjEnvelope().
+     * @param path       File path, used only to build exception messages.
+     * @param maxVersion Highest `"cnjVersion"` this document type understands. Defaults to 1, the
+     *        original format and still the only version every type other than `Model` writes.
+     *        `Model` passes 2, the version that adds the `"bones"` hierarchy and the per-mesh
+     *        `"parentBone"` index (plan_gltf.md GLTF-129, Phase 5). Scoping the ceiling per type
+     *        rather than raising it globally keeps "a future version is rejected" true for every
+     *        type that has not actually defined one.
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the document was not
-     *         valid JSON, its root was not an object, `"cnjVersion"` is missing or is not
-     *         exactly `1` (the only currently-supported envelope version), or `"type"` is
-     *         missing.
+     *         valid JSON, its root was not an object, `"cnjVersion"` is missing, is not an integer
+     *         in `[1, maxVersion]`, or `"type"` is missing.
      */
-    inline void ValidateCnjEnvelopeBaseline(const CnjEnvelope& envelope, const std::string& path)
+    inline void ValidateCnjEnvelopeBaseline(const CnjEnvelope& envelope, const std::string& path,
+                                             int maxVersion = 1)
     {
         using Microsoft::Xna::Framework::Content::ContentLoadException;
 
@@ -149,12 +155,17 @@ namespace CNA::Internal
                 "ContentManager: '" + path + "' is missing the required 'cnjVersion' field.");
         }
 
-        constexpr double kSupportedCnjVersion = 1.0;
-        if (envelope.cnjVersionRaw != kSupportedCnjVersion)
+        // cnjVersionRaw rather than cnjVersion so a non-integer version like 1.5 is still
+        // rejected outright instead of truncating into the supported range.
+        const double highest = static_cast<double>(maxVersion);
+        if (!(envelope.cnjVersionRaw >= 1.0 && envelope.cnjVersionRaw <= highest) ||
+            envelope.cnjVersionRaw != static_cast<double>(static_cast<int>(envelope.cnjVersionRaw)))
         {
             throw ContentLoadException(
                 "ContentManager: '" + path + "' has unsupported 'cnjVersion' (" +
-                std::to_string(envelope.cnjVersionRaw) + "); only version 1 is supported.");
+                std::to_string(envelope.cnjVersionRaw) + "); only version" +
+                (maxVersion > 1 ? "s 1 to " + std::to_string(maxVersion) + " are"
+                                : std::string(" 1 is")) + " supported.");
         }
 
         if (!envelope.hasType)
@@ -176,17 +187,20 @@ namespace CNA::Internal
      * @param envelope     Envelope previously returned by ParseCnjEnvelope().
      * @param expectedType The type name the calling reader produces (e.g. `"SpriteFont"`).
      * @param path         File path, used only to build the exception message.
+     * @param maxVersion   Highest `"cnjVersion"` this reader understands (see
+     *        ValidateCnjEnvelopeBaseline()). Defaults to 1.
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException for any
      *         ValidateCnjEnvelopeBaseline() failure, or if `"type"` does not equal
      *         @p expectedType.
      */
     inline void ValidateCnjEnvelope(const CnjEnvelope& envelope,
                                      const std::string& expectedType,
-                                     const std::string& path)
+                                     const std::string& path,
+                                     int maxVersion = 1)
     {
         using Microsoft::Xna::Framework::Content::ContentLoadException;
 
-        ValidateCnjEnvelopeBaseline(envelope, path);
+        ValidateCnjEnvelopeBaseline(envelope, path, maxVersion);
 
         if (envelope.type != expectedType)
         {

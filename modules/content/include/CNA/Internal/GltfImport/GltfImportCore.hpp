@@ -36,6 +36,27 @@ namespace CNA::Internal::GltfImport
         /** @brief World-space inverse bind matrix (glTF's own authored value, unit-scaled). */
         Microsoft::Xna::Framework::Matrix inverseBindGlobal =
             Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        /**
+         * @brief The transform a **root** bone's own local transform composes against; identity
+         * for any bone whose parent is inside the skin's joint set.
+         *
+         * @note CNAEXT — plan_gltf.md GLTF-245/GLTF-247 (Phase 5). glTF's joint matrix is
+         * `inverse(globalTransform(meshNode)) * globalTransform(joint) * inverseBindMatrix`, and
+         * both leading terms live *above* the joint set: `globalTransform(joint)` includes every
+         * scene ancestor -- joints or not, and regardless of `skin.skeleton` -- while
+         * `inverse(globalTransform(meshNode))` cancels the skinned mesh node's own placement.
+         * Neither can be expressed by a bone-local transform, and folding them into
+         * `bindPoseLocal` would be silently undone the moment an animation clip replaced that
+         * bone's local transform. Carrying them separately keeps both correct:
+         *
+         *     world(root) = bindPoseLocal(root) * parentWorldPrefix(root)
+         *     world(bone) = bindPoseLocal(bone) * world(parent)
+         *
+         * so an animated root joint substitutes only its own local transform, exactly as a
+         * non-root joint does.
+         */
+        Microsoft::Xna::Framework::Matrix parentWorldPrefix =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
     };
 
     /** @brief The result of topologically reordering one glTF skin's joints. */
@@ -91,11 +112,47 @@ namespace CNA::Internal::GltfImport
         std::string extension;
     };
 
+    /**
+     * @brief A glTF primitive's declared topology — `mesh.primitive.mode`, specification §3.7.2.1.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. The enumerator values are glTF's own `mode`
+     * numbers, so a value round-trips through the file format unchanged. This is deliberately the
+     * *source* topology rather than an XNA `PrimitiveType`: three of the seven modes have no XNA
+     * equivalent at all, and deciding what each becomes is a separate concern from reading what
+     * the file actually declares (plan_gltf.md §10.1).
+     */
+    enum class PrimitiveTopology
+    {
+        /** @brief `mode` 0 — an unconnected point per vertex. */
+        Points = 0,
+        /** @brief `mode` 1 — an independent line segment per index pair. */
+        Lines = 1,
+        /** @brief `mode` 2 — a connected line strip, closed by a segment back to the first vertex. */
+        LineLoop = 2,
+        /** @brief `mode` 3 — a connected, open line strip. */
+        LineStrip = 3,
+        /** @brief `mode` 4 — an independent triangle per index triple. glTF's own default. */
+        Triangles = 4,
+        /** @brief `mode` 5 — a triangle strip; odd triangles have reversed winding. */
+        TriangleStrip = 5,
+        /** @brief `mode` 6 — a triangle fan around the first vertex. */
+        TriangleFan = 6,
+    };
+
     /** @brief One extracted mesh primitive's vertex/index bytes plus its effect-relevant flags. */
     struct MeshOut
     {
         /** @brief The mesh part's name (from the glTF mesh, or a generated placeholder). */
         std::string name;
+        /**
+         * @brief The source primitive's declared topology (`mesh.primitive.mode`).
+         *
+         * Always `Triangles` on a `MeshOut` that `ExtractMesh` actually returned, because every
+         * other topology is currently rejected (see `IsPrimitiveTopologySupported`). It is carried
+         * anyway so the index list can never again be interpreted as a triangle list by default:
+         * the topology travels with the data it describes.
+         */
+        PrimitiveTopology topology = PrimitiveTopology::Triangles;
         /** @brief Tightly-packed vertex bytes, `vertexBytes.size() / stride` vertices. */
         std::vector<std::uint8_t> vertexBytes;
         /** @brief Byte stride of one vertex (16/20/24/32/48/52/56/68 — see CLAUDE.md's stride table). */
@@ -160,13 +217,89 @@ namespace CNA::Internal::GltfImport
         bool pbrUv2Mismatch = false;
     };
 
+    /**
+     * @brief One node of the imported scene graph — the `sceneNodeIndex` identity space.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md GLTF-103/GLTF-113 (Phase 5): glTF
+     * places a mesh through the node that instantiates it, and a node's world transform is the
+     * product of its ancestors' local transforms with its own. Reproducing that graph as CNA
+     * `ModelBone`s (rather than baking it into vertex positions) is what preserves mesh instancing,
+     * rigid node animation, node-attached cameras/lights, and a hierarchy game code can walk.
+     *
+     * This is the **scene-node identity space**, and it is deliberately distinct from a skin's own
+     * GPU bone-palette index space (see `SkeletonResult::oldToNew`, and plan_gltf.md §15.1.2): the
+     * scene graph is ordered by the glTF node graph and must never be reordered to suit a palette.
+     */
+    struct SceneNodeOut
+    {
+        /** @brief The node's name, from the glTF node, or a generated placeholder. */
+        std::string name;
+        /** @brief Index of this node's parent within the same `SceneGraphOut`, or -1 for the root. */
+        int parentIndex = -1;
+        /** @brief The node's own local transform (glTF `matrix`, or its TRS), in XNA row-vector form. */
+        Microsoft::Xna::Framework::Matrix localTransform =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        /** @brief The node's scene-root-relative transform: `local * parentWorld`, in XNA row-vector form. */
+        Microsoft::Xna::Framework::Matrix worldTransform =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        /** @brief The source glTF node, or nullptr for the synthetic scene root at index 0. */
+        const cgltf_node* node = nullptr;
+        /** @brief Index of the source node in `cgltf_data::nodes`, or -1 for the synthetic root. */
+        int gltfNodeIndex = -1;
+    };
+
+    /**
+     * @brief The default scene's node graph, flattened parent-before-child.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Index 0 is always a synthetic identity root, so a
+     * scene with several root nodes still maps onto CNA's single-`Root` `Model` shape without
+     * inventing a transform.
+     */
+    struct SceneGraphOut
+    {
+        /** @brief Every node, parent-before-child; index 0 is the synthetic identity root. */
+        std::vector<SceneNodeOut> nodes;
+        /** @brief Maps a glTF node to its index in `nodes`. */
+        std::unordered_map<const cgltf_node*, int> indexOfNode;
+    };
+
+    /**
+     * @brief One placement of one glTF mesh by one glTF node.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md GLTF-113. A mesh referenced by
+     * several nodes produces one instance per node, each with its own transform — the shape that
+     * makes real instancing expressible, which baking world transforms into vertices would destroy.
+     */
+    struct MeshInstanceOut
+    {
+        /** @brief The instancing node, or nullptr in the "no scene references any mesh" fallback. */
+        const cgltf_node* node = nullptr;
+        /** @brief The mesh this node instantiates. */
+        const cgltf_mesh* mesh = nullptr;
+        /** @brief Index of the instancing node in the owning `SceneGraphOut::nodes` (0 = root). */
+        int sceneNodeIndex = 0;
+        /** @brief The instancing node's scene-root-relative transform, in XNA row-vector form. */
+        Microsoft::Xna::Framework::Matrix worldTransform =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        /**
+         * @brief True when the instancing node also references a skin.
+         *
+         * glTF requires a skinned mesh's own node transform to be ignored — joint transforms alone
+         * place the geometry — so a caller building CNA bones must parent a skinned instance to the
+         * identity scene root rather than to its own node's bone. Completing that rule (the
+         * `inverse(globalTransform(meshNode))` term, and the joint ancestry `BuildSkeleton` still
+         * drops) is plan_gltf.md GLTF-245/GLTF-247/GLTF-260, not this type.
+         */
+        bool skinned = false;
+    };
+
     /** @brief A group of glTF mesh instances sharing the same skin (or no skin at all). */
     struct MeshGroup
     {
         /** @brief The shared skin, or nullptr for an unskinned (static) group. */
         const cgltf_skin* skin = nullptr;
-        /** @brief The glTF meshes belonging to this group. */
-        std::vector<const cgltf_mesh*> meshes;
+        /** @brief The mesh placements belonging to this group, in glTF node order. */
+        std::vector<MeshInstanceOut> instances;
     };
 
     /**
@@ -234,6 +367,33 @@ namespace CNA::Internal::GltfImport
      * @return The reordered skeleton, plus the old-to-new joint index remap.
      */
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale);
+
+    /**
+     * @brief Topologically reorders a glTF skin's joints and resolves the two coordinate spaces the
+     * one-argument overload cannot see: the joints' full scene ancestry and the skinned mesh node's
+     * own placement (plan_gltf.md GLTF-245/GLTF-247, Phase 5).
+     *
+     * A joint's global transform includes **every** scene ancestor, whether or not that ancestor is
+     * itself a joint and whether or not it lies above `skin.skeleton` — the declared skeleton root
+     * is a naming/locating hint, never a traversal stop. Dropping any of that ancestry while
+     * retaining the file's own `inverseBindMatrices` is defect D8: the joint matrix ends up
+     * multiplied by the inverse of whatever was dropped.
+     *
+     * The skinned mesh node's transform is separately *cancelled*, not applied: glTF places a
+     * skinned mesh entirely through its joints. Both terms are returned on each root bone's
+     * @ref BoneOut::parentWorldPrefix rather than folded into its bind pose, so animating a root
+     * joint cannot undo them.
+     *
+     * @param skin The glTF skin to process.
+     * @param scene The graph `BuildSceneGraph` produced for the same file.
+     * @param meshNodeWorld World transform of the node instancing the skinned mesh, in XNA
+     *        row-vector form. Pass the identity when no such node applies.
+     * @param unitScale Uniform scale applied to every bone's translation (see `ScaleTranslation`).
+     * @return The reordered skeleton, plus the old-to-new joint index remap.
+     */
+    SkeletonResult BuildSkeleton(const cgltf_skin* skin, const SceneGraphOut& scene,
+                                  const Microsoft::Xna::Framework::Matrix& meshNodeWorld,
+                                  float unitScale);
 
     /**
      * @brief Extracts every animation in a glTF file as a resampled, per-bone keyframe clip.
@@ -310,8 +470,59 @@ namespace CNA::Internal::GltfImport
     const cgltf_image* FindEmissiveImage(const cgltf_primitive& prim);
 
     /**
+     * @brief Classifies a primitive's declared `mode` (specification §3.7.2.1).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param prim The glTF primitive to classify.
+     * @param name The mesh part's name, used only in the error message.
+     * @return The declared topology.
+     * @throws std::runtime_error if the primitive declares no recognizable mode.
+     */
+    PrimitiveTopology ClassifyPrimitiveTopology(const cgltf_primitive& prim, const std::string& name);
+
+    /**
+     * @brief The specification's own name for a topology, e.g. "TRIANGLE_STRIP".
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param topology The topology to name.
+     * @return The glTF `mode` name, for diagnostics.
+     */
+    const char* PrimitiveTopologyName(PrimitiveTopology topology);
+
+    /**
+     * @brief The glTF `mode` number a topology corresponds to.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param topology The topology to convert.
+     * @return The `mesh.primitive.mode` value, 0…6.
+     */
+    int PrimitiveTopologyMode(PrimitiveTopology topology);
+
+    /**
+     * @brief Whether CNA's import path can currently carry a topology through to a draw.
+     *
+     * Only `Triangles` is supported today. The other six are read, classified and **rejected with
+     * a named error** rather than reinterpreted as a triangle list, which is what CNA did before:
+     * a strip's later triangles were lost and a point cloud became one arbitrary triangle, with no
+     * diagnostic at all. Converting strips and fans to triangle lists, and carrying the line and
+     * point topologies, is separate work (plan_gltf.md §10.1, `GLTF-072`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param topology The topology to test.
+     * @return True when `ExtractMesh` will import a primitive of that topology.
+     */
+    bool IsPrimitiveTopologySupported(PrimitiveTopology topology);
+
+    /**
      * @brief Extracts one glTF mesh primitive's vertex/index bytes, selecting the vertex stride
      * and effect-relevant flags from its attributes and material (see `MeshOut`).
+     *
+     * @throws std::runtime_error if the primitive's `mode` is one CNA does not yet support (see
+     * `IsPrimitiveTopologySupported`) — never silently reinterpreted as a triangle list.
      *
      * @param data The parsed glTF file (needed to resolve KHR_draco_mesh_compression attribute
      * unique IDs against `data->accessors`' own base pointer — see `FindDracoUniqueId`'s own doc
@@ -326,9 +537,43 @@ namespace CNA::Internal::GltfImport
                          const SkeletonResult* skel, float unitScale);
 
     /**
-     * @brief Groups every mesh-bearing node reachable from the file's default scene by which skin
+     * @brief Flattens the file's default scene into a parent-before-child node list with composed
+     * world transforms (plan_gltf.md GLTF-113, Phase 5).
+     *
+     * Index 0 is always a synthetic identity root named "Root"; every node reachable from the
+     * default scene (`data->scene`, or the first scene when that is unset) follows, each preceded
+     * by its parent. A node's local transform is its glTF `matrix` when present and its TRS
+     * otherwise — the two are mutually exclusive per the specification — converted into XNA's
+     * row-vector convention, and its world transform is `local * parentWorld`. A file with no
+     * scenes at all yields just the root, matching `CollectMeshGroups`' own fallback.
+     *
+     * @param data The parsed glTF file.
+     * @return The flattened graph, plus a node-pointer lookup into it.
+     */
+    SceneGraphOut BuildSceneGraph(const cgltf_data* data);
+
+    /**
+     * @brief Groups every mesh **placement** reachable from the file's default scene by which skin
      * (if any) it references, so a file combining multiple independent skinned characters (or a
      * mix of skinned + static scenery) produces one group per skin rather than merging them.
+     *
+     * Each placement is a `MeshInstanceOut` carrying the instancing node and that node's composed
+     * world transform, so a mesh instantiated by several nodes yields several distinct instances
+     * rather than one anonymous duplicate (plan_gltf.md GLTF-113).
+     *
+     * @param data The parsed glTF file.
+     * @param scene The graph `BuildSceneGraph` produced for the same file, used to resolve each
+     * instance's own node index and world transform.
+     * @return One `MeshGroup` per distinct skin (plus one for unskinned meshes, if any exist).
+     */
+    std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data, const SceneGraphOut& scene);
+
+    /**
+     * @brief Convenience overload that builds the scene graph internally.
+     *
+     * Prefer the two-argument form when the caller also needs the graph itself (both model loaders
+     * do, to build their `ModelBone` hierarchies) — this overload exists so call sites that only
+     * want the mesh placements do not have to thread a graph they never read.
      *
      * @param data The parsed glTF file.
      * @return One `MeshGroup` per distinct skin (plus one for unskinned meshes, if any exist).

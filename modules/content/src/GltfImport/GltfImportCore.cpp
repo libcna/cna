@@ -41,6 +41,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <unordered_set>
@@ -123,6 +124,226 @@ namespace CNA::Internal::GltfImport
                     std::string("Failed to unpack accessor '") + context +
                     "' (malformed data or an unsupported layout).");
             }
+            return out;
+        }
+
+        // plan_gltf.md GLTF-063: the index accessor's own decode path.
+        //
+        // Indices are NOT read through cgltf_accessor_read_index. That function returns 0 -- with
+        // no error channel, as its own upstream comment concedes -- for a sparse accessor and for
+        // one with no bufferView, so a spec-legal sparse index accessor silently decoded to all
+        // zeros and collapsed the primitive to a degenerate point. Everything below mirrors
+        // UnpackAccessor's structure (validate, then decode the whole accessor in one call,
+        // throwing a named error rather than returning a wrong value) for the index accessor's own
+        // integer semantics. The attribute path is unchanged and must stay that way -- it was
+        // proven correct and is locked by GLTF-041.
+
+        // glTF §3.6.2.2/§3.7.2.1: an index accessor is SCALAR, non-normalized, and one of exactly
+        // three unsigned component types. Anything else is a malformed file.
+        std::size_t IndexComponentSize(cgltf_component_type type)
+        {
+            switch (type)
+            {
+                case cgltf_component_type_r_8u:  return 1;
+                case cgltf_component_type_r_16u: return 2;
+                case cgltf_component_type_r_32u: return 4;
+                default: return 0;
+            }
+        }
+
+        const char* ComponentTypeName(cgltf_component_type type)
+        {
+            switch (type)
+            {
+                case cgltf_component_type_r_8:   return "BYTE (5120)";
+                case cgltf_component_type_r_8u:  return "UNSIGNED_BYTE (5121)";
+                case cgltf_component_type_r_16:  return "SHORT (5122)";
+                case cgltf_component_type_r_16u: return "UNSIGNED_SHORT (5123)";
+                case cgltf_component_type_r_32u: return "UNSIGNED_INT (5125)";
+                case cgltf_component_type_r_32f: return "FLOAT (5126)";
+                default: return "an unrecognized component type";
+            }
+        }
+
+        // Reads one unsigned index component. std::memcpy rather than a cast through a pointer to
+        // the wider type: a bufferView may legally start at any byte offset, so the source address
+        // is not guaranteed to satisfy the alignment of uint16_t/uint32_t (plan_gltf.md §8.4).
+        std::uint32_t ReadIndexComponent(const std::uint8_t* at, cgltf_component_type type)
+        {
+            switch (type)
+            {
+                case cgltf_component_type_r_8u:
+                {
+                    std::uint8_t v = 0;
+                    std::memcpy(&v, at, sizeof(v));
+                    return v;
+                }
+                case cgltf_component_type_r_16u:
+                {
+                    std::uint16_t v = 0;
+                    std::memcpy(&v, at, sizeof(v));
+                    return v;
+                }
+                default:
+                {
+                    std::uint32_t v = 0;
+                    std::memcpy(&v, at, sizeof(v));
+                    return v;
+                }
+            }
+        }
+
+        // The last byte an accessor-like walk touches: offset + (count-1)*stride + elementSize,
+        // computed so that an overflow throws instead of wrapping into a small, plausible span
+        // that would then pass the bounds check (plan_gltf.md §8.1).
+        std::size_t RequiredSpan(std::size_t byteOffset, std::size_t count, std::size_t stride,
+                                  std::size_t elementSize, const std::string& context)
+        {
+            if (count == 0) { return byteOffset; }
+            constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+            if (stride != 0 && (count - 1) > kMax / stride)
+            {
+                throw std::runtime_error("Accessor '" + context + "' declares a byte span that "
+                                          "overflows: count " + std::to_string(count) +
+                                          " at stride " + std::to_string(stride) + ".");
+            }
+            const std::size_t walk = (count - 1) * stride;
+            if (walk > kMax - elementSize || byteOffset > kMax - walk - elementSize)
+            {
+                throw std::runtime_error("Accessor '" + context + "' declares a byte span that "
+                                          "overflows its own byteOffset.");
+            }
+            return byteOffset + walk + elementSize;
+        }
+
+        // Decodes a whole index accessor to uint32, resolving `sparse` overrides (§3.6.2.3) and
+        // bounds-checking every read against the owning bufferView. Never returns a value it could
+        // not actually read: a malformed accessor throws a named error, because "wrong geometry
+        // with no diagnostic" is the failure mode this replaces.
+        std::vector<std::uint32_t> UnpackIndexAccessor(const cgltf_accessor& accessor,
+                                                        const std::string& context)
+        {
+            if (accessor.type != cgltf_type_scalar)
+            {
+                throw std::runtime_error("Index accessor of '" + context + "' is not SCALAR, which "
+                                          "the glTF specification requires for primitive indices.");
+            }
+            if (accessor.normalized)
+            {
+                throw std::runtime_error("Index accessor of '" + context + "' declares "
+                                          "'normalized', which the glTF specification forbids for "
+                                          "primitive indices.");
+            }
+            const std::size_t componentSize = IndexComponentSize(accessor.component_type);
+            if (componentSize == 0)
+            {
+                throw std::runtime_error(
+                    "Index accessor of '" + context + "' has component type " +
+                    ComponentTypeName(accessor.component_type) + "; the glTF specification allows "
+                    "only UNSIGNED_BYTE (5121), UNSIGNED_SHORT (5123) and UNSIGNED_INT (5125) for "
+                    "primitive indices.");
+            }
+
+            const std::size_t count = static_cast<std::size_t>(accessor.count);
+            std::vector<std::uint32_t> out(count, 0u);
+
+            if (accessor.buffer_view != nullptr)
+            {
+                const std::uint8_t* view = cgltf_buffer_view_data(accessor.buffer_view);
+                if (view == nullptr)
+                {
+                    throw std::runtime_error("Index accessor of '" + context + "' references a "
+                                              "bufferView whose buffer data is not loaded.");
+                }
+                // cgltf resolves accessor.stride to bufferView.byteStride when the view declares
+                // one and to the element size otherwise, so it is never zero here.
+                const std::size_t stride = static_cast<std::size_t>(accessor.stride) != 0
+                    ? static_cast<std::size_t>(accessor.stride) : componentSize;
+                const std::size_t byteOffset = static_cast<std::size_t>(accessor.offset);
+                const std::size_t span = RequiredSpan(byteOffset, count, stride, componentSize, context);
+                if (span > static_cast<std::size_t>(accessor.buffer_view->size))
+                {
+                    throw std::runtime_error(
+                        "Index accessor of '" + context + "' reads " + std::to_string(span) +
+                        " bytes from a bufferView that is only " +
+                        std::to_string(static_cast<std::size_t>(accessor.buffer_view->size)) +
+                        " bytes long.");
+                }
+                for (std::size_t i = 0; i < count; ++i)
+                {
+                    out[i] = ReadIndexComponent(view + byteOffset + i * stride, accessor.component_type);
+                }
+            }
+            else if (!accessor.is_sparse)
+            {
+                // §3.6.2: an accessor with neither a bufferView nor sparse data has no values at
+                // all. Reading it as zeros is exactly the silent corruption GLTF-063 removes.
+                throw std::runtime_error("Index accessor of '" + context + "' has neither a "
+                                          "bufferView nor sparse data, so it carries no indices.");
+            }
+            // else: §3.6.2.3's zero-initialised base array, which the sparse pass below displaces.
+
+            if (accessor.is_sparse && accessor.sparse.count > 0)
+            {
+                const cgltf_accessor_sparse& sparse = accessor.sparse;
+                const std::size_t sparseCount = static_cast<std::size_t>(sparse.count);
+                const std::size_t sparseIndexSize = IndexComponentSize(sparse.indices_component_type);
+                if (sparseIndexSize == 0)
+                {
+                    throw std::runtime_error(
+                        "Index accessor of '" + context + "' has sparse indices of component type " +
+                        ComponentTypeName(sparse.indices_component_type) + ", which the glTF "
+                        "specification does not allow for a sparse index array.");
+                }
+                if (sparse.indices_buffer_view == nullptr || sparse.values_buffer_view == nullptr)
+                {
+                    throw std::runtime_error("Index accessor of '" + context + "' has sparse data "
+                                              "with a missing indices or values bufferView.");
+                }
+                const std::uint8_t* sparseIndices = cgltf_buffer_view_data(sparse.indices_buffer_view);
+                const std::uint8_t* sparseValues = cgltf_buffer_view_data(sparse.values_buffer_view);
+                if (sparseIndices == nullptr || sparseValues == nullptr)
+                {
+                    throw std::runtime_error("Index accessor of '" + context + "' has sparse "
+                                              "bufferViews whose buffer data is not loaded.");
+                }
+                // §3.6.2.3: both sparse arrays are tightly packed -- their bufferViews may not
+                // declare a byteStride -- so the element size is the stride here, never the base
+                // accessor's own (possibly interleaved) stride.
+                const std::size_t indexSpan = RequiredSpan(
+                    static_cast<std::size_t>(sparse.indices_byte_offset), sparseCount,
+                    sparseIndexSize, sparseIndexSize, context);
+                const std::size_t valueSpan = RequiredSpan(
+                    static_cast<std::size_t>(sparse.values_byte_offset), sparseCount,
+                    componentSize, componentSize, context);
+                if (indexSpan > static_cast<std::size_t>(sparse.indices_buffer_view->size) ||
+                    valueSpan > static_cast<std::size_t>(sparse.values_buffer_view->size))
+                {
+                    throw std::runtime_error("Index accessor of '" + context + "' has a sparse "
+                                              "array that reads past its own bufferView.");
+                }
+
+                for (std::size_t k = 0; k < sparseCount; ++k)
+                {
+                    const std::uint32_t target = ReadIndexComponent(
+                        sparseIndices + static_cast<std::size_t>(sparse.indices_byte_offset) +
+                            k * sparseIndexSize,
+                        sparse.indices_component_type);
+                    if (static_cast<std::size_t>(target) >= count)
+                    {
+                        throw std::runtime_error(
+                            "Index accessor of '" + context + "' has sparse entry " +
+                            std::to_string(k) + " displacing element " + std::to_string(target) +
+                            ", but the accessor declares only " + std::to_string(count) +
+                            " elements.");
+                    }
+                    out[target] = ReadIndexComponent(
+                        sparseValues + static_cast<std::size_t>(sparse.values_byte_offset) +
+                            k * componentSize,
+                        accessor.component_type);
+                }
+            }
+
             return out;
         }
 
@@ -418,6 +639,16 @@ namespace CNA::Internal::GltfImport
 
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale)
     {
+        // No scene graph available: every root joint keeps an identity prefix, which is only
+        // correct when the joint set already reaches the scene root and the mesh node is
+        // untransformed. Callers that can build the graph must use the four-argument overload --
+        // both model loaders do (plan_gltf.md GLTF-245).
+        return BuildSkeleton(skin, SceneGraphOut{}, Matrix::getIdentityProperty(), unitScale);
+    }
+
+    SkeletonResult BuildSkeleton(const cgltf_skin* skin, const SceneGraphOut& scene,
+                                  const Matrix& meshNodeWorld, float unitScale)
+    {
         SkeletonResult result;
         const std::size_t n = skin->joints_count;
         if (n == 0) { return result; }
@@ -484,6 +715,38 @@ namespace CNA::Internal::GltfImport
             float localMat[16];
             cgltf_node_transform_local(node, localMat);
             bone.bindPoseLocal = ScaleTranslation(ConvertGltfMatrix(localMat), unitScale);
+
+            // GLTF-245/GLTF-247: a root joint -- one whose parent is not itself in this skin's
+            // joint set -- carries the two terms that live above the joint set. Everything the
+            // ancestry contributes is real scene data; skin.skeleton does not truncate it, and an
+            // ancestor that is not a joint contributes exactly as much as one that is.
+            if (bone.parentIndex == -1)
+            {
+                Matrix ancestorWorld = Matrix::getIdentityProperty();
+                if (const cgltf_node* parent = node->parent)
+                {
+                    const auto placed = scene.indexOfNode.find(parent);
+                    if (placed != scene.indexOfNode.end())
+                    {
+                        ancestorWorld = scene.nodes[static_cast<std::size_t>(placed->second)].worldTransform;
+                    }
+                    else
+                    {
+                        // The joint hangs off a node outside the default scene. cgltf can still
+                        // compose the chain, so use it rather than silently dropping the ancestry
+                        // -- dropping it is exactly D8.
+                        float parentWorld[16];
+                        cgltf_node_transform_world(parent, parentWorld);
+                        ancestorWorld = ConvertGltfMatrix(parentWorld);
+                    }
+                }
+                // Ancestor translations are unit-scaled for the same reason bone translations are:
+                // the correction has to apply uniformly across every position-derived quantity, or
+                // an animated bone would jump between two different unit spaces mid-clip.
+                ancestorWorld = ScaleTranslation(ancestorWorld, unitScale);
+                bone.parentWorldPrefix =
+                    ancestorWorld * Matrix::Invert(ScaleTranslation(meshNodeWorld, unitScale));
+            }
 
             if (!ibm.empty())
             {
@@ -823,9 +1086,74 @@ namespace CNA::Internal::GltfImport
     }
 #endif
 
+    PrimitiveTopology ClassifyPrimitiveTopology(const cgltf_primitive& prim, const std::string& name)
+    {
+        switch (prim.type)
+        {
+            case cgltf_primitive_type_points:         return PrimitiveTopology::Points;
+            case cgltf_primitive_type_lines:          return PrimitiveTopology::Lines;
+            case cgltf_primitive_type_line_loop:      return PrimitiveTopology::LineLoop;
+            case cgltf_primitive_type_line_strip:     return PrimitiveTopology::LineStrip;
+            case cgltf_primitive_type_triangles:      return PrimitiveTopology::Triangles;
+            case cgltf_primitive_type_triangle_strip: return PrimitiveTopology::TriangleStrip;
+            case cgltf_primitive_type_triangle_fan:   return PrimitiveTopology::TriangleFan;
+            default: break;
+        }
+        // cgltf leaves the type invalid only for a `mode` outside 0..6, which the specification
+        // does not define. Guessing "probably triangles" here is exactly the reflex GLTF-071 exists
+        // to remove.
+        throw std::runtime_error(
+            "Primitive '" + name + "' declares a mesh.primitive.mode the glTF specification does "
+            "not define (valid modes are 0..6).");
+    }
+
+    const char* PrimitiveTopologyName(PrimitiveTopology topology)
+    {
+        switch (topology)
+        {
+            case PrimitiveTopology::Points:        return "POINTS";
+            case PrimitiveTopology::Lines:         return "LINES";
+            case PrimitiveTopology::LineLoop:      return "LINE_LOOP";
+            case PrimitiveTopology::LineStrip:     return "LINE_STRIP";
+            case PrimitiveTopology::Triangles:     return "TRIANGLES";
+            case PrimitiveTopology::TriangleStrip: return "TRIANGLE_STRIP";
+            case PrimitiveTopology::TriangleFan:   return "TRIANGLE_FAN";
+        }
+        return "UNKNOWN";
+    }
+
+    int PrimitiveTopologyMode(PrimitiveTopology topology)
+    {
+        return static_cast<int>(topology);
+    }
+
+    bool IsPrimitiveTopologySupported(PrimitiveTopology topology)
+    {
+        return topology == PrimitiveTopology::Triangles;
+    }
+
     MeshOut ExtractMesh(const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
                          const SkeletonResult* skel, float unitScale)
     {
+        // plan_gltf.md GLTF-071: read mesh.primitive.mode before anything else, and never
+        // reinterpret it. Until GLTF-072 implements the per-mode conversion policy (strip/fan to a
+        // triangle list, line topologies carried, points decided per renderer), a non-TRIANGLES
+        // primitive is rejected here with its real mode named. That is a deliberate, visible
+        // limitation; the alternative this replaces was decoding a strip's index run as a triangle
+        // list -- dropping every triangle after the first and drawing a chaotic tangle -- with no
+        // diagnostic anywhere.
+        const PrimitiveTopology topology = ClassifyPrimitiveTopology(prim, name);
+        if (!IsPrimitiveTopologySupported(topology))
+        {
+            throw std::runtime_error(
+                "Primitive '" + name + "' uses glTF primitive mode " +
+                std::to_string(PrimitiveTopologyMode(topology)) + " (" +
+                PrimitiveTopologyName(topology) + "), which CNA does not import yet. Only mode " +
+                std::to_string(PrimitiveTopologyMode(PrimitiveTopology::Triangles)) + " (" +
+                PrimitiveTopologyName(PrimitiveTopology::Triangles) + ") is supported; the other "
+                "topologies are rejected rather than silently reinterpreted as a triangle list.");
+        }
+
 #ifdef CNA_DRACO_AVAILABLE
         // CNB-91 (Phase 14F): decoded once here; every per-attribute unpack below (via
         // unpackSemantic) and the index extraction near the end both branch on whether this is
@@ -875,6 +1203,10 @@ namespace CNA::Internal::GltfImport
 
         MeshOut out;
         out.name = name;
+        // The topology travels with the data it describes, so no downstream consumer has to assume
+        // one. Only TRIANGLES reaches this line today, which is what makes the assumption safe --
+        // rather than merely conventional, as it was before GLTF-071.
+        out.topology = topology;
         out.skinned = (jointsAcc != nullptr) && (weightsAcc != nullptr);
         // A skinned+colored primitive uses a stride-56 layout (the stride-52 GPU-skinned layout
         // with a per-vertex Color appended at the end) and SkinnedEffect's own CNAEXT
@@ -1019,15 +1351,37 @@ namespace CNA::Internal::GltfImport
         }
         else
 #endif
+        if (prim.indices)
         {
-            const cgltf_size indexCount = prim.indices ? prim.indices->count : vertexCount;
-            indices.reserve(static_cast<std::size_t>(indexCount));
-            for (cgltf_size i = 0; i < indexCount; ++i)
+            // GLTF-063: a CNA-side, sparse-aware, bounds-checked decode. See UnpackIndexAccessor.
+            indices = UnpackIndexAccessor(*prim.indices, name);
+        }
+        else
+        {
+            // Non-indexed primitive: implicit sequential vertex order per the glTF spec --
+            // Khronos's own "Fox" sample has exactly this shape.
+            indices.reserve(static_cast<std::size_t>(vertexCount));
+            for (cgltf_size i = 0; i < vertexCount; ++i)
             {
-                // Non-indexed primitive (prim.indices == nullptr): implicit sequential vertex
-                // order per the glTF spec -- Khronos's own "Fox" sample has exactly this shape.
-                indices.push_back(static_cast<std::uint32_t>(
-                    prim.indices ? cgltf_accessor_read_index(prim.indices, i) : i));
+                indices.push_back(static_cast<std::uint32_t>(i));
+            }
+        }
+
+        // GLTF-063: every index must address a real vertex before anything consumes it. Two things
+        // downstream depend on this and neither could detect a violation: ComputeTangentsEXT
+        // indexes the position/normal/UV arrays directly, and the packing loop below narrows to
+        // uint16 with a plain static_cast whenever the vertex count fits. An out-of-range index is
+        // a malformed file either way, and turning it into a named error is the whole point --
+        // silently truncating it produces wrong geometry with no diagnostic at all.
+        for (std::size_t i = 0; i < indices.size(); ++i)
+        {
+            if (static_cast<cgltf_size>(indices[i]) >= vertexCount)
+            {
+                throw std::runtime_error(
+                    "Primitive '" + name + "' has index " + std::to_string(i) + " = " +
+                    std::to_string(indices[i]) + ", but the primitive declares only " +
+                    std::to_string(static_cast<std::size_t>(vertexCount)) +
+                    " vertices (its POSITION accessor's count).");
             }
         }
 
@@ -1177,6 +1531,9 @@ namespace CNA::Internal::GltfImport
             }
         }
 
+        // The narrowing below is safe only because every index was proved < vertexCount above: when
+        // vertexCount <= 65535 the value therefore fits uint16 by construction, so the cast can no
+        // longer silently wrap a large index into a small, wrong one.
         out.use32BitIndices = vertexCount > 65535;
         out.indexBytes.reserve(indices.size() *
                                 (out.use32BitIndices ? sizeof(std::uint32_t) : sizeof(std::uint16_t)));
@@ -1228,42 +1585,128 @@ namespace CNA::Internal::GltfImport
         return out;
     }
 
-    std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data)
+    SceneGraphOut BuildSceneGraph(const cgltf_data* data)
+    {
+        SceneGraphOut graph;
+
+        // Index 0 is a synthetic identity root. glTF scenes may have several root nodes while CNA's
+        // Model has exactly one Root bone, so inventing an identity parent is the only mapping that
+        // adds no transform of its own.
+        SceneNodeOut root;
+        root.name = "Root";
+        graph.nodes.push_back(root);
+
+        const cgltf_scene* scene = data->scene
+            ? data->scene
+            : (data->scenes_count > 0 ? &data->scenes[0] : nullptr);
+        if (!scene) { return graph; } // no scenes at all -- caller falls back to "every mesh"
+
+        // Explicit stack rather than recursion: a pathological file may nest nodes thousands deep,
+        // and CollectSceneReachableNodes already established that convention for this traversal.
+        // Pushing children in reverse keeps the visit order equal to the file's own child order.
+        struct PendingNode { const cgltf_node* node; int parentIndex; };
+        std::vector<PendingNode> stack;
+        stack.reserve(data->nodes_count + 1);
+        for (cgltf_size i = scene->nodes_count; i > 0; --i)
+        {
+            stack.push_back(PendingNode{scene->nodes[i - 1], 0});
+        }
+
+        while (!stack.empty())
+        {
+            const PendingNode pending = stack.back();
+            stack.pop_back();
+            const cgltf_node* node = pending.node;
+            if (!node) { continue; }
+            // A node reachable by two paths is imported once, at the first path found -- matching
+            // CollectSceneReachableNodes' own de-duplication.
+            if (graph.indexOfNode.find(node) != graph.indexOfNode.end()) { continue; }
+
+            SceneNodeOut out;
+            out.name = node->name ? node->name : ("Node" + std::to_string(graph.nodes.size()));
+            out.parentIndex = pending.parentIndex;
+            out.node = node;
+            out.gltfNodeIndex = static_cast<int>(node - data->nodes);
+
+            // cgltf_node_transform_local already applies the spec's own "matrix, or else TRS"
+            // exclusivity rule, so this needs no separate branch of its own.
+            float localMat[16];
+            cgltf_node_transform_local(node, localMat);
+            out.localTransform = ConvertGltfMatrix(localMat);
+            // Row-vector composition: the parent is always already finalized, because a node is
+            // only ever pushed with a parent index that was assigned before it.
+            out.worldTransform = out.localTransform * graph.nodes[static_cast<std::size_t>(pending.parentIndex)].worldTransform;
+
+            const int index = static_cast<int>(graph.nodes.size());
+            graph.indexOfNode[node] = index;
+            graph.nodes.push_back(std::move(out));
+
+            for (cgltf_size c = node->children_count; c > 0; --c)
+            {
+                stack.push_back(PendingNode{node->children[c - 1], index});
+            }
+        }
+
+        return graph;
+    }
+
+    std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data, const SceneGraphOut& scene)
     {
         std::vector<MeshGroup> groups;
         std::unordered_map<const cgltf_skin*, std::size_t> indexOfSkin;
 
-        const std::unordered_set<const cgltf_node*> reachable = CollectSceneReachableNodes(data);
-
+        // Iterating data->nodes (rather than the scene graph's own order) keeps this function's
+        // established group ordering: groups appear in glTF node-array order, which several
+        // existing tests and the offline tool's own "_static"/"_<skinName>" output naming rely on.
         for (cgltf_size i = 0; i < data->nodes_count; ++i)
         {
             const cgltf_node& node = data->nodes[i];
             if (!node.mesh) { continue; }
-            if (!reachable.empty() && reachable.find(&node) == reachable.end()) { continue; }
+            const auto placed = scene.indexOfNode.find(&node);
+            // A node outside the default scene is not imported. The one exception is a file with
+            // no scenes at all, where the graph is just the root and the fallback below applies.
+            if (placed == scene.indexOfNode.end()) { continue; }
+
+            MeshInstanceOut instance;
+            instance.node = &node;
+            instance.mesh = node.mesh;
+            instance.sceneNodeIndex = placed->second;
+            instance.worldTransform = scene.nodes[static_cast<std::size_t>(placed->second)].worldTransform;
+            instance.skinned = node.skin != nullptr;
 
             auto it = indexOfSkin.find(node.skin);
             if (it == indexOfSkin.end())
             {
                 indexOfSkin[node.skin] = groups.size();
-                groups.push_back(MeshGroup{node.skin, {node.mesh}});
+                groups.push_back(MeshGroup{node.skin, {std::move(instance)}});
             }
             else
             {
-                groups[it->second].meshes.push_back(node.mesh);
+                groups[it->second].instances.push_back(std::move(instance));
             }
         }
 
         // Fallback for files where meshes exist but no scene node references them (unusual but
-        // not invalid) -- treat every mesh in the file as one unskinned group, matching this
-        // library's original node-graph-independent behavior.
+        // not invalid) -- treat every mesh in the file as one unskinned group placed at the
+        // identity root, matching this library's original node-graph-independent behavior.
         if (groups.empty())
         {
             MeshGroup g;
-            for (cgltf_size i = 0; i < data->meshes_count; ++i) { g.meshes.push_back(&data->meshes[i]); }
-            if (!g.meshes.empty()) { groups.push_back(std::move(g)); }
+            for (cgltf_size i = 0; i < data->meshes_count; ++i)
+            {
+                MeshInstanceOut instance;
+                instance.mesh = &data->meshes[i];
+                g.instances.push_back(std::move(instance));
+            }
+            if (!g.instances.empty()) { groups.push_back(std::move(g)); }
         }
 
         return groups;
+    }
+
+    std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data)
+    {
+        return CollectMeshGroups(data, BuildSceneGraph(data));
     }
 
     std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data)

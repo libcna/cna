@@ -208,6 +208,65 @@ TEST(ValidateCnjEnvelopeTest, NegativeCnjVersionThrows)
     EXPECT_THROW(ValidateCnjEnvelope(env, "SpriteFont", "wrong.cnj"), ContentLoadException);
 }
 
+// plan_gltf.md GLTF-129 (Phase 5): the version ceiling is a PER-TYPE argument, not a global
+// constant. Model understands version 2 (the "bones" hierarchy and per-mesh "parentBone"); every
+// other type still understands only version 1. The four cases below are the whole contract --
+// raising the ceiling globally would have made SpriteFont silently accept a version whose meaning
+// its own reader has never defined.
+
+TEST(ValidateCnjEnvelopeTest, ModelAcceptsVersionOne)
+{
+    const CnjEnvelope env = ParseCnjEnvelope(R"({"cnjVersion": 1, "type": "Model"})");
+
+    EXPECT_NO_THROW(ValidateCnjEnvelope(env, "Model", "v1.cnj", /*maxVersion=*/2));
+}
+
+TEST(ValidateCnjEnvelopeTest, ModelAcceptsVersionTwo)
+{
+    const CnjEnvelope env = ParseCnjEnvelope(R"({"cnjVersion": 2, "type": "Model"})");
+
+    EXPECT_NO_THROW(ValidateCnjEnvelope(env, "Model", "v2.cnj", /*maxVersion=*/2));
+}
+
+TEST(ValidateCnjEnvelopeTest, ModelRejectsVersionThreeNamingTheSupportedRange)
+{
+    const CnjEnvelope env = ParseCnjEnvelope(R"({"cnjVersion": 3, "type": "Model"})");
+
+    try
+    {
+        ValidateCnjEnvelope(env, "Model", "v3.cnj", /*maxVersion=*/2);
+        FAIL() << "expected ContentLoadException";
+    }
+    catch (const ContentLoadException& e)
+    {
+        const std::string message = e.what();
+        EXPECT_NE(std::string::npos, message.find("v3.cnj"));
+        EXPECT_NE(std::string::npos, message.find("versions 1 to 2"))
+            << "the message must name the range this type actually supports: " << message;
+    }
+}
+
+TEST(ValidateCnjEnvelopeTest, ARaisedCeilingDoesNotLeakToOtherTypes)
+{
+    // The regression this guards: a Model-shaped version reaching a reader that never defined it.
+    // SpriteFont's own ceiling stays 1 whatever Model's is, because the ceiling travels with the
+    // call, not with the envelope.
+    const CnjEnvelope env = ParseCnjEnvelope(R"({"cnjVersion": 2, "type": "SpriteFont"})");
+
+    EXPECT_THROW(ValidateCnjEnvelope(env, "SpriteFont", "leak.cnj"), ContentLoadException);
+    EXPECT_NO_THROW(ValidateCnjEnvelope(
+        ParseCnjEnvelope(R"({"cnjVersion": 1, "type": "SpriteFont"})"), "SpriteFont", "ok.cnj"));
+}
+
+TEST(ValidateCnjEnvelopeTest, NonIntegerVersionIsRejectedEvenInsideARaisedRange)
+{
+    // cnjVersionRaw, not the truncating cnjVersion: 1.5 must not slip through as "1".
+    const CnjEnvelope env = ParseCnjEnvelope(R"({"cnjVersion": 1.5, "type": "Model"})");
+
+    EXPECT_THROW(ValidateCnjEnvelope(env, "Model", "fractional.cnj", /*maxVersion=*/2),
+                 ContentLoadException);
+}
+
 TEST(ValidateCnjEnvelopeTest, FutureCnjVersionThrowsNamingActualValue)
 {
     const CnjEnvelope env = ParseCnjEnvelope(R"({"cnjVersion": 2, "type": "SpriteFont"})");

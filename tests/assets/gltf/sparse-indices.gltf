@@ -1,0 +1,99 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "CNA gltf_fixtures"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "MeshNode",
+      "mesh": 0
+    }
+  ],
+  "meshes": [
+    {
+      "name": "SparseIndexQuad",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3",
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5123,
+      "count": 6,
+      "type": "SCALAR",
+      "sparse": {
+        "count": 1,
+        "indices": {
+          "bufferView": 2,
+          "byteOffset": 0,
+          "componentType": 5123
+        },
+        "values": {
+          "bufferView": 3,
+          "byteOffset": 0
+        }
+      }
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 48,
+      "byteLength": 12
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 60,
+      "byteLength": 2
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 64,
+      "byteLength": 2
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 66,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAAAAAAABAAIAAAACAAAABQAAAAMA"
+    }
+  ]
+}

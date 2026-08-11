@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;

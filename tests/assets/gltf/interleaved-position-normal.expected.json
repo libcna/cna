@@ -1,0 +1,289 @@
+{
+  "id": "interleaved-position-normal",
+  "description": "POSITION and NORMAL interleaved at byteStride 24 in a bufferView at byteOffset 16, with NORMAL at accessor byteOffset 12. Verified correct on the campaign baseline -- GLTF-041 locks it so remediation cannot regress it.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "accessors",
+    "data-alignment"
+  ],
+  "inventory": {
+    "id": "interleaved-position-normal",
+    "owningGroup": "accessors",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3"
+    ],
+    "features": [
+      "bufferView.byteStride",
+      "bufferView.byteOffset",
+      "accessor.byteOffset",
+      "interleaved attributes"
+    ],
+    "auditFixture": "f5"
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 3,
+    "bufferViewCount": 2,
+    "bufferCount": 1,
+    "bufferByteLength": 94,
+    "extensionsUsed": [],
+    "extensionsRequired": []
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 16,
+        "bufferViewByteStride": 24,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          2.0,
+          0.0,
+          0.0,
+          0.0,
+          3.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 12,
+        "bufferViewByteOffset": 16,
+        "bufferViewByteStride": 24,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 88,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "InterleavedTri",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            2.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            3.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "MeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            2.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            3.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        2.0,
+        3.0,
+        0.0
+      ]
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 32,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 24,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "interleaved-position-normal.vb.bin",
+        "vertexBufferBytes": 96,
+        "vertexBufferSha256": "1867d16f24e644ed1348c0f15264de12581a1a1e16d37832df78517a495c0c90",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "interleaved-position-normal.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
+  "defects": []
+}
