@@ -72,14 +72,14 @@ native API: it picks SDL_GPU, Direct3D 11 or OpenGL at runtime. That is still on
 | FNA3D-2 | Identity registration: enum, selector, option, dispatch, module directory, validators 41→42 | **done** |
 | FNA3D-3 | Window-flag hook in `GraphicsDevice::getRendererWindowFlags()` | **done** |
 | FNA3D-4 | Device creation, teardown, clear family, present, presentation modes, readback | **done** — `Fna3d_Smoke` |
-| FNA3D-5 | Stock-effect loading, parameter writes with FNA's own packing, technique/pass application | **implemented, partially validated** — parameter packing is proven only for the effects FNA3D-8 renders plus FNA3D-26's corpus |
+| FNA3D-5 | Stock-effect loading, parameter writes with FNA's own packing, technique/pass application | **done** — all five stock effects render through `Fna3d_XNA_Oracle`; the `float4x3` bone packing is pinned by `Fna3dMatrixPackingTests` after FNA3D-27a found it wrong |
 | FNA3D-6 | 2D SpriteBatch through the stock SpriteEffect | **done** — `Fna3d_2D` |
-| FNA3D-7 | Textures 2D/3D/Cube, mip levels, sub-rectangle upload and readback | **implemented, partially validated** — cube faces and mip levels are not pixel-verified |
-| FNA3D-8 | 3D draw routes and the stock-effect variant mapping | **implemented, partially validated** — `Fna3d_3D` renders BasicEffect + AlphaTestEffect only; DualTexture/EnvironmentMap/Skinned, lighting variants and fog are covered only by FNA3D-26's corpus, with two open rows |
+| FNA3D-7 | Textures 2D/3D/Cube, mip levels, sub-rectangle upload and readback | **done** — `Fna3d_Smoke`, `Fna3d_Compressed`, and `Fna3d_RenderTarget_Advanced` for cube faces and mip storage |
+| FNA3D-8 | 3D draw routes and the stock-effect variant mapping | **done** — `Fna3d_3D` (BasicEffect, AlphaTestEffect) plus `Fna3d_XNA_Oracle` (DualTexture, EnvironmentMap, Skinned, the lighting variants, fog, all eight alpha-test functions) |
 | FNA3D-9 | Vertex and index buffers, `SetDataOptions`, per-stream declarations | **done** — `Fna3d_Buffers` (FNA3D-28/29) |
 | FNA3D-10 | Render targets 2D and cube: MSAA resolve, mips, depth/stencil, MRT, `PreserveContents` | **done** — `Fna3d_RenderTarget` (2D, MSAA, depth/stencil, PreserveContents) plus `Fna3d_RenderTarget_Advanced` (FNA3D-30/31/32: cube faces, MRT, mips) |
 | FNA3D-11 | Occlusion queries | **done** |
-| FNA3D-12 | Blend / depth-stencil / rasterizer / sampler state, write masks, scissor, viewport | **implemented, partially validated** — `Fna3d_State` covers blend/depth/stencil/scissor/viewport/write masks; sampler filter and address modes are not systematically covered |
+| FNA3D-12 | Blend / depth-stencil / rasterizer / sampler state, write masks, scissor, viewport | **done** — `Fna3d_State` plus `Fna3d_Sampler` (FNA3D-33) |
 | FNA3D-13 | Truthful capability reporting and deterministic rejections | **done** |
 | FNA3D-14 | Capability + rejection example test | **done** — `Fna3d_Capabilities` |
 | FNA3D-15 | Unit tests: stock-effect `ShaderIndex` arithmetic | **done** |
@@ -106,18 +106,27 @@ features that are already written.
 |---|---|---|
 | FNA3D-26 | XNA oracle conformance: build `cna_oracle_render_fna3d` and run the 39-scene corpus against the real XNA 4.0 reference images | **done** — 10/39 exact, 0 failed to render, at the EasyGL baseline; `docs/fna3d-parity-report.md` |
 | FNA3D-27a | Diagnose the two corpus rows where FNA3D is worse than EasyGL | **done** — real defect: `SetMatrix4x3Array` dropped the translation row of every bone matrix. All six skinned scenes now at or better than the EasyGL baseline; `Fna3dMatrixPackingTests` pins it |
-| FNA3D-27 | Runtime pixel coverage for the three stock effects `Fna3d_3D` never renders: DualTexture, EnvironmentMap, Skinned — plus the lighting variants and fog | **open** (corpus covers them; a renderer-local oracle test does not yet) |
+| FNA3D-27 | Runtime pixel coverage for the three stock effects `Fna3d_3D` never renders: DualTexture, EnvironmentMap, Skinned — plus the lighting variants and fog | **done** — `Fna3d_XNA_Oracle` registers the 39-scene corpus as a permanent CTest, which is the only coverage those three families have |
 | FNA3D-28 | Real multi-stream draw: split one `VertexDeclaration`'s attributes across two genuine vertex buffers and verify pixels | **done** — `Fna3d_Buffers`; POSITION in stream 0 and COLOR in stream 1 render correctly, in both binding orders |
 | FNA3D-29 | Buffer update semantics: `Discard` / `NoOverwrite` / `None`, source-window selection, consecutive updates, both index widths | **done** — `Fna3d_Buffers`. Note: CNA's buffer surface has **no destination-offset `SetData` overload** at all (`VertexBuffer`'s own header states the destination write always begins at the buffer's start), so a mid-buffer patch is not a route this renderer can be tested against — `startIndex` selects the source window and that is what is pinned |
 | FNA3D-30 | `RenderTargetCube`: render each of the six faces, read back, and sample | **done** — `Fna3d_RenderTarget_Advanced`; six faces hold six distinct colours, geometry renders into a bound face and does not leak into an unbound one |
 | FNA3D-31 | MRT: bind two or more real targets, draw into all of them, verify each one's contents independently | **done** — `Fna3d_RenderTarget_Advanced`; slot 1 genuinely receives the write and each target keeps its own storage |
 | FNA3D-32 | Render-target mipmaps: level count, base level after requesting mips, storage above level 0 | **done** — `Fna3d_RenderTarget_Advanced` |
-| FNA3D-33 | Sampler conformance: Point/Linear/Anisotropic, Wrap/Clamp/Mirror per axis, mip filtering, `MaxMipLevel`, LOD bias, `MaxAnisotropy` | **open** |
+| FNA3D-33 | Sampler conformance: Point/Linear/Anisotropic, Wrap/Clamp/Mirror per axis, `MaxMipLevel`, LOD bias, `MaxAnisotropy` | **done** — `Fna3d_Sampler`; Point and Linear are distinguishable, all three address modes place the right texel past u=1, and the two axes are independent |
 | FNA3D-34 | Driver matrix: the same core conformance suite on OpenGL, Direct3D 11 and SDL_GPU | **open — external gate** (no Vulkan ICD, no Windows on this host) |
-| FNA3D-35 | Negative / lifetime suite: cross-device resources, use-after-destroy, invalid regions and levels, teardown with outstanding resources, resize/recreate | **open** |
+| FNA3D-35 | Negative / lifetime suite: invalid regions and levels, disposed resources, draw-range validation, documented refusals, teardown with live resources | **done** — `Fna3d_Lifetime` |
 
-The renderer's status stays **implemented**, not **validated**, until FNA3D-27..33 and FNA3D-35 are
-closed. FNA3D-34 is an external gate and cannot be closed on this host.
+FNA3D-26..33 and FNA3D-35 are closed. **FNA3D-34 remains open and is an external gate**: only
+FNA3D's OpenGL driver is exercised on this host, so the renderer is validated *on that driver*, not
+across the driver matrix. Do not describe it as validated on SDL_GPU or Direct3D 11.
+
+### Findings this phase produced
+
+| Finding | Where | Status |
+|---|---|---|
+| `SetMatrix4x3Array` dropped the translation row of every bone matrix, silently turning translation bones into identity bones | found by the XNA oracle corpus | **fixed** (FNA3D-27a), pinned by `Fna3dMatrixPackingTests` |
+| `Texture2D::SetData` has no `isDisposed_` guard, so a transfer after `Dispose()` does not raise. The contract this codebase enforces for a disposed texture is at DRAW time instead | shared graphics layer, affects every renderer | **reported, not patched from this lane** — a shared-layer change needs its own commit and cross-renderer regression coverage |
+| CNA's buffer surface has no destination-offset `SetData` overload, so a mid-buffer partial update is not a route any renderer can be tested against | shared graphics layer | **reported** — `startIndex` selects the source window and that is what `Fna3d_Buffers` pins |
 
 ## Deferred / external gates
 

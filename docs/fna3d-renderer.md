@@ -177,12 +177,14 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 
 | Kind | Status |
 |---|---|
-| Native runtime (Linux, Xvfb + Mesa llvmpipe, FNA3D OpenGL driver) | **Performed** — all seven `Fna3d_*` CTest binaries pass, all pixel oracles |
-| Unit tests (`CnaTests`, `Fna3d*`) | **Performed** — 37 tests |
+| Native runtime (Linux, Xvfb + Mesa llvmpipe, FNA3D OpenGL driver) | **Performed** — all twelve `Fna3d_*` CTest binaries pass, all pixel oracles |
+| XNA 4.0 oracle corpus (39 scenes vs real XNA reference images) | **Performed** — `Fna3d_XNA_Oracle`; every scene renders, 10/39 exact at the EasyGL baseline. This is the only coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have. See [`fna3d-parity-report.md`](fna3d-parity-report.md) |
+| Unit tests (`CnaTests`, `Fna3d*`) | **Performed** — 41 tests |
 | Sanitizers (ASan + UBSan, all seven example tests) | **Performed** — no CNA-originating defect. UBSan reports one pre-existing upstream signed-overflow in MojoShader's own `mojoshader_common.c:1042` string parser, on every test alike. |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
 | SDL_GPU driver | **Not exercised here**: this container has no Vulkan ICD, so FNA3D declines SDL_GPU and falls through to OpenGL. The code path is driver-agnostic; the gate is external. This is also the only driver on which compressed readback is expected to succeed, so that arm of `Fna3d_Compressed` is unexercised here. |
 | Direct3D 11 driver | **Not exercised here**: Windows-only (or DXVK-native). External gate. |
+| Driver matrix (`plan_fna3d.md` FNA3D-34) | **Open.** This renderer is validated on FNA3D's **OpenGL driver**, not across the matrix. This lane has already found three driver-dependent behaviours (sub-rectangle readback origin, volume readback, compressed readback), so an OpenGL pass must not be read as validating SDL_GPU or Direct3D 11. |
 | macOS / iOS | Not exercised. External gate. |
 
 ## Tests
@@ -195,6 +197,11 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 | `Fna3d_RenderTarget` | Target clear/readback, geometry placement inside a target, unbind restores the backbuffer, sampling a rendered target, depth/stencil reporting, MSAA resolve, `PreserveContents` |
 | `Fna3d_State` | AlphaBlend, Additive, colour write masks, BlendFactor, scissor on/off, a non-default depth comparison, stencil write-then-test, viewport sub-rectangle |
 | `Fna3d_Capabilities` | Every capability answer matched against a real factory or a real refusal, and both rejection paths |
+| `Fna3d_RenderTarget_Advanced` | All six cube faces hold distinct colours and geometry renders into a bound face; two MRT slots are both written and keep their own storage; a mipmapped target's level count, base level and level-1 storage |
+| `Fna3d_Buffers` | POSITION and COLOR split across two real vertex streams (both binding orders), all three `SetDataOptions`, source-window selection, consecutive uploads, both index widths |
+| `Fna3d_Sampler` | Point vs Linear magnification, Clamp/Wrap/Mirror past u=1, independent U/V addressing, Anisotropic, and the LOD controls |
+| `Fna3d_Lifetime` | Invalid levels and regions, undersized destinations, disposed resources, draw-range validation, the documented refusals, and teardown with live resources |
+| `Fna3d_XNA_Oracle` | All 39 XNA oracle scenes render, and each is diffed against the real XNA 4.0 reference image |
 | `Fna3d_Compressed` | Hand-built DXT5 blocks uploaded through `IGraphicsRenderer::CreateTexture` decode as the right colour in the right quadrant, including a 6×6 level whose tail blocks are padded; `GetData` matches the driver's real compressed-readback answer; a compressed cube and an out-of-range sampler slot are refused by name |
 
 `CnaTests --gtest_filter=Fna3d*` covers the device-free logic: the `ShaderIndex` arithmetic against

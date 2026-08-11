@@ -48,6 +48,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_RenderTarget_Advanced
         COMMAND cna_test_fna3d_rendertarget_advanced TIMEOUT 120 LABELS "Fna3d")
 
+    cna_fna3d_test(cna_test_fna3d_lifetime fna3d_lifetime_test.cpp)
+    cna_register_renderer_test(NAME Fna3d_Lifetime COMMAND cna_test_fna3d_lifetime
+        TIMEOUT 120 LABELS "Fna3d")
+
+    cna_fna3d_test(cna_test_fna3d_sampler fna3d_sampler_test.cpp)
+    cna_register_renderer_test(NAME Fna3d_Sampler COMMAND cna_test_fna3d_sampler
+        TIMEOUT 120 LABELS "Fna3d")
+
     cna_fna3d_test(cna_test_fna3d_state fna3d_state_test.cpp)
     cna_register_renderer_test(NAME Fna3d_State COMMAND cna_test_fna3d_state
         TIMEOUT 120 LABELS "Fna3d")
@@ -63,6 +71,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     # that drives DualTextureEffect, EnvironmentMapEffect, SkinnedEffect, the lighting variants and
     # fog through this renderer.
     cna_fna3d_test(cna_oracle_render_fna3d ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
+    # plan_fna3d.md FNA3D-27: registered as a real CTest, unlike the OpenGLES1 twin, because this
+    # is the only permanent coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have
+    # under this renderer. The script gates on a scene failing to RENDER, not on pixel equality --
+    # the corpus carries a host-wide XNA-vs-GL divergence that is not renderer-specific, and
+    # docs/fna3d-parity-report.md holds the per-scene numbers against the EasyGL baseline.
+    cna_register_renderer_test(
+        NAME Fna3d_XNA_Oracle
+        COMMAND "${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff-fna3d.sh"
+                $<TARGET_FILE:cna_oracle_render_fna3d>
+        TIMEOUT 600 LABELS "Fna3d")
 
     cna_fna3d_test(cna_test_fna3d_capabilities fna3d_capabilities_test.cpp)
     cna_register_renderer_test(NAME Fna3d_Capabilities COMMAND cna_test_fna3d_capabilities
