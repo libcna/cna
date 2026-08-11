@@ -8,7 +8,8 @@ numbers, its owning task and the permanent fixture that locks it.
 
 This report depends on the fixes, never the other way round (`plan_gltf.md` §28.2). It is written
 **after** `GLTF-007`, `GLTF-063`, `GLTF-071`, `GLTF-115`, `GLTF-248` and `GLTF-260` landed, and it
-records what those tasks measured — it does not re-open them.
+records what those tasks measured — it does not re-open them. §3.5 was extended when `GLTF-072`
+closed the topology conversion immediately afterwards.
 
 ---
 
@@ -28,7 +29,8 @@ axis-conversion node carrying a uniform scale, that is literally a division by t
 
 Three further proven defects corrupt geometry without collapsing it: a sparse index accessor
 decoding to all zeros (**D4**, fixed), non-`TRIANGLES` topology silently reinterpreted (**D5**,
-partially remediated), and rigid node animation being dropped (**D6**, open). One more (**D7**,
+fixed for the triangle topologies; the point and line modes are now an explicit refusal to import,
+pending a draw path), and rigid node animation being dropped (**D6**, open). One more (**D7**,
 factor-only PBR material) is a shading defect, not a geometric one.
 
 **Both collapse mechanisms are closed.** Neither is suppressed by a known-defect test any more:
@@ -168,22 +170,45 @@ vertex 2  pos (1,1,0)  nrm (0,0,1)  uv (0,0)
 vertex 3  pos (0,1,0)  nrm (0,0,1)  uv (0,0)     ← only reachable once D4 was fixed
 ```
 
-### 3.5 D5 — non-`TRIANGLES` modes reinterpreted · `mode-triangle-strip`, `mode-points` · first divergent layer **L3**
+### 3.5 D5 — non-`TRIANGLES` modes reinterpreted · the seven `mode-*` fixtures · first divergent layer **L3**
 
-**Owning tasks:** `GLTF-071` (landed) + **`GLTF-072` (open)**. Status: `partially-remediated`.
+**Owning tasks:** `GLTF-071` + `GLTF-072` (both landed). Status: `partially-remediated` — see the
+scope boundary below.
 
 | Fixture | Expected | Before | Today |
 |---|---|---|---|
-| `mode-triangle-strip` (mode 5) | two triangles `[0,1,2]`, `[2,1,3]` | ❌ read as a triangle list: **one** triangle, vertex 3 unreachable | ⚠️ import **rejected** naming `TRIANGLE_STRIP` / `mode 5` |
+| `mode-triangle-strip` (mode 5) | two triangles `[0,1,2]`, `[2,1,3]` | ❌ read as a triangle list: **one** triangle, vertex 3 unreachable | ✅ **converted at import** to `[0,1,2,2,1,3]`, byte-exact at L5 |
+| `mode-triangle-fan` (mode 6) | two triangles `[0,1,2]`, `[0,2,3]` | ❌ read as a triangle list | ✅ **converted at import** to `[0,1,2,0,2,3]` |
+| `mode-triangles` (mode 4) | two triangles | ✅ correct | ✅ unchanged, byte for byte |
 | `mode-points` (mode 0, non-indexed) | four points, **zero** triangles | ❌ one triangle from the implicit index range | ⚠️ import **rejected** naming `POINTS` / `mode 0` |
+| `mode-lines` (mode 1) | two segments | ❌ one triangle | ⚠️ import **rejected** naming `LINES` / `mode 1` |
+| `mode-line-strip` (mode 3) | two segments | ❌ one triangle | ⚠️ import **rejected** naming `LINE_STRIP` / `mode 3` |
+| `mode-line-loop` (mode 2) | three segments, the last closing | ❌ one triangle | ⚠️ import **rejected** naming `LINE_LOOP` / `mode 2` |
 
-`prim.type` was never read. `GLTF-071` reads it, classifies all seven modes, carries the mode on
-`MeshOut`, and rejects what CNA cannot yet honour **with the mode named**. The silent corruption is
-gone; the conversion is not written. Both fixtures record `l5.supported = false` with
-`blockedBy: ["GLTF-072"]`, so the layer is visibly absent rather than quietly unasserted.
+`prim.type` was never read. `GLTF-071` reads it and classifies all seven modes. `GLTF-072` then
+converts the two topologies that have an **exact triangle-list equivalent**, preserving winding —
+a strip's odd triangle emits `(i+1, i, i+2)`, so every triangle faces the same way and back-face
+culling behaves as the author intended.
 
-**This is the only remaining geometric defect from the original P0 audit**, and it is a *refusal to
-import*, not a wrong import. It is tracked, loud, and cannot corrupt an asset.
+The equivalence is asserted at the byte level, which is what makes the conversion trustworthy:
+`mode-triangle-strip` and `mode-triangles` author the same quad by different routes and produce
+**byte-identical index buffers**, while `mode-triangle-fan` — the same four indices under the other
+rule — must not match. A conversion that ignored the mode could not satisfy both.
+
+`MeshOut` now carries `sourceTopology` beside `topology`, so a conversion is visible rather than
+lossy: `topology` is always `Triangles` on anything the importer returns, while `sourceTopology`
+still names what the file declared.
+
+**Scope boundary — why D5 is not yet `fixed`.** The four topologies that describe no triangles stay
+rejected, and that is a deliberate decision rather than unfinished work. They **decode correctly**;
+what they lack is a *draw path*, because every loader still computes `numIndices / 3`. Importing
+them now would move the original defect from the import layer to the draw layer rather than fix it.
+`GLTF-073` (a real `PrimitiveType` on `ModelMeshPart`), `GLTF-078` (a topology-aware primitive
+count), `GLTF-076` (`LINE_LOOP`'s closing segment) and `GLTF-077` (the points decision) own them,
+and each rejection message names the task that would lift it.
+
+**No geometric defect from the original P0 audit remains.** What is left is a *refusal to import*,
+not a wrong import: tracked, loud, and unable to corrupt an asset.
 
 ### 3.6 D8 (part 1) — skin ancestry dropped · `skin-armature-ancestor` · first divergent layer **L4**
 
@@ -313,7 +338,8 @@ inverted known-defect test. A regression is a normal build break naming the fixt
 | D3 | `xf-matrix-node` | `GltfConformanceL4`, `GltfSceneGraphBones.MatrixAuthoredNodeMapsOntoItsBone` | world X collapses from `[4,5]` to `[0,1]` |
 | — | `xf-identity` | `GltfSceneGraphBones.UntransformedControlCase` | the zero point: catches a "fix" that transforms things that should not move |
 | D4 | `sparse-indices` | `GltfConformanceL3`, `GltfConformanceL5`, `GltfIndexDecode` | indices revert to all-zero; `.ib.bin` mismatch at byte 0 |
-| D5 | `mode-triangle-strip`, `mode-points` | `GltfPrimitiveTopology`, `GltfKnownDefect` | a mode is silently reinterpreted instead of named and rejected |
+| D5 (conversion) | `mode-triangle-strip`, `mode-triangle-fan`, `mode-triangles` | `GltfConformanceL3`, `GltfConformanceL5.AConvertedTopologyProducesTheSameBufferAsAnExplicitTriangleList`, `GltfPrimitiveTopology` | a strip converts with the fan's rule, or loses the odd triangle's winding swap |
+| D5 (rejection) | `mode-points`, `mode-lines`, `mode-line-strip`, `mode-line-loop` | `GltfPrimitiveTopology`, `GltfKnownDefect` | a mode with no draw path imports silently instead of being named and rejected |
 | D8 (ancestry) | `skin-armature-ancestor` | `GltfSkinSpaces.RootJointCarriesTheSceneAncestryAboveTheJointSet`, `…SkinnedVertexLandsWhereTheSpecificationSaysItDoes` | joint matrix drifts from identity to `T(0,-100,0)` |
 | D8 (cancellation) | `skin-mesh-node-transform` | `GltfSkinSpaces.MeshNodeTransformIsCancelledExactlyOnce` | `M43` becomes `0` (missing) or `-100` (doubled) |
 | D8 (structure) | `skin-armature-ancestor` | `GltfSceneGraphBones.SkinnedMeshKeepsItsNodeBoneButIsNotTransformedByIt`, `…AncestryIsPreservedInTheSceneModelButDoesNotTransformIt` | the mesh node's bone is deleted rather than merely not applied |
@@ -371,7 +397,7 @@ The center-collapse track is closed. It is deliberately narrow, and these remain
 
 | Item | Owning task | Why it is not a collapse defect |
 |---|---|---|
-| Topology conversion (strip/fan/points/lines) | **`GLTF-072`** (+`GLTF-077`, `GLTF-078`) | a named rejection, not a wrong import — the last geometric defect from the P0 audit |
+| A draw path for the point and line topologies | **`GLTF-073`**, **`GLTF-076`**, **`GLTF-077`**, **`GLTF-078`** | a named rejection, not a wrong import; the decoding is correct and the gap is at the draw layer |
 | Rigid node animation | **`GLTF-284`** | the asset is in the right place, it just does not move |
 | Factor-only PBR materials | **`GLTF-217`/`228`/`229`** (+`GLTF-215`) | shading, not geometry |
 | L6 draw-parameter capture | `GLTF-008` | harness not yet built |
@@ -387,11 +413,12 @@ Per `plan_gltf.md` §28, Track B's Phases 8–23 were gated on this report and a
 
 | Quantity | Value |
 |---|---|
-| Generated fixtures today | **16** distinct assets (`manifest.json` → `distinctAssetCount`), each with a `.glb` twin |
+| Generated fixtures today | **21** distinct assets (`manifest.json` → `distinctAssetCount`), each with a `.glb` twin |
 | Planned corpus (`plan_gltf.md` §24.2) | **135** distinct assets — completed by `GLTF-399` |
-| L5 goldens | 14 of 16 (the two `GLTF-071` rejects record `l5.supported = false`) |
+| L5 goldens | 17 of 21 (the four point/line topologies record `l5.supported = false` with the tasks that would produce one) |
 
-`skin-mesh-node-transform` is the corpus's 16th asset, added by `GLTF-260`. It was **new to the
+`skin-mesh-node-transform` was the corpus's 16th asset, added by `GLTF-260`; `GLTF-072` then
+completed the topology group's seven, taking the generated corpus to 21. It was **new to the
 generated corpus but not to the plan** — §15.4's skinning ladder already listed it among its 13
 assets. P0-D incremented the §24.2 skinning group from 13 to 14 (and the total from 135 to 136) as
 though it were newly planned; this report corrects that back, since the ladder enumerates 13 and
@@ -439,9 +466,12 @@ For the assets the owner reported as deformed:
   `skin-armature-ancestor` / `skin-mesh-node-transform`. **Fixed.**
 * if the asset uses a **sparse index accessor** — **D4**, first divergent at **L3**, owned by
   `GLTF-063`, locked by `sparse-indices`. **Fixed.**
-* if the asset uses a **non-`TRIANGLES` primitive mode** — **D5**, first divergent at **L3**, owned
-  by `GLTF-071` (landed) and **`GLTF-072` (open)**. The asset now fails to import with the mode
-  named, instead of importing wrongly.
+* if the asset uses a **triangle strip or fan** — **D5**, first divergent at **L3**, owned by
+  `GLTF-071` + `GLTF-072`, locked by `mode-triangle-strip` / `mode-triangle-fan` / `mode-triangles`.
+  **Fixed:** converted to an equivalent triangle list at import, winding preserved.
+* if the asset uses a **point or line mode** — still **D5**, but a draw-path gap rather than a
+  decoding one, owned by `GLTF-073`/`GLTF-076`/`GLTF-077`/`GLTF-078`. The asset fails to import
+  with the mode named, instead of importing wrongly.
 * if the asset is **in the right place but does not move** — **D6**, owned by `GLTF-284`. **Open.**
 * if the asset is **in the right place but renders white** — **D7**, owned by
   `GLTF-217`/`228`/`229`. **Open.**

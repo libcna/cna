@@ -382,8 +382,13 @@ namespace CnaTest::GltfOracle
         // L3 instead of being assumed. Reading it back here is what lets an L3 comparison assert
         // the topology rather than infer it from an index count.
         dump.topologyCarried = true;
-        dump.topologyMode = CNA::Internal::GltfImport::PrimitiveTopologyMode(mesh.topology);
-        dump.topologyName = CNA::Internal::GltfImport::PrimitiveTopologyName(mesh.topology);
+        dump.topologyMode = CNA::Internal::GltfImport::PrimitiveTopologyMode(mesh.sourceTopology);
+        dump.topologyName = CNA::Internal::GltfImport::PrimitiveTopologyName(mesh.sourceTopology);
+        // GLTF-072 made the two distinct: the file's declared mode and the mode its index list is
+        // in after conversion. Reading both back is what lets L3 assert the conversion happened
+        // rather than merely that a topology is present.
+        dump.importedTopologyMode = CNA::Internal::GltfImport::PrimitiveTopologyMode(mesh.topology);
+        dump.importedTopologyName = CNA::Internal::GltfImport::PrimitiveTopologyName(mesh.topology);
 
         // Every layout in the stride ABI begins with a 3-float position, so a stride that cannot
         // hold one is not a layout this helper can read. Reporting zero vertices is the right
@@ -487,6 +492,8 @@ namespace CnaTest::GltfOracle
         out += ",\"topologyCarried\":" + std::string(dump.topologyCarried ? "true" : "false");
         out += ",\"topologyMode\":" + std::to_string(dump.topologyMode);
         out += ",\"topologyName\":" + Quote(dump.topologyName);
+        out += ",\"importedTopologyMode\":" + std::to_string(dump.importedTopologyMode);
+        out += ",\"importedTopologyName\":" + Quote(dump.importedTopologyName);
         out += ",\"skinned\":" + std::string(dump.skinned ? "true" : "false");
         out += ",\"colored\":" + std::string(dump.colored ? "true" : "false");
         out += ",\"usePbr\":" + std::string(dump.usePbr ? "true" : "false");

@@ -167,10 +167,25 @@ namespace CnaTest::GltfOracle
          * true, so a fixture's L3 topology can now be asserted rather than inferred.
          */
         bool topologyCarried = false;
-        /** @brief The carried `mesh.primitive.mode` value, or -1 when no topology is carried. */
+        /**
+         * @brief The `mesh.primitive.mode` the SOURCE file declared, or -1 when none is carried.
+         *
+         * This is the spec-derived quantity a fixture's `l3.mode` states. It is unaffected by any
+         * import-time conversion, which is exactly what makes a conversion checkable.
+         */
         int topologyMode = -1;
-        /** @brief The carried topology's specification name, empty when no topology is carried. */
+        /** @brief The source topology's specification name, empty when no topology is carried. */
         std::string topologyName;
+        /**
+         * @brief The mode the emitted index list is actually in, after `GLTF-072`'s conversion.
+         *
+         * `4` (`TRIANGLES`) for every primitive `ExtractMesh` returns. A fixture's
+         * `l3.importPolicy` states this separately from `l3.mode`, because it is CNA's own
+         * documented conversion policy (plan_gltf.md §10.1) rather than a specification value.
+         */
+        int importedTopologyMode = -1;
+        /** @brief The imported topology's specification name, empty when no topology is carried. */
+        std::string importedTopologyName;
     };
 
     /** @brief Unpacks a `MeshOut` into named semantic streams (L3). */

@@ -177,9 +177,10 @@ namespace
         const int expectedMode = static_cast<int>(NumberOr(expectedPrimitive, "mode", -1));
         EXPECT_NE(4, expectedMode) << "this fixture is supposed to declare a non-TRIANGLES mode";
         const std::vector<std::string> remaining = Strings(Member(defect, "remainingTasks"));
-        EXPECT_NE(remaining.end(), std::find(remaining.begin(), remaining.end(), "GLTF-072"))
-            << "D5 no longer names GLTF-072 as outstanding; if the conversion landed, this test "
-               "and the fixture's defect record both need to move to fixed";
+        EXPECT_NE(remaining.end(), std::find(remaining.begin(), remaining.end(), "GLTF-073"))
+            << "D5 no longer names GLTF-073 as outstanding; once ModelMeshPart carries a real "
+               "PrimitiveType these topologies have a draw path, and this test and the fixture's "
+               "defect record both need to move on";
 
         // (1) prim.type is genuinely read: the classifier returns the file's own mode, by number
         // and by specification name, and reports it as one CNA cannot yet honour.
@@ -200,8 +201,8 @@ namespace
         ASSERT_EQ(1u, extracted.size());
         EXPECT_TRUE(BoolOr(actualRecord, "importRejected", false));
         ASSERT_FALSE(extracted[0].extracted)
-            << "a non-TRIANGLES primitive imported successfully -- if GLTF-072 landed, mark D5 "
-               "fixed in tools/gltf_fixtures and delete this test";
+            << "a topology with no draw path imported successfully -- if GLTF-073/GLTF-077 landed, "
+               "update D5's record in tools/gltf_fixtures and delete this case";
         for (const std::string& fragment : Strings(Member(actualRecord, "errorContains")))
         {
             EXPECT_NE(std::string::npos, extracted[0].error.find(fragment))
@@ -217,9 +218,12 @@ namespace
         EXPECT_EQ(Member(actualRecord, "triangles").arrayValue.size(), dump.indices.size() / 3);
         // ...and what the audit measured before GLTF-071 is still on record, unchanged.
         const JsonValue& prior = Member(defect, "priorActual");
-        EXPECT_EQ(1u, Member(prior, "triangles").arrayValue.size())
-            << "the pre-GLTF-071 measurement (one silently reinterpreted triangle) was lost";
-        EXPECT_FALSE(BoolOr(prior, "topologyCarried", true));
+        if (prior.type == JsonType::Object)
+        {
+            EXPECT_EQ(1u, Member(prior, "triangles").arrayValue.size())
+                << "the pre-GLTF-071 measurement (one silently reinterpreted triangle) was lost";
+            EXPECT_FALSE(BoolOr(prior, "topologyCarried", true));
+        }
     }
 }
 
@@ -243,16 +247,30 @@ namespace
 
 // --- D5: primitive topology ----------------------------------------------------------------------
 
-TEST(GltfKnownDefect, D5_TriangleStripIsClassifiedAndRejectedPendingConversion)
-{
-    // GLTF-071 closed the reading half; GLTF-072 owns the strip -> triangle-list conversion.
-    ExpectTopologyClassifiedAndRejected("mode-triangle-strip");
-}
+// GLTF-071 closed the reading half and GLTF-072 the conversion half, so the triangle topologies
+// are no longer here: mode-triangle-strip and mode-triangle-fan import, and GltfConformanceL3/L5
+// assert their converted index lists in full. What is left is the four topologies that decode
+// correctly and have nowhere to be drawn -- a draw-path gap owned by GLTF-073/GLTF-077/GLTF-078,
+// not a decoding one. Each stays here until it has one.
 
 TEST(GltfKnownDefect, D5_NonIndexedPointsAreClassifiedAndRejectedPendingASupportDecision)
 {
-    // GLTF-071 closed the reading half; GLTF-072/GLTF-077 own what a point primitive becomes.
     ExpectTopologyClassifiedAndRejected("mode-points");
+}
+
+TEST(GltfKnownDefect, D5_LineListIsClassifiedAndRejectedPendingAPrimitiveType)
+{
+    ExpectTopologyClassifiedAndRejected("mode-lines");
+}
+
+TEST(GltfKnownDefect, D5_LineStripIsClassifiedAndRejectedPendingAPrimitiveType)
+{
+    ExpectTopologyClassifiedAndRejected("mode-line-strip");
+}
+
+TEST(GltfKnownDefect, D5_LineLoopIsClassifiedAndRejectedPendingItsClosingSegmentConversion)
+{
+    ExpectTopologyClassifiedAndRejected("mode-line-loop");
 }
 
 // --- D6: rigid node animation ---------------------------------------------------------------------

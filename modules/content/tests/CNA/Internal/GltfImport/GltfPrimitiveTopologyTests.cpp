@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-071: mesh.primitive.mode is read, classified, and never silently reinterpreted.
+// plan_gltf.md GLTF-071 / GLTF-072: mesh.primitive.mode is read, classified, converted where it
+// has an exact triangle-list equivalent, and never silently reinterpreted.
 //
 // The defect (D5) was that cgltf_primitive_type had zero occurrences in CNA production code. Every
 // primitive, whatever its declared topology, was decoded into a flat index list that all three
@@ -8,17 +9,19 @@
 // triangle with vertex 3 unreachable; a four-vertex POINTS cloud became one arbitrary triangle.
 // Neither produced a warning.
 //
-// What GLTF-071 owns is reading and classifying, not converting. So these tests assert three
-// things and deliberately not a fourth:
+// GLTF-071 owns reading and classifying; GLTF-072 owns the conversion policy of §10.1. Together
+// these tests assert:
 //
 //   1. all seven glTF modes classify, by number and by specification name;
-//   2. TRIANGLES imports exactly as it did before, byte for byte, and now carries its topology;
-//   3. every other mode is rejected with its real mode named in the diagnostic, and no index list
-//      survives to reach the numIndices/3 path.
+//   2. TRIANGLES imports exactly as it did before, byte for byte, and carries its topology;
+//   3. TRIANGLE_STRIP and TRIANGLE_FAN convert to an equivalent triangle list with winding
+//      preserved, and the source mode survives the conversion so it can still be reported;
+//   4. the four topologies that describe no triangles are rejected with their real mode named,
+//      and no index list survives to reach the numIndices/3 path.
 //
-// The fourth -- converting strips and fans to triangle lists, carrying the line topologies, and
-// deciding what a point primitive becomes -- is GLTF-072, and a test here must not pre-empt it. A
-// case that starts passing because conversion landed belongs in a GLTF-072 test, not this file.
+// Point 4 is a DRAW-PATH gap, not a decoding one: those modes decode fine and are rejected only
+// because every loader still computes a triangle-list primitive count. GLTF-073/GLTF-077/GLTF-078
+// own it, and a case that starts passing because a draw path landed belongs in their tests.
 
 #include <array>
 #include <cstdint>
@@ -58,8 +61,8 @@ namespace
         {2, "LINE_LOOP",      PrimitiveTopology::LineLoop,      false},
         {3, "LINE_STRIP",     PrimitiveTopology::LineStrip,     false},
         {4, "TRIANGLES",      PrimitiveTopology::Triangles,     true},
-        {5, "TRIANGLE_STRIP", PrimitiveTopology::TriangleStrip, false},
-        {6, "TRIANGLE_FAN",   PrimitiveTopology::TriangleFan,   false},
+        {5, "TRIANGLE_STRIP", PrimitiveTopology::TriangleStrip, true},
+        {6, "TRIANGLE_FAN",   PrimitiveTopology::TriangleFan,   true},
     }};
 
     class ScratchDir
@@ -174,17 +177,36 @@ TEST(GltfPrimitiveTopology, EveryGltfModeClassifiesByNumberAndName)
     }
 }
 
-TEST(GltfPrimitiveTopology, ExactlyOneModeIsSupportedTodayAndItIsTriangles)
+TEST(GltfPrimitiveTopology, OnlyTheTriangleProducingModesAreSupported)
 {
-    // Stated as its own assertion so widening support cannot happen by accident: a mode becoming
-    // importable is GLTF-072's decision and must arrive with its conversion, not before it.
+    // Stated as its own assertion so widening support cannot happen by accident. The rule is not
+    // "three of seven" but a property: a mode is importable exactly when it has an exact
+    // triangle-list equivalent, because a triangle list is what every renderer already draws.
     int supported = 0;
     for (const ModeRow& row : kModeTable)
     {
         if (IsPrimitiveTopologySupported(row.topology)) { ++supported; }
     }
-    EXPECT_EQ(1, supported);
+    EXPECT_EQ(3, supported);
     EXPECT_TRUE(IsPrimitiveTopologySupported(PrimitiveTopology::Triangles));
+    EXPECT_TRUE(IsPrimitiveTopologySupported(PrimitiveTopology::TriangleStrip));
+    EXPECT_TRUE(IsPrimitiveTopologySupported(PrimitiveTopology::TriangleFan));
+
+    // The converse, as a property rather than a list: a supported mode must convert, and an
+    // unsupported one must refuse to, so the two predicates cannot drift apart.
+    for (const ModeRow& row : kModeTable)
+    {
+        SCOPED_TRACE(std::string(row.name));
+        const std::vector<std::uint32_t> quad = {0, 1, 2, 3};
+        if (row.supported)
+        {
+            EXPECT_NO_THROW((void)ConvertToTriangleList(quad, row.topology));
+        }
+        else
+        {
+            EXPECT_THROW((void)ConvertToTriangleList(quad, row.topology), std::runtime_error);
+        }
+    }
 }
 
 TEST(GltfPrimitiveTopology, ClassifyReadsTheModeTheFileActuallyDeclares)
@@ -226,6 +248,7 @@ TEST(GltfPrimitiveTopology, TrianglesImportUnchangedAndCarryTheirTopology)
         ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0], "Quad", nullptr, 1.0f);
 
     EXPECT_EQ(PrimitiveTopology::Triangles, mesh.topology);
+    EXPECT_EQ(PrimitiveTopology::Triangles, mesh.sourceTopology);
     EXPECT_EQ(32, mesh.stride);
     EXPECT_EQ(4u * 32u, mesh.vertexBytes.size());
     EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 0, 2, 3}), DecodedIndices(mesh));
@@ -257,9 +280,99 @@ TEST(GltfPrimitiveTopology, EveryImportableCorpusFixtureCarriesTrianglesAtLayer3
         {
             if (!primitive.extracted) { continue; }   // rejected topologies: see the D5 tests
             EXPECT_TRUE(primitive.dump.topologyCarried);
-            EXPECT_EQ(4, primitive.dump.topologyMode);
-            EXPECT_EQ("TRIANGLES", primitive.dump.topologyName);
+            // Whatever the file declared, what comes out is always a triangle list -- that is what
+            // makes the conversion policy safe for every renderer downstream.
+            EXPECT_EQ(4, primitive.dump.importedTopologyMode);
+            EXPECT_EQ("TRIANGLES", primitive.dump.importedTopologyName);
+            // ...and the source mode is not overwritten by the conversion, so a strip is still
+            // reportable as a strip (GLTF-082).
+            EXPECT_TRUE(primitive.dump.topologyMode == 4 || primitive.dump.topologyMode == 5 ||
+                        primitive.dump.topologyMode == 6)
+                << "an importable primitive carries source mode " << primitive.dump.topologyMode;
         }
+    }
+}
+
+// --- GLTF-072: strips and fans convert, with winding preserved -----------------------------------
+
+TEST(GltfPrimitiveTopology, StripConversionSwapsTheOddTrianglesCorners)
+{
+    // §3.7.2.1's rule, on the smallest input that can tell a correct conversion from a plausible
+    // one. Emitting (i, i+1, i+2) for every triangle would give [1,2,3] as the second, which has
+    // the opposite winding and would be culled away by a renderer the author expected to draw it.
+    EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 2, 1, 3}),
+              ConvertToTriangleList({0, 1, 2, 3}, PrimitiveTopology::TriangleStrip));
+
+    // Five indices, three triangles: the alternation has to continue, not just apply once.
+    EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 2, 1, 3, 2, 3, 4}),
+              ConvertToTriangleList({0, 1, 2, 3, 4}, PrimitiveTopology::TriangleStrip));
+}
+
+TEST(GltfPrimitiveTopology, FanConversionKeepsEveryTriangleAnchoredToTheFirstVertex)
+{
+    EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 0, 2, 3}),
+              ConvertToTriangleList({0, 1, 2, 3}, PrimitiveTopology::TriangleFan));
+    EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 0, 2, 3, 0, 3, 4}),
+              ConvertToTriangleList({0, 1, 2, 3, 4}, PrimitiveTopology::TriangleFan));
+
+    // The two rules must not coincide: given identical input they produce different triangles, so
+    // a fixture cannot pass under the wrong one.
+    EXPECT_NE(ConvertToTriangleList({0, 1, 2, 3}, PrimitiveTopology::TriangleFan),
+              ConvertToTriangleList({0, 1, 2, 3}, PrimitiveTopology::TriangleStrip));
+}
+
+TEST(GltfPrimitiveTopology, ATriangleListIsReturnedVerbatim)
+{
+    // Including a trailing partial triple: what a malformed index count becomes is GLTF-079's
+    // decision, and trimming it here would silently change every file CNA already imports.
+    EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 2, 1, 3}),
+              ConvertToTriangleList({0, 1, 2, 2, 1, 3}, PrimitiveTopology::Triangles));
+    EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 3}),
+              ConvertToTriangleList({0, 1, 2, 3}, PrimitiveTopology::Triangles));
+}
+
+TEST(GltfPrimitiveTopology, AnIndexRunTooShortForOneTriangleConvertsToNothing)
+{
+    for (const PrimitiveTopology topology :
+         {PrimitiveTopology::TriangleStrip, PrimitiveTopology::TriangleFan})
+    {
+        EXPECT_TRUE(ConvertToTriangleList({}, topology).empty());
+        EXPECT_TRUE(ConvertToTriangleList({0}, topology).empty());
+        EXPECT_TRUE(ConvertToTriangleList({0, 1}, topology).empty());
+    }
+}
+
+TEST(GltfPrimitiveTopology, StripAndFanImportThroughExtractMeshAsTriangleLists)
+{
+    // End to end: ExtractMesh applies exactly the documented rule to the exact index run the file
+    // authors. The rules themselves are pinned by hand-written values in the tests above, so
+    // composing them here states the claim that actually belongs to ExtractMesh -- that it
+    // converts, and converts by the same rule -- without restating the arithmetic.
+    const std::vector<std::uint32_t> authored = {0, 1, 2, 0, 2, 3};
+    for (const PrimitiveTopology source : {PrimitiveTopology::Triangles,
+                                           PrimitiveTopology::TriangleStrip,
+                                           PrimitiveTopology::TriangleFan})
+    {
+        const int mode = PrimitiveTopologyMode(source);
+        SCOPED_TRACE("mode " + std::to_string(mode));
+        ScratchDir dir;
+        const Parsed parsed(QuadWithMode(", \"mode\": " + std::to_string(mode)), dir.path());
+        ASSERT_NE(nullptr, parsed.data);
+
+        const MeshOut mesh =
+            ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0], "Quad", nullptr, 1.0f);
+
+        // The conversion happened, and it is visible: the emitted list is a triangle list, while
+        // the source topology still says what the file declared.
+        EXPECT_EQ(PrimitiveTopology::Triangles, mesh.topology);
+        EXPECT_EQ(source, mesh.sourceTopology);
+        EXPECT_EQ(ConvertToTriangleList(authored, source), DecodedIndices(mesh));
+        EXPECT_EQ(0u, DecodedIndices(mesh).size() % 3)
+            << "a converted list must always divide evenly into triangles";
+
+        // The vertex buffer is untouched by a topology conversion -- only the index list is
+        // rewritten, which is precisely why no renderer needs to change.
+        EXPECT_EQ(4u * 32u, mesh.vertexBytes.size());
     }
 }
 
@@ -286,8 +399,8 @@ TEST(GltfPrimitiveTopology, EveryUnsupportedModeIsRejectedWithItsModeNamed)
         }
 
         ASSERT_FALSE(error.empty())
-            << "mode " << row.mode << " imported silently -- if GLTF-072 landed, this case belongs "
-               "in its tests, not here";
+            << "mode " << row.mode << " imported silently -- if its draw path landed "
+               "(GLTF-073/GLTF-077/GLTF-078), this case belongs in those tests, not here";
         // The diagnostic has to be actionable on its own: which primitive, which mode by number,
         // and which mode by the name the file format uses.
         EXPECT_NE(std::string::npos, error.find("Quad")) << error;

@@ -1129,29 +1129,97 @@ namespace CNA::Internal::GltfImport
 
     bool IsPrimitiveTopologySupported(PrimitiveTopology topology)
     {
-        return topology == PrimitiveTopology::Triangles;
+        // GLTF-072: exactly the topologies that can be expressed as a triangle list, because that
+        // is what every renderer already draws. The line and point topologies decode fine but have
+        // no draw path yet (GLTF-073/GLTF-077/GLTF-078); see the header for why importing them
+        // early would relocate the defect rather than fix it.
+        return topology == PrimitiveTopology::Triangles
+            || topology == PrimitiveTopology::TriangleStrip
+            || topology == PrimitiveTopology::TriangleFan;
+    }
+
+    std::vector<std::uint32_t> ConvertToTriangleList(const std::vector<std::uint32_t>& indices,
+                                                     PrimitiveTopology topology)
+    {
+        switch (topology)
+        {
+            // Already a triangle list: returned verbatim, including a trailing partial triple.
+            // Deciding what a malformed index count becomes is GLTF-079's, and silently trimming
+            // it here would pre-empt that decision on every file CNA already imports.
+            case PrimitiveTopology::Triangles: return indices;
+            case PrimitiveTopology::TriangleStrip:
+            {
+                std::vector<std::uint32_t> out;
+                if (indices.size() < 3) { return out; }
+                out.reserve((indices.size() - 2) * 3);
+                for (std::size_t i = 0; i + 2 < indices.size(); ++i)
+                {
+                    // Odd triangles have reversed winding in a strip, so their first two corners
+                    // are swapped to bring every triangle back to the same orientation.
+                    if (i % 2 == 0)
+                    {
+                        out.push_back(indices[i]);
+                        out.push_back(indices[i + 1]);
+                    }
+                    else
+                    {
+                        out.push_back(indices[i + 1]);
+                        out.push_back(indices[i]);
+                    }
+                    out.push_back(indices[i + 2]);
+                }
+                return out;
+            }
+            case PrimitiveTopology::TriangleFan:
+            {
+                std::vector<std::uint32_t> out;
+                if (indices.size() < 3) { return out; }
+                out.reserve((indices.size() - 2) * 3);
+                for (std::size_t i = 1; i + 1 < indices.size(); ++i)
+                {
+                    out.push_back(indices[0]);
+                    out.push_back(indices[i]);
+                    out.push_back(indices[i + 1]);
+                }
+                return out;
+            }
+            case PrimitiveTopology::Points:
+            case PrimitiveTopology::Lines:
+            case PrimitiveTopology::LineLoop:
+            case PrimitiveTopology::LineStrip:
+                break;
+        }
+        throw std::runtime_error(
+            std::string("glTF primitive mode ") + std::to_string(PrimitiveTopologyMode(topology)) +
+            " (" + PrimitiveTopologyName(topology) + ") describes no triangles, so it has no "
+            "triangle-list equivalent. Producing one would be the silent reinterpretation "
+            "GLTF-071 removed.");
     }
 
     MeshOut ExtractMesh(const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
                          const SkeletonResult* skel, float unitScale)
     {
         // plan_gltf.md GLTF-071: read mesh.primitive.mode before anything else, and never
-        // reinterpret it. Until GLTF-072 implements the per-mode conversion policy (strip/fan to a
-        // triangle list, line topologies carried, points decided per renderer), a non-TRIANGLES
-        // primitive is rejected here with its real mode named. That is a deliberate, visible
-        // limitation; the alternative this replaces was decoding a strip's index run as a triangle
-        // list -- dropping every triangle after the first and drawing a chaotic tangle -- with no
-        // diagnostic anywhere.
-        const PrimitiveTopology topology = ClassifyPrimitiveTopology(prim, name);
-        if (!IsPrimitiveTopologySupported(topology))
+        // reinterpret it. GLTF-072 then converts the two topologies that have an exact triangle-
+        // list equivalent; the line and point topologies stay rejected here with their real mode
+        // named, because they decode fine but have nowhere to be drawn yet. The behaviour this
+        // replaced was decoding a strip's index run as a triangle list -- dropping every triangle
+        // after the first and drawing a chaotic tangle -- with no diagnostic anywhere.
+        const PrimitiveTopology sourceTopology = ClassifyPrimitiveTopology(prim, name);
+        if (!IsPrimitiveTopologySupported(sourceTopology))
         {
+            const std::string owner = sourceTopology == PrimitiveTopology::Points
+                ? "GLTF-077 decides whether a point list becomes a CNAEXT point topology or a "
+                  "documented per-renderer rejection"
+                : "GLTF-073 gives ModelMeshPart a real PrimitiveType and GLTF-078 a topology-aware "
+                  "primitive count";
             throw std::runtime_error(
                 "Primitive '" + name + "' uses glTF primitive mode " +
-                std::to_string(PrimitiveTopologyMode(topology)) + " (" +
-                PrimitiveTopologyName(topology) + "), which CNA does not import yet. Only mode " +
-                std::to_string(PrimitiveTopologyMode(PrimitiveTopology::Triangles)) + " (" +
-                PrimitiveTopologyName(PrimitiveTopology::Triangles) + ") is supported; the other "
-                "topologies are rejected rather than silently reinterpreted as a triangle list.");
+                std::to_string(PrimitiveTopologyMode(sourceTopology)) + " (" +
+                PrimitiveTopologyName(sourceTopology) + "), which CNA does not import yet: it "
+                "decodes correctly but has no draw path, since every loader still computes a "
+                "triangle-list primitive count. " + owner + ". The triangle topologies (modes 4, "
+                "5, 6) are supported; nothing is silently reinterpreted as a triangle list.");
         }
 
 #ifdef CNA_DRACO_AVAILABLE
@@ -1204,9 +1272,11 @@ namespace CNA::Internal::GltfImport
         MeshOut out;
         out.name = name;
         // The topology travels with the data it describes, so no downstream consumer has to assume
-        // one. Only TRIANGLES reaches this line today, which is what makes the assumption safe --
-        // rather than merely conventional, as it was before GLTF-071.
-        out.topology = topology;
+        // one. `topology` is what indexBytes ends up in and is always Triangles, because a strip or
+        // fan is converted below; `sourceTopology` keeps what the file declared, so the conversion
+        // is visible rather than lossy.
+        out.sourceTopology = sourceTopology;
+        out.topology = PrimitiveTopology::Triangles;
         out.skinned = (jointsAcc != nullptr) && (weightsAcc != nullptr);
         // A skinned+colored primitive uses a stride-56 layout (the stride-52 GPU-skinned layout
         // with a per-vertex Color appended at the end) and SkinnedEffect's own CNAEXT
@@ -1384,6 +1454,13 @@ namespace CNA::Internal::GltfImport
                     " vertices (its POSITION accessor's count).");
             }
         }
+
+        // GLTF-072: a strip or fan becomes an equivalent triangle list here, winding preserved, so
+        // everything downstream -- tangent generation, the packing loop, every renderer's
+        // ApplyLayout, and the loaders' primitive count -- keeps working on triangle lists alone.
+        // Deliberately after the bounds check, so an out-of-range index is reported against the
+        // index the file actually authored rather than against a rewritten position.
+        indices = ConvertToTriangleList(indices, sourceTopology);
 
         const std::vector<float> positions = unpackSemantic(cgltf_attribute_type_position, 0, posAcc, 3, "POSITION");
         // Only the unskinned stride-24 (Position+Color+TextureCoordinate) and stride-20

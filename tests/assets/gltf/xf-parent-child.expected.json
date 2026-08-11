@@ -186,6 +186,17 @@
             2
           ]
         ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false
+        },
         "material": null
       }
     ]
@@ -282,6 +293,7 @@
         "indexBufferFile": "xf-parent-child.ib.bin",
         "indexBufferBytes": 6,
         "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
         "topology": "TRIANGLES",
         "primitiveCount": 1
       }

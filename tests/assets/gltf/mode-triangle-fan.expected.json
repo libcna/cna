@@ -1,6 +1,6 @@
 {
-  "id": "sparse-indices",
-  "description": "A sparse index accessor whose override turns a degenerate second triangle into a real one. L2 always passed (the data is readable and cgltf resolves it) while L3 did not, which localised D4 precisely to CNA's index-reading call; GLTF-063 replaced that call and the fixture now passes at every layer.",
+  "id": "mode-triangle-fan",
+  "description": "An indexed TRIANGLE_FAN quad. Four fan indices describe two triangles around vertex 0 -- [0,1,2] and [0,2,3] -- with no winding flip anywhere, which is what separates the fan rule from the strip rule on identical index input.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -14,25 +14,24 @@
     "document": "docs/gltf-conformance.md"
   },
   "specAnchors": [
-    "sparse-accessors",
     "meshes-overview"
   ],
   "inventory": {
-    "id": "sparse-indices",
-    "owningGroup": "accessors",
-    "referencingGroups": [
-      "topology"
-    ],
+    "id": "mode-triangle-fan",
+    "owningGroup": "topology",
+    "referencingGroups": [],
     "validatedLayers": [
       "L1",
       "L2",
-      "L3"
+      "L3",
+      "L4",
+      "L5"
     ],
     "features": [
-      "accessor.sparse on indices",
-      "UNSIGNED_SHORT indices"
+      "primitive.mode = TRIANGLE_FAN",
+      "fan -> list conversion"
     ],
-    "auditFixture": "f3"
+    "auditFixture": null
   },
   "l1": {
     "assetVersion": "2.0",
@@ -44,9 +43,9 @@
     "skinCount": 0,
     "animationCount": 0,
     "accessorCount": 2,
-    "bufferViewCount": 4,
+    "bufferViewCount": 2,
     "bufferCount": 1,
-    "bufferByteLength": 66,
+    "bufferByteLength": 56,
     "extensionsUsed": [],
     "extensionsRequired": []
   },
@@ -87,10 +86,10 @@
         "type": "SCALAR",
         "componentType": 5123,
         "componentTypeName": "UNSIGNED_SHORT",
-        "count": 6,
+        "count": 4,
         "componentsPerElement": 1,
         "normalized": false,
-        "sparse": true,
+        "sparse": false,
         "bufferView": 1,
         "byteOffset": 0,
         "bufferViewByteOffset": 48,
@@ -98,8 +97,6 @@
         "values": [
           0,
           1,
-          2,
-          0,
           2,
           3
         ]
@@ -110,10 +107,10 @@
     "primitives": [
       {
         "mesh": 0,
-        "meshName": "SparseIndexQuad",
+        "meshName": "FanQuad",
         "primitive": 0,
-        "mode": 4,
-        "modeName": "TRIANGLES",
+        "mode": 6,
+        "modeName": "TRIANGLE_FAN",
         "indexed": true,
         "vertexCount": 4,
         "positions": [
@@ -147,8 +144,6 @@
           0,
           1,
           2,
-          0,
-          2,
           3
         ],
         "triangles": [
@@ -175,7 +170,7 @@
             2,
             3
           ],
-          "converted": false
+          "converted": true
         },
         "material": null
       }
@@ -268,59 +263,19 @@
             "size": 8
           }
         ],
-        "vertexBufferFile": "sparse-indices.vb.bin",
+        "vertexBufferFile": "mode-triangle-fan.vb.bin",
         "vertexBufferBytes": 128,
         "vertexBufferSha256": "442269e699a11f1506533dffb1337bf68b4df12de71b7ead6e7b52c508ce748b",
         "indexElementSize": 2,
         "indexCount": 6,
-        "indexBufferFile": "sparse-indices.ib.bin",
+        "indexBufferFile": "mode-triangle-fan.ib.bin",
         "indexBufferBytes": 12,
         "indexBufferSha256": "4a16b824acb5d55f3f9fcaca42323d856db13089fdde0166ae1699c89a2710b0",
-        "sourceTopology": "TRIANGLES",
+        "sourceTopology": "TRIANGLE_FAN",
         "topology": "TRIANGLES",
         "primitiveCount": 2
       }
     ]
   },
-  "defects": [
-    {
-      "id": "D4",
-      "summary": "A sparse index accessor decoded to all zeros. cgltf_accessor_read_index returns 0 when accessor->is_sparse or accessor->buffer_view is null, with no error channel, and ExtractMesh checked neither. GLTF-063 replaced that call with a CNA-side sparse-aware, bounds-checked index reader.",
-      "firstDivergentLayer": "L3",
-      "divergentFields": [],
-      "divergentFieldsByLayer": {},
-      "owner": "GLTF-ACCESSOR",
-      "owningTasks": [
-        "GLTF-063"
-      ],
-      "closedTasks": [
-        "GLTF-063"
-      ],
-      "remainingTasks": [],
-      "status": "fixed",
-      "currentActual": {
-        "indices": [
-          0,
-          1,
-          2,
-          0,
-          2,
-          3
-        ],
-        "note": "The decoded indices are the spec-derived ones. Nothing is suppressed any more: GltfConformanceL3 asserts this fixture's index list in full, so D4 reappearing fails an ordinary green test rather than needing a known-defect test of its own."
-      },
-      "priorActual": {
-        "indices": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
-        "note": "What the forensic audit measured before GLTF-063: every index read back as 0, so the quad collapsed to a single degenerate point. The L2 dump of the same accessor was already correct, which is the evidence that localised the defect to the index-reading call rather than the accessor layer."
-      }
-    }
-  ]
+  "defects": []
 }

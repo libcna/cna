@@ -293,7 +293,7 @@ forensic audit, stop and investigate the contradiction.
 |---|---|---|---|
 | **D1, D2, D3** | **`fixed`** | **`GLTF-103` → `GLTF-113` → `GLTF-114` → `GLTF-115`** | — |
 | **D4** | **`fixed`** | **`GLTF-063`** | — |
-| **D5** | **`partially-remediated`** | **`GLTF-071`** (mode read, classified, never reinterpreted) | `GLTF-072` (the per-mode conversion policy) |
+| **D5** | **`partially-remediated`** | **`GLTF-071`** (mode read and classified) → **`GLTF-072`** (strip/fan converted to a triangle list) | `GLTF-073` / `GLTF-077` / `GLTF-078` — a **draw path** for the four topologies that describe no triangles |
 | D6 | `known-failing` | — | `GLTF-284` (after `GLTF-103`…`GLTF-114`) |
 | D7 | `known-failing` | — | `GLTF-217` / `GLTF-228` / `GLTF-229` |
 | **D8** | **`fixed`** | **`GLTF-245` → `GLTF-247` → `GLTF-248` → `GLTF-260`** | — |
@@ -370,7 +370,7 @@ working directory, which is what CTest is configured to use. The suites are:
 | `GltfBufferOracle` | the L5 comparator proving itself: a perturbed byte is reported at the right offset, vertex and field (`GLTF-007`) |
 | `GltfAccessorDecodeLock` | the verified-correct attribute decode path (`GLTF-041`) |
 | `GltfIndexDecode` | the sparse-safe, bounds-checked index reader and D4's regression witness (`GLTF-063`) |
-| `GltfPrimitiveTopology` | the seven-mode classification table and the never-reinterpret policy (`GLTF-071`) |
+| `GltfPrimitiveTopology` | the seven-mode classification table, the never-reinterpret policy (`GLTF-071`), and the strip/fan → triangle-list conversion with its winding rule (`GLTF-072`) |
 
 `GLTF-010` will collapse these into a single `ctest -L gltf-conformance` label once L6–L7 exist.
 
@@ -413,10 +413,19 @@ padding says so rather than naming a field it does not belong to, and an unknown
 
 ### 4.3 Coverage today
 
-13 of the 15 fixtures carry a golden, covering strides 32, 24 and 52, the 16-bit index path and the
-`vertexCount > 65535` width-selection rule. The two without one are the fixtures `GLTF-071` rejects;
-their manifests record `l5.supported = false` with a reason and the task that would produce a
-golden, so the layer is visibly absent rather than quietly unasserted.
+17 of the 21 fixtures carry a golden, covering strides 32, 24 and 52, the 16-bit index path and the
+`vertexCount > 65535` width-selection rule. The four without one are the point and line topologies,
+which decode correctly but have no draw path; their manifests record `l5.supported = false` with a
+reason and the tasks that would produce a golden, so the layer is visibly absent rather than quietly
+unasserted.
+
+A converted topology's golden holds the **converted** index list, not the authored one — a strip's
+golden is the triangle list `GLTF-072` rewrites it into. The `l5` block records both
+(`sourceTopology` and `topology`) so the two are never confused, and
+`GltfConformanceL5.AConvertedTopologyProducesTheSameBufferAsAnExplicitTriangleList` asserts the
+property that justifies converting at all: `mode-triangle-strip` and `mode-triangles` author the
+same quad by different routes and must produce byte-identical index buffers, while
+`mode-triangle-fan` — the same four indices under the other rule — must not.
 
 Deliberately not covered yet: the PBR and dual-texture strides (20/48/68), whose selection and
 tangent generation both depend on which texture maps a material carries. The packer raises an

@@ -690,6 +690,14 @@ All seven glTF modes are decoded as if they were `TRIANGLES`, and all three load
 Converting strips/fans at import is chosen deliberately over plumbing new topologies through 41
 renderers: it is provable at L3/L5, needs no renderer change, and cannot regress an existing renderer.
 
+**Status (`GLTF-072`, landed).** The three triangle-producing modes are done: `TRIANGLES` passes
+through and `TRIANGLE_STRIP`/`TRIANGLE_FAN` convert, winding preserved. The four remaining modes are
+**not** a decoding gap — they decode correctly and are rejected only because every loader still
+computes `numIndices / 3`. What they need is a draw path: `GLTF-073` (a real `PrimitiveType` on
+`ModelMeshPart`), `GLTF-078` (a topology-aware primitive count), `GLTF-076` (`LINE_LOOP`'s closing
+segment) and `GLTF-077` (whether a point list is CNAEXT-supported or explicitly refused per
+renderer). Until then the rejection names the owning task.
+
 ### 10.2 Index width and truncation
 
 `out.use32BitIndices = vertexCount > 65535`. If `vertexCount ≤ 65535` every index is
@@ -1525,7 +1533,8 @@ same asset in another container, not another asset.
 > cross-referenced ladders were re-counted and the counts here now match them exactly: transforms
 > 17 (§11.4), skinning 13 (§15.4), morph 13 (§16.3), animation 10 (§17.2, excluding the
 > morph-owned `anim-weights-*`), and the remaining groups enumerated in full below. The generated
-> corpus stands at **16** assets today; `GLTF-399` completes it.
+> corpus stands at **21** assets today (`GLTF-072` completed the topology group's seven);
+> `GLTF-399` completes the rest.
 
 | Group | Count | Assets |
 |---|---|---|
@@ -1831,9 +1840,22 @@ records that P0-D corrected the **L4 oracle itself** — both oracles placed a s
 node, which §3.7.3 says the joints do — against the specification rather than the implementation, so
 the expectation never became a golden bug.
 
+**P0-F — topology conversion**: `GLTF-072`, `GLTF-074`, `GLTF-075`. The last geometric defect from
+the P0 audit. All seven `mode-*` fixtures exist and decode to their manifest lists; a
+`TRIANGLE_STRIP` and a `TRIANGLE_FAN` are converted to equivalent triangle lists at import with
+winding preserved, so no renderer changed. The four topologies that describe no triangles stay
+rejected pending a draw path (`GLTF-073`/`GLTF-077`/`GLTF-078`), which is why D5 remains
+`partially-remediated`.
+
+Landed alongside it: `tools/gltf_fixtures/builder.py`, the corpus generator's core module, which
+`.gitignore`'s unanchored `build*` rule had silently swallowed — the generator did not run on a
+clean checkout at all, so `GLTF-003`'s byte-identical-regeneration guarantee was unverifiable.
+Reconstructed against the committed corpus (which carries a SHA-256 per file), with a test that
+fails if any generator module goes missing again.
+
 **D6 and D7 remain open** and reproducible exactly as the audit recorded them; neither is a
-center-collapse mechanism (`docs/gltf-center-collapse-verdict.md` §6). `GLTF-072` still owns the
-remaining half of D5. No renderer and no `cna-gltf-viewer` work has been started.
+center-collapse mechanism (`docs/gltf-center-collapse-verdict.md` §6). No renderer and no
+`cna-gltf-viewer` work has been started.
 
 Every phase declares its **primary owner** from §6; a task whose owner differs names it inline.
 Dependencies are the *minimum* set — a task also inherits its phase's entry condition, **except for
@@ -1950,10 +1972,10 @@ primitive mode is ever silently reinterpreted; indices decode exactly.*
 | GLTF-069 | 16- vs 32-bit index selection rule | ⬜ | GLTF-068 | `use32BitIndices = vertexCount > 65535`. **Accept:** documented and tested at both sides of the boundary. |
 | GLTF-070 | Record the "always materialise an index buffer" decision | ⬜ | GLTF-067 | Keeps the GPU layer uniform. **Accept:** decision documented and tested. |
 | GLTF-071 | **[P0] Read `prim.type`; never silently reinterpret** | ✔ | GLTF-063 | `cgltf_primitive_type` has **0 occurrences**; `f4` (strip) and `f12` (points) both decoded as triangle lists. **Accept:** every mode is classified; **critical path.** **Done** (`07312274e`): `PrimitiveTopology` + `ClassifyPrimitiveTopology`/`PrimitiveTopologyName`/`PrimitiveTopologyMode`/`IsPrimitiveTopologySupported`, carried on `MeshOut::topology`. All seven modes classify by number and by specification name; a mode outside 0…6 is rejected rather than assumed. `TRIANGLES` imports byte-identically to before, including the very common no-`mode`-key case. Every other topology is rejected by `ExtractMesh` with its mode named by number and name, and **no index list reaches the `numIndices / 3` path at all**. **D5 → `partially-remediated`**: silent corruption is gone, but the row's own scope ends at classification — `GLTF-072` still owns conversion, so `f4`/`f12` do not import. |
-| GLTF-072 | Implement the §10.1 per-mode policy | 🐛 | GLTF-071 | Pass through `TRIANGLES`; convert `TRIANGLE_STRIP`/`TRIANGLE_FAN` to a triangle list at import; carry `LINES`/`LINE_STRIP`; convert `LINE_LOOP`; `POINTS` via CNAEXT or an explicit error. **Accept:** all seven `mode-*` fixtures decode to the manifest's triangle/line/point list. **Still open.** `GLTF-071` supplies the classification and the never-reinterpret guarantee this builds on; today `IsPrimitiveTopologySupported` returns true for `TRIANGLES` alone and the other six are rejected. Closing this task means widening that predicate *together with* the conversion each mode needs, flipping D5 to `fixed`, and giving `mode-triangle-strip`/`mode-points` their L5 goldens. |
+| GLTF-072 | Implement the §10.1 per-mode policy | ✔ | GLTF-071 | Pass through `TRIANGLES`; convert `TRIANGLE_STRIP`/`TRIANGLE_FAN` to a triangle list at import; carry `LINES`/`LINE_STRIP`; convert `LINE_LOOP`; `POINTS` via CNAEXT or an explicit error. **Accept:** all seven `mode-*` fixtures decode to the manifest's triangle/line/point list. **Landed:** all seven `mode-*` fixtures now exist (the topology group is complete at 7) and each decodes to its manifest list. `ConvertToTriangleList` rewrites a strip or fan at import with winding preserved — a strip's odd triangle emits `(i+1, i, i+2)` — and `IsPrimitiveTopologySupported` widens to exactly the three triangle-producing modes. `MeshOut` gained `sourceTopology` alongside `topology`, so a conversion is visible rather than lossy: `topology` is always `Triangles` on anything `ExtractMesh` returns, while `sourceTopology` still names what the file declared (`GLTF-082`). The vertex buffer is untouched by a conversion — only the index list is rewritten — which is exactly why no renderer changed. **Scope boundary:** the four topologies that describe *no* triangles stay rejected, and deliberately so. They decode correctly; what they lack is a draw path, since every loader still computes `numIndices / 3`. Importing them now would move the original defect from the import layer to the draw layer rather than fix it, so `GLTF-073` (a real `PrimitiveType` on `ModelMeshPart`), `GLTF-078` (a topology-aware count) and `GLTF-077` (the points decision) own them, and the rejection message names them. D5 stays `partially-remediated` for that reason, with `GLTF-072` in `closedTasks`. |
 | GLTF-073 | Carry primitive type on `ModelMeshPart` | ⬜ | GLTF-072, GLTF-025 | XNA already has `PrimitiveType` at the device level. **Accept:** a line-mode fixture draws as lines on `OPENGLES3`. |
-| GLTF-074 | Strip→list conversion preserves winding | ⬜ | GLTF-072 | Odd triangles in a strip have reversed winding. **Accept:** `mode-triangle-strip` L3 index list equals the manifest exactly, including the swap on odd triangles. |
-| GLTF-075 | Fan→list conversion | ⬜ | GLTF-072 | **Accept:** `mode-triangle-fan` matches the manifest. |
+| GLTF-074 | Strip→list conversion preserves winding | ✔ | GLTF-072 | Odd triangles in a strip have reversed winding. **Accept:** `mode-triangle-strip` L3 index list equals the manifest exactly, including the swap on odd triangles. **Landed with `GLTF-072`.** `GltfConformanceL3` asserts the converted list against the manifest's own `triangles` expansion — derived independently of `importPolicy.indices`, so a generator bug that got the rule wrong in both places still fails — and `GltfPrimitiveTopology.StripConversionSwapsTheOddTrianglesCorners` pins the rule on a five-index run where the alternation has to continue rather than merely apply once. |
+| GLTF-075 | Fan→list conversion | ✔ | GLTF-072 | **Accept:** `mode-triangle-fan` matches the manifest. **Landed with `GLTF-072`.** `mode-triangle-fan` is generated and imports to `[0,1,2]`,`[0,2,3]`. The two rules are asserted to *differ* on identical input, so neither fixture can pass under the other's conversion. |
 | GLTF-076 | `LINE_LOOP` → `LINE_STRIP` + closing segment | ⬜ | GLTF-072 | **Accept:** manifest match. |
 | GLTF-077 | Decide `POINTS` support per renderer | ⬜ | GLTF-072 | **Accept:** either a CNAEXT point-list path or a documented, per-renderer explicit rejection — never a triangle. |
 | GLTF-078 | Primitive-count helper for every topology | 🐛 | GLTF-072 | All three loaders hardcode `numIndices / 3`. **Accept:** one shared helper; §12.3 table asserted at L5. |

@@ -179,10 +179,16 @@ class Defect:
             raise ValueError(
                 f"{self.id}: a fixed defect may not still declare divergent fields -- a fixed "
                 "defect suppresses nothing, which is what makes it a regression witness")
-        if self.status in OPEN_DEFECT_STATUSES and not self.divergent_by_layer():
+        if self.status == "known-failing" and not self.divergent_by_layer():
             raise ValueError(
                 f"{self.id}: an open defect must name the fields it breaks, or the conformance "
                 "suite would assert them and fail")
+        # A `partially-remediated` defect may legitimately declare nothing on a fixture the landed
+        # tasks fully resolved -- that is what "partial" means once a defect spans several
+        # fixtures. GLTF-072 converts mode-triangle-strip correctly while mode-points still has no
+        # draw path, so D5 bites one of its two fixtures and not the other. The invariant that
+        # actually matters is corpus-level and lives in corpus.py: a partially-remediated defect
+        # must still be divergent on at least one fixture, or it is simply fixed.
         entry: dict[str, Any] = {
             "id": self.id,
             "summary": self.summary,
@@ -363,10 +369,26 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
     ``indices`` is the resolved index list a conforming reader must produce (``None`` for a
     non-indexed primitive, whose implicit indices are ``[0, count)``). ``triangles`` is derived
     from ``mode`` per §3.7.2.1 and is empty for the point and line modes.
+
+    ``importPolicy`` is the one part of this record that is **not** spec-derived: it states what
+    CNA's own documented per-mode policy (plan_gltf.md §10.1, ``GLTF-072``) must turn the primitive
+    into. A strip or fan is converted to a triangle list at import, so the mode CNA carries and the
+    index list it emits both differ from the authored ones -- and a manifest that stated only the
+    authored values could not tell a correct conversion from a missing one.
     """
-    from .builder import MODE_NAMES, expand_to_triangles
+    from .builder import MODE_NAMES, TRIANGLES, expand_to_triangles
 
     resolved = list(indices) if indices is not None else list(range(len(positions)))
+    triangles = expand_to_triangles(resolved, mode)
+    # The line and point topologies have no triangle-list equivalent and are not imported at all;
+    # stating a converted index list for them would assert the reinterpretation GLTF-071 removed.
+    import_policy: dict[str, Any] = {
+        "imported": bool(triangles),
+        "topologyMode": TRIANGLES,
+        "topologyName": MODE_NAMES[TRIANGLES],
+        "indices": [i for tri in triangles for i in tri],
+        "converted": mode != TRIANGLES,
+    }
     return {
         "mesh": mesh,
         "meshName": mesh_name,
@@ -382,6 +404,7 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
         "joints": [list(j) for j in (joints or [])],
         "weights": [list(w) for w in (weights or [])],
         "indices": resolved,
-        "triangles": expand_to_triangles(resolved, mode),
+        "triangles": triangles,
+        "importPolicy": import_policy,
         "material": material,
     }

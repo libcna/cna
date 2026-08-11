@@ -12,11 +12,11 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 16,
+  "distinctAssetCount": 21,
   "owningGroupCounts": {
     "accessors": 3,
     "component-types": 2,
-    "topology": 2,
+    "topology": 7,
     "transforms": 4,
     "materials": 1,
     "skinning": 2,
@@ -128,23 +128,29 @@
     },
     {
       "id": "D5",
-      "summary": "primitive.mode was never read, so a TRIANGLE_STRIP was silently reinterpreted as a triangle list. GLTF-071 reads and classifies the mode and rejects the topologies CNA cannot yet honour; GLTF-072 still owns converting a strip to a triangle list, so the fixture does not import.",
+      "summary": "primitive.mode was never read, so a POINTS primitive became a triangle list built from its own implicit index range. GLTF-071 reads and classifies the mode and rejects it explicitly rather than reinterpreting it; a point list has no triangle-list equivalent, so what remains is a draw path, not a conversion.",
       "owner": "GLTF-MESH",
       "owningTasks": [
         "GLTF-071",
         "GLTF-072"
       ],
       "closedTasks": [
-        "GLTF-071"
+        "GLTF-071",
+        "GLTF-072"
       ],
       "remainingTasks": [
-        "GLTF-072"
+        "GLTF-073",
+        "GLTF-077",
+        "GLTF-078"
       ],
       "firstDivergentLayer": "L3",
       "status": "partially-remediated",
       "fixtures": [
-        "mode-triangle-strip",
-        "mode-points"
+        "mode-points",
+        "mode-lines",
+        "mode-line-loop",
+        "mode-line-strip",
+        "mode-triangle-strip"
       ]
     },
     {
@@ -292,21 +298,6 @@
       "auditFixture": "f10"
     },
     {
-      "id": "mode-triangle-strip",
-      "owningGroup": "topology",
-      "referencingGroups": [],
-      "validatedLayers": [
-        "L1",
-        "L2",
-        "L3"
-      ],
-      "features": [
-        "primitive.mode = TRIANGLE_STRIP",
-        "strip winding"
-      ],
-      "auditFixture": "f4"
-    },
-    {
       "id": "mode-points",
       "owningGroup": "topology",
       "referencingGroups": [],
@@ -321,6 +312,104 @@
         "implicit index range"
       ],
       "auditFixture": "f12"
+    },
+    {
+      "id": "mode-lines",
+      "owningGroup": "topology",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "primitive.mode = LINES",
+        "line topology"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mode-line-loop",
+      "owningGroup": "topology",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "primitive.mode = LINE_LOOP",
+        "line topology",
+        "implicit closing segment"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mode-line-strip",
+      "owningGroup": "topology",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "primitive.mode = LINE_STRIP",
+        "line topology"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mode-triangles",
+      "owningGroup": "topology",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "primitive.mode = TRIANGLES",
+        "explicit mode key"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mode-triangle-strip",
+      "owningGroup": "topology",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "primitive.mode = TRIANGLE_STRIP",
+        "strip winding",
+        "strip -> list conversion"
+      ],
+      "auditFixture": "f4"
+    },
+    {
+      "id": "mode-triangle-fan",
+      "owningGroup": "topology",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "primitive.mode = TRIANGLE_FAN",
+        "fan -> list conversion"
+      ],
+      "auditFixture": null
     },
     {
       "id": "xf-identity",
@@ -484,8 +573,8 @@
   "files": [
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 10615,
-      "sha256": "4ca62e4feb2ceb9bb615a3a6d21226a5924e88df734c5ffbdc68f0e353da79ac"
+      "bytes": 10896,
+      "sha256": "09a22da05cbb9c5a85dd8913374f933b5253eeaf398ce7a78baa0e7c0d5a5610"
     },
     {
       "path": "anim-rigid-node.glb",
@@ -509,8 +598,8 @@
     },
     {
       "path": "interleaved-position-normal.expected.json",
-      "bytes": 6006,
-      "sha256": "667f6db5a82271756dc3198e55a9ce165d0b5ca519c452a6b2dad759c93ee4be"
+      "bytes": 6287,
+      "sha256": "5c16f4c27760d0eda82e9da606c8ebf6bb52f48d5bd2a5fe39f9fde59e713bcd"
     },
     {
       "path": "interleaved-position-normal.glb",
@@ -534,8 +623,8 @@
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 8638,
-      "sha256": "4ff8335b1b8877e28ce6e0d9e988ef21fb763635f1cba28f78135198a2fc36fe"
+      "bytes": 8919,
+      "sha256": "44838f36aa56de901c3da1b3fc5084611f2cd360420bc1fb9ababf786de1d0f1"
     },
     {
       "path": "mat-factor-only-gold.glb",
@@ -558,9 +647,54 @@
       "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
     },
     {
+      "path": "mode-line-loop.expected.json",
+      "bytes": 6109,
+      "sha256": "ad06e34eedeb1996255fbe2fa895cea87e9fcf2bcf9bb08b76235895fb2e407b"
+    },
+    {
+      "path": "mode-line-loop.glb",
+      "bytes": 632,
+      "sha256": "4c957e74e2ae6ccab7df730c4360714c2789bf33e68fd14b1a46a6382a3a6975"
+    },
+    {
+      "path": "mode-line-loop.gltf",
+      "bytes": 1170,
+      "sha256": "37f9caac2c76c0fc7bb70674d47ac643d6208ab87ce401826f9f0c1bf06e956a"
+    },
+    {
+      "path": "mode-line-strip.expected.json",
+      "bytes": 6022,
+      "sha256": "4a6886079e43b878214bf3f98722c332f7088da59d2251a75973a94193b138ed"
+    },
+    {
+      "path": "mode-line-strip.glb",
+      "bytes": 632,
+      "sha256": "5daf911153772e55322ddbc57b85214a434a03a23304b7b28daeafec1d2ed516"
+    },
+    {
+      "path": "mode-line-strip.gltf",
+      "bytes": 1171,
+      "sha256": "740c3b963044c72bea2480dbeb6d14db1494b974bc145ead00810e64a7f432c6"
+    },
+    {
+      "path": "mode-lines.expected.json",
+      "bytes": 6000,
+      "sha256": "426f1c86fa70d8ad115dd2e1cb467fe8fb10bf281304660cf932d7d8e05fdf54"
+    },
+    {
+      "path": "mode-lines.glb",
+      "bytes": 632,
+      "sha256": "0bf285ec746cd56ce214f13d46f20c1a4deffe2cd6f1164477f171b156665640"
+    },
+    {
+      "path": "mode-lines.gltf",
+      "bytes": 1174,
+      "sha256": "cc3845158ce106073e8c8bb5ac5cbebc701b93c44faf51ed067a34c058bc95b3"
+    },
+    {
       "path": "mode-points.expected.json",
-      "bytes": 6124,
-      "sha256": "863c46f67766350ab44097838acd77c9d613d4bc0708099afeb6d5851b58275c"
+      "bytes": 6385,
+      "sha256": "e93847577339935fc11b0965490a57c30de5a6f842d58a4d6f7cddaa5b5c4978"
     },
     {
       "path": "mode-points.glb",
@@ -573,9 +707,34 @@
       "sha256": "711fb757e52d663a5cd0ca8f4d12ce19420f4f59403fd165e1af55f621bcd01a"
     },
     {
+      "path": "mode-triangle-fan.expected.json",
+      "bytes": 5759,
+      "sha256": "e4e628b4256084d829e6251a040b6db1b7a118f50623cdf3cded0662a548629b"
+    },
+    {
+      "path": "mode-triangle-fan.glb",
+      "bytes": 644,
+      "sha256": "95d73de8b5c207cffa94ecf951a627e4fa78c94aa5b1342bd42c31f0a070cc86"
+    },
+    {
+      "path": "mode-triangle-fan.gltf",
+      "bytes": 1189,
+      "sha256": "16dda36b31ef49c6653aae4554c6ff258c6846e43755be2bb21c0a367dd0614e"
+    },
+    {
+      "path": "mode-triangle-fan.ib.bin",
+      "bytes": 12,
+      "sha256": "4a16b824acb5d55f3f9fcaca42323d856db13089fdde0166ae1699c89a2710b0"
+    },
+    {
+      "path": "mode-triangle-fan.vb.bin",
+      "bytes": 128,
+      "sha256": "442269e699a11f1506533dffb1337bf68b4df12de71b7ead6e7b52c508ce748b"
+    },
+    {
       "path": "mode-triangle-strip.expected.json",
-      "bytes": 6747,
-      "sha256": "89a11e584068d97dbdd42e849b63dcd2661774859d13e6079bda159fef07cfcf"
+      "bytes": 8084,
+      "sha256": "0f2eb73475691fcfc52366df1028bb5429f6840f6f662fd601406479e685399b"
     },
     {
       "path": "mode-triangle-strip.glb",
@@ -588,9 +747,44 @@
       "sha256": "33010660904ef40bc2d1d58cdf6a56a2f12e1a93b85b2507a86f651269afe1dc"
     },
     {
+      "path": "mode-triangle-strip.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "mode-triangle-strip.vb.bin",
+      "bytes": 128,
+      "sha256": "4543950acd77b876f0b8dcb8bb6644feeb0a4978246c3d31edff04691e909272"
+    },
+    {
+      "path": "mode-triangles.expected.json",
+      "bytes": 5833,
+      "sha256": "470896e39bad8d0e4469647d19a81615f47c086b1f1842bc22b07af7f1303183"
+    },
+    {
+      "path": "mode-triangles.glb",
+      "bytes": 648,
+      "sha256": "5fd8921122178e739642f9e226fc96ad45e10c8971580b1a60057fd89d711a97"
+    },
+    {
+      "path": "mode-triangles.gltf",
+      "bytes": 1195,
+      "sha256": "e265af9543b450e8a34758f2cc05b0c908f3eaa534042b9c6da674591b6830ea"
+    },
+    {
+      "path": "mode-triangles.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "mode-triangles.vb.bin",
+      "bytes": 128,
+      "sha256": "4543950acd77b876f0b8dcb8bb6644feeb0a4978246c3d31edff04691e909272"
+    },
+    {
       "path": "normalized-u8-color.expected.json",
-      "bytes": 6122,
-      "sha256": "5c870099c047ff691f18476a434a36efc1d466e1ac329f8db5f3a97bb98f900e"
+      "bytes": 6403,
+      "sha256": "ccad44ce93206eb2a27a97c9a1bd0018d58f2c0006d3e20ae323f1b355cbc0dc"
     },
     {
       "path": "normalized-u8-color.glb",
@@ -614,8 +808,8 @@
     },
     {
       "path": "scene-default-selection.expected.json",
-      "bytes": 7558,
-      "sha256": "42232cbc9186c497c265760e93a1ae303e9c861a7c94e218aa12c24af5c88951"
+      "bytes": 7839,
+      "sha256": "310c370e5b6e57a9f30727deeeb7b4061437f07585792c9db4b50723ceaabd76"
     },
     {
       "path": "scene-default-selection.glb",
@@ -639,8 +833,8 @@
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 12058,
-      "sha256": "e90a99dc999e2c05c43298e8309c6616dca155b56905fb64e767c13e0435caa3"
+      "bytes": 12339,
+      "sha256": "c821de81764f470018a79f1a1a91c037e6661ab159e09f5abda8c89be96c376b"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -664,8 +858,8 @@
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
-      "bytes": 9967,
-      "sha256": "b54023182a141288087043f4ba049a2c1020d4c14904cdcb94cbf123c8413c1e"
+      "bytes": 10248,
+      "sha256": "1968a1398914c56482e5cd240abc5f38041d0209103d2fc5a3f78da614d3058f"
     },
     {
       "path": "skin-mesh-node-transform.glb",
@@ -689,8 +883,8 @@
     },
     {
       "path": "sparse-indices.expected.json",
-      "bytes": 7107,
-      "sha256": "8e5686ec5e56bfdb1e1177e3486b3e2f3e5db74de77a2dab9ba264fce4ffee9b"
+      "bytes": 7433,
+      "sha256": "8b87986486a8affa78fe64eba7563667fa723f2e5651aaf6b64c10a12239b84f"
     },
     {
       "path": "sparse-indices.glb",
@@ -714,8 +908,8 @@
     },
     {
       "path": "sparse-position.expected.json",
-      "bytes": 5210,
-      "sha256": "eb70d4b9e1cc1f152642dae8053e22921bfeb75655dbd32932d603f818a0d13b"
+      "bytes": 5491,
+      "sha256": "f95a702c922d9c2a7de481d892880a3ee0902cc61484d96e2f0417f2530d5fb8"
     },
     {
       "path": "sparse-position.glb",
@@ -739,8 +933,8 @@
     },
     {
       "path": "u8-idx.expected.json",
-      "bytes": 5854,
-      "sha256": "340adc9bfeb9e6bb29b445718a7fbd9fe674568d4e5c9b0c2327365a4228f852"
+      "bytes": 6135,
+      "sha256": "b32487c1d46b25bc7f450e029f8a003ad0d52cf76e5c50c14a2828a4e8ce4d92"
     },
     {
       "path": "u8-idx.glb",
@@ -764,8 +958,8 @@
     },
     {
       "path": "xf-identity.expected.json",
-      "bytes": 5814,
-      "sha256": "cf14314d45a94136567a30e83cd3977e4885cdd25921223a64e1e0090c5772a4"
+      "bytes": 6095,
+      "sha256": "998102ef0acd7bd49c4925c0e8a372a4a0559c56d359649cf7c20a8b8cdcb2b5"
     },
     {
       "path": "xf-identity.glb",
@@ -789,8 +983,8 @@
     },
     {
       "path": "xf-matrix-node.expected.json",
-      "bytes": 7444,
-      "sha256": "1e3d7484fa9c7dce90f1ba3fcd1877d95925bc668eaefe49d1c08380650ff092"
+      "bytes": 7725,
+      "sha256": "7af878bfaa0c40d2b291097debde12ad81fb4c6a22aeaa510a753141e6cb1031"
     },
     {
       "path": "xf-matrix-node.glb",
@@ -814,8 +1008,8 @@
     },
     {
       "path": "xf-parent-child.expected.json",
-      "bytes": 7533,
-      "sha256": "dd0b5d1147f19bfe1c16dd52fe4df16b02327ebf40a1a47689d5e848632c14cb"
+      "bytes": 7814,
+      "sha256": "679cf3333476ae577fa41ee376d4bde1c720a385981a724464e46d3cd0d26fe7"
     },
     {
       "path": "xf-parent-child.glb",
@@ -839,8 +1033,8 @@
     },
     {
       "path": "xf-shared-mesh.expected.json",
-      "bytes": 8763,
-      "sha256": "d075eb7d80f61c03bafdc0d4d0aa5623267f196f96c0072230bd7b3b11733b1b"
+      "bytes": 9044,
+      "sha256": "70b94ce8d3147a0518360b75c1bb675e7971eb8f2a8d51dddf06370051a29536"
     },
     {
       "path": "xf-shared-mesh.glb",

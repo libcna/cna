@@ -374,7 +374,10 @@ TEST(GltfConformanceL5, SparseIndicesProducesTheGoldenIndexBuffer)
 
 TEST(GltfConformanceL5, ARejectedTopologyHasNoGoldenAndSaysWhichTaskWouldGiveItOne)
 {
-    for (const std::string& id : {"mode-triangle-strip", "mode-points"})
+    // The four topologies that describe no triangles. GLTF-072 gave the strip and the fan their
+    // goldens by converting them; these have no triangle-list equivalent to convert to, so what
+    // they are waiting for is a draw path, and the manifest has to say which task provides it.
+    for (const std::string& id : {"mode-points", "mode-lines", "mode-line-strip", "mode-line-loop"})
     {
         SCOPED_TRACE(id);
         const LoadedFixture fixture(id);
@@ -383,9 +386,44 @@ TEST(GltfConformanceL5, ARejectedTopologyHasNoGoldenAndSaysWhichTaskWouldGiveItO
         ASSERT_TRUE(golden.declared);
         ASSERT_TRUE(golden.ok) << golden.error;
         EXPECT_FALSE(golden.supported)
-            << "this fixture now has an L5 golden -- if GLTF-072 landed, that is where it belongs";
+            << "this fixture now has an L5 golden -- if its draw path landed, that is where it "
+               "belongs";
+        EXPECT_FALSE(golden.blockedBy.empty())
+            << "the missing golden names no task that would produce it";
         EXPECT_NE(golden.blockedBy.end(),
-                  std::find(golden.blockedBy.begin(), golden.blockedBy.end(), "GLTF-072"))
-            << "the missing golden does not name GLTF-072 as what would produce it";
+                  std::find(golden.blockedBy.begin(), golden.blockedBy.end(), "GLTF-078"))
+            << "the missing golden does not name GLTF-078, whose topology-aware primitive count "
+               "every non-triangle draw needs";
     }
+}
+
+TEST(GltfConformanceL5, AConvertedTopologyProducesTheSameBufferAsAnExplicitTriangleList)
+{
+    // GLTF-072's byte-level statement. mode-triangle-strip and mode-triangles author the same quad
+    // by different routes -- a four-index strip and an explicit six-index list -- so a correct
+    // conversion makes their index buffers identical byte for byte. mode-triangle-fan authors the
+    // same four indices as the strip under the other rule, and must NOT match, which is what stops
+    // this passing under a conversion that ignored the mode.
+    const auto indexBytesOf = [](const std::string& id) {
+        const LoadedFixture fixture(id);
+        EXPECT_TRUE(fixture.Ok()) << fixture.Error();
+        const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
+        EXPECT_TRUE(golden.supported) << id << " has no golden -- its conversion did not land";
+        CNA::Internal::GltfImport::MeshOut mesh;
+        std::string error;
+        EXPECT_TRUE(golden.parts.size() == 1u) << id << " has " << golden.parts.size() << " parts";
+        EXPECT_TRUE(ExtractMeshOut(fixture.Data(), golden.parts[0].mesh, golden.parts[0].primitive,
+                                   mesh, error)) << error;
+        return mesh.indexBytes;
+    };
+
+    const std::vector<std::uint8_t> fromStrip = indexBytesOf("mode-triangle-strip");
+    const std::vector<std::uint8_t> fromList = indexBytesOf("mode-triangles");
+    const std::vector<std::uint8_t> fromFan = indexBytesOf("mode-triangle-fan");
+
+    EXPECT_EQ(fromList, fromStrip)
+        << "a converted strip must be byte-identical to the triangle list a file could author "
+           "directly -- that equivalence is the whole justification for converting at import";
+    EXPECT_NE(fromList, fromFan)
+        << "the fan rule produced the strip's triangles, so the mode is not actually being read";
 }

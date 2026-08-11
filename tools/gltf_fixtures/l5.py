@@ -148,10 +148,17 @@ def pack_index_buffer(indices: Sequence[int], vertex_count: int) -> tuple[bytes,
 
 
 def primitive_count(mode: int, index_count: int) -> int:
-    """The draw-call primitive count for a topology (plan_gltf.md §12.3)."""
+    """The draw-call primitive count for a topology (plan_gltf.md §12.3).
+
+    ``mode`` is the topology the buffer is in *after* import, not the one the file declared. A
+    strip or fan is converted to a triangle list by then (`GLTF-072`), so a triangle-list count is
+    the right answer for all three triangle modes; the line and point topologies do not reach L5
+    at all until they have a draw path (`GLTF-073`/`GLTF-077`/`GLTF-078`).
+    """
     if mode != TRIANGLES:
         raise NotImplementedError(
-            f"the L5 golden only covers TRIANGLES today; {MODE_NAMES[mode]} arrives with GLTF-072")
+            f"the L5 golden only covers buffers already converted to TRIANGLES; {MODE_NAMES[mode]} "
+            "arrives with its draw path (GLTF-073/GLTF-077/GLTF-078)")
     if index_count % 3 != 0:
         raise ValueError(f"a triangle list needs a multiple of 3 indices, got {index_count}")
     return index_count // 3
@@ -171,7 +178,14 @@ def buffers(fixture_id: str, primitives: Sequence[dict[str, Any]],
     for i, primitive in enumerate(primitives):
         stride = strides[i] if strides is not None else select_stride(primitive)
         vertex_bytes = pack_vertex_buffer(primitive, stride)
-        index_bytes, element_size = pack_index_buffer(primitive["indices"],
+        # The buffer holds what CNA emits, which for a strip or fan is the CONVERTED triangle list
+        # (GLTF-072), not the authored index run. l3_primitive states that separately under
+        # importPolicy precisely so this layer does not have to re-derive it -- and so a manifest
+        # reader can see that the two differ.
+        policy = primitive.get("importPolicy") or {}
+        imported_indices = policy.get("indices", primitive["indices"])
+        imported_mode = policy.get("topologyMode", primitive["mode"])
+        index_bytes, element_size = pack_index_buffer(imported_indices,
                                                        int(primitive["vertexCount"]))
         suffix = "" if i == 0 else f".p{i}"
         vb_name = f"{fixture_id}{suffix}.vb.bin"
@@ -188,12 +202,13 @@ def buffers(fixture_id: str, primitives: Sequence[dict[str, Any]],
             "vertexBufferBytes": len(vertex_bytes),
             "vertexBufferSha256": hashlib.sha256(vertex_bytes).hexdigest(),
             "indexElementSize": element_size,
-            "indexCount": len(primitive["indices"]),
+            "indexCount": len(imported_indices),
             "indexBufferFile": ib_name,
             "indexBufferBytes": len(index_bytes),
             "indexBufferSha256": hashlib.sha256(index_bytes).hexdigest(),
-            "topology": MODE_NAMES[primitive["mode"]],
-            "primitiveCount": primitive_count(primitive["mode"], len(primitive["indices"])),
+            "sourceTopology": MODE_NAMES[primitive["mode"]],
+            "topology": MODE_NAMES[imported_mode],
+            "primitiveCount": primitive_count(imported_mode, len(imported_indices)),
         })
     return {"supported": True, "parts": parts}, files
 

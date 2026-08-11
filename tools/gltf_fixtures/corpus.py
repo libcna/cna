@@ -14,7 +14,7 @@ from typing import Any, Callable
 from . import GENERATOR_VERSION, SPEC_PIN
 from .defs import (accessors, animation, component_types, materials, scenes, skinning, topology,
                    transforms)
-from .manifest import Fixture, dumps
+from .manifest import OPEN_DEFECT_STATUSES, Fixture, dumps
 
 #: Owning groups in a fixed order, so the emitted manifest is deterministic. The order follows
 #: the oracle ladder -- container and accessor concerns first, then semantics, then composition.
@@ -99,6 +99,19 @@ def corpus_manifest(fixtures: list[Fixture], files: dict[str, bytes]) -> dict[st
                     f"({fixture.id} says {defect.status!r}/{defect.closed_tasks}, an earlier "
                     f"fixture said {record['status']!r}/{record['closedTasks']})")
             record["fixtures"].append(fixture.id)
+            if defect.divergent_by_layer():
+                record["_divergentSomewhere"] = True
+
+    for record in defects.values():
+        divergent = record.pop("_divergentSomewhere", False)
+        # A partially-remediated defect that no longer bites ANY of its fixtures is fixed, and
+        # leaving it open would suppress nothing while still demanding a known-defect test.
+        # Per-fixture the rule is looser (see Defect.record): a defect spanning several fixtures
+        # may be resolved on some and not others, which is exactly what "partial" means.
+        if record["status"] in OPEN_DEFECT_STATUSES and not divergent:
+            raise ValueError(
+                f"{record['id']}: status is {record['status']!r} but no fixture declares a "
+                "divergent field any more -- mark it 'fixed' and delete its known-defect test")
 
     return {
         "generator": {

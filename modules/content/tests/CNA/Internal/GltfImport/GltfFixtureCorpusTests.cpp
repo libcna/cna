@@ -478,10 +478,24 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
             ASSERT_TRUE(actual->extracted) << "ExtractMesh threw: " << actual->error;
             const MeshOutDump& dump = actual->dump;
 
-            // The topology the file declares reaches L3 and is not assumed (GLTF-071).
+            // The topology the file declares reaches L3 and is not assumed (GLTF-071). This is the
+            // SOURCE mode, and it survives any import-time conversion -- which is exactly what
+            // makes the conversion below checkable rather than merely asserted against itself.
             EXPECT_TRUE(dump.topologyCarried);
             EXPECT_EQ(static_cast<int>(NumberOr(expected, "mode", -1)), dump.topologyMode);
             EXPECT_EQ(StringOr(expected, "modeName", ""), dump.topologyName);
+
+            // GLTF-072: what CNA's own documented per-mode policy (plan_gltf.md §10.1) must turn
+            // the primitive into. Kept separate from the spec-derived fields above because it is a
+            // CNA decision -- converting strips and fans at import rather than plumbing new
+            // topologies through every renderer.
+            const JsonValue& policy = Member(expected, "importPolicy");
+            ASSERT_EQ(JsonType::Object, policy.type)
+                << "the manifest has no importPolicy block -- a generator change dropped it";
+            EXPECT_EQ(static_cast<int>(NumberOr(policy, "topologyMode", -1)),
+                      dump.importedTopologyMode)
+                << "the emitted index list is not in the topology the import policy requires";
+            EXPECT_EQ(StringOr(policy, "topologyName", ""), dump.importedTopologyName);
 
             EXPECT_EQ(static_cast<std::size_t>(NumberOr(expected, "vertexCount", -1)),
                       dump.vertexCount);
@@ -539,12 +553,38 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
 
             if (!IsKnownDefectField(fixture.Expected(), "L3", "indices"))
             {
-                const std::vector<double> expectedIndices = Numbers(Member(expected, "indices"));
+                // The index list CNA emits is the import policy's, not the file's: for a strip or
+                // fan the two differ, and comparing against the authored run would assert that no
+                // conversion happened. For a TRIANGLES primitive the generator writes the same
+                // list into both, so nothing about the existing fixtures is weakened.
+                const std::vector<double> expectedIndices = Numbers(Member(policy, "indices"));
                 ASSERT_EQ(expectedIndices.size(), dump.indices.size()) << "indices: count differs";
                 for (std::size_t i = 0; i < expectedIndices.size(); ++i)
                 {
                     EXPECT_EQ(static_cast<std::uint32_t>(expectedIndices[i]), dump.indices[i])
                         << "indices[" << i << "]";
+                }
+
+                // The converted list must describe exactly the triangles §3.7.2.1 derives from the
+                // authored one. Asserted from `triangles` rather than from `importPolicy.indices`,
+                // so a generator bug that got the conversion rule wrong in BOTH places still fails.
+                const JsonValue& triangles = Member(expected, "triangles");
+                if (triangles.type == JsonType::Array && !triangles.arrayValue.empty())
+                {
+                    ASSERT_EQ(triangles.arrayValue.size() * 3, dump.indices.size())
+                        << "the emitted index list does not describe the expected triangle count";
+                    for (std::size_t t = 0; t < triangles.arrayValue.size(); ++t)
+                    {
+                        const std::vector<double> corners = Numbers(triangles.arrayValue[t]);
+                        ASSERT_EQ(3u, corners.size()) << "triangles[" << t << "]";
+                        for (std::size_t c = 0; c < 3; ++c)
+                        {
+                            EXPECT_EQ(static_cast<std::uint32_t>(corners[c]),
+                                      dump.indices[t * 3 + c])
+                                << "triangles[" << t << "][" << c << "] -- winding is preserved "
+                                   "only if a strip's odd triangle swaps its first two corners";
+                        }
+                    }
                 }
             }
         }

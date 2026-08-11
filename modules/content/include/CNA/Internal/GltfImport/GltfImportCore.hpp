@@ -145,14 +145,23 @@ namespace CNA::Internal::GltfImport
         /** @brief The mesh part's name (from the glTF mesh, or a generated placeholder). */
         std::string name;
         /**
-         * @brief The source primitive's declared topology (`mesh.primitive.mode`).
+         * @brief The topology `indexBytes` is actually in, after any import-time conversion.
          *
-         * Always `Triangles` on a `MeshOut` that `ExtractMesh` actually returned, because every
-         * other topology is currently rejected (see `IsPrimitiveTopologySupported`). It is carried
-         * anyway so the index list can never again be interpreted as a triangle list by default:
-         * the topology travels with the data it describes.
+         * Always `Triangles` on a `MeshOut` that `ExtractMesh` returned, and that is a guarantee
+         * rather than a coincidence: a triangle strip or fan is converted to a triangle list here
+         * (plan_gltf.md §10.1, `GLTF-072`) and every remaining topology is rejected. Compare with
+         * @ref sourceTopology to see whether a conversion happened.
          */
         PrimitiveTopology topology = PrimitiveTopology::Triangles;
+        /**
+         * @brief The topology the source primitive declared (`mesh.primitive.mode`), unconverted.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Kept distinct from @ref topology so a
+         * conversion is visible rather than lossy: `sourceTopology != topology` means the index
+         * list was rewritten at import, which is what `GLTF-082` reports and what a consumer
+         * needs in order to map a drawn triangle back to the primitive the file authored.
+         */
+        PrimitiveTopology sourceTopology = PrimitiveTopology::Triangles;
         /** @brief Tightly-packed vertex bytes, `vertexBytes.size() / stride` vertices. */
         std::vector<std::uint8_t> vertexBytes;
         /** @brief Byte stride of one vertex (16/20/24/32/48/52/56/68 — see CLAUDE.md's stride table). */
@@ -504,11 +513,19 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief Whether CNA's import path can currently carry a topology through to a draw.
      *
-     * Only `Triangles` is supported today. The other six are read, classified and **rejected with
-     * a named error** rather than reinterpreted as a triangle list, which is what CNA did before:
-     * a strip's later triangles were lost and a point cloud became one arbitrary triangle, with no
-     * diagnostic at all. Converting strips and fans to triangle lists, and carrying the line and
-     * point topologies, is separate work (plan_gltf.md §10.1, `GLTF-072`).
+     * The three triangle-producing topologies are supported: `Triangles` passes through, and
+     * `TriangleStrip` / `TriangleFan` are **converted to a triangle list at import**
+     * (`ConvertToTriangleList`). That conversion is deliberately chosen over plumbing new
+     * topologies through every renderer — it is provable at L3 and L5, needs no renderer change,
+     * and cannot regress an existing renderer (plan_gltf.md §10.1).
+     *
+     * The line and point topologies are read, classified and **rejected with a named error**
+     * rather than reinterpreted. They decode perfectly well; what they lack is a draw path, since
+     * every loader still computes a triangle-list primitive count. Giving them one is `GLTF-073`
+     * (a real `PrimitiveType` on `ModelMeshPart`) plus `GLTF-078` (a topology-aware primitive
+     * count), and for points also `GLTF-077` (whether a point list is CNAEXT-supported or an
+     * explicit per-renderer rejection). Importing them before that would move the original defect
+     * from the import layer to the draw layer rather than fixing it.
      *
      * @note CNAEXT — not part of the XNA 4.0 API.
      *
@@ -516,6 +533,32 @@ namespace CNA::Internal::GltfImport
      * @return True when `ExtractMesh` will import a primitive of that topology.
      */
     bool IsPrimitiveTopologySupported(PrimitiveTopology topology);
+
+    /**
+     * @brief Rewrites a strip's or fan's index list as an equivalent triangle list (§3.7.2.1).
+     *
+     * A `Triangles` list is returned unchanged, so this is safe to apply unconditionally to any
+     * supported topology. Winding is preserved exactly as the specification defines it: a strip's
+     * odd triangles emit `(i+1, i, i+2)` rather than `(i, i+1, i+2)`, so every resulting triangle
+     * faces the same way and back-face culling behaves as the author intended. A fan emits
+     * `(0, i, i+1)` around its first vertex.
+     *
+     * An index run too short to describe a single triangle yields an empty list rather than a
+     * partial one. A list already in `Triangles` is returned verbatim, trailing partial triple
+     * included — what a malformed index count becomes is `GLTF-079`'s decision, not this
+     * function's.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param indices The source index list, already resolved (a non-indexed primitive's implicit
+     * `[0, count)` counts as resolved).
+     * @param topology The topology `indices` is in.
+     * @return The equivalent triangle-list indices, three per triangle.
+     * @throws std::runtime_error if `topology` describes no triangles at all (a point or line
+     * topology), which has no triangle-list equivalent and must never be given one.
+     */
+    std::vector<std::uint32_t> ConvertToTriangleList(const std::vector<std::uint32_t>& indices,
+                                                     PrimitiveTopology topology);
 
     /**
      * @brief Extracts one glTF mesh primitive's vertex/index bytes, selecting the vertex stride
