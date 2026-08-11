@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plan_ascii.md Phase G2 (ASCII-10/11): smoke test for the ASCII renderer's hand-authored
-// glyph-density font atlas.
+// Migrated from the former ASCII graphics renderer (plan_ascii.md Phase G2, ASCII-10/11): smoke
+// test for AsciiPostProcessEffect's hand-authored glyph-density font atlas.
 //
 // Check A -- every glyph's pixel-count (popcount of its 8x8 bitmap) is strictly increasing along
 //   kAsciiGlyphRamp -- Phase G4's quantizer picks a glyph by luminance rank, so a non-monotonic
@@ -17,14 +17,14 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 
-#include "CNA/Internal/Renderers/Ascii/AsciiFontAtlas.hpp"
+#include "CNA/Internal/Graphics/Ascii/AsciiFontAtlas.hpp"
 
 #include <cstdio>
 #include <memory>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Renderers::Ascii;
+using namespace CNA::Internal::Graphics::Ascii;
 
 namespace
 {
