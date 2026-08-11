@@ -1,22 +1,17 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
+#ifdef CNA_CNAEXT
+
+#include "CNA/Graphics/AsciiQuantizeMode.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
-namespace CNA::Internal::Renderers::Ascii
+namespace CNA::Internal::Graphics::Ascii
 {
-    /// Selects which quantization mode Present() uses (plan_ascii.md design decision 5).
-    enum class AsciiQuantizeMode
-    {
-        /// Monochrome: glyph chosen by luminance rank only, fixed white foreground, no
-        /// background fill -- the lesser-looking, simpler tier (plan_ascii.md §0.3).
-        BlackWhite,
-        /// Glyph chosen by luminance rank, PLUS the cell's own averaged color used as both the
-        /// foreground tint and (at quarter brightness) an optional background fill.
-        Color
-    };
+    using CNA::Graphics::AsciiQuantizeMode;
 
     /// One quantized grid cell: which glyph to draw (index into kAsciiGlyphRamp, see
     /// AsciiFontAtlas.hpp) and what colors to draw it with.
@@ -71,3 +66,5 @@ namespace CNA::Internal::Renderers::Ascii
      */
     [[nodiscard]] AsciiQuantizeMode ParseAsciiModeFromEnvironment();
 }
+
+#endif // CNA_CNAEXT

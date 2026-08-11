@@ -198,7 +198,7 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 // reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
-#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || \
+#if defined(CNA_RENDERER_SDL_RENDERER) || \
     defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
     defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI)
 constexpr bool kCubeStorageSupported = false;

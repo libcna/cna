@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plan_ascii.md Phase G4 (ASCII-30..33): quantizer smoke test -- pure function, no
-// GraphicsDevice/window needed at all.
+// Migrated from the former ASCII graphics renderer (plan_ascii.md Phase G4, ASCII-30..33) to
+// AsciiPostProcessEffect's own internal quantizer -- pure function, no GraphicsDevice/window
+// needed at all.
 //
 // Check A -- BlackWhite mode: a solid-black 8x8 block picks glyph index 0 (space, darkest);
 //   a solid-white 8x8 block picks the last ramp index ('@', densest). Both use a fixed white
@@ -16,15 +17,15 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
-#include "CNA/Internal/Renderers/Ascii/AsciiQuantizer.hpp"
-#include "CNA/Internal/Renderers/Ascii/AsciiFontAtlas.hpp"
+#include "CNA/Internal/Graphics/Ascii/AsciiQuantizer.hpp"
+#include "CNA/Internal/Graphics/Ascii/AsciiFontAtlas.hpp"
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
 
-using namespace CNA::Internal::Renderers::Ascii;
+using namespace CNA::Internal::Graphics::Ascii;
 
 namespace
 {

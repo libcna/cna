@@ -1,12 +1,16 @@
-#include "CNA/Internal/Renderers/Ascii/AsciiQuantizer.hpp"
-#include "CNA/Internal/Renderers/Ascii/AsciiFontAtlas.hpp"
+// SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/Graphics/Ascii/AsciiQuantizer.hpp"
+
+#ifdef CNA_CNAEXT
+
+#include "CNA/Internal/Graphics/Ascii/AsciiFontAtlas.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <string>
 
-namespace CNA::Internal::Renderers::Ascii
+namespace CNA::Internal::Graphics::Ascii
 {
     using Microsoft::Xna::Framework::Color;
 
@@ -96,3 +100,5 @@ namespace CNA::Internal::Renderers::Ascii
         return grid;
     }
 }
+
+#endif // CNA_CNAEXT

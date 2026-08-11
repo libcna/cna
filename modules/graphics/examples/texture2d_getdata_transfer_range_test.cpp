@@ -121,8 +121,8 @@ namespace
     /**
      * @brief The exact policy used when an application requests a 2D mip chain.
      *
-     * Declared, not probed, for the same reason as RtContract: three renderers document that their
-     * 2D texture API has no mip chain (SDL_Renderer, the ASCII renderer that wraps it, and DIRECTX3's
+     * Declared, not probed, for the same reason as RtContract: two renderers document that their
+     * 2D texture API has no mip chain (SDL_Renderer and DIRECTX3's
      * IDirectDrawSurface), and Canvas the same. Most still create a mipmapped resource and reject
      * `SetData(level=1, ...)`. SKIA-127 now implements that upload/readback path after SKIA-126
      * opened construction. These honest policies must not be conflated by a test that terminates
@@ -168,10 +168,6 @@ namespace
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "SDL_RENDERER";
-    constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
-#elif defined(CNA_RENDERER_ASCII)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "ASCII";
     constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr RtContract kRtContract = RtContract::Exact;

@@ -114,8 +114,12 @@ Kept for their investigation methodology and root-cause detail, not as current s
   the doc's own caveat.
 - `html-dom-renderer.md` — the HTML_DOM (DOM/CSS) renderer's own capability status; its ✅ marks are
   backed by a real headless-browser run, not only a structural review.
-- **[`ascii-renderer.md`](ascii-renderer.md)** — current status for the `ASCII` (SDL-windowed retro
-  glyph-grid) renderer; see `../plan_ascii.md` for full task-by-task detail.
+- **[`ascii-post-process-effect.md`](ascii-post-process-effect.md)** — `CNA::Graphics::AsciiPostProcessEffect`,
+  the renderer-neutral ASCII/glyph-grid post-process effect (`modules/graphics-ext/`) that replaced
+  the former `ASCII` graphics-renderer identity.
+- `ascii-renderer.md` — **historical**: completeness status for the former `ASCII` (SDL-windowed
+  retro glyph-grid) graphics renderer, removed 2026-08 in favor of the post-process effect above;
+  see `../plan_ascii.md` for the full historical task-by-task detail.
 - `freedirect-renderer.md` — FreeDirect (formerly `DIRECTX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,
   current as of `plan_freedirect.md`'s Phase X1-X7 closure (2026-07-15).
 - `glide-renderer.md` — Glide 3.x's native-API SpriteBatch and constrained color-vertex 3D path;

@@ -61,9 +61,6 @@ namespace CNA
         /** @brief Skia 2D raster renderer. */
         Skia,
 
-        /** @brief ASCII (SDL-windowed glyph grid). */
-        Ascii,
-
         /** @brief FreeDirect (DirectDraw via the ../free-direct sibling reimplementation; formerly DIRECTX3). */
         FreeDirect,
 
@@ -185,8 +182,6 @@ namespace CNA
         return GraphicsRendererType::HtmlDom;
 #elif defined(CNA_RENDERER_SKIA)
         return GraphicsRendererType::Skia;
-#elif defined(CNA_RENDERER_ASCII)
-        return GraphicsRendererType::Ascii;
 #elif defined(CNA_RENDERER_FREEDIRECT)
         return GraphicsRendererType::FreeDirect;
 #elif defined(CNA_RENDERER_DIRECTX9)
@@ -268,7 +263,6 @@ namespace CNA
             case GraphicsRendererType::Canvas:       return "CANVAS";
             case GraphicsRendererType::HtmlDom:      return "HTML_DOM";
             case GraphicsRendererType::Skia:         return "SKIA";
-            case GraphicsRendererType::Ascii:        return "ASCII";
             case GraphicsRendererType::FreeDirect:           return "FREEDIRECT";
             case GraphicsRendererType::DirectX9:          return "DIRECTX9";
             case GraphicsRendererType::DirectX1:            return "DIRECTX1";

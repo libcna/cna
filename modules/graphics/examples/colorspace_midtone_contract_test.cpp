@@ -192,12 +192,6 @@ namespace
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kRendererName = "SDL_RENDERER";
-#elif defined(CNA_RENDERER_ASCII)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr bool kCubeSupported = false;
-    constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
-    constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kRendererName = "ASCII";
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;

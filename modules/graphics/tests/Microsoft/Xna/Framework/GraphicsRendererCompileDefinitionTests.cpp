@@ -53,9 +53,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_SKIA
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_ASCII
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_DIRECTX11
     ++enabled;
 #endif

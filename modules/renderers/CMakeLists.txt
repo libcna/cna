@@ -2,7 +2,7 @@
 # Renderer module composition. Every implementation family owns
 # modules/renderers/<family>/{CMakeLists.txt,src/,include/,tests/}; exactly one family
 # builds the selected ${RENDERER_TARGET} per configuration (RendererSelection.cmake resolves
-# the public identity to RENDERER_DIR = modules/renderers/<family>). The 41 public renderer
+# the public identity to RENDERER_DIR = modules/renderers/<family>). The 40 public renderer
 # identities live in RendererSelection.cmake + GraphicsRendererType.hpp and are pinned by
 # scripts/check_renderer_identities.py; families and helper targets here are
 # implementation structure, not identities.
@@ -67,13 +67,6 @@ add_subdirectory(glide)
 # plan_d3d10.md link audit).
 if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     add_subdirectory(common/d3d)
-endif()
-
-# plan_ascii.md design decision 2: ASCII is a thin decorator around SDL_RENDERER's own
-# SdlRenderer (composition, not reimplementation) -- the sdl-renderer module builds
-# its sources as a shared core library for the ASCII configuration.
-if(CNA_GRAPHICS_RENDERER STREQUAL "ASCII")
-    add_subdirectory(sdl-renderer)
 endif()
 
 # GDI presents the Software renderer's CPU framebuffer through classic Win32 GDI: the

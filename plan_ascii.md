@@ -1,5 +1,12 @@
 # ASCII Graphics Backend (SDL-windowed, not a real terminal) — Implementation Plan
 
+> **Superseded, 2026-08.** The `ASCII` public graphics-renderer identity this plan built was
+> removed from `CNA_GRAPHICS_RENDERER`/`GraphicsRendererType`. Its reusable quantizer/font-atlas
+> logic and visual behavior were migrated to a renderer-neutral post-process effect,
+> `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) — see
+> `docs/ascii-post-process-effect.md`. This plan is preserved unchanged below as the historical
+> record of the former renderer's own implementation phases.
+
 > **Status: ✅ COMPLETE 2026-07-15 — all 8 phases (`ASCII-1`–`ASCII-82`) closed** on `feature/ascii`
 > (worktree `../cnaascii`, branched from `develop`, pushed to `origin/feature/ascii`). Full
 > `CnaTests` regression: 4364 pass / 2 skip / 11 pre-existing failures (zero regressions across

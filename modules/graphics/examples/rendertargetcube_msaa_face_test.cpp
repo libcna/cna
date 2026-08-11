@@ -114,7 +114,7 @@ namespace
          * A `multiSampleCount = 4` RenderTargetCube really reports an applied count > 0 here.
          * False is a declared capability boundary, not a defect: WebGPU ignores the parameter
          * (WEBGPU-114's own scope), D3D9's cube target allocates no multisampling at all, and
-         * Software/SDL_Renderer/ASCII/Canvas/DIRECTX3 have no cube target to multisample.
+         * Software/SDL_Renderer/Canvas/DIRECTX3 have no cube target to multisample.
          */
         bool    msaaEngages;
         /**
@@ -172,9 +172,6 @@ namespace
                                  Support::Exact, false, false};
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, false,
-                                 Support::Unsupported, false, false};
-#elif defined(CNA_RENDERER_ASCII)
-    constexpr Contract kContract{"ASCII", false, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, false,

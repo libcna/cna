@@ -154,7 +154,7 @@ set(_cna_framework_modules
     core math runtime graphics input audio media content storage
     devices devices-ext graphics-ext gamer-services net)
 set(_cna_renderer_modules
-    ascii bgfx canvas diligent direct2d directx1 directx2 directx3 directx5 directx6
+    bgfx canvas diligent direct2d directx1 directx2 directx3 directx5 directx6
     directx7 directx8 directx9 directx10 directx11 directx12
     easygl freedirect gdi glide headless html-dom llgl magnum metal opengl1
     opengl2 opengl4 opengles1 sdl-gpu sdl-renderer skia software sokol stub vulkan

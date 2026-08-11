@@ -64,6 +64,44 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGL
     endif()
 endif()
 
+# ---- AsciiPostProcessEffect oracles -----------------------------------------------------------
+# Migrated from the former ASCII graphics renderer (plan_ascii.md); unlike the CRTEffect/DepthEffect
+# demos above, AsciiPostProcessEffect's portable CPU quantizer needs no GLSL shader compilation, so
+# these run under every renderer (any CNA_GRAPHICS_RENDERER), not just OPENGLES3/OPENGL33 -- the
+# whole point of this migration is that the effect is no longer tied to one specific renderer.
+if(CNA_BUILD_TESTS AND CNA_CNAEXT)
+    macro(cna_graphics_ext_test target src)
+        add_executable(${target} ${src})
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    # Pure function, no GraphicsDevice/window needed at all.
+    cna_graphics_ext_test(cna_test_ascii_quantizer ascii_quantizer_test.cpp)
+    cna_register_renderer_test(NAME Ascii_Quantizer COMMAND cna_test_ascii_quantizer
+        TIMEOUT 30)
+
+    if(NOT EMSCRIPTEN AND NOT WIN32)
+        cna_graphics_ext_test(cna_test_ascii_fontatlas ascii_fontatlas_test.cpp)
+        cna_register_renderer_test(NAME Ascii_FontAtlas COMMAND cna_test_ascii_fontatlas
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_graphics_ext_test(cna_test_ascii_posteffect_pixel ascii_posteffect_pixel_test.cpp)
+        cna_register_renderer_test(NAME AsciiPostProcessEffect_Pixel COMMAND cna_test_ascii_posteffect_pixel
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Proves the effect accepts a source produced by a genuine 3D draw call (BasicEffect +
+        # VertexBuffer + depth-tested DrawPrimitives), not just a 2D SpriteBatch-composited scene.
+        # Self-SKIPs (exit 77) via GraphicsCapability::ThreeD on renderers with no real 3D pipeline
+        # (SDL_RENDERER, HEADLESS, ...) -- registered unconditionally here, same as the other two.
+        cna_graphics_ext_test(cna_test_ascii_posteffect_3d_source ascii_posteffect_3d_source_test.cpp)
+        cna_register_renderer_test(NAME AsciiPostProcessEffect_3DSource COMMAND cna_test_ascii_posteffect_3d_source
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    endif()
+endif()
+
 # Module-local tests get the same headless-safe skip convention the root one-shot
 # gives root-registered tests (see cmake/TestHelpers.cmake).
 cna_apply_skip_convention()

@@ -236,9 +236,6 @@ namespace
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, false, false, true, false, false};
-#elif defined(CNA_RENDERER_ASCII)
-    constexpr Contract kContract{"ASCII", Support::Exact, true, Support::Exact,
-                                 false, true, true, true, true, false, false, true, false, false};
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, true, true, true, true, false};

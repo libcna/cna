@@ -115,9 +115,6 @@ namespace
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "SDL_RENDERER";
-#elif defined(CNA_RENDERER_ASCII)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "ASCII";
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "FREEDIRECT";
