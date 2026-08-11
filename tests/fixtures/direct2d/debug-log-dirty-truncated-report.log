@@ -1,0 +1,5 @@
+1: Test command: C:/cna/build/cna_test_direct2d_lifetime.exe
+1: [Direct2D diagnostics] created driver=hardware feature-level=0xB100 adapter-vendor=0x8086 adapter-device=0x9A49 debug-layer=enabled.
+1: [Direct2D diagnostics] ReportLiveDeviceObjects hr=0x0.
+1: [Direct2D diagnostics] debug-layer stored messages=2.
+1: [Direct2D D3D11 debug] severity=WARNING category=2 id=441 Live ID3D11Device at 0x0000021B4C0D1090, Refcount: 4

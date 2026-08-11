@@ -1,0 +1,8 @@
+1: Test command: C:/cna/build/cna_test_direct2d_2d_parity.exe
+1: [Direct2D diagnostics] created driver=hardware feature-level=0xB100 adapter-vendor=0x1002 adapter-device=0x73FF debug-layer=enabled.
+1: [Direct2D D3D11 debug] severity=ERROR category=3 id=356 ID3D11DeviceContext::CopySubresourceRegion: Source and destination resources have incompatible formats.
+1: [Direct2D diagnostics] ReportLiveDeviceObjects hr=0x0.
+1: [Direct2D diagnostics] debug-layer stored messages=2.
+1: [Direct2D D3D11 debug] severity=WARNING category=2 id=441 Live ID3D11Device at 0x0000019D6E20A0B0, Refcount: 4
+1: [Direct2D diagnostics] live-object report end.
+1/1 Test #1: Direct2D_2DParity ................   Passed    3.02 sec

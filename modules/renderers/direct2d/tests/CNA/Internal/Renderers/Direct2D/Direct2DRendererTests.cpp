@@ -13,12 +13,15 @@
 
 using CNA::Internal::Renderers::Direct2D::BlendStateToDirect2DBlendMode;
 using CNA::Internal::Renderers::Direct2D::CheckedRgbaByteCount;
+using CNA::Internal::Renderers::Direct2D::CompositePorterDuffReference;
 using CNA::Internal::Renderers::Direct2D::CopyBgraToTightRgba;
 using CNA::Internal::Renderers::Direct2D::CopyRgbaToTightBgra;
 using CNA::Internal::Renderers::Direct2D::Direct2DBlendMode;
 using CNA::Internal::Renderers::Direct2D::FractionalMipLevelForTransform;
 using CNA::Internal::Renderers::Direct2D::IsDeviceLossHResult;
 using CNA::Internal::Renderers::Direct2D::MapSourceRectangleToMip;
+using CNA::Internal::Renderers::Direct2D::SpriteBitmapCacheKey;
+using CNA::Internal::Renderers::Direct2D::SpriteBrushCacheKey;
 using CNA::Internal::Renderers::Direct2D::PreferredMipLevelForTransform;
 using CNA::Internal::Renderers::Direct2D::SupportsDirect2DCapability;
 using CNA::GraphicsCapability;
@@ -285,5 +288,285 @@ TEST(Direct2DFractionalMipLod, MagnifyingTransformClampsToZeroNotNegative)
                                                        1.0f, 1.0f, &minifying);
     EXPECT_FALSE(minifying);
     EXPECT_NEAR(lod, 0.0, 1e-9);
+}
+
+// D2D-40: an algebraic Porter-Duff oracle for the exact composite modes D2D-33 maps. The expected
+// values below were derived by hand from the operator definitions
+// (out = Fs * source + Fd * destination over premultiplied colors) for one nontrivial,
+// channel-asymmetric, partially transparent pair, so this test pins the arithmetic itself rather
+// than restating the implementation.
+namespace
+{
+    constexpr std::array<std::uint8_t, 4> kReferenceSource{{100, 50, 25, 200}};
+    constexpr std::array<std::uint8_t, 4> kReferenceDestination{{40, 80, 120, 150}};
+}
+
+TEST(Direct2DPorterDuffReference, EveryExactCompositeModeMatchesTheHandDerivedAlgebra)
+{
+    struct ModeExpectation
+    {
+        Direct2DBlendMode mode;
+        std::array<std::uint8_t, 4> expected;
+    };
+    // Fs/Fd per operator, with alphaS = 200/255 and alphaD = 150/255:
+    //   Copy            1,            0
+    //   SourceOver      1,            1-alphaS
+    //   DestinationOver 1-alphaD,     1
+    //   SourceIn        alphaD,       0
+    //   DestinationIn   0,            alphaS
+    //   SourceOut       1-alphaD,     0
+    //   DestinationOut  0,            1-alphaS
+    //   SourceAtop      alphaD,       1-alphaS
+    //   DestinationAtop 1-alphaD,     alphaS
+    //   Xor             1-alphaD,     1-alphaS
+    const std::array<ModeExpectation, 10> expectations{{
+        {Direct2DBlendMode::Copy, {{100, 50, 25, 200}}},
+        {Direct2DBlendMode::SourceOver, {{109, 67, 51, 232}}},
+        {Direct2DBlendMode::DestinationOver, {{81, 101, 130, 232}}},
+        {Direct2DBlendMode::SourceIn, {{59, 29, 15, 118}}},
+        {Direct2DBlendMode::DestinationIn, {{31, 63, 94, 118}}},
+        {Direct2DBlendMode::SourceOut, {{41, 21, 10, 82}}},
+        {Direct2DBlendMode::DestinationOut, {{9, 17, 26, 32}}},
+        {Direct2DBlendMode::SourceAtop, {{67, 47, 41, 150}}},
+        {Direct2DBlendMode::DestinationAtop, {{73, 83, 104, 200}}},
+        {Direct2DBlendMode::Xor, {{50, 38, 36, 115}}},
+    }};
+
+    for (const auto& expectation : expectations)
+    {
+        const std::array<std::uint8_t, 4> actual = CompositePorterDuffReference(
+            expectation.mode, kReferenceSource, kReferenceDestination);
+        EXPECT_EQ(actual, expectation.expected)
+            << "composite mode ordinal " << static_cast<int>(expectation.mode);
+    }
+}
+
+TEST(Direct2DPorterDuffReference, PreservesTheAlphaInvariantsOfEachOperator)
+{
+    const auto composite = [](Direct2DBlendMode mode) {
+        return CompositePorterDuffReference(mode, kReferenceSource, kReferenceDestination);
+    };
+    // "Atop" keeps the alpha of whichever operand it is atop; "in" produces the product of both.
+    EXPECT_EQ(composite(Direct2DBlendMode::SourceAtop)[3], kReferenceDestination[3]);
+    EXPECT_EQ(composite(Direct2DBlendMode::DestinationAtop)[3], kReferenceSource[3]);
+    EXPECT_EQ(composite(Direct2DBlendMode::SourceIn)[3], composite(Direct2DBlendMode::DestinationIn)[3]);
+    // Copy discards the destination entirely, source-over never reduces the destination's alpha.
+    EXPECT_EQ(composite(Direct2DBlendMode::Copy), kReferenceSource);
+    EXPECT_GE(composite(Direct2DBlendMode::SourceOver)[3], kReferenceDestination[3]);
+}
+
+TEST(Direct2DPorterDuffReference, DegenerateOperandsCollapseToTheDefiningIdentities)
+{
+    constexpr std::array<std::uint8_t, 4> transparent{{0, 0, 0, 0}};
+    constexpr std::array<std::uint8_t, 4> opaque{{30, 60, 90, 255}};
+
+    // Compositing onto a fully transparent destination leaves the source unchanged for the
+    // operators whose destination factor vanishes there, and erases it for the "in"/"atop" family.
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceOver, kReferenceSource, transparent),
+              kReferenceSource);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceOut, kReferenceSource, transparent),
+              kReferenceSource);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceIn, kReferenceSource, transparent),
+              transparent);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceAtop, kReferenceSource, transparent),
+              transparent);
+    // A fully transparent source cannot change the destination under source-over, and completely
+    // replaces it under Copy.
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceOver, transparent, opaque), opaque);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::Copy, transparent, opaque), transparent);
+    // An opaque source hides the destination under every "over"-like operator.
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::SourceOver, opaque, kReferenceDestination),
+              opaque);
+    EXPECT_EQ(CompositePorterDuffReference(Direct2DBlendMode::DestinationOut, opaque, kReferenceDestination),
+              transparent);
+}
+
+// D2D-109: the sprite-bitmap cache is only safe if its key separates every input that can change
+// the materialized pixels. A field silently missing from the key would serve stale pixels for a
+// genuinely different draw, so each one is mutated individually here.
+TEST(Direct2DSpriteBitmapCacheKey, EveryPixelAffectingFieldSeparatesTwoKeys)
+{
+    const SpriteBitmapCacheKey baseline{};
+    EXPECT_EQ(baseline, SpriteBitmapCacheKey{});
+
+    int distinctFields = 0;
+    const auto expectDifferent = [&](const SpriteBitmapCacheKey& mutated, const char* field) {
+        ++distinctFields;
+        EXPECT_FALSE(mutated == baseline) << "cache key ignores " << field;
+        EXPECT_TRUE(mutated == mutated) << "cache key is not reflexive after changing " << field;
+    };
+
+    int sentinel = 0;
+    SpriteBitmapCacheKey key = baseline;
+    key.source = &sentinel;
+    expectDifferent(key, "source");
+
+    key = baseline;
+    key.contentVersion = 1;
+    expectDifferent(key, "contentVersion");
+
+    key = baseline;
+    key.deviceGeneration = 1;
+    expectDifferent(key, "deviceGeneration");
+
+    key = baseline;
+    key.mipLevel = 1;
+    expectDifferent(key, "mipLevel");
+
+    key = baseline;
+    key.upperMipLevel = 0;
+    expectDifferent(key, "upperMipLevel");
+
+    key = baseline;
+    key.mipBlendFraction = 0.5f;
+    expectDifferent(key, "mipBlendFraction");
+
+    key = baseline;
+    key.sourceX = 1;
+    expectDifferent(key, "sourceX");
+
+    key = baseline;
+    key.sourceY = 1;
+    expectDifferent(key, "sourceY");
+
+    key = baseline;
+    key.sourceWidth = 1;
+    expectDifferent(key, "sourceWidth");
+
+    key = baseline;
+    key.sourceHeight = 1;
+    expectDifferent(key, "sourceHeight");
+
+    key = baseline;
+    key.color = 0xFF00FF00u;
+    expectDifferent(key, "color");
+
+    key = baseline;
+    key.spriteEffects = 1;
+    expectDifferent(key, "spriteEffects");
+
+    key = baseline;
+    key.addressU = 1;
+    expectDifferent(key, "addressU");
+
+    key = baseline;
+    key.addressV = 1;
+    expectDifferent(key, "addressV");
+
+    key = baseline;
+    key.nonPremultipliedSource = true;
+    expectDifferent(key, "nonPremultipliedSource");
+
+    // Pins the count itself: a field added to the struct without a case above would leave this at
+    // the old number and fail here rather than silently going untested.
+    EXPECT_EQ(distinctFields, 15);
+}
+
+TEST(Direct2DSpriteBitmapCacheKey, IdenticalDrawsShareOneEntry)
+{
+    int texture = 0;
+    SpriteBitmapCacheKey first{};
+    first.source = &texture;
+    first.contentVersion = 7;
+    first.deviceGeneration = 3;
+    first.mipLevel = 2;
+    first.upperMipLevel = -1;
+    first.sourceX = 4;
+    first.sourceY = 5;
+    first.sourceWidth = 6;
+    first.sourceHeight = 7;
+    first.color = 0x80FF20C0u;
+    first.spriteEffects = 2;
+    first.addressU = 2;
+    first.addressV = 0;
+    first.nonPremultipliedSource = true;
+
+    const SpriteBitmapCacheKey second = first;
+    EXPECT_TRUE(first == second);
+
+    // Only the destination position differs between repeated sprites drawn from the same atlas
+    // cell; that is not part of the materialized pixels and deliberately not part of the key.
+    SpriteBitmapCacheKey nextContent = first;
+    nextContent.contentVersion = 8;
+    EXPECT_FALSE(nextContent == first);
+}
+
+// D2D-107: the decorated-brush cache reuses Direct2D objects WITHOUT writing any property, which
+// is only sound while every value baked into those objects is part of the key.
+TEST(Direct2DSpriteBrushCacheKey, EveryBakedInPropertySeparatesTwoKeys)
+{
+    const SpriteBrushCacheKey baseline{};
+    int distinctFields = 0;
+    const auto expectDifferent = [&](const SpriteBrushCacheKey& mutated, const char* field) {
+        ++distinctFields;
+        EXPECT_FALSE(mutated == baseline) << "brush cache key ignores " << field;
+    };
+
+    int sentinel = 0;
+    SpriteBrushCacheKey key = baseline;
+    key.image = &sentinel;
+    expectDifferent(key, "image");
+
+    key = baseline;
+    key.deviceGeneration = 1;
+    expectDifferent(key, "deviceGeneration");
+
+    key = baseline;
+    key.color = 0x11223344u;
+    expectDifferent(key, "color");
+
+    key = baseline;
+    key.tinted = true;
+    expectDifferent(key, "tinted");
+
+    key = baseline;
+    key.straightAlphaTint = true;
+    expectDifferent(key, "straightAlphaTint");
+
+    key = baseline;
+    key.premultiplyStage = true;
+    expectDifferent(key, "premultiplyStage");
+
+    key = baseline;
+    key.sourceX = 1;
+    expectDifferent(key, "sourceX");
+
+    key = baseline;
+    key.sourceY = 1;
+    expectDifferent(key, "sourceY");
+
+    key = baseline;
+    key.sourceWidth = 1;
+    expectDifferent(key, "sourceWidth");
+
+    key = baseline;
+    key.sourceHeight = 1;
+    expectDifferent(key, "sourceHeight");
+
+    key = baseline;
+    key.extendU = 1;
+    expectDifferent(key, "extendU");
+
+    key = baseline;
+    key.extendV = 1;
+    expectDifferent(key, "extendV");
+
+    key = baseline;
+    key.interpolationMode = 1;
+    expectDifferent(key, "interpolationMode");
+
+    key = baseline;
+    key.spriteEffects = 1;
+    expectDifferent(key, "spriteEffects");
+
+    key = baseline;
+    key.originX = 0.5f;
+    expectDifferent(key, "originX");
+
+    key = baseline;
+    key.originY = 0.5f;
+    expectDifferent(key, "originY");
+
+    EXPECT_EQ(distinctFields, 16);
 }
 #endif

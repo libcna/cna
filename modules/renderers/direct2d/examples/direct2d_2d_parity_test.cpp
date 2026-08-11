@@ -34,7 +34,17 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+// D2D-40: CompositePorterDuffReference is the independent CPU oracle the composite-mode
+// matrix below compares Direct2D output against; Direct2DBlendMode names the modes.
+// NOGDI keeps <windows.h> (pulled in by d2d1_1.h) from declaring the global ::Rectangle
+// GDI function, which would otherwise make every unqualified Rectangle in this file
+// ambiguous against Microsoft::Xna::Framework::Rectangle. Direct2D itself never uses GDI.
+#ifndef NOGDI
+#define NOGDI
+#endif
+#include "CNA/Internal/Renderers/Direct2D/Direct2DRenderer.hpp"
 #include "System/NotSupportedException.hpp"
+#include "direct2d_test_support.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -52,17 +62,14 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using CNA::Internal::Renderers::Direct2D::CompositePorterDuffReference;
+using CNA::Internal::Renderers::Direct2D::Direct2DBlendMode;
 
-namespace
-{
-    [[nodiscard]] bool Matches(const Color& actual, const Color& expected, int tolerance = 4)
-    {
-        return std::abs(static_cast<int>(actual.getRProperty()) - expected.getRProperty()) <= tolerance &&
-               std::abs(static_cast<int>(actual.getGProperty()) - expected.getGProperty()) <= tolerance &&
-               std::abs(static_cast<int>(actual.getBProperty()) - expected.getBProperty()) <= tolerance &&
-               std::abs(static_cast<int>(actual.getAProperty()) - expected.getAProperty()) <= tolerance;
-    }
-}
+// D2D-128: the tolerance comparison and the read-one-pixel-and-report step are shared by every
+// Direct2D example test; they live in one header so two tests cannot drift apart about what a
+// tolerance means.
+using CnaDirect2DTestSupport::Matches;
+using CnaDirect2DTestSupport::PixelChecker;
 
 class Direct2D2DParityTest final : public Game
 {
@@ -113,17 +120,218 @@ protected:
         const bool verifyAdvancedBlend =
             std::getenv("CNA_DIRECT2D_SKIP_ADVANCED_BLEND") == nullptr;
 
+        PixelChecker checker(device, passed);
         const auto check = [&](const char* label, int x, int y, const Color& expected) {
-            Color actual(0, 0, 0, 0);
-            const Rectangle region(x, y, 1, 1);
-            device.GetBackBufferData(&region, &actual, 0, 1);
-            const bool matches = Matches(actual, expected);
-            std::printf("[%s] %s: got=(%d,%d,%d,%d), expected=(%d,%d,%d,%d)\n",
-                        matches ? "PASS" : "FAIL", label,
-                        actual.getRProperty(), actual.getGProperty(), actual.getBProperty(), actual.getAProperty(),
-                        expected.getRProperty(), expected.getGProperty(), expected.getBProperty(), expected.getAProperty());
-            passed = passed && matches;
+            checker.Check(label, x, y, expected);
         };
+
+        // D2D-89: the complete full/partial SetData matrix for every authored Texture2D mip and
+        // for the render target. Everything here is a byte-exact transfer contract -- no
+        // filtering, no blending -- so it holds identically on every runtime.
+        {
+            const auto transferCheck = [&](const char* label, bool condition) {
+                std::printf("[%s] %s\n", condition ? "PASS" : "FAIL", label);
+                passed = passed && condition;
+            };
+            const auto rejects = [&](const char* label, auto&& action) {
+                bool threw = false;
+                try
+                {
+                    action();
+                }
+                catch (const std::exception&)
+                {
+                    threw = true;
+                }
+                transferCheck(label, threw);
+            };
+
+            // 5x3 with one authored lower level (2x1); the odd width and the non-square shape make
+            // a row-pitch or transposition mistake visible instead of self-cancelling.
+            Texture2D transferTexture(device, 5, 3, true, SurfaceFormat::Color);
+            std::vector<Color> levelZero(15, Color::Transparent);
+            for (std::size_t index = 0; index < levelZero.size(); ++index)
+            {
+                const int value = static_cast<int>(index);
+                levelZero[index] = Color(10 + value * 3, 200 - value * 5, 40 + value * 7,
+                                         255 - value * 2);
+            }
+            transferTexture.SetData(levelZero.data(), static_cast<int>(levelZero.size()));
+            std::vector<Color> readBack(15, Color::Transparent);
+            transferTexture.GetData(readBack.data(), static_cast<int>(readBack.size()));
+            transferCheck("SetData full level 0 round trip", readBack == levelZero);
+
+            // Interior rectangle at a nonzero offset: every texel outside it must survive.
+            const Rectangle interior(1, 1, 3, 1);
+            const std::array<Color, 3> interiorPixels{
+                Color(1, 2, 3, 4), Color(5, 6, 7, 8), Color(9, 10, 11, 12)};
+            transferTexture.SetData(0, &interior, interiorPixels.data(), 0,
+                                    static_cast<int>(interiorPixels.size()));
+            std::vector<Color> afterInterior(15, Color::Transparent);
+            transferTexture.GetData(afterInterior.data(), static_cast<int>(afterInterior.size()));
+            bool interiorExact = true;
+            for (std::size_t index = 0; index < afterInterior.size(); ++index)
+            {
+                const int x = static_cast<int>(index) % 5;
+                const int y = static_cast<int>(index) / 5;
+                const bool inside = y == 1 && x >= 1 && x <= 3;
+                const Color expectedPixel =
+                    inside ? interiorPixels[static_cast<std::size_t>(x - 1)] : levelZero[index];
+                interiorExact = interiorExact && afterInterior[index] == expectedPixel;
+            }
+            transferCheck("SetData offset rectangle preserves every other texel", interiorExact);
+
+            // Last pixel of the level: an off-by-one in the row offset lands outside it.
+            const Rectangle lastPixel(4, 2, 1, 1);
+            // Opaque on purpose: this texel is also the one sampled through SpriteBatch below,
+            // where an AlphaBlend result would otherwise mix with the cleared background.
+            const std::array<Color, 1> lastPixelData{Color(123, 45, 67, 255)};
+            transferTexture.SetData(0, &lastPixel, lastPixelData.data(), 0, 1);
+            std::array<Color, 1> lastPixelReadback{Color::Transparent};
+            transferTexture.GetData(0, &lastPixel, lastPixelReadback.data(), 0, 1);
+            transferCheck("SetData/GetData address the last texel",
+                          lastPixelReadback[0] == lastPixelData[0]);
+
+            // startIndex selects a window inside a larger buffer rather than its beginning.
+            const Rectangle windowRect(0, 0, 2, 1);
+            const std::array<Color, 4> windowSource{
+                Color(200, 0, 0, 255), Color(0, 200, 0, 255),
+                Color(0, 0, 200, 255), Color(200, 200, 0, 255)};
+            transferTexture.SetData(0, &windowRect, windowSource.data(), 2, 2);
+            std::array<Color, 2> windowReadback{Color::Transparent, Color::Transparent};
+            transferTexture.GetData(0, &windowRect, windowReadback.data(), 0, 2);
+            transferCheck("SetData honours startIndex",
+                          windowReadback[0] == windowSource[2] && windowReadback[1] == windowSource[3]);
+
+            // The authored lower level is 2x1 and is written and read independently of level 0.
+            const std::array<Color, 2> levelOne{Color(0, 0, 255, 255), Color(255, 255, 0, 255)};
+            transferTexture.SetData(1, nullptr, levelOne.data(), 0,
+                                    static_cast<int>(levelOne.size()));
+            std::array<Color, 2> levelOneReadback{Color::Transparent, Color::Transparent};
+            transferTexture.GetData(1, nullptr, levelOneReadback.data(), 0, 2);
+            transferCheck("SetData/GetData round trip for the authored mip",
+                          levelOneReadback == levelOne);
+            const Rectangle levelOneTail(1, 0, 1, 1);
+            const std::array<Color, 1> levelOneTailData{Color(7, 8, 9, 10)};
+            transferTexture.SetData(1, &levelOneTail, levelOneTailData.data(), 0, 1);
+            std::array<Color, 2> levelOneAfterPartial{Color::Transparent, Color::Transparent};
+            transferTexture.GetData(1, nullptr, levelOneAfterPartial.data(), 0, 2);
+            transferCheck("partial SetData on the authored mip keeps its other texel",
+                          levelOneAfterPartial[0] == levelOne[0] &&
+                              levelOneAfterPartial[1] == levelOneTailData[0]);
+
+            // Writing a lower level must not disturb level zero.
+            std::vector<Color> levelZeroAfterMipWrite(15, Color::Transparent);
+            transferTexture.GetData(levelZeroAfterMipWrite.data(),
+                                    static_cast<int>(levelZeroAfterMipWrite.size()));
+            transferCheck("authored mip writes leave level 0 untouched",
+                          levelZeroAfterMipWrite[0] == afterInterior[0] &&
+                              levelZeroAfterMipWrite[14] == lastPixelData[0]);
+
+            // Invalid ranges. Each rejection must also leave the texture untouched, which the
+            // full-level comparison after them asserts once for all of them.
+            const Rectangle outsideRight(3, 0, 3, 1);
+            const Rectangle negativeOrigin(-1, 0, 2, 1);
+            const Rectangle emptyRegion(1, 1, 0, 0);
+            rejects("SetData rejects a rectangle leaving the level", [&] {
+                transferTexture.SetData(0, &outsideRight, interiorPixels.data(), 0, 3);
+            });
+            rejects("SetData rejects a negative origin", [&] {
+                transferTexture.SetData(0, &negativeOrigin, interiorPixels.data(), 0, 2);
+            });
+            // An empty region is a no-op rather than an error: the shared transfer layer bounds-
+            // checks the rectangle and the element count, and a zero-area region violates neither.
+            // Pin that it really changes nothing instead of pretending it throws.
+            std::vector<Color> beforeEmptyRegion(15, Color::Transparent);
+            transferTexture.GetData(beforeEmptyRegion.data(),
+                                    static_cast<int>(beforeEmptyRegion.size()));
+            transferTexture.SetData(0, &emptyRegion, interiorPixels.data(), 0, 1);
+            std::vector<Color> afterEmptyRegion(15, Color::Transparent);
+            transferTexture.GetData(afterEmptyRegion.data(),
+                                    static_cast<int>(afterEmptyRegion.size()));
+            transferCheck("an empty region writes nothing", beforeEmptyRegion == afterEmptyRegion);
+            rejects("SetData rejects an element count smaller than the region", [&] {
+                transferTexture.SetData(0, &interior, interiorPixels.data(), 0, 2);
+            });
+            rejects("SetData rejects a level that does not exist", [&] {
+                transferTexture.SetData(7, nullptr, levelOne.data(), 0, 2);
+            });
+            rejects("GetData rejects a rectangle leaving the level", [&] {
+                std::vector<Color> destination(3, Color::Transparent);
+                transferTexture.GetData(0, &outsideRight, destination.data(), 0, 3);
+            });
+            rejects("GetData rejects a destination smaller than the region", [&] {
+                std::vector<Color> destination(1, Color::Transparent);
+                transferTexture.GetData(0, &interior, destination.data(), 0, 1);
+            });
+
+            // Every rejection above must have left the texture exactly as it was.
+            std::vector<Color> afterRejections(15, Color::Transparent);
+            transferTexture.GetData(afterRejections.data(), static_cast<int>(afterRejections.size()));
+            transferCheck("rejected transfers change nothing",
+                          afterRejections == levelZeroAfterMipWrite);
+
+            // The GPU side must agree with the CPU round trip: point-sample the updated texture
+            // 1:1 and compare the exact texels.
+            device.Clear(Color::Black);
+            SamplerState transferSampler = SamplerState::PointClamp;
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &transferSampler,
+                            nullptr, nullptr);
+            sprites_->Draw(transferTexture, Rectangle(0, 0, 5, 3), Rectangle(4, 2, 1, 1),
+                           Color::White);
+            sprites_->End();
+            check("SetData reaches the GPU (last texel)", 2, 1, lastPixelData[0]);
+
+            // RenderTarget2D: level zero only, full and partial, with the same rejection contract.
+            RenderTarget2D transferTarget(device, 4, 2, false, SurfaceFormat::Color,
+                                          DepthFormat::None);
+            std::vector<Color> targetPixels(8, Color::Transparent);
+            for (std::size_t index = 0; index < targetPixels.size(); ++index)
+            {
+                const int value = static_cast<int>(index);
+                targetPixels[index] = Color(20 * value, 255 - 20 * value, 30 + value, 255);
+            }
+            transferTarget.SetData(targetPixels.data(), static_cast<int>(targetPixels.size()));
+            std::vector<Color> targetReadback(8, Color::Transparent);
+            transferTarget.GetData(targetReadback.data(), static_cast<int>(targetReadback.size()));
+            transferCheck("render-target full SetData round trip", targetReadback == targetPixels);
+
+            const Rectangle targetRegion(2, 1, 2, 1);
+            const std::array<Color, 2> targetRegionPixels{
+                Color(11, 22, 33, 255), Color(44, 55, 66, 255)};
+            transferTarget.SetData(0, &targetRegion, targetRegionPixels.data(), 0, 2);
+            std::vector<Color> targetAfterPartial(8, Color::Transparent);
+            transferTarget.GetData(targetAfterPartial.data(),
+                                   static_cast<int>(targetAfterPartial.size()));
+            bool targetPartialExact = true;
+            for (std::size_t index = 0; index < targetAfterPartial.size(); ++index)
+            {
+                const int x = static_cast<int>(index) % 4;
+                const int y = static_cast<int>(index) / 4;
+                const bool inside = y == 1 && x >= 2;
+                const Color expectedPixel =
+                    inside ? targetRegionPixels[static_cast<std::size_t>(x - 2)] : targetPixels[index];
+                targetPartialExact = targetPartialExact && targetAfterPartial[index] == expectedPixel;
+            }
+            transferCheck("render-target partial SetData preserves every other texel",
+                          targetPartialExact);
+            rejects("render-target rejects level 1 SetData", [&] {
+                transferTarget.SetData(1, nullptr, targetRegionPixels.data(), 0, 1);
+            });
+            rejects("render-target rejects level 1 GetData", [&] {
+                std::vector<Color> destination(1, Color::Transparent);
+                transferTarget.GetData(1, nullptr, destination.data(), 0, 1);
+            });
+            rejects("render-target rejects a rectangle leaving level 0", [&] {
+                const Rectangle outside(3, 1, 2, 1);
+                transferTarget.SetData(0, &outside, targetRegionPixels.data(), 0, 2);
+            });
+            std::vector<Color> targetAfterRejections(8, Color::Transparent);
+            transferTarget.GetData(targetAfterRejections.data(),
+                                   static_cast<int>(targetAfterRejections.size()));
+            transferCheck("rejected render-target transfers change nothing",
+                          targetAfterRejections == targetAfterPartial);
+        }
 
         // 1. Clear and native backbuffer readback.
         device.Clear(Color(12, 34, 56, 255));
@@ -741,6 +949,95 @@ protected:
             }
         }
 
+        // D2D-81 (vertical half): the same independent numeric oracle transposed onto the Y axis,
+        // which the horizontal block above deliberately left uncovered.
+        //
+        // The expected values are NOT re-derived: they are the horizontal ones, and that is the
+        // whole point. Direct2D's bilinear filter is separable and its extend modes are per-axis --
+        // D2D1_IMAGE_BRUSH_PROPERTIES carries extendModeX and extendModeY as two independent
+        // parameters -- so a vertical sample through the same texel layout must produce the same
+        // numbers as the horizontal one, including Wrap's 1/18 seam weights (255/18 = 14.1(6) ->
+        // 14, 255*17/18 = 240.8(3) -> 241) that the horizontal run confirmed empirically. If a
+        // runtime disagrees here while agreeing there, that asymmetry is itself the finding: it
+        // would mean the Y axis is not being addressed or filtered the way the X axis is.
+        {
+            std::vector<uint8_t> columnPixels(8 * 4, 0);
+            for (int i = 0; i < 4; ++i)
+            {
+                columnPixels[static_cast<std::size_t>(i) * 4 + 0] = 255; // rows 0-3: red
+                columnPixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
+            }
+            for (int i = 4; i < 8; ++i)
+            {
+                columnPixels[static_cast<std::size_t>(i) * 4 + 1] = 255; // rows 4-7: green
+                columnPixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
+            }
+            Texture2D columnTexture = Texture2D::CreateFromPixels(device, 1, 8, columnPixels);
+            RenderTarget2D columnTarget(device, 1, 8);
+            device.SetRenderTarget(&columnTarget);
+            device.Clear(Color::Black);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            sprites_->Draw(*white_, Rectangle(0, 0, 1, 4), Rectangle(0, 0, 1, 1), Color(255, 0, 0, 255));
+            sprites_->Draw(*white_, Rectangle(0, 4, 1, 4), Rectangle(0, 0, 1, 1), Color(0, 255, 0, 255));
+            sprites_->End();
+            device.SetRenderTarget(nullptr);
+
+            const Color red(255, 0, 0, 255);
+            const Color green(0, 255, 0, 255);
+            const Color halfBlend(128, 128, 0, 255);
+            const Color wrapOutsideTop(14, 241, 0, 255);
+            const Color wrapOutsideBottom(241, 14, 0, 255);
+            struct ColumnSample { int destY; Color clampExpected; Color wrapExpected; Color mirrorExpected; const char* label; };
+            // Destination height 9 is odd for the same reason the horizontal width was: it puts one
+            // sample exactly at v=4.0, the midpoint between row 3's and row 4's centers.
+            const ColumnSample columnSamples[] = {
+                {1, red, red, red, "v~0.67 interior red"},
+                {2, red, red, red, "v~1.78 interior red"},
+                {4, halfBlend, halfBlend, halfBlend, "v=4.0 exact red/green midpoint"},
+                {6, green, green, green, "v~6.22 interior green"},
+                {0, red, wrapOutsideTop, red, "v~-0.44 outside top"},
+                {8, green, wrapOutsideBottom, green, "v~8.44 outside bottom"},
+            };
+
+            for (SamplerState* sampler : {&linearClamp, &linearWrap, &linearMirror})
+            {
+                const char* modeName = sampler == &linearClamp ? "Clamp"
+                    : sampler == &linearWrap ? "Wrap" : "Mirror";
+                for (const ColumnSample& sample : columnSamples)
+                {
+                    const Color& expected = sampler == &linearClamp   ? sample.clampExpected
+                                            : sampler == &linearWrap  ? sample.wrapExpected
+                                                                      : sample.mirrorExpected;
+                    device.Clear(Color::Black);
+                    sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, sampler, nullptr, nullptr);
+                    sprites_->Draw(columnTexture, Rectangle(0, 0, 1, 9), Rectangle(0, -1, 1, 10), Color::White);
+                    sprites_->Draw(columnTarget, Rectangle(1, 0, 1, 9), Rectangle(0, -1, 1, 10), Color::White);
+                    sprites_->End();
+                    Color ordinaryActual(0, 0, 0, 0);
+                    Color targetActual(0, 0, 0, 0);
+                    const Rectangle ordinaryTexel(0, sample.destY, 1, 1);
+                    const Rectangle targetTexel(1, sample.destY, 1, 1);
+                    device.GetBackBufferData(&ordinaryTexel, &ordinaryActual, 0, 1);
+                    device.GetBackBufferData(&targetTexel, &targetActual, 0, 1);
+                    const bool ordinaryMatches = Matches(ordinaryActual, expected, 8);
+                    const bool targetMatches = Matches(targetActual, expected, 8);
+                    std::printf("[%s] Texture2D vertical oracle Linear %s %s: got=(%d,%d,%d,%d), expected=(%d,%d,%d,%d)\n",
+                                ordinaryMatches ? "PASS" : "FAIL", modeName, sample.label,
+                                ordinaryActual.getRProperty(), ordinaryActual.getGProperty(),
+                                ordinaryActual.getBProperty(), ordinaryActual.getAProperty(),
+                                expected.getRProperty(), expected.getGProperty(),
+                                expected.getBProperty(), expected.getAProperty());
+                    std::printf("[%s] RenderTarget2D vertical oracle Linear %s %s: got=(%d,%d,%d,%d), expected=(%d,%d,%d,%d)\n",
+                                targetMatches ? "PASS" : "FAIL", modeName, sample.label,
+                                targetActual.getRProperty(), targetActual.getGProperty(),
+                                targetActual.getBProperty(), targetActual.getAProperty(),
+                                expected.getRProperty(), expected.getGProperty(),
+                                expected.getBProperty(), expected.getAProperty());
+                    passed = passed && ordinaryMatches && targetMatches;
+                }
+            }
+        }
+
         // 7. A recorded scissor rectangle must only affect SpriteBatch once RasterizerState
         // explicitly enables its test. Clear deliberately ignores it, so both branches begin
         // from the same black backbuffer.
@@ -946,7 +1243,226 @@ protected:
             check("DestinationOver direct fills transparent", 6, 1, Color(255, 0, 0, 255));
             check("DestinationOver brush preserves destination", 9, 1, Color(0, 0, 255, 255));
             check("DestinationOver brush fills transparent", 14, 1, Color(255, 0, 0, 255));
+
+            // D2D-40: every exact composite mode against an INDEPENDENT algebraic oracle. The
+            // checks above compare one Direct2D path with another Direct2D path, which cannot
+            // detect a mode that is uniformly mapped to the wrong operator.
+            // CompositePorterDuffReference evaluates the operator's own Fs/Fd definition on the
+            // CPU without consulting CNA's mapping at all, and both operands are deliberately
+            // channel-asymmetric and partially transparent so that no two operators agree by
+            // accident.
+            constexpr std::array<std::uint8_t, 4> compositeSource{{100, 50, 25, 200}};
+            constexpr std::array<std::uint8_t, 4> compositeDestination{{40, 80, 120, 150}};
+            struct CompositeModeCase
+            {
+                const char* name;
+                Blend colorSource;
+                Blend colorDestination;
+                Direct2DBlendMode mode;
+            };
+            const std::array<CompositeModeCase, 10> compositeCases{{
+                {"Copy", Blend::One, Blend::Zero, Direct2DBlendMode::Copy},
+                {"SourceOver", Blend::One, Blend::InverseSourceAlpha, Direct2DBlendMode::SourceOver},
+                {"DestinationOver", Blend::InverseDestinationAlpha, Blend::One,
+                 Direct2DBlendMode::DestinationOver},
+                {"SourceIn", Blend::DestinationAlpha, Blend::Zero, Direct2DBlendMode::SourceIn},
+                {"DestinationIn", Blend::Zero, Blend::SourceAlpha, Direct2DBlendMode::DestinationIn},
+                {"SourceOut", Blend::InverseDestinationAlpha, Blend::Zero, Direct2DBlendMode::SourceOut},
+                {"DestinationOut", Blend::Zero, Blend::InverseSourceAlpha,
+                 Direct2DBlendMode::DestinationOut},
+                {"SourceAtop", Blend::DestinationAlpha, Blend::InverseSourceAlpha,
+                 Direct2DBlendMode::SourceAtop},
+                {"DestinationAtop", Blend::InverseDestinationAlpha, Blend::SourceAlpha,
+                 Direct2DBlendMode::DestinationAtop},
+                {"Xor", Blend::InverseDestinationAlpha, Blend::InverseSourceAlpha,
+                 Direct2DBlendMode::Xor},
+            }};
+
+            auto compositeSourceTexture = Texture2D::CreateFromPixels(
+                device, 1, 1,
+                std::vector<uint8_t>{compositeSource[0], compositeSource[1], compositeSource[2],
+                                     compositeSource[3]});
+            auto compositeDestinationTexture = Texture2D::CreateFromPixels(
+                device, 1, 1,
+                std::vector<uint8_t>{compositeDestination[0], compositeDestination[1],
+                                     compositeDestination[2], compositeDestination[3]});
+            // SetData writes the render target's level-zero bytes exactly (D2D-87), so the
+            // GPU-resident source variant carries the same premultiplied operand as the texture
+            // instead of an approximation produced by a preceding blend.
+            RenderTarget2D compositeSourceTarget(device, 1, 1);
+            const std::array<Color, 1> compositeSourcePixel{
+                Color(compositeSource[0], compositeSource[1], compositeSource[2], compositeSource[3])};
+            compositeSourceTarget.SetData(compositeSourcePixel.data(),
+                                          static_cast<int>(compositeSourcePixel.size()));
+
+            device.Clear(Color::Transparent);
+            // One destination pass for the whole matrix: Copy writes the operand bytes verbatim.
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr,
+                            &scissorDisabled);
+            for (std::size_t index = 0; index < compositeCases.size(); ++index)
+            {
+                const int tileX = static_cast<int>(index) * 4;
+                sprites_->Draw(compositeDestinationTexture, Rectangle(tileX, 0, 4, 4),
+                               Rectangle(0, 0, 1, 1), Color::White);
+                sprites_->Draw(compositeDestinationTexture, Rectangle(tileX, 4, 4, 4),
+                               Rectangle(0, 0, 1, 1), Color::White);
+            }
+            sprites_->End();
+
+            for (std::size_t index = 0; index < compositeCases.size(); ++index)
+            {
+                const CompositeModeCase& testCase = compositeCases[index];
+                BlendState compositeBlend = BlendState::Opaque;
+                compositeBlend.setColorSourceBlendProperty(testCase.colorSource);
+                compositeBlend.setAlphaSourceBlendProperty(testCase.colorSource);
+                compositeBlend.setColorDestinationBlendProperty(testCase.colorDestination);
+                compositeBlend.setAlphaDestinationBlendProperty(testCase.colorDestination);
+                const int tileX = static_cast<int>(index) * 4;
+                sprites_->Begin(SpriteSortMode::Deferred, compositeBlend, &point, nullptr,
+                                &scissorDisabled);
+                sprites_->Draw(compositeSourceTexture, Rectangle(tileX, 0, 4, 4),
+                               Rectangle(0, 0, 1, 1), Color::White);
+                sprites_->Draw(compositeSourceTarget, Rectangle(tileX, 4, 4, 4),
+                               Rectangle(0, 0, 1, 1), Color::White);
+                sprites_->End();
+            }
+
+            for (std::size_t index = 0; index < compositeCases.size(); ++index)
+            {
+                const CompositeModeCase& testCase = compositeCases[index];
+                const std::array<std::uint8_t, 4> expected = CompositePorterDuffReference(
+                    testCase.mode, compositeSource, compositeDestination);
+                const Color expectedColor(expected[0], expected[1], expected[2], expected[3]);
+                const int tileX = static_cast<int>(index) * 4 + 1;
+                const std::string textureLabel =
+                    std::string("Porter-Duff oracle ") + testCase.name + " (Texture2D source)";
+                const std::string targetLabel =
+                    std::string("Porter-Duff oracle ") + testCase.name + " (RenderTarget2D source)";
+                check(textureLabel.c_str(), tileX, 1, expectedColor);
+                check(targetLabel.c_str(), tileX, 5, expectedColor);
+            }
         }
+        // D2D-45: golden matrix over blend preset x source type x tint x alpha representation,
+        // generated from the data below rather than written out case by case, and compared against
+        // the same independent CPU reference D2D-40 uses. The destination is opaque so it can be
+        // established with Clear on every runtime -- an exact premultiplied destination would need
+        // the bounded-copy composite, which Wine ignores, and that would have made the whole matrix
+        // native-only for no gain.
+        //
+        // Only the two source-over presets appear here. Opaque's independent RGB/alpha tint is
+        // still an open native question (D2D-41), and asserting an answer for it from this matrix
+        // would be inventing evidence rather than collecting it.
+        {
+            struct AlphaRepresentation
+            {
+                const char* name;
+                bool straight;
+                std::array<std::uint8_t, 4> stored;
+            };
+            struct TintCase
+            {
+                const char* name;
+                Color tint;
+            };
+            const std::array<AlphaRepresentation, 2> representations{{
+                // Premultiplied: every channel is already scaled by alpha, so it must not be
+                // scaled again anywhere in the pipeline.
+                {"premultiplied", false, {{120, 60, 30, 200}}},
+                // Straight: the same visual colour stored unmultiplied, converted exactly once.
+                {"straight", true, {{153, 77, 38, 200}}},
+            }};
+            const std::array<TintCase, 3> tints{{
+                {"white", Color::White},
+                {"rgb", Color(200, 150, 100, 255)},
+                {"alpha", Color(255, 255, 255, 128)},
+            }};
+            const std::array<std::uint8_t, 4> matrixDestination{{40, 80, 120, 255}};
+
+            const auto expectedFor = [&](const AlphaRepresentation& representation,
+                                         const TintCase& tintCase) {
+                // The renderer's documented contract (D2D-34): a straight source is premultiplied
+                // exactly once, then Color.RGB scales the premultiplied RGB and Color.A scales only
+                // the alpha. Everything after that is plain source-over.
+                const int storedAlpha = representation.stored[3];
+                std::array<std::uint8_t, 4> effective{};
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    const int premultiplied = representation.straight
+                        ? representation.stored[static_cast<std::size_t>(channel)] * storedAlpha / 255
+                        : representation.stored[static_cast<std::size_t>(channel)];
+                    const int tintChannel = channel == 0 ? tintCase.tint.getRProperty()
+                        : (channel == 1 ? tintCase.tint.getGProperty() : tintCase.tint.getBProperty());
+                    effective[static_cast<std::size_t>(channel)] =
+                        static_cast<std::uint8_t>(premultiplied * tintChannel / 255);
+                }
+                effective[3] = static_cast<std::uint8_t>(storedAlpha * tintCase.tint.getAProperty() / 255);
+                const std::array<std::uint8_t, 4> composited = CompositePorterDuffReference(
+                    Direct2DBlendMode::SourceOver, effective, matrixDestination);
+                return Color(composited[0], composited[1], composited[2], composited[3]);
+            };
+
+            SamplerState matrixSampler = SamplerState::PointClamp;
+            for (std::size_t representationIndex = 0; representationIndex < representations.size();
+                 ++representationIndex)
+            {
+                const AlphaRepresentation& representation = representations[representationIndex];
+                auto matrixTexture = Texture2D::CreateFromPixels(
+                    device, 1, 1,
+                    std::vector<uint8_t>{representation.stored[0], representation.stored[1],
+                                         representation.stored[2], representation.stored[3]});
+                const BlendState& blend = representation.straight
+                    ? BlendState::NonPremultiplied : BlendState::AlphaBlend;
+
+                device.Clear(Color(matrixDestination[0], matrixDestination[1], matrixDestination[2],
+                                   matrixDestination[3]));
+                for (std::size_t tintIndex = 0; tintIndex < tints.size(); ++tintIndex)
+                {
+                    sprites_->Begin(SpriteSortMode::Deferred, blend, &matrixSampler, nullptr,
+                                    &scissorDisabled);
+                    sprites_->Draw(matrixTexture,
+                                   Rectangle(static_cast<int>(tintIndex) * 4, 0, 4, 4),
+                                   Rectangle(0, 0, 1, 1), tints[tintIndex].tint);
+                    sprites_->End();
+                }
+                for (std::size_t tintIndex = 0; tintIndex < tints.size(); ++tintIndex)
+                {
+                    const std::string label = std::string("golden matrix ") + representation.name +
+                        " x " + tints[tintIndex].name + " (Texture2D)";
+                    check(label.c_str(), static_cast<int>(tintIndex) * 4 + 1, 1,
+                          expectedFor(representation, tints[tintIndex]));
+                }
+
+                // The same matrix with a GPU-resident source. Its decoration needs the built-in
+                // effects, so this half -- and only this half -- is the documented native branch.
+                if (!verifyRenderTargetDecoration) continue;
+                RenderTarget2D matrixTarget(device, 1, 1, false, SurfaceFormat::Color,
+                                            DepthFormat::None);
+                const std::array<Color, 1> matrixTargetPixel{
+                    Color(representation.stored[0], representation.stored[1],
+                          representation.stored[2], representation.stored[3])};
+                matrixTarget.SetData(matrixTargetPixel.data(),
+                                     static_cast<int>(matrixTargetPixel.size()));
+                device.Clear(Color(matrixDestination[0], matrixDestination[1], matrixDestination[2],
+                                   matrixDestination[3]));
+                for (std::size_t tintIndex = 0; tintIndex < tints.size(); ++tintIndex)
+                {
+                    sprites_->Begin(SpriteSortMode::Deferred, blend, &matrixSampler, nullptr,
+                                    &scissorDisabled);
+                    sprites_->Draw(matrixTarget,
+                                   Rectangle(static_cast<int>(tintIndex) * 4, 0, 4, 4),
+                                   Rectangle(0, 0, 1, 1), tints[tintIndex].tint);
+                    sprites_->End();
+                }
+                for (std::size_t tintIndex = 0; tintIndex < tints.size(); ++tintIndex)
+                {
+                    const std::string label = std::string("golden matrix ") + representation.name +
+                        " x " + tints[tintIndex].name + " (RenderTarget2D)";
+                    check(label.c_str(), static_cast<int>(tintIndex) * 4 + 1, 1,
+                          expectedFor(representation, tints[tintIndex]));
+                }
+            }
+        }
+
         if (verifyRenderTargetDecoration)
         {
             device.Clear(blendBackground);
@@ -2054,7 +2570,9 @@ protected:
                     emptyFrameResizeAccepted ? "PASS" : "FAIL");
         passed = passed && emptyFrameResizeAccepted;
         renderer.SetVirtualResolution(48, 32);
-        const auto near = [](float actual, float expected) {
+        // Not named `near`: <windows.h> (reached through the Direct2D renderer header above)
+        // still defines the legacy empty `near`/`far` macros.
+        const auto nearlyEqual = [](float actual, float expected) {
             return std::abs(actual - expected) <= 0.05f;
         };
         const auto verifyPresentationTransform = [&](PresentationMode mode, const char* label,
@@ -2070,8 +2588,9 @@ protected:
                 12.0f, 8.0f, windowX, windowY);
             const bool transformedBack = transformedOut && renderer.TransformWindowToLogical(
                 windowX, windowY, logicalX, logicalY);
-            const bool matches = transformedBack && near(windowX, 12.0f * scaleX + offsetX) &&
-                near(windowY, 8.0f * scaleY + offsetY) && near(logicalX, 12.0f) && near(logicalY, 8.0f);
+            const bool matches = transformedBack && nearlyEqual(windowX, 12.0f * scaleX + offsetX) &&
+                nearlyEqual(windowY, 8.0f * scaleY + offsetY) &&
+                nearlyEqual(logicalX, 12.0f) && nearlyEqual(logicalY, 8.0f);
             std::printf("[%s] Direct2D presentation %s uses physical client transform\n",
                         matches ? "PASS" : "FAIL", label);
             passed = passed && matches;
