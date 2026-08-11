@@ -94,6 +94,15 @@ VULKAN (or any 3D-capable renderer) 3D scene
     -> backbuffer
 ```
 
+This is verified by a permanent regression, not just architectural inference:
+`AsciiPostProcessEffect_3DSource` (`modules/graphics-ext/examples/ascii_posteffect_3d_source_test.cpp`)
+renders two depth-tested, overlapping triangles into a `RenderTarget2D` via `BasicEffect` + a real
+`VertexBuffer` + `GraphicsDevice::DrawPrimitives`, then applies the effect and confirms the
+near/far occlusion relationship (proven by real depth-buffer testing, not draw-submission order)
+survives the `GetData()` → `AsciiQuantizer` → `SpriteBatch` round-trip. It self-skips (exit 77) via
+`GraphicsDevice::SupportsCapability(GraphicsCapability::ThreeD)` on renderers with no real 3D
+pipeline.
+
 ## Portable CPU implementation (v1)
 
 `Draw()` reads the source texture back to the CPU (`Texture2D::GetData()`), quantizes it there
