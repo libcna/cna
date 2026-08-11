@@ -91,11 +91,47 @@ namespace CNA::Internal::GltfImport
         std::string extension;
     };
 
+    /**
+     * @brief A glTF primitive's declared topology — `mesh.primitive.mode`, specification §3.7.2.1.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. The enumerator values are glTF's own `mode`
+     * numbers, so a value round-trips through the file format unchanged. This is deliberately the
+     * *source* topology rather than an XNA `PrimitiveType`: three of the seven modes have no XNA
+     * equivalent at all, and deciding what each becomes is a separate concern from reading what
+     * the file actually declares (plan_gltf.md §10.1).
+     */
+    enum class PrimitiveTopology
+    {
+        /** @brief `mode` 0 — an unconnected point per vertex. */
+        Points = 0,
+        /** @brief `mode` 1 — an independent line segment per index pair. */
+        Lines = 1,
+        /** @brief `mode` 2 — a connected line strip, closed by a segment back to the first vertex. */
+        LineLoop = 2,
+        /** @brief `mode` 3 — a connected, open line strip. */
+        LineStrip = 3,
+        /** @brief `mode` 4 — an independent triangle per index triple. glTF's own default. */
+        Triangles = 4,
+        /** @brief `mode` 5 — a triangle strip; odd triangles have reversed winding. */
+        TriangleStrip = 5,
+        /** @brief `mode` 6 — a triangle fan around the first vertex. */
+        TriangleFan = 6,
+    };
+
     /** @brief One extracted mesh primitive's vertex/index bytes plus its effect-relevant flags. */
     struct MeshOut
     {
         /** @brief The mesh part's name (from the glTF mesh, or a generated placeholder). */
         std::string name;
+        /**
+         * @brief The source primitive's declared topology (`mesh.primitive.mode`).
+         *
+         * Always `Triangles` on a `MeshOut` that `ExtractMesh` actually returned, because every
+         * other topology is currently rejected (see `IsPrimitiveTopologySupported`). It is carried
+         * anyway so the index list can never again be interpreted as a triangle list by default:
+         * the topology travels with the data it describes.
+         */
+        PrimitiveTopology topology = PrimitiveTopology::Triangles;
         /** @brief Tightly-packed vertex bytes, `vertexBytes.size() / stride` vertices. */
         std::vector<std::uint8_t> vertexBytes;
         /** @brief Byte stride of one vertex (16/20/24/32/48/52/56/68 — see CLAUDE.md's stride table). */
@@ -310,8 +346,59 @@ namespace CNA::Internal::GltfImport
     const cgltf_image* FindEmissiveImage(const cgltf_primitive& prim);
 
     /**
+     * @brief Classifies a primitive's declared `mode` (specification §3.7.2.1).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param prim The glTF primitive to classify.
+     * @param name The mesh part's name, used only in the error message.
+     * @return The declared topology.
+     * @throws std::runtime_error if the primitive declares no recognizable mode.
+     */
+    PrimitiveTopology ClassifyPrimitiveTopology(const cgltf_primitive& prim, const std::string& name);
+
+    /**
+     * @brief The specification's own name for a topology, e.g. "TRIANGLE_STRIP".
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param topology The topology to name.
+     * @return The glTF `mode` name, for diagnostics.
+     */
+    const char* PrimitiveTopologyName(PrimitiveTopology topology);
+
+    /**
+     * @brief The glTF `mode` number a topology corresponds to.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param topology The topology to convert.
+     * @return The `mesh.primitive.mode` value, 0…6.
+     */
+    int PrimitiveTopologyMode(PrimitiveTopology topology);
+
+    /**
+     * @brief Whether CNA's import path can currently carry a topology through to a draw.
+     *
+     * Only `Triangles` is supported today. The other six are read, classified and **rejected with
+     * a named error** rather than reinterpreted as a triangle list, which is what CNA did before:
+     * a strip's later triangles were lost and a point cloud became one arbitrary triangle, with no
+     * diagnostic at all. Converting strips and fans to triangle lists, and carrying the line and
+     * point topologies, is separate work (plan_gltf.md §10.1, `GLTF-072`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param topology The topology to test.
+     * @return True when `ExtractMesh` will import a primitive of that topology.
+     */
+    bool IsPrimitiveTopologySupported(PrimitiveTopology topology);
+
+    /**
      * @brief Extracts one glTF mesh primitive's vertex/index bytes, selecting the vertex stride
      * and effect-relevant flags from its attributes and material (see `MeshOut`).
+     *
+     * @throws std::runtime_error if the primitive's `mode` is one CNA does not yet support (see
+     * `IsPrimitiveTopologySupported`) — never silently reinterpreted as a triangle list.
      *
      * @param data The parsed glTF file (needed to resolve KHR_draco_mesh_compression attribute
      * unique IDs against `data->accessors`' own base pointer — see `FindDracoUniqueId`'s own doc

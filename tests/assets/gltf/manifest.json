@@ -113,15 +113,20 @@
     },
     {
       "id": "D5",
-      "summary": "primitive.mode is never read. MeshOut carries no topology field at all, so a TRIANGLE_STRIP is silently reinterpreted as a triangle list.",
+      "summary": "primitive.mode was never read, so a TRIANGLE_STRIP was silently reinterpreted as a triangle list. GLTF-071 reads and classifies the mode and rejects the topologies CNA cannot yet honour; GLTF-072 still owns converting a strip to a triangle list, so the fixture does not import.",
       "owner": "GLTF-MESH",
       "owningTasks": [
+        "GLTF-071",
+        "GLTF-072"
+      ],
+      "closedTasks": [
         "GLTF-071"
       ],
-      "closedTasks": [],
-      "remainingTasks": [],
+      "remainingTasks": [
+        "GLTF-072"
+      ],
       "firstDivergentLayer": "L3",
-      "status": "known-failing",
+      "status": "partially-remediated",
       "fixtures": [
         "mode-triangle-strip",
         "mode-points"
@@ -484,8 +489,8 @@
     },
     {
       "path": "mode-points.expected.json",
-      "bytes": 4813,
-      "sha256": "a78b407b89599c99c1ba43ebd180ed50d70e8ba6a7a5a947db2f6fcdc3d06467"
+      "bytes": 5805,
+      "sha256": "4c6dc6adbfab7f6d774830a54eb0c15f1c55441c1c652cb0346ce73daa3c4764"
     },
     {
       "path": "mode-points.glb",
@@ -499,8 +504,8 @@
     },
     {
       "path": "mode-triangle-strip.expected.json",
-      "bytes": 5477,
-      "sha256": "b1c39540764d39d7849b4d37a0ddaae0af22bb3c840937f3a7ec408406d75999"
+      "bytes": 6455,
+      "sha256": "ab42771825a19a4a79437b41be8c18fae51a07b5c4b8f1481f033c4960597a98"
     },
     {
       "path": "mode-triangle-strip.glb",

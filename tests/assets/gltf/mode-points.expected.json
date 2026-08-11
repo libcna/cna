@@ -194,30 +194,52 @@
   "defects": [
     {
       "id": "D5",
-      "summary": "primitive.mode is never read, so a POINTS primitive becomes a triangle list built from its own implicit index range.",
+      "summary": "primitive.mode was never read, so a POINTS primitive became a triangle list built from its own implicit index range. GLTF-071 reads and classifies the mode and rejects it explicitly; GLTF-072 still owns deciding what a point primitive becomes, so the fixture does not import.",
       "firstDivergentLayer": "L3",
       "divergentFields": [
+        "import",
         "mode",
         "modeName",
-        "topologyCarried",
         "triangles"
       ],
       "divergentFieldsByLayer": {
         "L3": [
+          "import",
           "mode",
           "modeName",
-          "topologyCarried",
           "triangles"
+        ],
+        "L4": [
+          "worldPositions",
+          "worldBounds"
         ]
       },
       "owner": "GLTF-MESH",
       "owningTasks": [
+        "GLTF-071",
+        "GLTF-072"
+      ],
+      "closedTasks": [
         "GLTF-071"
       ],
-      "closedTasks": [],
-      "remainingTasks": [],
-      "status": "known-failing",
+      "remainingTasks": [
+        "GLTF-072"
+      ],
+      "status": "partially-remediated",
       "currentActual": {
+        "importRejected": true,
+        "topologyCarried": true,
+        "classifiedMode": 0,
+        "classifiedModeName": "POINTS",
+        "errorContains": [
+          "POINTS",
+          "mode 0"
+        ],
+        "indices": [],
+        "triangles": [],
+        "note": "ExtractMesh classifies mode 0 and throws with POINTS named, before the implicit index range is even synthesised. GLTF-077 decides whether a point list becomes a CNAEXT point topology or a documented per-renderer rejection; either way the expected output stays four points and zero triangles."
+      },
+      "priorActual": {
         "indices": [
           0,
           1,
@@ -232,7 +254,8 @@
             2
           ]
         ],
-        "note": "Implicit indices [0,1,2,3] are generated correctly for the non-indexed primitive; the defect is that they are then interpreted as TRIANGLES, yielding one triangle where the expected output is four points and zero triangles."
+        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+        "note": "What the forensic audit measured before GLTF-071: implicit indices [0,1,2,3] were generated correctly for the non-indexed primitive and then interpreted as TRIANGLES, yielding one triangle where the expected output is four points and zero triangles."
       }
     }
   ]

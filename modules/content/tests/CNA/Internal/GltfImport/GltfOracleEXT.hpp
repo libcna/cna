@@ -162,11 +162,15 @@ namespace CnaTest::GltfOracle
         /**
          * @brief Whether `MeshOut` carries the source primitive's topology at all.
          *
-         * Always false on the campaign baseline: `MeshOut` has no mode/topology field, which is
-         * defect D5 stated structurally rather than as a value comparison. `GLTF-071` makes this
-         * true.
+         * False on the campaign baseline, where `MeshOut` had no mode/topology field at all --
+         * defect D5 stated structurally rather than as a value comparison. `GLTF-071` made it
+         * true, so a fixture's L3 topology can now be asserted rather than inferred.
          */
         bool topologyCarried = false;
+        /** @brief The carried `mesh.primitive.mode` value, or -1 when no topology is carried. */
+        int topologyMode = -1;
+        /** @brief The carried topology's specification name, empty when no topology is carried. */
+        std::string topologyName;
     };
 
     /** @brief Unpacks a `MeshOut` into named semantic streams (L3). */

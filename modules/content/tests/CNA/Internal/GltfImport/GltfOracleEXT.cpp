@@ -364,9 +364,12 @@ namespace CnaTest::GltfOracle
         dump.hasMetallicRoughnessImage = mesh.metallicRoughnessImage != nullptr;
         dump.hasEmissiveImage = mesh.emissiveImage != nullptr;
         dump.morphTargetCount = mesh.morphPositionDeltas.size();
-        // MeshOut has no topology member on the campaign baseline. This is D5 expressed as a
-        // structural fact; GLTF-071 is what makes it true.
-        dump.topologyCarried = false;
+        // GLTF-071 gave MeshOut a real topology member, so the source primitive's mode now reaches
+        // L3 instead of being assumed. Reading it back here is what lets an L3 comparison assert
+        // the topology rather than infer it from an index count.
+        dump.topologyCarried = true;
+        dump.topologyMode = CNA::Internal::GltfImport::PrimitiveTopologyMode(mesh.topology);
+        dump.topologyName = CNA::Internal::GltfImport::PrimitiveTopologyName(mesh.topology);
 
         // Every layout in the stride ABI begins with a 3-float position, so a stride that cannot
         // hold one is not a layout this helper can read. Reporting zero vertices is the right
@@ -468,6 +471,8 @@ namespace CnaTest::GltfOracle
         out += ",\"stride\":" + std::to_string(dump.stride);
         out += ",\"vertexCount\":" + std::to_string(dump.vertexCount);
         out += ",\"topologyCarried\":" + std::string(dump.topologyCarried ? "true" : "false");
+        out += ",\"topologyMode\":" + std::to_string(dump.topologyMode);
+        out += ",\"topologyName\":" + Quote(dump.topologyName);
         out += ",\"skinned\":" + std::string(dump.skinned ? "true" : "false");
         out += ",\"colored\":" + std::string(dump.colored ? "true" : "false");
         out += ",\"usePbr\":" + std::string(dump.usePbr ? "true" : "false");

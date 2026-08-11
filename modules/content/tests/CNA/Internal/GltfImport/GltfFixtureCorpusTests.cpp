@@ -392,8 +392,26 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
 
             const ExtractedPrimitive* actual = FindExtracted(extracted, mesh, primitive);
             ASSERT_NE(nullptr, actual) << "the import path produced no such primitive";
+
+            // A defect that stops this primitive being imported at all -- today, a topology CNA
+            // classifies and rejects rather than reinterpreting (D5) -- leaves no semantic mesh to
+            // compare field by field. The rejection itself is asserted by the GltfKnownDefect
+            // suite, including that it names the mode; here it only has to not be mistaken for a
+            // conformance failure.
+            if (IsKnownDefectField(fixture.Expected(), "L3", "import"))
+            {
+                EXPECT_FALSE(actual->extracted)
+                    << "the manifest records this primitive as not importable, but it imported. "
+                       "If the owning task landed, update its defect record.";
+                continue;
+            }
             ASSERT_TRUE(actual->extracted) << "ExtractMesh threw: " << actual->error;
             const MeshOutDump& dump = actual->dump;
+
+            // The topology the file declares reaches L3 and is not assumed (GLTF-071).
+            EXPECT_TRUE(dump.topologyCarried);
+            EXPECT_EQ(static_cast<int>(NumberOr(expected, "mode", -1)), dump.topologyMode);
+            EXPECT_EQ(StringOr(expected, "modeName", ""), dump.topologyName);
 
             EXPECT_EQ(static_cast<std::size_t>(NumberOr(expected, "vertexCount", -1)),
                       dump.vertexCount);
@@ -536,6 +554,9 @@ TEST(GltfConformanceL4, CnaWorldPositionsMatchTheExpectedGeometry)
         SCOPED_TRACE(id);
         const LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        // A defect that stops a primitive being imported at all contributes no world geometry
+        // either, which is why such a record declares its L4 fields as well as its L3 ones. The
+        // fixture's L4 expectation is untouched -- it is simply not reachable while it is open.
         if (IsKnownDefectField(fixture.Expected(), "L4", "worldPositions")) { continue; }
 
         const WorldPositions expectedWorld = EvaluateWorldPositionsEXT(fixture.Data());

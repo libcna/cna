@@ -1044,9 +1044,74 @@ namespace CNA::Internal::GltfImport
     }
 #endif
 
+    PrimitiveTopology ClassifyPrimitiveTopology(const cgltf_primitive& prim, const std::string& name)
+    {
+        switch (prim.type)
+        {
+            case cgltf_primitive_type_points:         return PrimitiveTopology::Points;
+            case cgltf_primitive_type_lines:          return PrimitiveTopology::Lines;
+            case cgltf_primitive_type_line_loop:      return PrimitiveTopology::LineLoop;
+            case cgltf_primitive_type_line_strip:     return PrimitiveTopology::LineStrip;
+            case cgltf_primitive_type_triangles:      return PrimitiveTopology::Triangles;
+            case cgltf_primitive_type_triangle_strip: return PrimitiveTopology::TriangleStrip;
+            case cgltf_primitive_type_triangle_fan:   return PrimitiveTopology::TriangleFan;
+            default: break;
+        }
+        // cgltf leaves the type invalid only for a `mode` outside 0..6, which the specification
+        // does not define. Guessing "probably triangles" here is exactly the reflex GLTF-071 exists
+        // to remove.
+        throw std::runtime_error(
+            "Primitive '" + name + "' declares a mesh.primitive.mode the glTF specification does "
+            "not define (valid modes are 0..6).");
+    }
+
+    const char* PrimitiveTopologyName(PrimitiveTopology topology)
+    {
+        switch (topology)
+        {
+            case PrimitiveTopology::Points:        return "POINTS";
+            case PrimitiveTopology::Lines:         return "LINES";
+            case PrimitiveTopology::LineLoop:      return "LINE_LOOP";
+            case PrimitiveTopology::LineStrip:     return "LINE_STRIP";
+            case PrimitiveTopology::Triangles:     return "TRIANGLES";
+            case PrimitiveTopology::TriangleStrip: return "TRIANGLE_STRIP";
+            case PrimitiveTopology::TriangleFan:   return "TRIANGLE_FAN";
+        }
+        return "UNKNOWN";
+    }
+
+    int PrimitiveTopologyMode(PrimitiveTopology topology)
+    {
+        return static_cast<int>(topology);
+    }
+
+    bool IsPrimitiveTopologySupported(PrimitiveTopology topology)
+    {
+        return topology == PrimitiveTopology::Triangles;
+    }
+
     MeshOut ExtractMesh(const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
                          const SkeletonResult* skel, float unitScale)
     {
+        // plan_gltf.md GLTF-071: read mesh.primitive.mode before anything else, and never
+        // reinterpret it. Until GLTF-072 implements the per-mode conversion policy (strip/fan to a
+        // triangle list, line topologies carried, points decided per renderer), a non-TRIANGLES
+        // primitive is rejected here with its real mode named. That is a deliberate, visible
+        // limitation; the alternative this replaces was decoding a strip's index run as a triangle
+        // list -- dropping every triangle after the first and drawing a chaotic tangle -- with no
+        // diagnostic anywhere.
+        const PrimitiveTopology topology = ClassifyPrimitiveTopology(prim, name);
+        if (!IsPrimitiveTopologySupported(topology))
+        {
+            throw std::runtime_error(
+                "Primitive '" + name + "' uses glTF primitive mode " +
+                std::to_string(PrimitiveTopologyMode(topology)) + " (" +
+                PrimitiveTopologyName(topology) + "), which CNA does not import yet. Only mode " +
+                std::to_string(PrimitiveTopologyMode(PrimitiveTopology::Triangles)) + " (" +
+                PrimitiveTopologyName(PrimitiveTopology::Triangles) + ") is supported; the other "
+                "topologies are rejected rather than silently reinterpreted as a triangle list.");
+        }
+
 #ifdef CNA_DRACO_AVAILABLE
         // CNB-91 (Phase 14F): decoded once here; every per-attribute unpack below (via
         // unpackSemantic) and the index extraction near the end both branch on whether this is
@@ -1096,6 +1161,10 @@ namespace CNA::Internal::GltfImport
 
         MeshOut out;
         out.name = name;
+        // The topology travels with the data it describes, so no downstream consumer has to assume
+        // one. Only TRIANGLES reaches this line today, which is what makes the assumption safe --
+        // rather than merely conventional, as it was before GLTF-071.
+        out.topology = topology;
         out.skinned = (jointsAcc != nullptr) && (weightsAcc != nullptr);
         // A skinned+colored primitive uses a stride-56 layout (the stride-52 GPU-skinned layout
         // with a per-vertex Color appended at the end) and SkinnedEffect's own CNAEXT

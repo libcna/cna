@@ -225,30 +225,52 @@
   "defects": [
     {
       "id": "D5",
-      "summary": "primitive.mode is never read. MeshOut carries no topology field at all, so a TRIANGLE_STRIP is silently reinterpreted as a triangle list.",
+      "summary": "primitive.mode was never read, so a TRIANGLE_STRIP was silently reinterpreted as a triangle list. GLTF-071 reads and classifies the mode and rejects the topologies CNA cannot yet honour; GLTF-072 still owns converting a strip to a triangle list, so the fixture does not import.",
       "firstDivergentLayer": "L3",
       "divergentFields": [
+        "import",
         "mode",
         "modeName",
-        "topologyCarried",
         "triangles"
       ],
       "divergentFieldsByLayer": {
         "L3": [
+          "import",
           "mode",
           "modeName",
-          "topologyCarried",
           "triangles"
+        ],
+        "L4": [
+          "worldPositions",
+          "worldBounds"
         ]
       },
       "owner": "GLTF-MESH",
       "owningTasks": [
+        "GLTF-071",
+        "GLTF-072"
+      ],
+      "closedTasks": [
         "GLTF-071"
       ],
-      "closedTasks": [],
-      "remainingTasks": [],
-      "status": "known-failing",
+      "remainingTasks": [
+        "GLTF-072"
+      ],
+      "status": "partially-remediated",
       "currentActual": {
+        "importRejected": true,
+        "topologyCarried": true,
+        "classifiedMode": 5,
+        "classifiedModeName": "TRIANGLE_STRIP",
+        "errorContains": [
+          "TRIANGLE_STRIP",
+          "mode 5"
+        ],
+        "indices": [],
+        "triangles": [],
+        "note": "ExtractMesh classifies mode 5 and throws with TRIANGLE_STRIP named. No index list reaches the numIndices/3 triangle-list path any more -- an explicit, tracked limitation instead of one silently wrong triangle. GLTF-072 converts the strip to [0,1,2] and [2,1,3], at which point this record becomes fixed."
+      },
+      "priorActual": {
         "indices": [
           0,
           1,
@@ -263,7 +285,8 @@
             2
           ]
         ],
-        "note": "The index list itself survives intact -- the loss is the topology. Read as TRIANGLES, four indices yield one triangle and vertex 3 is unreachable; the expected expansion is two triangles."
+        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+        "note": "What the forensic audit measured before GLTF-071: the index list survived intact and the topology was lost. Read as TRIANGLES, four indices yielded one triangle and vertex 3 was unreachable."
       }
     }
   ]
