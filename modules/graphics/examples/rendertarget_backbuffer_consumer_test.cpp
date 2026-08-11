@@ -138,9 +138,6 @@ namespace
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "SDL_RENDERER";
-#elif defined(CNA_RENDERER_ASCII)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "ASCII";
 #elif defined(CNA_RENDERER_FREEDIRECT)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "FREEDIRECT";

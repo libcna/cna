@@ -149,14 +149,6 @@ namespace
     // refused at construction (this renderer reports no GraphicsCapability::Texture3D).
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
-#elif defined(CNA_RENDERER_ASCII)
-    // Same 2D-only situation as SDL_RENDERER. Texture3D used to CONSTRUCT here, because this
-    // renderer inherits IGraphicsRenderer directly and was still answering SupportsCapability's own
-    // `return true` default while CreateTexture3D returned nullptr -- a volume resource with no
-    // storage behind it. REMED-GFX-130 made that report honest, so construction is now refused
-    // exactly as it is on Headless and Software (REMED-CONTENT-004's own mechanism).
-    constexpr Contract kContract{"ASCII", false, Support::Unsupported, Support::Unsupported,
-                                 false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};

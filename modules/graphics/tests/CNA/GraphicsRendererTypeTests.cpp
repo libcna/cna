@@ -14,8 +14,8 @@ static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Metal) + 1;
-static_assert(kPublicRendererCount == 41,
-              "GraphicsRendererType must expose all 41 genuine renderer identities");
+static_assert(kPublicRendererCount == 40,
+              "GraphicsRendererType must expose all 40 genuine renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
 {
@@ -67,7 +67,6 @@ namespace
             case GraphicsRendererType::Canvas:      return "CANVAS";
             case GraphicsRendererType::HtmlDom:     return "HTML_DOM";
             case GraphicsRendererType::Skia:        return "SKIA";
-            case GraphicsRendererType::Ascii:       return "ASCII";
             case GraphicsRendererType::FreeDirect:  return "FREEDIRECT";
             case GraphicsRendererType::Stub:        return "STUB";
             case GraphicsRendererType::DirectX9:        return "DIRECTX9";

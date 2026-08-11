@@ -163,7 +163,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_DIRECTX1) || defined(CNA_RENDERER_DIRECTX2) || defined(CNA_RENDERER_DIRECTX3) || defined(CNA_RENDERER_DIRECTX5) || defined(CNA_RENDERER_DIRECTX6) || defined(CNA_RENDERER_DIRECTX7) || defined(CNA_RENDERER_DIRECTX8) || defined(CNA_RENDERER_GDI)
+#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_DIRECTX1) || defined(CNA_RENDERER_DIRECTX2) || defined(CNA_RENDERER_DIRECTX3) || defined(CNA_RENDERER_DIRECTX5) || defined(CNA_RENDERER_DIRECTX6) || defined(CNA_RENDERER_DIRECTX7) || defined(CNA_RENDERER_DIRECTX8) || defined(CNA_RENDERER_GDI)
     // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
@@ -171,9 +171,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // binding more than one target here must throw clearly rather than silently rendering to only
     // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
     // this test's name/history (Task 881) refers to, so the throw here comes entirely from the
-    // renderer's own single-target limitation, not the cap check. ASCII (plan_ascii.md) forwards
-    // SetRenderTargets straight to the same real SdlRenderer instance it wraps, so it
-    // inherits this exact throw too.
+    // renderer's own single-target limitation, not the cap check.
     // Sokol left this list at plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
     // exactly like EasyGL/Vulkan/D3D11/etc. do below.

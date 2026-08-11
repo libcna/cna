@@ -197,9 +197,6 @@ namespace
     // 2D-only by design: CreateRenderTargetCube keeps IGraphicsRenderer's nullptr default.
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
-#elif defined(CNA_RENDERER_ASCII)
-    constexpr Contract kContract{"ASCII", false, Support::Unsupported, Support::Unsupported,
-                                 true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};

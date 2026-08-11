@@ -106,7 +106,7 @@ jobs:
       # CONFIGURE time (CMakeLists.txt: `set(CNA_TEST_DISPLAY ":0" CACHE STRING ...)`), so it cannot
       # be supplied by wrapping the test-run step in `xvfb-run` the way input-ci.yml does for its
       # narrower `-L input` selection -- that selection happens not to include any test that bakes
-      # CNA_TEST_DISPLAY. The unfiltered general suite does include several (EasyGL/SdlGpu/Ascii
+      # CNA_TEST_DISPLAY. The unfiltered general suite does include several (EasyGL/SdlGpu
       # real-window tests), so this job instead starts a real Xvfb server on a FIXED, known display
       # first, and passes that same display to `-DCNA_TEST_DISPLAY=` at configure time, so both the
       # baked-in test environment and every other test's inherited $DISPLAY agree.

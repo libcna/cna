@@ -185,11 +185,6 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = false;
     constexpr const char* kRendererName = "SDL_RENDERER";
-#elif defined(CNA_RENDERER_ASCII)
-    constexpr bool kRasterizes = true;
-    constexpr bool kReadsBackbuffer = true;
-    constexpr bool kDraws3D = false;
-    constexpr const char* kRendererName = "ASCII";
 #elif defined(CNA_RENDERER_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renderer-identity registry gate (MODULARIZATION_PLAN.md §2.3).
 
-CNA has exactly 41 public renderer identities. This check mechanically compares
+CNA has exactly 40 public renderer identities. This check mechanically compares
 the two authoritative registries -- the public GraphicsRendererType enum and the
 CNA_GRAPHICS_RENDERER cmake selection list -- against the canonical identity
 table below. Any addition, removal or rename of a public identity fails here
@@ -16,7 +16,7 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Canonical public identities: (cmake selection name, enum name). 41 entries.
+# Canonical public identities: (cmake selection name, enum name). 40 entries.
 IDENTITIES = [
     ("SDL_RENDERER", "SdlRenderer"),
     ("OPENGLES3", "OpenGLES3"),
@@ -36,7 +36,6 @@ IDENTITIES = [
     ("CANVAS", "Canvas"),
     ("HTML_DOM", "HtmlDom"),
     ("SKIA", "Skia"),
-    ("ASCII", "Ascii"),
     ("FREEDIRECT", "FreeDirect"),
     ("DIRECTX9", "DirectX9"),
     ("DIRECTX1", "DirectX1"),

@@ -20,7 +20,7 @@
 // "this renderer creates no cube/volume resource at all" into a successful-looking call. Three
 // distinct silent-discard routes are reachable through the public API today:
 //
-//   * NO RESOURCE -- SDL_Renderer, ASCII, Canvas and DIRECTX3 keep IGraphicsRenderer::CreateTextureCube's
+//   * NO RESOURCE -- SDL_Renderer, Canvas and DIRECTX3 keep IGraphicsRenderer::CreateTextureCube's
 //     nullptr default, so `renderer_` is null and the upload is dropped by the `if` itself;
 //   * NO STORAGE -- Headless's cube renderer validates its arguments, records a trace entry and
 //     stores nothing, and RenderTargetCube renderers without an explicit upload override inherit
@@ -177,10 +177,6 @@ namespace
     // IGraphicsRenderer's own nullptr-returning defaults, so no cube/volume storage exists at all
     // and Texture3D is refused at construction.
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
-                                 false, Support::Unsupported, Support::Unsupported,
-                                 Support::Unsupported, false};
-#elif defined(CNA_RENDERER_ASCII)
-    constexpr Contract kContract{"ASCII", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
 #elif defined(CNA_RENDERER_CANVAS)
