@@ -224,6 +224,12 @@ TEST_F(Texture2DCacheReconstructionTest, RenderTargetKeepsItsRendererAndDropsThe
     }
 
     RenderTarget2D rt(gd, kW, kH);
+    // A renderer that creates no render-target resource at all (its CreateRenderTarget2D keeps
+    // IGraphicsRenderer's nullptr default) has no IRenderTargetRenderer for this contract to be
+    // about; GraphicsDeviceValidationTest covers its deterministic refusal of a binding instead.
+    if (rt.GetRenderTargetRenderer() == nullptr)
+        GTEST_SKIP() << "this renderer creates no RenderTarget2D resource";
+
     const auto before = rt.GetRendererWeak().lock();
     ASSERT_NE(before, nullptr);
 
@@ -254,6 +260,12 @@ TEST_F(Texture2DCacheReconstructionTest, RenderTargetReadbackComesFromTheSurface
     }
 
     RenderTarget2D rt(gd, kW, kH);
+    // A renderer that creates no render-target resource at all (its CreateRenderTarget2D keeps
+    // IGraphicsRenderer's nullptr default) has no IRenderTargetRenderer for this contract to be
+    // about; GraphicsDeviceValidationTest covers its deterministic refusal of a binding instead.
+    if (rt.GetRenderTargetRenderer() == nullptr)
+        GTEST_SKIP() << "this renderer creates no RenderTarget2D resource";
+
     const auto in = Pattern(110);
     rt.SetData(in.data(), static_cast<int>(in.size()));
     ASSERT_TRUE(rt.GetCpuPixelsWeak().expired())

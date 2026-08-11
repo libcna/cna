@@ -84,7 +84,8 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // policy (OpenVgRenderer::CreateTextureCube only ever returns a real object under the opt-in
 // WarnAndStub policy, and even then a discard-everything null object, never real storage) --
 // ShivaVG/OpenVG has no cube-map concept at all. Same "no cube resource exists" shape as
-// SDL_Renderer/Canvas/HTML_DOM/FreeDirect/GDI above.
+// SDL_Renderer/Canvas/HTML_DOM/FreeDirect/GDI above. || \
+    defined(CNA_RENDERER_PORTABLEGL)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else

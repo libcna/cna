@@ -141,7 +141,10 @@ namespace CNA
         SvgDom,
 
         /** @brief OpenVG 1.1 vector graphics (2D-only), implemented by ShivaVG on top of desktop OpenGL. */
-        OpenVg
+        OpenVg,
+
+        /** @brief PortableGL (rswinkle/PortableGL, CPU software OpenGL 3.x). */
+        PortableGL
     };
 
     /**
@@ -251,6 +254,8 @@ namespace CNA
         return GraphicsRendererType::SvgDom;
 #elif defined(CNA_RENDERER_OPENVG)
         return GraphicsRendererType::OpenVg;
+#elif defined(CNA_RENDERER_PORTABLEGL)
+        return GraphicsRendererType::PortableGL;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -315,6 +320,7 @@ namespace CNA
             case GraphicsRendererType::Fna3d:         return "FNA3D";
             case GraphicsRendererType::SvgDom:         return "SVG_DOM";
             case GraphicsRendererType::OpenVg:         return "OPENVG";
+            case GraphicsRendererType::PortableGL:    return "PORTABLEGL";
         }
         return "UNKNOWN";
     }

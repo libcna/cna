@@ -165,7 +165,7 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 
 ## 6. 🔌 Renderer System
 
-CNA exposes **45 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+CNA exposes **46 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
 configuration). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
@@ -185,6 +185,7 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `WEBGPU`
 - `MAGNUM`
 - `SKIA`
+- `BLEND2D` (CPU 2D vector rasterizer via Blend2D, presented through a streaming SDL_Renderer texture -- see [`docs/blend2d-renderer.md`](docs/blend2d-renderer.md))
 - `HEADLESS`
 - `SOFTWARE`
 - `STUB`
@@ -198,6 +199,7 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `DIRECTX12` (Windows-only)
 - `CANVAS` (Emscripten only)
 - `HTML_DOM` (Emscripten only)
+- `SVG_DOM` (Emscripten only, 2D-only; SpriteBatch output as real `<svg>`/`<image>` DOM elements -- see [`docs/svg-dom-renderer.md`](docs/svg-dom-renderer.md))
 - `FREEDIRECT` (formerly `DIRECTX3`)
 - `DIRECTX1` (Windows-only)
 - `DIRECTX2` (Windows-only)
@@ -215,6 +217,8 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `LLGL` (experimental; accepted support is OpenGL on Linux/X11/x86_64)
 - `METAL` (macOS only, experimental — see [`docs/metal-renderer.md`](docs/metal-renderer.md))
 - `FNA3D` (FNA's own XNA-shaped graphics library; picks SDL_GPU/Direct3D 11/OpenGL at runtime, and executes XNA's actual stock effects — see [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md))
+- `OPENVG` (OpenVG 1.1 2D vector graphics via ShivaVG on a desktop OpenGL context; desktop Linux/Windows/macOS -- see [`docs/openvg-renderer.md`](docs/openvg-renderer.md))
+- `PORTABLEGL` (CPU software OpenGL 3.x-ish pipeline via `rswinkle/PortableGL`; no GPU/window required -- see [`docs/portablegl-renderer.md`](docs/portablegl-renderer.md))
 
 ### Tradeoffs
 

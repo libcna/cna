@@ -456,7 +456,7 @@ Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 `HTML_DOM` | `SKIA` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
 `DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL` | `BLEND2D` | `FNA3D` |
-`SVG_DOM` | `OPENVG`). These are exactly 45
+`SVG_DOM` | `OPENVG` | `PORTABLEGL`). These are exactly 46
 public identities; EasyGL remains an internal implementation shared by five GL profiles. The former
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.

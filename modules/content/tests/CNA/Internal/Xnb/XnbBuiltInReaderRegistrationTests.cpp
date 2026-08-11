@@ -153,10 +153,13 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 // reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
+// PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
+// either (docs/portablegl-renderer.md).
 #if defined(CNA_RENDERER_SDL_RENDERER) || \
     defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
-    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI) || \
-    defined(CNA_RENDERER_OPENVG)
+    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || \
+    defined(CNA_RENDERER_GDI) || defined(CNA_RENDERER_OPENVG) || \
+    defined(CNA_RENDERER_PORTABLEGL)
 constexpr bool kCubeStorageSupported = false;
 #else
 constexpr bool kCubeStorageSupported = true;
