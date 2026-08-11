@@ -135,16 +135,6 @@ namespace CnaTest::GltfOracle
             return value;
         }
 
-        /// Every node reachable from the default scene, so an instance outside it is never counted.
-        void CollectReachable(const cgltf_node* node, std::unordered_set<const cgltf_node*>& out)
-        {
-            if (node == nullptr || !out.insert(node).second) { return; }
-            for (cgltf_size i = 0; i < node->children_count; ++i)
-            {
-                CollectReachable(node->children[i], out);
-            }
-        }
-
         void AccumulateBounds(WorldPositions& positions)
         {
             float lo[3] = {std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(),
@@ -378,7 +368,10 @@ namespace CnaTest::GltfOracle
         // structural fact; GLTF-071 is what makes it true.
         dump.topologyCarried = false;
 
-        if (mesh.stride <= 0) { return dump; }
+        // Every layout in the stride ABI begins with a 3-float position, so a stride that cannot
+        // hold one is not a layout this helper can read. Reporting zero vertices is the right
+        // answer for a MeshOut that was never populated; guessing would read past the buffer.
+        if (mesh.stride < 12) { return dump; }
         const std::size_t stride = static_cast<std::size_t>(mesh.stride);
         dump.vertexCount = mesh.vertexBytes.size() / stride;
 
@@ -560,9 +553,18 @@ namespace CnaTest::GltfOracle
         {
             const cgltf_data& data;
             WorldPositions& out;
+            // A node graph is a tree in any valid file, but nothing in the parse prevents a
+            // malformed one from containing a cycle, and this helper must terminate on any input
+            // it is handed rather than recursing until the stack runs out.
+            std::unordered_set<const cgltf_node*> onPath;
 
             void Visit(const cgltf_node& node, const GltfMatrix& parentWorld)
             {
+                if (!onPath.insert(&node).second)
+                {
+                    out.selfCheckPassed = false;  // a cycle: no world transform is well defined
+                    return;
+                }
                 const GltfMatrix world = Multiply(parentWorld, NodeLocalMatrix(node));
 
                 // Independent cross-check: cgltf composes the same chain from the same file with
@@ -590,12 +592,13 @@ namespace CnaTest::GltfOracle
 
                 for (cgltf_size i = 0; i < node.children_count; ++i)
                 {
-                    Visit(*node.children[i], world);
+                    if (node.children[i] != nullptr) { Visit(*node.children[i], world); }
                 }
+                onPath.erase(&node);
             }
         };
 
-        Walker walker{data, positions};
+        Walker walker{data, positions, {}};
         for (cgltf_size i = 0; i < scene->nodes_count; ++i)
         {
             walker.Visit(*scene->nodes[i], IdentityMatrix());
