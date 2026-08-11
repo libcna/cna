@@ -67,9 +67,10 @@ staleness problem: it still uses the pre-2026-08-10 `CNA_GRAPHICS_BACKEND` / `EA
 so **it cannot currently configure against the baseline at all**.
 
 The plan defines two milestones — **GLTF CORE 2.0 CORRECT** and **GLTF ROBUST** — a seven-layer
-numerical oracle hierarchy, a 96-asset conformance corpus, a 24-phase dependency-ordered backlog of
-**460 tasks** (`GLTF-001` … `GLTF-460`), and a 14-task **center-collapse critical path** that
-answers the owner's question before any material, animation or extension work begins.
+numerical oracle hierarchy, a 135-asset conformance corpus, a 24-phase dependency-ordered backlog of
+**460 tasks** (`GLTF-001` … `GLTF-460`) organised into **two execution tracks**, and a 19-task
+**P0 center-collapse track** that answers the owner's question before any accessor-breadth,
+material, animation or extension work begins.
 
 ### 1.1 Proven defect ledger (this audit, on `fb37282`)
 
@@ -821,32 +822,54 @@ Each fixture is one node-graph shape with an exactly computable world-space vert
 | `xf-transform-only` | a node with a transform and no mesh, with a mesh child | child placed by the parent |
 | `xf-multi-root` | three root nodes in the scene | all three present |
 
-### 11.5 Design decision to be made in Phase 5 (`GLTF-103`)
+### 11.5 Architecture policy for Phase 5 (`GLTF-103`)
 
-Two viable architectures. The plan does **not** pre-commit; `GLTF-103` chooses on evidence and
-records the choice, and every downstream task is written to be agnostic.
+**Option A — a real `ModelBone` node hierarchy — is the presumptive final architecture.**
+`GLTF-103` is therefore not an open A-vs-B choice: it is a task to *prove Option A preserves XNA
+compatibility and adopt it*, and it may fall back to Option B only by demonstrating a concrete,
+written blocker.
 
-**Option A — real bone hierarchy (preferred).** `MeshGroup` becomes a list of *instances*
-(`{const cgltf_node*, const cgltf_mesh*, Matrix world, Matrix local, int parentBoneIndex}`); the
-importer builds a real `ModelBone` tree mirroring the glTF node graph, and each `ModelMesh`'s
-`ParentBone` is its node's bone. `Model::Draw` then already composes correctly (`Model.cpp` is
-verified correct). `.cnj` gains a `"bones"` array with parent indices and transforms, and a
-per-mesh `"parentBone"` index.
+**Option A — real bone hierarchy (PRESUMPTIVE FINAL ARCHITECTURE).** `MeshGroup` becomes a list of
+*instances* (`{const cgltf_node*, const cgltf_mesh*, Matrix world, Matrix local, int
+parentBoneIndex}`); the importer builds a real `ModelBone` tree mirroring the glTF node graph, and
+each `ModelMesh`'s `ParentBone` is its node's bone. `Model::Draw` then already composes correctly
+(`Model.cpp` is verified correct). `.cnj` gains a `"bones"` array with parent indices and
+transforms, and a per-mesh `"parentBone"` index.
 
-* Pros: lossless; enables rigid node animation (D6), instancing, correct camera framing, and
-  `CopyAbsoluteBoneTransformsTo` for game code; matches XNA's own model shape.
-* Cons: `.cnj` format change (versioned); both loaders must change together.
+CNA already ships every primitive this needs — `Model`, `ModelBone`, `ModelMesh::ParentBone`,
+`CopyAbsoluteBoneTransformsTo` — and `Model::Draw`'s composition was **verified correct** by this
+audit. Building the node graph at import is therefore the architecturally natural move, not a new
+subsystem.
 
-**Option B — bake world transforms into vertices.** Positions premultiplied by `world`, normals by
-`transpose(inverse(A))`, `tangent.w` by `sign(det A)`, winding flipped on negative determinant.
+Option A is the only architecture that preserves all seven of:
 
-* Pros: no format change; smallest diff.
-* Cons: destroys instancing (a shared mesh is duplicated per node), makes rigid node animation
-  impossible, and permanently loses the hierarchy. **Acceptable only as an interim step, and only if
-  `GLTF-103` records it as such.**
+1. mesh instancing (a shared mesh drawn from N nodes, one `VertexBuffer`);
+2. a real scene node graph;
+3. rigid (non-joint) node animation — **D6 cannot be fixed without it**;
+4. correct `node.weights` per instance;
+5. cameras and lights attached to nodes, with their node transforms;
+6. hierarchy visibility to game code via `CopyAbsoluteBoneTransformsTo`;
+7. natural parity between the offline `.cnj` path and the direct runtime path.
 
-The critical path (§28) is deliberately written so that the *diagnosis* completes before this choice
-is made.
+Its cost is a versioned, additive `.cnj` format change (`GLTF-129`) that both loaders must adopt
+together (`GLTF-130`). Under this policy those two tasks are **mandatory, not conditional**.
+
+**Option B — bake world transforms into vertices — is a temporary emergency fallback only.**
+Positions premultiplied by `world`, normals by `transpose(inverse(A))`, `tangent.w` by
+`sign(det A)`, winding flipped on negative determinant.
+
+* Only merit: no format change, smallest diff.
+* Cost: destroys every one of the seven properties above. It duplicates a shared mesh per node (N×
+  geometry memory), makes rigid node animation **impossible**, and permanently discards the
+  hierarchy.
+
+Option B is **not** an equal long-term alternative and must never be recorded as the final
+architecture. It may be adopted only if `GLTF-103` demonstrates a concrete blocker to Option A, and
+then only as an explicitly time-boxed interim step that carries its own removal task.
+
+`GLTF-103` decides on evidence from the L2/L3/L4 oracle harness (`GLTF-004`, `GLTF-005`,
+`GLTF-006`) — it does **not** wait for the `GLTF-011` verdict, which is written after the
+center-collapse fixes land (§28).
 
 ---
 
@@ -1054,13 +1077,54 @@ jointMatrix(j) = inverse(globalTransform(meshNode)) · globalTransform(joint_j) 
 skinnedPosition = Σ_i  WEIGHTS_0[i] · jointMatrix(JOINTS_0[i]) · position
 ```
 
-Two rules that are easy to miss and that CNA gets wrong:
+Three rules that are easy to miss and that CNA gets wrong:
 
 1. `globalTransform(joint_j)` is the joint's **full scene-root-relative** transform — every ancestor,
-   including nodes that are not themselves joints.
+   including nodes that are not themselves joints, **and including every ancestor above
+   `skin.skeleton`**. See the boxed rule below.
 2. The mesh node's own transform must be **cancelled**, not applied. glTF further says a skinned
    mesh's node transform *should* be ignored entirely; the `inverse(globalTransform(meshNode))` term
    is what makes that true.
+3. A joint's **scene-node identity** and its **skin palette index** are different things (§15.1.2).
+   Conflating them is how a correct palette reorder silently corrupts the scene hierarchy.
+
+#### 15.1.1 `skin.skeleton` is a root *hint*, never a traversal stop
+
+> ⛔ **`skin.skeleton` must never truncate the ancestry used to compute `globalTransform(joint)`.**
+>
+> `skin.skeleton` names the declared skeleton root — a semantic hint useful for locating and naming
+> the rig. It is **not** a licence to stop walking scene ancestors. Every transform on every
+> ancestor above `skin.skeleton`, and every ancestor that is not itself a joint, still contributes
+> to `globalTransform(joint)` exactly as the equation above requires.
+>
+> **D8 is precisely the failure that "stop the walk early" produces.** An implementation that walks
+> up only until it reaches `skin.skeleton` — or only within the joint set, as CNA does today —
+> reproduces D8 in a new disguise. `f9` proves the cost: one dropped ancestor translation of
+> `[0,100,0]` displaces every skinned vertex by exactly `−100` in Y.
+
+#### 15.1.2 Scene-node identity ≠ skin palette identity
+
+Two independent index spaces must be modelled explicitly and never merged:
+
+| Space | Meaning | Ordering constraint | Consumers |
+|---|---|---|---|
+| **`sceneNodeIndex`** | the node's stable identity in the glTF scene graph and in CNA's `ModelBone` tree | glTF's own node order / the imported bone tree; **stable across loads** | `Model::Bones`, `ModelMesh::ParentBone`, `CopyAbsoluteBoneTransformsTo`, rigid node animation, cameras/lights |
+| **`paletteIndex`** | the joint's slot in one skin's GPU bone palette | whatever the shader palette requires (today: breadth-first, parent-before-child) | `SkinningData`, `AnimationPlayer::GetSkinTransforms`, `BlendIndices`, `uBones[]` |
+
+Rules:
+
+* the **scene hierarchy must not be reordered** to satisfy palette ordering — palette ordering is a
+  skin-local implementation detail;
+* palette reordering and its `oldToNew` remap stay **internal** to the skin;
+* `JOINTS_0` decoding targets **`paletteIndex`**, via the skin's own remap;
+* rigid animation, scene hierarchy, camera/light attachment and game-facing bone lookup all use
+  **`sceneNodeIndex`**;
+* the mapping `sceneNodeIndex ↔ paletteIndex` is explicit, per skin, and testable in both
+  directions.
+
+This costs nothing today — `BuildSkeleton`'s breadth-first reorder and `oldToNew` remap are already
+correct *as a palette operation* (`RuntimeGltfModelTest.LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversedJointOrder` proves it). The rule exists so that Phase 5's new scene hierarchy is not
+retro-fitted to the palette order once both exist.
 
 CNA's XNA row-vector equivalent, as currently implemented in `AnimationPlayer::RecomputeTransforms`:
 
@@ -1098,13 +1162,13 @@ why "the character collapses toward the centre" is the expected symptom of D8 on
 
 | Gap | Detail | Task |
 |---|---|---|
-| `skin.skeleton` ignored | the declared skeleton root is never used to scope the ancestor walk | `GLTF-249` |
+| `skin.skeleton` ignored | the declared skeleton root is parsed by cgltf and never read. It is a naming/locating hint — **it must not scope or truncate the ancestor walk** (§15.1.1) | `GLTF-249` |
 | Missing `inverseBindMatrices` | spec says treat as identity; CNA leaves `Matrix::Identity` ✅ correct, untested | `GLTF-250` |
 | `JOINTS_1`/`WEIGHTS_1` | ignored with no warning; >4 influences silently truncated | `GLTF-257` |
 | Weight renormalisation | never performed; a non-conforming exporter shrinks vertices toward the origin | `GLTF-256` |
 | `MaxBones = 72` | rigs above 72 joints silently exceed the palette | `GLTF-261` |
 | `BlendIndices` `uint8` | rigs above 255 joints wrap the index | `GLTF-254` |
-| Palette ordering | `BuildSkeleton` reorders joints breadth-first and remaps `JOINTS_0` via `oldToNew` ✅ correct, and `RuntimeGltfModelTest.LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversedJointOrder` covers it | ✅ |
+| Palette ordering | `BuildSkeleton` reorders joints breadth-first and remaps `JOINTS_0` via `oldToNew` ✅ correct **as a palette operation**, and `RuntimeGltfModelTest.LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversedJointOrder` covers it. The risk is Phase 5: the new scene hierarchy must not inherit palette order (§15.1.2) | ✅ / `GLTF-252` |
 | Multiple skins per file | one `MeshGroup` per skin; the offline tool emits one `.cnj` each ✅, the runtime path keeps only the first 🐛 | `GLTF-137` |
 | Non-uniform joint scale | never tested; normals need the inverse-transpose in the skinning shader | `GLTF-268` |
 | Bind pose never applied | `SkinnedEffect` defaults to 72 identity bones; the viewer never calls `SetBoneTransforms`, so a skinned model renders **unskinned** | `GLTF-262`, V-adjacent `GLTF-425` |
@@ -1121,7 +1185,7 @@ why "the character collapses toward the centre" is the expected symptom of D8 on
 | `skin-unnormalized` | w=`[0.5,0.25,0,0]` (sums to 0.75) | manifest states both the raw and the renormalised result; the policy chosen in `GLTF-256` decides which is asserted |
 | `skin-parented-joints` | joint B child of joint A, both transformed | manifest-computed |
 | `skin-armature-ancestor` | **`f9`** — joints under a transformed non-joint node | `(1,0,0)`; today `(1,−100,0)` |
-| `skin-mesh-node-transform` | skinned mesh node with `T=[0,0,50]` | `(1,0,0)` — the mesh node transform must be cancelled |
+| `skin-mesh-node-transform` | skinned mesh node with `T=[0,0,50]` | `(1,0,0)` — the mesh node transform must be cancelled **and** must not be re-applied by the node bone Phase 5 gives that same node (`GLTF-260`) |
 | `skin-no-ibm` | `inverseBindMatrices` absent | identity IBMs |
 | `skin-nonuniform-joint-scale` | joint `S=[1,2,1]` | positions **and** normals asserted |
 | `skin-73-joints` | 73 joints | must not silently truncate |
@@ -1168,11 +1232,18 @@ transforms is currently vacuous because there are none.
 
 ### 16.3 Morph fixture ladder (L3/L4)
 
+The morph group **owns** 13 assets — every name is written out in full so the §24.2 inventory is
+machine-verifiable rather than inferred from a compressed token:
+
 `morph-position-single`, `morph-position-two-targets`, `morph-normal-delta-basic` (stride 32),
 `morph-normal-delta-pbr` (stride 48 — **fails today**), `morph-tangent-delta` (fails today),
 `morph-mesh-weights-nonzero`, `morph-node-weights-override` (fails today),
-`morph-weights-animated-linear/step/cubic`, `morph-target-without-position`,
-`morph-plus-skin`, `morph-shared-mesh-two-nodes`.
+`morph-weights-animated-linear`, `morph-weights-animated-step`, `morph-weights-animated-cubic`,
+`morph-target-without-position`, `morph-plus-skin`, `morph-shared-mesh-two-nodes`.
+
+The three `morph-weights-animated-*` assets are owned here and *referenced* by Phase 14
+(§17.2's `anim-weights-*`); `morph-plus-skin` is owned here and referenced by `GLTF-269`/`GLTF-286`.
+Per §24.1 a reference never re-counts.
 
 ---
 
@@ -1205,9 +1276,9 @@ For each interpolation mode, a single node with a known channel, asserted at `t 
 * `anim-step-translation` — same keys, `STEP`; assert `t=1.999 → [0,0,0]`, `t=2 → [10,0,0]`.
 * `anim-cubic-translation` — keys with non-trivial tangents; the manifest carries the Hermite result
   computed independently, to 1e-6.
-* `anim-rotation-slerp` — identity → 180° about Y; assert `t=mid` is the 90° quaternion and that the
-  **shortest path** was taken (negate one keyframe quaternion in a sibling fixture and assert the
-  same visual result).
+* `anim-rotation-slerp` — identity → 180° about Y; assert `t=mid` is the 90° quaternion.
+* `anim-rotation-shortest-path` — the sibling twin of the above with one keyframe quaternion negated;
+  assert the **shortest path** was taken by requiring the same pose as `anim-rotation-slerp`.
 * `anim-scale-linear`, `anim-multi-channel-one-node` (T+R+S on one node with different key times —
   exercises the union resampling), `anim-two-nodes`, `anim-nonzero-start` (first key at `t=1.5`),
   `anim-rigid-node` (`f7`), `anim-weights-*` (see §16.3).
@@ -1431,8 +1502,22 @@ and fails the release gate if any is found.
   never encode CNA's bug as the spec.
 * **Small.** Every synthetic fixture is < 8 KB. Large real-world assets are referenced, licence-
   reviewed, and fetched by a script — not committed blindly.
+* **One canonical ID, one owning group, many referencing groups.** Every asset has exactly one
+  canonical name and is **listed and counted in exactly one owning group** in §24.2. Other phases
+  freely *reference* it — `sparse-indices` is owned by the accessor group and referenced by
+  `GLTF-063`; `morph-plus-skin` is owned by the morph group and referenced by `GLTF-269`;
+  `anim-weights-*` are owned by the morph group and referenced by Phase 14. **Referencing never
+  re-counts.** The distinct-asset total is therefore exactly the sum of the owning-group counts.
+* **The manifest is the authority, not this document.** The generator emits a machine-readable
+  inventory (`id`, `owningGroup`, `referencingGroups[]`, `validatedLayers[]`, `features[]`), and
+  `GLTF-399` asserts in CI that the emitted distinct-asset count equals the number stated here. If
+  the corpus grows, the number in this document is updated from the manifest — never the reverse.
 
-### 24.2 Planned corpus — 96 synthetic assets
+### 24.2 Planned corpus — 135 distinct synthetic assets
+
+Counts below are **owning-group** counts per §24.1; no asset is listed twice, so the column sums to
+the distinct-asset total. Each asset additionally ships a `.glb` twin (`GLTF-400`), which is the
+same asset in another container, not another asset.
 
 | Group | Count | Assets |
 |---|---|---|
@@ -1445,15 +1530,25 @@ and fails the release gate if any is found.
 | UV / textures / samplers | 10 | `uv0-checker`, `uv1-material`, `uv-out-of-range-clamp`, `uv-out-of-range-wrap`, `uv-out-of-range-mirror`, `sampler-nearest`, `sampler-trilinear`, `texture-transform-basecolor`, `texture-transform-per-map`, `texture-shared-two-samplers` |
 | Materials / PBR | 12 | `mat-default` (no material), `mat-factor-only-gold`, `mat-basecolor-factor-times-texture`, `mat-metallic-roughness-channels`, `mat-normal-scale`, `mat-occlusion-strength`, `mat-emissive-factor`, `mat-emissive-strength`, `alpha-opaque`, `alpha-mask`, `alpha-blend`, `double-sided` |
 | Skinning | 13 | the `skin-*` ladder in §15.4 |
-| Morph | 12 | the `morph-*` ladder in §16.3 |
-| Animation | 12 | the `anim-*` ladder in §17.2 |
+| Morph | 13 | the `morph-*` ladder in §16.3, which **owns** `morph-weights-animated-linear/step/cubic` and `morph-plus-skin` |
+| Animation | 10 | the `anim-*` ladder in §17.2, excluding the `anim-weights-*` fixtures owned by the morph group |
 | Scenes / cameras / lights | 7 | `scene-default-selection`, `scene-two-roots`, `scene-no-scenes`, `camera-perspective`, `camera-perspective-infinite`, `camera-orthographic`, `lights-punctual-three` |
 | Draco parity | 4 | `draco-triangle`, `draco-vs-uncompressed-pair`, `draco-skinned`, `draco-morph` |
 | Robustness / malformed | 6 | `bad-accessor-out-of-bounds`, `bad-index-out-of-range`, `bad-buffer-truncated`, `bad-glb-chunk-length`, `bad-matrix-and-trs`, `bad-version-1.0` |
 
-Some groups reuse an asset across layers (the same `alpha-mask` file is an L3, L6 and L7 fixture);
-the count above is of distinct files. Fourteen of them (`f1`…`f14`) already exist as the throwaway
-audit fixtures and are promoted, not re-invented.
+**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 13 + 13 + 10 + 7 + 4 + 6 = 135 distinct assets.**
+
+Reuse happens along two axes and neither changes that total. An asset is reused **across oracle
+layers** — the same `alpha-mask` file is an L3, L6 and L7 fixture — and **across phases**, where a
+task in another group consumes an asset owned elsewhere (§24.1). Both are recorded in the manifest
+as `validatedLayers[]` and `referencingGroups[]`; only `owningGroup` counts.
+
+Fourteen assets (`f1`…`f14`) already exist as this audit's throwaway fixtures and are promoted, not
+re-invented: `xf-shared-mesh` (f1), `xf-parent-child` (f2), `sparse-indices` (f3),
+`mode-triangle-strip` (f4), `interleaved-position-normal` (f5), `sparse-position` (f6),
+`anim-rigid-node` (f7), `mat-factor-only-gold` (f8), `skin-armature-ancestor` (f9),
+`normalized-u8-color` (f10), `u8-idx` (f11), `mode-points` (f12), `xf-matrix-node` (f13),
+`scene-default-selection` (f14).
 
 ### 24.3 Existing tracked glTF assets
 
@@ -1569,38 +1664,93 @@ GPU morphing, >4 skin influences, >72 bones.
 
 ## 28. Critical Path — DEFORMATION / CENTER-COLLAPSE
 
-**This is what runs first. It is 14 tasks and does not depend on any material, texture, animation or
+### 28.1 Two execution tracks
+
+The 24 phases of §29 express **dependency order, not schedule order**. Read literally as a schedule
+they would put the entire Phase 1–4 conformance campaign — container validation, the whole accessor
+component-type matrix, vertex-semantics breadth — ahead of Phase 5, and so delay the already-proven
+fundamental geometry defect behind work that does not block it. That is the wrong sequencing for the
+owner's actual problem.
+
+The campaign therefore runs as two tracks:
+
+| Track | Contents | Entry | Blocks |
+|---|---|---|---|
+| **TRACK A — P0 CENTER-COLLAPSE** | the 19 tasks in §28.2, each marked `[P0]` in §29 | none beyond its own dependency columns | nothing else may claim a milestone before it completes |
+| **TRACK B — FULL CONFORMANCE** | every remaining task, in the Phase 1–23 order of §29 | its own phase entry conditions | Track A tasks are **not** blocked by Track B phase entry conditions |
+
+**Track A's phase entry conditions are waived for its own 19 tasks**, and only for those. A phase
+entry condition such as Phase 5's *"Entry: Phase 4"* means "Phase 4 must be complete before the rest
+of Phase 5 runs" — it does **not** gate `GLTF-103`, `GLTF-113`, `GLTF-114` or `GLTF-115`, whose real
+prerequisites are the dependency columns in §29 and nothing more. The same waiver applies to Phase 2
+(`GLTF-041`), Phase 3 (`GLTF-063`, `GLTF-071`) and Phase 12 (`GLTF-245`, `GLTF-247`, `GLTF-248`,
+`GLTF-260`).
+
+Track A is **closed under its own dependencies**: the transitive closure of its 19 tasks contains
+nothing outside the set. That is a machine-checkable property of the `Deps` columns, and it is why
+`GLTF-002` (the spec pin `GLTF-003` needs) and `GLTF-041` (the L2 attribute-decode lock `GLTF-063`
+builds on) are members rather than silent external prerequisites.
+
+This is safe because every Track A task's dependency column already names its true prerequisites, and
+the audit proved the accessor breadth Track B adds is **not** implicated in any of D1–D5 or D8: the
+attribute decode path was numerically verified correct (§1.2, §9.1).
+
+### 28.2 Track A — the P0 sequence
+
+**19 tasks, closed under their own dependencies. Depends on no material, texture, animation or
 extension work.** Its output is a written verdict naming the first divergent layer for the owner's
 failing asset, with numbers.
 
 ```
-GLTF-001  record baseline SHA + build the converter                  (done in this audit; re-verify)
+GLTF-001  record baseline SHA + build the converter               (done in this audit; re-verify)
    │
-GLTF-004  promote f1…f14 into tools/gltf_fixtures/ with manifests
+GLTF-002  pin the glTF 2.0 specification revision
    │
-GLTF-005  DumpAccessorEXT / DumpMeshOutEXT test-only dumpers (L2/L3)
+GLTF-003  tools/gltf_fixtures/ generator — asset AND manifest from one source
+   │
+GLTF-004  promote f1…f14 into the generator with full manifests
+   │
+GLTF-005  DumpAccessorEXT / DumpMeshOutEXT test-only dumpers      (L2 / L3)
    │
 GLTF-006  EvaluateWorldPositionsEXT expected-world-position helper (L4)
    │
+GLTF-007  golden vertex/index buffer comparator                   (L5)
+   │
+GLTF-041  lock the VERIFIED-correct attribute decode path with L2 fixtures
+   │       (so index-path work cannot be blamed on, or regress, the attribute path)
+   │
    ├── GLTF-063  index decoding: sparse + null-bufferView + range validation   ← D4
    │
-   ├── GLTF-071  read prim.type; reject or convert; never reinterpret          ← D5
+   ├── GLTF-071  read prim.type; classify; never reinterpret                   ← D5
    │
-   ├── GLTF-103  DECISION: node-transform architecture (bones vs baking)       ← D1 D2 D3
-   │      └── GLTF-113  MeshGroup → mesh *instances* carrying cgltf_node* + world matrix
-   │             └── GLTF-114  world transform reaches ModelBone / vertex data on BOTH loaders
-   │                    └── GLTF-115  xf-* ladder passes at L4
-   │
-   └── GLTF-245  BuildSkeleton walks the FULL ancestor chain above the joint set  ← D8
+   ├── GLTF-103  ADOPT Option A (real ModelBone node hierarchy) unless a
+   │   │         concrete blocker is proven                                    ← D1 D2 D3
+   │   │         deps: GLTF-004, GLTF-005, GLTF-006   — NOT GLTF-011
+   │   └── GLTF-113  MeshGroup → mesh *instances* carrying cgltf_node* + world matrix
+   │          └── GLTF-114  world transform reaches ModelBone on BOTH loaders
+   │                 └── GLTF-115  xf-* ladder passes at L4
+   │                        │
+   └── GLTF-245  BuildSkeleton walks the FULL scene ancestry above the joint set ← D8
+          │      (skin.skeleton is a hint, never a traversal stop — §15.1.1)
           └── GLTF-247  add the inverse(meshNodeWorld) term to the joint matrix
-                 └── GLTF-248  skin-armature-ancestor + skin-mesh-node-transform pass at L4
+                 └── GLTF-248  skin-armature-ancestor + skin-mesh-node-transform at L4
+                        └── GLTF-260  the node bone Phase 5 gives the skinned mesh node
+                                      must NOT re-apply that transform  (needs GLTF-114)
+                                      ← D1–D3 remediation changes D8's assumptions
    │
 GLTF-011  center-collapse verdict report: for each failing asset, the first
           divergent layer, decoded vs expected positions, generated VB bytes,
           transform matrices, and the owning task ID
+          deps: GLTF-007, GLTF-063, GLTF-071, GLTF-115, GLTF-248, GLTF-260
 ```
 
-Deliverables of the critical path, per failing asset:
+`GLTF-260` is inside the critical path, not after it. Fixing D1–D3 gives the skinned mesh's node a
+real `ModelBone` for the first time — which is exactly the transform glTF requires to be *cancelled*
+for a skinned mesh (§15.1). Without `GLTF-260`, the D1–D3 remediation can silently re-introduce the
+mesh-node transform that `GLTF-247` just cancelled, and skinning would be double-transformed rather
+than fixed. **Skinning is not complete at `GLTF-248`.**
+
+### 28.3 Track A deliverables, per failing asset
 
 1. a **minimal failing asset** (either a corpus fixture that already reproduces it, or a reduction of
    the real asset);
@@ -1610,7 +1760,8 @@ Deliverables of the critical path, per failing asset:
 5. every **transform matrix** in the chain, printed;
 6. the **first divergent layer** and the single owning task ID.
 
-Nothing in Phases 8–20 begins before `GLTF-011` is written.
+Track B's Phases 8–23 do not begin before `GLTF-011` is written. Track B's Phases 1–4 and 6–7 may
+proceed in parallel with Track A, since neither blocks the other.
 
 ---
 
@@ -1623,26 +1774,34 @@ Status legend — `⬜ TODO` (new work) · `🐛 CONFIRMED` (defect proven durin
 `✅ VERIFIED` (prerequisite proven correct during this audit; the task only locks it with a test).
 
 Every phase declares its **primary owner** from §6; a task whose owner differs names it inline.
-Dependencies are the *minimum* set — a task also inherits its phase's entry condition.
+Dependencies are the *minimum* set — a task also inherits its phase's entry condition, **except for
+the 19 Track A (P0 center-collapse) tasks listed in §28.2, whose phase entry conditions are waived**;
+for those the dependency column is the complete prerequisite set.
+
+The dependency graph over all 460 tasks is **acyclic** and is machine-checkable from the `Deps`
+column of these tables.
+
+**Track A tasks are marked `[P0]` in their title.**
 
 ---
 
 ### Phase 0 — Baseline, oracle harness, corpus generator · owner: `GLTF-CONTAINER` / tooling
-*Entry: none. Exit: the seven-layer harness runs green on the promoted `f1…f14` fixtures.*
+*Entry: none. Exit: the seven-layer harness runs green on the promoted `f1…f14` fixtures. `GLTF-001`
+… `GLTF-007` are Track A's entry condition (§28.1); `GLTF-011` is Track A's terminus.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-001 | Record the campaign baseline and reproduce the converter build | ✅ | — | Baseline `fb37282`; `cmake -DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF -DCNA_ENABLE_NET=OFF` then `--target cna_tool_gltf_to_cnj` → 525/525, exit 0. **Accept:** a documented one-command reproduction that a fresh session can re-run. |
-| GLTF-002 | Pin the glTF 2.0 specification revision used by this campaign | ⬜ | — | Record the Khronos registry snapshot date/hash in `docs/gltf-conformance.md`. **Accept:** every later task's spec citation resolves against that pin. |
-| GLTF-003 | Create `tools/gltf_fixtures/` — one generator emitting asset **and** manifest | ⬜ | GLTF-002 | Python generator, `.gltf` + `.glb` twin + `<name>.expected.json` per fixture, from one source of truth. **Accept:** `python -m gltf_fixtures --out <dir>` regenerates the whole corpus byte-identically. |
-| GLTF-004 | Promote `f1…f14` into the generator with full manifests | 🐛 | GLTF-003 | The 14 audit fixtures in §1.1/§1.2, each with its expected L3/L4 values. **Accept:** 8 of 14 fail against current CNA with exactly the deltas in §1.1; 6 pass. |
-| GLTF-005 | `DumpAccessorEXT` / `DumpMeshOutEXT` test-only dumpers (L2/L3) | ⬜ | GLTF-003 | Test-scope helpers serialising decoded accessor arrays and every `MeshOut` field to JSON. Not public API. **Accept:** dumps round-trip and diff cleanly against a manifest. |
-| GLTF-006 | `EvaluateWorldPositionsEXT` expected-world-position helper (L4) | ⬜ | GLTF-005 | Composes node/skin/morph state into world-space vertex positions for comparison. **Accept:** returns the manifest values for `xf-identity`. |
-| GLTF-007 | Golden vertex/index buffer comparator (L5) | ⬜ | GLTF-005 | `memcmp` against `<name>.vb.bin`/`.ib.bin` with a readable first-difference report (offset, field, expected, actual). **Accept:** a one-byte perturbation is reported at the right offset and field name. |
+| GLTF-001 | **[P0]** Record the campaign baseline and reproduce the converter build | ✅ | — | Baseline `fb37282`; `cmake -DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF -DCNA_ENABLE_NET=OFF` then `--target cna_tool_gltf_to_cnj` → 525/525, exit 0. **Accept:** a documented one-command reproduction that a fresh session can re-run. |
+| GLTF-002 | **[P0]** Pin the glTF 2.0 specification revision used by this campaign | ⬜ | — | Record the Khronos registry snapshot date/hash in `docs/gltf-conformance.md`. **Accept:** every later task's spec citation resolves against that pin. |
+| GLTF-003 | **[P0]** Create `tools/gltf_fixtures/` — one generator emitting asset **and** manifest | ⬜ | GLTF-002 | Python generator, `.gltf` + `.glb` twin + `<name>.expected.json` per fixture, from one source of truth. Emits the §24.1 inventory record per asset (`id`, `owningGroup`, `referencingGroups[]`, `validatedLayers[]`, `features[]`). **Accept:** `python -m gltf_fixtures --out <dir>` regenerates the whole corpus byte-identically and emits a manifest whose distinct-asset count is machine-readable. |
+| GLTF-004 | **[P0]** Promote `f1…f14` into the generator with full manifests | 🐛 | GLTF-003 | The 14 audit fixtures in §1.1/§1.2, each with its expected L3/L4 values. **Accept:** 8 of 14 fail against current CNA with exactly the deltas in §1.1; 6 pass. |
+| GLTF-005 | **[P0]** `DumpAccessorEXT` / `DumpMeshOutEXT` test-only dumpers (L2/L3) | ⬜ | GLTF-003 | Test-scope helpers serialising decoded accessor arrays and every `MeshOut` field to JSON. Not public API. **Accept:** dumps round-trip and diff cleanly against a manifest. |
+| GLTF-006 | **[P0]** `EvaluateWorldPositionsEXT` expected-world-position helper (L4) | ⬜ | GLTF-005 | Composes node/skin/morph state into world-space vertex positions for comparison. **Accept:** returns the manifest values for `xf-identity`. |
+| GLTF-007 | **[P0]** Golden vertex/index buffer comparator (L5) | ⬜ | GLTF-005 | `memcmp` against `<name>.vb.bin`/`.ib.bin` with a readable first-difference report (offset, field, expected, actual). **Accept:** a one-byte perturbation is reported at the right offset and field name. |
 | GLTF-008 | `GpuDrawParams` capture harness on `HEADLESS`/`STUB` (L6) | ⬜ | GLTF-005 | Record every effect parameter actually bound for each draw. **Accept:** a `PbrEffect` draw yields all 12 §21.1 quantities. |
 | GLTF-009 | L7 image-oracle harness for the corpus | ⬜ | GLTF-008 | Reuse `examples/golden/` + xvfb; fixed camera/light rig per fixture; per-renderer tolerance. **Accept:** deterministic PNGs across two runs on `OPENGLES3`. |
 | GLTF-010 | Wire L1–L7 into one `ctest` label `gltf-conformance` | ⬜ | GLTF-009 | **Accept:** `ctest -L gltf-conformance` runs the whole ladder and names the failing layer. |
-| GLTF-011 | **Write the center-collapse verdict report** | 🔬 | GLTF-063, GLTF-071, GLTF-115, GLTF-248 | For every asset the owner reports as deformed: minimal reproducer, decoded vs expected positions, generated VB bytes, transform chain, **first divergent layer**, owning task ID. **Accept:** `docs/gltf-center-collapse-verdict.md` exists and every listed asset has a named owning task. |
+| GLTF-011 | **[P0] Write the center-collapse verdict report** | 🔬 | GLTF-007, GLTF-063, GLTF-071, GLTF-115, GLTF-248, GLTF-260 | The Track A terminus (§28.2). For every asset the owner reports as deformed: minimal reproducer, decoded vs expected positions, generated VB bytes, transform chain, **first divergent layer**, owning task ID. Depends on the fixes, **never the other way round** — `GLTF-103` must not depend on this task. **Accept:** `docs/gltf-center-collapse-verdict.md` exists and every listed asset has a named owning task. |
 | GLTF-012 | Stand up a `known_bugs.md` glTF section | ⬜ | GLTF-004 | `known_bugs.md` currently has **zero** glTF entries. Add D1–D8 with their fixtures. **Accept:** each of D1–D8 has an entry pointing at its fixture and task. |
 | GLTF-013 | Pin `glTF-Sample-Assets` for reference use | ⬜ | GLTF-002 | Commit pin only; no assets committed yet. **Accept:** pin recorded with its licence summary. |
 | GLTF-014 | Pin `glTF-Asset-Generator` and map its manifest to the corpus | ⬜ | GLTF-013 | **Accept:** the permutation manifest is machine-readable by the corpus runner. |
@@ -1684,11 +1843,12 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 ---
 
 ### Phase 2 — bufferView / accessor correctness · owner: `GLTF-ACCESSOR`
-*Entry: Phase 1. Exit: every §8.3 cell has a fixture; every address computation is bounds-checked.*
+*Entry: Phase 1 — **waived for the Track A task `GLTF-041`** (§28.1). Exit: every §8.3 cell has a
+fixture; every address computation is bounds-checked.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-041 | Lock the attribute decode path with L2 fixtures | ✅ | GLTF-005 | `UnpackAccessor` → `cgltf_accessor_unpack_floats` proven correct on `f5`/`f6`/`f10`/`f11`. **Accept:** L2 dumps match manifests; **no rewrite of this path.** |
+| GLTF-041 | **[P0]** Lock the attribute decode path with L2 fixtures | ✅ | GLTF-005 | `UnpackAccessor` → `cgltf_accessor_unpack_floats` proven correct on `f5`/`f6`/`f10`/`f11`. **Accept:** L2 dumps match manifests; **no rewrite of this path.** |
 | GLTF-042 | Bounds-check the effective accessor address | 🐛 | GLTF-021 | §8.1 inequality is never enforced. **Accept:** `bad-accessor-out-of-bounds` errors; ASan clean. |
 | GLTF-043 | Enforce `accessor.byteOffset % componentSize == 0` | ⬜ | GLTF-042 | §3.6.2.4. **Accept:** a misaligned fixture errors. |
 | GLTF-044 | Enforce `byteStride` range and multiple-of-4 | ⬜ | GLTF-042 | **Accept:** an out-of-range stride errors. |
@@ -1714,11 +1874,12 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 ---
 
 ### Phase 3 — Indices and primitive topology · owner: `GLTF-MESH`
-*Entry: Phase 2. Exit: no primitive mode is ever silently reinterpreted; indices decode exactly.*
+*Entry: Phase 2 — **waived for the Track A tasks `GLTF-063` and `GLTF-071`** (§28.1). Exit: no
+primitive mode is ever silently reinterpreted; indices decode exactly.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-063 | **Sparse-safe, bounds-checked index reader** | 🐛 | GLTF-041 | `cgltf_accessor_read_index` returns `0` for sparse or null-`bufferView` with no error channel; `f3` decoded `[0,0,0,0,0,0]` for expected `[0,1,2,0,2,3]`. Replace with a CNA reader mirroring `UnpackAccessor`. **Accept:** `sparse-indices` decodes exactly; **critical path.** |
+| GLTF-063 | **[P0] Sparse-safe, bounds-checked index reader** | 🐛 | GLTF-041 | `cgltf_accessor_read_index` returns `0` for sparse or null-`bufferView` with no error channel; `f3` decoded `[0,0,0,0,0,0]` for expected `[0,1,2,0,2,3]`. Replace with a CNA reader mirroring `UnpackAccessor`. **Accept:** `sparse-indices` decodes exactly; **critical path.** |
 | GLTF-064 | Index component-type fixtures | ✅/⬜ | GLTF-063 | `u8-idx` ✅ (`f11`), `u16-idx` ✅, `u32-idx` ⬜. **Accept:** all three exact at L3. |
 | GLTF-065 | Null-`bufferView` index accessor is an explicit error | 🐛 | GLTF-063 | Today it silently yields zeros. **Accept:** clear error. |
 | GLTF-066 | Sparse index accessor L2 dump | ⬜ | GLTF-063 | **Accept:** the L2 dump shows the override applied. |
@@ -1726,7 +1887,7 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 | GLTF-068 | Validate `index < vertexCount` before packing | 🐛 | GLTF-063 | `static_cast<uint16_t>` truncates silently when `vertexCount ≤ 65535`. **Accept:** `bad-index-out-of-range` errors with the offending value. |
 | GLTF-069 | 16- vs 32-bit index selection rule | ⬜ | GLTF-068 | `use32BitIndices = vertexCount > 65535`. **Accept:** documented and tested at both sides of the boundary. |
 | GLTF-070 | Record the "always materialise an index buffer" decision | ⬜ | GLTF-067 | Keeps the GPU layer uniform. **Accept:** decision documented and tested. |
-| GLTF-071 | **Read `prim.type`; never silently reinterpret** | 🐛 | GLTF-063 | `cgltf_primitive_type` has **0 occurrences**; `f4` (strip) and `f12` (points) both decoded as triangle lists. **Accept:** every mode is classified; **critical path.** |
+| GLTF-071 | **[P0] Read `prim.type`; never silently reinterpret** | 🐛 | GLTF-063 | `cgltf_primitive_type` has **0 occurrences**; `f4` (strip) and `f12` (points) both decoded as triangle lists. **Accept:** every mode is classified; **critical path.** |
 | GLTF-072 | Implement the §10.1 per-mode policy | 🐛 | GLTF-071 | Pass through `TRIANGLES`; convert `TRIANGLE_STRIP`/`TRIANGLE_FAN` to a triangle list at import; carry `LINES`/`LINE_STRIP`; convert `LINE_LOOP`; `POINTS` via CNAEXT or an explicit error. **Accept:** all seven `mode-*` fixtures decode to the manifest's triangle/line/point list. |
 | GLTF-073 | Carry primitive type on `ModelMeshPart` | ⬜ | GLTF-072, GLTF-025 | XNA already has `PrimitiveType` at the device level. **Accept:** a line-mode fixture draws as lines on `OPENGLES3`. |
 | GLTF-074 | Strip→list conversion preserves winding | ⬜ | GLTF-072 | Odd triangles in a strip have reversed winding. **Accept:** `mode-triangle-strip` L3 index list equals the manifest exactly, including the swap on odd triangles. |
@@ -1764,17 +1925,19 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 | GLTF-098 | Deterministic vertex ordering | ✅ | GLTF-083 | `ExtractMesh` emits vertices in accessor order. **Accept:** locked at L5 — required for morph delta indexing. |
 | GLTF-099 | Stride selection decision table as data, not nested ternaries | ⬜ | GLTF-072 | The current one-line ternary chain is unreadable and duplicated implicitly in renderers. **Accept:** a table-driven selector with a unit test per row of §2.3. |
 | GLTF-100 | Reject unrepresentable attribute combinations loudly | ⬜ | GLTF-099 | e.g. `usePbr && colored` is currently impossible and silently downgrades. **Accept:** the combination is either supported or reported. |
-| GLTF-101 | L3 semantic-mesh manifest for every corpus asset | ⬜ | GLTF-005 | **Accept:** `MeshOut` field-by-field comparison for all 96 fixtures. |
+| GLTF-101 | L3 semantic-mesh manifest for every corpus asset | ⬜ | GLTF-005 | **Accept:** `MeshOut` field-by-field comparison for all 135 assets. |
 | GLTF-102 | Attribute fuzz: random valid permutations | ⬜ | GLTF-040 | **Accept:** no crash, no sanitiser finding, no silent drop without a report entry. |
 
 ---
 
 ### Phase 5 — Coordinate conventions and node transforms · owner: `GLTF-TRANSFORM` · **CRITICAL PATH**
-*Entry: Phase 4. Exit: every `xf-*` fixture passes numerically at L4.*
+*Entry: Phase 4 — **waived for the Track A tasks `GLTF-103`, `GLTF-113`, `GLTF-114`, `GLTF-115`**,
+whose only prerequisites are their own dependency columns (§28.1). Exit: every `xf-*` fixture passes
+numerically at L4.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-103 | **DECISION: node-transform architecture** | 🐛 | GLTF-011 | §11.5 Option A (real `ModelBone` hierarchy, preferred) vs Option B (bake into vertices). Weigh instancing, rigid animation, `.cnj` format impact, camera framing. **Accept:** a written decision with rationale; every downstream task references it. **Critical path.** |
+| GLTF-103 | **[P0] ADOPT the real `ModelBone` node hierarchy (§11.5 Option A)** | 🐛 | GLTF-004, GLTF-005, GLTF-006 | **Not an open A-vs-B choice.** Option A is the presumptive final architecture (§11.5): prove it preserves XNA compatibility and adopt it. CNA already has `Model`, `ModelBone`, `ModelMesh::ParentBone` and a verified-correct `CopyAbsoluteBoneTransformsTo`. Option B (baking) may be adopted **only** on a demonstrated concrete blocker, **only** as an explicitly time-boxed interim step, and then it must carry its own removal task — it is never recorded as the final architecture. Makes `GLTF-129`/`GLTF-130` mandatory. **Dependency note:** this task deliberately does **not** depend on `GLTF-011`; the verdict is written after these fixes land, and the reverse dependency would be a cycle. **Accept:** a written decision naming the adopted architecture, the seven properties of §11.5 it preserves, and — if Option B is chosen — the concrete blocker, the time box and the removal task. **Critical path.** |
 | GLTF-104 | Lock the XNA transform-order invariants | ✅ | GLTF-006 | `Model::Draw` uses `bone * world`; `AnimationPlayer` uses `local * parentWorld`. Both correct. **Accept:** unit tests pin them so a later change is caught. |
 | GLTF-105 | **Record "no axis or handedness conversion" as a testable invariant** | ✅ | GLTF-104 | glTF and XNA are both right-handed, +Y up, −Z forward; UV origin is top-left in both. **Accept:** `docs/gltf-conventions.md` states it, and a test asserts a +Z-facing glTF normal stays +Z. Any future axis flip must first fail a fixture. |
 | GLTF-106 | Lock `ConvertGltfMatrix` | ✅ | GLTF-105 | Copies basis vectors, producing the XNA row-vector transpose of the glTF column-vector matrix. Correct — but unreached today. **Accept:** direct unit test over a non-trivial affine matrix. |
@@ -1784,9 +1947,9 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 | GLTF-110 | `matrix` and TRS mutual exclusivity | ⬜ | GLTF-107 | §3.5. **Accept:** `bad-matrix-and-trs` is reported; `xf-matrix-vs-trs` proves the two authorings agree. |
 | GLTF-111 | Default TRS values | ⬜ | GLTF-109 | `T=0`, `R=identity`, `S=1`. **Accept:** `xf-identity`. |
 | GLTF-112 | World-transform propagation, applied exactly once | ✅/⬜ | GLTF-109 | `CopyAbsoluteBoneTransformsTo` is correct; the input is missing. **Accept:** `xf-deep-chain` yields `(6,0,0)` — not `(1,0,0)` and not `(11,0,0)`. |
-| GLTF-113 | **`MeshGroup` → mesh instances carrying `cgltf_node*` + world matrix** | 🐛 | GLTF-103 | `struct MeshGroup { const cgltf_skin*; std::vector<const cgltf_mesh*>; }` has no node and no matrix (D1–D3). **Accept:** the import data model carries per-instance node identity and transform. **Critical path.** |
-| GLTF-114 | **World transform reaches the model on BOTH loaders** | 🐛 | GLTF-113 | `ReadGltfModel` and the `.cnj` `ModelTypeReader` both create identity root and identity per-mesh bones. **Accept:** `f1` yields X ∈ `[0,11]`; `f2` yields Y ∈ `[6,8]`. **Critical path.** |
-| GLTF-115 | **The whole `xf-*` ladder passes at L4** | 🐛 | GLTF-114 | All 17 fixtures in §11.4. **Accept:** every expected world position matches to 1e-6. **Critical path.** |
+| GLTF-113 | **[P0] `MeshGroup` → mesh instances carrying `cgltf_node*` + world matrix** | 🐛 | GLTF-103 | `struct MeshGroup { const cgltf_skin*; std::vector<const cgltf_mesh*>; }` has no node and no matrix (D1–D3). The per-instance identity introduced here is the **`sceneNodeIndex`** space of §15.1.2 and must not be ordered to suit any skin's GPU palette. **Accept:** the import data model carries per-instance node identity and transform. **Critical path.** |
+| GLTF-114 | **[P0] World transform reaches the model on BOTH loaders** | 🐛 | GLTF-113 | `ReadGltfModel` and the `.cnj` `ModelTypeReader` both create identity root and identity per-mesh bones. **Accept:** `f1` yields X ∈ `[0,11]`; `f2` yields Y ∈ `[6,8]`. **Critical path.** |
+| GLTF-115 | **[P0] The whole `xf-*` ladder passes at L4** | 🐛 | GLTF-114 | All 17 fixtures in §11.4. **Accept:** every expected world position matches to 1e-6. **Critical path.** |
 | GLTF-116 | Negative scale: winding | ⬜ | GLTF-115 | `xf-negative-scale`. **Accept:** triangle winding is flipped so front faces stay front-facing; asserted at L5 (index order) or L7 (cull test). |
 | GLTF-117 | Mirrored transform through a hierarchy | ⬜ | GLTF-116 | `xf-mirror-child`. **Accept:** manifest match. |
 | GLTF-118 | Normal transformation under non-uniform scale | ⬜ | GLTF-115 | `normal * transpose(inverse(A))`. **Accept:** `xf-scale-nonuniform` normals match the manifest; matters for Option B and for the shader's `uNormalMatrix` either way. |
@@ -1968,18 +2131,20 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 ---
 
 ### Phase 12 — Skinning · owner: `GLTF-SKIN` · **CRITICAL PATH**
-*Entry: Phase 5 (transforms). Exit: every `skin-*` fixture passes numerically at L4.*
+*Entry: Phase 5 (transforms) — **waived for the Track A tasks `GLTF-245`, `GLTF-247`, `GLTF-248`,
+`GLTF-260`** (§28.1); `GLTF-260` still genuinely needs `GLTF-114`. Exit: every `skin-*` fixture
+passes numerically at L4 **and** `GLTF-260` proves no double application.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-245 | **`BuildSkeleton` must walk the full ancestor chain** | 🐛 | GLTF-114 | Parent links are resolved **only within the joint set**; `f9` proved an armature `translation [0,100,0]` is dropped from `bindPoseLocal` while the file's IBM keeps it ⇒ skin transform `translate(0,−100,0)`. **Accept:** `skin-armature-ancestor` places the vertex at `(1,0,0)`. **Critical path.** |
+| GLTF-245 | **[P0] `BuildSkeleton` must walk the full scene ancestry** | 🐛 | GLTF-114 | Parent links are resolved **only within the joint set**; `f9` proved an armature `translation [0,100,0]` is dropped from `bindPoseLocal` while the file's IBM keeps it ⇒ skin transform `translate(0,−100,0)`. `globalTransform(joint)` must include **every** scene ancestor, joint or not, **and every ancestor above `skin.skeleton`** (§15.1.1) — no early stop. The palette this produces is the `paletteIndex` space of §15.1.2 and must not reorder the scene hierarchy. **Accept:** `skin-armature-ancestor` places the vertex at `(1,0,0)`; a test asserts an ancestor transform above `skin.skeleton` still contributes. **Critical path.** |
 | GLTF-246 | Lock IBM reading | ✅ | GLTF-059 | `ConvertGltfMatrix` + `ScaleTranslation` read IBMs correctly (`f9`). **Accept:** locked at L2. |
-| GLTF-247 | **Add the `inverse(meshNodeWorld)` term** | 🐛 | GLTF-245 | glTF §3.8: the mesh node's own transform must be cancelled. Absent entirely today. **Accept:** `skin-mesh-node-transform` (mesh node `T=[0,0,50]`) places the vertex at `(1,0,0)`. **Critical path.** |
-| GLTF-248 | **The whole `skin-*` ladder passes at L4** | 🐛 | GLTF-247 | The 13 fixtures in §15.4. **Accept:** every expected world position matches to 1e-6. **Critical path.** |
-| GLTF-249 | Honour `skin.skeleton` | 🐛 | GLTF-245 | Parsed by cgltf, never read. **Accept:** used to scope the ancestor walk; tested against a fixture where it differs from the natural common ancestor. |
+| GLTF-247 | **[P0] Add the `inverse(meshNodeWorld)` term** | 🐛 | GLTF-245 | glTF §3.8: the mesh node's own transform must be cancelled. Absent entirely today. **Accept:** `skin-mesh-node-transform` (mesh node `T=[0,0,50]`) places the vertex at `(1,0,0)`. **Critical path.** |
+| GLTF-248 | **[P0] The whole `skin-*` ladder passes at L4** | 🐛 | GLTF-247 | The 13 fixtures in §15.4. **Accept:** every expected world position matches to 1e-6. **Skinning is not complete here** — `GLTF-260` closes the track. **Critical path.** |
+| GLTF-249 | Honour `skin.skeleton` **as a root hint, never as a traversal stop** | 🐛 | GLTF-245 | Parsed by cgltf, never read. §15.1.1: it names the declared skeleton root — useful for locating and naming the rig — but **must not truncate the ancestry** used for `globalTransform(joint)`. An implementation that walks up only until `skin.skeleton` recreates D8 in a new disguise. **Accept:** `skin.skeleton` is honoured as the declared/semantic root **while** joint global transforms are still derived from the complete scene-node ancestry the glTF skinning equation requires; a fixture in which a transform-bearing ancestor sits **above** `skin.skeleton` still produces the correct world position, and a fixture where `skin.skeleton` differs from the natural common ancestor is covered. No required ancestor transform may be dropped because an ancestor lies above `skin.skeleton` or is not itself a joint. |
 | GLTF-250 | Missing `inverseBindMatrices` ⇒ identity | ✅ | GLTF-246 | Spec-correct today, untested. **Accept:** `skin-no-ibm` locked. |
 | GLTF-251 | Joint matrix formula documented in one place | ⬜ | GLTF-247 | §15.1 in both column- and row-vector form. **Accept:** `docs/gltf-conventions.md`, referenced from the code. |
-| GLTF-252 | Topological joint reordering | ✅ | GLTF-245 | Breadth-first with an `oldToNew` remap; `LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversedJointOrder` covers it. **Accept:** locked. |
+| GLTF-252 | Joint palette ordering — **keep it separate from scene-node identity** | ✅/⬜ | GLTF-245, GLTF-113 | Breadth-first with an `oldToNew` remap; `LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversedJointOrder` covers it, and it is correct **as a palette operation**. §15.1.2 makes the two index spaces explicit: `sceneNodeIndex` (stable scene/`ModelBone` identity, used by the hierarchy, rigid animation, cameras/lights and game code) versus `paletteIndex` (skin-local GPU palette slot, used by `SkinningData`, `BlendIndices` and `uBones[]`). **Accept:** the existing reorder is locked; the scene hierarchy introduced by `GLTF-113` is **not** reordered to match palette order; `JOINTS_0` remapping targets `paletteIndex`; the per-skin `sceneNodeIndex ↔ paletteIndex` mapping is explicit and tested in both directions. No public API is introduced unless a test proves one is required. |
 | GLTF-253 | `AnimationPlayer` composition order | ✅ | GLTF-252 | `world[i] = local[i] * world[parent]`, `skin[i] = IBM[i] * world[i]` — correct XNA row-vector order. **Accept:** locked. |
 | GLTF-254 | `BlendIndices` `uint8` truncation | 🐛 | GLTF-093 | Silent above 255 joints. **Accept:** `skin-256-joints` errors or uses a wider index; never wraps. |
 | GLTF-255 | `WEIGHTS_0` decode | ✅ | GLTF-094 | **Accept:** locked at L5 for `FLOAT` and normalized integer forms. |
@@ -1987,7 +2152,7 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 | GLTF-257 | `JOINTS_1`/`WEIGHTS_1` — support or report | 🐛 | GLTF-095 | Silently ignored. **Accept:** >4 influences are either supported or reported; never silently truncated. |
 | GLTF-258 | Influence count reaches the shader | ✅ | GLTF-255 | `WeightsPerVertex` / `uWeightsPerVertex`. **Accept:** L6 capture. |
 | GLTF-259 | Skinning is applied only to skinned primitives | ✅ | GLTF-245 | Gated on `JOINTS_0 && WEIGHTS_0`. **Accept:** locked. |
-| GLTF-260 | A skinned mesh's node transform must not be applied twice | ⬜ | GLTF-247, GLTF-114 | After Phase 5 the mesh node has a real bone; for a skinned mesh that bone must not also transform the geometry. **Accept:** `skin-mesh-node-transform` asserted through **both** loaders. |
+| GLTF-260 | **[P0] A skinned mesh's node transform must not be applied twice** | 🔬 | GLTF-247, GLTF-114, GLTF-248 | Remediating D1–D3 changes the assumptions D8's fix rests on: Phase 5 gives the skinned mesh's node a real `ModelBone` for the first time, and that is precisely the transform glTF requires to be *cancelled* for a skinned mesh (§15.1). Without this task the node-hierarchy work can silently re-apply what `GLTF-247` just cancelled, leaving skinning double-transformed rather than fixed. **Accept, both halves required:** (a) the mesh-space cancellation term `inverse(globalTransform(meshNode))` is present and effective — `skin-mesh-node-transform` (mesh node `T=[0,0,50]`) places the vertex at `(1,0,0)`; and (b) the new real node hierarchy does **not** re-apply that same transform — the identical fixture yields `(1,0,0)`, not `(1,0,50)`, with the node bone present and non-identity, asserted at L4 through **both** loaders. **Critical path — skinning is not complete without it.** |
 | GLTF-261 | `MaxBones = 72` | 🔬 | GLTF-025 | Rigs above 72 joints silently exceed the palette. Raising it changes a real XNA constant and every renderer's uniform array. **Accept:** `skin-73-joints` errors clearly, or the limit is raised deliberately with the cost recorded. |
 | GLTF-262 | Bind pose must be applied when no clip is playing | 🐛 | GLTF-253 | `SkinnedEffect` defaults to 72 identity bones, so an unanimated skinned model renders **unskinned**. **Accept:** loading a skinned model yields a usable bind-pose palette without game-code setup, or the requirement is documented and the viewer satisfies it (`GLTF-425`). |
 | GLTF-263 | Bone palette upload | ✅ | GLTF-262 | `SetBoneTransforms` → `uBones[72]`. **Accept:** L6 capture matches `GetSkinTransforms()`. |
@@ -2190,9 +2355,9 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-399 | Complete the 96-asset synthetic corpus | ⬜ | GLTF-003 | §24.2. **Accept:** every group's assets exist, generated and validated. |
+| GLTF-399 | Complete the 135-asset synthetic corpus | ⬜ | GLTF-003 | §24.2's owning-group inventory (8+14+8+7+17+6+10+12+13+13+10+7+4+6 = **135** distinct assets, each with a `.glb` twin). **Accept:** every owning group's assets exist, are generated and are validated; **CI asserts the generator's manifest reports exactly 135 distinct assets**, so the number in §24.2 and the corpus cannot drift apart. |
 | GLTF-400 | `.glb` twin for every synthetic asset | ⬜ | GLTF-399 | **Accept:** twins agree at L3/L4. |
-| GLTF-401 | Manifest completeness audit | ⬜ | GLTF-399 | **Accept:** every asset declares the layers it validates and the expected values for each. |
+| GLTF-401 | Manifest completeness audit | ⬜ | GLTF-399 | **Accept:** every asset declares exactly one `owningGroup`, its `referencingGroups[]`, the layers it validates and the expected values for each; the sum of owning-group counts equals the reported distinct-asset total, checked mechanically rather than by reading. |
 | GLTF-402 | Corpus runner reports the first divergent layer | ⬜ | GLTF-010 | **Accept:** a failure names the layer, the fixture, the field and the delta. |
 | GLTF-403 | Corpus coverage matrix vs the §27.1 checklist | ⬜ | GLTF-401 | **Accept:** every CORE requirement maps to ≥1 fixture. |
 | GLTF-404 | Fixture-count and runtime budget | ⬜ | GLTF-402 | **Accept:** the full corpus runs within a stated CI time budget. |
@@ -2281,7 +2446,7 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 
 ## 30. Final Acceptance Gates
 
-### 30.1 Gate A — Center-collapse answered (end of the §28 critical path)
+### 30.1 Gate A — Center-collapse answered (end of the §28.2 Track A sequence)
 
 | # | Gate |
 |---|---|
@@ -2290,6 +2455,9 @@ Dependencies are the *minimum* set — a task also inherits its phase's entry co
 | A3 | Decoded CPU positions, expected CPU positions, generated vertex-buffer bytes and the full transform chain are recorded for each |
 | A4 | Each has exactly one owning task ID from §29 |
 | A5 | `f1`, `f2`, `f13` (node transforms), `f3` (sparse indices), `f4`/`f12` (topology) and `f9` (skin ancestor chain) all pass |
+| A6 | **`GLTF-260` passes both halves**: the mesh-space cancellation exists **and** the new real node hierarchy does not re-apply the skinned mesh node's transform. Skinning is **not** accepted at `GLTF-248` alone |
+| A7 | All 19 Track A tasks of §28.2 are closed, and `GLTF-103` recorded the adopted architecture (§11.5 Option A unless a concrete blocker was proven, time-boxed, and given a removal task) |
+| A8 | The dependency graph remains acyclic — in particular `GLTF-103` does not depend, directly or transitively, on `GLTF-011` |
 
 ### 30.2 Gate B — `GLTF CORE 2.0 CORRECT`
 
@@ -2340,7 +2508,19 @@ All 12 rows of §27.2, plus Gate C passing on ≥ 4 renderers including one Dire
 5. **A fixture and its expectation are generated from one source of truth** — they cannot drift.
 6. **An API is not complete until its tests are** (`CLAUDE.md`).
 7. **No third-party asset is committed without a licence review** (`GLTF-018`).
-8. **One task = one commit**, referencing its `GLTF-NNN` ID (`CLAUDE.md`).
+8. **Task ↔ commit traceability, not one commit per task.** `CLAUDE.md`'s repository-wide
+   "one task = one commit" rule is written for its own single-task plans; a 460-task campaign
+   applying it literally would produce 460 commits, enormous history noise, many intermediate
+   states that do not build, and painful cherry-picks. This campaign therefore adopts the following
+   as its explicit, scoped exception — traceability is preserved exactly, fragmentation is not
+   forced:
+   * every implementation commit **references one or more `GLTF-NNN` IDs** in its message;
+   * every closed `GLTF-NNN` task **identifies the single commit that closed it**;
+   * a commit must remain **coherent and, where practical, independently buildable and testable**;
+   * **unrelated tasks must not be bundled merely for convenience** — grouping is legitimate only
+     when the tasks form one coherent change (e.g. `GLTF-104`/`GLTF-105`/`GLTF-106`, which together
+     lock the transform-convention invariants), never when it is just batching;
+   * a task that changes behaviour lands with its test in the same commit.
 
 ---
 
