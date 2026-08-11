@@ -30,8 +30,9 @@ axis-conversion node carrying a uniform scale, that is literally a division by t
 Three further proven defects corrupt geometry without collapsing it: a sparse index accessor
 decoding to all zeros (**D4**, fixed), non-`TRIANGLES` topology silently reinterpreted (**D5**,
 fixed for the triangle topologies; the point and line modes are now an explicit refusal to import,
-pending a draw path), and rigid node animation being dropped (**D6**, open). One more (**D7**,
-factor-only PBR material) is a shading defect, not a geometric one.
+pending a draw path), and rigid node animation being dropped (**D6**, now imported and reported —
+serialisation pending). One more (**D7**, factor-only PBR material) is a shading defect, not a
+geometric one.
 
 **Both collapse mechanisms are closed.** Neither is suppressed by a known-defect test any more:
 each is asserted by an ordinary green test through the real loader, so a regression fails as a
@@ -284,9 +285,11 @@ its own local transform, exactly like any other bone — `AnimationPlayer` compo
 `world(root) = local · prefix`, and an absent prefix array reads as all-identity, so a skeleton built
 without that context is unaffected.
 
-### 3.8 D6 — rigid node animation dropped · `anim-rigid-node` · first divergent layer **L4** · **OPEN**
+### 3.8 D6 — rigid node animation dropped · `anim-rigid-node` · first divergent layer **L4** · **PARTLY OPEN**
 
-**Owning task:** `GLTF-284` (after `GLTF-103`…`GLTF-114`, which are now done).
+**Owning tasks:** `GLTF-293` (landed) + **`GLTF-294` (open)**. The audit ledger originally named
+`GLTF-284` here, which is the morph weight-vector validation task and has nothing to do with rigid
+animation; corrected when `GLTF-293` landed.
 
 One `LINEAR` rotation channel on an unskinned mesh node — a door, a turntable, a clock hand. There
 is no skin anywhere in the file.
@@ -294,15 +297,22 @@ is no skin anywhere in the file.
 | | Value |
 |---|---|
 | Expected | 1 clip, 1 track, the node poses through a quarter turn about +Z |
-| Today | **0 clips**, no `animations` key in the `.cnj`, **no warning** |
+| Before | **0 clips**, no `animations` key in the `.cnj`, **no warning** |
+| After | **1 clip** `Spin`, **1 track** on the `SpinningMesh` node's own bone: identity at `t=0`, `(0,0,√2/2,√2/2)` at `t=1`, scale filled from the node's bind pose. Reported by the converter; **not yet written to the `.cnj`** |
 
-Two separate gates cause it: the converter calls `ExtractClips` only for a *skinned* group, and
-`ExtractClips` itself resolves every channel target against the skin's joint set, so a channel
-targeting an ordinary node is discarded. Even if called, it would emit a clip with zero tracks.
+Two separate gates caused the loss: the converter called `ExtractClips` only for a *skinned* group,
+and `ExtractClips` resolved every channel target against the skin's joint set, so a channel
+targeting an ordinary node was discarded. Even if called it would have emitted a clip with zero
+tracks. `ExtractSceneNodeClips` removes both — it resolves against the scene graph instead, which is
+only possible because `GLTF-103`/`GLTF-114` gave rigid nodes real `ModelBone`s to drive.
 
-**Not a collapse mechanism** — the asset imports in the right place, it just does not move.
-`GLTF-284` is now substantially easier than when the audit was written, because the real `ModelBone`
-scene hierarchy from `GLTF-103`/`GLTF-114` gives the animation something to drive.
+**Why it is not yet `fixed`.** A scene-node track's `boneIndex` is a `sceneNodeIndex`; the `.cnj`
+clip schema has no field distinguishing that from a joint-palette slot (§15.1.2). Writing one anyway
+would let a reader apply a scene index as a palette slot — a fresh silent corruption in place of the
+old one. `GLTF-294` adds the field and the playback path; until then the converter *reports* the
+clip by name and track count rather than dropping it, which is the property D6 was really about.
+
+**Not a collapse mechanism** — the asset imports in the right place, it just does not move yet.
 
 ### 3.9 D7 — factor-only PBR material lost · `mat-factor-only-gold` · first divergent layer **L3** · **OPEN**
 
@@ -398,7 +408,7 @@ The center-collapse track is closed. It is deliberately narrow, and these remain
 | Item | Owning task | Why it is not a collapse defect |
 |---|---|---|
 | A draw path for the point and line topologies | **`GLTF-073`**, **`GLTF-076`**, **`GLTF-077`**, **`GLTF-078`** | a named rejection, not a wrong import; the decoding is correct and the gap is at the draw layer |
-| Rigid node animation | **`GLTF-284`** | the asset is in the right place, it just does not move |
+| Serialising and playing a rigid node clip | **`GLTF-294`** | the clip is now imported and reported (`GLTF-293`); the `.cnj` schema cannot yet say which index space a track targets |
 | Factor-only PBR materials | **`GLTF-217`/`228`/`229`** (+`GLTF-215`) | shading, not geometry |
 | L6 draw-parameter capture | `GLTF-008` | harness not yet built |
 | L7 image oracle | `GLTF-009` | harness not yet built |
@@ -472,7 +482,9 @@ For the assets the owner reported as deformed:
 * if the asset uses a **point or line mode** — still **D5**, but a draw-path gap rather than a
   decoding one, owned by `GLTF-073`/`GLTF-076`/`GLTF-077`/`GLTF-078`. The asset fails to import
   with the mode named, instead of importing wrongly.
-* if the asset is **in the right place but does not move** — **D6**, owned by `GLTF-284`. **Open.**
+* if the asset is **in the right place but does not move** — **D6**, owned by `GLTF-293` (landed:
+  the clip is imported onto the node's own bone) and **`GLTF-294` (open:** carrying it through the
+  `.cnj` and playing it).
 * if the asset is **in the right place but renders white** — **D7**, owned by
   `GLTF-217`/`228`/`229`. **Open.**
 

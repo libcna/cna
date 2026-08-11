@@ -275,9 +275,14 @@ TEST(GltfKnownDefect, D5_LineLoopIsClassifiedAndRejectedPendingItsClosingSegment
 
 // --- D6: rigid node animation ---------------------------------------------------------------------
 
-TEST(GltfKnownDefect, D6_RigidNodeAnimationIsSilentlyDropped)
+TEST(GltfKnownDefect, D6_RigidNodeAnimationIsImportedButNotYetSerialised)
 {
-    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-284.
+    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-293, with GLTF-294 still outstanding.
+    //
+    // The claim has moved on with the code. It is no longer "the animation disappears"; both
+    // mechanisms that made it disappear are gone. What is asserted now is the remaining, explicit
+    // limitation: the clip is extracted, correct and reported, and is not written to the .cnj
+    // because the clip schema cannot yet say which index space a track targets (§15.1.2).
     using namespace CNA::Internal::GltfImport;
 
     const LoadedFixture fixture("anim-rigid-node");
@@ -286,36 +291,52 @@ TEST(GltfKnownDefect, D6_RigidNodeAnimationIsSilentlyDropped)
     ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D6"));
     const JsonValue& actualRecord = CurrentActual(defect);
 
-    // The file really does carry the animation -- the loss is entirely on CNA's side.
+    // The file really does carry the animation, and really has no skin.
     ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().animations_count));
     ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().animations[0].channels_count));
     ASSERT_EQ(0u, static_cast<std::size_t>(fixture.Data().skins_count));
 
-    // Mechanism one: clip extraction is gated on the group having a skin, and this file has none,
-    // so the converter never calls ExtractClips at all and emits no "animations" key.
     const std::vector<MeshGroup> groups = CollectMeshGroups(&fixture.Data());
     ASSERT_EQ(1u, groups.size());
     EXPECT_EQ(nullptr, groups[0].skin);
-    EXPECT_TRUE(BoolOr(actualRecord, "clipExtractionGatedOnSkin", false));
+    // Mechanism one is gone: extraction no longer depends on the group having a skin.
+    EXPECT_FALSE(BoolOr(actualRecord, "clipExtractionGatedOnSkin", true));
 
-    // Mechanism two: even when called, ExtractClips resolves each channel target against the
-    // joint set, so a channel targeting an ordinary mesh node is skipped -- silently, with no
-    // warning. Both mechanisms have to be addressed for D6 to be fixed.
-    SkeletonResult emptySkeleton;
+    // Mechanism two is gone: a non-joint target resolves against the scene graph instead of being
+    // skipped, and the resulting track drives that node's own bone.
+    const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
     std::vector<std::string> warnings;
     const std::vector<ClipOut> clips =
-        ExtractClips(&fixture.Data(), emptySkeleton, 1.0f, warnings);
-    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "clipCountIfExtractClipsWereCalled", -1)),
+        ExtractSceneNodeClips(&fixture.Data(), scene, 1.0f, warnings);
+    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "importedClipCount", -1)),
               clips.size());
     std::size_t trackCount = 0;
-    for (const ClipOut& clip : clips) { trackCount += clip.tracks.size(); }
-    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "trackCountIfExtractClipsWereCalled", -1)),
+    for (const ClipOut& clip : clips)
+    {
+        trackCount += clip.tracks.size();
+        EXPECT_EQ(ClipTargetSpace::SceneNode, clip.targetSpace);
+    }
+    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "importedTrackCount", -1)),
               trackCount);
-    EXPECT_EQ(0u, trackCount)
-        << "a rigid node channel now produces a track -- if GLTF-284 landed, mark D6 fixed in "
-           "tools/gltf_fixtures and delete this test";
-    EXPECT_EQ(BoolOr(actualRecord, "warningEmitted", true), !warnings.empty())
-        << "the drop is supposed to be silent; a warning appearing is itself a change";
+    EXPECT_GT(trackCount, 0u) << "the rigid channel produced no track -- D6 has come back";
+
+    // The old joint-palette path still skips it, and that is correct rather than a bug: a file
+    // with no skin has no palette, so there is nothing there for the channel to target.
+    SkeletonResult emptySkeleton;
+    std::vector<std::string> paletteWarnings;
+    const std::vector<ClipOut> paletteClips =
+        ExtractClips(&fixture.Data(), emptySkeleton, 1.0f, paletteWarnings);
+    std::size_t paletteTracks = 0;
+    for (const ClipOut& clip : paletteClips) { paletteTracks += clip.tracks.size(); }
+    EXPECT_EQ(0u, paletteTracks);
+
+    // What remains, stated as the thing it is: the clip is reported, not dropped. The converter
+    // emits a warning naming it; serialisation waits for GLTF-294.
+    EXPECT_FALSE(BoolOr(actualRecord, "serialisedToCnj", true));
+    const std::vector<std::string> remaining = Strings(Member(defect, "remainingTasks"));
+    EXPECT_NE(remaining.end(), std::find(remaining.begin(), remaining.end(), "GLTF-294"))
+        << "D6 no longer names GLTF-294 as outstanding; if the .cnj carries rigid clips now, mark "
+           "the defect fixed in tools/gltf_fixtures and delete this test";
 }
 
 // --- D7: factor-only PBR material ------------------------------------------------------------------

@@ -440,6 +440,30 @@ namespace
             }
         }
 
+        // plan_gltf.md GLTF-293: rigid (non-joint) node animation. Before this, a channel targeting
+        // an ordinary mesh node matched nothing in the skin's joint set and was dropped in complete
+        // silence -- and for an unskinned file ExtractClips was never called at all, so the .cnj
+        // simply had no "animations" key and said nothing about why (defect D6).
+        //
+        // The clip is extracted here and REPORTED. It is deliberately not serialised yet: a
+        // scene-node clip's boneIndex is a sceneNodeIndex, and the .cnj clip schema has no field
+        // saying which of the two index spaces (§15.1.2) a track is in. Writing one anyway would
+        // let a reader apply a scene-node index as a joint-palette slot -- a fresh silent
+        // corruption in place of the old one. GLTF-294 adds that field and the unified playback
+        // path; until then this is an explicit, named limitation rather than a disappearance.
+        {
+            std::vector<ClipOut> rigidClips =
+                ExtractSceneNodeClips(data, sceneGraph, unitScale, warnings);
+            for (const ClipOut& clip : rigidClips)
+            {
+                warnings.push_back(
+                    "Clip '" + clip.name + "' animates " + std::to_string(clip.tracks.size()) +
+                    " scene node(s) rather than skin joints. It is imported and correct, but is "
+                    "not written to the .cnj yet: the clip schema cannot yet say that a track "
+                    "targets a scene node rather than a joint palette slot (GLTF-294).");
+            }
+        }
+
         std::ostringstream json;
         json << "{\n  \"cnjVersion\": 2,\n  \"type\": \"Model\",\n";
         if (!skeletonFile.empty())

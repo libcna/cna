@@ -16,6 +16,8 @@
 #define CGLTF_IMPLEMENTATION
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 
+#include <functional>
+
 // RemapOcclusionImageForDualTextureEXT's own decode/re-encode step (plan_cnj.md CNB-88). STATIC
 // so every stbi_*/stbiw_* symbol has internal linkage in this one translation unit -- other parts
 // of the CNA tree (SDL_image's own vendored copy) also compile stb_image.h's implementation, and
@@ -761,6 +763,170 @@ namespace CNA::Internal::GltfImport
         return result;
     }
 
+    namespace
+    {
+        /// One clip's channels, already grouped by the bone they drive.
+        struct BoneChannels
+        {
+            std::optional<SampledChannel> translation, rotation, scale;
+        };
+
+        /// Resolves one animation's channels against a caller-supplied node -> bone mapping.
+        ///
+        /// Shared by the joint-palette and scene-node extractors so the two cannot drift: the ONLY
+        /// difference between rigid and skinned animation is which index space a target node
+        /// resolves into (§15.1.2). Everything after this -- union resampling, bind-pose fallback,
+        /// unit scaling -- is identical, and D6 existed precisely because the two were never
+        /// separated in the first place.
+        ///
+        /// @param resolve Maps a channel's target node to a bone index, or -1 to skip it.
+        /// @param skippedTargets Incremented for each channel whose target `resolve` rejected.
+        std::unordered_map<int, BoneChannels> GatherChannels(
+            const cgltf_animation& anim, float unitScale,
+            const std::function<int(const cgltf_node*)>& resolve, double& maxTime,
+            bool& sawUnsupportedPath, std::size_t& skippedTargets)
+        {
+            std::unordered_map<int, BoneChannels> byBone;
+            for (cgltf_size c = 0; c < anim.channels_count; ++c)
+            {
+                const cgltf_animation_channel& ch = anim.channels[c];
+                const int boneIdx = resolve(ch.target_node);
+                if (boneIdx < 0) { ++skippedTargets; continue; }
+
+                if (ch.target_path == cgltf_animation_path_type_translation)
+                {
+                    byBone[boneIdx].translation = LoadChannel(ch, 3, "translation channel");
+                    // Translation values (and, for CUBICSPLINE, their in/out tangents -- both are
+                    // position-derived quantities) must track the same unit-scale correction
+                    // already applied to bind-pose translations, or an animated bone would jump
+                    // back to unscaled-space offsets mid-clip.
+                    for (float& component : byBone[boneIdx].translation->values) { component *= unitScale; }
+                }
+                else if (ch.target_path == cgltf_animation_path_type_rotation)
+                {
+                    byBone[boneIdx].rotation = LoadChannel(ch, 4, "rotation channel");
+                }
+                else if (ch.target_path == cgltf_animation_path_type_scale)
+                {
+                    byBone[boneIdx].scale = LoadChannel(ch, 3, "scale channel");
+                }
+                else { sawUnsupportedPath = true; continue; } // e.g. morph target weights
+
+                if (ch.sampler->input->count > 0)
+                {
+                    const std::vector<float> t = UnpackAccessor(ch.sampler->input, 1, "sampler input");
+                    maxTime = std::max(maxTime, static_cast<double>(t.back()));
+                }
+            }
+            return byBone;
+        }
+
+        /// Resamples one bone's channels onto the union of their key times, filling each missing
+        /// component from the bone's own bind pose.
+        std::optional<TrackOut> BuildTrack(int boneIdx, const BoneChannels& channels,
+                                           const Matrix& bindPoseLocal)
+        {
+            std::vector<double> unionTimes;
+            for (const auto* ch : {&channels.translation, &channels.rotation, &channels.scale})
+            {
+                if (*ch) { unionTimes.insert(unionTimes.end(), ch->value().times.begin(), ch->value().times.end()); }
+            }
+            if (unionTimes.empty()) { return std::nullopt; }
+            std::sort(unionTimes.begin(), unionTimes.end());
+            unionTimes.erase(
+                std::unique(unionTimes.begin(), unionTimes.end(),
+                            [](double x, double y) { return std::fabs(x - y) < 1e-9; }),
+                unionTimes.end());
+
+            Vector3 bindScale{1.0f, 1.0f, 1.0f};
+            Quaternion bindRotation = Quaternion::Identity;
+            Vector3 bindTranslation;
+            (void)bindPoseLocal.Decompose(bindScale, bindRotation, bindTranslation);
+
+            TrackOut track;
+            track.boneIndex = boneIdx;
+            track.keys.reserve(unionTimes.size());
+            for (double t : unionTimes)
+            {
+                KeyframeOut key;
+                key.time = t;
+                key.translation = EvaluateVec3Channel(channels.translation ? &*channels.translation : nullptr, t, bindTranslation);
+                key.rotation = EvaluateQuatChannel(channels.rotation ? &*channels.rotation : nullptr, t, bindRotation);
+                key.scale = EvaluateVec3Channel(channels.scale ? &*channels.scale : nullptr, t, bindScale);
+                track.keys.push_back(key);
+            }
+            return track;
+        }
+    }
+
+    std::vector<ClipOut> ExtractSceneNodeClips(const cgltf_data* data, const SceneGraphOut& scene,
+                                                float unitScale,
+                                                std::vector<std::string>& warnings)
+    {
+        // GLTF-293: rigid (non-joint) node animation. Before the real ModelBone hierarchy existed
+        // there was nothing for such a channel to drive, which is why D6 waited on GLTF-103/113/114
+        // rather than on the animation layer.
+        std::vector<ClipOut> clips;
+        if (data == nullptr) { return clips; }
+
+        for (cgltf_size a = 0; a < data->animations_count; ++a)
+        {
+            const cgltf_animation& anim = data->animations[a];
+            const std::string clipName = anim.name ? anim.name : ("Clip" + std::to_string(a));
+
+            double maxTime = 0.0;
+            bool sawUnsupportedPath = false;
+            std::size_t skippedTargets = 0;
+            const std::unordered_map<int, BoneChannels> byBone = GatherChannels(
+                anim, unitScale,
+                [&scene](const cgltf_node* node) {
+                    const auto it = scene.indexOfNode.find(node);
+                    return it == scene.indexOfNode.end() ? -1 : it->second;
+                },
+                maxTime, sawUnsupportedPath, skippedTargets);
+
+            if (sawUnsupportedPath)
+            {
+                warnings.push_back(
+                    "Clip '" + clipName + "' targets a channel path this tool does not import "
+                    "(e.g. morph target weights) -- skipped.");
+            }
+            if (skippedTargets > 0)
+            {
+                // Never silent: a dropped channel is exactly what D6 was.
+                warnings.push_back(
+                    "Clip '" + clipName + "' has " + std::to_string(skippedTargets) +
+                    " channel(s) whose target node is not in the default scene -- they drive "
+                    "nothing that was imported, and are skipped.");
+            }
+
+            ClipOut clip;
+            clip.name = clipName;
+            clip.duration = maxTime;
+            clip.targetSpace = ClipTargetSpace::SceneNode;
+            for (const auto& [boneIdx, channels] : byBone)
+            {
+                const Matrix& bindPose =
+                    scene.nodes[static_cast<std::size_t>(boneIdx)].localTransform;
+                if (std::optional<TrackOut> track = BuildTrack(boneIdx, channels, bindPose))
+                {
+                    clip.tracks.push_back(std::move(*track));
+                }
+            }
+            // Deterministic order: an unordered_map's iteration order is not a property anyone
+            // should be able to observe in a committed .cnj or a test expectation.
+            std::sort(clip.tracks.begin(), clip.tracks.end(),
+                      [](const TrackOut& l, const TrackOut& r) { return l.boneIndex < r.boneIndex; });
+
+            // An animation that drives nothing imported is not a clip. Emitting an empty one would
+            // put an "animations" key in the .cnj that plays nothing, which is a different lie
+            // from D6's but a lie all the same -- the warning above already reported why.
+            if (!clip.tracks.empty()) { clips.push_back(std::move(clip)); }
+        }
+
+        return clips;
+    }
+
     std::vector<ClipOut> ExtractClips(const cgltf_data* data, const SkeletonResult& skel,
                                        float unitScale, std::vector<std::string>& warnings)
     {
@@ -770,10 +936,6 @@ namespace CNA::Internal::GltfImport
         {
             const cgltf_animation& anim = data->animations[a];
 
-            struct BoneChannels
-            {
-                std::optional<SampledChannel> translation, rotation, scale;
-            };
             std::unordered_map<int, BoneChannels> byBone;
             double maxTime = 0.0;
             bool sawUnsupportedTarget = false;
@@ -823,39 +985,14 @@ namespace CNA::Internal::GltfImport
             clip.name = anim.name ? anim.name : ("Clip" + std::to_string(a));
             clip.duration = maxTime;
 
-            for (auto& [boneIdx, channels] : byBone)
+            for (const auto& [boneIdx, channels] : byBone)
             {
-                std::vector<double> unionTimes;
-                for (const auto* ch : {&channels.translation, &channels.rotation, &channels.scale})
+                // Same resampling as the scene-node path -- shared so the two cannot diverge.
+                if (std::optional<TrackOut> track = BuildTrack(
+                        boneIdx, channels, skel.bones[static_cast<std::size_t>(boneIdx)].bindPoseLocal))
                 {
-                    if (*ch) { unionTimes.insert(unionTimes.end(), ch->value().times.begin(), ch->value().times.end()); }
+                    clip.tracks.push_back(std::move(*track));
                 }
-                if (unionTimes.empty()) { continue; }
-                std::sort(unionTimes.begin(), unionTimes.end());
-                unionTimes.erase(
-                    std::unique(unionTimes.begin(), unionTimes.end(),
-                                [](double x, double y) { return std::fabs(x - y) < 1e-9; }),
-                    unionTimes.end());
-
-                Vector3 bindScale{1.0f, 1.0f, 1.0f};
-                Quaternion bindRotation = Quaternion::Identity;
-                Vector3 bindTranslation;
-                (void)skel.bones[static_cast<std::size_t>(boneIdx)].bindPoseLocal.Decompose(
-                    bindScale, bindRotation, bindTranslation);
-
-                TrackOut track;
-                track.boneIndex = boneIdx;
-                track.keys.reserve(unionTimes.size());
-                for (double t : unionTimes)
-                {
-                    KeyframeOut key;
-                    key.time = t;
-                    key.translation = EvaluateVec3Channel(channels.translation ? &*channels.translation : nullptr, t, bindTranslation);
-                    key.rotation = EvaluateQuatChannel(channels.rotation ? &*channels.rotation : nullptr, t, bindRotation);
-                    key.scale = EvaluateVec3Channel(channels.scale ? &*channels.scale : nullptr, t, bindScale);
-                    track.keys.push_back(key);
-                }
-                clip.tracks.push_back(std::move(track));
             }
 
             clips.push_back(std::move(clip));

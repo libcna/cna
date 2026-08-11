@@ -400,3 +400,99 @@ TEST(GltfSkinSpaces, MeshNodeTransformIsCancelledExactlyOnce)
     EXPECT_NEAR(0.0f, skinned.Y, kTolerance);
     EXPECT_NEAR(-50.0f, skinned.Z, kTolerance);
 }
+
+// --- GLTF-293: rigid (non-joint) node animation ------------------------------------------------
+
+TEST(GltfRigidAnimation, AChannelTargetingAnOrdinaryMeshNodeBecomesATrackOnThatNodesBone)
+{
+    // D6's fixture. anim-rigid-node has no skin anywhere: one LINEAR rotation channel drives a
+    // plain mesh node through a quarter turn about +Z -- a door, a turntable, a clock hand.
+    //
+    // Before GLTF-293 this produced nothing at all and said nothing: ExtractClips resolves every
+    // channel against a skin's joint set, so the channel matched nothing and was skipped, and the
+    // offline tool called ExtractClips only for a skinned group in the first place.
+    using namespace CNA::Internal::GltfImport;
+
+    const LoadedFixture fixture("anim-rigid-node");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
+    std::vector<std::string> warnings;
+    const std::vector<ClipOut> clips =
+        ExtractSceneNodeClips(&fixture.Data(), scene, 1.0f, warnings);
+
+    ASSERT_EQ(1u, clips.size()) << "the file declares one animation and it drives an imported node";
+    const ClipOut& clip = clips[0];
+    EXPECT_EQ("Spin", clip.name);
+    EXPECT_EQ(ClipTargetSpace::SceneNode, clip.targetSpace)
+        << "a rigid clip's indices are sceneNodeIndex, not paletteIndex (§15.1.2)";
+    ASSERT_EQ(1u, clip.tracks.size());
+
+    // The track targets the animated node's own bone, which is what makes it playable: both
+    // loaders mirror SceneGraphOut::nodes one-for-one onto Model::Bones.
+    const cgltf_node* animated = fixture.Data().animations[0].channels[0].target_node;
+    ASSERT_NE(nullptr, animated);
+    const auto placed = scene.indexOfNode.find(animated);
+    ASSERT_NE(scene.indexOfNode.end(), placed);
+    EXPECT_EQ(placed->second, clip.tracks[0].boneIndex);
+    EXPECT_EQ("SpinningMesh", scene.nodes[static_cast<std::size_t>(placed->second)].name);
+
+    // The manifest's own pose expectation: identity at t=0, a quarter turn about +Z at t=1.
+    const std::vector<KeyframeOut>& keys = clip.tracks[0].keys;
+    ASSERT_EQ(2u, keys.size());
+    EXPECT_NEAR(0.0, keys[0].time, kTolerance);
+    EXPECT_NEAR(1.0, keys[1].time, kTolerance);
+    EXPECT_NEAR(1.0, clip.duration, kTolerance);
+
+    const float halfSqrt2 = 0.70710678f;
+    EXPECT_NEAR(0.0f, keys[0].rotation.Z, kTolerance);
+    EXPECT_NEAR(1.0f, keys[0].rotation.W, kTolerance);
+    EXPECT_NEAR(halfSqrt2, keys[1].rotation.Z, kTolerance);
+    EXPECT_NEAR(halfSqrt2, keys[1].rotation.W, kTolerance);
+
+    // A channel that authors only rotation must still produce complete keyframes: the missing
+    // components come from the node's own bind pose, not from zero.
+    for (const KeyframeOut& key : keys)
+    {
+        EXPECT_NEAR(1.0f, key.scale.X, kTolerance);
+        EXPECT_NEAR(1.0f, key.scale.Y, kTolerance);
+        EXPECT_NEAR(1.0f, key.scale.Z, kTolerance);
+    }
+}
+
+TEST(GltfRigidAnimation, AChannelTargetingANodeOutsideTheDefaultSceneIsReportedNotDropped)
+{
+    // scene-default-selection has a decoy node outside the default scene. Nothing animates it, so
+    // the assertion here is the converse one: an animation that drives nothing imported yields no
+    // clip at all rather than an empty one that would play nothing.
+    using namespace CNA::Internal::GltfImport;
+
+    const LoadedFixture fixture("scene-default-selection");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
+    std::vector<std::string> warnings;
+    const std::vector<ClipOut> clips =
+        ExtractSceneNodeClips(&fixture.Data(), scene, 1.0f, warnings);
+    EXPECT_TRUE(clips.empty()) << "the fixture declares no animation at all";
+}
+
+TEST(GltfRigidAnimation, RigidAndSkinnedExtractionAgreeOnTheSameChannelData)
+{
+    // The two extractors differ ONLY in which index space a target node resolves into. Asserting
+    // that on a skinned fixture is what stops them drifting: skin-armature-ancestor has no
+    // animation, so the meaningful check is that neither invents one.
+    using namespace CNA::Internal::GltfImport;
+
+    const LoadedFixture fixture("skin-armature-ancestor");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
+    std::vector<std::string> warnings;
+    EXPECT_TRUE(ExtractSceneNodeClips(&fixture.Data(), scene, 1.0f, warnings).empty());
+
+    // ...and a clip extracted against a joint palette still says so, so an existing consumer's
+    // meaning is unchanged by the new field.
+    ClipOut defaultConstructed;
+    EXPECT_EQ(ClipTargetSpace::JointPalette, defaultConstructed.targetSpace);
+}

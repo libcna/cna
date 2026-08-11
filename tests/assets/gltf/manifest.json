@@ -155,18 +155,26 @@
     },
     {
       "id": "D6",
-      "summary": "Rigid (unskinned) node animation is silently dropped. ExtractClips resolves every channel target against the skin's joint set, so a channel targeting an ordinary mesh node is discarded with no warning and no clip is emitted.",
+      "summary": "Rigid (unskinned) node animation was silently dropped: ExtractClips resolves every channel target against the skin's joint set, so a channel targeting an ordinary mesh node matched nothing and was discarded with no warning, and the converter called ExtractClips only for a skinned group at all. GLTF-293 adds ExtractSceneNodeClips, which resolves channels against the scene graph and produces a clip whose tracks target the animated node's own ModelBone. GLTF-294 still owns carrying such a clip through the .cnj and playing it, so the animation is imported and reported but not yet serialised.",
       "owner": "GLTF-ANIMATION",
       "owningTasks": [
         "GLTF-103",
         "GLTF-113",
         "GLTF-114",
-        "GLTF-284"
+        "GLTF-293",
+        "GLTF-294"
       ],
-      "closedTasks": [],
-      "remainingTasks": [],
+      "closedTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-293"
+      ],
+      "remainingTasks": [
+        "GLTF-294"
+      ],
       "firstDivergentLayer": "L4",
-      "status": "known-failing",
+      "status": "partially-remediated",
       "fixtures": [
         "anim-rigid-node"
       ]
@@ -573,8 +581,8 @@
   "files": [
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 10896,
-      "sha256": "09a22da05cbb9c5a85dd8913374f933b5253eeaf398ce7a78baa0e7c0d5a5610"
+      "bytes": 12496,
+      "sha256": "ca8ae839221a4238674e1fac146f48903ec6ebd6ab242e98bb383057807e43f2"
     },
     {
       "path": "anim-rigid-node.glb",

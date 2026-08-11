@@ -98,24 +98,54 @@ def anim_rigid_node() -> Fixture:
         l4=l4,
         defects=[Defect(
             id="D6", owner="GLTF-ANIMATION", first_divergent_layer="L4",
-            summary="Rigid (unskinned) node animation is silently dropped. ExtractClips resolves "
+            summary="Rigid (unskinned) node animation was silently dropped: ExtractClips resolves "
                     "every channel target against the skin's joint set, so a channel targeting an "
-                    "ordinary mesh node is discarded with no warning and no clip is emitted.",
-            owning_tasks=["GLTF-103", "GLTF-113", "GLTF-114", "GLTF-284"],
+                    "ordinary mesh node matched nothing and was discarded with no warning, and the "
+                    "converter called ExtractClips only for a skinned group at all. GLTF-293 adds "
+                    "ExtractSceneNodeClips, which resolves channels against the scene graph and "
+                    "produces a clip whose tracks target the animated node's own ModelBone. "
+                    "GLTF-294 still owns carrying such a clip through the .cnj and playing it, so "
+                    "the animation is imported and reported but not yet serialised.",
+            # The owning-task list said GLTF-284 until GLTF-293 landed. GLTF-284 is the morph
+            # weight-vector validation task and has nothing to do with rigid animation; the real
+            # owner is GLTF-293 (plan_gltf.md §29 Phase 14), with GLTF-294 unifying playback.
+            owning_tasks=["GLTF-103", "GLTF-113", "GLTF-114", "GLTF-293", "GLTF-294"],
+            closed_tasks=["GLTF-103", "GLTF-113", "GLTF-114", "GLTF-293"],
+            remaining_tasks=["GLTF-294"],
+            status="partially-remediated",
             divergent_fields=["animation"],
             current_actual={
+                "importedClipCount": 1,
+                "importedTrackCount": 1,
+                "clipTargetSpace": "SceneNode",
+                "warningEmitted": True,
+                "clipExtractionGatedOnSkin": False,
+                "serialisedToCnj": False,
+                "note": "ExtractSceneNodeClips resolves the rotation channel against the scene "
+                        "graph and yields one clip, 'Spin', with one track on the SpinningMesh "
+                        "node's own bone -- identity at t=0 and a quarter turn about +Z at t=1, "
+                        "with the scale components filled from the node's bind pose rather than "
+                        "from zero. Both original mechanisms are gone: extraction is no longer "
+                        "gated on a skin, and a non-joint target resolves instead of being "
+                        "skipped. What remains is serialisation: a scene-node clip's boneIndex is "
+                        "a sceneNodeIndex, and the .cnj clip schema has no field distinguishing "
+                        "that from a joint-palette slot (§15.1.2), so writing one would let a "
+                        "reader apply it as a palette index -- a fresh silent corruption in place "
+                        "of the old one. The converter therefore reports the clip by name and "
+                        "track count instead of dropping it. GLTF-294 adds the field and the "
+                        "unified playback path.",
+            },
+            prior_actual={
                 "importedClipCount": 0,
                 "warningEmitted": False,
-                # Two independent mechanisms drop this animation, and a fix must address both.
                 "clipExtractionGatedOnSkin": True,
                 "clipCountIfExtractClipsWereCalled": 1,
                 "trackCountIfExtractClipsWereCalled": 0,
-                "note": "The converter calls ExtractClips only for a skinned group, so with no "
-                        "skin the .cnj has no 'animations' key at all. Even when called, "
-                        "ExtractClips resolves the channel target against the joint set and skips "
-                        "it, producing a clip with zero tracks. Fixing this needs a real node "
-                        "hierarchy to animate, which is why D6 depends on the Phase 5 "
-                        "architecture rather than on the animation layer alone.",
+                "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+                "note": "What the forensic audit measured: the converter called ExtractClips only "
+                        "for a skinned group, so with no skin the .cnj had no 'animations' key at "
+                        "all. Even when called, ExtractClips resolved the channel target against "
+                        "the joint set and skipped it, producing a clip with zero tracks.",
             },
         )],
     )

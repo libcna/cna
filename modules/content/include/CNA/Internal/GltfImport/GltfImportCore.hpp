@@ -83,10 +83,40 @@ namespace CNA::Internal::GltfImport
         Microsoft::Xna::Framework::Vector3 scale{1.0f, 1.0f, 1.0f};
     };
 
+    /**
+     * @brief Which index space a clip's `TrackOut::boneIndex` values live in (§15.1.2).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. The two spaces are deliberately distinct and
+     * must never be silently interchanged: a joint's palette slot has nothing to do with its
+     * position in the scene, and a rigid node has no palette slot at all.
+     */
+    enum class ClipTargetSpace
+    {
+        /**
+         * @brief `paletteIndex` — a slot in one skin's GPU joint palette (`SkeletonResult::bones`).
+         *
+         * What `SkinningData`, `BlendIndices` and `uBones[]` index. Meaningful only relative to the
+         * skin the clip was extracted for.
+         */
+        JointPalette,
+        /**
+         * @brief `sceneNodeIndex` — a node's index in `SceneGraphOut::nodes`, and hence its
+         * `ModelBone` index, since both loaders mirror the scene graph one-for-one.
+         *
+         * What rigid (non-joint) node animation drives (`GLTF-293`).
+         */
+        SceneNode,
+    };
+
     /** @brief A sequence of keyframes driving one bone within an animation clip. */
     struct TrackOut
     {
-        /** @brief Index of the bone this track drives, into the owning `SkeletonResult::bones`. */
+        /**
+         * @brief Index of the bone this track drives, in the owning clip's `targetSpace`.
+         *
+         * A `JointPalette` clip indexes `SkeletonResult::bones`; a `SceneNode` clip indexes
+         * `SceneGraphOut::nodes` (equivalently `Model::Bones`).
+         */
         int boneIndex = -1;
         /** @brief Keyframes for this track, in ascending time order. */
         std::vector<KeyframeOut> keys;
@@ -101,6 +131,13 @@ namespace CNA::Internal::GltfImport
         double duration = 0.0;
         /** @brief Per-bone keyframe tracks. Bones with no track hold their bind pose. */
         std::vector<TrackOut> tracks;
+        /**
+         * @brief Which index space this clip's track bone indices are in.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `JointPalette`, which is what
+         * every clip was before `GLTF-293`, so an existing consumer keeps its meaning unchanged.
+         */
+        ClipTargetSpace targetSpace = ClipTargetSpace::JointPalette;
     };
 
     /** @brief A texture's raw encoded (PNG/JPEG) image bytes, plus its file extension. */
@@ -416,6 +453,36 @@ namespace CNA::Internal::GltfImport
      */
     std::vector<ClipOut> ExtractClips(const cgltf_data* data, const SkeletonResult& skel,
                                        float unitScale, std::vector<std::string>& warnings);
+
+    /**
+     * @brief Extracts every animation as a clip whose tracks target **scene nodes**, not joints.
+     *
+     * This is rigid (non-joint) node animation — a door, a turntable, a clock hand — which was
+     * silently dropped before `GLTF-293`: `ExtractClips` resolves every channel against a skin's
+     * joint set, so a channel targeting an ordinary mesh node matched nothing and was skipped
+     * without a warning, and the offline tool called it only for a skinned group in the first
+     * place.
+     *
+     * The returned clips carry `ClipTargetSpace::SceneNode`, so their `boneIndex` values index
+     * `SceneGraphOut::nodes` — which both loaders mirror one-for-one as `Model::Bones`. A channel
+     * whose target node is not in the default scene is skipped and reported: it drives nothing
+     * that was imported.
+     *
+     * Joints are deliberately **not** excluded. A node can be both a skin joint and an ordinary
+     * scene node, and which of the two clips should drive it is `GLTF-294`'s question, not this
+     * function's; silently dropping it here would repeat D6 in the other direction.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param data The parsed glTF file.
+     * @param scene The default scene's flattened node graph (from `BuildSceneGraph`).
+     * @param unitScale Uniform scale applied to translation channel values/tangents.
+     * @param warnings Appended with a human-readable note per skipped channel, naming why.
+     * @return One `ClipOut` per glTF animation that drives at least one imported scene node.
+     */
+    std::vector<ClipOut> ExtractSceneNodeClips(const cgltf_data* data, const SceneGraphOut& scene,
+                                                float unitScale,
+                                                std::vector<std::string>& warnings);
 
     /**
      * @brief Extracts a glTF image's raw encoded bytes, resolving whichever of the three glTF

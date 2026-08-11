@@ -1264,7 +1264,7 @@ Per §24.1 a reference never re-counts.
 | `animation.samplers` / `channels` | ✅ parsed |
 | target path `translation`/`rotation`/`scale` | ✅ — **but only when the target node is a skin joint** |
 | target path `weights` | ✅ via a separate `ExtractMorphWeightTrack` path |
-| **rigid (non-joint) node targets** | 🐛 **silently skipped** (`ExtractClips` line ~521: `if (it == skel.nodeToNewIndex.end()) continue;`), and the offline tool only calls `ExtractClips` at all when `hasSkin`. Proven by `f7`. `GLTF-293` |
+| **rigid (non-joint) node targets** | ✔ **imported** by `ExtractSceneNodeClips` (`GLTF-293`), which resolves channels against the scene graph; the clip targets the node's own `ModelBone`. Not yet serialised to the `.cnj` — `GLTF-294`. Was: silently skipped, and the offline tool only called `ExtractClips` at all when `hasSkin`. |
 | `LINEAR` | ✅ `Vector3::Lerp` / `Quaternion::Slerp` |
 | `STEP` | ✅ hold-last-value, covered by an existing test |
 | `CUBICSPLINE` | ✅ real Hermite with the spec's `Δt` tangent scaling, covered by an existing test; rotations renormalised |
@@ -1853,7 +1853,13 @@ clean checkout at all, so `GLTF-003`'s byte-identical-regeneration guarantee was
 Reconstructed against the committed corpus (which carries a SHA-256 per file), with a test that
 fails if any generator module goes missing again.
 
-**D6 and D7 remain open** and reproducible exactly as the audit recorded them; neither is a
+**P0-G — rigid node animation**: `GLTF-293`. `ExtractSceneNodeClips` resolves animation channels
+against the scene graph rather than a skin's joint set, so `anim-rigid-node` produces a real clip on
+the animated node's own bone. Both mechanisms that dropped it are gone; what remains is
+serialisation, which `GLTF-294` owns, so **D6 is `partially-remediated`** rather than fixed and the
+converter reports the clip instead of discarding it.
+
+**D7 remains open** and reproducible exactly as the audit recorded it; like D6 it is not a
 center-collapse mechanism (`docs/gltf-center-collapse-verdict.md` §6). No renderer and no
 `cna-gltf-viewer` work has been started.
 
@@ -2285,8 +2291,8 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-293 | **Import animation of non-joint (rigid) nodes** | 🐛 | GLTF-114 | `ExtractClips` skips any channel whose target is not in `skel.nodeToNewIndex`, and the offline tool calls it only when `hasSkin`. `f7` produced a `.cnj` with **no** `animations` key and no warning. **Accept:** `anim-rigid-node` produces a playable clip targeting the mesh node's bone. |
-| GLTF-294 | Unify joint and node animation on the bone hierarchy | ⬜ | GLTF-293, GLTF-103 | With a real `ModelBone` tree, both are bone tracks. **Accept:** one code path; `.cnj` carries clips for both. |
+| GLTF-293 | **Import animation of non-joint (rigid) nodes** | ✔ | GLTF-114 | `ExtractClips` skips any channel whose target is not in `skel.nodeToNewIndex`, and the offline tool calls it only when `hasSkin`. `f7` produced a `.cnj` with **no** `animations` key and no warning. **Accept:** `anim-rigid-node` produces a playable clip targeting the mesh node's bone. **Landed:** `ExtractSceneNodeClips` resolves channels against `SceneGraphOut` instead of a joint set, so `anim-rigid-node` yields one clip `Spin` with one track on the `SpinningMesh` node's own bone — identity at `t=0`, a quarter turn about +Z at `t=1`, scale filled from the node's bind pose rather than zero. Both original mechanisms are gone: extraction is no longer gated on a skin, and a non-joint target resolves instead of being skipped. `ClipOut` gained `targetSpace` (`ClipTargetSpace::JointPalette` \| `SceneNode`) so §15.1.2's two index spaces can never be silently interchanged; it defaults to `JointPalette`, leaving every existing consumer's meaning unchanged. Channel gathering and keyframe resampling are now one shared code path for both extractors — the two differing only in how a target node resolves — since D6 existed precisely because they were never separated. **Scope boundary:** the clip is **not** serialised to the `.cnj` yet. A scene-node track's `boneIndex` is a `sceneNodeIndex`, and the clip schema has no field distinguishing it from a palette slot; writing one would let a reader apply it as a palette index — a fresh silent corruption in place of the old one. `GLTF-294` adds the field and the unified playback path, so the converter **reports** the clip by name and track count instead of dropping it. **D6 → `partially-remediated`.** Its ledger entry also named the wrong owner (`GLTF-284`, the morph weight-vector validation task); corrected to `GLTF-293`/`GLTF-294`. |
+| GLTF-294 | Unify joint and node animation on the bone hierarchy | ⬜ | GLTF-293, GLTF-103 | With a real `ModelBone` tree, both are bone tracks. **Accept:** one code path; `.cnj` carries clips for both. **Half done by `GLTF-293`:** channel gathering and resampling are already one shared path, and `ClipOut::targetSpace` names the space each clip is in. What is left is the serialisation and playback half — a `targetSpace` field in the `.cnj` clip schema, a reader that honours it, and a way to drive `ModelBone` transforms from a `SceneNode` clip. **This is what keeps D6 open.** |
 | GLTF-295 | Call `ExtractClips` unconditionally | 🐛 | GLTF-293 | `gltf_to_cnj` gates it on `hasSkin`. **Accept:** a skinless animated file produces clips. |
 | GLTF-296 | Animation of camera and light nodes | 🐛 | GLTF-294 | Same non-joint drop. **Accept:** imported or reported. |
 | GLTF-297 | Quantify the union-time resampling error | 🔬 | GLTF-294 | Bone channels are resampled onto the union of their own three channels' times, baking a piecewise-linear approximation of CUBICSPLINE between keys. **Accept:** the error is measured on a fixture and either accepted with numbers or replaced by lazy evaluation (as the morph path already does). |

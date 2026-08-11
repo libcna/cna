@@ -294,7 +294,7 @@ forensic audit, stop and investigate the contradiction.
 | **D1, D2, D3** | **`fixed`** | **`GLTF-103` → `GLTF-113` → `GLTF-114` → `GLTF-115`** | — |
 | **D4** | **`fixed`** | **`GLTF-063`** | — |
 | **D5** | **`partially-remediated`** | **`GLTF-071`** (mode read and classified) → **`GLTF-072`** (strip/fan converted to a triangle list) | `GLTF-073` / `GLTF-077` / `GLTF-078` — a **draw path** for the four topologies that describe no triangles |
-| D6 | `known-failing` | — | `GLTF-284` (after `GLTF-103`…`GLTF-114`) |
+| **D6** | **`partially-remediated`** | **`GLTF-293`** (the clip is imported onto the node's own bone) | `GLTF-294` — carrying a scene-node clip through the `.cnj` and playing it |
 | D7 | `known-failing` | — | `GLTF-217` / `GLTF-228` / `GLTF-229` |
 | **D8** | **`fixed`** | **`GLTF-245` → `GLTF-247` → `GLTF-248` → `GLTF-260`** | — |
 
