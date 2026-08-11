@@ -179,13 +179,96 @@ plan is the result of the audit that followed.
 - **BLEND2D-19.** Added `plan_blend2d.md` (this file) — the branch referenced it from multiple
   source-file comments without it existing.
 
+### Remediation pass — post-review correctness (blend alpha, RenderTarget2D properties, sampler filter)
+
+An independent post-remediation review of the state above (starting SHA `3da643712`) found the
+READY verdict was still incorrect: the four-preset `BlendState` match landed by BLEND2D-9 was
+complete (every stock tuple recognized, everything else rejected) but two of the four presets
+computed the wrong pixel; a `RenderTarget2D` public-property boundary and a filter-family claim
+were asserted but not actually regression-tested against the real public API/a genuinely
+distinguishing case.
+
+- **BLEND2D-20 (P0).** `ApplyBlendState` mapped `NonPremultiplied` to `BL_COMP_OP_SRC_OVER` and
+  `Additive` to `BL_COMP_OP_PLUS` as if they were exact native operators. This is correct for the
+  COLOUR channel (`Sc*Sa` computed by the `SourceAlpha` colour factor is algebraically the same
+  byte Blend2D's native premultiplied storage already holds) but wrong for ALPHA: both presets set
+  `AlphaSourceBlend=SourceAlpha` (not `AlphaBlend`'s `One`), so XNA's true alpha equation is
+  independent of the colour equation — `Da'=Sa*Sa+Da*(1-Sa)` for `NonPremultiplied`,
+  `Da'=Sa*Sa+Da` for `Additive` — which native `SRC_OVER`/`PLUS` (multiplying by `Sa` only once)
+  cannot reproduce whenever `Sa` is neither 0 nor 1. Fixed with a bounded CPU-assisted correction
+  (`ApplyIndependentAlphaCorrectionEXT` in `Blend2DSpriteBatchRenderer.cpp`, semantically informed
+  by `SkiaRenderer`'s own masked-blend precedent, not copied from it): the real draw still goes
+  through the native `BLCompOp` blit for its (already-correct) colour bytes; a second pass renders
+  the same draw onto a transparent scratch canvas via `SRC_OVER` — which collapses to exactly `Sa`
+  against a zero destination alpha, recovering Blend2D's true per-pixel effective source alpha
+  including AA/clip/coverage — and combines it with a whole-surface pre-draw alpha snapshot to
+  compute and write back the true independent alpha equation over just the alpha byte. This
+  surfaced a real, previously-latent bug in `Blend2DPixelConvert.hpp`'s
+  `ConvertPremultipliedBgraRowToStraightRgba`: a stored premultiplied colour byte can legitimately
+  exceed the new, smaller alpha byte under the corrected equation (an expected consequence of an
+  independent alpha equation on premultiplied-native storage), and the unclamped
+  `static_cast<uint8_t>` unpremultiply division would silently wrap instead of clamping to 255;
+  fixed with an explicit `std::min(255, …)` clamp on all three channels.
+- **BLEND2D-21 (P0 test oracle).** `TestBlendPresets` asserted `NonPremultiplied == AlphaBlend`
+  (true only for BLEND2D-9's uncorrected native mapping) and derived `Additive`'s expected pixel
+  from native `PLUS` behaviour instead of `BlendState`'s own factor tuples. Rewritten to derive
+  every preset's expected alpha independently from `BlendState.cpp`'s real
+  `(ColorSourceBlend, ColorDestinationBlend, AlphaSourceBlend, AlphaDestinationBlend)` tuples, with
+  alpha checked in isolation (`CheckAlpha`) before the combined RGBA check, and the
+  `NonPremultiplied` clamp-on-unpremultiply documented as a genuine boundary rather than adjusted
+  away.
+- **BLEND2D-22 (P1).** `Blend2DRenderTargetRenderer` overrode `HasRealDepthBuffer()` to `false`
+  but not `GetAppliedDepthStencilFormatEXT()`, so `RenderTarget2D.cpp` (which populates the public
+  `DepthStencilFormat` property from that method, not from `HasRealDepthBuffer`) could report
+  `Depth24`/`Depth24Stencil8` on a target with no depth/stencil storage at all. Added the missing
+  override (always `DepthFormat::None`'s raw ordinal); `GetMultiSampleCount()`/`HasDefinedMipLevel`
+  were already correctly un-overridden (truthfully inheriting the shared `0`/`false` defaults), so
+  `RenderTarget2D.MultiSampleCount` and mip-level usability were already correct and needed no code
+  change — only the regression test below, which the previous "READY" pass never wrote.
+- **BLEND2D-23 (P1/P2 regression coverage).** None of `RenderTarget2D`'s public property
+  truthfulness (`DepthStencilFormat`/`MultiSampleCount`/`LevelCount` vs. actual mip usability), a
+  real (non-`SetCustomEffect(nullptr)`-only) custom-`Effect` rejection, or an actually-distinguishing
+  Point-vs-Linear sampler test existed. Added `blend2d_rendertarget_property_test.cpp`
+  (`Blend2D_RenderTargetProperty`), driving the real public `Game`/`GraphicsDeviceManager`/
+  `RenderTarget2D`/`SpriteBatch` API (not the internal renderer directly): all four `DepthFormat`
+  values report `DepthStencilFormat=None`/`HasRealDepthBuffer=false`/`HasRealStencilBuffer=false`;
+  a non-default `DepthStencilState` still throws; `MultiSampleCount` clamps to 0; a `mipMap=true`
+  target's `GetData(level=1)` throws `NotSupportedException` while `GetData(level=0)` still
+  succeeds; and a real minimal non-stock `Effect` subclass is rejected by `SpriteBatch.Begin()`
+  while null/the exact stock `SpriteEffect` are accepted and a rejected Begin() does not poison the
+  next Begin()/Draw()/End() cycle (which is also proven to genuinely rasterize, not just "not
+  throw"). Separately, `TestSamplerFilter` (`Blend2D_Correctness`) was extended: its only existing
+  check drew a uniform 2x2 texture at 1:1 scale, where Point and Linear are mathematically
+  identical by construction. Added a minification case (a two-texel red/green source collapsed
+  into one destination pixel, the same oracle as `skia_texture_filter_minification_test.cpp`
+  SKIA-43) across all 9 `TextureFilter` values, proving the NEAREST family selects one pure texel
+  and the BILINEAR family actually blends.
+- **Second-pass oracle audit.** Reviewed the remaining ~10 test functions in
+  `blend2d_renderer_correctness_test.cpp` for the same class of bug (an expected value derived
+  from the same assumption as the implementation rather than an independent oracle): flip/origin/
+  rotation geometry (direct rotation-matrix derivation), sampler addressing (wrap/clamp/mirror
+  definitions on a 2-texel texture), tint chain (straight-alpha component-multiply XNA semantics,
+  with a second, fully independent floating-point Porter-Duff cross-check already in place for the
+  three-alpha-values case), colour-write-channel masking (premultiplied-representation math cross-
+  referenced against `SkiaRenderer`'s own masked-write precedent), viewport/scissor (direct
+  geometric containment), and render-target bind/switch/self-sample (behavioural round-trips, not
+  derived pixel maths). No further instances of the bug class were found beyond BLEND2D-20/21/23
+  above.
+
 ### Remaining boundaries (explicit, not silently accepted)
 
 These are documented, tested-as-absent boundaries, not oversights:
 
-- **Mip chains and MSAA** are not implemented for `RenderTarget2D`/`Texture2D`; `CreateRenderTarget2D`'s
-  `mipMap`/`multiSampleCount` parameters are accepted but produce a single-level, zero-sample
-  target. `GraphicsCapability::MultiSampleAntiAliasing` correctly reports `false`.
+- **Mip chains and MSAA** are not implemented for `RenderTarget2D`/`Texture2D`;
+  `CreateRenderTarget2D`'s `mipMap`/`multiSampleCount` parameters are accepted, and
+  `RenderTarget2D.LevelCount` echoes the requested mip-chain length as metadata (the shared
+  cross-renderer convention), but the underlying storage is single-level/zero-sample: no level
+  beyond 0 is ever real (`GetData` on `level != 0` throws `NotSupportedException`, verified by
+  `Blend2D_RenderTargetProperty`) and `RenderTarget2D.MultiSampleCount` truthfully clamps to 0.
+  `GraphicsCapability::MultiSampleAntiAliasing` correctly reports `false`.
+- **`RenderTarget2D.DepthStencilFormat`** always truthfully reports `DepthFormat::None`
+  regardless of the format requested at construction — Blend2D never allocates a real
+  depth/stencil plane (verified by `Blend2D_RenderTargetProperty`).
 - **Cube/volume textures** (`TextureCube`, `Texture3D`, `RenderTargetCube`) have no Blend2D
   representation; the shared `IGraphicsRenderer` defaults (`return nullptr`) are the correct,
   established "unsupported" signal this codebase already uses consistently for a renderer with no

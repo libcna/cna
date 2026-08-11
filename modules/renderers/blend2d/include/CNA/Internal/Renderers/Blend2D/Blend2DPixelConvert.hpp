@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <bit>
 #include <cstdint>
 
@@ -47,6 +48,14 @@ namespace CNA::Internal::Renderers::Blend2D
 
     /// Inverse of ConvertStraightRgbaRowToPremultipliedBgra: reads one row of Blend2D's native
     /// premultiplied BGRA storage and writes straight top-row-first RGBA8 bytes.
+    ///
+    /// A premultiplied colour byte can legitimately exceed the stored alpha byte -- not just from
+    /// a corrupt/adversarial buffer, but as a genuine, expected result of blending BlendState::
+    /// NonPremultiplied/Additive onto this renderer's premultiplied-native storage (their
+    /// independent Sa*Sa alpha term can end up smaller than the Sa-scaled colour a native
+    /// Porter-Duff operator already wrote -- see Blend2DRenderer::ApplyBlendState's doc comment
+    /// and ApplyIndependentAlphaCorrectionEXT). The unpremultiplied channel is then mathematically
+    /// >255 and MUST clamp, not silently wrap through an unchecked `uint8_t` cast.
     inline void ConvertPremultipliedBgraRowToStraightRgba(const std::uint8_t* srcBgra,
                                                            std::uint8_t* dstRgba,
                                                            int pixelCount)
@@ -65,9 +74,9 @@ namespace CNA::Internal::Renderers::Blend2D
                 dstRgba[i * 4 + 3] = 0;
                 continue;
             }
-            dstRgba[i * 4 + 0] = static_cast<std::uint8_t>((r * 255 + a / 2) / a);
-            dstRgba[i * 4 + 1] = static_cast<std::uint8_t>((g * 255 + a / 2) / a);
-            dstRgba[i * 4 + 2] = static_cast<std::uint8_t>((b * 255 + a / 2) / a);
+            dstRgba[i * 4 + 0] = static_cast<std::uint8_t>(std::min(255, (r * 255 + a / 2) / a));
+            dstRgba[i * 4 + 1] = static_cast<std::uint8_t>(std::min(255, (g * 255 + a / 2) / a));
+            dstRgba[i * 4 + 2] = static_cast<std::uint8_t>(std::min(255, (b * 255 + a / 2) / a));
             dstRgba[i * 4 + 3] = a;
         }
     }

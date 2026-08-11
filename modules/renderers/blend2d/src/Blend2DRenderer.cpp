@@ -395,38 +395,64 @@ namespace CNA::Internal::Renderers::Blend2D
         //
         // Blend2D's BLCompOp set is Porter-Duff/blend-mode based, not the generic
         // (srcFactor,dstFactor,equation) pair XNA's BlendState exposes, so only tuples that
-        // correspond EXACTLY to a native Blend2D composition operator are accepted; every other
-        // combination is refused rather than silently approximated with SRC_OVER. The four stock
-        // XNA presets all use identical colour and alpha factors/functions, so both channel
-        // groups are validated together:
+        // correspond EXACTLY to one of the four stock BlendState presets (modules/graphics/src/
+        // Xna/BlendState.cpp) are accepted; every other combination is refused rather than
+        // silently approximated. The four stock presets:
         //
-        //   Opaque:           (One,Zero,Add)              -> BL_COMP_OP_SRC_COPY   (exact)
-        //   AlphaBlend:       (One,InverseSourceAlpha,Add) -> BL_COMP_OP_SRC_OVER   (exact: every
-        //     CNA-owned Blend2D texture/target already stores premultiplied pixels, so blitting
-        //     with Blend2D's native SRC_OVER already computes src*1 + dst*(1-srcA) against that
-        //     premultiplied source -- exactly AlphaBlend's GPU equation.)
-        //   NonPremultiplied: (SourceAlpha,InverseSourceAlpha,Add) -> BL_COMP_OP_SRC_OVER (exact
-        //     for the same reason: NonPremultiplied's equation exists to premultiply a STRAIGHT
-        //     source on the fly, but Blend2D's stored source is already premultiplied regardless
-        //     of which BlendState the caller selects, so the two presets are numerically
-        //     identical here.)
-        //   Additive:         (SourceAlpha,One,Add)        -> BL_COMP_OP_PLUS       (exact:
-        //     Sca(premultiplied) + Dca, Sa + Da is exactly BL_COMP_OP_PLUS.)
+        //   Opaque:           (One,Zero,Add)                          -> BL_COMP_OP_SRC_COPY, exact.
+        //   AlphaBlend:       (One,InverseSourceAlpha,Add)             -> BL_COMP_OP_SRC_OVER, exact
+        //     in BOTH channels: every CNA-owned Blend2D texture/target already stores premultiplied
+        //     pixels, so native SRC_OVER's Dca'=Sca+Dca(1-Sa), Da'=Sa+Da(1-Sa) is byte-identical to
+        //     AlphaBlend's own (ColorSourceBlend=One, AlphaSourceBlend=One) equation.
+        //   NonPremultiplied: (SourceAlpha,InverseSourceAlpha,Add)     -> BL_COMP_OP_SRC_OVER for
+        //     COLOUR ONLY, plus a bounded CPU alpha correction (see below). NonPremultiplied's
+        //     ColorSourceBlend is SourceAlpha, so its colour equation Dca'=Sc*Sa+Dca(1-Sa) is
+        //     algebraically identical to native SRC_OVER's (Sc*Sa is exactly the source's own
+        //     stored premultiplied byte) -- the colour channels ARE byte-identical to AlphaBlend's
+        //     output. But NonPremultiplied's AlphaSourceBlend is ALSO SourceAlpha (not One), giving
+        //     Da'=Sa*Sa+Da(1-Sa) -- an independent Sa^2 term native SRC_OVER's alpha equation
+        //     (Sa+Da(1-Sa)) does not have. Confirmed against SkiaRenderer.cpp's own masked-blender
+        //     oracle (nonPremulAlpha = src.a*src.a + dst.a*(1-src.a)).
+        //   Additive:         (SourceAlpha,One,Add)                    -> BL_COMP_OP_PLUS for
+        //     COLOUR ONLY (Dca'=Sc*Sa+Dca is byte-identical to native PLUS's Sca+Dca), plus the
+        //     same bounded alpha correction: Da'=Sa*Sa+Da, not native PLUS's Sa+Da (Skia's
+        //     additiveAlpha = src.a*src.a + dst.a is the identical derivation).
+        //
+        // The colour-channel equivalence above means the native blit_image call already writes the
+        // CORRECT premultiplied colour bytes for all four presets; only NonPremultiplied/Additive's
+        // ALPHA byte needs a follow-up correction, applied by
+        // Blend2DSpriteBatchRenderer::ApplyIndependentAlphaCorrectionEXT (driven by
+        // ActiveBlendPresetEXT() below, since appliedCompOp_ alone cannot distinguish AlphaBlend
+        // from NonPremultiplied or a plain PLUS from Additive -- both pairs resolve to the same
+        // BLCompOp).
         constexpr int kOne = 0, kZero = 1, kSourceAlpha = 4, kInverseSourceAlpha = 5, kAdd = 0;
         const bool colorAlphaMatch = colorSrcBlend == alphaSrcBlend && colorDstBlend == alphaDstBlend
             && colorBlendFunc == alphaBlendFunc;
 
         BLCompOp resolved;
+        Blend2DBlendPresetEXT preset;
         if (colorBlendFunc == kAdd && colorAlphaMatch)
         {
             if (colorSrcBlend == kOne && colorDstBlend == kZero)
+            {
                 resolved = BL_COMP_OP_SRC_COPY;
+                preset = Blend2DBlendPresetEXT::Opaque;
+            }
             else if (colorSrcBlend == kOne && colorDstBlend == kInverseSourceAlpha)
+            {
                 resolved = BL_COMP_OP_SRC_OVER;
+                preset = Blend2DBlendPresetEXT::AlphaBlend;
+            }
             else if (colorSrcBlend == kSourceAlpha && colorDstBlend == kInverseSourceAlpha)
+            {
                 resolved = BL_COMP_OP_SRC_OVER;
+                preset = Blend2DBlendPresetEXT::NonPremultiplied;
+            }
             else if (colorSrcBlend == kSourceAlpha && colorDstBlend == kOne)
+            {
                 resolved = BL_COMP_OP_PLUS;
+                preset = Blend2DBlendPresetEXT::Additive;
+            }
             else
             {
                 throw std::runtime_error(
@@ -465,6 +491,7 @@ namespace CNA::Internal::Renderers::Blend2D
 
         // Commit only after every validation above succeeds.
         appliedCompOp_ = resolved;
+        appliedPreset_ = preset;
         colorWriteMask_ = colorWriteMask;
     }
 
@@ -484,8 +511,10 @@ namespace CNA::Internal::Renderers::Blend2D
             case CNA::GraphicsCapability::MultiStreamVertexInput: return false;
             case CNA::GraphicsCapability::Instancing: return false;
             case CNA::GraphicsCapability::StencilBuffer: return false;
-            // Genuinely honored: ApplyBlendState maps the Additive preset to BL_COMP_OP_PLUS, an
-            // exact Blend2D composition operator, not an approximation.
+            // Genuinely honored: ApplyBlendState maps the Additive preset's colour equation to
+            // BL_COMP_OP_PLUS (byte-identical to the native operator) and its independent alpha
+            // equation (Sa*Sa+Da) to a bounded CPU correction pass -- see ApplyBlendState's own
+            // doc comment and Blend2DSpriteBatchRenderer::ApplyIndependentAlphaCorrectionEXT.
             case CNA::GraphicsCapability::AdditiveBlending: return true;
         }
         return false;

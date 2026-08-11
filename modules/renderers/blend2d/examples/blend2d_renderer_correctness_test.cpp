@@ -140,6 +140,19 @@ namespace
                  ColorStr(expected) + " got " + ColorStr(actual));
     }
 
+    /// Checks only the alpha channel of a pixel, independently of its RGB channels. Used to
+    /// isolate an alpha-equation regression (e.g. a wrong independent-alpha blend factor) from an
+    /// RGB regression when both are being verified from separately-derived expected values.
+    void CheckAlpha(Blend2DRenderer& renderer, int x, int y, int expectedAlpha, const std::string& label,
+                    int tolerance = 0)
+    {
+        const Color actual = ReadPixel(renderer, x, y);
+        const int actualAlpha = static_cast<int>(actual.getAProperty());
+        Check(std::abs(actualAlpha - expectedAlpha) <= tolerance,
+             label + " alpha at (" + std::to_string(x) + "," + std::to_string(y) + "): expected alpha " +
+                 std::to_string(expectedAlpha) + " got " + std::to_string(actualAlpha));
+    }
+
     // ------------------------------------------------------------------
     // Texture stride
     // ------------------------------------------------------------------
@@ -435,6 +448,60 @@ namespace
         CheckThrows("SetSamplerFilter(9) (invalid)", [&] { sb->SetSamplerFilter(9); });
         CheckThrows("SetSamplerFilter(-1) (invalid)", [&] { sb->SetSamplerFilter(-1); });
 
+        // A 1:1 draw is exact under EVERY filter (nothing above actually exercises interpolation).
+        // Prove Point and Linear genuinely differ by minifying a two-texel (red, green) source
+        // into a single destination pixel -- the same oracle as
+        // skia_texture_filter_minification_test.cpp (SKIA-43): an unambiguous 2:1 minification,
+        // where Point/NEAREST must select exactly one stored texel (a pure red or pure green
+        // result) and Linear/BILINEAR must interpolate both (a blended result with R and G both
+        // in a mid-range, neither channel near 0 nor near 255).
+        ImageData redGreen;
+        redGreen.width = 2;
+        redGreen.height = 1;
+        redGreen.pixels = { 255, 0, 0, 255,   0, 255, 0, 255 };
+        auto redGreenTex = renderer->CreateTexture(redGreen);
+
+        // Family per Blend2DSpriteBatchRenderer::SamplerFilterToPatternQualityEXT: BILINEAR =
+        // {Linear=0, Anisotropic=2, LinearMipPoint=3, MinPointMagLinearMipLinear=7,
+        // MinPointMagLinearMipPoint=8} (Linear MAGNIFICATION component); NEAREST = {Point=1,
+        // PointMipLinear=4, MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6} (Point
+        // magnification component). Blend2D has no mip chain at all -- every "Mip*" suffix is
+        // necessarily unobservable here; only the base/magnification filter family is testable.
+        struct FilterCase { int filter; bool expectBlended; const char* name; };
+        const FilterCase filterCases[] = {
+            {0, true,  "Linear"},
+            {1, false, "Point"},
+            {2, true,  "Anisotropic"},
+            {3, true,  "LinearMipPoint"},
+            {4, false, "PointMipLinear"},
+            {5, false, "MinLinearMagPointMipLinear"},
+            {6, false, "MinLinearMagPointMipPoint"},
+            {7, true,  "MinPointMagLinearMipLinear"},
+            {8, true,  "MinPointMagLinearMipPoint"},
+        };
+        for (const auto& c : filterCases)
+        {
+            sb->SetSamplerFilter(c.filter);
+            renderer->Clear(0, 0, 0, 1);
+            sb->Begin();
+            // Two source texels collapsed into a single destination column (width 1): an
+            // unambiguous 2:1 minification. Height 4 just keeps the sampled row comfortably away
+            // from any dest-rect edge.
+            sb->Draw(*redGreenTex, Rectangle(1, 0, 1, 4), Rectangle(0, 0, 2, 1), Color::White);
+            sb->End();
+            const Color px = ReadPixel(*renderer, 1, 2);
+            const bool pure = (px.getRProperty() >= 235 && px.getGProperty() <= 20) ||
+                              (px.getGProperty() >= 235 && px.getRProperty() <= 20);
+            const bool blended = px.getRProperty() >= 90 && px.getRProperty() <= 165 &&
+                                 px.getGProperty() >= 90 && px.getGProperty() <= 165;
+            if (c.expectBlended)
+                Check(blended, std::string("TextureFilter::") + c.name +
+                               " (BILINEAR family) blends the minified red/green source, got " + ColorStr(px));
+            else
+                Check(pure, std::string("TextureFilter::") + c.name +
+                            " (NEAREST family) selects one pure stored texel, got " + ColorStr(px));
+        }
+
         SDL_DestroyWindow(window);
     }
 
@@ -573,57 +640,90 @@ namespace
 
     void TestBlendPresets()
     {
+        // Every expected value below is derived independently from BlendState.cpp's real stock
+        // factor tuples (Opaque=One/Zero, AlphaBlend=One/InverseSourceAlpha,
+        // NonPremultiplied=SourceAlpha/InverseSourceAlpha, Additive=SourceAlpha/One, all with
+        // matching Alpha*Blend factors), NOT from Blend2D's BLCompOp behaviour. The XNA blend
+        // equation is evaluated per-channel and independently for colour vs. alpha:
+        //   Dca' = Sc*ColorSrcFactor + Dca*ColorDstFactor      (colour, on premultiplied storage)
+        //   Da'  = Sa*AlphaSrcFactor + Da*AlphaDstFactor        (alpha, independently)
+        // where Sc is the source's OWN premultiplied byte (Sc_straight*Sa) -- so a SourceAlpha
+        // colour factor multiplies Sc_straight by Sa, which is algebraically identical to Sc
+        // (the stored premultiplied byte) itself. That is why NonPremultiplied's colour channel
+        // is byte-identical to AlphaBlend's (both End up as Sca + Dca*(1-Sa)) while its ALPHA
+        // channel is NOT (AlphaSrcFactor=SourceAlpha introduces an independent Sa*Sa term that
+        // native Porter-Duff SRC_OVER, which only ever multiplies by Sa once, cannot reproduce).
         SDL_Window* window = MakeWindow(8, 8);
         auto renderer = MakeRenderer(window, 8, 8);
         auto sb = renderer->CreateSpriteBatch();
 
-        // Opaque (One,Zero): result = src, INCLUDING src's own alpha -- XNA's Opaque preset does
-        // not force alpha to 1, it only means "no blending" (the destination is a straight copy
-        // of whatever the source, including its own alpha, is). A premultiplied straight
-        // (255,0,0,128) source stores as premultiplied (128,0,0,128); SRC_COPY reproduces those
-        // exact bytes, which unpremultiply back to straight (255,0,0,128).
+        // Opaque (One,Zero): Dca'=Sc*1+Dca*0=Sc, Da'=Sa*1+Da*0=Sa -- a literal copy of the
+        // source's own stored bytes, alpha included (Opaque does not force alpha to 1). Straight
+        // (255,0,0,128) stores premultiplied as (128,0,0,128); the copy reproduces those bytes,
+        // which unpremultiply back to straight (255,0,0,128).
         auto halfRed = renderer->CreateTexture(SolidImage(1, 1, Color(255, 0, 0, 128)));
         ApplyStockBlend(*renderer, kBlendOne, kBlendZero);
         renderer->Clear(0, 1, 0, 1); // opaque green background
         sb->Begin();
         sb->Draw(*halfRed, 0.0f, 0.0f);
         sb->End();
+        CheckAlpha(*renderer, 0, 0, 128, "BlendState::Opaque: Da'=Sa*1+Da*0=Sa=128");
         CheckPixel(*renderer, 0, 0, Color(255, 0, 0, 128), "BlendState::Opaque is a literal copy of source, alpha included (not forced to 1)");
 
-        // AlphaBlend against a semi-transparent destination AND a semi-transparent source: XNA's
-        // "over" composite, Dca' = Sca + Dca*(1-Sa), Da' = Sa + Da*(1-Sa), evaluated on Blend2D's
-        // own premultiplied storage. Source colour stores as premultiplied (128,0,0,128) (from
-        // straight (255,0,0,128)); the destination Clear(0,1,0,64/255) stores as premultiplied
-        // (0,64,0,64). Da' = 128/255 + (64/255)*(1-128/255) ~= 0.6270 -> 160 (byte). Dca_r' = 128
-        // (Dca_r contributes 0 from dst), Dca_g' = 0 + 64*(1-128/255) ~= 32. Unpremultiplied by
-        // Da'=160: R = 128*255/160 ~= 204, G = 32*255/160 ~= 51.
+        // AlphaBlend (One,InverseSourceAlpha) against a semi-transparent destination AND a
+        // semi-transparent source: Dca'=Sca+Dca*(1-Sa), Da'=Sa+Da*(1-Sa). Source premultiplies to
+        // (128,0,0,128) (Sa=128/255); the destination Clear(0,1,0,64/255) premultiplies to
+        // (0,64,0,64) (Da=64/255).
+        //   Da'  = 128/255 + (64/255)*(1-128/255) = 0.62696 -> 160 (byte, round-half-up)
+        //   Dca_r' = 128 + 0*(1-Sa) = 128           Dca_g' = 0 + 64*(1-Sa) = 31.87 -> 32
+        // Unpremultiplied by Da'=160: R = (128*255+80)/160 = 204, G = (32*255+80)/160 = 51.
         ApplyStockBlend(*renderer, kBlendOne, kBlendInverseSourceAlpha);
         renderer->Clear(0, 1, 0, 64.0f / 255.0f);
         sb->Begin();
         sb->Draw(*halfRed, 0.0f, 0.0f);
         sb->End();
+        CheckAlpha(*renderer, 0, 0, 160, "BlendState::AlphaBlend: Da'=Sa+Da*(1-Sa)=160", 2);
         CheckPixel(*renderer, 0, 0, Color(204, 51, 0, 160), "BlendState::AlphaBlend, semi-transparent src AND dst", 3);
 
-        // NonPremultiplied must reproduce the IDENTICAL final pixel to AlphaBlend, because every
-        // CNA-owned Blend2D texture is stored premultiplied regardless of which BlendState the
-        // caller selects (see ApplyBlendState's own doc comment).
+        // NonPremultiplied (SourceAlpha,InverseSourceAlpha): colour factor pair is the SAME as
+        // AlphaBlend's (SourceAlpha applied to the straight source colour is algebraically
+        // identical to the source's own premultiplied byte, Sc*Sa == Sca), so the RGB result MUST
+        // match AlphaBlend's exactly: Dca_r'=128, Dca_g'=32. But the ALPHA factor is ALSO
+        // SourceAlpha (not AlphaBlend's One), giving an independent equation:
+        //   Da' = Sa*Sa + Da*(1-Sa) = (128/255)^2 + (64/255)*(1-128/255) = 0.376948 -> 96 (byte)
+        // This is NOT 160 (AlphaBlend's alpha) -- the two presets diverge here, which is exactly
+        // the P0 defect this test now proves is fixed. Unpremultiplied by the NEW Da'=96, the
+        // SAME premultiplied colour bytes (128,0,32/*sic, 32 is green*/,...) now divide out to a
+        // value that exceeds 255 for red (128*255/96 = 340) -- a genuine, expected consequence of
+        // an independent alpha equation applied to premultiplied-native storage, not a test bug;
+        // the implementation must clamp rather than wrap. R clamps to 255, G = (32*255+48)/96 = 85.
         ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendInverseSourceAlpha);
         renderer->Clear(0, 1, 0, 64.0f / 255.0f);
         sb->Begin();
         sb->Draw(*halfRed, 0.0f, 0.0f);
         sb->End();
-        CheckPixel(*renderer, 0, 0, Color(204, 51, 0, 160), "BlendState::NonPremultiplied matches AlphaBlend exactly given premultiplied storage", 3);
+        CheckAlpha(*renderer, 0, 0, 96,
+                  "BlendState::NonPremultiplied: Da'=Sa*Sa+Da*(1-Sa)=96 (independent of AlphaBlend's Da'=160)", 2);
+        CheckPixel(*renderer, 0, 0, Color(255, 85, 0, 96),
+                  "BlendState::NonPremultiplied: RGB matches AlphaBlend's premultiplied bytes (clamped on unpremultiply), alpha does not", 3);
 
-        // Additive against a semi-transparent destination.
+        // Additive (SourceAlpha,One) against a semi-transparent destination. Colour: Dca'=Sca+Dca
+        // (same as native PLUS, for the same Sc*Sa==Sca reason as above). Source straight
+        // (0,0,255,128) premultiplies to (0,0,128,128); destination Clear(1,0,0,64/255)
+        // premultiplies to (64,0,0,64).
+        //   Dca_r'=0+64=64  Dca_g'=0+0=0  Dca_b'=128+0=128
+        //   Da' = Sa*Sa + Da = (128/255)^2 + 64/255 = 0.502918 -> 128 (byte)
+        // This is NOT native PLUS's Sa+Da=192 -- Additive's alpha diverges from naive Porter-Duff
+        // addition the same way NonPremultiplied's does. Unpremultiplied by the NEW Da'=128:
+        // R=(64*255+64)/128=128, G=0, B=(128*255+64)/128=255 (floors from 255.5, no overflow).
         auto halfBlue = renderer->CreateTexture(SolidImage(1, 1, Color(0, 0, 255, 128)));
         ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendOne);
         renderer->Clear(1, 0, 0, 64.0f / 255.0f);
         sb->Begin();
         sb->Draw(*halfBlue, 0.0f, 0.0f);
         sb->End();
-        // Premultiplied src=(0,0,128,128), premultiplied dst=(64,0,0,64); PLUS adds directly:
-        // (64,0,128,192) premultiplied -> unpremultiplied ~=(85,0,170,192).
-        CheckPixel(*renderer, 0, 0, Color(85, 0, 170, 192), "BlendState::Additive, semi-transparent src and dst", 3);
+        CheckAlpha(*renderer, 0, 0, 128, "BlendState::Additive: Da'=Sa*Sa+Da=128 (not native PLUS's Sa+Da=192)", 2);
+        CheckPixel(*renderer, 0, 0, Color(128, 0, 255, 128), "BlendState::Additive, semi-transparent src and dst", 3);
 
         // Unsupported / unrecognized combination must be REJECTED, not silently approximated.
         CheckThrows("Non-stock colour blend factor combination", [&] {

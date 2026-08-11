@@ -84,6 +84,26 @@ namespace CNA::Internal::Renderers::Blend2D
         [[nodiscard]] virtual const BLImage& NativeImageEXT() const = 0;
     };
 
+    /**
+     * @brief CNAEXT. Which stock XNA BlendState preset ApplyBlendState most recently accepted.
+     *
+     * Blend2D's BLCompOp alone cannot distinguish AlphaBlend from NonPremultiplied: both compose
+     * through the identical native BL_COMP_OP_SRC_OVER call (the colour channels are byte-
+     * identical either way -- see ApplyBlendState's doc comment for the derivation), but their
+     * PUBLIC ALPHA results differ, because NonPremultiplied's AlphaSourceBlend is also
+     * SourceAlpha (giving an independent Sa*Sa term) where AlphaBlend's is One. The same split
+     * applies to Additive vs a plain PLUS. Blend2DSpriteBatchRenderer::DrawQuad needs to know
+     * which preset is active (not just which BLCompOp) to decide whether the bounded CPU alpha
+     * correction pass (ApplyIndependentAlphaCorrectionEXT) is required.
+     */
+    enum class Blend2DBlendPresetEXT
+    {
+        Opaque,
+        AlphaBlend,
+        NonPremultiplied,
+        Additive,
+    };
+
     class Blend2DRenderer;
 
     /// Plain Texture2D handle: an owned premultiplied BLImage plus straight-RGBA reads/writes
@@ -157,6 +177,20 @@ namespace CNA::Internal::Renderers::Blend2D
         [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override
         {
             return false;
+        }
+        /// Truthful counterpart to HasRealDepthBuffer() above, for the PUBLIC
+        /// RenderTarget2D.DepthStencilFormat property: RenderTarget2D.cpp populates that property
+        /// directly from this method's return value (not from HasRealDepthBuffer(), which only
+        /// gates ClearOptions handling), so without this override a caller requesting Depth24/
+        /// Depth24Stencil8 would receive a RenderTarget2D that PUBLICLY CLAIMS that attachment
+        /// exists even though Blend2D allocated no depth/stencil storage at all -- the same "one
+        /// property source of truth" bug HasRealDepthBuffer already fixed for the boolean queries,
+        /// now fixed for the format property too. `0` is DepthFormat::None's raw ordinal (this
+        /// header must not depend on the XNA namespace, matching CreateRenderTarget2D's own
+        /// `depthFormat` int convention).
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int /*requestedDepthStencilFormat*/) const override
+        {
+            return 0;
         }
 
         [[nodiscard]] Blend2DSurface& Surface() noexcept { return surface_; }
@@ -389,6 +423,14 @@ namespace CNA::Internal::Renderers::Blend2D
         /// matching XNA's "operations apply to the currently set render target" contract.
         [[nodiscard]] Blend2DSurface& ActiveSurface() noexcept;
         [[nodiscard]] BLCompOp ActiveCompOp() const noexcept;
+        /// CNAEXT. Which stock preset is active right now, or Opaque when blending is disabled
+        /// (SetBlendEnabled(false) forces a literal SRC_COPY regardless of the last ApplyBlendState
+        /// call, so no independent-alpha correction is ever needed in that state -- see
+        /// Blend2DBlendPresetEXT's own doc comment).
+        [[nodiscard]] Blend2DBlendPresetEXT ActiveBlendPresetEXT() const noexcept
+        {
+            return blendEnabled_ ? appliedPreset_ : Blend2DBlendPresetEXT::Opaque;
+        }
 
         /// CNAEXT. Internal hook used by Blend2DRenderTargetRenderer::BindAsRenderTarget/
         /// UnbindAsRenderTarget (see that class) -- not part of the public IGraphicsRenderer
@@ -445,6 +487,10 @@ namespace CNA::Internal::Renderers::Blend2D
 
         bool blendEnabled_ = true;
         BLCompOp appliedCompOp_ = BL_COMP_OP_SRC_OVER;
+        /// See Blend2DBlendPresetEXT's doc comment: tracks which stock preset ApplyBlendState most
+        /// recently accepted, since appliedCompOp_ alone cannot distinguish AlphaBlend from
+        /// NonPremultiplied (nor a plain PLUS from Additive).
+        Blend2DBlendPresetEXT appliedPreset_ = Blend2DBlendPresetEXT::AlphaBlend;
         /// Raw XNA ColorWriteChannels mask for render-target slot 0 (Blend2D has exactly one
         /// active target), applied by every SpriteBatch draw; see ActiveColorWriteMaskEXT().
         int colorWriteMask_ = 15;

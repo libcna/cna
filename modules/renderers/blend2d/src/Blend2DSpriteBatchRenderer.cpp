@@ -191,6 +191,145 @@ namespace CNA::Internal::Renderers::Blend2D
             // transform is x' = x*m00 + y*m10 + m20, y' = x*m01 + y*m11 + m21.
             return BLMatrix2D(m.M11, m.M12, m.M21, m.M22, m.M41, m.M42);
         }
+
+        /// Everything one sprite draw applies to a BLContext AFTER set_comp_op/set_pattern_quality:
+        /// viewport clip, scissor clip, viewport-local origin shift, the Begin() transform matrix,
+        /// per-sprite translate/rotate/flip, and the final blit_image call. Extracted so
+        /// ApplyIndependentAlphaCorrectionEXT's auxiliary "effective source alpha" recovery pass
+        /// (below) can replay the IDENTICAL geometry/clipping/sampling against a scratch context --
+        /// the two passes must touch exactly the same destination pixels for the recovered
+        /// per-pixel alpha to correspond to what the real draw actually painted.
+        void PlaceAndBlitEXT(BLContext& ctx, const BLImage& img, const Matrix& transformMatrix,
+                             bool viewportSet, int viewportX, int viewportY, int viewportW, int viewportH,
+                             bool scissorEnabled, int scissorX, int scissorY, int scissorW, int scissorH,
+                             double destX, double destY, double rotation, bool effectiveFlipH,
+                             bool effectiveFlipV, double rectX, double rectY, double rectW, double rectH,
+                             int blitSrcX, int blitSrcY, int sw, int sh)
+        {
+            ScopedContextStateEXT scopedState(ctx);
+
+            if (viewportSet)
+                Blend2DCheckEXT(ctx.clip_to_rect(BLRectI(viewportX, viewportY, viewportW, viewportH)), "BLContext::clip_to_rect (viewport)");
+            if (scissorEnabled)
+                Blend2DCheckEXT(ctx.clip_to_rect(BLRectI(scissorX, scissorY, scissorW, scissorH)), "BLContext::clip_to_rect");
+            if (viewportSet)
+                Blend2DCheckEXT(ctx.translate(static_cast<double>(viewportX), static_cast<double>(viewportY)), "BLContext::translate (viewport)");
+
+            Blend2DCheckEXT(ctx.apply_transform(ToBlMatrixEXT(transformMatrix)), "BLContext::apply_transform");
+            Blend2DCheckEXT(ctx.translate(destX, destY), "BLContext::translate");
+            if (rotation != 0.0)
+                Blend2DCheckEXT(ctx.rotate(rotation), "BLContext::rotate");
+
+            if (effectiveFlipH)
+            {
+                const double centerX = rectX + rectW / 2.0;
+                Blend2DCheckEXT(ctx.translate(centerX, 0.0), "BLContext::translate (flip H)");
+                Blend2DCheckEXT(ctx.scale(-1.0, 1.0), "BLContext::scale (flip H)");
+                Blend2DCheckEXT(ctx.translate(-centerX, 0.0), "BLContext::translate (flip H)");
+            }
+            if (effectiveFlipV)
+            {
+                const double centerY = rectY + rectH / 2.0;
+                Blend2DCheckEXT(ctx.translate(0.0, centerY), "BLContext::translate (flip V)");
+                Blend2DCheckEXT(ctx.scale(1.0, -1.0), "BLContext::scale (flip V)");
+                Blend2DCheckEXT(ctx.translate(0.0, -centerY), "BLContext::translate (flip V)");
+            }
+
+            Blend2DCheckEXT(
+                ctx.blit_image(BLRect(rectX, rectY, rectW, rectH), img, BLRectI(blitSrcX, blitSrcY, sw, sh)),
+                "BLContext::blit_image");
+        }
+
+        /// Bounded CPU correction for BlendState::NonPremultiplied/Additive's INDEPENDENT alpha
+        /// equation (Sa*Sa+Da*(1-Sa) / Sa*Sa+Da respectively -- Blend2DRenderer::ApplyBlendState's
+        /// doc comment derives both from BlendState.cpp's real factors, cross-checked against
+        /// SkiaRenderer.cpp's masked-blender oracle), which no single Blend2D BLCompOp can express
+        /// -- even though the COLOUR channels of both presets are already byte-identical to native
+        /// SRC_OVER/PLUS and so are already correct after the real draw this function runs after.
+        ///
+        /// Renders the identical transformed blit a SECOND time onto a fresh, fully transparent
+        /// scratch canvas the same size as the active surface, using SRC_OVER: since the scratch
+        /// destination starts at alpha=0, SRC_OVER's own alpha equation Sa+Da*(1-Sa) collapses to
+        /// exactly Sa -- so the scratch canvas's resulting alpha channel IS the per-pixel EFFECTIVE
+        /// source alpha Blend2D's real rasterizer used for the actual draw, antialiased edge
+        /// coverage/sampling/rotation/clipping all included -- reusing Blend2D's own rasterizer for
+        /// the hard part rather than reimplementing it (and avoiding the algebraic inverse's
+        /// division-by-(1-Da) degeneracy when the destination was already fully opaque). Combined
+        /// with @p beforeBytes (the destination's state BEFORE the real draw, snapshotted by the
+        /// caller), the true per-pixel alpha is computed and written back over just the alpha byte
+        /// of every surface pixel -- the colour bytes the real draw already wrote are untouched.
+        ///
+        /// A corrected alpha can end up SMALLER than the (unmodified, already-correct) premultiplied
+        /// colour bytes already stored -- a genuine, expected consequence of NonPremultiplied/
+        /// Additive's independent alpha equation combined with Blend2D's premultiplied-native
+        /// storage, not a bug here; ConvertPremultipliedBgraRowToStraightRgba's caller-facing
+        /// unpremultiply clamps rather than wrapping when that happens.
+        ///
+        /// Bounded to the whole active surface (same "simple and always correct for any
+        /// rotation/clip" tradeoff DrawQuad's ColorWriteChannels merge below already accepts)
+        /// rather than computing a tighter bounding box.
+        void ApplyIndependentAlphaCorrectionEXT(
+            Blend2DSurface& activeSurface, const BLImage& img, const Matrix& transformMatrix,
+            bool viewportSet, int viewportX, int viewportY, int viewportW, int viewportH,
+            bool scissorEnabled, int scissorX, int scissorY, int scissorW, int scissorH, double destX,
+            double destY, double rotation, bool effectiveFlipH, bool effectiveFlipV, double rectX,
+            double rectY, double rectW, double rectH, int blitSrcX, int blitSrcY, int sw, int sh,
+            BLPatternQuality patternQuality, const std::vector<std::uint8_t>& beforeBytes, int survW,
+            int survH, std::ptrdiff_t beforeStride, bool additive)
+        {
+            BLImage scratch;
+            Blend2DCheckEXT(scratch.create(survW, survH, BL_FORMAT_PRGB32),
+                            "BLImage::create (alpha-correction scratch)");
+            {
+                BLImageData sd{};
+                Blend2DCheckEXT(scratch.make_mutable(&sd), "BLImage::make_mutable (alpha-correction scratch zero)");
+                auto* base = static_cast<std::uint8_t*>(sd.pixel_data);
+                for (int row = 0; row < survH; ++row)
+                {
+                    std::memset(base + static_cast<std::ptrdiff_t>(row) * sd.stride, 0,
+                               static_cast<std::size_t>(survW) * 4);
+                }
+            }
+
+            BLContext scratchCtx;
+            Blend2DCheckEXT(scratchCtx.begin(scratch), "BLContext::begin (alpha-correction scratch)");
+            Blend2DCheckEXT(scratchCtx.set_comp_op(BL_COMP_OP_SRC_OVER), "BLContext::set_comp_op (alpha-correction scratch)");
+            Blend2DCheckEXT(scratchCtx.set_pattern_quality(patternQuality),
+                            "BLContext::set_pattern_quality (alpha-correction scratch)");
+            PlaceAndBlitEXT(scratchCtx, img, transformMatrix, viewportSet, viewportX, viewportY,
+                           viewportW, viewportH, scissorEnabled, scissorX, scissorY, scissorW,
+                           scissorH, destX, destY, rotation, effectiveFlipH, effectiveFlipV, rectX,
+                           rectY, rectW, rectH, blitSrcX, blitSrcY, sw, sh);
+            Blend2DCheckEXT(scratchCtx.end(), "BLContext::end (alpha-correction scratch)");
+
+            BLImageData scratchData{};
+            Blend2DCheckEXT(scratch.get_data(&scratchData), "BLImage::get_data (alpha-correction scratch readback)");
+            BLImageData afterData{};
+            Blend2DCheckEXT(activeSurface.Image().make_mutable(&afterData),
+                            "BLImage::make_mutable (alpha-correction write-back)");
+
+            const auto* scratchBase = static_cast<const std::uint8_t*>(scratchData.pixel_data);
+            auto* afterBase = static_cast<std::uint8_t*>(afterData.pixel_data);
+            for (int row = 0; row < survH; ++row)
+            {
+                const std::uint8_t* scratchRow = scratchBase + static_cast<std::ptrdiff_t>(row) * scratchData.stride;
+                const std::uint8_t* beforeRow = beforeBytes.data() + static_cast<std::ptrdiff_t>(row) * beforeStride;
+                std::uint8_t* afterRow = afterBase + static_cast<std::ptrdiff_t>(row) * afterData.stride;
+                for (int col = 0; col < survW; ++col)
+                {
+                    const std::size_t idx = static_cast<std::size_t>(col) * 4;
+                    const double saEff = scratchRow[idx + 3] / 255.0;
+                    if (saEff <= 0.0)
+                        continue; // Untouched by this draw -- destination alpha stays as-is.
+                    const double daBefore = beforeRow[idx + 3] / 255.0;
+                    const double trueAlpha = additive
+                        ? saEff * saEff + daBefore
+                        : saEff * saEff + daBefore * (1.0 - saEff);
+                    const double clamped = std::clamp(trueAlpha, 0.0, 1.0);
+                    afterRow[idx + 3] = static_cast<std::uint8_t>(clamped * 255.0 + 0.5);
+                }
+            }
+        }
     } // namespace
 
     void Blend2DSpriteBatchRenderer::Begin()
@@ -354,83 +493,63 @@ namespace CNA::Internal::Renderers::Blend2D
 
         BLContext& ctx = activeSurface.Context();
         Blend2DCheckEXT(ctx.set_comp_op(renderer_.ActiveCompOp()), "BLContext::set_comp_op");
-        Blend2DCheckEXT(ctx.set_pattern_quality(SamplerFilterToPatternQualityEXT(textureFilter_)),
-                        "BLContext::set_pattern_quality");
+        const BLPatternQuality patternQuality = SamplerFilterToPatternQualityEXT(textureFilter_);
+        Blend2DCheckEXT(ctx.set_pattern_quality(patternQuality), "BLContext::set_pattern_quality");
 
         const int colorWriteMask = renderer_.ActiveColorWriteMaskEXT();
         const bool needsWriteMask = colorWriteMask != 15;
+        const Blend2DBlendPresetEXT activePreset = renderer_.ActiveBlendPresetEXT();
+        const bool needsAlphaCorrection = activePreset == Blend2DBlendPresetEXT::NonPremultiplied ||
+                                          activePreset == Blend2DBlendPresetEXT::Additive;
+
+        // Blend2D has no native per-channel colour write mask, and no single BLCompOp can express
+        // NonPremultiplied/Additive's independent alpha equation (see ApplyIndependentAlphaCorrectionEXT's
+        // doc comment) -- both are realized as bounded post-processes that need the destination's
+        // state from BEFORE the real draw, so it is snapshotted up front for whichever (or both) is
+        // needed. Bounded to the whole surface (simple and always correct for any rotation/clip),
+        // acceptable since neither is the fast/common path (mask==15 with AlphaBlend/Opaque is).
+        const bool needsBeforeSnapshot = needsWriteMask || needsAlphaCorrection;
         std::vector<std::uint8_t> beforeBytes;
         BLImageData beforeData{};
         int survW = 0, survH = 0;
-        if (needsWriteMask)
+        if (needsBeforeSnapshot)
         {
-            // Blend2D has no native per-channel colour write mask, so a non-default
-            // ColorWriteChannels is realized as a bounded post-process: snapshot every byte of the
-            // active surface up front, let Blend2D's real rasterizer perform the actual composite
-            // (correct antialiasing/rotation/scale/blend maths), then merge the two premultiplied
-            // BGRA buffers per channel -- matching SkiaRenderer's own masked-write precedent of
-            // merging directly in its native premultiplied representation, not a logical/straight
-            // one. Bounded to the whole surface (simple and always correct for any rotation),
-            // acceptable since a non-default write mask is a rare, non-default state.
             survW = activeSurface.Width();
             survH = activeSurface.Height();
-            Blend2DCheckEXT(activeSurface.Image().get_data(&beforeData), "BLImage::get_data (write-mask snapshot)");
+            Blend2DCheckEXT(activeSurface.Image().get_data(&beforeData), "BLImage::get_data (pre-draw snapshot)");
             beforeBytes.resize(static_cast<std::size_t>(survH) * static_cast<std::size_t>(beforeData.stride));
             std::memcpy(beforeBytes.data(), beforeData.pixel_data, beforeBytes.size());
         }
 
+        // Viewport and scissor clips are TARGET-space state: read once and apply before any
+        // per-sprite or Begin() transform is installed, so their coordinates are never
+        // reinterpreted as sprite-local (REMED-GFX scissor/viewport audit). Re-read fresh from the
+        // renderer on every draw so they reflect the current SetViewport/ScissorTestEnable/
+        // SetScissorRect state exactly, on whichever BLContext is active right now -- neither can
+        // leak stale state across a render-target switch or an intervening state change the way a
+        // persistently-applied clip would. Captured once here (rather than inside PlaceAndBlitEXT)
+        // so the real draw and, when needed, ApplyIndependentAlphaCorrectionEXT's auxiliary pass
+        // apply byte-identical clipping.
+        bool viewportSet = false;
+        int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
+        renderer_.GetViewportStateEXT(viewportSet, viewportX, viewportY, viewportW, viewportH);
+        bool scissorEnabled = false;
+        int scissorX = 0, scissorY = 0, scissorW = 0, scissorH = 0;
+        renderer_.GetScissorStateEXT(scissorEnabled, scissorX, scissorY, scissorW, scissorH);
+
+        PlaceAndBlitEXT(ctx, *img, transformMatrix_, viewportSet, viewportX, viewportY, viewportW,
+                        viewportH, scissorEnabled, scissorX, scissorY, scissorW, scissorH, destX,
+                        destY, rotation, effectiveFlipH, effectiveFlipV, rectX, rectY, rectW, rectH,
+                        blitSrcX, blitSrcY, sw, sh);
+
+        if (needsAlphaCorrection)
         {
-            ScopedContextStateEXT scopedState(ctx);
-
-            // Viewport and scissor clips are TARGET-space state: apply both before any per-sprite
-            // or Begin() transform is installed, so their coordinates are never reinterpreted as
-            // sprite-local (REMED-GFX scissor/viewport audit). Re-read fresh from the renderer on
-            // every draw so they reflect the current SetViewport/ScissorTestEnable/SetScissorRect
-            // state exactly, on whichever BLContext is active right now -- neither can leak stale
-            // state across a render-target switch or an intervening state change the way a
-            // persistently-applied clip would.
-            bool viewportSet = false;
-            int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
-            renderer_.GetViewportStateEXT(viewportSet, viewportX, viewportY, viewportW, viewportH);
-            if (viewportSet)
-                Blend2DCheckEXT(ctx.clip_to_rect(BLRectI(viewportX, viewportY, viewportW, viewportH)), "BLContext::clip_to_rect (viewport)");
-
-            bool scissorEnabled = false;
-            int scissorX = 0, scissorY = 0, scissorW = 0, scissorH = 0;
-            renderer_.GetScissorStateEXT(scissorEnabled, scissorX, scissorY, scissorW, scissorH);
-            if (scissorEnabled)
-                Blend2DCheckEXT(ctx.clip_to_rect(BLRectI(scissorX, scissorY, scissorW, scissorH)), "BLContext::clip_to_rect");
-
-            // SpriteBatch coordinates are viewport-LOCAL (Task 880/REMED-GFX-073): shift the
-            // origin to the viewport's top-left corner before installing the Begin() transform or
-            // any per-sprite placement, so a non-default (e.g. split-screen) viewport positions
-            // sprites correctly without every caller having to offset their own coordinates.
-            if (viewportSet)
-                Blend2DCheckEXT(ctx.translate(static_cast<double>(viewportX), static_cast<double>(viewportY)), "BLContext::translate (viewport)");
-
-            Blend2DCheckEXT(ctx.apply_transform(ToBlMatrixEXT(transformMatrix_)), "BLContext::apply_transform");
-            Blend2DCheckEXT(ctx.translate(destX, destY), "BLContext::translate");
-            if (rotation != 0.0)
-                Blend2DCheckEXT(ctx.rotate(rotation), "BLContext::rotate");
-
-            if (effectiveFlipH)
-            {
-                const double centerX = rectX + rectW / 2.0;
-                Blend2DCheckEXT(ctx.translate(centerX, 0.0), "BLContext::translate (flip H)");
-                Blend2DCheckEXT(ctx.scale(-1.0, 1.0), "BLContext::scale (flip H)");
-                Blend2DCheckEXT(ctx.translate(-centerX, 0.0), "BLContext::translate (flip H)");
-            }
-            if (effectiveFlipV)
-            {
-                const double centerY = rectY + rectH / 2.0;
-                Blend2DCheckEXT(ctx.translate(0.0, centerY), "BLContext::translate (flip V)");
-                Blend2DCheckEXT(ctx.scale(1.0, -1.0), "BLContext::scale (flip V)");
-                Blend2DCheckEXT(ctx.translate(0.0, -centerY), "BLContext::translate (flip V)");
-            }
-
-            Blend2DCheckEXT(
-                ctx.blit_image(BLRect(rectX, rectY, rectW, rectH), *img, BLRectI(blitSrcX, blitSrcY, sw, sh)),
-                "BLContext::blit_image");
+            ApplyIndependentAlphaCorrectionEXT(
+                activeSurface, *img, transformMatrix_, viewportSet, viewportX, viewportY, viewportW,
+                viewportH, scissorEnabled, scissorX, scissorY, scissorW, scissorH, destX, destY,
+                rotation, effectiveFlipH, effectiveFlipV, rectX, rectY, rectW, rectH, blitSrcX,
+                blitSrcY, sw, sh, patternQuality, beforeBytes, survW, survH, beforeData.stride,
+                activePreset == Blend2DBlendPresetEXT::Additive);
         }
 
         if (needsWriteMask)

@@ -58,6 +58,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 AND CNA_GRAPHICS_RENDERER ST
     cna_blend2d_test(cna_test_blend2d_correctness blend2d_renderer_correctness_test.cpp)
     cna_register_renderer_test(NAME Blend2D_Correctness COMMAND cna_test_blend2d_correctness
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "Blend2D;Correctness")
+
+    # plan_blend2d.md remediation (post-3da643712 review): RenderTarget2D public-property
+    # truthfulness (DepthStencilFormat/MultiSampleCount/LevelCount) and custom-Effect rejection,
+    # driven through the real Game/GraphicsDeviceManager/RenderTarget2D/SpriteBatch public API.
+    # Uses SDL_VIDEODRIVER=dummy (verified against Game/GraphicsDeviceManager, same as
+    # Blend2D_Correctness above) rather than Blend2D_Smoke's x11 requirement, so this runs
+    # headlessly with no real X11/Wayland display needed.
+    cna_blend2d_test(cna_test_blend2d_rendertarget_property blend2d_rendertarget_property_test.cpp)
+    cna_register_renderer_test(NAME Blend2D_RenderTargetProperty
+        COMMAND cna_test_blend2d_rendertarget_property
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        LABELS "Blend2D;Display")
 endif()
 
 cna_apply_skip_convention()
