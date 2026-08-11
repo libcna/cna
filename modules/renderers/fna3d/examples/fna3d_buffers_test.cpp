@@ -13,16 +13,20 @@
 // FNA3D-29 -- `SetDataOptions` is forwarded to FNA3D per upload, with `NoOverwrite` downgraded to
 // `None` on a driver that reports no support for it (FNA3D-22). XNA's semantics are that all three
 // options must leave the caller's data readable afterwards; `Discard` and `NoOverwrite` are
-// promises about *aliasing*, not permission to lose bytes. These checks pin exactly that, plus the
-// offset/partial-update paths the renderer's own reallocation logic sits on.
+// promises about *aliasing*, not permission to lose bytes. These checks pin exactly that.
+//
+// Note on what is deliberately NOT here: CNA's buffer surface has no destination-offset `SetData`
+// overload at all -- `VertexBuffer`'s own header states the destination write always begins at the
+// buffer's start, and `startIndex` only selects where reading from the source begins. A mid-buffer
+// partial update is therefore not a route any renderer can be tested against, so Check D pins the
+// source-window selection that does exist rather than an offset that does not.
 //
 // Check A -- POSITION from stream 0 and COLOR from stream 1 produce the right pixels.
 // Check B -- swapping which buffer holds which attribute still works, so the streams are really
 //   independent rather than one layout being hard-coded.
 // Check C -- every SetDataOptions value round-trips the data it wrote.
-// Check D -- a partial update at a non-zero offset changes only the elements it names.
-// Check E -- consecutive updates to one buffer are all observable, and a re-upload that grows the
-//   buffer keeps the newly written contents.
+// Check D -- `startIndex` selects which SOURCE elements are uploaded.
+// Check E -- consecutive updates to one buffer are all observable; the last one renders.
 // Check F -- index buffers round-trip through both the 16-bit and 32-bit routes.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = skipped (no display).
