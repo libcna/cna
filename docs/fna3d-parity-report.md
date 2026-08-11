@@ -54,18 +54,42 @@ EasyGL number, so its dual-UV path carries the second coordinate set correctly.
 The three sort-mode scenes are what lift FNA3D's exact count: EasyGL differs from XNA by a
 sub-LSB rounding step on them, FNA3D does not.
 
-## Where FNA3D is worse than the EasyGL baseline — open findings
+## The defect this corpus found — FNA3D-27a, fixed
 
-| scene | EasyGL | FNA3D | status |
+The first run put `skinned_pixellighting_twobone_quad` at 21880 differing pixels and
+`skinned_pixellighting_fourbone_quad` at 19378, well outside EasyGL's 7956–8569 band. Measuring the
+rendered geometry rather than guessing located it immediately: real XNA puts the quad at x-extent
+(77, 230) and FNA3D put it at (51, 204) — 26 pixels left, and the scene's `bone1translate=0.4` at
+weight 0.5 is 0.2 world units, which at ~127.5 px/unit is 25.5 px. **The bone translation was not
+being applied at all.**
+
+Root cause: `Fna3dStockEffect::SetMatrix4x3Array` copied the first twelve floats of each flattened
+matrix straight into the `float4x3` parameter. `Matrix::ToColumnMajor` — despite its name — emits
+the ROW order `M11,M12,M13,M14, M21,...`, so those twelve floats are the first three ROWS, while
+FNA's own `EffectParameter.SetValue(Matrix[])` for a 4-column/3-row parameter writes the three
+COLUMNS: `M11,M21,M31,M41, M12,M22,M32,M42, M13,M23,M33,M43`. The copy therefore both transposed
+wrongly and dropped `M41..M43`, the translation row, entirely — silently turning every translation
+bone into an identity bone.
+
+It is worth being precise about why nothing else caught this. A wrongly transposed identity is
+still an identity, and a bone palette is overwhelmingly identities, so single-bone scenes and the
+`ShaderIndex` unit tests all passed. Only a bone carrying a translation reveals it, and this corpus
+is the only thing in the repository that renders one.
+
+| scene | before | after | EasyGL |
 | --- | --- | --- | --- |
-| `skinned_pixellighting_twobone_quad` | 7956–8569 | **21880** | **Unexplained — open (FNA3D-27a).** |
-| `skinned_pixellighting_fourbone_quad` | 7956–8569 | **19378** | **Unexplained — open (FNA3D-27a).** |
+| `skinned_twobone_quad` | 8110 | **306** | 306 |
+| `skinned_fourbone_quad` | 5878 | **306** | 306 |
+| `skinned_pixellighting_twobone_quad` | 21880 | **7650** | 7956 |
+| `skinned_pixellighting_fourbone_quad` | 19378 | **7650** | 7956 |
 
-`skinned_pixellighting_quad` (one bone) is at 8263, inside the EasyGL band, and the non-pixel-lit
-`skinned_twobone_quad` (8110) and `skinned_fourbone_quad` (5878) are too. The divergence appears
-only where per-pixel lighting and multi-bone skinning combine, which points at the `SkinnedEffect`
-`ShaderIndex` selection for that combination rather than at bone transforms or lighting alone.
-**Not yet diagnosed. Not counted as passing.**
+All six skinned scenes are now at or better than the EasyGL baseline. `Fna3dMatrixPackingTests`
+(4 cases) pins the arithmetic as a pure function so a regression is a red unit test rather than a
+red image; those tests fail against the old code.
+
+## Where FNA3D is worse than the EasyGL baseline
+
+Nothing outstanding.
 
 ## Honest limits of this measurement
 
@@ -74,6 +98,5 @@ only where per-pixel lighting and multi-bone skinning combine, which points at t
 - FNA3D's OpenGL driver only. The SDL_GPU and Direct3D 11 drivers execute the same MojoShader-
   translated stock effects through different rasterisers and are unmeasured here (no Vulkan ICD,
   no Windows on this host). Whether they hit the same numbers is an open external gate.
-- The two open rows above are findings, not accepted costs. Widening the tolerance to turn a red
-  row green without a per-scene reason is not acceptable — `scripts/xna-diff.py`'s own standing
-  warning.
+- Widening the tolerance to turn a red row green without a per-scene reason is not acceptable —
+  `scripts/xna-diff.py`'s own standing warning. FNA3D-27a was fixed, not tolerated.

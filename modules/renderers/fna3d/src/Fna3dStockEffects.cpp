@@ -136,11 +136,11 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
-    void Fna3dStockEffect::SetMatrix4x3Array(const char* name, const float* columnMajor,
+    void Fna3dStockEffect::SetMatrix4x3Array(const char* name, const float* source,
                                              int count) const
     {
         MOJOSHADER_effectParam* param = Find(name);
-        if (param == nullptr || param->value.values == nullptr || columnMajor == nullptr)
+        if (param == nullptr || param->value.values == nullptr || source == nullptr)
         {
             return;
         }
@@ -149,9 +149,8 @@ namespace CNA::Internal::Renderers::Fna3d
         float* dst = param->value.valuesF;
         for (int i = 0; i < writable; ++i)
         {
-            std::memcpy(dst + static_cast<std::size_t>(i) * 12,
-                        columnMajor + static_cast<std::size_t>(i) * 16,
-                        12 * sizeof(float));
+            PackMatrix4x3(source + static_cast<std::size_t>(i) * 16,
+                          dst + static_cast<std::size_t>(i) * 12);
         }
     }
 

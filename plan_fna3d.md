@@ -105,7 +105,7 @@ features that are already written.
 | ID | Task | Status |
 |---|---|---|
 | FNA3D-26 | XNA oracle conformance: build `cna_oracle_render_fna3d` and run the 39-scene corpus against the real XNA 4.0 reference images | **done** — 10/39 exact, 0 failed to render, at the EasyGL baseline; `docs/fna3d-parity-report.md` |
-| FNA3D-27a | Diagnose the two corpus rows where FNA3D is worse than EasyGL: `skinned_pixellighting_twobone_quad` (21880 vs 7956–8569) and `skinned_pixellighting_fourbone_quad` (19378) | **open — undiagnosed** |
+| FNA3D-27a | Diagnose the two corpus rows where FNA3D is worse than EasyGL | **done** — real defect: `SetMatrix4x3Array` dropped the translation row of every bone matrix. All six skinned scenes now at or better than the EasyGL baseline; `Fna3dMatrixPackingTests` pins it |
 | FNA3D-27 | Runtime pixel coverage for the three stock effects `Fna3d_3D` never renders: DualTexture, EnvironmentMap, Skinned — plus the lighting variants and fog | **open** (corpus covers them; a renderer-local oracle test does not yet) |
 | FNA3D-28 | Real multi-stream draw: split one `VertexDeclaration`'s attributes across two genuine vertex buffers and verify pixels. `MultiStreamVertexInput` is reported true on a non-null capability check alone today | **open** |
 | FNA3D-29 | Buffer update semantics: `Discard` / `NoOverwrite` / `None`, partial updates, non-zero offsets, reallocation-then-write, consecutive updates | **open** |

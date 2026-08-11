@@ -46,6 +46,34 @@ namespace CNA::Internal::Renderers::Fna3d
      * of variant selection and are deliberately pure and free of any FNA3D type -- which is what
      * makes them directly unit-testable.
      */
+    /**
+     * @brief Packs one flattened XNA matrix into FNA's `float4x3` parameter layout.
+     *
+     * FNA3D-27a. Kept pure and free of any FNA3D/MojoShader type so it is directly unit-testable:
+     * getting this wrong is silent, because a wrongly transposed identity is still an identity and
+     * only a matrix with a translation row reveals it.
+     *
+     * @p source is one matrix in the element order `Matrix::ToColumnMajor` produces, which despite
+     * that name is the ROW order `M11,M12,M13,M14, M21,...`. A `float4x3` parameter wants three
+     * four-float registers holding the matrix's COLUMNS -- `M11,M21,M31,M41, M12,M22,M32,M42,
+     * M13,M23,M33,M43` -- matching FNA's own `EffectParameter.SetValue(Matrix[])` for a
+     * 4-column/3-row parameter. Note that `M41..M43`, the translation row, lands in the LAST slot
+     * of each register, so a copy of the source's first twelve floats drops it entirely.
+     *
+     * @param source Sixteen floats: one matrix, row order.
+     * @param out    Twelve floats: the packed `float4x3`.
+     */
+    constexpr void PackMatrix4x3(const float* source, float* out)
+    {
+        for (int column = 0; column < 3; ++column)
+        {
+            for (int row = 0; row < 4; ++row)
+            {
+                out[column * 4 + row] = source[row * 4 + column];
+            }
+        }
+    }
+
     namespace StockShaderIndex
     {
         /**
@@ -233,17 +261,21 @@ namespace CNA::Internal::Renderers::Fna3d
         void SetMatrix(const char* name, const Matrix& matrix) const;
 
         /**
-         * @brief Writes an array of already column-major-packed 4x4 matrices as `float4x3`.
+         * @brief Writes an array of flattened 4x4 matrices as a `float4x3` parameter.
          *
-         * `GpuDrawParams::boneTransforms` already holds column-major `mat4`s, whose first twelve
-         * floats are precisely the `float4x3` layout SkinnedEffect's `Bones` parameter expects, so
-         * this copies twelve of every sixteen floats without rearranging anything.
+         * @p source holds `count` matrices in the element order `Matrix::ToColumnMajor` produces:
+         * `M11,M12,M13,M14, M21,M22,M23,M24, ...`. A `float4x3` parameter such as SkinnedEffect's
+         * `Bones` instead wants three four-float registers holding the matrix's columns --
+         * `M11,M21,M31,M41, M12,M22,M32,M42, M13,M23,M33,M43` -- which is what FNA's own
+         * `EffectParameter.SetValue(Matrix[])` writes for a 4-column/3-row parameter. Each matrix
+         * is therefore transposed on the way in, and `M41..M43` (the translation row) is carried
+         * rather than dropped.
          *
-         * @param name         Parameter name.
-         * @param columnMajor  Source array of `count` column-major 4x4 matrices (16 floats each).
-         * @param count        Number of matrices.
+         * @param name   Parameter name.
+         * @param source Source array of @p count matrices, 16 floats each.
+         * @param count  Number of matrices.
          */
-        void SetMatrix4x3Array(const char* name, const float* columnMajor, int count) const;
+        void SetMatrix4x3Array(const char* name, const float* source, int count) const;
 
         /**
          * @brief Selects technique 0 and applies pass 0, committing every parameter write.
