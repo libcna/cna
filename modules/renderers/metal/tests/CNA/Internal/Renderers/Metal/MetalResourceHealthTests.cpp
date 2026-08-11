@@ -216,7 +216,13 @@ TEST(MetalResourceHealth, RenderTargetCubeRendererEscapesThroughTextureCubeBaseM
         RenderTargetCube renderTarget(device,1,false,SurfaceFormat::Color,DepthFormat::None,0,
                                       RenderTargetUsage::DiscardContents);
         rendererIdentity=renderTarget.GetRenderTargetCubeRenderer();
-        ASSERT_NE(rendererIdentity,nullptr);
+        // This suite is deliberately host-portable and compiles into the CnaTests corpus on every
+        // renderer (see the file header), but the lifetime contract it measures needs a real
+        // cube render-target resource to escape. A renderer whose CreateRenderTargetCube keeps
+        // IGraphicsRenderer's nullptr default has none, and refusing to bind one is its own
+        // contract, asserted where that refusal lives.
+        if (rendererIdentity==nullptr)
+            GTEST_SKIP() << "this renderer creates no RenderTargetCube resource";
 
         TextureCube escapedTexture(std::move(renderTarget));
         ASSERT_EQ(&escapedTexture.GetRenderer(),rendererIdentity);

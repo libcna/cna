@@ -74,9 +74,14 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
 // real CPU shadow (SetData/GetData round-trip exactly, at every level -- not level-0-only like
 // Software), even though nothing on this renderer samples a cube texture as a GPU resource yet.
+//
+// PortableGL keeps the same nullptr CreateTextureCube default: a cube map would need a second
+// texture target its one colored program and its SpriteBatch quad shader never sample, so no cube
+// resource exists to store or read back (docs/portablegl-renderer.md).
 #if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || \
     defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
-    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI)
+    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || \
+    defined(CNA_RENDERER_GDI) || defined(CNA_RENDERER_PORTABLEGL)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else

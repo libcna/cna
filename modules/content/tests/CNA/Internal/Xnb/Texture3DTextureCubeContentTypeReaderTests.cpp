@@ -48,9 +48,12 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // Software gained real per-mip cube storage in that finding, so its mip readback is now exact.
 // plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
 // real CPU shadow, so its readback is exact at every level too.
+// PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
+// either (docs/portablegl-renderer.md).
 #if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_ASCII) || \
     defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
-    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI)
+    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || \
+    defined(CNA_RENDERER_GDI) || defined(CNA_RENDERER_PORTABLEGL)
 constexpr bool kCubeStorageSupported         = false;
 constexpr bool kCubeLevel0ReadbackSupported  = false;
 constexpr bool kCubeMipReadbackSupported     = false;
