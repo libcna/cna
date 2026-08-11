@@ -91,6 +91,14 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT)
         cna_graphics_ext_test(cna_test_ascii_posteffect_pixel ascii_posteffect_pixel_test.cpp)
         cna_register_renderer_test(NAME AsciiPostProcessEffect_Pixel COMMAND cna_test_ascii_posteffect_pixel
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Proves the effect accepts a source produced by a genuine 3D draw call (BasicEffect +
+        # VertexBuffer + depth-tested DrawPrimitives), not just a 2D SpriteBatch-composited scene.
+        # Self-SKIPs (exit 77) via GraphicsCapability::ThreeD on renderers with no real 3D pipeline
+        # (SDL_RENDERER, HEADLESS, ...) -- registered unconditionally here, same as the other two.
+        cna_graphics_ext_test(cna_test_ascii_posteffect_3d_source ascii_posteffect_3d_source_test.cpp)
+        cna_register_renderer_test(NAME AsciiPostProcessEffect_3DSource COMMAND cna_test_ascii_posteffect_3d_source
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     endif()
 endif()
 
