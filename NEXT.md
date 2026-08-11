@@ -1,15 +1,26 @@
 # NEXT.md
 
-## FNA3D RENDERER LANE — IMPLEMENTED, NOT YET VALIDATED (2026-08-11)
+## FNA3D RENDERER LANE — VALIDATED ON OPENGL, DRIVER MATRIX OPEN (2026-08-11)
 
-> **Do not merge as "FNA3D complete."** An external audit (2026-08-11) found several tasks marked
-> **done** on the strength of code existing rather than a test proving it — sharpest case FNA3D-10,
-> which claimed RenderTargetCube + mips + MRT while `Fna3d_RenderTarget` renders none of the three
-> and the cube "test" is a non-null pointer check. Statuses in `plan_fna3d.md` are corrected and a
-> conformance phase FNA3D-26..35 is open. FNA3D-26 is closed: the 39-scene XNA oracle corpus now
-> runs through this renderer (10/39 exact, 0 render failures, at the EasyGL baseline) — see
-> `docs/fna3d-parity-report.md`, which also records two undiagnosed rows (`skinned_pixellighting_`
-> `twobone`/`fourbone`) where FNA3D is worse than EasyGL.
+> **Validated on FNA3D's OpenGL driver; the driver matrix is still open (FNA3D-34).** An external
+> audit (2026-08-11) found several tasks marked **done** on the strength of code existing rather
+> than a test proving it — sharpest case FNA3D-10, which claimed RenderTargetCube + mips + MRT
+> while `Fna3d_RenderTarget` renders none of the three. The conformance phase FNA3D-26..35 closed
+> every one of those on this driver: cube faces, MRT and render-target mips now render and read
+> back (`Fna3d_RenderTarget_Advanced`), multi-stream input and `SetDataOptions` are pixel-checked
+> (`Fna3d_Buffers`), sampler filtering and all three address modes are covered (`Fna3d_Sampler`),
+> negative/lifetime behaviour is covered (`Fna3d_Lifetime`), and the 39-scene XNA oracle corpus
+> runs as a registered CTest (`Fna3d_XNA_Oracle`) — the only coverage DualTexture,
+> EnvironmentMap and Skinned have.
+>
+> **The corpus found a real defect** the targeted tests had all missed: `SetMatrix4x3Array` dropped
+> the translation row of every bone matrix, silently turning translation bones into identity bones.
+> Fixed (FNA3D-27a) and pinned by `Fna3dMatrixPackingTests`; all six skinned scenes are now at or
+> better than the EasyGL baseline. See `docs/fna3d-parity-report.md`.
+>
+> Two shared-layer gaps are **reported, not patched from this lane**: `Texture2D::SetData` has no
+> `isDisposed_` guard, and CNA has no destination-offset `SetData` overload. Both affect every
+> renderer and need their own commit with cross-renderer regression coverage.
 
 
 > The first renderer-expansion lane. **`FNA3D` is CNA's 42nd public renderer identity**
@@ -39,9 +50,9 @@
 > Effect), so `DrawInstancedPrimitivesEx` refuses by name instead of stacking every instance on
 > record 0. Both are structural, not deferred. See `docs/fna3d-renderer.md` and `plan_fna3d.md`.
 >
-> **Validation.** Native runtime on Linux/Xvfb/Mesa llvmpipe through FNA3D's OpenGL driver: seven
-> `Fna3d_*` CTest binaries, all pixel oracles, plus 37 device-free unit tests in the corpus. The
-> full `CnaTests` corpus under `CNA_GRAPHICS_RENDERER=FNA3D` is **6102 passed / 0 failed / 7
+> **Validation.** Native runtime on Linux/Xvfb/Mesa llvmpipe through FNA3D's OpenGL driver: twelve
+> `Fna3d_*` CTest binaries, all pixel oracles, plus 41 device-free unit tests in the corpus. The
+> full `CnaTests` corpus under `CNA_GRAPHICS_RENDERER=FNA3D` is **6106 passed / 0 failed / 7
 > skipped**, and the `HEADLESS` control is unchanged. Clean under ASan/UBSan apart from a
 > pre-existing upstream signed-overflow in MojoShader's own `mojoshader_common.c` string parser.
 > FNA3D's SDL_GPU and Direct3D 11 drivers are external gates (no Vulkan ICD and no Windows here).
