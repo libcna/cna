@@ -1,0 +1,488 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plan_gltf.md GLTF-004: the eight proven defects D1-D8, as executable tests.
+//
+// EVERY TEST IN THIS FILE IS GREEN WHILE CNA IS BROKEN. That inversion is deliberate and is the
+// mechanism that makes a known defect visible and reproducible without turning the ordinary suite
+// red for months. Each test asserts two things:
+//
+//   1. the spec-derived expectation is still NOT met -- the defect is still present; and
+//   2. the divergence is EXACTLY the one the forensic audit recorded -- CNA is broken in the
+//      documented way, not in some new way.
+//
+// Assertion 2 is what gives these tests their real value. When the owning remediation task lands,
+// it fails here with the fixture and the task id named, so the implementer cannot mistake a
+// partial fix for a complete one. Converting a case to passing is a manifest change in
+// tools/gltf_fixtures (set the defect's status to "fixed" and drop its divergentFields) plus
+// deleting the test below -- never a change to the fixture or to its expected values.
+//
+// None of D1-D8 is fixed by this batch. The corresponding remediation tasks are named in each
+// test and in each fixture's manifest.
+
+#include <cmath>
+#include <gtest/gtest.h>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+
+#include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+
+#include "GltfFixtureCorpus.hpp"
+#include "GltfOracleEXT.hpp"
+
+using namespace CnaTest::GltfOracle;
+using CNA::Internal::JsonType;
+using CNA::Internal::JsonValue;
+using Microsoft::Xna::Framework::Matrix;
+
+namespace
+{
+    constexpr double kTolerance = 1e-5;
+
+    /// The `defects[]` record with the given id, so every assertion below is checked against the
+    /// generated manifest rather than against numbers re-typed into this file.
+    const JsonValue& DefectRecord(const LoadedFixture& fixture, const std::string& defectId)
+    {
+        const JsonValue& defects = Member(fixture.Expected(), "defects");
+        if (defects.type == JsonType::Array)
+        {
+            for (const JsonValue& defect : defects.arrayValue)
+            {
+                if (StringOr(defect, "id", "") == defectId) { return defect; }
+            }
+        }
+        return JsonNull();
+    }
+
+    /// Fails when the defect has been marked fixed but its known-failing test still exists, which
+    /// is the one way this file could start lying about the state of the code.
+    void RequireStillOpen(const JsonValue& defect, const std::string& defectId)
+    {
+        ASSERT_EQ(JsonType::Object, defect.type) << defectId << " has no record in the manifest";
+        ASSERT_EQ("known-failing", StringOr(defect, "status", ""))
+            << defectId << " is no longer marked known-failing in tools/gltf_fixtures, but this "
+                           "known-defect test still exists. Delete the test and move the fixture's "
+                           "layer into the GltfConformance suite.";
+    }
+
+    const JsonValue& CurrentActual(const JsonValue& defect)
+    {
+        return Member(defect, "currentActual");
+    }
+
+    void ExpectVector(const std::vector<double>& expected, const std::array<float, 3>& actual,
+                      const std::string& what)
+    {
+        ASSERT_EQ(3u, expected.size()) << what << ": manifest value is not a 3-vector";
+        for (std::size_t i = 0; i < 3; ++i)
+        {
+            EXPECT_NEAR(expected[i], static_cast<double>(actual[i]), kTolerance)
+                << what << "[" << i << "]";
+        }
+    }
+
+    bool IsIdentity(const GltfMatrix& m)
+    {
+        const GltfMatrix identity = IdentityMatrix();
+        for (std::size_t i = 0; i < 16; ++i)
+        {
+            if (std::fabs(m[i] - identity[i]) > kTolerance) { return false; }
+        }
+        return true;
+    }
+
+    /// Shared body for D1/D2/D3: all three are the same mechanism -- the import data model has no
+    /// node and no matrix -- reached through a different authoring style.
+    void ExpectNodeTransformDiscarded(const std::string& fixtureId, const std::string& defectId)
+    {
+        const LoadedFixture fixture(fixtureId);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const JsonValue& defect = DefectRecord(fixture, defectId);
+        ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, defectId));
+        const JsonValue& actualRecord = CurrentActual(defect);
+
+        const WorldPositions expectedWorld = EvaluateWorldPositionsEXT(fixture.Data());
+        ASSERT_TRUE(expectedWorld.selfCheckPassed);
+        const WorldPositions cnaWorld = EvaluateCnaWorldPositionsEXT(fixture.Data());
+
+        // (1) The defect is still present: CNA's world geometry does not match the specification's.
+        ASSERT_TRUE(expectedWorld.hasBounds);
+        ASSERT_TRUE(cnaWorld.hasBounds);
+        bool boundsDiffer = false;
+        for (std::size_t c = 0; c < 3; ++c)
+        {
+            boundsDiffer = boundsDiffer ||
+                std::fabs(expectedWorld.min[c] - cnaWorld.min[c]) > kTolerance ||
+                std::fabs(expectedWorld.max[c] - cnaWorld.max[c]) > kTolerance;
+        }
+        EXPECT_TRUE(boundsDiffer)
+            << defectId << " no longer reproduces on " << fixtureId << ": CNA's world bounds now "
+            << "match the specification. If the fix landed, mark the defect fixed in "
+            << "tools/gltf_fixtures and delete this test.";
+
+        // (2) It is broken in exactly the documented way: every instance comes back with an
+        // identity world transform, so the geometry stays in mesh-local space.
+        EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "instanceCount", -1)),
+                  cnaWorld.instances.size());
+        const bool expectAllIdentity =
+            BoolOr(actualRecord, "instanceWorldMatricesAreAllIdentity", false);
+        for (const WorldInstance& instance : cnaWorld.instances)
+        {
+            EXPECT_EQ(expectAllIdentity, IsIdentity(instance.worldMatrix));
+            EXPECT_EQ(-1, instance.node) << "MeshGroup gained a node -- Phase 5 may have landed";
+        }
+        ExpectVector(Numbers(Path(actualRecord, "worldBounds.min")), cnaWorld.min,
+                     "currentActual.worldBounds.min");
+        ExpectVector(Numbers(Path(actualRecord, "worldBounds.max")), cnaWorld.max,
+                     "currentActual.worldBounds.max");
+    }
+
+    /// Shared body for the two D5 fixtures.
+    void ExpectTopologyReinterpreted(const std::string& fixtureId)
+    {
+        const LoadedFixture fixture(fixtureId);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const JsonValue& defect = DefectRecord(fixture, "D5");
+        ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D5"));
+        const JsonValue& actualRecord = CurrentActual(defect);
+
+        const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
+        ASSERT_EQ(1u, extracted.size());
+        ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
+        const MeshOutDump& dump = extracted[0].dump;
+
+        // (1) The mode the file declares is not TRIANGLES...
+        const JsonValue& expectedPrimitive = Path(fixture.Expected(), "l3.primitives").arrayValue.at(0);
+        EXPECT_NE(4, static_cast<int>(NumberOr(expectedPrimitive, "mode", -1)))
+            << "this fixture is supposed to declare a non-TRIANGLES mode";
+
+        // ...and (2) MeshOut carries no topology at all, so it cannot be honoured downstream.
+        EXPECT_EQ(BoolOr(actualRecord, "topologyCarried", true), dump.topologyCarried);
+        EXPECT_FALSE(dump.topologyCarried)
+            << "MeshOut now carries topology -- GLTF-071 may have landed; move this fixture into "
+               "the GltfConformance suite and mark D5 fixed in tools/gltf_fixtures.";
+
+        const std::vector<double> expectedIndices = Numbers(Member(actualRecord, "indices"));
+        ASSERT_EQ(expectedIndices.size(), dump.indices.size()) << "index count changed";
+        for (std::size_t i = 0; i < expectedIndices.size(); ++i)
+        {
+            EXPECT_EQ(static_cast<std::uint32_t>(expectedIndices[i]), dump.indices[i])
+                << "indices[" << i << "]";
+        }
+
+        // The consequence downstream: the index list is divided by three and drawn as triangles.
+        const std::size_t reinterpretedTriangles = dump.indices.size() / 3;
+        const JsonValue& expectedTriangles = Member(expectedPrimitive, "triangles");
+        EXPECT_NE(expectedTriangles.arrayValue.size(), reinterpretedTriangles)
+            << "the reinterpretation now yields the spec-correct triangle count on " << fixtureId;
+        EXPECT_EQ(Member(actualRecord, "triangles").arrayValue.size(), reinterpretedTriangles);
+    }
+}
+
+// --- D1/D2/D3: the node transform pipeline that does not exist --------------------------------
+
+TEST(GltfKnownDefect, D1_NodeTranslationIsDiscardedForEveryMeshInstance)
+{
+    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-115.
+    ExpectNodeTransformDiscarded("xf-shared-mesh", "D1");
+}
+
+TEST(GltfKnownDefect, D2_ParentChildTransformCompositionIsDiscarded)
+{
+    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-115.
+    ExpectNodeTransformDiscarded("xf-parent-child", "D2");
+}
+
+TEST(GltfKnownDefect, D3_NodeMatrixIsDiscarded)
+{
+    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-115.
+    ExpectNodeTransformDiscarded("xf-matrix-node", "D3");
+}
+
+// --- D4: the index path --------------------------------------------------------------------------
+
+TEST(GltfKnownDefect, D4_SparseIndexAccessorDecodesToAllZeros)
+{
+    // Owned by GLTF-063.
+    const LoadedFixture fixture("sparse-indices");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& defect = DefectRecord(fixture, "D4");
+    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D4"));
+
+    // The localisation that matters: at L2 the very same accessor decodes perfectly, because
+    // cgltf_accessor_unpack_floats resolves sparse data. The accessor layer is not at fault; only
+    // CNA's separate index-reading call is. This is why GLTF-041 locks the attribute path rather
+    // than rewriting it.
+    const JsonValue& expectedAccessors = Path(fixture.Expected(), "l2.accessors");
+    for (const JsonValue& expectedAccessor : expectedAccessors.arrayValue)
+    {
+        if (StringOr(expectedAccessor, "usage", "") != "indices") { continue; }
+        const AccessorDump l2 = DumpAccessorEXT(
+            fixture.Data(), static_cast<std::size_t>(NumberOr(expectedAccessor, "index", -1)));
+        ASSERT_TRUE(l2.decoded) << l2.error;
+        ASSERT_TRUE(l2.sparse) << "the fixture's index accessor is supposed to be sparse";
+        const std::vector<double> expectedValues = Numbers(Member(expectedAccessor, "values"));
+        ASSERT_EQ(expectedValues.size(), l2.values.size());
+        for (std::size_t i = 0; i < expectedValues.size(); ++i)
+        {
+            EXPECT_NEAR(expectedValues[i], static_cast<double>(l2.values[i]), kTolerance)
+                << "L2 index accessor component[" << i << "] -- the data itself is readable";
+        }
+    }
+
+    // At L3 the same indices come back as zeros.
+    const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
+    ASSERT_EQ(1u, extracted.size());
+    ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
+
+    const std::vector<double> brokenIndices = Numbers(Member(CurrentActual(defect), "indices"));
+    ASSERT_EQ(brokenIndices.size(), extracted[0].dump.indices.size());
+    for (std::size_t i = 0; i < brokenIndices.size(); ++i)
+    {
+        EXPECT_EQ(static_cast<std::uint32_t>(brokenIndices[i]), extracted[0].dump.indices[i])
+            << "indices[" << i << "] -- D4 no longer reproduces exactly as recorded. If GLTF-063 "
+               "landed, mark D4 fixed in tools/gltf_fixtures and delete this test.";
+    }
+
+    const std::vector<double> specIndices =
+        Numbers(Member(Path(fixture.Expected(), "l3.primitives").arrayValue.at(0), "indices"));
+    bool diverges = false;
+    for (std::size_t i = 0; i < specIndices.size() && i < extracted[0].dump.indices.size(); ++i)
+    {
+        diverges = diverges ||
+            static_cast<std::uint32_t>(specIndices[i]) != extracted[0].dump.indices[i];
+    }
+    EXPECT_TRUE(diverges) << "the decoded indices now match the specification";
+}
+
+// --- D5: primitive topology ----------------------------------------------------------------------
+
+TEST(GltfKnownDefect, D5_TriangleStripIsReinterpretedAsATriangleList)
+{
+    // Owned by GLTF-071.
+    ExpectTopologyReinterpreted("mode-triangle-strip");
+}
+
+TEST(GltfKnownDefect, D5_NonIndexedPointsAreReinterpretedAsATriangleList)
+{
+    // Owned by GLTF-071.
+    ExpectTopologyReinterpreted("mode-points");
+}
+
+// --- D6: rigid node animation ---------------------------------------------------------------------
+
+TEST(GltfKnownDefect, D6_RigidNodeAnimationIsSilentlyDropped)
+{
+    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-284.
+    using namespace CNA::Internal::GltfImport;
+
+    const LoadedFixture fixture("anim-rigid-node");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& defect = DefectRecord(fixture, "D6");
+    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D6"));
+    const JsonValue& actualRecord = CurrentActual(defect);
+
+    // The file really does carry the animation -- the loss is entirely on CNA's side.
+    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().animations_count));
+    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().animations[0].channels_count));
+    ASSERT_EQ(0u, static_cast<std::size_t>(fixture.Data().skins_count));
+
+    // Mechanism one: clip extraction is gated on the group having a skin, and this file has none,
+    // so the converter never calls ExtractClips at all and emits no "animations" key.
+    const std::vector<MeshGroup> groups = CollectMeshGroups(&fixture.Data());
+    ASSERT_EQ(1u, groups.size());
+    EXPECT_EQ(nullptr, groups[0].skin);
+    EXPECT_TRUE(BoolOr(actualRecord, "clipExtractionGatedOnSkin", false));
+
+    // Mechanism two: even when called, ExtractClips resolves each channel target against the
+    // joint set, so a channel targeting an ordinary mesh node is skipped -- silently, with no
+    // warning. Both mechanisms have to be addressed for D6 to be fixed.
+    SkeletonResult emptySkeleton;
+    std::vector<std::string> warnings;
+    const std::vector<ClipOut> clips =
+        ExtractClips(&fixture.Data(), emptySkeleton, 1.0f, warnings);
+    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "clipCountIfExtractClipsWereCalled", -1)),
+              clips.size());
+    std::size_t trackCount = 0;
+    for (const ClipOut& clip : clips) { trackCount += clip.tracks.size(); }
+    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "trackCountIfExtractClipsWereCalled", -1)),
+              trackCount);
+    EXPECT_EQ(0u, trackCount)
+        << "a rigid node channel now produces a track -- if GLTF-284 landed, mark D6 fixed in "
+           "tools/gltf_fixtures and delete this test";
+    EXPECT_EQ(BoolOr(actualRecord, "warningEmitted", true), !warnings.empty())
+        << "the drop is supposed to be silent; a warning appearing is itself a change";
+}
+
+// --- D7: factor-only PBR material ------------------------------------------------------------------
+
+TEST(GltfKnownDefect, D7_FactorOnlyPbrMaterialIsDowngradedAndItsStateLost)
+{
+    // Owned by GLTF-217 / GLTF-228 / GLTF-229.
+    const LoadedFixture fixture("mat-factor-only-gold");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& defect = DefectRecord(fixture, "D7");
+    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D7"));
+    const JsonValue& actualRecord = CurrentActual(defect);
+
+    // The file authors a real, non-default material.
+    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().materials_count));
+    const cgltf_material& material = fixture.Data().materials[0];
+    ASSERT_NE(0, material.has_pbr_metallic_roughness);
+    EXPECT_NE(cgltf_alpha_mode_opaque, material.alpha_mode);
+    EXPECT_NE(0, material.double_sided);
+
+    const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
+    ASSERT_EQ(1u, extracted.size());
+    ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
+    const MeshOutDump& dump = extracted[0].dump;
+
+    // With no normal map and no metallic-roughness map, the PBR path can never be selected, so the
+    // surface falls all the way back to BasicEffect's stride-32 layout.
+    EXPECT_EQ(BoolOr(actualRecord, "usePbr", true), dump.usePbr);
+    EXPECT_FALSE(dump.usePbr)
+        << "a factor-only material now selects the PBR path -- if GLTF-217 landed, mark D7 fixed "
+           "in tools/gltf_fixtures and delete this test";
+    EXPECT_EQ(static_cast<int>(NumberOr(actualRecord, "stride", -1)), dump.stride);
+
+    // Not one material property survives. MeshOut has no field at all for baseColorFactor,
+    // alphaMode, alphaCutoff or doubleSided; and the three factor fields it does have are
+    // assigned only inside ExtractMesh's `if (usePbr)` guard, so they are left at MeshOut's own
+    // defaults rather than the file's values. This is plan_gltf.md §1.1's "zero material fields
+    // emitted", confirmed field by field.
+    const JsonValue& expectedMaterial =
+        Member(Path(fixture.Expected(), "l3.primitives").arrayValue.at(0), "material");
+    ASSERT_EQ(JsonType::Object, expectedMaterial.type);
+
+    EXPECT_NEAR(NumberOr(actualRecord, "metallicFactor", -1),
+                static_cast<double>(dump.metallicFactor), kTolerance);
+    EXPECT_NEAR(NumberOr(actualRecord, "roughnessFactor", -1),
+                static_cast<double>(dump.roughnessFactor), kTolerance);
+    EXPECT_GT(std::fabs(NumberOr(expectedMaterial, "metallicFactor", -1) -
+                        static_cast<double>(dump.metallicFactor)), kTolerance)
+        << "metallicFactor now reaches MeshOut for a factor-only material -- if GLTF-217 landed, "
+           "mark D7 fixed in tools/gltf_fixtures and delete this test";
+    EXPECT_GT(std::fabs(NumberOr(expectedMaterial, "roughnessFactor", -1) -
+                        static_cast<double>(dump.roughnessFactor)), kTolerance)
+        << "roughnessFactor now reaches MeshOut for a factor-only material";
+
+    const std::vector<double> expectedEmissive = Numbers(Member(expectedMaterial, "emissiveFactor"));
+    const std::vector<double> actualEmissive = Numbers(Member(actualRecord, "emissiveFactor"));
+    ASSERT_EQ(3u, expectedEmissive.size());
+    ASSERT_EQ(3u, actualEmissive.size());
+    double emissiveDelta = 0.0;
+    for (std::size_t c = 0; c < 3; ++c)
+    {
+        EXPECT_NEAR(actualEmissive[c], static_cast<double>(dump.emissiveFactor[c]), kTolerance);
+        emissiveDelta += std::fabs(expectedEmissive[c] - static_cast<double>(dump.emissiveFactor[c]));
+    }
+    EXPECT_GT(emissiveDelta, kTolerance) << "emissiveFactor now reaches MeshOut";
+
+    EXPECT_TRUE(Strings(Member(actualRecord, "carriedFields")).empty())
+        << "the ledger claims a material field survives; none does";
+    EXPECT_FALSE(dump.hasBaseColorImage);
+}
+
+// --- D8: the skin ancestor chain ---------------------------------------------------------------------
+
+TEST(GltfKnownDefect, D8_SkinAncestorChainIsDroppedWhileInverseBindMatricesAreKept)
+{
+    // Owned by GLTF-245 -> GLTF-247 -> GLTF-248 -> GLTF-260.
+    using namespace CNA::Internal::GltfImport;
+
+    const LoadedFixture fixture("skin-armature-ancestor");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& defect = DefectRecord(fixture, "D8");
+    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D8"));
+    const JsonValue& actualRecord = CurrentActual(defect);
+
+    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().skins_count));
+    const SkeletonResult skeleton = BuildSkeleton(&fixture.Data().skins[0], 1.0f);
+    ASSERT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "boneCount", -1)),
+              skeleton.bones.size());
+    ASSERT_EQ(1u, skeleton.bones.size());
+    const BoneOut& joint = skeleton.bones[0];
+
+    EXPECT_EQ(static_cast<int>(NumberOr(actualRecord, "parentIndex", -99)), joint.parentIndex);
+
+    const std::vector<double> expectedBindLocal =
+        Numbers(Member(actualRecord, "bindPoseLocalTranslation"));
+    ASSERT_EQ(3u, expectedBindLocal.size());
+    EXPECT_NEAR(expectedBindLocal[0], static_cast<double>(joint.bindPoseLocal.M41), kTolerance);
+    EXPECT_NEAR(expectedBindLocal[1], static_cast<double>(joint.bindPoseLocal.M42), kTolerance);
+    EXPECT_NEAR(expectedBindLocal[2], static_cast<double>(joint.bindPoseLocal.M43), kTolerance);
+
+    // The authored inverse bind matrix is kept verbatim and *does* contain the armature transform.
+    const std::vector<double> expectedInverseBind =
+        Numbers(Member(actualRecord, "inverseBindGlobalTranslation"));
+    ASSERT_EQ(3u, expectedInverseBind.size());
+    EXPECT_NEAR(expectedInverseBind[0], static_cast<double>(joint.inverseBindGlobal.M41), kTolerance);
+    EXPECT_NEAR(expectedInverseBind[1], static_cast<double>(joint.inverseBindGlobal.M42), kTolerance);
+    EXPECT_NEAR(expectedInverseBind[2], static_cast<double>(joint.inverseBindGlobal.M43), kTolerance);
+
+    // AnimationPlayer composes skinTransform[i] = InverseBindPose[i] * worldTransform[i], and for
+    // a root bone at bind pose worldTransform is just bindPoseLocal. The correct result is the
+    // identity: the joint's true global transform, translate(0,100,0), exactly cancels the
+    // authored inverse. What CNA produces instead is the inverse of the dropped ancestor.
+    const Matrix skinTransform = joint.inverseBindGlobal * joint.bindPoseLocal;
+    const std::vector<double> expectedSkin =
+        Numbers(Member(actualRecord, "skinTransformTranslation"));
+    ASSERT_EQ(3u, expectedSkin.size());
+    EXPECT_NEAR(expectedSkin[0], static_cast<double>(skinTransform.M41), kTolerance);
+    EXPECT_NEAR(expectedSkin[1], static_cast<double>(skinTransform.M42), kTolerance);
+    EXPECT_NEAR(expectedSkin[2], static_cast<double>(skinTransform.M43), kTolerance);
+
+    const double displacement = std::sqrt(
+        static_cast<double>(skinTransform.M41) * skinTransform.M41 +
+        static_cast<double>(skinTransform.M42) * skinTransform.M42 +
+        static_cast<double>(skinTransform.M43) * skinTransform.M43);
+    EXPECT_GT(displacement, 1.0)
+        << "the bind-pose skin transform is now (near) the identity -- if GLTF-245/247 landed, "
+           "mark D8 fixed in tools/gltf_fixtures and delete this test";
+
+    // And the expectation this is measured against, straight from the manifest: identity.
+    const JsonValue& expectedJoints = Path(fixture.Expected(), "l4.skin.joints");
+    ASSERT_EQ(JsonType::Array, expectedJoints.type);
+    ASSERT_EQ(1u, expectedJoints.arrayValue.size());
+    const std::vector<double> expectedJointMatrix =
+        Numbers(Member(expectedJoints.arrayValue.at(0), "jointMatrixColumnMajor"));
+    ASSERT_EQ(16u, expectedJointMatrix.size());
+    const GltfMatrix identity = IdentityMatrix();
+    for (std::size_t i = 0; i < 16; ++i)
+    {
+        EXPECT_NEAR(static_cast<double>(identity[i]), expectedJointMatrix[i], kTolerance)
+            << "the fixture's expected joint matrix should be the identity";
+    }
+}
+
+// --- Ledger completeness -------------------------------------------------------------------------
+
+TEST(GltfKnownDefect, EveryDefectInTheCorpusLedgerHasAnExecutableTestHere)
+{
+    // Adding a defect fixture to the generator without an executable test would leave the defect
+    // documented but unproven, which is exactly the failure mode this batch exists to remove.
+    const std::set<std::string> covered = {"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"};
+
+    const JsonValue& ledger = Member(CorpusManifest(), "defectLedger");
+    ASSERT_EQ(JsonType::Array, ledger.type);
+    std::set<std::string> recorded;
+    for (const JsonValue& defect : ledger.arrayValue)
+    {
+        const std::string id = StringOr(defect, "id", "");
+        ASSERT_FALSE(id.empty());
+        recorded.insert(id);
+        EXPECT_TRUE(covered.count(id) != 0)
+            << id << " is recorded in the corpus but has no known-defect test in this file";
+        EXPECT_FALSE(Strings(Member(defect, "owningTasks")).empty())
+            << id << " names no remediation task";
+        EXPECT_FALSE(Member(defect, "fixtures").arrayValue.empty())
+            << id << " is not reproduced by any fixture";
+    }
+    for (const std::string& id : covered)
+    {
+        EXPECT_TRUE(recorded.count(id) != 0)
+            << id << " has a test here but is no longer recorded in the corpus ledger";
+    }
+}
