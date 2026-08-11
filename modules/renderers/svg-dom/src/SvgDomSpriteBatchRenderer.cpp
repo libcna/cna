@@ -29,32 +29,21 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
     if (typeof document === 'undefined') return;
     const root = Module['cnaSvgDomRoot'];
     const defs = Module['cnaSvgDomDefs'];
-    const group = Module['cnaSvgDomSpriteGroup'];
-    if (!root || !group) return;
+    const getRegion = Module['cnaSvgDomGetRegion'];
+    if (!root || !getRegion) return;
 
-    // One clip-path shared by the whole frame's sprite group (V1: a single global scissor region,
-    // not HtmlDom's own per-batch-isolated regions -- see docs/svg-dom-renderer.md).
-    if (scissorEnabled) {
-        let clipRect = Module['cnaSvgDomClipRect'];
-        if (!clipRect) {
-            const clipPath = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
-            clipPath.id = 'cna-svg-dom-scissor';
-            clipRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            clipPath.appendChild(clipRect);
-            defs.appendChild(clipPath);
-            Module['cnaSvgDomClipRect'] = clipRect;
-            group.setAttribute('clip-path', 'url(#cna-svg-dom-scissor)');
-        }
-        clipRect.setAttribute('x', sx); clipRect.setAttribute('y', sy);
-        clipRect.setAttribute('width', Math.max(0, sw)); clipRect.setAttribute('height', Math.max(0, sh));
-        group.setAttribute('clip-path', 'url(#cna-svg-dom-scissor)');
-    } else {
-        group.removeAttribute('clip-path');
-    }
+    // SVGDOM-4: this flush is one whole SpriteBatch Begin/End batch, so the scissor rect current
+    // RIGHT NOW (whatever the game's last SetScissorRect call recorded, gated by
+    // RasterizerState.ScissorTestEnable at End()) is the one that applies to every sprite in it --
+    // matching real XNA/FNA semantics, where ScissorRectangle is read once the batch's draw calls
+    // are actually issued. cnaSvgDomGetRegion resolves that rect to an isolated <g> container (its
+    // own <clipPath>, its own sprite pool) so a LATER batch's different scissor rect can never reach
+    // back and reclip sprites THIS batch already flushed.
+    const region = getRegion(scissorEnabled ? { x: sx, y: sy, w: sw, h: sh } : null);
+    const container = region.container;
+    const pool = region.pool;
+    let used = region.used;
 
-    if (!Module['cnaSvgDomSpritePool']) Module['cnaSvgDomSpritePool'] = [];
-    if (Module['cnaSvgDomSpriteUsed'] === undefined) Module['cnaSvgDomSpriteUsed'] = 0;
-    const pool = Module['cnaSvgDomSpritePool'];
     const svgNS = 'http://www.w3.org/2000/svg';
     const xlinkNS = 'http://www.w3.org/1999/xlink';
     // Proper (non-negative) modulo -- JS '%' keeps the dividend's sign, which a negative source
@@ -75,7 +64,7 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
         const packedColor = HEAP32[o + 13] >>> 0;
         const tiled = (flags & 32) !== 0; // SvgFlagTiled
 
-        const poolIndex = Module['cnaSvgDomSpriteUsed']++;
+        const poolIndex = used++;
         let entryEl = pool[poolIndex];
         if (!entryEl) {
             const g = document.createElementNS(svgNS, 'g');
@@ -90,8 +79,12 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
             rect.style.display = 'none';
             g.appendChild(viewport);
             g.appendChild(rect);
-            group.appendChild(g);
-            entryEl = { g: g, viewport: viewport, image: image, rect: rect,
+            container.appendChild(g);
+            // A globally unique id, NOT poolIndex -- poolIndex is only unique WITHIN one region's
+            // own pool array, and this id feeds the per-slot <pattern> id below, shared across every
+            // region's slots in the same <defs>.
+            const slotId = (Module['cnaSvgDomNextSlotId'] = (Module['cnaSvgDomNextSlotId'] || 0) + 1);
+            entryEl = { g: g, viewport: viewport, image: image, rect: rect, slotId: slotId,
                        pattern: null, patternImage: null, cna: {} };
             pool[poolIndex] = entryEl;
         }
@@ -131,7 +124,7 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
 
             if (!entryEl.pattern) {
                 const pattern = document.createElementNS(svgNS, 'pattern');
-                pattern.id = 'cna-svg-dom-pattern-' + poolIndex;
+                pattern.id = 'cna-svg-dom-pattern-' + entryEl.slotId;
                 pattern.setAttribute('patternUnits', 'userSpaceOnUse');
                 const patternImage = document.createElementNS(svgNS, 'image');
                 patternImage.setAttribute('x', 0); patternImage.setAttribute('y', 0);
@@ -185,6 +178,7 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
             prev.filter = filterAttr;
         }
     }
+    region.used = used;
 });
 
 // Render-target-bound path: one call per sprite (simpler than the batched array the SVG path

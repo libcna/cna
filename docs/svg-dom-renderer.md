@@ -142,7 +142,7 @@ a block.
 |---|---|---|
 | `GetViewportSize` / `SetVirtualResolution` / `SetPresentationMode` | 🟨 (math ✅) | All five `CnaPresentationMode` values (`Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer`/`FixedHeightDynamicWidth`) share the identical XNA/Windows-Phone geometry contract every 2D-DOM CNA renderer implements (`ComputeLogicalViewport`), independently re-derived here; `SetPresentationMode` ordinal validation is ✅ unit-tested. Applying the computed geometry to the DOM (`root.setAttribute('viewBox', …)`) is 🟨. |
 | `TransformWindowToLogical` / `TransformLogicalToWindow` | ✅ | Pure C++ against `ComputeLogicalViewport`; the "no virtual resolution configured" contract is unit-tested against the same `FakeWindow()` harness `HtmlDomRendererTests.cpp` uses. |
-| `GraphicsDevice.ScissorRectangle` (`SetScissorRect`) | 🟨 | **V1 scope**: a SINGLE global `<clipPath>` shared by the whole frame's pooled sprite group, re-evaluated at the most recent flush — a real, smaller-scope boundary than `HTML_DOM`'s own per-scissor-rect-isolated region pools (HTMLDOM-94), not silently approximated. Only applied when `RasterizerState.ScissorTestEnable` is true (✅ unit-tested: `ApplyRasterizerStateReadsScissorTestEnable`). |
+| `GraphicsDevice.ScissorRectangle` (`SetScissorRect`) | 🟨 | Each distinct rect a batch's `End()` observes (`RasterizerState.ScissorTestEnable` true) resolves to its own isolated `<g clip-path="…">` region with its own pooled sprites (SVGDOM-4, mirroring `HTML_DOM`'s HTMLDOM-94) — a later batch's different rect can no longer retroactively reclip an earlier batch's sprites. Cross-region paint-order interleaving within one frame still follows each region's own first-creation order rather than a per-flush z-index counter (`HTML_DOM`'s own later HTMLDOM-103 refinement, not replicated here); the render-target-bound Canvas2D path still does not consult the scissor rect at all (a separate, pre-existing gap, matching `HTML_DOM`'s own pre-HTMLDOM-102 state). Only applied when `RasterizerState.ScissorTestEnable` is true (✅ unit-tested: `ApplyRasterizerStateReadsScissorTestEnable`). |
 | `GraphicsDevice.Viewport` (`SetViewport`) | 🟨 (composition ✅) | Recorded as C++ state only; composed as the outermost translation on each sprite's own matrix at flush time, matching real XNA/FNA's rasterizer-stage `Viewport.X/Y` application strictly after `SpriteBatch.Begin(transformMatrix)`. The composition itself is exercised by `SetViewportRecordsTheOffsetWithoutThrowing`. |
 | `ApplyDepthStencilState` / `SetReferenceStencil` | ✅ truthful 2D boundary | A fully-disabled depth/stencil state and reference value zero are accepted; anything else throws deterministically (✅ unit-tested). |
 | `ApplyRasterizerState` | ✅ truthful 2D subset | Ordinary filled 2D/default-cull states and `scissorTestEnable` are accepted; clockwise-face culling, wireframe and non-zero depth bias throw (✅ unit-tested). |
@@ -176,11 +176,13 @@ natively (`SvgDom3DSurfaceTest`).
    deterministically — see `ValidateAddressModesEXT`. Clamp-overflow edge-extension is tracked as a
    separate follow-up (SVGDOM-3); `HTML_DOM`'s own edge-extension/tiling variant cache remains a
    wider boundary than this renderer's.
-3. **A single global scissor region**, not `HTML_DOM`'s own per-batch-isolated regions (HTMLDOM-94)
-   — a later batch's different `ScissorRectangle` retroactively affects the clip every pooled
-   sprite in the shared group uses, since there is only one `<clipPath>` for the whole frame. Real
-   per-region isolation (multiple pooled groups, one per distinct active rect) is a documented,
-   deferred follow-up, not attempted in this pass.
+3. **Per-region scissor isolation is implemented** (SVGDOM-4), one `<g clip-path="…">` region with
+   its own pooled sprites per distinct `ScissorRectangle` a batch's `End()` actually observes,
+   mirroring `HTML_DOM`'s own per-batch-isolated regions (HTMLDOM-94). Two narrower gaps remain,
+   both documented rather than silently approximated: cross-region paint order within one frame
+   follows each region's own first-creation (DOM) order, not a per-flush z-index counter (`HTML_DOM`'s
+   own later HTMLDOM-103 refinement); and the render-target-bound Canvas2D draw path does not
+   consult the scissor rect at all yet (matching `HTML_DOM`'s own pre-HTMLDOM-102 state).
 4. **Custom `BlendState`s throw** — only the four standard presets exist in SVG/CSS compositing.
 5. **No custom `Effect`s** — there is no shader stage.
 6. **No MSAA, no depth, no stencil** — the same 2D-only boundary as `SDL_RENDERER`/`CANVAS`/`HTML_DOM`.
