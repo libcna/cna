@@ -194,7 +194,7 @@ pass for its fixture. Implemented so far:
 | **L2** | decoded accessor arrays, before any semantic interpretation | implemented — `DumpAccessorEXT` | `GLTF-005`, `GLTF-041` |
 | **L3** | semantic mesh streams in mesh-local space (`MeshOut`, field by field) | implemented — `DumpMeshOutEXT` | `GLTF-005` |
 | **L4** | world-space vertex positions after node composition | implemented — `EvaluateWorldPositionsEXT` | `GLTF-006` |
-| **L5** | byte-exact generated vertex/index buffers | not implemented | `GLTF-007` |
+| **L5** | byte-exact generated vertex/index buffers | implemented — `CompareVertexBytesEXT` / `CompareIndexBytesEXT` | `GLTF-007` |
 | **L6** | effect parameters actually bound for a draw | not implemented | `GLTF-008` |
 | **L7** | rendered pixels vs a golden PNG | not implemented | `GLTF-009` |
 
@@ -222,13 +222,15 @@ and none may be added.
 `manifest.json` records for every emitted file, so the byte-identity guarantee holds at test time
 without a Python interpreter. `--check` is the developer-side equivalent.
 
-Per fixture the generator emits three files into `tests/assets/gltf/`:
+Per fixture the generator emits three files into `tests/assets/gltf/`, plus the L5 goldens for a
+fixture CNA can import:
 
 | File | Contents |
 |---|---|
 | `<id>.gltf` | the asset, JSON with base64 `data:` URI buffers — text-first and diffable |
 | `<id>.glb` | the same asset in the binary container, from the same source of truth |
 | `<id>.expected.json` | the inventory record and the **spec-derived** expectations for every layer the asset validates |
+| `<id>.vb.bin` / `<id>.ib.bin` | the L5 golden vertex and index buffers (§3.7). Part 0 of a fixture uses these names; a second part would use `<id>.p1.vb.bin`, so adding one never renames the first |
 
 `tests/assets/gltf/manifest.json` is the corpus-level inventory: the distinct-asset count, and each
 asset's `id`, `owningGroup`, `referencingGroups[]`, `validatedLayers[]` and `features[]` (§24.1 of
@@ -248,11 +250,11 @@ Each `<id>.expected.json` keeps three things strictly apart:
 
 * `l1` / `l2` / `l3` / `l4` — **spec-derived expectations**. Never CNA's output. They are computed
   by the generator from the fixture's own authored values and the pinned specification, and they do
-  not change when CNA is fixed.
+  not change when CNA is fixed. (`l5` is the one layer that is not purely spec-derived; see §3.7.)
 * `defects[]` — one record per proven defect the fixture exposes, each naming the defect id
   (`D1`…`D8`), the layer it first diverges at, the remediation tasks that own it, and
-  `currentActual`: **the wrong value CNA produces today**, recorded as evidence.
-* `status` per defect — `known-failing` while the owning task is open.
+  `currentActual`: **what CNA produces today**, recorded as evidence.
+* `status` per defect — see the lifecycle below.
 
 A known-defect test therefore asserts two things at once:
 
@@ -260,13 +262,41 @@ A known-defect test therefore asserts two things at once:
 2. the divergence is **exactly** the recorded one (CNA is broken in the documented way, not a new
    way).
 
-When the owning remediation task lands, assertion 2 fails loudly and the implementer flips the
-fixture's defect record to `fixed` — **without touching the fixture or its spec expectation**. That
-is the mechanism by which `GLTF-063`, `GLTF-071`, `GLTF-115`, `GLTF-248` and `GLTF-260` convert
-these exact cases from known-failing to passing.
+When an owning remediation task lands, assertion 2 fails loudly — with the fixture and the task
+named — and the implementer updates the fixture's defect record, **without touching the fixture or
+its spec expectation**.
+
+#### The defect lifecycle
+
+| `status` | Meaning | Effect on the suites |
+|---|---|---|
+| `known-failing` | no owning task has landed; CNA is wrong in exactly the recorded way | the fields in `divergentFieldsByLayer` are skipped by `GltfConformance*`; a `GltfKnownDefect` test asserts the divergence |
+| `partially-remediated` | one owning task landed and changed the behaviour; `closedTasks` names it and `remainingTasks` names what is left | same suppression, but the known-defect test now asserts the **new** behaviour |
+| `fixed` | every owning task landed | `divergentFieldsByLayer` is empty, so the layer is asserted in full and the record becomes a regression witness. Its known-defect test is deleted |
+
+A defect record is **never deleted**. When a defect is fixed, `currentActual` becomes what CNA
+produces today and the measurement it replaced moves to `priorActual`, dated with the baseline
+commit it was taken on. `GltfKnownDefectTests.cpp` asserts this bookkeeping in both directions: an
+open defect must have a test there, and a remediated one must not.
+
+`divergentFieldsByLayer` is authoritative and is what the conformance suites consult. A defect
+usually breaks exactly one layer, but not always: a primitive CNA rejects outright has no semantic
+mesh at L3 **and** no world geometry at L4, and a record that declared only the first would leave
+the second failing as if it were a conformance regression.
 
 Never weaken an expectation to make the current implementation green. If a fixture contradicts the
 forensic audit, stop and investigate the contradiction.
+
+#### Current state
+
+| Defect | Status | Closed by | Remaining |
+|---|---|---|---|
+| D1, D2, D3 | `known-failing` | — | `GLTF-103` → `GLTF-113` → `GLTF-114` → `GLTF-115` |
+| **D4** | **`fixed`** | **`GLTF-063`** | — |
+| **D5** | **`partially-remediated`** | **`GLTF-071`** (mode read, classified, never reinterpreted) | `GLTF-072` (the per-mode conversion policy) |
+| D6 | `known-failing` | — | `GLTF-284` (after `GLTF-103`…`GLTF-114`) |
+| D7 | `known-failing` | — | `GLTF-217` / `GLTF-228` / `GLTF-229` |
+| D8 | `known-failing` | — | `GLTF-245` → `GLTF-247` → `GLTF-248` → `GLTF-260` |
 
 ### 3.4 Promoted audit fixtures (`GLTF-004`)
 
@@ -306,8 +336,8 @@ the production `UnpackAccessor`) produced from the same accessors. A rewrite of 
 these tests.
 
 **Do not rewrite this path.** Phase 2 adds fixtures and bounds checks *around* the decoder, never a
-replacement decoder. The index path (`cgltf_accessor_read_index`) is a different, genuinely broken
-path and is `GLTF-063`'s to fix.
+replacement decoder. The index path was a different, genuinely broken path; `GLTF-063` replaced it
+(§3.7) without touching this one, which is exactly what `GLTF-041` exists to guarantee.
 
 ### 3.6 Running the harness
 
@@ -321,9 +351,63 @@ working directory, which is what CTest is configured to use. The suites are:
 | Suite | What it asserts |
 |---|---|
 | `GltfFixtureCorpus` | the committed corpus matches the generator (per-file SHA-256), the ownership model holds, and every `.glb` twin is a valid container |
-| `GltfConformanceL1` … `L4` | the spec-derived expectation, field by field, minus the fields a still-open defect breaks |
-| `GltfKnownDefect` | each of D1–D8 is still present and still wrong in exactly the recorded way |
+| `GltfConformanceL1` … `L5` | the spec-derived expectation, field by field, minus the fields a still-open defect breaks |
+| `GltfKnownDefect` | each still-open defect is present in exactly the recorded way, and the remediated ones are no longer asserted here |
 | `GltfOracleEXT` | the oracle helpers themselves — stability, round-tripping, agreement with cgltf, and that using them does not alter production output |
+| `GltfBufferOracle` | the L5 comparator proving itself: a perturbed byte is reported at the right offset, vertex and field (`GLTF-007`) |
 | `GltfAccessorDecodeLock` | the verified-correct attribute decode path (`GLTF-041`) |
+| `GltfIndexDecode` | the sparse-safe, bounds-checked index reader and D4's regression witness (`GLTF-063`) |
+| `GltfPrimitiveTopology` | the seven-mode classification table and the never-reinterpret policy (`GLTF-071`) |
 
-`GLTF-010` will collapse these into a single `ctest -L gltf-conformance` label once L5–L7 exist.
+`GLTF-010` will collapse these into a single `ctest -L gltf-conformance` label once L6–L7 exist.
+
+---
+
+## 4. The L5 golden buffers (`GLTF-007`)
+
+### 4.1 What an L5 golden is derived from
+
+L5 compares the bytes CNA hands to `VertexBuffer::SetData` / `IndexBuffer::SetData` — that is,
+`MeshOut::vertexBytes` and `MeshOut::indexBytes` — against a committed golden. No GPU and no
+renderer is involved.
+
+Unlike L1–L4, an L5 golden is **not** purely spec-derived, and the distinction matters:
+
+* the **values** come from the fixture's own spec-derived L3 expectation;
+* the **placement** comes from CNA's own vertex stride ABI (`plan_gltf.md` §2.3) — a CNA decision,
+  not a Khronos one — including the fill values `ExtractMesh` writes into a slot whose attribute the
+  file omits: normal `(0,0,1)`, texture coordinate `(0,0)`, colour alpha `255`.
+
+So a golden asserts *the spec-derived values, laid out the way CNA says it lays them out*. A
+deliberate ABI change therefore requires regenerating these goldens, and that regeneration is the
+point at which someone has to look at every renderer's `ApplyLayout` and agree.
+
+The layout table is stated twice on purpose — in `tools/gltf_fixtures/l5.py` and in
+`GltfBufferOracleEXT.cpp` — and `GltfBufferOracle.TheCppLayoutTableAgreesWithTheOneTheGeneratorPackedWith`
+asserts they agree. A table stated once cannot catch its own drift.
+
+### 4.2 Reading a failure
+
+A difference names the fixture, the buffer, the byte, the element and the field:
+
+```text
+u8-idx VB differs at byte 45 (vertex 1, Normal +1): expected 0x00, actual 0xFF
+```
+
+A size difference is reported at the first byte past the shorter buffer. A byte in inter-field
+padding says so rather than naming a field it does not belong to, and an unknown stride says
+`<unknown stride layout>` rather than guessing.
+
+### 4.3 Coverage today
+
+13 of the 15 fixtures carry a golden, covering strides 32, 24 and 52, the 16-bit index path and the
+`vertexCount > 65535` width-selection rule. The two without one are the fixtures `GLTF-071` rejects;
+their manifests record `l5.supported = false` with a reason and the task that would produce a
+golden, so the layer is visibly absent rather than quietly unasserted.
+
+Deliberately not covered yet: the PBR and dual-texture strides (20/48/68), whose selection and
+tangent generation both depend on which texture maps a material carries. The packer raises an
+explicit "not implemented" for them rather than emitting a golden nobody has checked. `GLTF-149`+
+extends it. The `primitiveCount` assertion likewise covers only `TRIANGLES`, since that is the only
+topology that currently reaches L5; `GLTF-078` replaces the loaders' hardcoded `numIndices / 3`
+with a topology-aware helper and this is where that replacement is held to the same answer.

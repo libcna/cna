@@ -1775,12 +1775,34 @@ Status legend — `⬜ TODO` (new work) · `🐛 CONFIRMED` (defect proven durin
 `✔ DONE` (implemented and verified against the task's own acceptance criteria; the row names the
 closing commit).
 
-**Implementation progress.** Batch **P0-A — oracle foundation** is complete: `GLTF-001` … `GLTF-006`
-and `GLTF-041` (2026-08-11, branch `claude/gltf-correctness-audit-plan-rxfs1l`). It established the
+**Implementation progress.** Two batches are complete, both on branch
+`claude/gltf-correctness-audit-plan-rxfs1l` (2026-08-11). See `docs/gltf-conformance.md`.
+
+**P0-A — oracle foundation**: `GLTF-001` … `GLTF-006` and `GLTF-041`. It established the
 specification pin, the permanent fixture generator, the promoted `f1`…`f14` corpus, the L2/L3/L4
 numerical oracles, and the executable D1–D8 known-defect ledger. **No D1–D8 production fix was
-implemented** — the defects remain reproducible by design, and the next batch is the first that
-changes behaviour. See `docs/gltf-conformance.md`.
+implemented** — the defects remained reproducible by design.
+
+**P0-B — independent geometry corruption**: `GLTF-007`, `GLTF-063`, `GLTF-071`. The first batch that
+changes glTF behaviour.
+
+* `GLTF-063` (`ef3bc2cbf`) replaced `cgltf_accessor_read_index` with a CNA-side sparse-aware,
+  bounds-checked index reader and added the `index < POSITION.count` validation. **D4 is fixed**:
+  `sparse-indices` decodes `[0,1,2,0,2,3]` at L2, L3 and byte-exact at L5, from the unchanged
+  fixture and the unchanged expectation.
+* `GLTF-071` (`07312274e`) reads and classifies `mesh.primitive.mode`, carries it on `MeshOut`, and
+  rejects every topology CNA cannot yet honour with its mode named. **D5 is partially remediated**:
+  the silent triangle-list reinterpretation is gone, but `GLTF-072` still owns the conversions, so
+  `mode-triangle-strip` and `mode-points` do not import at all today. **`GLTF-072` is not started.**
+* `GLTF-007` (`414686088`) added the permanent L5 byte-level VB/IB oracle and the golden buffers for
+  13 of the 15 fixtures.
+
+The defect ledger gained a three-state lifecycle (`known-failing` → `partially-remediated` →
+`fixed`) with per-layer divergent fields, and a defect record is now never deleted: a remediated one
+stays as the regression witness with its original measurement under `priorActual`.
+
+**D1, D2, D3, D6, D7 and D8 are untouched by P0-B** and remain reproducible exactly as the audit
+recorded them. No renderer, no `cna-gltf-viewer` and no node-transform work was started.
 
 Every phase declares its **primary owner** from §6; a task whose owner differs names it inline.
 Dependencies are the *minimum* set — a task also inherits its phase's entry condition, **except for
@@ -1806,7 +1828,7 @@ column of these tables.
 | GLTF-004 | **[P0]** Promote `f1…f14` into the generator with full manifests | ✔ | GLTF-003 | The 14 audit fixtures in §1.1/§1.2, each with its expected L3/L4 values. **Accept:** 8 of 14 fail against current CNA with exactly the deltas in §1.1; 6 pass. **Done** (`35ddc1ce5`, `b681f1327`): 15 assets (the 14 promoted plus `xf-identity`). All eight defects reproduce exactly as §1.1 recorded; the five verified-correct fixtures pass. The split is **9 fixtures failing, 5 passing**, not the 8/6 written above: D5 owns two fixtures (`f4` `mode-triangle-strip` and `f12` `mode-points`), so the eight *defects* of §1.1 are exposed by nine *fixtures*, and §1.2 lists five verified-correct fixtures (`f5` `f6` `f10` `f11` `f14`) — the sixth §1.2 row, base64 `data:` URI buffers, is a property of all fourteen rather than a fixture of its own. One sharpening: `mat-factor-only-gold` now authors non-default metallic/roughness/emissive factors, which showed those are lost too — `ExtractMesh` assigns them only inside its `usePbr` guard, confirming §1.1's "zero material fields emitted" precisely. |
 | GLTF-005 | **[P0]** `DumpAccessorEXT` / `DumpMeshOutEXT` test-only dumpers (L2/L3) | ✔ | GLTF-003 | Test-scope helpers serialising decoded accessor arrays and every `MeshOut` field to JSON. Not public API. **Accept:** dumps round-trip and diff cleanly against a manifest. **Done** (`195bda140`): `modules/content/tests/CNA/Internal/GltfImport/GltfOracleEXT.{hpp,cpp}`, namespace `CnaTest::GltfOracle`. Dumps round-trip and are byte-stable; a single-component perturbation of an L2 or L3 manifest value fails with the field and component index named. |
 | GLTF-006 | **[P0]** `EvaluateWorldPositionsEXT` expected-world-position helper (L4) | ✔ | GLTF-005 | Composes node/skin/morph state into world-space vertex positions for comparison. **Accept:** returns the manifest values for `xf-identity`. **Done** (`195bda140`): returns the manifest values for `xf-identity`, cross-checks its own composition against `cgltf_node_transform_world` on every fixture, and is proved not to alter production output. Exposes the D1–D3 divergence without fixing it. |
-| GLTF-007 | **[P0]** Golden vertex/index buffer comparator (L5) | ⬜ | GLTF-005 | `memcmp` against `<name>.vb.bin`/`.ib.bin` with a readable first-difference report (offset, field, expected, actual). **Accept:** a one-byte perturbation is reported at the right offset and field name. |
+| GLTF-007 | **[P0]** Golden vertex/index buffer comparator (L5) | ✔ | GLTF-005 | `memcmp` against `<name>.vb.bin`/`.ib.bin` with a readable first-difference report (offset, field, expected, actual). **Accept:** a one-byte perturbation is reported at the right offset and field name. **Done** (`414686088`): `GltfBufferOracleEXT.{hpp,cpp}` + `tools/gltf_fixtures/l5.py`. A perturbed byte is reported as `<fixture> VB differs at byte 45 (vertex 1, Normal +1)`; every byte of a vertex is swept and must resolve to the field whose span contains it. 13 of 15 fixtures carry goldens (strides 32/24/52, 16-bit index path); the two `GLTF-071` rejects record `l5.supported = false` naming `GLTF-072`. The stride ABI is stated independently in the generator and in C++ and a test asserts they agree. **Scope held:** the PBR/dual-texture strides (20/48/68) raise an explicit "not implemented" in the packer rather than emitting an unchecked golden (`GLTF-149`+), and `primitiveCount` is asserted for `TRIANGLES` only (`GLTF-078`). See `docs/gltf-conformance.md` §4. |
 | GLTF-008 | `GpuDrawParams` capture harness on `HEADLESS`/`STUB` (L6) | ⬜ | GLTF-005 | Record every effect parameter actually bound for each draw. **Accept:** a `PbrEffect` draw yields all 12 §21.1 quantities. |
 | GLTF-009 | L7 image-oracle harness for the corpus | ⬜ | GLTF-008 | Reuse `examples/golden/` + xvfb; fixed camera/light rig per fixture; per-renderer tolerance. **Accept:** deterministic PNGs across two runs on `OPENGLES3`. |
 | GLTF-010 | Wire L1–L7 into one `ctest` label `gltf-conformance` | ⬜ | GLTF-009 | **Accept:** `ctest -L gltf-conformance` runs the whole ladder and names the failing layer. |
@@ -1888,16 +1910,16 @@ primitive mode is ever silently reinterpreted; indices decode exactly.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-063 | **[P0] Sparse-safe, bounds-checked index reader** | 🐛 | GLTF-041 | `cgltf_accessor_read_index` returns `0` for sparse or null-`bufferView` with no error channel; `f3` decoded `[0,0,0,0,0,0]` for expected `[0,1,2,0,2,3]`. Replace with a CNA reader mirroring `UnpackAccessor`. **Accept:** `sparse-indices` decodes exactly; **critical path.** |
-| GLTF-064 | Index component-type fixtures | ✅/⬜ | GLTF-063 | `u8-idx` ✅ (`f11`), `u16-idx` ✅, `u32-idx` ⬜. **Accept:** all three exact at L3. |
-| GLTF-065 | Null-`bufferView` index accessor is an explicit error | 🐛 | GLTF-063 | Today it silently yields zeros. **Accept:** clear error. |
+| GLTF-063 | **[P0] Sparse-safe, bounds-checked index reader** | ✔ | GLTF-041 | `cgltf_accessor_read_index` returns `0` for sparse or null-`bufferView` with no error channel; `f3` decoded `[0,0,0,0,0,0]` for expected `[0,1,2,0,2,3]`. Replace with a CNA reader mirroring `UnpackAccessor`. **Accept:** `sparse-indices` decodes exactly; **critical path.** **Done** (`ef3bc2cbf`): `UnpackIndexAccessor` in `GltfImportCore.cpp`. `sparse-indices` decodes `[0,1,2,0,2,3]` exactly, at L2, L3 and (since `GLTF-007`) byte-exact at L5. Resolves sparse overrides per §3.6.2.3 including the zero-initialised base array and an independent sparse-index component type; requires SCALAR, non-normalized and one of the three unsigned types; bounds-checks every read against the owning bufferView with overflow-checked span arithmetic; reads components with `memcpy`. **D4 → `fixed`**, its record kept as the regression witness. The attribute path is untouched (`GLTF-041` still green). |
+| GLTF-064 | Index component-type fixtures | ✅/⬜ | GLTF-063 | `u8-idx` ✅ (`f11`), `u16-idx` ✅, `u32-idx` ⬜. **Accept:** all three exact at L3. **Partly** (`ef3bc2cbf`): `GltfIndexDecodeTests.cpp` asserts all three decode exactly, but `u32` only on a hand-authored in-test accessor. The **corpus fixture** the row asks for does not exist yet, so the row stays open. |
+| GLTF-065 | Null-`bufferView` index accessor is an explicit error | ✔ | GLTF-063 | Today it silently yields zeros. **Accept:** clear error. **Done** (`ef3bc2cbf`): an index accessor with neither a bufferView nor sparse data throws naming both; one with no bufferView *and* sparse data is legal per §3.6.2.3 and decodes from the zero-initialised base array, which is tested separately. |
 | GLTF-066 | Sparse index accessor L2 dump | ⬜ | GLTF-063 | **Accept:** the L2 dump shows the override applied. |
-| GLTF-067 | Non-indexed primitives synthesise `0..count-1` | ✅ | GLTF-063 | `f12` proves it runs. **Accept:** locked at L3. |
-| GLTF-068 | Validate `index < vertexCount` before packing | 🐛 | GLTF-063 | `static_cast<uint16_t>` truncates silently when `vertexCount ≤ 65535`. **Accept:** `bad-index-out-of-range` errors with the offending value. |
+| GLTF-067 | Non-indexed primitives synthesise `0..count-1` | ✅/⬜ | GLTF-063 | ~~`f12` proves it runs.~~ **Accept:** locked at L3. **Note** (`ef3bc2cbf`, `07312274e`): `f12` (`mode-points`) can no longer prove this — `GLTF-071` rejects its `POINTS` mode before the implicit range is synthesised at all. `GltfIndexDecode.NonIndexedPrimitiveSynthesisesTheImplicitRange` covers it on a hand-authored non-indexed `TRIANGLES` primitive instead. A non-indexed **corpus** fixture with an importable topology is still owed. |
+| GLTF-068 | Validate `index < vertexCount` before packing | ✅/⬜ | GLTF-063 | `static_cast<uint16_t>` truncates silently when `vertexCount ≤ 65535`. **Accept:** `bad-index-out-of-range` errors with the offending value. **Partly** (`ef3bc2cbf`): the production check landed with `GLTF-063` — every decoded index is proved `< POSITION.count` before `ComputeTangentsEXT` or the packing loop sees it, and the error names the offending value, its position and the vertex count. Asserted on a hand-authored accessor; the `bad-index-out-of-range` **corpus fixture** the acceptance names does not exist yet, so the row stays open. |
 | GLTF-069 | 16- vs 32-bit index selection rule | ⬜ | GLTF-068 | `use32BitIndices = vertexCount > 65535`. **Accept:** documented and tested at both sides of the boundary. |
 | GLTF-070 | Record the "always materialise an index buffer" decision | ⬜ | GLTF-067 | Keeps the GPU layer uniform. **Accept:** decision documented and tested. |
-| GLTF-071 | **[P0] Read `prim.type`; never silently reinterpret** | 🐛 | GLTF-063 | `cgltf_primitive_type` has **0 occurrences**; `f4` (strip) and `f12` (points) both decoded as triangle lists. **Accept:** every mode is classified; **critical path.** |
-| GLTF-072 | Implement the §10.1 per-mode policy | 🐛 | GLTF-071 | Pass through `TRIANGLES`; convert `TRIANGLE_STRIP`/`TRIANGLE_FAN` to a triangle list at import; carry `LINES`/`LINE_STRIP`; convert `LINE_LOOP`; `POINTS` via CNAEXT or an explicit error. **Accept:** all seven `mode-*` fixtures decode to the manifest's triangle/line/point list. |
+| GLTF-071 | **[P0] Read `prim.type`; never silently reinterpret** | ✔ | GLTF-063 | `cgltf_primitive_type` has **0 occurrences**; `f4` (strip) and `f12` (points) both decoded as triangle lists. **Accept:** every mode is classified; **critical path.** **Done** (`07312274e`): `PrimitiveTopology` + `ClassifyPrimitiveTopology`/`PrimitiveTopologyName`/`PrimitiveTopologyMode`/`IsPrimitiveTopologySupported`, carried on `MeshOut::topology`. All seven modes classify by number and by specification name; a mode outside 0…6 is rejected rather than assumed. `TRIANGLES` imports byte-identically to before, including the very common no-`mode`-key case. Every other topology is rejected by `ExtractMesh` with its mode named by number and name, and **no index list reaches the `numIndices / 3` path at all**. **D5 → `partially-remediated`**: silent corruption is gone, but the row's own scope ends at classification — `GLTF-072` still owns conversion, so `f4`/`f12` do not import. |
+| GLTF-072 | Implement the §10.1 per-mode policy | 🐛 | GLTF-071 | Pass through `TRIANGLES`; convert `TRIANGLE_STRIP`/`TRIANGLE_FAN` to a triangle list at import; carry `LINES`/`LINE_STRIP`; convert `LINE_LOOP`; `POINTS` via CNAEXT or an explicit error. **Accept:** all seven `mode-*` fixtures decode to the manifest's triangle/line/point list. **Still open.** `GLTF-071` supplies the classification and the never-reinterpret guarantee this builds on; today `IsPrimitiveTopologySupported` returns true for `TRIANGLES` alone and the other six are rejected. Closing this task means widening that predicate *together with* the conversion each mode needs, flipping D5 to `fixed`, and giving `mode-triangle-strip`/`mode-points` their L5 goldens. |
 | GLTF-073 | Carry primitive type on `ModelMeshPart` | ⬜ | GLTF-072, GLTF-025 | XNA already has `PrimitiveType` at the device level. **Accept:** a line-mode fixture draws as lines on `OPENGLES3`. |
 | GLTF-074 | Strip→list conversion preserves winding | ⬜ | GLTF-072 | Odd triangles in a strip have reversed winding. **Accept:** `mode-triangle-strip` L3 index list equals the manifest exactly, including the swap on odd triangles. |
 | GLTF-075 | Fan→list conversion | ⬜ | GLTF-072 | **Accept:** `mode-triangle-fan` matches the manifest. |
