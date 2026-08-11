@@ -229,6 +229,44 @@
       ]
     }
   },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 32,
+        "vertexCount": 4,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 24,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "sparse-indices.vb.bin",
+        "vertexBufferBytes": 128,
+        "vertexBufferSha256": "442269e699a11f1506533dffb1337bf68b4df12de71b7ead6e7b52c508ce748b",
+        "indexElementSize": 2,
+        "indexCount": 6,
+        "indexBufferFile": "sparse-indices.ib.bin",
+        "indexBufferBytes": 12,
+        "indexBufferSha256": "4a16b824acb5d55f3f9fcaca42323d856db13089fdde0166ae1699c89a2710b0",
+        "topology": "TRIANGLES",
+        "primitiveCount": 2
+      }
+    ]
+  },
   "defects": [
     {
       "id": "D4",

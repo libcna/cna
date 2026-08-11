@@ -323,5 +323,43 @@
       ]
     }
   },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 1,
+        "primitive": 0,
+        "stride": 32,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 24,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "scene-default-selection.vb.bin",
+        "vertexBufferBytes": 96,
+        "vertexBufferSha256": "dd4f3226fd167fe18f1885b24b67df1350c23d331b60c2bab067eda8a092de02",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "scene-default-selection.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
   "defects": []
 }

@@ -444,8 +444,8 @@
   "files": [
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 9613,
-      "sha256": "e3fd2de87a96ddf09049b81a454732defa42b0b5403677e4f868a1b38722b96f"
+      "bytes": 10615,
+      "sha256": "4ca62e4feb2ceb9bb615a3a6d21226a5924e88df734c5ffbdc68f0e353da79ac"
     },
     {
       "path": "anim-rigid-node.glb",
@@ -458,9 +458,19 @@
       "sha256": "8df88459512cc1217c6733421bd5ab476fd313dbc70a52ea7b20ae1793aab2d4"
     },
     {
+      "path": "anim-rigid-node.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-rigid-node.vb.bin",
+      "bytes": 96,
+      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+    },
+    {
       "path": "interleaved-position-normal.expected.json",
-      "bytes": 4980,
-      "sha256": "95bbb02139792a191b6bdfaa885ee3333e475744908d205770083bac22fb7398"
+      "bytes": 6006,
+      "sha256": "667f6db5a82271756dc3198e55a9ce165d0b5ca519c452a6b2dad759c93ee4be"
     },
     {
       "path": "interleaved-position-normal.glb",
@@ -473,9 +483,19 @@
       "sha256": "3a3f951e63a7b9af458208e34b5304e2c0abc036a5020425d04aacec3f73edea"
     },
     {
+      "path": "interleaved-position-normal.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "interleaved-position-normal.vb.bin",
+      "bytes": 96,
+      "sha256": "1867d16f24e644ed1348c0f15264de12581a1a1e16d37832df78517a495c0c90"
+    },
+    {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 7626,
-      "sha256": "5e984f0ed439b54f9e94b52959a662d58ad4feef7b7d041bb3f93e13ee595a01"
+      "bytes": 8638,
+      "sha256": "4ff8335b1b8877e28ce6e0d9e988ef21fb763635f1cba28f78135198a2fc36fe"
     },
     {
       "path": "mat-factor-only-gold.glb",
@@ -488,9 +508,19 @@
       "sha256": "3fe8a6902cfb077690e316c7131c9b12fb9462d53e1d257d67e80a44b17e292a"
     },
     {
+      "path": "mat-factor-only-gold.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-factor-only-gold.vb.bin",
+      "bytes": 96,
+      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+    },
+    {
       "path": "mode-points.expected.json",
-      "bytes": 5805,
-      "sha256": "4c6dc6adbfab7f6d774830a54eb0c15f1c55441c1c652cb0346ce73daa3c4764"
+      "bytes": 6124,
+      "sha256": "863c46f67766350ab44097838acd77c9d613d4bc0708099afeb6d5851b58275c"
     },
     {
       "path": "mode-points.glb",
@@ -504,8 +534,8 @@
     },
     {
       "path": "mode-triangle-strip.expected.json",
-      "bytes": 6455,
-      "sha256": "ab42771825a19a4a79437b41be8c18fae51a07b5c4b8f1481f033c4960597a98"
+      "bytes": 6747,
+      "sha256": "89a11e584068d97dbdd42e849b63dcd2661774859d13e6079bda159fef07cfcf"
     },
     {
       "path": "mode-triangle-strip.glb",
@@ -519,8 +549,8 @@
     },
     {
       "path": "normalized-u8-color.expected.json",
-      "bytes": 5114,
-      "sha256": "7b49fdf0ed8b2defa4b92d3bb3d29b7e2dab0766799ede1b70bdbd0877aee2e1"
+      "bytes": 6122,
+      "sha256": "5c870099c047ff691f18476a434a36efc1d466e1ac329f8db5f3a97bb98f900e"
     },
     {
       "path": "normalized-u8-color.glb",
@@ -533,9 +563,19 @@
       "sha256": "15b4b7ca164a16c8704d92fe084de922d93bcfcae03a5a281c928cdbe8459cb4"
     },
     {
+      "path": "normalized-u8-color.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "normalized-u8-color.vb.bin",
+      "bytes": 72,
+      "sha256": "a9d7469337c7f09463242302b16a6522e3a31f0a1df6ac18047baf83a733de70"
+    },
+    {
       "path": "scene-default-selection.expected.json",
-      "bytes": 6540,
-      "sha256": "52b28d01e1f8e8e12a8cef15ceca098928ff5ef9b08302df7e7361ccdd92f616"
+      "bytes": 7558,
+      "sha256": "42232cbc9186c497c265760e93a1ae303e9c861a7c94e218aa12c24af5c88951"
     },
     {
       "path": "scene-default-selection.glb",
@@ -548,9 +588,19 @@
       "sha256": "07edcf818d08c84f51c94c2c53960ad07016753c9a9500bd285c88f8f1c1f943"
     },
     {
+      "path": "scene-default-selection.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "scene-default-selection.vb.bin",
+      "bytes": 96,
+      "sha256": "dd4f3226fd167fe18f1885b24b67df1350c23d331b60c2bab067eda8a092de02"
+    },
+    {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 10030,
-      "sha256": "4bdb2b990b4e87db0a37e5f52198ed5a649d6fff97fac9fe2e33055752fd53da"
+      "bytes": 11265,
+      "sha256": "70ed98d7280f816cad06489229e7654d91550390b5aeb3c25cf78f00e967b6ab"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -563,9 +613,19 @@
       "sha256": "76897639f2681df7cb7251b84bdfb02987ec95d0c52be9adef009bbbf39ccd7e"
     },
     {
+      "path": "skin-armature-ancestor.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-armature-ancestor.vb.bin",
+      "bytes": 156,
+      "sha256": "25fbc45fe26066e3d7e194f6c1c7be32817e2182fdda49a750a69ace04e343f9"
+    },
+    {
       "path": "sparse-indices.expected.json",
-      "bytes": 6105,
-      "sha256": "bf37b1b94aeada87dd7205753033859f73adc49b708e55abd04f3a34d4027ee7"
+      "bytes": 7107,
+      "sha256": "8e5686ec5e56bfdb1e1177e3486b3e2f3e5db74de77a2dab9ba264fce4ffee9b"
     },
     {
       "path": "sparse-indices.glb",
@@ -578,9 +638,19 @@
       "sha256": "ffebfe48fb5e11be4dbcbfa8189c3241eeab34089b56f6feb29cdabf1aeec145"
     },
     {
+      "path": "sparse-indices.ib.bin",
+      "bytes": 12,
+      "sha256": "4a16b824acb5d55f3f9fcaca42323d856db13089fdde0166ae1699c89a2710b0"
+    },
+    {
+      "path": "sparse-indices.vb.bin",
+      "bytes": 128,
+      "sha256": "442269e699a11f1506533dffb1337bf68b4df12de71b7ead6e7b52c508ce748b"
+    },
+    {
       "path": "sparse-position.expected.json",
-      "bytes": 4208,
-      "sha256": "3d521123d155fe83a675d0be1c1b68abde4c6a88fe5d79e1867aa0db46db9747"
+      "bytes": 5210,
+      "sha256": "eb70d4b9e1cc1f152642dae8053e22921bfeb75655dbd32932d603f818a0d13b"
     },
     {
       "path": "sparse-position.glb",
@@ -593,9 +663,19 @@
       "sha256": "805959f472a2fcbaa1ceccb3cf71ad6e6c02b233e1f64703a7cc66efaa44ee22"
     },
     {
+      "path": "sparse-position.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "sparse-position.vb.bin",
+      "bytes": 96,
+      "sha256": "1b178445447902ef2987d3c49d9a94da26532595fc9832d499551155b5686694"
+    },
+    {
       "path": "u8-idx.expected.json",
-      "bytes": 4870,
-      "sha256": "5bffd9a04fd52101bd85c65f799c50b83cb308a415126e2ed665f4e247bca8df"
+      "bytes": 5854,
+      "sha256": "340adc9bfeb9e6bb29b445718a7fbd9fe674568d4e5c9b0c2327365a4228f852"
     },
     {
       "path": "u8-idx.glb",
@@ -608,9 +688,19 @@
       "sha256": "518e32102376578c63ec457a78bd56d1bd50f9fa083c0b0e7db05563d0c8998a"
     },
     {
+      "path": "u8-idx.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "u8-idx.vb.bin",
+      "bytes": 96,
+      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+    },
+    {
       "path": "xf-identity.expected.json",
-      "bytes": 4820,
-      "sha256": "711858250917bc8528759c9f4cc63e944d657ccd2c3ff9a6e93842a3a53c22cb"
+      "bytes": 5814,
+      "sha256": "cf14314d45a94136567a30e83cd3977e4885cdd25921223a64e1e0090c5772a4"
     },
     {
       "path": "xf-identity.glb",
@@ -623,9 +713,19 @@
       "sha256": "77a46b402d5aa10e66d592d8882bd90a761a634d450eab1fe950af91a0845998"
     },
     {
+      "path": "xf-identity.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-identity.vb.bin",
+      "bytes": 96,
+      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+    },
+    {
       "path": "xf-matrix-node.expected.json",
-      "bytes": 5926,
-      "sha256": "69f3b090687d779b30f9b224438fc680184712dcaed49000c8f3655b864719b0"
+      "bytes": 6926,
+      "sha256": "76a8c90521b7bbb2f7c7062516225d3ac402cb6a44190e71da2cb22d1fa6fffc"
     },
     {
       "path": "xf-matrix-node.glb",
@@ -638,9 +738,19 @@
       "sha256": "63c8fa2957cda6e94132430c53d2bb88ac2da97e9d202c83c40a0f53044d25bb"
     },
     {
+      "path": "xf-matrix-node.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-matrix-node.vb.bin",
+      "bytes": 96,
+      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+    },
+    {
       "path": "xf-parent-child.expected.json",
-      "bytes": 6028,
-      "sha256": "11f1b54a95e3efb26c89419ecede196674f8e9945f9933a168699384dafe7fab"
+      "bytes": 7030,
+      "sha256": "04cff8c15f1fa1f328ab6aa3c9068383761e7dba9c1d30b9692c2143d050addd"
     },
     {
       "path": "xf-parent-child.glb",
@@ -653,9 +763,19 @@
       "sha256": "ffd4d33b04f1e8141f27c3144a951a9067cf238c977503c6567f76c3a1ead5e0"
     },
     {
+      "path": "xf-parent-child.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-parent-child.vb.bin",
+      "bytes": 96,
+      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+    },
+    {
       "path": "xf-shared-mesh.expected.json",
-      "bytes": 6912,
-      "sha256": "6153b7ab0d367af14c09b9d7cf7c88ba2997720ea82c6dab1665930776e6c25b"
+      "bytes": 7912,
+      "sha256": "8afdd1a4c100839ce318f9122f9ea4d9799317dea569fa199cbb14ad81952e63"
     },
     {
       "path": "xf-shared-mesh.glb",
@@ -666,6 +786,16 @@
       "path": "xf-shared-mesh.gltf",
       "bytes": 1643,
       "sha256": "70fe801df6b872e5ce0403c74ebf7f8939d54e5e30d68c7eed51f4204e52afa8"
+    },
+    {
+      "path": "xf-shared-mesh.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-shared-mesh.vb.bin",
+      "bytes": 96,
+      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
     }
   ]
 }

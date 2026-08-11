@@ -17,7 +17,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
-from . import GENERATOR_VERSION, SPEC_PIN
+from . import GENERATOR_VERSION, SPEC_PIN, l5
 from .builder import GltfBuilder
 
 Matrix = list[float]
@@ -216,7 +216,20 @@ class Fixture:
     audit_fixture: str | None = None
     l3: dict[str, Any] = field(default_factory=dict)
     l4: dict[str, Any] = field(default_factory=dict)
+    #: The L5 golden expectation (`GLTF-007`). Left ``None`` it is derived from the fixture's own
+    #: L3 primitives, which is right for every asset CNA imports; a fixture CNA rejects sets it
+    #: explicitly to ``l5.unsupported(...)`` naming what is blocking it.
+    l5: dict[str, Any] | None = None
     defects: list[Defect] = field(default_factory=list)
+
+    def l5_expectation(self) -> tuple[dict[str, Any], dict[str, bytes]]:
+        """The ``l5`` block and the golden buffer files it references."""
+        if self.l5 is not None:
+            return self.l5, {}
+        primitives = self.l3.get("primitives", [])
+        if not primitives:
+            return l5.unsupported("the fixture declares no importable primitive", []), {}
+        return l5.buffers(self.id, primitives)
 
     def inventory(self) -> dict[str, Any]:
         """The §24.1 inventory record: one canonical id, exactly one owning group."""
@@ -246,6 +259,7 @@ class Fixture:
             "l2": {"accessors": self.builder.accessor_records},
             "l3": self.l3,
             "l4": self.l4,
+            "l5": self.l5_expectation()[0],
             "defects": [d.record() for d in self.defects],
         }
         return _clean(doc)

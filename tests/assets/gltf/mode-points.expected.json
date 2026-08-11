@@ -191,6 +191,15 @@
       ]
     }
   },
+  "l5": {
+    "supported": false,
+    "reason": "GLTF-071 rejects a POINTS primitive rather than reinterpreting it, so no vertex or index buffer is produced at all. What a point list becomes on the GPU is GLTF-072/GLTF-077's decision.",
+    "blockedBy": [
+      "GLTF-072",
+      "GLTF-077"
+    ],
+    "parts": []
+  },
   "defects": [
     {
       "id": "D5",

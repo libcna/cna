@@ -222,6 +222,14 @@
       ]
     }
   },
+  "l5": {
+    "supported": false,
+    "reason": "GLTF-071 rejects a TRIANGLE_STRIP rather than reinterpreting it, so no vertex or index buffer is produced at all. The golden arrives with the strip -> triangle-list conversion.",
+    "blockedBy": [
+      "GLTF-072"
+    ],
+    "parts": []
+  },
   "defects": [
     {
       "id": "D5",

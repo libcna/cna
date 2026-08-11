@@ -17,6 +17,7 @@ Specification: §3.7.2.1 ``meshes-overview``.
 from __future__ import annotations
 
 from ..builder import MODE_NAMES, POINTS, TRIANGLE_STRIP, UNSIGNED_SHORT, GltfBuilder
+from ..l5 import unsupported as l5_unsupported
 from ..manifest import Defect, Fixture, l3_primitive, world_positions
 from .common import QUAD_STRIP_POSITIONS
 
@@ -78,6 +79,9 @@ def mode_triangle_strip() -> Fixture:
             mesh=mesh, mesh_name="StripQuad", primitive=0, mode=TRIANGLE_STRIP,
             positions=QUAD_STRIP_POSITIONS, indices=[0, 1, 2, 3])]},
         l4=world_positions(b, {mesh: list(QUAD_STRIP_POSITIONS)}),
+        l5=l5_unsupported("GLTF-071 rejects a TRIANGLE_STRIP rather than reinterpreting it, so no "
+                          "vertex or index buffer is produced at all. The golden arrives with the "
+                          "strip -> triangle-list conversion.", ["GLTF-072"]),
         defects=[Defect(
             id="D5", owner="GLTF-MESH", first_divergent_layer="L3",
             summary="primitive.mode was never read, so a TRIANGLE_STRIP was silently reinterpreted "
@@ -134,6 +138,9 @@ def mode_points() -> Fixture:
             mesh=mesh, mesh_name="PointCloud", primitive=0, mode=POINTS,
             positions=QUAD_STRIP_POSITIONS, indices=None)]},
         l4=world_positions(b, {mesh: list(QUAD_STRIP_POSITIONS)}),
+        l5=l5_unsupported("GLTF-071 rejects a POINTS primitive rather than reinterpreting it, so "
+                          "no vertex or index buffer is produced at all. What a point list becomes "
+                          "on the GPU is GLTF-072/GLTF-077's decision.", ["GLTF-072", "GLTF-077"]),
         defects=[Defect(
             id="D5", owner="GLTF-MESH", first_divergent_layer="L3",
             summary="primitive.mode was never read, so a POINTS primitive became a triangle list "

@@ -61,6 +61,9 @@ def emit(fixtures: list[Fixture]) -> dict[str, bytes]:
         files[f"{fixture.id}.gltf"] = fixture.builder.to_gltf_text().encode("utf-8")
         files[f"{fixture.id}.glb"] = fixture.builder.to_glb_bytes()
         files[f"{fixture.id}.expected.json"] = dumps(fixture.expectation()).encode("utf-8")
+        # The L5 goldens (GLTF-007): the vertex/index bytes CNA must hand to the GPU layer, as
+        # files rather than as JSON, because a byte comparison is the whole point of the layer.
+        files.update(fixture.l5_expectation()[1])
     files["manifest.json"] = dumps(corpus_manifest(fixtures, files)).encode("utf-8")
     return files
 
