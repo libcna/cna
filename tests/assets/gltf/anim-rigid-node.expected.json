@@ -1,0 +1,435 @@
+{
+  "id": "anim-rigid-node",
+  "description": "A single LINEAR rotation channel driving an unskinned mesh node through a quarter turn about +Z. There is no skin anywhere in the file, so the channel targets a plain scene node -- the ordinary case for a door, a turntable or a clock hand.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "animations",
+    "transformations"
+  ],
+  "inventory": {
+    "id": "anim-rigid-node",
+    "owningGroup": "animation",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3",
+      "L4"
+    ],
+    "features": [
+      "animation.channel targeting a non-joint node",
+      "rotation path",
+      "LINEAR interpolation",
+      "no skin"
+    ],
+    "auditFixture": "f7"
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "skinCount": 0,
+    "animationCount": 1,
+    "accessorCount": 5,
+    "bufferViewCount": 5,
+    "bufferCount": 1,
+    "bufferByteLength": 120,
+    "extensionsUsed": [],
+    "extensionsRequired": []
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 72,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "animation input (time)",
+        "type": "SCALAR",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 80,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 4,
+        "usage": "animation output (rotation)",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 4,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 88,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.7071067811865476,
+          0.7071067811865476
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "RigidTri",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "SpinningMesh",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    },
+    "animation": {
+      "animationCount": 1,
+      "clipNames": [
+        "Spin"
+      ],
+      "duration": 1.0,
+      "channels": [
+        {
+          "animation": 0,
+          "channel": 0,
+          "targetNode": 0,
+          "targetNodeName": "SpinningMesh",
+          "path": "rotation",
+          "interpolation": "LINEAR",
+          "targetsSkinJoint": false,
+          "times": [
+            0.0,
+            1.0
+          ],
+          "values": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.7071067811865476,
+              0.7071067811865476
+            ]
+          ]
+        }
+      ],
+      "posesAtKeyTimes": [
+        {
+          "time": 0.0,
+          "nodeLocalColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "worldPositions": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ]
+          ]
+        },
+        {
+          "time": 1.0,
+          "nodeLocalColumnMajor": [
+            -2.220446049250313e-16,
+            1.0000000000000002,
+            0.0,
+            0.0,
+            -1.0000000000000002,
+            -2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "worldPositions": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -2.220446049250313e-16,
+              1.0000000000000002,
+              0.0
+            ],
+            [
+              -1.0000000000000002,
+              -2.220446049250313e-16,
+              0.0
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "defects": [
+    {
+      "id": "D6",
+      "summary": "Rigid (unskinned) node animation is silently dropped. ExtractClips resolves every channel target against the skin's joint set, so a channel targeting an ordinary mesh node is discarded with no warning and no clip is emitted.",
+      "firstDivergentLayer": "L4",
+      "divergentFields": [
+        "animation"
+      ],
+      "owner": "GLTF-ANIMATION",
+      "owningTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-284"
+      ],
+      "status": "known-failing",
+      "currentActual": {
+        "importedClipCount": 0,
+        "warningEmitted": false,
+        "clipExtractionGatedOnSkin": true,
+        "clipCountIfExtractClipsWereCalled": 1,
+        "trackCountIfExtractClipsWereCalled": 0,
+        "note": "The converter calls ExtractClips only for a skinned group, so with no skin the .cnj has no 'animations' key at all. Even when called, ExtractClips resolves the channel target against the joint set and skips it, producing a clip with zero tracks. Fixing this needs a real node hierarchy to animate, which is why D6 depends on the Phase 5 architecture rather than on the animation layer alone."
+      }
+    }
+  ]
+}

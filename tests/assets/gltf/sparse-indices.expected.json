@@ -1,0 +1,259 @@
+{
+  "id": "sparse-indices",
+  "description": "A sparse index accessor whose override turns a degenerate second triangle into a real one. L2 passes (the data is readable and cgltf resolves it); L3 fails, which localises D4 precisely to CNA's index-reading call.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "sparse-accessors",
+    "meshes-overview"
+  ],
+  "inventory": {
+    "id": "sparse-indices",
+    "owningGroup": "accessors",
+    "referencingGroups": [
+      "topology"
+    ],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3"
+    ],
+    "features": [
+      "accessor.sparse on indices",
+      "UNSIGNED_SHORT indices"
+    ],
+    "auditFixture": "f3"
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 2,
+    "bufferViewCount": 4,
+    "bufferCount": 1,
+    "bufferByteLength": 66,
+    "extensionsUsed": [],
+    "extensionsRequired": []
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 6,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": true,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 48,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2,
+          0,
+          2,
+          3
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "SparseIndexQuad",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 4,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2,
+          0,
+          2,
+          3
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            2,
+            3
+          ]
+        ],
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "MeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    }
+  },
+  "defects": [
+    {
+      "id": "D4",
+      "summary": "A sparse index accessor decodes to all zeros. cgltf_accessor_read_index returns 0 when accessor->is_sparse or accessor->buffer_view is null, with no error channel, and ExtractMesh checks neither.",
+      "firstDivergentLayer": "L3",
+      "divergentFields": [
+        "indices",
+        "triangles"
+      ],
+      "owner": "GLTF-ACCESSOR",
+      "owningTasks": [
+        "GLTF-063"
+      ],
+      "status": "known-failing",
+      "currentActual": {
+        "indices": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "note": "Every index reads back as 0, so the quad collapses to a single degenerate point. The L2 dump of the same accessor is correct, which is the evidence that the accessor layer is not at fault."
+      }
+    }
+  ]
+}

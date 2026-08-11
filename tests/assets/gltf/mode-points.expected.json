@@ -1,0 +1,229 @@
+{
+  "id": "mode-points",
+  "description": "A non-indexed POINTS primitive with four vertices. A conforming importer draws four points and no triangles at all.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "meshes-overview"
+  ],
+  "inventory": {
+    "id": "mode-points",
+    "owningGroup": "topology",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3"
+    ],
+    "features": [
+      "primitive.mode = POINTS",
+      "non-indexed primitive",
+      "implicit index range"
+    ],
+    "auditFixture": "f12"
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 1,
+    "bufferViewCount": 1,
+    "bufferCount": 1,
+    "bufferByteLength": 48,
+    "extensionsUsed": [],
+    "extensionsRequired": []
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "PointCloud",
+        "primitive": 0,
+        "mode": 0,
+        "modeName": "POINTS",
+        "indexed": false,
+        "vertexCount": 4,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "triangles": [],
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "MeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    }
+  },
+  "defects": [
+    {
+      "id": "D5",
+      "summary": "primitive.mode is never read, so a POINTS primitive becomes a triangle list built from its own implicit index range.",
+      "firstDivergentLayer": "L3",
+      "divergentFields": [
+        "mode",
+        "modeName",
+        "topologyCarried",
+        "triangles"
+      ],
+      "owner": "GLTF-MESH",
+      "owningTasks": [
+        "GLTF-071"
+      ],
+      "status": "known-failing",
+      "currentActual": {
+        "indices": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "topologyCarried": false,
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "note": "Implicit indices [0,1,2,3] are generated correctly for the non-indexed primitive; the defect is that they are then interpreted as TRIANGLES, yielding one triangle where the expected output is four points and zero triangles."
+      }
+    }
+  ]
+}

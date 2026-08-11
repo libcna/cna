@@ -1,0 +1,648 @@
+{
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003",
+    "regenerate": "PYTHONPATH=tools python3 -m gltf_fixtures --out tests/assets/gltf"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "distinctAssetCount": 15,
+  "owningGroupCounts": {
+    "accessors": 3,
+    "component-types": 2,
+    "topology": 2,
+    "transforms": 4,
+    "materials": 1,
+    "skinning": 1,
+    "animation": 1,
+    "scenes": 1
+  },
+  "promotedAuditFixtures": {
+    "f1": "xf-shared-mesh",
+    "f2": "xf-parent-child",
+    "f3": "sparse-indices",
+    "f4": "mode-triangle-strip",
+    "f5": "interleaved-position-normal",
+    "f6": "sparse-position",
+    "f7": "anim-rigid-node",
+    "f8": "mat-factor-only-gold",
+    "f9": "skin-armature-ancestor",
+    "f10": "normalized-u8-color",
+    "f11": "u8-idx",
+    "f12": "mode-points",
+    "f13": "xf-matrix-node",
+    "f14": "scene-default-selection"
+  },
+  "defectLedger": [
+    {
+      "id": "D1",
+      "summary": "glTF node TRS is discarded for every mesh instance -- MeshGroup carries no cgltf_node and no matrix, so every primitive is emitted mesh-local with an identity bone transform.",
+      "owner": "GLTF-TRANSFORM",
+      "owningTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-115"
+      ],
+      "firstDivergentLayer": "L4",
+      "status": "known-failing",
+      "fixtures": [
+        "xf-shared-mesh"
+      ]
+    },
+    {
+      "id": "D2",
+      "summary": "Parent-to-child transform composition is discarded: no ancestry is walked for a mesh instance at all.",
+      "owner": "GLTF-TRANSFORM",
+      "owningTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-115"
+      ],
+      "firstDivergentLayer": "L4",
+      "status": "known-failing",
+      "fixtures": [
+        "xf-parent-child"
+      ]
+    },
+    {
+      "id": "D3",
+      "summary": "node.matrix is discarded, by the same mechanism as D1/D2 -- the import data model has nowhere to put it.",
+      "owner": "GLTF-TRANSFORM",
+      "owningTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-115"
+      ],
+      "firstDivergentLayer": "L4",
+      "status": "known-failing",
+      "fixtures": [
+        "xf-matrix-node"
+      ]
+    },
+    {
+      "id": "D4",
+      "summary": "A sparse index accessor decodes to all zeros. cgltf_accessor_read_index returns 0 when accessor->is_sparse or accessor->buffer_view is null, with no error channel, and ExtractMesh checks neither.",
+      "owner": "GLTF-ACCESSOR",
+      "owningTasks": [
+        "GLTF-063"
+      ],
+      "firstDivergentLayer": "L3",
+      "status": "known-failing",
+      "fixtures": [
+        "sparse-indices"
+      ]
+    },
+    {
+      "id": "D5",
+      "summary": "primitive.mode is never read. MeshOut carries no topology field at all, so a TRIANGLE_STRIP is silently reinterpreted as a triangle list.",
+      "owner": "GLTF-MESH",
+      "owningTasks": [
+        "GLTF-071"
+      ],
+      "firstDivergentLayer": "L3",
+      "status": "known-failing",
+      "fixtures": [
+        "mode-triangle-strip",
+        "mode-points"
+      ]
+    },
+    {
+      "id": "D6",
+      "summary": "Rigid (unskinned) node animation is silently dropped. ExtractClips resolves every channel target against the skin's joint set, so a channel targeting an ordinary mesh node is discarded with no warning and no clip is emitted.",
+      "owner": "GLTF-ANIMATION",
+      "owningTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-284"
+      ],
+      "firstDivergentLayer": "L4",
+      "status": "known-failing",
+      "fixtures": [
+        "anim-rigid-node"
+      ]
+    },
+    {
+      "id": "D7",
+      "summary": "A factor-only metallic-roughness material is downgraded to BasicEffect and NOT ONE material property survives. MeshOut has no field at all for baseColorFactor, alphaMode, alphaCutoff or doubleSided, and the three fields it does have -- metallicFactor, roughnessFactor, emissiveFactor -- are only assigned inside an `if (usePbr)` guard, so a factor-only material leaves them at their MeshOut defaults.",
+      "owner": "GLTF-MATERIAL",
+      "owningTasks": [
+        "GLTF-217",
+        "GLTF-228",
+        "GLTF-229"
+      ],
+      "firstDivergentLayer": "L3",
+      "status": "known-failing",
+      "fixtures": [
+        "mat-factor-only-gold"
+      ]
+    },
+    {
+      "id": "D8",
+      "summary": "BuildSkeleton walks parent links only inside the skin's own joint set, so the armature transform above the joints is dropped from the bind pose while the authored inverseBindMatrices still contain it. The joint matrix ends up multiplied by the inverse of the dropped transform.",
+      "owner": "GLTF-SKIN",
+      "owningTasks": [
+        "GLTF-245",
+        "GLTF-247",
+        "GLTF-248",
+        "GLTF-260"
+      ],
+      "firstDivergentLayer": "L4",
+      "status": "known-failing",
+      "fixtures": [
+        "skin-armature-ancestor"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "interleaved-position-normal",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "bufferView.byteStride",
+        "bufferView.byteOffset",
+        "accessor.byteOffset",
+        "interleaved attributes"
+      ],
+      "auditFixture": "f5"
+    },
+    {
+      "id": "sparse-position",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "accessor.sparse",
+        "absent base bufferView",
+        "zero-initialised base array"
+      ],
+      "auditFixture": "f6"
+    },
+    {
+      "id": "sparse-indices",
+      "owningGroup": "accessors",
+      "referencingGroups": [
+        "topology"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "accessor.sparse on indices",
+        "UNSIGNED_SHORT indices"
+      ],
+      "auditFixture": "f3"
+    },
+    {
+      "id": "u8-idx",
+      "owningGroup": "component-types",
+      "referencingGroups": [
+        "accessors"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "UNSIGNED_BYTE indices"
+      ],
+      "auditFixture": "f11"
+    },
+    {
+      "id": "normalized-u8-color",
+      "owningGroup": "component-types",
+      "referencingGroups": [
+        "accessors"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "normalized UNSIGNED_BYTE",
+        "COLOR_0 VEC4",
+        "vertex colour round-trip"
+      ],
+      "auditFixture": "f10"
+    },
+    {
+      "id": "mode-triangle-strip",
+      "owningGroup": "topology",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "primitive.mode = TRIANGLE_STRIP",
+        "strip winding"
+      ],
+      "auditFixture": "f4"
+    },
+    {
+      "id": "mode-points",
+      "owningGroup": "topology",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "primitive.mode = POINTS",
+        "non-indexed primitive",
+        "implicit index range"
+      ],
+      "auditFixture": "f12"
+    },
+    {
+      "id": "xf-identity",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node without transform",
+        "single scene root"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-shared-mesh",
+      "owningGroup": "transforms",
+      "referencingGroups": [
+        "scenes"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node.translation",
+        "mesh instancing",
+        "two scene roots"
+      ],
+      "auditFixture": "f1"
+    },
+    {
+      "id": "xf-parent-child",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node.scale",
+        "node.translation",
+        "parent-child composition"
+      ],
+      "auditFixture": "f2"
+    },
+    {
+      "id": "xf-matrix-node",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node.matrix",
+        "column-major matrix layout"
+      ],
+      "auditFixture": "f13"
+    },
+    {
+      "id": "mat-factor-only-gold",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "pbrMetallicRoughness factors",
+        "baseColorFactor",
+        "alphaMode BLEND",
+        "doubleSided",
+        "no texture maps"
+      ],
+      "auditFixture": "f8"
+    },
+    {
+      "id": "skin-armature-ancestor",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "skin.joints",
+        "skin.inverseBindMatrices",
+        "armature ancestor above the joint set",
+        "JOINTS_0 / WEIGHTS_0"
+      ],
+      "auditFixture": "f9"
+    },
+    {
+      "id": "anim-rigid-node",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "animation.channel targeting a non-joint node",
+        "rotation path",
+        "LINEAR interpolation",
+        "no skin"
+      ],
+      "auditFixture": "f7"
+    },
+    {
+      "id": "scene-default-selection",
+      "owningGroup": "scenes",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "scene != 0",
+        "unreferenced decoy mesh",
+        "multiple scenes"
+      ],
+      "auditFixture": "f14"
+    }
+  ],
+  "files": [
+    {
+      "path": "anim-rigid-node.expected.json",
+      "bytes": 9469,
+      "sha256": "7631461cbf44613ed5dfbde952b5cc4a61e9cc6aa1c22e1adcb074b00d892186"
+    },
+    {
+      "path": "anim-rigid-node.glb",
+      "bytes": 1232,
+      "sha256": "68b8d60e1465d11492574064510d289a786fb4514232023340852c5c035f8df5"
+    },
+    {
+      "path": "anim-rigid-node.gltf",
+      "bytes": 2281,
+      "sha256": "8df88459512cc1217c6733421bd5ab476fd313dbc70a52ea7b20ae1793aab2d4"
+    },
+    {
+      "path": "interleaved-position-normal.expected.json",
+      "bytes": 4980,
+      "sha256": "95bbb02139792a191b6bdfaa885ee3333e475744908d205770083bac22fb7398"
+    },
+    {
+      "path": "interleaved-position-normal.glb",
+      "bytes": 796,
+      "sha256": "95f9b0e757827e47934ec9eccded2ed13bd5521623ff09e0a72304e8b886252f"
+    },
+    {
+      "path": "interleaved-position-normal.gltf",
+      "bytes": 1426,
+      "sha256": "3a3f951e63a7b9af458208e34b5304e2c0abc036a5020425d04aacec3f73edea"
+    },
+    {
+      "path": "mat-factor-only-gold.expected.json",
+      "bytes": 7483,
+      "sha256": "b50f28d01c065e1f6b84993161d18d26ccf678cde2e8edcd21a871a0a3b9c431"
+    },
+    {
+      "path": "mat-factor-only-gold.glb",
+      "bytes": 1008,
+      "sha256": "cfd53287b7c675b3fd84f5785072cd4bdae3ee07b6725d2a2329485c07f14f3d"
+    },
+    {
+      "path": "mat-factor-only-gold.gltf",
+      "bytes": 1840,
+      "sha256": "3fe8a6902cfb077690e316c7131c9b12fb9462d53e1d257d67e80a44b17e292a"
+    },
+    {
+      "path": "mode-points.expected.json",
+      "bytes": 4600,
+      "sha256": "6d9b0aee8a976d1ddbe8d01c0e41638b0f6590b5b1666f87c1dad32998b0c9a2"
+    },
+    {
+      "path": "mode-points.glb",
+      "bytes": 520,
+      "sha256": "3a20c9956b556159abde8853caf483f4679c5eb7f55b87f2ad0d359c1fe2b91e"
+    },
+    {
+      "path": "mode-points.gltf",
+      "bytes": 972,
+      "sha256": "711fb757e52d663a5cd0ca8f4d12ce19420f4f59403fd165e1af55f621bcd01a"
+    },
+    {
+      "path": "mode-triangle-strip.expected.json",
+      "bytes": 5264,
+      "sha256": "1f6cf3fcfafcb97d2c19f011ea6c918ec072e39fba4632de95923e5554c00335"
+    },
+    {
+      "path": "mode-triangle-strip.glb",
+      "bytes": 644,
+      "sha256": "c2cee08e979219648ab43227010aa0efe749377e27bdb28dce00a17472c49e52"
+    },
+    {
+      "path": "mode-triangle-strip.gltf",
+      "bytes": 1191,
+      "sha256": "33010660904ef40bc2d1d58cdf6a56a2f12e1a93b85b2507a86f651269afe1dc"
+    },
+    {
+      "path": "normalized-u8-color.expected.json",
+      "bytes": 5114,
+      "sha256": "7b49fdf0ed8b2defa4b92d3bb3d29b7e2dab0766799ede1b70bdbd0877aee2e1"
+    },
+    {
+      "path": "normalized-u8-color.glb",
+      "bytes": 780,
+      "sha256": "c4e21b141b4edd2f1bf0581fd7dcc10ec283358091d263b1e7c65dff8a636fbd"
+    },
+    {
+      "path": "normalized-u8-color.gltf",
+      "bytes": 1419,
+      "sha256": "15b4b7ca164a16c8704d92fe084de922d93bcfcae03a5a281c928cdbe8459cb4"
+    },
+    {
+      "path": "scene-default-selection.expected.json",
+      "bytes": 6540,
+      "sha256": "52b28d01e1f8e8e12a8cef15ceca098928ff5ef9b08302df7e7361ccdd92f616"
+    },
+    {
+      "path": "scene-default-selection.glb",
+      "bytes": 1396,
+      "sha256": "9b06fa0262b894337007f7db41ddd22ac05531267788576df8d1b3a5b0dd9940"
+    },
+    {
+      "path": "scene-default-selection.gltf",
+      "bytes": 2571,
+      "sha256": "07edcf818d08c84f51c94c2c53960ad07016753c9a9500bd285c88f8f1c1f943"
+    },
+    {
+      "path": "skin-armature-ancestor.expected.json",
+      "bytes": 9891,
+      "sha256": "4097f131ea3d4daab4b99bac66758c52fbf9a86595956443db0262ada18a7833"
+    },
+    {
+      "path": "skin-armature-ancestor.glb",
+      "bytes": 1272,
+      "sha256": "65cf35b47d9fcb8fc981df21c124d902e8ef0f89effff46b4886598e03609d1f"
+    },
+    {
+      "path": "skin-armature-ancestor.gltf",
+      "bytes": 2286,
+      "sha256": "76897639f2681df7cb7251b84bdfb02987ec95d0c52be9adef009bbbf39ccd7e"
+    },
+    {
+      "path": "sparse-indices.expected.json",
+      "bytes": 5306,
+      "sha256": "d67e57ef3a179a57438fe0f2fb1056d634ccd44e1a0937c9b20777bc6e9695b3"
+    },
+    {
+      "path": "sparse-indices.glb",
+      "bytes": 876,
+      "sha256": "48e3c1bc5067521c7063ef2cc93d745e5e32a48bd90d0b5f5b767b337d7c71c2"
+    },
+    {
+      "path": "sparse-indices.gltf",
+      "bytes": 1614,
+      "sha256": "ffebfe48fb5e11be4dbcbfa8189c3241eeab34089b56f6feb29cdabf1aeec145"
+    },
+    {
+      "path": "sparse-position.expected.json",
+      "bytes": 4208,
+      "sha256": "3d521123d155fe83a675d0be1c1b68abde4c6a88fe5d79e1867aa0db46db9747"
+    },
+    {
+      "path": "sparse-position.glb",
+      "bytes": 780,
+      "sha256": "d4d91705e464d7dd2eb5a315b552d6e5880400f86b6b749393fe02a6a137cc7b"
+    },
+    {
+      "path": "sparse-position.gltf",
+      "bytes": 1465,
+      "sha256": "805959f472a2fcbaa1ceccb3cf71ad6e6c02b233e1f64703a7cc66efaa44ee22"
+    },
+    {
+      "path": "u8-idx.expected.json",
+      "bytes": 4870,
+      "sha256": "5bffd9a04fd52101bd85c65f799c50b83cb308a415126e2ed665f4e247bca8df"
+    },
+    {
+      "path": "u8-idx.glb",
+      "bytes": 784,
+      "sha256": "bc113f4b0134a3d15785e47be157d26c5319f486123ef0d28f43d6e6e7fdd5fb"
+    },
+    {
+      "path": "u8-idx.gltf",
+      "bytes": 1424,
+      "sha256": "518e32102376578c63ec457a78bd56d1bd50f9fa083c0b0e7db05563d0c8998a"
+    },
+    {
+      "path": "xf-identity.expected.json",
+      "bytes": 4820,
+      "sha256": "711858250917bc8528759c9f4cc63e944d657ccd2c3ff9a6e93842a3a53c22cb"
+    },
+    {
+      "path": "xf-identity.glb",
+      "bytes": 780,
+      "sha256": "dee0201a5b419979a6f8edcb1e431a72c0ce0bbebf8a7e23063be472a5cc471d"
+    },
+    {
+      "path": "xf-identity.gltf",
+      "bytes": 1421,
+      "sha256": "77a46b402d5aa10e66d592d8882bd90a761a634d450eab1fe950af91a0845998"
+    },
+    {
+      "path": "xf-matrix-node.expected.json",
+      "bytes": 5716,
+      "sha256": "88b03d8bf342ec94908f1fd923dc36cb0da2f77d533a3a1fe46551b04694ff40"
+    },
+    {
+      "path": "xf-matrix-node.glb",
+      "bytes": 832,
+      "sha256": "59a5e84fcf756354bf0897914b2f55f91d5b414d074957318a703c717f936aa8"
+    },
+    {
+      "path": "xf-matrix-node.gltf",
+      "bytes": 1631,
+      "sha256": "63c8fa2957cda6e94132430c53d2bb88ac2da97e9d202c83c40a0f53044d25bb"
+    },
+    {
+      "path": "xf-parent-child.expected.json",
+      "bytes": 5818,
+      "sha256": "da70fdcf6b5ec59bb6e64aba0b07f86c00a22fd27b8c277f00a43eacf278ff8c"
+    },
+    {
+      "path": "xf-parent-child.glb",
+      "bytes": 856,
+      "sha256": "a849b84015c31d18c4eef7509f27250b93b7ab3fd42cd5f603f4ab9ea2438454"
+    },
+    {
+      "path": "xf-parent-child.gltf",
+      "bytes": 1620,
+      "sha256": "ffd4d33b04f1e8141f27c3144a951a9067cf238c977503c6567f76c3a1ead5e0"
+    },
+    {
+      "path": "xf-shared-mesh.expected.json",
+      "bytes": 6702,
+      "sha256": "dcf25adf1b7b38c8d5e1651475f872f31be942e6694e3a6b17f8c348e12fea9a"
+    },
+    {
+      "path": "xf-shared-mesh.glb",
+      "bytes": 884,
+      "sha256": "01714fa4a7f945bdcc59208c5d644f2b90fd3ce69de1b341c1fcfbd7e5660424"
+    },
+    {
+      "path": "xf-shared-mesh.gltf",
+      "bytes": 1643,
+      "sha256": "70fe801df6b872e5ce0403c74ebf7f8939d54e5e30d68c7eed51f4204e52afa8"
+    }
+  ]
+}

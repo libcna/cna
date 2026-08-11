@@ -1,0 +1,483 @@
+{
+  "id": "skin-armature-ancestor",
+  "description": "A single joint whose global transform comes entirely from a translated armature node above it, with a correctly authored inverse bind matrix. The correct joint matrix is the identity; CNA produces translate(0,-100,0).",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "skins",
+    "joint-hierarchy",
+    "skinned-mesh-attributes"
+  ],
+  "inventory": {
+    "id": "skin-armature-ancestor",
+    "owningGroup": "skinning",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3",
+      "L4"
+    ],
+    "features": [
+      "skin.joints",
+      "skin.inverseBindMatrices",
+      "armature ancestor above the joint set",
+      "JOINTS_0 / WEIGHTS_0"
+    ],
+    "auditFixture": "f9"
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 3,
+    "meshCount": 1,
+    "materialCount": 0,
+    "skinCount": 1,
+    "animationCount": 0,
+    "accessorCount": 5,
+    "bufferViewCount": 5,
+    "bufferCount": 1,
+    "bufferByteLength": 168,
+    "extensionsUsed": [],
+    "extensionsRequired": []
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "JOINTS_0",
+        "type": "VEC4",
+        "componentType": 5121,
+        "componentTypeName": "UNSIGNED_BYTE",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "WEIGHTS_0",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 48,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 96,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "index": 4,
+        "usage": "inverseBindMatrices",
+        "type": "MAT4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 1,
+        "componentsPerElement": 16,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 4,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 104,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          -100.0,
+          0.0,
+          1.0
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "SkinnedTri",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "weights": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 2,
+        "nodeName": "SkinnedMeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    },
+    "skin": {
+      "jointCount": 1,
+      "meshNodeWorldColumnMajor": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "joints": [
+        {
+          "joint": 0,
+          "node": 0,
+          "nodeName": "Joint0",
+          "parentJoint": -1,
+          "jointGlobalColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            100.0,
+            0.0,
+            1.0
+          ],
+          "inverseBindMatrixColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            -100.0,
+            0.0,
+            1.0
+          ],
+          "jointMatrixColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      ],
+      "skinnedPositions": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "note": "jointMatrix = inverse(globalTransform(meshNode)) * globalTransform(joint) * inverseBindMatrix. Here that is I * T(0,100,0) * T(0,-100,0) = identity, so the skinned positions equal the mesh-local positions exactly."
+    }
+  },
+  "defects": [
+    {
+      "id": "D8",
+      "summary": "BuildSkeleton walks parent links only inside the skin's own joint set, so the armature transform above the joints is dropped from the bind pose while the authored inverseBindMatrices still contain it. The joint matrix ends up multiplied by the inverse of the dropped transform.",
+      "firstDivergentLayer": "L4",
+      "divergentFields": [
+        "skin"
+      ],
+      "owner": "GLTF-SKIN",
+      "owningTasks": [
+        "GLTF-245",
+        "GLTF-247",
+        "GLTF-248",
+        "GLTF-260"
+      ],
+      "status": "known-failing",
+      "currentActual": {
+        "boneCount": 1,
+        "parentIndex": -1,
+        "bindPoseLocalTranslation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inverseBindGlobalTranslation": [
+          0.0,
+          -100.0,
+          0.0
+        ],
+        "bindPoseGlobalTranslation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "skinTransformTranslation": [
+          0.0,
+          -100.0,
+          0.0
+        ],
+        "note": "bindPoseGlobal * inverseBindGlobal = I * T(0,-100,0), so every skinned vertex is displaced by -100 on Y. With a uniform scale on the armature instead of a translation, the same mechanism multiplies every vertex by the reciprocal of that scale -- the character collapses toward the origin."
+      }
+    }
+  ]
+}
