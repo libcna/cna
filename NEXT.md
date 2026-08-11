@@ -1,5 +1,62 @@
 # NEXT.md
 
+## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
+
+> Ten frozen feature lanes integrated one at a time into `11branches`, which started at exactly the
+> public `develop` head `fb3728267`. `develop` itself is untouched, no source lane was moved,
+> rebased or squashed, and every lane is merged by a real signed `--no-ff` merge commit of its
+> exact recorded SHA.
+>
+> | # | Lane | Frozen SHA | Scope |
+> |---:|---|---|---|
+> | 1 | `feature/bigcommit` | `e52b6a02b` | docs/history analysis (commit.md) |
+> | 2 | `feature/gltf` | `37f461f72` | glTF correctness |
+> | 3 | `feature/direct2dcomplete` | `fee726818` | DIRECT2D completion |
+> | 4 | `feature/asciieffect` | `b51d894b1` | ASCII renderer -> post-process effect |
+> | 5 | `feature/opengles2` | `a43adcf90` | OPENGLES2 GL profile |
+> | 6 | `feature/blend2d` | `4ee952cba` | BLEND2D renderer |
+> | 7 | `feature/fna3d` | `0e804a064` | FNA3D renderer |
+> | 8 | `feature/svgdom` | `99c8040be` | SVG_DOM renderer |
+> | 9 | `feature/openvg` | `20b840116` | OPENVG renderer |
+> | 10 | `feature/portablegl` | `14b2cc5b4` | PORTABLEGL renderer |
+>
+> **Merge order was derived, not taken from the request's list order.** The three lanes with no
+> renderer-registry contact went first (`bigcommit` has zero path overlap with anything; `gltf` and
+> `direct2dcomplete` share one file each and change no identity), so the branch was exercised
+> before any registry work. `asciieffect` — the only subtractive/structural lane — went next, so the
+> "ASCII effect exists, ASCII renderer does not" architecture was established once and then
+> *defended* at each of the six following merges, rather than being unpicked out of six
+> already-reconciled registry lines at the end. The six additive renderer lanes followed, least
+> entangled first (`opengles2` adds no implementation family and never touches
+> `modules/CMakeLists.txt`), and `portablegl` went last because its `SetRenderTarget` refactor
+> **supersedes** the inline guard `openvg` adds to the same method.
+>
+> **Renderer identity arithmetic (mechanically counted, not asserted):**
+>
+>     41  public identities at the 2026-08-10 pre-expansion promotion
+>     -1  ASCII (renderer identity removed; logic migrated to CNA::Graphics::AsciiPostProcessEffect)
+>     +6  OPENGLES2, BLEND2D, FNA3D, SVG_DOM, OPENVG, PORTABLEGL
+>     ==
+>     46  public identities   (scripts/check_renderer_identities.py: OK, both registries agree)
+>
+> Implementation families: 38 -> 42 (ascii removed; blend2d, fna3d, svg-dom, openvg, portablegl
+> added; OPENGLES2 adds none — EasyGL now backs five GL profiles instead of four).
+>
+> **Cross-lane defects fixed as integration consequences** (none of them wrong on their own lane):
+> the enum/`STRINGS`/docstring/selection-guard surfaces in `cmake/RendererSelection.cmake` were
+> regenerated from the authoritative identity table because no single lane's snapshot carried all
+> 46; `GraphicsRendererTypeTests.cpp` needed its `static_assert` at 46 and the three name arms
+> (`Fna3d`/`SvgDom`/`OpenVg`) that later lanes' snapshots did not carry; the `SVG_DOM`, `OPENVG` and
+> `PORTABLEGL` `option()`/enabled-arm/selector branches were re-grafted after list-line conflict
+> resolution dropped them; and the shared instancing suites now gate on **both**
+> `GraphicsCapability::ThreeD` (OpenVG's requirement) and `GraphicsCapability::Instancing`
+> (OPENGLES2's), since taking either lane's side alone silently un-skipped the other renderer.
+>
+> `commit.md` (the `bigcommit` lane) asked for one check its shallow clone could not run; it was run
+> here against a full clone and the document now records the verified result — the build-artifact
+> bloat is real and reachable from `develop`, but under commit `77cf76302`, not the `c9f05a687` the
+> analysis names (identical tree, different lineage).
+
 ## PHASE-2 RENDERER EXPANSION STARTED: OPENGLES2 ADDED (2026-08-10, feature/renderer-opengles2)
 
 > The first Phase-2 addition (FUTURE.md "Planned additions" #1) is implemented on the dedicated

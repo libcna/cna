@@ -14,8 +14,8 @@ static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::PortableGL) + 1;
-static_assert(kPublicRendererCount == 42,
-              "GraphicsRendererType must expose all 42 genuine renderer identities");
+static_assert(kPublicRendererCount == 46,
+              "GraphicsRendererType must expose all 46 genuine renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
 {
@@ -92,6 +92,9 @@ namespace
             case GraphicsRendererType::Gdi:         return "GDI";
             case GraphicsRendererType::Llgl:        return "LLGL";
             case GraphicsRendererType::Metal:       return "METAL";
+            case GraphicsRendererType::Fna3d:       return "FNA3D";
+            case GraphicsRendererType::SvgDom:      return "SVG_DOM";
+            case GraphicsRendererType::OpenVg:      return "OPENVG";
             case GraphicsRendererType::PortableGL:  return "PORTABLEGL";
         }
         return {};
@@ -118,7 +121,7 @@ TEST(GraphicsRendererTypeTest, NameMatchesTypeForEveryRenderer)
 {
     // Every call in this build returns the SAME compile-time-selected renderer, so one build
     // checks one active arm; EveryPublicRendererHasOneUniqueCanonicalName covers the complete
-    // 42-identity enum in every build. What this asserts
+    // 46-identity enum in every build. What this asserts
     // is that the (type, name) pair is internally consistent AND that the active renderer has an
     // expected-name arm at all -- a renderer with no arm fails here instead of passing vacuously.
     const auto type = getCurrentGraphicsRendererType();

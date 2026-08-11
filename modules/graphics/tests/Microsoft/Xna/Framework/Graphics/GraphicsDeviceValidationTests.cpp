@@ -130,7 +130,6 @@ TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToPixelTexture
         gd.getTexturesProperty()(0, &target),
         System::InvalidOperationException);
     EXPECT_EQ(gd.getTexturesProperty()[0], nullptr);
-#endif
 }
 
 TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToVertexTextureSlot)
@@ -146,7 +145,6 @@ TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToVertexTextur
         gd.getVertexTexturesProperty()(0, &target),
         System::InvalidOperationException);
     EXPECT_EQ(gd.getVertexTexturesProperty()[0], nullptr);
-#endif
 }
 
 TEST(TextureCollectionValidationTest, RenderTargetCanBindForSamplingAfterUnbind)
@@ -158,7 +156,6 @@ TEST(TextureCollectionValidationTest, RenderTargetCanBindForSamplingAfterUnbind)
         GTEST_SKIP() << "this renderer does not support RenderTarget2D";
     }
     gd.SetRenderTarget(nullptr);
-#endif
 
     EXPECT_NO_THROW(gd.getTexturesProperty()(0, &target));
     EXPECT_EQ(gd.getTexturesProperty()[0], static_cast<Texture2D*>(&target));

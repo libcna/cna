@@ -17,20 +17,20 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | Horizon | Item | State |
 |---|---|---|
 | **CURRENT** | Post-audit integration campaign promoted to `develop` | 21/21 lanes accepted, 0 pending, Batch 0–6 complete, `FINAL-STAB-001` complete |
-| **CURRENT** | Public CNA renderer identities | **42** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core); 41 → 42 with the Phase-2 `OPENGLES2` addition on `feature/renderer-opengles2` |
-| **CURRENT** | Public CNA renderer identities | **42** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core). 41 at the 2026-08-10 pre-expansion promotion + `OPENVG` (ShivaVG-backed 2D vector-graphics renderer, `claude/renderer-openvg-c2wnet`, ordinal 41 in `GraphicsRendererType`), the first Phase 2 addition landed under an explicit owner instruction scoped to that one identity |
+| **CURRENT** | Public CNA renderer identities | **46** — mechanically counted from `CNA/GraphicsRendererType.hpp` (modules/core) and `cmake/RendererSelection.cmake`, pinned by `scripts/check_renderer_identities.py`. 41 at the 2026-08-10 pre-expansion promotion, **−1** for the `ASCII` renderer identity (migrated to a renderer-neutral post-process effect), **+6** for `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG` and `PORTABLEGL`, all integrated on the `11branches` integration branch |
 | **CURRENT** | Phase 1.5 — naming normalization (backend→renderer, DIRECTX*, OPENGLES3, CNAEXT) | **COMPLETE AND PUBLIC** — implemented on `feature/renderer-naming-normalization` (endpoint `16f76cf1a`) and promoted to `develop` on 2026-08-10 as part of the pre-expansion fast-forward. See `docs/RendererNamingMigration.md`. Renderer count unchanged at 41 |
 | **CURRENT** | Phase 1.6 — module-owned examples | **COMPLETE AND PUBLIC** — implemented on `feature/module-examples` (endpoint `675e04c7a`, a descendant of the naming endpoint) and promoted in the same fast-forward. All 1373 tracked example files now live with their owning module, registered by 44 module-local `examples/CMakeLists.txt` files; only the shared `examples/golden/` oracle corpus stays at repository level. See `docs/physical-modules.md` §"Module examples" and `modularization/module-examples/` |
 | **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** in three stages, all now on public `develop`: target graph + physical `src/` layout (`41028e995`), modular sharp-runtime consumption (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, MODULARIZATION_PLAN.md §11–§11.2) promoted 2026-08-10 by fast-forward to `3ecbbce72` (tree unchanged by the promotion). The modularization campaign is DONE |
-| **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **in progress**: `OPENGLES2`, `BLEND2D` and `FNA3D` are implemented on their own lanes and integrated on the `11branches` integration branch — see the Phase 2 table below, `NEXT.md`, and each lane's plan/renderer doc. The remaining additions are untouched and each still requires its own explicit owner instruction |
+| **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **in progress**: six additions — `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`, `PORTABLEGL` — are implemented on their own lanes and integrated on `11branches`. The remaining planned additions are untouched and each still requires its own explicit owner instruction |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
 | **FUTURE** | Phase 5 — glTF correctness campaign | **not started**; blocked on Phase 4 |
 
 Explicitly **not** true today, and not to be stated as true anywhere:
 
-- CNA does **not** have 55 renderers. It has 42 (41 plus the standalone `SVG_DOM` addition below).
-- CNA does **not** have 55 renderers. It has 42 (41 at the pre-expansion promotion + `OPENVG`).
+- CNA does **not** have 55 renderers. It has **46** (41 at the pre-expansion promotion, minus the
+  removed `ASCII` renderer identity, plus `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`
+  and `PORTABLEGL`).
 - Modularization is complete **and promoted**, including the final physical module/package
   layout: `develop` is a module-oriented monorepo as of 2026-08-10 (`41028e995` target graph +
   physical layout, then `3ecbbce72` `modules/<name>/{include,src,tests}`; both no-loss-proven —
@@ -82,12 +82,13 @@ Unblocked by Phase 1's promotion, but **not started** — and, like every phase 
 fresh explicit owner instruction before any work begins. It must start from the stable modularized
 public `develop` base, not from an older pre-modularization commit.
 
-Current public renderer count before this phase: **42** (`BLEND2D` landed independently of this
-phase — see `docs/blend2d-renderer.md` — and is no longer a planned addition below).
-Current public renderer count before this phase: **41**. One item (`OPENVG`, #3 below) has since
-been implemented on `claude/renderer-openvg-c2wnet` under an explicit owner instruction scoped to that
-one identity — see `docs/openvg-renderer.md` — bringing the live count to 42; the remaining items
-in this table are still unstarted and each still requires its own fresh explicit owner instruction.
+Current public renderer count before this phase: **41** (the 2026-08-10 pre-expansion promotion).
+Six of the planned additions have since been implemented on their own lanes and integrated on the
+`11branches` integration branch — `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG` and
+`PORTABLEGL`. Together with the removal of the `ASCII` renderer identity (migrated to a
+renderer-neutral post-process effect, outside this phase's scope) that brings the live count to
+**46**. The remaining items in this table are still unstarted and each still requires its own
+fresh explicit owner instruction.
 
 This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer implementations.
 
@@ -95,14 +96,10 @@ This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer imp
 
 | # | Public identity | Notes |
 |---:|---|---|
-| 1 | `OPENGLES2` | **DONE (2026-08-10, `feature/renderer-opengles2`)** — public CNA OpenGL ES 2 renderer/profile, reusing the EasyGL/MetaGL ES 2 capability as its own fifth GL profile (`CNA_GL_PROFILE_OPENGLES2`) with truthful ES 2.0 capability and platform reporting. See `plan_opengles2.md` / `docs/opengles2-renderer.md`. |
-| 2 | `FNA3D` | Based on the FNA3D graphics library. **IMPLEMENTED on its own lane** (`feature/renderer-fna3d`), not yet integrated into `develop`: FNA3D pinned at release 26.08, executing XNA's own compiled stock effects through MojoShader. See `docs/fna3d-renderer.md` and `plan_fna3d.md`. Integrating it makes the public count 42. |
-| 3 | `OPENVG` | OpenVG. |
-| 4 | `SVG_DOM` | **DELIVERED** (outside this phase, via a dedicated owner instruction on its own `feature/renderer-svg-dom` lane). Emscripten-only, 2D-only; renders `SpriteBatch` output as real pooled SVG DOM elements (`<svg>`/`<image>`/`feColorMatrix`), distinct from both `CANVAS` (rasterized) and `HTML_DOM` (CSS `<div>`s). See `docs/svg-dom-renderer.md` for the capability boundary — native host-contract tests pass (64/64); real-browser validation remains an external Emscripten-SDK gate. |
-| 1 | `OPENGLES2` | Public CNA OpenGL ES 2 renderer/profile. Expected to reuse the existing EasyGL/MetaGL OpenGL ES 2 capability where technically appropriate, but must remain a genuine public CNA identity with truthful capability and platform reporting. |
-| 2 | `FNA3D` | Based on the FNA3D graphics library. |
-| 3 | `OPENVG` | **DONE** (`claude/renderer-openvg-c2wnet`) — OpenVG 1.1, implemented via ShivaVG on top of a real desktop OpenGL context. 2D-only (no 3D pipeline, no render targets). See `docs/openvg-renderer.md`. |
-| 4 | `SVG_DOM` | SVG DOM. |
+| 1 | `OPENGLES2` | **INTEGRATED** (`feature/opengles2`) — public CNA OpenGL ES 2 renderer/profile, reusing the EasyGL ES 2 capability as its own fifth GL profile (`CNA_GL_PROFILE_OPENGLES2`) with truthful ES 2.0 capability and platform reporting. See `plan_opengles2.md` / `docs/opengles2-renderer.md`. |
+| 2 | `FNA3D` | **INTEGRATED** (`feature/fna3d`) — FNA3D pinned at release 26.08, executing XNA's own compiled stock effects through MojoShader; selects SDL_GPU/Direct3D 11/OpenGL at runtime. See `docs/fna3d-renderer.md` and `plan_fna3d.md`. |
+| 3 | `OPENVG` | **INTEGRATED** (`feature/openvg`) — OpenVG 1.1 via ShivaVG on a real desktop OpenGL context. 2D-only (no 3D pipeline, no render targets). See `docs/openvg-renderer.md`. |
+| 4 | `SVG_DOM` | **INTEGRATED** (`feature/svgdom`) — Emscripten-only, 2D-only; renders `SpriteBatch` output as real pooled SVG DOM elements (`<svg>`/`<image>`/`feColorMatrix`), distinct from both `CANVAS` (rasterized) and `HTML_DOM` (CSS `<div>`s). See `docs/svg-dom-renderer.md`; real-browser validation remains an external Emscripten-SDK gate. |
 | 5 | `IGL` | Facebook IGL — https://github.com/facebook/igl |
 | 6 | `NVRHI` | NVIDIA NVRHI. |
 | 7 | `KORE` | Kode/Kore — https://github.com/Kode/Kore |
@@ -110,16 +107,22 @@ This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer imp
 | 9 | `LINAGX` | LinaGX. |
 | 10 | `TEMPEST` | Tempest. |
 | 11 | `THORVG` | ThorVG. |
-| 12 | `PORTABLEGL` | PortableGL. |
+| 12 | `PORTABLEGL` | **INTEGRATED** (`feature/portablegl`) — CPU software OpenGL 3.x-ish pipeline via `rswinkle/PortableGL`; no GPU or window required. See `docs/portablegl-renderer.md`. |
 | 13 | `REACT_DOM` | A distinct React/DOM-oriented CNA rendering implementation, **only if** the final architecture proves it can truthfully satisfy a useful CNA graphics contract. It must not be counted merely as a conceptual alias of an existing identity. |
 
-That is `OPENGLES2` + 12 new renderer implementations = **13 additions**.
+That is `OPENGLES2` + 12 new renderer implementations = **13 additions** in this table, of which
+six are already integrated (the five marked INTEGRATED above, plus `BLEND2D`, which was delivered
+on its own lane and is no longer listed as a planned addition).
 
 ### Target count
 
-    42 + 13 = 55 public CNA renderer identities
+    46 live today + 8 still-unstarted additions from the table above = 54 public CNA renderer
+    identities if every remaining planned identity lands
 
-**This 55 count is a TARGET, not an invariant.** After implementation, recount public identities
+(The original 55 target assumed the `ASCII` renderer identity would remain; it was removed in
+favour of a renderer-neutral post-process effect, so the arithmetic ceiling is one lower.)
+
+**This count is a TARGET, not an invariant.** After implementation, recount public identities
 mechanically from the actual registry and report the truthful result. If `REACT_DOM` cannot
 truthfully satisfy a CNA graphics contract, or any other planned identity is withdrawn, the real
 number is lower and the real number is what gets reported.

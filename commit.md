@@ -90,6 +90,28 @@ branch" as a well-supported inference from the graph structure above, not a dire
 `merge-base` proof on those two refs specifically. A full (unshallowed) clone would let you
 confirm this with one command: `git merge-base --is-ancestor c9f05a687 origin/develop`.
 
+### Verification against a full clone (2026-08-11, eleven-lane integration)
+
+That command was run against a full clone during the `11branches` integration campaign. The
+document's **conclusion is confirmed, but its commit SHAs do not identify the reachable copy**:
+
+- `git merge-base --is-ancestor c9f05a687 develop` reports **not an ancestor**, and
+  `git branch -a --contains c9f05a687` matches **no ref at all** — in a full clone that commit is
+  an unreachable object, not part of any published branch.
+- The incident is nevertheless genuinely baked into `develop`'s history under a **different commit
+  pair**: `77cf76302fdff59f11b96d1c582fa3cafa48c156` ("Implement SpriteFont glyph data model and
+  SpriteBatch::DrawString", 2026-06-07T11:48:00+02:00) and `e43a4a99b` ("Stop tracking
+  cmake-build-easygl build artifacts"). `77cf76302` **is** an ancestor of `develop`.
+- `77cf76302` and `c9f05a687` share the **identical tree** `9ddae2e0ab8757b5edd114ca692d9e678bce8158`
+  and differ only in parent, i.e. they are the same content on two lineages — the shallow clone this
+  analysis was written in saw the other one.
+- The quantification is unchanged and re-measured on the reachable commit:
+  `git ls-tree -r -l 77cf76302 -- cmake-build-easygl/` → **701 files, 160,890,338 bytes (153.4 MB)**.
+
+So the remediation section below still applies; the paths to feed `git filter-repo` / BFG are the
+same, and the commit to start reasoning from is `77cf76302`, not `c9f05a687`. Nothing was rewritten
+here either — this note records a verification only.
+
 ## Why it won't recur
 
 `.gitignore` already has a catch-all `cmake-build-*/` pattern (line 2) in addition to the many
