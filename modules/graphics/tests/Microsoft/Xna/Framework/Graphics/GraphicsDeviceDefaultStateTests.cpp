@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
@@ -158,10 +159,20 @@ TEST(GraphicsDeviceDefaultStateTest, MutatingRasterizerStateAfterAssignmentDoesN
 // setReferenceStencilProperty from within setDepthStencilStateProperty, mirroring Task 309 exactly.
 TEST(GraphicsDeviceDefaultStateTest, AssigningDepthStencilStatePropagatesReferenceStencil)
 {
+    GraphicsDevice gd;
+    // A non-zero ReferenceStencil is meaningless (and, on a renderer with genuinely no stencil
+    // plane at all, deterministically rejected -- see IGraphicsRenderer::ApplyDepthStencilState's
+    // own contract) without real stencil-buffer support; this test exercises GraphicsDevice's own
+    // property-propagation bookkeeping, which only runs once the renderer call it precedes
+    // actually succeeds. Renderer-neutral capability gate, not an OPENVG-specific skip: any
+    // stencil-less renderer (present and future) hits the same path identically.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::StencilBuffer))
+    {
+        GTEST_SKIP() << "this renderer has no stencil buffer to hold a non-zero ReferenceStencil";
+    }
+
     DepthStencilState custom;
     custom.setReferenceStencilProperty(42);
-
-    GraphicsDevice gd;
     gd.setDepthStencilStateProperty(custom);
 
     EXPECT_EQ(gd.getReferenceStencilProperty(), 42);

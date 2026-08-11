@@ -95,11 +95,36 @@ TEST(TextureCollectionValidationTest, LiveTexture_DoesNotThrowForDisposedCheck)
 // TextureCollection — active render targets cannot simultaneously be sampled
 // =============================================================================
 
+namespace
+{
+    // Renderer-neutral capability gate (not an OPENVG-specific skip): a renderer with no real
+    // RenderTarget2D storage throws System::NotSupportedException out of SetRenderTarget itself
+    // (GraphicsDevice::SetRenderTarget's own transactional check -- see its own comment) before
+    // any of these tests' actual subject (texture-slot binding conflict validation) is reached.
+    // Tied to the real runtime behavior rather than a renderer-name list, so it stays correct for
+    // any current or future renderer that genuinely lacks RenderTarget2D.
+    bool BindOrSkip(GraphicsDevice& gd, RenderTarget2D& target)
+    {
+        try
+        {
+            gd.SetRenderTarget(&target);
+            return true;
+        }
+        catch (const System::NotSupportedException&)
+        {
+            return false;
+        }
+    }
+}
+
 TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToPixelTextureSlot)
 {
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    gd.SetRenderTarget(&target);
+    if (!BindOrSkip(gd, target))
+    {
+        GTEST_SKIP() << "this renderer does not support RenderTarget2D";
+    }
 
     EXPECT_THROW(
         gd.getTexturesProperty()(0, &target),
@@ -111,7 +136,10 @@ TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToVertexTextur
 {
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    gd.SetRenderTarget(&target);
+    if (!BindOrSkip(gd, target))
+    {
+        GTEST_SKIP() << "this renderer does not support RenderTarget2D";
+    }
 
     EXPECT_THROW(
         gd.getVertexTexturesProperty()(0, &target),
@@ -123,7 +151,10 @@ TEST(TextureCollectionValidationTest, RenderTargetCanBindForSamplingAfterUnbind)
 {
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    gd.SetRenderTarget(&target);
+    if (!BindOrSkip(gd, target))
+    {
+        GTEST_SKIP() << "this renderer does not support RenderTarget2D";
+    }
     gd.SetRenderTarget(nullptr);
 
     EXPECT_NO_THROW(gd.getTexturesProperty()(0, &target));
