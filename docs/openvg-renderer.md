@@ -278,10 +278,26 @@ revision's `shPaint.c` either -- OpenVgSpriteBatchRenderer's tint path uses the 
 multi-threading support (and, per "Lifetime and safety" above, no multi-INSTANCE support in one
 process either -- ShivaVG's own global context, not a CNA design choice).
 
-**Fixed-size leak per renderer lifecycle (AddressSanitizer/LeakSanitizer, upstream).** See the
-project's ASan/UBSan validation notes for the exact reproduction and root cause (`shContext.c`'s
-`VGContext_ctor`/`VGContext_dtor` asymmetry -- the destructor never deinits the `paths`/`paints`/
-`images` backing arrays themselves, nor `c->defaultPaint`) -- a genuine upstream ShivaVG bug, not
-CNA glue code. Re-verified after this audit's own context-lifecycle changes (P0-9/P0-10): the
-single-live-context guard and exception-safe construction do not change this leak's shape, size,
-or root cause.
+**Per-renderer-lifecycle leak (upstream) -- FIXED via a checked-in patch, not left as a limitation.**
+`shContext.c`'s `VGContext_ctor`/`VGContext_dtor` were asymmetric: the constructor `SH_INITOBJ`s
+five owned resources (the `paths`/`paints`/`images` arrays' own backing storage plus
+`c->defaultPaint`'s `instops`/`stops` arrays and 1D gradient GL texture), but the destructor only
+ever freed the individual path/paint/image *objects* those arrays contained -- never the arrays'
+own storage, and never `c->defaultPaint` at all (leaking its GL texture object too, not just heap
+bytes). A genuine upstream bug (confirmed by reading `VGContext_ctor` against `VGContext_dtor`
+side by side), reproducible as a constant 64-byte/5-allocation-plus-one-GL-texture leak on every
+`vgCreateContextSH`/`vgDestroyContextSH` (`OpenVgRenderer` construct/destroy) cycle -- fixed size,
+confirmed NOT to accumulate per draw/frame/texture, only per renderer lifecycle.
+
+Fixed with `cmake/patches/shivavg-context-dtor-leak.patch` (four `SH_DEINITOBJ` calls added to
+`VGContext_dtor`), applied idempotently to the `FetchContent`-fetched source via
+`cmake/patches/apply-shivavg-patch.cmake` as `ThirdPartyOpenVG.cmake`'s own `PATCH_COMMAND` --
+never by hand-editing generated `_deps` content. Verified: a fresh `FetchContent` checkout gets the
+patch applied automatically (`git apply`); re-running the same `PATCH_COMMAND` against an
+already-patched checkout detects that via `git apply --reverse --check` and skips cleanly (no
+double-apply, no error); a 25-cycle sequential construct/`Clear`/`Present`/destroy regression test
+(`openvg_presentation_viewport_scissor_test.cpp`'s `TestRepeatedConstructDestroyCycle`) and the
+full `OpenVg`-labelled + `CnaTests` graphics suite are all clean of AddressSanitizer/LeakSanitizer
+findings after the patch, where the pre-patch same runs reported this exact leak. The single-live-
+context guard and exception-safe construction below are unaffected -- neither touches
+`VGContext_ctor`/`_dtor` -- and re-verified clean together with this fix.

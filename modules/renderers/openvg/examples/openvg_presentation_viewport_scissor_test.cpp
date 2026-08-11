@@ -384,6 +384,38 @@ namespace
         SDL_DestroyWindow(window2);
     }
 
+    // ---- Repeated construct/destroy lifecycle (P1-9) ----
+    // A permanent regression test for the vgCreateContextSH/vgDestroyContextSH leak fixed by
+    // cmake/patches/shivavg-context-dtor-leak.patch (VGContext_dtor previously freed the
+    // individual path/paint/image objects but never the three resource arrays' own backing
+    // storage nor c->defaultPaint's owned resources -- a fixed 64-byte/5-allocation-plus-one-GL-
+    // texture leak per cycle). This loop's own job is to prove every cycle succeeds and the single-
+    // live-context guard (TestSingleLiveContext above) never wedges across repeated
+    // construct/destroy; the actual leak-freedom claim is verified by running this same binary
+    // under LeakSanitizer (see docs/openvg-renderer.md), not by anything observable from C++ here.
+    void TestRepeatedConstructDestroyCycle()
+    {
+        constexpr int kCycles = 25;
+        bool allSucceeded = true;
+        for (int i = 0; i < kCycles && allSucceeded; ++i)
+        {
+            SDL_Window* window = MakeWindow(32, 32);
+            try
+            {
+                OpenVgRenderer renderer(window, 0, 0, CnaPresentationMode::NativeBackBuffer);
+                renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+                renderer.Present();
+            }
+            catch (const std::exception& ex)
+            {
+                allSucceeded = false;
+                std::printf("    (cycle %d unexpectedly threw: %s)\n", i, ex.what());
+            }
+            SDL_DestroyWindow(window);
+        }
+        Check(allSucceeded, "25 sequential OpenVgRenderer construct/Clear/Present/destroy cycles all succeed");
+    }
+
     // ---- Swap interval reaches SDL (P1-1) ----
     void TestSwapInterval()
     {
@@ -420,6 +452,7 @@ int main()
         TestResizeWithoutClear();
         TestScissor();
         TestSingleLiveContext();
+        TestRepeatedConstructDestroyCycle();
         TestSwapInterval();
     }
     catch (const std::exception& ex)

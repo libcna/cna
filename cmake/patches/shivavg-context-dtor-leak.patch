@@ -1,0 +1,20 @@
+--- a/src/shContext.c
++++ b/src/shContext.c
+@@ -193,6 +193,17 @@
+   
+   for (i=0; i<c->images.size; ++i)
+     SH_DELETEOBJ(SHImage, c->images.items[i]);
++
++  /* CNA fix (see cmake/patches/shivavg-context-dtor-leak.patch in the consuming project): this
++   * upstream destructor freed the individual path/paint/image objects above but never the three
++   * array containers' own backing storage (each SH_INITOBJ'd in VGContext_ctor, just above this
++   * function), nor c->defaultPaint (whose instops/stops arrays and 1D gradient GL texture were
++   * otherwise never released either) -- a fixed 64-byte/5-allocation-plus-one-GL-texture leak on
++   * every VGContext_ctor/VGContext_dtor (i.e. vgCreateContextSH/vgDestroyContextSH) cycle. */
++  SH_DEINITOBJ(SHPathArray, c->paths);
++  SH_DEINITOBJ(SHPaintArray, c->paints);
++  SH_DEINITOBJ(SHImageArray, c->images);
++  SH_DEINITOBJ(SHPaint, c->defaultPaint);
+ }
+ 
+ /*--------------------------------------------------

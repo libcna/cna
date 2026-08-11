@@ -40,12 +40,24 @@ function(cna_configure_openvg)
     endif()
 
     include(FetchContent)
+
+    # P1-9: VGContext_dtor (src/shContext.c) never freed the paths/paints/images resource arrays'
+    # own backing storage, nor c->defaultPaint's owned instops/stops arrays and 1D gradient GL
+    # texture -- upstream only ever freed the individual path/paint/image objects inside those
+    # arrays, not the arrays (or defaultPaint) themselves. A fixed 64-byte/5-allocation-plus-one-
+    # GL-texture leak on every vgCreateContextSH/vgDestroyContextSH (OpenVgRenderer construct/
+    # destroy) cycle, confirmed via LeakSanitizer and fixed here via a checked-in patch applied to
+    # the fetched source -- not by hand-editing generated _deps content. See
+    # cmake/patches/shivavg-context-dtor-leak.patch and docs/openvg-renderer.md.
     FetchContent_Declare(
         shivavg
         GIT_REPOSITORY "${CNA_OPENVG_GIT_REPOSITORY}"
         GIT_TAG        "${CNA_OPENVG_GIT_TAG}"
         GIT_SHALLOW    FALSE
         GIT_PROGRESS   TRUE
+        PATCH_COMMAND  "${CMAKE_COMMAND}"
+                       "-DCNA_SHIVAVG_PATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/patches/shivavg-context-dtor-leak.patch"
+                       -P "${CMAKE_CURRENT_LIST_DIR}/patches/apply-shivavg-patch.cmake"
     )
     FetchContent_MakeAvailable(shivavg)
 
