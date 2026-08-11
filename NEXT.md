@@ -29,13 +29,23 @@
 > Effect), so `DrawInstancedPrimitivesEx` refuses by name instead of stacking every instance on
 > record 0. Both are structural, not deferred. See `docs/fna3d-renderer.md` and `plan_fna3d.md`.
 >
-> **Validation.** Native runtime on Linux/Xvfb/Mesa llvmpipe through FNA3D's OpenGL driver: six
-> `Fna3d_*` CTest binaries, all pixel oracles, plus 30 device-free unit tests in the corpus. The
-> full `CnaTests` corpus under `CNA_GRAPHICS_RENDERER=FNA3D` is **6095 passed / 0 failed / 7
-> skipped**, and the `HEADLESS` control is unchanged. FNA3D's SDL_GPU and Direct3D 11 drivers are
-> external gates (no Vulkan ICD and no Windows here). Two existence-gate spikes are committed under
-> `fna3d-spike/`; the second one is what measured FNA3D's driver-dependent sub-rectangle
-> `ReadBackbuffer` origin, which the renderer works around by cropping in CNA.
+> **Validation.** Native runtime on Linux/Xvfb/Mesa llvmpipe through FNA3D's OpenGL driver: seven
+> `Fna3d_*` CTest binaries, all pixel oracles, plus 37 device-free unit tests in the corpus. The
+> full `CnaTests` corpus under `CNA_GRAPHICS_RENDERER=FNA3D` is **6102 passed / 0 failed / 7
+> skipped**, and the `HEADLESS` control is unchanged. Clean under ASan/UBSan apart from a
+> pre-existing upstream signed-overflow in MojoShader's own `mojoshader_common.c` string parser.
+> FNA3D's SDL_GPU and Direct3D 11 drivers are external gates (no Vulkan ICD and no Windows here).
+> Two existence-gate spikes are committed under `fna3d-spike/`; the second one is what measured
+> FNA3D's driver-dependent sub-rectangle `ReadBackbuffer` origin, which the renderer works around
+> by cropping in CNA.
+>
+> **Follow-up batch (FNA3D-19..25).** Format-correct transfer sizing for block-compressed formats,
+> driver limit queries (`SupportsDXT1`/`S3TC`/`BC7`/`SRGBRenderTargets`, `GetMaxTextureSlots`) with
+> refusals by name, a compressed-readback probe so `GetData` never reports an untouched buffer as
+> read, `NoOverwrite` gated on `FNA3D_SupportsNoOverwrite`, `FNA3D_SetTextureName`, and a linked-vs-
+> compiled version check. Four FNA3D entry points remain unreachable without a shared-contract
+> change and are documented rather than faked: `SetTextureDataYUV`, `Get{Vertex,Index}BufferData`,
+> `CloneEffect`, `VerifyVertexSampler`.
 >
 > **Shared CNA surface touched** (each minimal and renderer-guarded): the identity registries and
 > their validators (41 → 42), one `#ifdef CNA_RENDERER_FNA3D` block in
