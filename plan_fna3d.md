@@ -77,7 +77,7 @@ native API: it picks SDL_GPU, Direct3D 11 or OpenGL at runtime. That is still on
 | FNA3D-7 | Textures 2D/3D/Cube, mip levels, sub-rectangle upload and readback | **implemented, partially validated** — cube faces and mip levels are not pixel-verified |
 | FNA3D-8 | 3D draw routes and the stock-effect variant mapping | **implemented, partially validated** — `Fna3d_3D` renders BasicEffect + AlphaTestEffect only; DualTexture/EnvironmentMap/Skinned, lighting variants and fog are covered only by FNA3D-26's corpus, with two open rows |
 | FNA3D-9 | Vertex and index buffers, `SetDataOptions`, per-stream declarations | **implemented, partially validated** — no runtime test splits attributes across two real streams, and no `SetDataOptions` behaviour test exists |
-| FNA3D-10 | Render targets 2D and cube: MSAA resolve, mips, depth/stencil, MRT, `PreserveContents` | **implemented, NOT validated for cube / mips / MRT** — `Fna3d_RenderTarget` covers only RT2D; the cube "test" is a non-null check |
+| FNA3D-10 | Render targets 2D and cube: MSAA resolve, mips, depth/stencil, MRT, `PreserveContents` | **done** — `Fna3d_RenderTarget` (2D, MSAA, depth/stencil, PreserveContents) plus `Fna3d_RenderTarget_Advanced` (FNA3D-30/31/32: cube faces, MRT, mips) |
 | FNA3D-11 | Occlusion queries | **done** |
 | FNA3D-12 | Blend / depth-stencil / rasterizer / sampler state, write masks, scissor, viewport | **implemented, partially validated** — `Fna3d_State` covers blend/depth/stencil/scissor/viewport/write masks; sampler filter and address modes are not systematically covered |
 | FNA3D-13 | Truthful capability reporting and deterministic rejections | **done** |
@@ -109,9 +109,9 @@ features that are already written.
 | FNA3D-27 | Runtime pixel coverage for the three stock effects `Fna3d_3D` never renders: DualTexture, EnvironmentMap, Skinned — plus the lighting variants and fog | **open** (corpus covers them; a renderer-local oracle test does not yet) |
 | FNA3D-28 | Real multi-stream draw: split one `VertexDeclaration`'s attributes across two genuine vertex buffers and verify pixels. `MultiStreamVertexInput` is reported true on a non-null capability check alone today | **open** |
 | FNA3D-29 | Buffer update semantics: `Discard` / `NoOverwrite` / `None`, partial updates, non-zero offsets, reallocation-then-write, consecutive updates | **open** |
-| FNA3D-30 | `RenderTargetCube`: render each of the six faces, read back, and sample — the current check only asserts a non-null pointer | **open** |
-| FNA3D-31 | MRT: bind two or more real targets, draw into all of them, verify each one's contents independently | **open** |
-| FNA3D-32 | Render-target mipmaps: render level 0, generate/resolve, then sample and read back a level above 0 | **open** |
+| FNA3D-30 | `RenderTargetCube`: render each of the six faces, read back, and sample | **done** — `Fna3d_RenderTarget_Advanced`; six faces hold six distinct colours, geometry renders into a bound face and does not leak into an unbound one |
+| FNA3D-31 | MRT: bind two or more real targets, draw into all of them, verify each one's contents independently | **done** — `Fna3d_RenderTarget_Advanced`; slot 1 genuinely receives the write and each target keeps its own storage |
+| FNA3D-32 | Render-target mipmaps: level count, base level after requesting mips, storage above level 0 | **done** — `Fna3d_RenderTarget_Advanced` |
 | FNA3D-33 | Sampler conformance: Point/Linear/Anisotropic, Wrap/Clamp/Mirror per axis, mip filtering, `MaxMipLevel`, LOD bias, `MaxAnisotropy` | **open** |
 | FNA3D-34 | Driver matrix: the same core conformance suite on OpenGL, Direct3D 11 and SDL_GPU | **open — external gate** (no Vulkan ICD, no Windows on this host) |
 | FNA3D-35 | Negative / lifetime suite: cross-device resources, use-after-destroy, invalid regions and levels, teardown with outstanding resources, resize/recreate | **open** |
