@@ -67,7 +67,7 @@ this document designs the "engine orchestration" half that `CNA_CNAEXT` was crea
 ├──────────────────────────────────────────────────────────────────────────┤
 │  IGraphicsRenderer   (compile-time selection: CNA_GRAPHICS_RENDERER)        │
 │  EasyGL · Vulkan · Bgfx · SdlGpu · WebGPU · D3D9/11/12 · SDL_Renderer      │
-│  · Software · Canvas · Ascii · FreeDirect · Headless                             │
+│  · Software · Canvas · FreeDirect · Headless                             │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -117,7 +117,7 @@ the stride‑56 skinned+color layout used by `SkinnedEffect.VertexColorEnabled` 
 | WebGPU | ✅ (unskinned) | ⬜ (no skinning path yet) | Hand‑derived |
 | D3D11 | ✅ | ✅ | GPU‑verified (Wine+DXVK, real HW) |
 | D3D9 / D3D12 | ✅ | ✅ | Compile‑verified (Windows‑only) |
-| SDL_Renderer / Software / Canvas / Ascii / FreeDirect / Headless | fallback | fallback | 2D‑only / non‑shader by design |
+| SDL_Renderer / Software / Canvas / FreeDirect / Headless | fallback | fallback | 2D‑only / non‑shader by design |
 
 ### 3.2 glTF / GLB import
 
@@ -512,7 +512,7 @@ Same "EasyGL is the reference, others follow independently" model that Phases 13
 
 | Subsystem | Reference (do first) | Follow‑ups | Never (documented fallback) |
 |---|---|---|---|
-| Float render targets (HDR) | EasyGL | Vulkan, SdlGpu, Bgfx, WebGPU, D3D11/12 | SDL_Renderer, Canvas, Ascii, FreeDirect, Software, Headless |
+| Float render targets (HDR) | EasyGL | Vulkan, SdlGpu, Bgfx, WebGPU, D3D11/12 | SDL_Renderer, Canvas, FreeDirect, Software, Headless |
 | Post‑process passes (bloom/SSAO/tonemap/FXAA) | EasyGL | all shader‑capable renderers | 2D‑only renderers |
 | Shadow maps / CSM | EasyGL | all 3D renderers | 2D‑only renderers |
 | Skybox + IBL | EasyGL | all 3D renderers | 2D‑only renderers |

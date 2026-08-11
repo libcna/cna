@@ -1,9 +1,13 @@
 # CNA renderer registry
 
-Current as of the final 21-lane reconciliation on 2026-08-09. CNA exposes exactly **41 public
-renderer identities**. EasyGL is an internal implementation shared by four public GL profiles and
-does not add a public identity. Internal renderer/API choices made by bgfx, Skia, Sokol, Diligent,
-LLGL, or another abstraction likewise do not add CNA identities.
+Current as of the ascii-post-process-effect migration (2026-08): CNA exposes exactly **40 public
+renderer identities** — one fewer than the prior 41-identity reconciliation of 2026-08-09, which
+still included `ASCII`. `ASCII` was removed as a public renderer identity and its reusable
+quantization/glyph-atlas logic migrated to a renderer-neutral post-process effect,
+`CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) — see
+`docs/ascii-post-process-effect.md`. EasyGL is an internal implementation shared by four public GL
+profiles and does not add a public identity. Internal renderer/API choices made by bgfx, Skia,
+Sokol, Diligent, LLGL, or another abstraction likewise do not add CNA identities.
 
 ## Canonical public identities
 
@@ -27,32 +31,31 @@ LLGL, or another abstraction likewise do not add CNA identities.
 | 16 | `Canvas` | `CANVAS` | `CNA_RENDERER_CANVAS` | Canvas / `CanvasRenderer` | Emscripten |
 | 17 | `HtmlDom` | `HTML_DOM` | `CNA_RENDERER_HTML_DOM` | HTML DOM / `HtmlDomRenderer` | Emscripten |
 | 18 | `Skia` | `SKIA` | `CNA_RENDERER_SKIA` | Skia / `SkiaRenderer` | pinned Skia artifact |
-| 19 | `Ascii` | `ASCII` | `CNA_RENDERER_ASCII` | ASCII / `AsciiRenderer` | none |
-| 20 | `FreeDirect` | `FREEDIRECT` | `CNA_RENDERER_FREEDIRECT` | FreeDirect / `FreeDirectRenderer` | free-direct dependency |
-| 21 | `DirectX9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Direct3D 9 / `DirectX9Renderer` | Windows |
-| 22 | `DirectX1` | `DIRECTX1` | `CNA_RENDERER_DIRECTX1` | DIRECTX1 / `DirectX1Renderer` | Windows |
-| 23 | `DirectX2` | `DIRECTX2` | `CNA_RENDERER_DIRECTX2` | DIRECTX2 / `DirectX2Renderer` | Windows |
-| 24 | `DirectX3` | `DIRECTX3` | `CNA_RENDERER_DIRECTX3` | DIRECTX3 / `DirectX3Renderer` | Windows |
-| 25 | `DirectX5` | `DIRECTX5` | `CNA_RENDERER_DIRECTX5` | DIRECTX5 / `DirectX5Renderer` | Windows |
-| 26 | `DirectX6` | `DIRECTX6` | `CNA_RENDERER_DIRECTX6` | DIRECTX6 / `DirectX6Renderer` | Windows |
-| 27 | `DirectX7` | `DIRECTX7` | `CNA_RENDERER_DIRECTX7` | DIRECTX7 / `DirectX7Renderer` | Windows |
-| 28 | `DirectX8` | `DIRECTX8` | `CNA_RENDERER_DIRECTX8` | DIRECTX8 / `DirectX8Renderer` | Windows |
-| 29 | `DirectX10` | `DIRECTX10` | `CNA_RENDERER_DIRECTX10` | Direct3D 10 / `DirectX10Renderer` | Windows |
-| 30 | `SdlGpu` | `SDL_GPU` | `CNA_RENDERER_SDL_GPU` | SDL GPU / `SdlGpuRenderer` | SDL GPU runtime |
-| 31 | `OpenGLES1` | `OPENGLES1` | `CNA_RENDERER_OPENGLES1` | GLES 1.1 / `OpenGLES1Renderer` | system GLESv1_CM |
-| 32 | `OpenGL4` | `OPENGL4` | `CNA_RENDERER_OPENGL4` | OpenGL 4 / `OpenGL4Renderer` | system OpenGL |
-| 33 | `OpenGL1` | `OPENGL1` | `CNA_RENDERER_OPENGL1` | OpenGL 1 / `OpenGL1Renderer` | Linux or Windows |
-| 34 | `OpenGL2` | `OPENGL2` | `CNA_RENDERER_OPENGL2` | OpenGL 2 / `OpenGL2Renderer` | system OpenGL |
-| 35 | `Wicked` | `WICKED` | `CNA_RENDERER_WICKED` | Wicked / `WickedRenderer` | non-Emscripten + dependency |
-| 36 | `Sokol` | `SOKOL` | `CNA_RENDERER_SOKOL` | Sokol / `SokolRenderer` | configured native API |
-| 37 | `Diligent` | `DILIGENT` | `CNA_RENDERER_DILIGENT` | Diligent / `DiligentRenderer` | DiligentCore |
-| 38 | `Glide` | `GLIDE` | `CNA_RENDERER_GLIDE` | Glide / `GlideRenderer` | 32-bit Windows |
-| 39 | `Gdi` | `GDI` | `CNA_RENDERER_GDI` | GDI / `GdiRenderer` | Windows |
-| 40 | `Llgl` | `LLGL` | `CNA_RENDERER_LLGL` | LLGL / `LlglRenderer` | LLGL dependency |
-| 41 | `Metal` | `METAL` | `CNA_RENDERER_METAL` | Metal / `MetalRenderer` | macOS/Darwin |
+| 19 | `FreeDirect` | `FREEDIRECT` | `CNA_RENDERER_FREEDIRECT` | FreeDirect / `FreeDirectRenderer` | free-direct dependency |
+| 20 | `DirectX9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Direct3D 9 / `DirectX9Renderer` | Windows |
+| 21 | `DirectX1` | `DIRECTX1` | `CNA_RENDERER_DIRECTX1` | DIRECTX1 / `DirectX1Renderer` | Windows |
+| 22 | `DirectX2` | `DIRECTX2` | `CNA_RENDERER_DIRECTX2` | DIRECTX2 / `DirectX2Renderer` | Windows |
+| 23 | `DirectX3` | `DIRECTX3` | `CNA_RENDERER_DIRECTX3` | DIRECTX3 / `DirectX3Renderer` | Windows |
+| 24 | `DirectX5` | `DIRECTX5` | `CNA_RENDERER_DIRECTX5` | DIRECTX5 / `DirectX5Renderer` | Windows |
+| 25 | `DirectX6` | `DIRECTX6` | `CNA_RENDERER_DIRECTX6` | DIRECTX6 / `DirectX6Renderer` | Windows |
+| 26 | `DirectX7` | `DIRECTX7` | `CNA_RENDERER_DIRECTX7` | DIRECTX7 / `DirectX7Renderer` | Windows |
+| 27 | `DirectX8` | `DIRECTX8` | `CNA_RENDERER_DIRECTX8` | DIRECTX8 / `DirectX8Renderer` | Windows |
+| 28 | `DirectX10` | `DIRECTX10` | `CNA_RENDERER_DIRECTX10` | Direct3D 10 / `DirectX10Renderer` | Windows |
+| 29 | `SdlGpu` | `SDL_GPU` | `CNA_RENDERER_SDL_GPU` | SDL GPU / `SdlGpuRenderer` | SDL GPU runtime |
+| 30 | `OpenGLES1` | `OPENGLES1` | `CNA_RENDERER_OPENGLES1` | GLES 1.1 / `OpenGLES1Renderer` | system GLESv1_CM |
+| 31 | `OpenGL4` | `OPENGL4` | `CNA_RENDERER_OPENGL4` | OpenGL 4 / `OpenGL4Renderer` | system OpenGL |
+| 32 | `OpenGL1` | `OPENGL1` | `CNA_RENDERER_OPENGL1` | OpenGL 1 / `OpenGL1Renderer` | Linux or Windows |
+| 33 | `OpenGL2` | `OPENGL2` | `CNA_RENDERER_OPENGL2` | OpenGL 2 / `OpenGL2Renderer` | system OpenGL |
+| 34 | `Wicked` | `WICKED` | `CNA_RENDERER_WICKED` | Wicked / `WickedRenderer` | non-Emscripten + dependency |
+| 35 | `Sokol` | `SOKOL` | `CNA_RENDERER_SOKOL` | Sokol / `SokolRenderer` | configured native API |
+| 36 | `Diligent` | `DILIGENT` | `CNA_RENDERER_DILIGENT` | Diligent / `DiligentRenderer` | DiligentCore |
+| 37 | `Glide` | `GLIDE` | `CNA_RENDERER_GLIDE` | Glide / `GlideRenderer` | 32-bit Windows |
+| 38 | `Gdi` | `GDI` | `CNA_RENDERER_GDI` | GDI / `GdiRenderer` | Windows |
+| 39 | `Llgl` | `LLGL` | `CNA_RENDERER_LLGL` | LLGL / `LlglRenderer` | LLGL dependency |
+| 40 | `Metal` | `METAL` | `CNA_RENDERER_METAL` | Metal / `MetalRenderer` | macOS/Darwin |
 
-The four GL profiles share one implementation target, macro, and factory, so 41 public identities
-map to 38 concrete implementation factories. Their public contracts remain distinct because the
+The four GL profiles share one implementation target, macro, and factory, so 40 public identities
+map to 37 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
 renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
 `EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.
@@ -61,7 +64,7 @@ renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3
 
 - **No renderer:** `STUB` is a no-op; `HEADLESS` is validation/trace-oriented and makes no pixel
   fidelity claim.
-- **2D-oriented:** `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SKIA`, `ASCII`, `FREEDIRECT`, `DIRECTX1`,
+- **2D-oriented:** `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SKIA`, `FREEDIRECT`, `DIRECTX1`,
   `DIRECT2D`, and `GDI`.
 - **CPU bounded 3D:** `SOFTWARE`.
 - **Legacy or fixed-function bounded 3D:** `OPENGLES1`, `OPENGL1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`,

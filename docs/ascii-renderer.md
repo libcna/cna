@@ -1,4 +1,13 @@
-# ASCII Renderer — Completeness Status
+# ASCII Renderer — Completeness Status (historical)
+
+> **Historical document (2026-08).** The `ASCII` graphics-renderer identity described below was
+> removed from CNA's public renderer system: it was never a genuine terminal/TTY renderer, only a
+> thin `SDL_RENDERER` decorator that quantized its own frame before presenting. Its reusable
+> quantizer/font-atlas logic and visual behavior now live as a renderer-neutral post-process
+> effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usable with any CNA
+> renderer's `RenderTarget2D` output — see [`docs/ascii-post-process-effect.md`](ascii-post-process-effect.md).
+> This document is preserved unchanged below as the historical completeness record for the former
+> renderer; do not treat it as describing current CNA renderer identities.
 
 `ASCII` is CNA's SDL-windowed retro glyph-grid graphics renderer: **not a real terminal/TTY
 renderer** — it renders inside a normal SDL window, exactly like `SDL_RENDERER`, and is in fact
