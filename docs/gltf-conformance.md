@@ -214,8 +214,13 @@ python3 -m gltf_fixtures --check tests/assets/gltf       # verify the tree is by
 python3 -m gltf_fixtures --list                          # machine-readable inventory, no writes
 ```
 
-Run from the repository root (the package directory `tools/` must be on `PYTHONPATH`; the
-`--check` invocation used by the tests does this itself — see `tools/gltf_fixtures/README.md`).
+Run from the repository root with `tools/` on `PYTHONPATH`, or from `tools/` without it
+(`cd tools && python3 -m gltf_fixtures --list`). Standard library only; no third-party dependency,
+and none may be added.
+
+`CnaTests` never runs the generator. It verifies the committed corpus against the SHA-256 digests
+`manifest.json` records for every emitted file, so the byte-identity guarantee holds at test time
+without a Python interpreter. `--check` is the developer-side equivalent.
 
 Per fixture the generator emits three files into `tests/assets/gltf/`:
 
