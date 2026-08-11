@@ -46,6 +46,35 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENVG")
     cna_openvg_test(cna_test_openvg_unsupported_3d_behavior openvg_unsupported_3d_behavior_test.cpp)
     cna_register_renderer_test(NAME OpenVg_Unsupported3DBehavior
         COMMAND cna_test_openvg_unsupported_3d_behavior TIMEOUT 30 LABELS "OpenVg")
+
+    # Presentation transform (Letterbox/Overscan/Stretch/FixedHeightDynamicWidth/NativeBackBuffer),
+    # window<->logical coordinate transforms, custom Viewport placement/persistence, resize
+    # without Clear(), RasterizerState-driven scissor, the single-live-ShivaVG-context guard, and
+    # swap interval control -- see that file's own top comment.
+    cna_openvg_test(cna_test_openvg_presentation_viewport_scissor
+        openvg_presentation_viewport_scissor_test.cpp)
+    cna_register_renderer_test(NAME OpenVg_PresentationViewportScissor
+        COMMAND cna_test_openvg_presentation_viewport_scissor TIMEOUT 30 LABELS "OpenVg")
+
+    # Texture upload format/orientation pixel oracle (P1-3) and out-of-bounds Clamp edge-extension
+    # (P1-4) -- see that file's own top comment.
+    cna_openvg_test(cna_test_openvg_texture_orientation openvg_texture_orientation_test.cpp)
+    cna_register_renderer_test(NAME OpenVg_TextureOrientation
+        COMMAND cna_test_openvg_texture_orientation TIMEOUT 30 LABELS "OpenVg")
+
+    # Blend mode pixel oracle (Opaque/AlphaBlend/NonPremultiplied), Additive/custom-BlendState
+    # rejection, and BlendWriteState.ColorWriteChannels honored via glColorMask -- see that file's
+    # own top comment.
+    cna_openvg_test(cna_test_openvg_blend openvg_blend_test.cpp)
+    cna_register_renderer_test(NAME OpenVg_Blend
+        COMMAND cna_test_openvg_blend TIMEOUT 30 LABELS "OpenVg")
+
+    # 3D Draw* rejection through public GraphicsDevice APIs, meaningful DepthStencilState/
+    # RasterizerState rejection, and transactional RenderTarget2D-binding rejection -- see that
+    # file's own top comment.
+    cna_openvg_test(cna_test_openvg_modern_state_guard openvg_modern_state_guard_test.cpp)
+    cna_register_renderer_test(NAME OpenVg_ModernStateGuard
+        COMMAND cna_test_openvg_modern_state_guard TIMEOUT 30 LABELS "OpenVg")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
