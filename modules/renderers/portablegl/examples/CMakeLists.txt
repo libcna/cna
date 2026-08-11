@@ -43,6 +43,34 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "PORTABLEGL")
     cna_portablegl_test(cna_test_portablegl_edge_cases portablegl_edge_cases_test.cpp)
     cna_register_renderer_test(NAME PortableGL_EdgeCases COMMAND cna_test_portablegl_edge_cases
         TIMEOUT 60 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_draw_offsets portablegl_draw_offsets_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_DrawOffsets COMMAND cna_test_portablegl_draw_offsets
+        TIMEOUT 30 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_effect_state portablegl_effect_state_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_EffectState COMMAND cna_test_portablegl_effect_state
+        TIMEOUT 30 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_blend portablegl_blend_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_Blend COMMAND cna_test_portablegl_blend
+        TIMEOUT 30 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_stencil portablegl_stencil_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_Stencil COMMAND cna_test_portablegl_stencil
+        TIMEOUT 30 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_raster_state portablegl_raster_state_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_RasterState COMMAND cna_test_portablegl_raster_state
+        TIMEOUT 30 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_sampler portablegl_sampler_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_Sampler COMMAND cna_test_portablegl_sampler
+        TIMEOUT 30 LABELS "PortableGL")
+
+    cna_portablegl_test(cna_test_portablegl_rejection portablegl_rejection_test.cpp)
+    cna_register_renderer_test(NAME PortableGL_Rejection COMMAND cna_test_portablegl_rejection
+        TIMEOUT 30 LABELS "PortableGL")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

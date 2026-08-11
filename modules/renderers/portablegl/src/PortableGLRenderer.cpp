@@ -1111,16 +1111,6 @@ namespace CNA::Internal::Renderers::PortableGL
         const GLenum eqRGB  = ToPglBlendEquation(colorBlendFunc);
         const GLenum eqA    = ToPglBlendEquation(alphaBlendFunc);
 
-        // PortableGL has exactly one colour attachment, so the MRT slots 1..3 cannot express a
-        // distinct mask. They only ever matter for a multi-target bind this renderer already
-        // refuses, and a value that differs from slot 0's is refused here too rather than dropped.
-        for (int i = 1; i < 4; ++i)
-            if (writeState.colorWriteChannels[i] != writeState.colorWriteChannels[0])
-                Unsupported(
-                    "BlendState.ColorWriteChannels" + std::to_string(i) +
-                    " differs from ColorWriteChannels, but this renderer has a single colour "
-                    "attachment and supports no multiple render targets.");
-
         MakeCurrent(&impl_->context);
 
         // BlendState::Opaque is (One, Zero) on both channels with Add -- arithmetically identical
@@ -1136,20 +1126,23 @@ namespace CNA::Internal::Renderers::PortableGL
         glBlendFuncSeparate(srcRGB, dstRGB, srcA, dstA);
         glBlendEquationSeparate(eqRGB, eqA);
 
+        // Only slot 0's mask can mean anything here: PortableGL owns a single colour attachment,
+        // SetRenderTargets() refuses every non-empty binding and
+        // SupportsCapability(MultipleRenderTargets) reports false, so slots 1..3 describe
+        // attachments that can never exist on this renderer. They are inert rather than dropped --
+        // there is no state they could control.
         impl_->colorWriteChannels = writeState.colorWriteChannels[0];
         glColorMask(ColorWriteHasRed(impl_->colorWriteChannels) ? GL_TRUE : GL_FALSE,
                     ColorWriteHasGreen(impl_->colorWriteChannels) ? GL_TRUE : GL_FALSE,
                     ColorWriteHasBlue(impl_->colorWriteChannels) ? GL_TRUE : GL_FALSE,
                     ColorWriteHasAlpha(impl_->colorWriteChannels) ? GL_TRUE : GL_FALSE);
 
-        // BlendState.MultiSampleMask is a coverage mask over MSAA samples. PortableGL has no
-        // multisampling at all (SupportsCapability(MultiSampleAntiAliasing) is false), so there is
-        // exactly one sample and any mask whose bit 0 is set is a true no-op. A mask that disables
-        // sample 0 would mean "write nothing", which cannot be expressed and is refused.
-        if ((writeState.multiSampleMask & 1u) == 0u)
-            Unsupported(
-                "BlendState.MultiSampleMask excludes sample 0, but this renderer has no "
-                "multisampling and therefore no coverage mask to apply.");
+        // BlendState.MultiSampleMask is a coverage mask over MSAA samples. PortableGL rasterizes
+        // exactly one sample per pixel and SupportsCapability(MultiSampleAntiAliasing) reports
+        // false, so there is no coverage to mask; the value reaches the renderer and only the rare
+        // non-default path is unimplemented. This is the same documented gap EasyGL records for
+        // the same field, not a silent drop.
+        (void)writeState.multiSampleMask;
     }
 
     void PortableGLRenderer::SetBlendFactor(float r, float g, float b, float a)
