@@ -2846,54 +2846,31 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetRenderTarget(RenderTarget2D* renderTarget)
     {
-        if (renderTarget && renderTarget->getIsDisposedProperty())
-            throw System::ObjectDisposedException(renderTarget->getNameProperty());
-        if (renderer_)
-            renderer_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetRenderer() : nullptr);
-
-        currentRenderTargets_.clear();
-        renderTargetBound_ = (renderTarget != nullptr);
-        if (renderTarget != nullptr)
-            currentRenderTargets_.push_back(RenderTargetBinding(
-                static_cast<Texture*>(renderTarget)));
-
-        // Matches FNA: Viewport/ScissorRectangle always reset to the new render target's size
-        // (or the backbuffer's, when unbinding) — never left at whatever was set before.
-        if (renderTarget != nullptr)
-            ResetViewportAndScissorForRenderTarget(renderTarget->getWidthProperty(),
-                                                    renderTarget->getHeightProperty());
-        else
-            ResetViewportAndScissorForRenderTarget(presentationParameters_.getBackBufferWidthProperty(),
-                                                    presentationParameters_.getBackBufferHeightProperty());
-
-        if (renderTarget &&
-            renderTarget->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
+        // REMED-GFX-PGL-AUDIT: this single-target overload used to call renderer_->SetRenderTarget2D()
+        // directly instead of routing through SetRenderTargets(). That skipped the null-renderer
+        // check SetRenderTargets() already performs (RenderTarget2D::GetRenderTargetRenderer() is
+        // null on a renderer that keeps IGraphicsRenderer's nullptr CreateRenderTarget2D() default,
+        // e.g. Stub/PortableGL/OpenGLES1/OpenGL1): `renderTarget ? renderTarget->GetRenderTargetRenderer()
+        // : nullptr` collapsed to the SAME nullptr the "unbind" call passes, so the renderer accepted
+        // it as an ordinary restore-backbuffer request instead of refusing an unsupported binding --
+        // while this method still recorded the target as bound and reset the viewport/scissor to its
+        // size, so every draw after a `SetRenderTarget(rt)` on such a renderer silently landed in the
+        // real backbuffer with no error at all. Delegating to SetRenderTargets() (already exercised by
+        // the analogous cube overload below) reuses its existing NotSupportedException check and
+        // keeps this a single code path to keep correct.
+        if (renderTarget == nullptr)
         {
-            // GDI-050: discard every attachment that this target really owns. Depth and stencil
-            // are separate because GDI's 2D render target has a standalone stencil plane but no
-            // depth plane. Other renderers preserve their combined-attachment behavior through
-            // HasRealStencilBuffer's compatibility default.
-            const DepthFormat depthFormat = renderTarget->getDepthStencilFormatProperty();
-            const bool depthFormatRequested = depthFormat != DepthFormat::None;
-            const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
-            const auto* rtRenderer = renderTarget->GetRenderTargetRenderer();
-            const bool hasDepthBuffer =
-                rtRenderer && rtRenderer->HasRealDepthBuffer(depthFormatRequested);
-            const bool hasStencilBuffer =
-                rtRenderer && rtRenderer->HasRealStencilBuffer(stencilFormatRequested);
-            // REMED-GFX-142: ClearOptions::Stencil belongs here. FNA's own SetRenderTargets ends
-            // with Clear(Target | DepthBuffer | Stencil, DiscardColor, Viewport.MaxDepth, 0), and
-            // FNA3D documents `preserveTargetContents` as storing the "color/depth/stencil"
-            // contents -- so DiscardContents has a DETERMINISTIC replacement for all three
-            // aspects, not two. Without the flag a DiscardContents target kept its previous
-            // stencil for ever, which is neither preservation nor discard.
-            ClearOptions discardOptions = ClearOptions::Target;
-            if (hasDepthBuffer)
-                discardOptions |= ClearOptions::DepthBuffer;
-            if (hasStencilBuffer)
-                discardOptions |= ClearOptions::Stencil;
-            Clear(discardOptions, Color(0, 0, 0, 255), 1.0f, 0);
+            SetRenderTargets({});
+            return;
         }
+        if (renderTarget->getIsDisposedProperty())
+            throw System::ObjectDisposedException(renderTarget->getNameProperty());
+        // SetRenderTargets() below already performs the DiscardContents clear (see its own
+        // "Matches FNA" comment) for the target it just bound, using the same
+        // HasRealDepthBuffer/HasRealStencilBuffer-derived ClearOptions this method used to compute
+        // a second time here -- that duplicate block was removed so a DiscardContents target is
+        // cleared exactly once, not twice.
+        SetRenderTargets({RenderTargetBinding(renderTarget)});
     }
 
     void GraphicsDevice::SetRenderTarget(RenderTargetCube* renderTarget, CubeMapFace cubeMapFace)

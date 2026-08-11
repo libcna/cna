@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <cstdint>
 #include <exception>
@@ -92,6 +93,35 @@ class PortableGLRejectionTest : public PortableGLTestGame
         dev.SetVertexBuffer(nullptr);
     }
 
+    /// Genuinely uploads at PositionTextureDecl()'s own 20-byte stride via SetDataRaw(), unlike
+    /// DrawQuadWith() above. VertexBuffer::SetData(const VertexPositionColor*, ...) always packs
+    /// into the 16-byte PositionColorStream regardless of the buffer's declared VertexDeclaration,
+    /// so calling DrawQuadWith(PositionTextureDecl(), ...) never actually reaches this renderer
+    /// with a 20-byte upload at all -- VertexBuffer's own shared "element outside the uploaded
+    /// vertex stride" ArgumentException fires first (declared stride 20 vs. the 16 bytes the typed
+    /// overload actually uploaded), on every renderer, before PortableGLRenderer::DrawColoredCommon
+    /// ever sees the draw. This helper uploads real 20-byte Position+TextureCoordinate records so
+    /// the draw actually reaches this renderer's own `StrideInBytes() != 16` refusal.
+    void DrawUnimplementedStrideQuad()
+    {
+        auto& dev = getGraphicsDeviceProperty();
+        struct PosUv { float x, y, z, u, v; };
+        static_assert(sizeof(PosUv) == 20, "must match PositionTextureDecl()'s 20-byte stride");
+        const PosUv verts[6] = {
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f}, { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f}, {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f}, {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+        };
+        VertexBuffer vb(dev, PositionTextureDecl(), 6, BufferUsage::None);
+        vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(PosUv)));
+        BasicEffect fx(dev);
+        fx.VertexColorEnabled = true;
+        fx.Apply();
+        dev.SetVertexBuffer(&vb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nullptr);
+    }
+
 protected:
     void LoadContent() override
     {
@@ -114,6 +144,7 @@ protected:
             dev.Clear(kBlack);
             BasicEffect custom(dev);
             bool threw = false;
+            bool correctType = false;
             try
             {
                 spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr,
@@ -122,8 +153,14 @@ protected:
                                    std::optional<Rectangle>(Rectangle(0, 0, 1, 1)), Color::White);
                 spriteBatch_->End();
             }
-            catch (const std::exception&) { threw = true; }
-            check(threw, "check A: SpriteBatch.Begin with a custom Effect is refused");
+            // Type-checked: SupportsCapability(...) == false must refuse with the specific
+            // System::NotSupportedException every other renderer's deterministic-rejection path
+            // uses, not merely "something threw" -- an accidental std::bad_alloc or an unrelated
+            // std::runtime_error from a different bug must not be mistaken for the real refusal.
+            catch (const System::NotSupportedException&) { threw = true; correctType = true; }
+            catch (const std::exception&) { threw = true; correctType = false; }
+            check(threw && correctType,
+                  "check A: SpriteBatch.Begin with a custom Effect is refused with NotSupportedException");
             check(RegionIs(Whole(), kBlack),
                   "check A: and the refused batch drew nothing with the built-in shader");
 
@@ -141,13 +178,20 @@ protected:
             dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
             dev.Clear(kBlack);
             bool threw = false;
+            bool correctType = false;
             try
             {
                 DrawQuadWith(SameStrideIncompatibleDecl(), kRed);
             }
-            catch (const std::exception&) { threw = true; }
-            check(threw,
-                  "check B: a same-stride VertexDeclaration with a different semantic is refused");
+            // Type-checked: SupportsCapability(...) == false must refuse with the specific
+            // System::NotSupportedException every other renderer's deterministic-rejection path
+            // uses, not merely "something threw" -- an accidental std::bad_alloc or an unrelated
+            // std::runtime_error from a different bug must not be mistaken for the real refusal.
+            catch (const System::NotSupportedException&) { threw = true; correctType = true; }
+            catch (const std::exception&) { threw = true; correctType = false; }
+            check(threw && correctType,
+                  "check B: a same-stride VertexDeclaration with a different semantic is refused "
+                  "with NotSupportedException");
             check(RegionIs(Whole(), kBlack),
                   "check B: and the refused draw wrote no pixels");
 
@@ -160,12 +204,19 @@ protected:
         {
             dev.Clear(kBlack);
             bool threw = false;
+            bool correctType = false;
             try
             {
-                DrawQuadWith(PositionTextureDecl(), kRed);
+                DrawUnimplementedStrideQuad();
             }
-            catch (const std::exception&) { threw = true; }
-            check(threw, "check C: an unimplemented vertex stride is refused");
+            // Type-checked: SupportsCapability(...) == false must refuse with the specific
+            // System::NotSupportedException every other renderer's deterministic-rejection path
+            // uses, not merely "something threw" -- an accidental std::bad_alloc or an unrelated
+            // std::runtime_error from a different bug must not be mistaken for the real refusal.
+            catch (const System::NotSupportedException&) { threw = true; correctType = true; }
+            catch (const std::exception&) { threw = true; correctType = false; }
+            check(threw && correctType,
+                  "check C: an unimplemented vertex stride is refused with NotSupportedException");
 
             DrawQuadWith(PosColorDecl(), kGreen);
             check(RegionIs(Whole(), kGreen),
@@ -177,6 +228,7 @@ protected:
         {
             dev.Clear(kBlack);
             bool threw = false;
+            bool correctType = false;
             try
             {
                 RenderTarget2D target(dev, 16, 16);
@@ -184,8 +236,14 @@ protected:
                 bindings.emplace_back(static_cast<Texture*>(&target));
                 dev.SetRenderTargets(bindings);
             }
-            catch (const std::exception&) { threw = true; }
-            check(threw, "check D: binding a RenderTarget2D is refused");
+            // Type-checked: SupportsCapability(...) == false must refuse with the specific
+            // System::NotSupportedException every other renderer's deterministic-rejection path
+            // uses, not merely "something threw" -- an accidental std::bad_alloc or an unrelated
+            // std::runtime_error from a different bug must not be mistaken for the real refusal.
+            catch (const System::NotSupportedException&) { threw = true; correctType = true; }
+            catch (const std::exception&) { threw = true; correctType = false; }
+            check(threw && correctType,
+                  "check D: binding a RenderTarget2D is refused with NotSupportedException");
 
             DrawQuadWith(PosColorDecl(), kRed);
             check(RegionIs(Whole(), kRed),

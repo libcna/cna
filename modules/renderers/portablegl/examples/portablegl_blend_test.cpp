@@ -153,8 +153,14 @@ protected:
                   "check E: a partial-alpha source composites against the destination");
 
             DrawQuad(Color(255, 255, 255, 128));
-            check(RegionNear(Whole(), Color(191, 191, 191, 255), 1),
-                  "check E: a second translucent pass accumulates on top of the first");
+            // Exact, not RegionNear: blending runs in full float precision (confirmed against
+            // PortableGL's own blend_pixel -- the fragment's quantized output is blended, then
+            // truncated to bytes exactly once, at the very end), so 0.751925... * 255 = 191.74...
+            // truncates to precisely 191 with no float-noise margin anywhere near the 191/192
+            // boundary. A tolerant check here would accept 192 too, silently passing a renderer
+            // that rounds instead of truncates -- exactly the distinction this check exists to catch.
+            check(RegionIs(Whole(), Color(191, 191, 191, 255)),
+                  "check E: a second translucent pass accumulates on top of the first (exact truncation)");
         }
 
         // Check F -- BlendFactor. (BlendFactor, Zero) makes the result the source scaled by the

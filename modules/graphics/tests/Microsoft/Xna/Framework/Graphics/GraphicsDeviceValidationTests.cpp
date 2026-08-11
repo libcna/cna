@@ -98,32 +98,49 @@ TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToPixelTexture
 {
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
+#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)
+    // REMED-GFX-PGL-AUDIT: a renderer with no render-target support at all now refuses the bind
+    // itself (SetRenderTarget(RenderTarget2D*) routes through SetRenderTargets(), which already
+    // throws for these renderers), so there is never an active render target for the
+    // TextureCollection guard below to react to.
+    EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
+#else
     gd.SetRenderTarget(&target);
 
     EXPECT_THROW(
         gd.getTexturesProperty()(0, &target),
         System::InvalidOperationException);
     EXPECT_EQ(gd.getTexturesProperty()[0], nullptr);
+#endif
 }
 
 TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToVertexTextureSlot)
 {
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
+#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)
+    EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
+#else
     gd.SetRenderTarget(&target);
 
     EXPECT_THROW(
         gd.getVertexTexturesProperty()(0, &target),
         System::InvalidOperationException);
     EXPECT_EQ(gd.getVertexTexturesProperty()[0], nullptr);
+#endif
 }
 
 TEST(TextureCollectionValidationTest, RenderTargetCanBindForSamplingAfterUnbind)
 {
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
+#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)
+    EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
+    gd.SetRenderTarget(nullptr);
+#else
     gd.SetRenderTarget(&target);
     gd.SetRenderTarget(nullptr);
+#endif
 
     EXPECT_NO_THROW(gd.getTexturesProperty()(0, &target));
     EXPECT_EQ(gd.getTexturesProperty()[0], static_cast<Texture2D*>(&target));
@@ -227,6 +244,35 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
+#endif
+}
+
+TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOverloadRejection)
+{
+    // REMED-GFX-PGL-AUDIT: SetRenderTarget(RenderTarget2D*) used to call renderer_->SetRenderTarget2D()
+    // directly with `renderTarget ? renderTarget->GetRenderTargetRenderer() : nullptr`. On a renderer
+    // that keeps IGraphicsRenderer's nullptr CreateRenderTarget2D() default (Stub, PortableGL,
+    // OpenGLES1's/OpenGL1's zero-target case does not apply here since they support one),
+    // GetRenderTargetRenderer() is itself null, so that ternary collapsed to the exact nullptr the
+    // "unbind" call passes -- the renderer accepted it as an ordinary restore-backbuffer request
+    // instead of refusing an unsupported binding, while this method still recorded the target as
+    // bound and reset Viewport/ScissorRectangle to its size. Every draw after that silently landed
+    // in the real backbuffer, not the (never actually created) render target, with no error raised
+    // anywhere -- exactly the "no meaningful public renderer operation is silently ignored" contract
+    // this pins for both public entry points.
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, 4, 4);
+#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)
+    EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
+    // No partial state: GraphicsDevice must not report the rejected target as bound...
+    EXPECT_TRUE(gd.GetRenderTargets().empty());
+    // ...and the renderer must be left exactly as before the rejected call -- an ordinary backbuffer
+    // draw still works immediately afterward.
+    EXPECT_NO_THROW(gd.Clear(Color(0, 0, 0, 255)));
+#else
+    EXPECT_NO_THROW(gd.SetRenderTarget(&target));
+    EXPECT_EQ(gd.GetRenderTargets().size(), 1u);
+    gd.SetRenderTarget(nullptr);
 #endif
 }
 
