@@ -21,6 +21,18 @@ namespace CNA::Internal::Renderers::SvgDom
     inline constexpr std::int32_t SvgFlagAdditive = 1 << 3;
     /** @brief SvgDomDrawCommand::flags bit: force output alpha to 1 (BlendState.Opaque). */
     inline constexpr std::int32_t SvgFlagOpaque = 1 << 4;
+    /**
+     * @brief SvgDomDrawCommand::flags bit: fill with a repeating pattern instead of a single crop
+     * (`TextureAddressMode::Wrap`/symmetric `Mirror` with an out-of-bounds sourceRectangle --
+     * SVGDOM-1). See `ValidateAddressModesEXT`.
+     */
+    inline constexpr std::int32_t SvgFlagTiled = 1 << 5;
+    /**
+     * @brief SvgDomDrawCommand::flags bit: the tiled pattern's source is the mirror-doubled variant
+     * (symmetric `TextureAddressMode::Mirror`) rather than the plain texture (`Wrap`). Only ever set
+     * together with @ref SvgFlagTiled.
+     */
+    inline constexpr std::int32_t SvgFlagMirrorTiled = 1 << 6;
 
     /**
      * @brief One sprite in a batch, encoded for a single wasm->JS handoff.
@@ -85,16 +97,19 @@ namespace CNA::Internal::Renderers::SvgDom
      * @param textureWidth  Source texture width, for source-rectangle bounds validation.
      * @param textureHeight Source texture height.
      * @param dest          Destination rectangle, in logical game pixels.
-     * @param source        Source rectangle, in texture pixels; must lie within the texture.
+     * @param source        Source rectangle, in texture pixels; may leave the texture only for
+     *                      Wrap/symmetric-Mirror addressing (see ValidateAddressModesEXT).
      * @param color         Tint; RGBA all multiply the texels (see DomCompositeOp's own doc).
      * @param rotation      Clockwise rotation about @p origin, in radians.
      * @param origin        Rotation/scale pivot, in source-pixel space.
      * @param effects       Horizontal/vertical mirroring.
      * @param smoothing     Whether magnification should be smooth rather than nearest-neighbour.
+     * @param addressU      Raw TextureAddressMode ordinal for U (0=Wrap, 1=Clamp, 2=Mirror).
+     * @param addressV      Raw TextureAddressMode ordinal for V.
      * @param op            The composite operation in effect, selecting the pixel variant/flags.
      * @return The encoded command.
-     * @throws std::runtime_error if @p source leaves @p textureWidth/@p textureHeight's bounds; see
-     *         ValidateSourceRectangleEXT.
+     * @throws std::runtime_error for an addressing-mode combination this renderer cannot reproduce
+     *         for an out-of-bounds @p source; see ValidateAddressModesEXT.
      */
     [[nodiscard]] SvgDomDrawCommand BuildDrawCommandEXT(int textureId,
                                                         int textureWidth, int textureHeight,
@@ -105,6 +120,7 @@ namespace CNA::Internal::Renderers::SvgDom
                                                         const Vector2& origin,
                                                         SpriteEffects effects,
                                                         bool smoothing,
+                                                        int addressU, int addressV,
                                                         DomCompositeOp op);
 
     /**
@@ -160,8 +176,9 @@ namespace CNA::Internal::Renderers::SvgDom
         /**
          * @brief Records the texture addressing modes subsequent draws use.
          *
-         * Recorded for API completeness; only ever consulted once a source rectangle actually leaves
-         * the texture, which V1 always rejects regardless of mode (see ValidateSourceRectangleEXT).
+         * Only consulted once a source rectangle actually leaves the texture: `Wrap` and symmetric
+         * `Mirror` (the same mode on both axes) tile via a pattern fill; `Clamp` overflow and mixed
+         * per-axis addressing remain a narrower, documented throw (see ValidateAddressModesEXT).
          */
         void SetSamplerAddressMode(int addressU, int addressV) override;
 
@@ -190,8 +207,9 @@ namespace CNA::Internal::Renderers::SvgDom
          *
          * @param layerDepth Ignored: sorting happens in the shared SpriteBatch layer, and document
          *                   order already realizes the resulting paint order.
-         * @throws std::runtime_error if called before Begin(), or if sourceRectangle leaves the
-         *         texture's bounds (see ValidateSourceRectangleEXT).
+         * @throws std::runtime_error if called before Begin(), or for an addressing-mode
+         *         combination this renderer cannot reproduce when sourceRectangle leaves the
+         *         texture's bounds (see ValidateAddressModesEXT).
          */
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,

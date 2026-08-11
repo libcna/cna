@@ -121,7 +121,7 @@ EM_JS(void, CNA_SvgDom_PresentFrame, (), {
     for (let i = used; i < high; ++i) {
         const entryEl = pool[i];
         if (entryEl && !entryEl.cna.hidden) {
-            entryEl.viewport.style.display = 'none';
+            entryEl.g.style.display = 'none';
             entryEl.cna.hidden = true;
         }
     }

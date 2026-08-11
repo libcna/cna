@@ -129,12 +129,34 @@ namespace CNA::Internal::Renderers::SvgDom
         return next++;
     }
 
-    void ValidateSourceRectangleEXT(bool exceedsBounds)
+    void ValidateAddressModesEXT(int addressU, int addressV, bool exceedsBounds,
+                                 bool& tiled, bool& mirrored)
     {
-        if (exceedsBounds)
+        tiled = false;
+        mirrored = false;
+        if (addressU < 0 || addressU > 2 || addressV < 0 || addressV > 2)
             throw std::runtime_error(
-                "SVG_DOM renderer: sourceRectangle exceeds the texture's own bounds. "
-                "TextureAddressMode Wrap/Mirror/edge-extended Clamp tiling is not yet implemented "
-                "(plan_svg_dom.md SVGDOM-1) -- keep sourceRectangle within the texture.");
+                "SVG_DOM renderer: TextureAddressMode must be Wrap, Clamp, or Mirror.");
+        if (!exceedsBounds) return;
+
+        // Clamp=1. Overflow on a Clamp axis would need a per-draw edge-extended texture variant
+        // (plan_svg_dom.md SVGDOM-2, not yet implemented) -- a real, narrower boundary than
+        // HtmlDom's own kMaxClampPadding-bounded padded-variant cache.
+        if (addressU == 1 || addressV == 1)
+            throw std::runtime_error(
+                "SVG_DOM renderer: TextureAddressMode::Clamp with an out-of-bounds sourceRectangle "
+                "is not yet implemented -- use the same Wrap or Mirror mode on both axes, or keep "
+                "sourceRectangle within the texture.");
+
+        if (addressU != addressV)
+            throw std::runtime_error(
+                "SVG_DOM renderer: mixed TextureAddressMode axes for an out-of-bounds "
+                "sourceRectangle are not yet implemented (addressU=" + std::to_string(addressU) +
+                ", addressV=" + std::to_string(addressV) + ") -- use the same Wrap or Mirror mode "
+                "on both axes.");
+
+        // addressU == addressV here, and both are 0 (Wrap) or 2 (Mirror) -- Clamp was rejected above.
+        tiled = true;
+        mirrored = (addressU == 2);
     }
 }

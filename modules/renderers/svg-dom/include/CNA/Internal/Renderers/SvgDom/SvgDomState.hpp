@@ -152,18 +152,29 @@ namespace CNA::Internal::Renderers::SvgDom
     [[nodiscard]] int AllocateTextureIdEXT();
 
     /**
-     * @brief Rejects a source rectangle this renderer cannot reproduce.
+     * @brief Rejects an addressing-mode combination this renderer cannot reproduce for an
+     * out-of-bounds source rectangle, and reports whether tiling/mirroring applies.
      *
-     * plan_svg_dom.md SVGDOM-1 (V1 scope): unlike the more mature `HtmlDom` renderer, this first
-     * implementation does not yet generate edge-extended (`Clamp`) or tiled (`Wrap`/`Mirror`)
-     * texture variants for an out-of-bounds source rectangle -- every draw's source rectangle must
-     * lie entirely within the texture. `TextureAddressMode` itself is still recorded and applied
-     * (see `SvgDomSpriteBatchRenderer::SetSamplerAddressMode`), but only ever matters once a source
-     * rectangle actually leaves the texture, which this function refuses outright rather than
-     * silently approximating. A truthful, narrower boundary than `HtmlDom`'s, not a fake pass.
+     * plan_svg_dom.md SVGDOM-1: `Wrap` (both axes) and symmetric `Mirror` (the same mode on both
+     * axes -- `SamplerState` has no built-in Mirror preset, so a game always constructs a custom
+     * one, and using the same mode on both axes is simply the natural way to do that) are
+     * implemented via a real SVG `<pattern>` fill (backbuffer path) / `ctx.createPattern(...,
+     * 'repeat')` (render-target Canvas2D path) -- see `SvgDomSpriteBatchRenderer::BuildDrawCommandEXT`.
+     * `Clamp` overflow (edge-texel extension) and mixed per-axis addressing remain a narrower,
+     * documented throw -- a real, smaller-scope boundary than `HtmlDom`'s own (which additionally
+     * handles Clamp overflow and independent per-axis Wrap/Clamp combinations), not a silent
+     * approximation. Pure function -- no DOM access.
      *
+     * @param addressU      Raw TextureAddressMode ordinal for U (0=Wrap, 1=Clamp, 2=Mirror).
+     * @param addressV      Raw TextureAddressMode ordinal for V.
      * @param exceedsBounds Whether the source rectangle leaves the texture's own bounds.
-     * @throws std::runtime_error when @p exceedsBounds is true.
+     * @param tiled         Receives true when the draw should tile via a pattern fill (Wrap or
+     *                      symmetric Mirror, only meaningful when @p exceedsBounds is true).
+     * @param mirrored      Receives true when the tiling is symmetric `Mirror` (as opposed to
+     *                      `Wrap`), only meaningful when @p tiled is true.
+     * @throws std::runtime_error for an out-of-range ordinal, or -- only when @p exceedsBounds is
+     *         true -- for `Clamp` overflow or a mixed non-symmetric-Mirror axis combination.
      */
-    void ValidateSourceRectangleEXT(bool exceedsBounds);
+    void ValidateAddressModesEXT(int addressU, int addressV, bool exceedsBounds,
+                                 bool& tiled, bool& mirrored);
 }

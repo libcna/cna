@@ -11,16 +11,19 @@
 // plan_svg_dom.md design decision 6 (revised): pooled sprite elements, reused and dirty-diffed
 // across frames rather than rebuilt every flush -- the same "pool cursor reset at frame start,
 // reuse by index, hide the unused tail at Present()" shape HtmlDom's own DOM path uses,
-// independently applied here to SVG's own primitives. Each sprite is a pooled nested <svg>
-// viewport (its own width/height/viewBox crop the source rectangle -- an SVG nested <svg> clips
-// its content to its own box by spec, so this needs no separate <clipPath>) containing one pooled
-// <image>, with the sprite's own collapsed affine `transform="matrix(...)"` placing it. Tint is an
+// independently applied here to SVG's own primitives. Each pool slot is a wrapping <g> (carrying
+// the sprite's own collapsed affine `transform="matrix(...)"`, image-rendering, mix-blend-mode and
+// tint filter -- all mode-independent) around TWO alternately shown children: a nested <svg>
+// viewport (crop-only draws -- its own width/height/viewBox crop the source rectangle, an SVG
+// nested <svg> clips its content to its own box by spec, so this needs no separate <clipPath>)
+// containing one <image>, or a <rect> filled by a per-slot <pattern> (SVGDOM-1: Wrap/symmetric
+// Mirror addressing on an out-of-bounds sourceRectangle -- see ValidateAddressModesEXT). Tint is an
 // `feColorMatrix` filter, cached in <defs> and referenced by url(#id) -- omitted entirely for an
 // opaque-alpha white tint with no Opaque-alpha-forcing, the overwhelmingly common case, so most
 // sprites carry no filter attribute at all. Every attribute/style write below is dirty-checked
 // against the pool element's own last-applied state (`__cna`), so a steady frame (same sprite
-// count, same per-sprite texture/geometry/tint) costs no DOM writes beyond the initial pool
-// creation -- only `transform` typically changes frame to frame for a moving sprite.
+// count, same per-sprite texture/geometry/tint/addressing) costs no DOM writes beyond the initial
+// pool creation -- only `transform` typically changes frame to frame for a moving sprite.
 EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stride,
                                            int scissorEnabled, int sx, int sy, int sw, int sh), {
     if (typeof document === 'undefined') return;
@@ -54,6 +57,9 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
     const pool = Module['cnaSvgDomSpritePool'];
     const svgNS = 'http://www.w3.org/2000/svg';
     const xlinkNS = 'http://www.w3.org/1999/xlink';
+    // Proper (non-negative) modulo -- JS '%' keeps the dividend's sign, which a negative source
+    // origin (a sourceRectangle scrolled past the left/top edge under Wrap/Mirror) would produce.
+    const properMod = function (v, m) { return m > 0 ? ((v % m) + m) % m : 0; };
 
     const base = cmds >> 2;
     for (let i = 0; i < count; ++i) {
@@ -67,49 +73,93 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
         const flags = HEAP32[o + 11];
         const variantMode = HEAP32[o + 12];
         const packedColor = HEAP32[o + 13] >>> 0;
+        const tiled = (flags & 32) !== 0; // SvgFlagTiled
 
         const poolIndex = Module['cnaSvgDomSpriteUsed']++;
         let entryEl = pool[poolIndex];
         if (!entryEl) {
+            const g = document.createElementNS(svgNS, 'g');
             const viewport = document.createElementNS(svgNS, 'svg');
             const image = document.createElementNS(svgNS, 'image');
             image.setAttribute('x', 0); image.setAttribute('y', 0);
             image.setAttribute('preserveAspectRatio', 'none');
             viewport.setAttribute('x', 0); viewport.setAttribute('y', 0);
             viewport.appendChild(image);
-            group.appendChild(viewport);
-            entryEl = { viewport: viewport, image: image, cna: {} };
+            const rect = document.createElementNS(svgNS, 'rect');
+            rect.setAttribute('x', 0); rect.setAttribute('y', 0);
+            rect.style.display = 'none';
+            g.appendChild(viewport);
+            g.appendChild(rect);
+            group.appendChild(g);
+            entryEl = { g: g, viewport: viewport, image: image, rect: rect,
+                       pattern: null, patternImage: null, cna: {} };
             pool[poolIndex] = entryEl;
         }
-        const viewport = entryEl.viewport, image = entryEl.image, prev = entryEl.cna;
-        if (prev.hidden) { viewport.style.display = ''; prev.hidden = false; }
+        const g = entryEl.g, viewport = entryEl.viewport, image = entryEl.image,
+              rect = entryEl.rect, prev = entryEl.cna;
+        if (prev.hidden) { g.style.display = ''; prev.hidden = false; }
 
-        const viewBox = sx2 + ' ' + sy2 + ' ' + sw2 + ' ' + sh2;
-        if (prev.w !== sw2) { viewport.setAttribute('width', sw2); prev.w = sw2; }
-        if (prev.h !== sh2) { viewport.setAttribute('height', sh2); prev.h = sh2; }
-        if (prev.viewBox !== viewBox) { viewport.setAttribute('viewBox', viewBox); prev.viewBox = viewBox; }
+        if (prev.tiled !== tiled) {
+            viewport.style.display = tiled ? 'none' : '';
+            rect.style.display = tiled ? '' : 'none';
+            prev.tiled = tiled;
+        }
+
         const transform = 'matrix(' + m0 + ',' + m1 + ',' + m2 + ',' + m3 + ',' + m4 + ',' + m5 + ')';
-        if (prev.transform !== transform) { viewport.setAttribute('transform', transform); prev.transform = transform; }
-        const smoothing = (flags & 4) ? 'auto' : 'pixelated'; // FlagSmoothing = bit 2
-        if (prev.smoothing !== smoothing) { viewport.style.imageRendering = smoothing; prev.smoothing = smoothing; }
+        if (prev.transform !== transform) { g.setAttribute('transform', transform); prev.transform = transform; }
+        const smoothing = (flags & 4) ? 'auto' : 'pixelated'; // SvgFlagSmoothing = bit 2
+        if (prev.smoothing !== smoothing) { g.style.imageRendering = smoothing; prev.smoothing = smoothing; }
         const additive = (flags & 8) !== 0; // SvgFlagAdditive
         if (prev.additive !== additive) {
-            viewport.style.mixBlendMode = additive ? 'plus-lighter' : "";
+            g.style.mixBlendMode = additive ? 'plus-lighter' : "";
             prev.additive = additive;
         }
 
         const href = entry.variants[variantMode] || '';
-        if (prev.href !== href) { image.setAttributeNS(xlinkNS, 'href', href); prev.href = href; }
-        if (prev.texW !== entry.w) { image.setAttribute('width', entry.w); prev.texW = entry.w; }
-        if (prev.texH !== entry.h) { image.setAttribute('height', entry.h); prev.texH = entry.h; }
 
-        const r = packedColor & 0xFF, g = (packedColor >> 8) & 0xFF,
+        if (!tiled) {
+            const viewBox = sx2 + ' ' + sy2 + ' ' + sw2 + ' ' + sh2;
+            if (prev.w !== sw2) { viewport.setAttribute('width', sw2); prev.w = sw2; }
+            if (prev.h !== sh2) { viewport.setAttribute('height', sh2); prev.h = sh2; }
+            if (prev.viewBox !== viewBox) { viewport.setAttribute('viewBox', viewBox); prev.viewBox = viewBox; }
+            if (prev.href !== href) { image.setAttributeNS(xlinkNS, 'href', href); prev.href = href; }
+            if (prev.texW !== entry.w) { image.setAttribute('width', entry.w); prev.texW = entry.w; }
+            if (prev.texH !== entry.h) { image.setAttribute('height', entry.h); prev.texH = entry.h; }
+        } else {
+            if (prev.rw !== sw2) { rect.setAttribute('width', sw2); prev.rw = sw2; }
+            if (prev.rh !== sh2) { rect.setAttribute('height', sh2); prev.rh = sh2; }
+
+            if (!entryEl.pattern) {
+                const pattern = document.createElementNS(svgNS, 'pattern');
+                pattern.id = 'cna-svg-dom-pattern-' + poolIndex;
+                pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+                const patternImage = document.createElementNS(svgNS, 'image');
+                patternImage.setAttribute('x', 0); patternImage.setAttribute('y', 0);
+                patternImage.setAttribute('preserveAspectRatio', 'none');
+                pattern.appendChild(patternImage);
+                defs.appendChild(pattern);
+                entryEl.pattern = pattern;
+                entryEl.patternImage = patternImage;
+                rect.setAttribute('fill', 'url(#' + pattern.id + ')');
+            }
+            const pattern = entryEl.pattern, patternImage = entryEl.patternImage;
+            const dims = entry.variantDims && entry.variantDims[variantMode];
+            const patW = dims ? dims.w : entry.w, patH = dims ? dims.h : entry.h;
+            const patX = -properMod(sx2, patW), patY = -properMod(sy2, patH);
+            if (prev.patW !== patW) { pattern.setAttribute('width', patW); patternImage.setAttribute('width', patW); prev.patW = patW; }
+            if (prev.patH !== patH) { pattern.setAttribute('height', patH); patternImage.setAttribute('height', patH); prev.patH = patH; }
+            if (prev.patX !== patX) { pattern.setAttribute('x', patX); prev.patX = patX; }
+            if (prev.patY !== patY) { pattern.setAttribute('y', patY); prev.patY = patY; }
+            if (prev.href !== href) { patternImage.setAttributeNS(xlinkNS, 'href', href); prev.href = href; }
+        }
+
+        const r = packedColor & 0xFF, g2 = (packedColor >> 8) & 0xFF,
               b = (packedColor >> 16) & 0xFF, a = (packedColor >> 24) & 0xFF;
         const isOpaqueOp = (flags & 16) !== 0; // SvgFlagOpaque
-        const needsTint = r !== 255 || g !== 255 || b !== 255 || a !== 255 || isOpaqueOp;
+        const needsTint = r !== 255 || g2 !== 255 || b !== 255 || a !== 255 || isOpaqueOp;
         let filterId = "";
         if (needsTint) {
-            const key = r + '_' + g + '_' + b + '_' + a + '_' + (isOpaqueOp ? 1 : 0);
+            const key = r + '_' + g2 + '_' + b + '_' + a + '_' + (isOpaqueOp ? 1 : 0);
             filterId = Module['cnaSvgDomFilterCache'] && Module['cnaSvgDomFilterCache'][key];
             if (!filterId) {
                 if (!Module['cnaSvgDomFilterCache']) Module['cnaSvgDomFilterCache'] = {};
@@ -119,7 +169,7 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
                 filter.setAttribute('color-interpolation-filters', 'sRGB');
                 const cm = document.createElementNS(svgNS, 'feColorMatrix');
                 cm.setAttribute('type', 'matrix');
-                const rr = r / 255, gg = g / 255, bb = b / 255;
+                const rr = r / 255, gg = g2 / 255, bb = b / 255;
                 const alphaRow = isOpaqueOp ? '0 0 0 0 1' : ('0 0 0 ' + (a / 255) + ' 0');
                 cm.setAttribute('values',
                     rr + ' 0 0 0 0  0 ' + gg + ' 0 0 0  0 0 ' + bb + ' 0 0  ' + alphaRow);
@@ -130,8 +180,8 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
         }
         const filterAttr = needsTint ? ('url(#' + filterId + ')') : "";
         if (prev.filter !== filterAttr) {
-            if (needsTint) image.setAttribute('filter', filterAttr);
-            else image.removeAttribute('filter');
+            if (needsTint) g.setAttribute('filter', filterAttr);
+            else g.removeAttribute('filter');
             prev.filter = filterAttr;
         }
     }
@@ -200,6 +250,7 @@ namespace CNA::Internal::Renderers::SvgDom
                                           const Vector2& origin,
                                           SpriteEffects effects,
                                           bool smoothing,
+                                          int addressU, int addressV,
                                           DomCompositeOp op)
     {
         const float sourceX = static_cast<float>(source.X);
@@ -210,7 +261,8 @@ namespace CNA::Internal::Renderers::SvgDom
         const bool exceedsBounds = source.X < 0 || source.Y < 0 ||
                                    source.X + source.Width > textureWidth ||
                                    source.Y + source.Height > textureHeight;
-        ValidateSourceRectangleEXT(exceedsBounds);
+        bool tiled = false, mirrored = false;
+        ValidateAddressModesEXT(addressU, addressV, exceedsBounds, tiled, mirrored);
 
         const float scaleX = sourceW != 0.0f ? static_cast<float>(dest.Width) / sourceW : 0.0f;
         const float scaleY = sourceH != 0.0f ? static_cast<float>(dest.Height) / sourceH : 0.0f;
@@ -244,9 +296,14 @@ namespace CNA::Internal::Renderers::SvgDom
         if (smoothing) flags |= SvgFlagSmoothing;
         if (op == DomCompositeOp::Additive) flags |= SvgFlagAdditive;
         if (op == DomCompositeOp::Opaque) flags |= SvgFlagOpaque;
+        if (tiled) flags |= SvgFlagTiled;
+        if (mirrored) flags |= SvgFlagMirrorTiled;
         cmd.flags = flags;
 
-        cmd.variantMode = VariantModeFor(op);
+        // Mirror-tiled variants live at slots 2/3 (see SvgDomTextureRenderer::GetDataUriEXT); a
+        // tiled-but-not-mirrored (Wrap) draw reuses the plain straight/unpremultiplied slots 0/1
+        // since a plain 'repeat' tiling of the untouched texture already reproduces Wrap addressing.
+        cmd.variantMode = VariantModeFor(op) + (mirrored ? 2 : 0);
         cmd.packedColor = static_cast<std::uint32_t>(color.getRProperty())
                         | (static_cast<std::uint32_t>(color.getGProperty()) << 8)
                         | (static_cast<std::uint32_t>(color.getBProperty()) << 16)
@@ -301,10 +358,17 @@ namespace CNA::Internal::Renderers::SvgDom
                                  static_cast<std::uint8_t>((c.packedColor >> 16) & 0xFF),
                                  static_cast<std::uint8_t>((c.packedColor >> 24) & 0xFF));
                 const DomCompositeOp op = ReconstructOpEXT(c);
-                const std::vector<std::uint8_t> pixels = PrepareSpritePixelsEXT(
-                    tex->GetPixelsEXT(), tex->GetWidth(),
-                    static_cast<int>(c.sx), static_cast<int>(c.sy),
-                    static_cast<int>(c.sw), static_cast<int>(c.sh), tint, op);
+                const bool tiled = (c.flags & SvgFlagTiled) != 0;
+                const std::vector<std::uint8_t> pixels = tiled
+                    ? PrepareTiledSpritePixelsEXT(
+                          tex->GetPixelsEXT(), tex->GetWidth(), tex->GetHeight(),
+                          static_cast<int>(c.sx), static_cast<int>(c.sy),
+                          static_cast<int>(c.sw), static_cast<int>(c.sh),
+                          (c.flags & SvgFlagMirrorTiled) != 0, tint, op)
+                    : PrepareSpritePixelsEXT(
+                          tex->GetPixelsEXT(), tex->GetWidth(),
+                          static_cast<int>(c.sx), static_cast<int>(c.sy),
+                          static_cast<int>(c.sw), static_cast<int>(c.sh), tint, op);
                 CNA_SvgDom_DrawSpriteToTarget(
                     boundTarget, pixels.data(), static_cast<int>(c.sw), static_cast<int>(c.sh),
                     c.m0, c.m1, c.m2, c.m3, c.m4, c.m5,
@@ -390,7 +454,7 @@ namespace CNA::Internal::Renderers::SvgDom
         SvgDomDrawCommand cmd = BuildDrawCommandEXT(
             tex.GetCanvasIdEXT(), texture.GetWidth(), texture.GetHeight(), destinationRectangle,
             sourceRectangle, color, rotation, origin, effects, smoothingEnabled_,
-            GetCurrentCompositeOpEXT());
+            addressU_, addressV_, GetCurrentCompositeOpEXT());
 
         // Compose (in order) the batch's own SetTransformMatrix and the active Viewport's (X,Y)
         // offset on top of the intrinsic per-sprite placement BuildDrawCommandEXT already produced.

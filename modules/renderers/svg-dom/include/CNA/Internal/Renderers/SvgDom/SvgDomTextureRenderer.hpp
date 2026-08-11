@@ -76,6 +76,49 @@ namespace CNA::Internal::Renderers::SvgDom
         int sx, int sy, int sw, int sh, const Color& tint, DomCompositeOp op);
 
     /**
+     * @brief CNAEXT. Render-target-bound counterpart to @ref PrepareSpritePixelsEXT for a
+     * Wrap/symmetric-Mirror source rectangle that leaves the texture (SVGDOM-1): samples every
+     * output texel through wrap or mirror addressing instead of a single in-bounds copy, then
+     * applies the same blend-prep/tint as @ref PrepareSpritePixelsEXT.
+     *
+     * Unlike the SVG backbuffer path (a `<pattern>` fill, tiling a pre-built texture variant), the
+     * render-target path already rasterizes per draw, so it samples straight from the source
+     * texture with no pre-tiled variant needed.
+     *
+     * @param texturePixels Full tightly packed RGBA8 texture, top row first.
+     * @param textureWidth  Full texture width in pixels.
+     * @param textureHeight Full texture height in pixels.
+     * @param sx,sy,sw,sh   Source rectangle, in texture pixels; may leave the texture bounds.
+     * @param mirrored      True for symmetric Mirror addressing, false for Wrap.
+     * @param tint          Tint colour; RGBA all multiply the texels.
+     * @param op            The composite operation in effect.
+     * @return @p sw * @p sh tightly packed RGBA8 pixels, top row first.
+     */
+    [[nodiscard]] std::vector<std::uint8_t> PrepareTiledSpritePixelsEXT(
+        const std::vector<std::uint8_t>& texturePixels, int textureWidth, int textureHeight,
+        int sx, int sy, int sw, int sh, bool mirrored, const Color& tint, DomCompositeOp op);
+
+    /**
+     * @brief CNAEXT. Builds a 2*width x 2*height quadrant-mirrored tile from @p pixels, the source
+     * image a symmetric `TextureAddressMode::Mirror` pattern fill tiles with plain `'repeat'` to
+     * reproduce mirror-repeat addressing exactly (the same technique `HtmlDom` proved out for its
+     * own equivalent `background-repeat` gap, independently applied here to an SVG/Canvas2D
+     * `<pattern>`/`createPattern` fill instead of a CSS background).
+     *
+     * Quadrants: top-left is @p pixels unchanged; top-right is horizontally flipped; bottom-left is
+     * vertically flipped; bottom-right is flipped on both axes. Tiling this 2x-sized image with a
+     * plain (non-offset-corrected) repeat produces a seamless mirror-repeat at every tile boundary,
+     * by construction.
+     *
+     * @param pixels Tightly packed RGBA8 rows, top row first.
+     * @param width  Source image width in pixels.
+     * @param height Source image height in pixels.
+     * @return `(2*width) * (2*height)` tightly packed RGBA8 pixels, top row first.
+     */
+    [[nodiscard]] std::vector<std::uint8_t> BuildMirrorTiledVariantEXT(
+        const std::vector<std::uint8_t>& pixels, int width, int height);
+
+    /**
      * @brief Texture backed by a CPU-side RGBA8 buffer, with lazily generated/cached PNG data URIs.
      *
      * plan_svg_dom.md design decision 2. An SVG `<image>` element's `href` needs a URL; unlike
@@ -153,10 +196,24 @@ namespace CNA::Internal::Renderers::SvgDom
          * variant, encoding and caching it first if this is the first request since the last
          * `UpdatePixels`.
          *
-         * @param variantMode 0 for the as-uploaded pixels, 1 for the un-premultiplied copy.
+         * @param variantMode 0 for the as-uploaded pixels, 1 for the un-premultiplied copy, 2 for
+         *                    the mirror-tiled straight copy (`2*GetWidth() x 2*GetHeight()`), 3 for
+         *                    the mirror-tiled un-premultiplied copy.
          * @return The data URI; never empty for a texture with a positive width/height.
          */
         [[nodiscard]] const std::string& GetDataUriEXT(int variantMode) const;
+
+        /** @brief CNAEXT. Width in pixels of the image @ref GetDataUriEXT(variantMode) returns. */
+        [[nodiscard]] int GetVariantWidthEXT(int variantMode) const
+        {
+            return (variantMode == 2 || variantMode == 3) ? width_ * 2 : width_;
+        }
+
+        /** @brief CNAEXT. Height in pixels of the image @ref GetDataUriEXT(variantMode) returns. */
+        [[nodiscard]] int GetVariantHeightEXT(int variantMode) const
+        {
+            return (variantMode == 2 || variantMode == 3) ? height_ * 2 : height_;
+        }
 
         /**
          * @brief CNAEXT. Returns this texture's id into `Module['cnaSvgDomTextures']`.
@@ -180,7 +237,7 @@ namespace CNA::Internal::Renderers::SvgDom
         std::vector<std::uint8_t> pixels_;
 
     private:
-        mutable std::string variantUriCache_[2];
-        mutable bool variantUriValid_[2] = {false, false};
+        mutable std::string variantUriCache_[4];
+        mutable bool variantUriValid_[4] = {false, false, false, false};
     };
 }

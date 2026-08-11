@@ -17,14 +17,20 @@
 // plan_svg_dom.md design decision 2: registers (or updates) a texture's data-URI variant in the
 // JS-side registry the SVG backbuffer flush path (SvgDomSpriteBatchRenderer.cpp) resolves
 // <image href> from. Idempotent per (id, variantMode) from the C++ side (only called once per
-// variant generation -- see SvgDomTextureRenderer::GetDataUriEXT).
-EM_JS(void, CNA_SvgDom_RegisterTextureVariant, (int id, int variantMode, const char* uri, int w, int h), {
+// variant generation -- see SvgDomTextureRenderer::GetDataUriEXT). `texW`/`texH` are the texture's
+// own natural size (always the same across every call for a given id); `variantW`/`variantH` are
+// this specific variant's own image size -- equal to texW/texH for variants 0/1, but 2x for the
+// mirror-tiled variants 2/3 (SVGDOM-1), so a <pattern> tile sized from the wrong dimensions never
+// happens even though a single texture can have differently-sized cached variants.
+EM_JS(void, CNA_SvgDom_RegisterTextureVariant, (int id, int variantMode, const char* uri,
+                                                int texW, int texH, int variantW, int variantH), {
     if (typeof document === 'undefined') return;
     if (!Module['cnaSvgDomTextures']) Module['cnaSvgDomTextures'] = {};
     let entry = Module['cnaSvgDomTextures'][id];
-    if (!entry) { entry = { variants: {}, w: w, h: h }; Module['cnaSvgDomTextures'][id] = entry; }
+    if (!entry) { entry = { variants: {}, variantDims: {}, w: texW, h: texH }; Module['cnaSvgDomTextures'][id] = entry; }
     entry.variants[variantMode] = UTF8ToString(uri);
-    entry.w = w; entry.h = h;
+    entry.variantDims[variantMode] = { w: variantW, h: variantH };
+    entry.w = texW; entry.h = texH;
 });
 #endif
 
@@ -186,8 +192,7 @@ namespace CNA::Internal::Renderers::SvgDom
     {
         if (!rgba) return;
         pixels_ = TightenTextureRowsEXT(rgba, width_, height_, stride);
-        variantUriValid_[0] = false;
-        variantUriValid_[1] = false;
+        for (bool& valid : variantUriValid_) valid = false;
     }
 
     void SvgDomTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
@@ -218,20 +223,121 @@ namespace CNA::Internal::Renderers::SvgDom
 
     const std::string& SvgDomTextureRenderer::GetDataUriEXT(int variantMode) const
     {
-        const int idx = (variantMode == 1) ? 1 : 0;
+        const int idx = (variantMode >= 0 && variantMode <= 3) ? variantMode : 0;
         if (!variantUriValid_[idx])
         {
-            const std::vector<std::uint8_t> png = (idx == 1)
-                ? EncodePngEXT(UnpremultiplyEXT(pixels_.data(), width_, height_).data(), width_, height_)
-                : EncodePngEXT(pixels_.data(), width_, height_);
+            std::vector<std::uint8_t> png;
+            switch (idx)
+            {
+                case 1:
+                    png = EncodePngEXT(
+                        UnpremultiplyEXT(pixels_.data(), width_, height_).data(), width_, height_);
+                    break;
+                case 2:
+                {
+                    const std::vector<std::uint8_t> tiled =
+                        BuildMirrorTiledVariantEXT(pixels_, width_, height_);
+                    png = EncodePngEXT(tiled.data(), width_ * 2, height_ * 2);
+                    break;
+                }
+                case 3:
+                {
+                    const std::vector<std::uint8_t> unpremul =
+                        UnpremultiplyEXT(pixels_.data(), width_, height_);
+                    const std::vector<std::uint8_t> tiled =
+                        BuildMirrorTiledVariantEXT(unpremul, width_, height_);
+                    png = EncodePngEXT(tiled.data(), width_ * 2, height_ * 2);
+                    break;
+                }
+                default:
+                    png = EncodePngEXT(pixels_.data(), width_, height_);
+                    break;
+            }
             variantUriCache_[idx] = BuildPngDataUriEXT(png);
             variantUriValid_[idx] = true;
 #if defined(__EMSCRIPTEN__)
             CNA_SvgDom_RegisterTextureVariant(
-                id_, idx, variantUriCache_[idx].c_str(), width_, height_);
+                id_, idx, variantUriCache_[idx].c_str(), width_, height_,
+                GetVariantWidthEXT(idx), GetVariantHeightEXT(idx));
 #endif
         }
         return variantUriCache_[idx];
+    }
+
+    std::vector<std::uint8_t> BuildMirrorTiledVariantEXT(
+        const std::vector<std::uint8_t>& pixels, int width, int height)
+    {
+        const int outW = width * 2;
+        const int outH = height * 2;
+        std::vector<std::uint8_t> out(static_cast<std::size_t>(outW) * outH * 4);
+
+        auto srcPixel = [&](int x, int y) -> const std::uint8_t*
+        {
+            return pixels.data() + (static_cast<std::size_t>(y) * width + x) * 4;
+        };
+        auto dstPixel = [&](int x, int y) -> std::uint8_t*
+        {
+            return out.data() + (static_cast<std::size_t>(y) * outW + x) * 4;
+        };
+
+        for (int y = 0; y < height; ++y)
+        {
+            for (int x = 0; x < width; ++x)
+            {
+                const std::uint8_t* src = srcPixel(x, y);
+                std::memcpy(dstPixel(x, y), src, 4);                             // top-left
+                std::memcpy(dstPixel(outW - 1 - x, y), src, 4);                  // top-right (flip X)
+                std::memcpy(dstPixel(x, outH - 1 - y), src, 4);                  // bottom-left (flip Y)
+                std::memcpy(dstPixel(outW - 1 - x, outH - 1 - y), src, 4);       // bottom-right (flip both)
+            }
+        }
+        return out;
+    }
+
+    namespace
+    {
+        // Shared by PrepareSpritePixelsEXT and PrepareTiledSpritePixelsEXT: both extract an sw x sh
+        // buffer of texels (by straight in-bounds copy or by wrap/mirror sampling, respectively)
+        // and then apply the identical blend-prep/tint step below.
+        void ApplyBlendPrepAndTintEXT(std::vector<std::uint8_t>& pixels, int w, int h,
+                                      const Color& tint, DomCompositeOp op)
+        {
+            if (op == DomCompositeOp::AlphaBlend)
+                pixels = UnpremultiplyEXT(pixels.data(), w, h);
+
+            const int tintR = tint.getRProperty();
+            const int tintG = tint.getGProperty();
+            const int tintB = tint.getBProperty();
+            const int tintA = tint.getAProperty();
+            const std::size_t pixelCount = static_cast<std::size_t>(w) * h;
+            for (std::size_t p = 0; p < pixelCount; ++p)
+            {
+                pixels[p * 4 + 0] = static_cast<std::uint8_t>((pixels[p * 4 + 0] * tintR) / 255);
+                pixels[p * 4 + 1] = static_cast<std::uint8_t>((pixels[p * 4 + 1] * tintG) / 255);
+                pixels[p * 4 + 2] = static_cast<std::uint8_t>((pixels[p * 4 + 2] * tintB) / 255);
+                pixels[p * 4 + 3] = (op == DomCompositeOp::Opaque)
+                    ? static_cast<std::uint8_t>(255)
+                    : static_cast<std::uint8_t>((pixels[p * 4 + 3] * tintA) / 255);
+            }
+        }
+
+        // Non-negative modulo -- an out-of-bounds source origin can be negative (a sourceRectangle
+        // scrolled past the left/top edge under Wrap/Mirror addressing).
+        int ProperModEXT(int v, int m)
+        {
+            const int r = v % m;
+            return r < 0 ? r + m : r;
+        }
+
+        // Folds v into [0, w) via the standard hardware mirror-repeat function: periodic with
+        // period 2w, identity on [0, w) and reflected on [w, 2w) -- matches
+        // BuildMirrorTiledVariantEXT's own quadrant layout (see that function's doc).
+        int MirrorFoldEXT(int v, int w)
+        {
+            const int period = 2 * w;
+            const int m = ProperModEXT(v, period);
+            return m < w ? m : (period - 1 - m);
+        }
     }
 
     std::vector<std::uint8_t> PrepareSpritePixelsEXT(
@@ -246,24 +352,29 @@ namespace CNA::Internal::Renderers::SvgDom
             std::memcpy(sub.data() + static_cast<std::size_t>(row) * sw * 4, src,
                        static_cast<std::size_t>(sw) * 4);
         }
+        ApplyBlendPrepAndTintEXT(sub, sw, sh, tint, op);
+        return sub;
+    }
 
-        if (op == DomCompositeOp::AlphaBlend)
-            sub = UnpremultiplyEXT(sub.data(), sw, sh);
-
-        const int tintR = tint.getRProperty();
-        const int tintG = tint.getGProperty();
-        const int tintB = tint.getBProperty();
-        const int tintA = tint.getAProperty();
-        const std::size_t pixelCount = static_cast<std::size_t>(sw) * sh;
-        for (std::size_t p = 0; p < pixelCount; ++p)
+    std::vector<std::uint8_t> PrepareTiledSpritePixelsEXT(
+        const std::vector<std::uint8_t>& texturePixels, int textureWidth, int textureHeight,
+        int sx, int sy, int sw, int sh, bool mirrored, const Color& tint, DomCompositeOp op)
+    {
+        std::vector<std::uint8_t> sub(static_cast<std::size_t>(sw) * sh * 4);
+        for (int row = 0; row < sh; ++row)
         {
-            sub[p * 4 + 0] = static_cast<std::uint8_t>((sub[p * 4 + 0] * tintR) / 255);
-            sub[p * 4 + 1] = static_cast<std::uint8_t>((sub[p * 4 + 1] * tintG) / 255);
-            sub[p * 4 + 2] = static_cast<std::uint8_t>((sub[p * 4 + 2] * tintB) / 255);
-            sub[p * 4 + 3] = (op == DomCompositeOp::Opaque)
-                ? static_cast<std::uint8_t>(255)
-                : static_cast<std::uint8_t>((sub[p * 4 + 3] * tintA) / 255);
+            const int gy = sy + row;
+            const int texY = mirrored ? MirrorFoldEXT(gy, textureHeight) : ProperModEXT(gy, textureHeight);
+            for (int col = 0; col < sw; ++col)
+            {
+                const int gx = sx + col;
+                const int texX = mirrored ? MirrorFoldEXT(gx, textureWidth) : ProperModEXT(gx, textureWidth);
+                const std::uint8_t* src = texturePixels.data() +
+                    (static_cast<std::size_t>(texY) * textureWidth + texX) * 4;
+                std::memcpy(sub.data() + (static_cast<std::size_t>(row) * sw + col) * 4, src, 4);
+            }
         }
+        ApplyBlendPrepAndTintEXT(sub, sw, sh, tint, op);
         return sub;
     }
 }

@@ -150,14 +150,50 @@ TEST(SvgDomSharedState, AllocateTextureIdEXTIsMonotonicallyIncreasing)
     EXPECT_GT(a, 0);
 }
 
-TEST(SvgDomSourceRectangleValidation, InBoundsNeverThrows)
+TEST(SvgDomAddressModeValidation, InBoundsNeverThrowsRegardlessOfMode)
 {
-    EXPECT_NO_THROW(ValidateSourceRectangleEXT(false));
+    bool tiled = true, mirrored = true;
+    EXPECT_NO_THROW(ValidateAddressModesEXT(0, 0, false, tiled, mirrored));
+    EXPECT_FALSE(tiled);
+    EXPECT_FALSE(mirrored);
+    EXPECT_NO_THROW(ValidateAddressModesEXT(1, 1, false, tiled, mirrored));
+    EXPECT_NO_THROW(ValidateAddressModesEXT(2, 2, false, tiled, mirrored));
 }
 
-TEST(SvgDomSourceRectangleValidation, OutOfBoundsThrows)
+TEST(SvgDomAddressModeValidation, OutOfBoundsWrapTilesWithoutMirroring)
 {
-    EXPECT_THROW(ValidateSourceRectangleEXT(true), std::runtime_error);
+    bool tiled = false, mirrored = true;
+    ValidateAddressModesEXT(0, 0, true, tiled, mirrored);
+    EXPECT_TRUE(tiled);
+    EXPECT_FALSE(mirrored);
+}
+
+TEST(SvgDomAddressModeValidation, OutOfBoundsSymmetricMirrorTilesWithMirroring)
+{
+    bool tiled = false, mirrored = false;
+    ValidateAddressModesEXT(2, 2, true, tiled, mirrored);
+    EXPECT_TRUE(tiled);
+    EXPECT_TRUE(mirrored);
+}
+
+TEST(SvgDomAddressModeValidation, OutOfBoundsClampThrows)
+{
+    bool tiled = false, mirrored = false;
+    EXPECT_THROW(ValidateAddressModesEXT(1, 1, true, tiled, mirrored), std::runtime_error);
+}
+
+TEST(SvgDomAddressModeValidation, OutOfBoundsMixedAxesThrows)
+{
+    bool tiled = false, mirrored = false;
+    EXPECT_THROW(ValidateAddressModesEXT(0, 2, true, tiled, mirrored), std::runtime_error);
+    EXPECT_THROW(ValidateAddressModesEXT(2, 0, true, tiled, mirrored), std::runtime_error);
+}
+
+TEST(SvgDomAddressModeValidation, InvalidOrdinalThrowsEvenInBounds)
+{
+    bool tiled = false, mirrored = false;
+    EXPECT_THROW(ValidateAddressModesEXT(3, 0, false, tiled, mirrored), std::runtime_error);
+    EXPECT_THROW(ValidateAddressModesEXT(0, -1, false, tiled, mirrored), std::runtime_error);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -365,7 +401,7 @@ TEST(SvgDomDrawCommand, UnscaledUnrotatedDrawPlacesOriginAtDest)
 {
     const auto cmd = BuildDrawCommandEXT(
         7, 64, 32, Rectangle(10, 20, 8, 8), Rectangle(0, 0, 8, 8), Color(255, 255, 255, 255),
-        0.0f, Vector2(0, 0), SpriteEffects::None, true, DomCompositeOp::NonPremultiplied);
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::NonPremultiplied);
     // Identity rotation/scale, no origin: matrix should be pure translate(10,20).
     EXPECT_FLOAT_EQ(cmd.m0, 1.0f); EXPECT_FLOAT_EQ(cmd.m1, 0.0f);
     EXPECT_FLOAT_EQ(cmd.m2, 0.0f); EXPECT_FLOAT_EQ(cmd.m3, 1.0f);
@@ -378,7 +414,7 @@ TEST(SvgDomDrawCommand, ScaleIsDestinationOverUnclampedSource)
 {
     const auto cmd = BuildDrawCommandEXT(
         1, 64, 32, Rectangle(0, 0, 20, 40), Rectangle(0, 0, 10, 10), Color(255, 255, 255, 255),
-        0.0f, Vector2(0, 0), SpriteEffects::None, true, DomCompositeOp::NonPremultiplied);
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::NonPremultiplied);
     EXPECT_FLOAT_EQ(cmd.m0, 2.0f); // scaleX
     EXPECT_FLOAT_EQ(cmd.m3, 4.0f); // scaleY
 }
@@ -389,7 +425,7 @@ TEST(SvgDomDrawCommand, OriginTranslatesLocalPivotIntoTheDestinationPoint)
     // exactly to dest (10,20) after the full transform.
     const auto cmd = BuildDrawCommandEXT(
         1, 64, 32, Rectangle(10, 20, 8, 8), Rectangle(0, 0, 8, 8), Color(255, 255, 255, 255),
-        0.0f, Vector2(4, 4), SpriteEffects::None, true, DomCompositeOp::NonPremultiplied);
+        0.0f, Vector2(4, 4), SpriteEffects::None, true, 1, 1, DomCompositeOp::NonPremultiplied);
     const float px = cmd.m0 * 4 + cmd.m2 * 4 + cmd.m4;
     const float py = cmd.m1 * 4 + cmd.m3 * 4 + cmd.m5;
     EXPECT_NEAR(px, 10.0f, 1e-4f);
@@ -403,7 +439,7 @@ TEST(SvgDomDrawCommand, NinetyDegreeRotationMapsRightToDown)
     constexpr float kHalfPi = 1.57079632679489661923f;
     const auto cmd = BuildDrawCommandEXT(
         1, 64, 32, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), Color(255, 255, 255, 255),
-        kHalfPi, Vector2(0, 0), SpriteEffects::None, true,
+        kHalfPi, Vector2(0, 0), SpriteEffects::None, true, 1, 1,
         DomCompositeOp::NonPremultiplied);
     const float px = cmd.m0 * 1 + cmd.m2 * 0 + cmd.m4;
     const float py = cmd.m1 * 1 + cmd.m3 * 0 + cmd.m5;
@@ -415,7 +451,7 @@ TEST(SvgDomDrawCommand, OutOfBoundsSourceRectangleThrows)
 {
     EXPECT_THROW(BuildDrawCommandEXT(
         1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 16, 8), Color(255, 255, 255, 255),
-        0.0f, Vector2(0, 0), SpriteEffects::None, true, DomCompositeOp::NonPremultiplied),
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::NonPremultiplied),
         std::runtime_error);
 }
 
@@ -423,19 +459,19 @@ TEST(SvgDomDrawCommand, ColorIsPackedRgbaAndOpSelectsVariantAndFlags)
 {
     const auto opaque = BuildDrawCommandEXT(
         1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), Color(1, 2, 3, 4),
-        0.0f, Vector2(0, 0), SpriteEffects::None, true, DomCompositeOp::Opaque);
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::Opaque);
     EXPECT_EQ(opaque.packedColor, 1u | (2u << 8) | (3u << 16) | (4u << 24));
     EXPECT_TRUE(opaque.flags & SvgFlagOpaque);
     EXPECT_EQ(opaque.variantMode, 0);
 
     const auto alphaBlend = BuildDrawCommandEXT(
         1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), Color(255, 255, 255, 255),
-        0.0f, Vector2(0, 0), SpriteEffects::None, true, DomCompositeOp::AlphaBlend);
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::AlphaBlend);
     EXPECT_EQ(alphaBlend.variantMode, 1);
 
     const auto additive = BuildDrawCommandEXT(
         1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), Color(255, 255, 255, 255),
-        0.0f, Vector2(0, 0), SpriteEffects::None, true, DomCompositeOp::Additive);
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::Additive);
     EXPECT_TRUE(additive.flags & SvgFlagAdditive);
 }
 
@@ -443,7 +479,7 @@ TEST(SvgDomDrawCommand, PointFilteringClearsTheSmoothingFlag)
 {
     const auto cmd = BuildDrawCommandEXT(
         1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), Color(255, 255, 255, 255),
-        0.0f, Vector2(0, 0), SpriteEffects::None, false, DomCompositeOp::NonPremultiplied);
+        0.0f, Vector2(0, 0), SpriteEffects::None, false, 1, 1, DomCompositeOp::NonPremultiplied);
     EXPECT_FALSE(cmd.flags & SvgFlagSmoothing);
 }
 
@@ -451,11 +487,132 @@ TEST(SvgDomDrawCommand, FlipHorizontallySetsTheFlagWithoutThrowing)
 {
     EXPECT_NO_THROW(BuildDrawCommandEXT(
         1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), Color(255, 255, 255, 255),
-        0.0f, Vector2(0, 0), SpriteEffects::FlipHorizontally, true, DomCompositeOp::NonPremultiplied));
+        0.0f, Vector2(0, 0), SpriteEffects::FlipHorizontally, true, 1, 1, DomCompositeOp::NonPremultiplied));
     const auto cmd = BuildDrawCommandEXT(
         1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), Color(255, 255, 255, 255),
-        0.0f, Vector2(0, 0), SpriteEffects::FlipHorizontally, true, DomCompositeOp::NonPremultiplied);
+        0.0f, Vector2(0, 0), SpriteEffects::FlipHorizontally, true, 1, 1, DomCompositeOp::NonPremultiplied);
     EXPECT_TRUE(cmd.flags & SvgFlagFlipHorizontally);
+}
+
+TEST(SvgDomDrawCommand, OutOfBoundsWrapSetsTiledWithoutMirrorAndKeepsVariantSlot)
+{
+    // sourceRectangle wider than the texture, both axes addressed Wrap (0): tiles via the plain
+    // (non mirror-doubled) variant, so variantMode is unaffected by tiling.
+    const auto cmd = BuildDrawCommandEXT(
+        1, 8, 8, Rectangle(0, 0, 16, 8), Rectangle(0, 0, 16, 8), Color(255, 255, 255, 255),
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 0, 0, DomCompositeOp::AlphaBlend);
+    EXPECT_TRUE(cmd.flags & SvgFlagTiled);
+    EXPECT_FALSE(cmd.flags & SvgFlagMirrorTiled);
+    EXPECT_EQ(cmd.variantMode, 1); // AlphaBlend's own slot (1), not shifted by +2
+}
+
+TEST(SvgDomDrawCommand, OutOfBoundsMirrorSetsTiledAndMirrorAndShiftsVariantSlot)
+{
+    // sourceRectangle wider than the texture, both axes addressed Mirror (2): tiles via the
+    // mirror-doubled variant, so variantMode is shifted into the mirror slot pair (+2).
+    const auto cmd = BuildDrawCommandEXT(
+        1, 8, 8, Rectangle(0, 0, 16, 8), Rectangle(0, 0, 16, 8), Color(255, 255, 255, 255),
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 2, 2, DomCompositeOp::AlphaBlend);
+    EXPECT_TRUE(cmd.flags & SvgFlagTiled);
+    EXPECT_TRUE(cmd.flags & SvgFlagMirrorTiled);
+    EXPECT_EQ(cmd.variantMode, 3); // AlphaBlend's slot (1) shifted into the mirror pair (+2)
+}
+
+TEST(SvgDomDrawCommand, OutOfBoundsClampStillThrows)
+{
+    EXPECT_THROW(BuildDrawCommandEXT(
+        1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 16, 8), Color(255, 255, 255, 255),
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::NonPremultiplied),
+        std::runtime_error);
+}
+
+TEST(SvgDomDrawCommand, OutOfBoundsMixedWrapAndMirrorThrows)
+{
+    EXPECT_THROW(BuildDrawCommandEXT(
+        1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 16, 8), Color(255, 255, 255, 255),
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 0, 2, DomCompositeOp::NonPremultiplied),
+        std::runtime_error);
+}
+
+// ---------------------------------------------------------------------------------------------
+// BuildMirrorTiledVariantEXT / PrepareTiledSpritePixelsEXT -- pure C++, genuinely exercised
+// ---------------------------------------------------------------------------------------------
+
+TEST(SvgDomMirrorTiledVariant, ProducesQuadrantMirroredTileTwiceTheSourceSize)
+{
+    // 2x1 source: pixel(0,0)=red, pixel(1,0)=green.
+    std::vector<std::uint8_t> src = {255, 0, 0, 255,  0, 255, 0, 255};
+    const auto out = BuildMirrorTiledVariantEXT(src, 2, 1);
+    ASSERT_EQ(out.size(), static_cast<std::size_t>(4 * 2 * 4));
+    auto px = [&](int x, int y) { return &out[(static_cast<std::size_t>(y) * 4 + x) * 4]; };
+    EXPECT_EQ(px(0, 0)[0], 255); EXPECT_EQ(px(0, 0)[1], 0);   // top-left: red, unchanged
+    EXPECT_EQ(px(1, 0)[0], 0);   EXPECT_EQ(px(1, 0)[1], 255); // pixel(1,0): green, unchanged
+    EXPECT_EQ(px(2, 0)[0], 0);   EXPECT_EQ(px(2, 0)[1], 255); // mirror of x=1 -> green
+    EXPECT_EQ(px(3, 0)[0], 255); EXPECT_EQ(px(3, 0)[1], 0);   // mirror of x=0 -> red
+}
+
+TEST(SvgDomMirrorTiledVariant, TilesSeamlesslyAtTheDoubledBoundary)
+{
+    // The whole point of the quadrant construction: plain repeat of the 2Wx2H tile must reproduce
+    // the same value at u and u + 2W for every u -- verified here for a few boundary-straddling u.
+    std::vector<std::uint8_t> src = {10, 20, 30, 255,  40, 50, 60, 255,
+                                     70, 80, 90, 255,  100, 110, 120, 255};
+    const auto out = BuildMirrorTiledVariantEXT(src, 2, 2);
+    auto px = [&](int x, int y) { return &out[(static_cast<std::size_t>(y) * 4 + x) * 4]; };
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+            for (int c = 0; c < 4; ++c)
+                EXPECT_EQ(px(x, y)[c], px(x, y)[c]); // sanity: same-cell read is stable
+    // A tile repeated with period 4 means content at local x=3 (this tile's last column) must equal
+    // what the NEXT tile would show at its own x=-1, i.e. this tile's own x=3 -- already true by
+    // construction; the real assertion is symmetry: column 0 mirrors column 3, column 1 mirrors 2.
+    for (int y = 0; y < 4; ++y)
+        for (int c = 0; c < 4; ++c)
+        {
+            EXPECT_EQ(px(0, y)[c], px(3, y)[c]);
+            EXPECT_EQ(px(1, y)[c], px(2, y)[c]);
+        }
+}
+
+TEST(SvgDomPrepareTiledSpritePixels, WrapSamplesModuloTheTextureSize)
+{
+    // 2x1 texture: (0,0)=red, (1,0)=green. Requesting a 4-wide strip starting at x=-1 under Wrap
+    // should read green,red,green,red (mod 2, non-negative).
+    std::vector<std::uint8_t> tex = {255, 0, 0, 255,  0, 255, 0, 255};
+    const auto out = PrepareTiledSpritePixelsEXT(tex, 2, 1, -1, 0, 4, 1, false,
+                                                 Color(255, 255, 255, 255), DomCompositeOp::NonPremultiplied);
+    auto px = [&](int x) { return &out[static_cast<std::size_t>(x) * 4]; };
+    EXPECT_EQ(px(0)[1], 255); EXPECT_EQ(px(0)[0], 0);   // x=-1 -> mod 2 -> texel 1 (green)
+    EXPECT_EQ(px(1)[0], 255); EXPECT_EQ(px(1)[1], 0);   // x=0  -> texel 0 (red)
+    EXPECT_EQ(px(2)[1], 255); EXPECT_EQ(px(2)[0], 0);   // x=1  -> texel 1 (green)
+    EXPECT_EQ(px(3)[0], 255); EXPECT_EQ(px(3)[1], 0);   // x=2  -> mod 2 -> texel 0 (red)
+}
+
+TEST(SvgDomPrepareTiledSpritePixels, MirrorFoldsAboutEachTextureEdge)
+{
+    // 2x1 texture: (0,0)=red, (1,0)=green. Mirror period is 2*W=4: u=0->red, 1->green, 2->green
+    // (fold), 3->red (fold).
+    std::vector<std::uint8_t> tex = {255, 0, 0, 255,  0, 255, 0, 255};
+    const auto out = PrepareTiledSpritePixelsEXT(tex, 2, 1, 0, 0, 4, 1, true,
+                                                 Color(255, 255, 255, 255), DomCompositeOp::NonPremultiplied);
+    auto px = [&](int x) { return &out[static_cast<std::size_t>(x) * 4]; };
+    EXPECT_EQ(px(0)[0], 255); EXPECT_EQ(px(0)[1], 0);   // u=0 -> red
+    EXPECT_EQ(px(1)[1], 255); EXPECT_EQ(px(1)[0], 0);   // u=1 -> green
+    EXPECT_EQ(px(2)[1], 255); EXPECT_EQ(px(2)[0], 0);   // u=2 -> fold(2)=1 -> green
+    EXPECT_EQ(px(3)[0], 255); EXPECT_EQ(px(3)[1], 0);   // u=3 -> fold(3)=0 -> red
+}
+
+TEST(SvgDomPrepareTiledSpritePixels, AppliesTintAndOpaqueForcingLikeThePlainVariant)
+{
+    std::vector<std::uint8_t> tex(4 * 4, 0);
+    for (std::size_t p = 0; p < 4; ++p) { tex[p * 4 + 0] = 100; tex[p * 4 + 3] = 128; }
+    const auto out = PrepareTiledSpritePixelsEXT(tex, 2, 2, 0, 0, 2, 2, false,
+                                                 Color(200, 255, 255, 255), DomCompositeOp::Opaque);
+    for (std::size_t p = 0; p < 4; ++p)
+    {
+        EXPECT_EQ(out[p * 4 + 0], static_cast<std::uint8_t>((100 * 200) / 255));
+        EXPECT_EQ(out[p * 4 + 3], 255); // Opaque forces alpha to 255 regardless of source/tint alpha
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -492,6 +649,53 @@ TEST(SvgDomSpriteBatch, SamplerAddressModeRejectsOutOfRangeOrdinals)
     EXPECT_NO_THROW(batch.SetSamplerAddressMode(0, 2));
     EXPECT_THROW(batch.SetSamplerAddressMode(-1, 0), std::runtime_error);
     EXPECT_THROW(batch.SetSamplerAddressMode(0, 3), std::runtime_error);
+}
+
+TEST(SvgDomSpriteBatch, WrapAddressModeWithOutOfBoundsSourceRectangleTilesInsteadOfThrowing)
+{
+    SvgDomSpriteBatchRenderer batch;
+    SvgDomTextureRenderer tex(MakeImage(2, 2, Sample2x2()));
+    batch.SetSamplerAddressMode(0, 0); // Wrap
+    batch.Begin();
+    EXPECT_NO_THROW(batch.Draw(tex, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 4, 4),
+                               Color(255, 255, 255, 255)));
+    ASSERT_EQ(batch.GetCommandsEXT().size(), 1u);
+    EXPECT_TRUE(batch.GetCommandsEXT()[0].flags & SvgFlagTiled);
+    EXPECT_FALSE(batch.GetCommandsEXT()[0].flags & SvgFlagMirrorTiled);
+}
+
+TEST(SvgDomSpriteBatch, MirrorAddressModeWithOutOfBoundsSourceRectangleTilesWithMirroring)
+{
+    SvgDomSpriteBatchRenderer batch;
+    SvgDomTextureRenderer tex(MakeImage(2, 2, Sample2x2()));
+    batch.SetSamplerAddressMode(2, 2); // Mirror
+    batch.Begin();
+    EXPECT_NO_THROW(batch.Draw(tex, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 4, 4),
+                               Color(255, 255, 255, 255)));
+    ASSERT_EQ(batch.GetCommandsEXT().size(), 1u);
+    EXPECT_TRUE(batch.GetCommandsEXT()[0].flags & SvgFlagTiled);
+    EXPECT_TRUE(batch.GetCommandsEXT()[0].flags & SvgFlagMirrorTiled);
+}
+
+TEST(SvgDomSpriteBatch, ClampAddressModeWithOutOfBoundsSourceRectangleStillThrows)
+{
+    SvgDomSpriteBatchRenderer batch;
+    SvgDomTextureRenderer tex(MakeImage(2, 2, Sample2x2()));
+    batch.SetSamplerAddressMode(1, 1); // Clamp -- also the default sampler state
+    batch.Begin();
+    EXPECT_THROW(batch.Draw(tex, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 4, 4),
+                            Color(255, 255, 255, 255)), std::runtime_error);
+}
+
+TEST(SvgDomSpriteBatch, InBoundsSourceRectangleNeverTilesRegardlessOfAddressMode)
+{
+    SvgDomSpriteBatchRenderer batch;
+    SvgDomTextureRenderer tex(MakeImage(2, 2, Sample2x2()));
+    batch.SetSamplerAddressMode(0, 0); // Wrap
+    batch.Begin();
+    batch.Draw(tex, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 2, 2), Color(255, 255, 255, 255));
+    ASSERT_EQ(batch.GetCommandsEXT().size(), 1u);
+    EXPECT_FALSE(batch.GetCommandsEXT()[0].flags & SvgFlagTiled);
 }
 
 TEST(SvgDomSpriteBatch, BeginClearsCommandsFromAPreviousBatch)

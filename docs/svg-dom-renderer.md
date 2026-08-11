@@ -61,14 +61,18 @@ reaching it requires *selecting* `SVG_DOM`, which itself requires Emscripten —
 
 One `<svg id="cna-svg-dom-root">` is created over the `<canvas>` SDL3 already owns (the canvas
 stays in the layout, hidden, so SDL keeps sizing it and delivering input through it). Every sprite
-is a **pooled**, dirty-diffed pair of elements — a nested `<svg>` viewport containing one `<image>`:
+is a **pooled**, dirty-diffed wrapper `<g>` around two alternately shown children: a nested `<svg>`
+viewport containing one `<image>` (crop-only draws), or a `<rect>` filled by a per-slot `<pattern>`
+(tiled draws — see the `TextureAddressMode` row below). Placement, filtering and tint all live on
+the wrapping `<g>` so both children share them identically:
 
 | XNA concept | SVG realization |
 |---|---|
-| destination position, rotation, scale, flip | one collapsed affine `transform="matrix(a,b,c,d,e,f)"` on the nested `<svg>` (computed in C++, unit-tested numerically — see `SvgDomSpriteBatchRenderer::BuildDrawCommandEXT`) |
-| `Texture2D` + `sourceRectangle` | the nested `<svg>`'s own `width`/`height`/`viewBox` crop an `<image>` sized to the full texture — SVG's intrinsic nested-viewport clipping, no separate `<clipPath>` needed |
+| destination position, rotation, scale, flip | one collapsed affine `transform="matrix(a,b,c,d,e,f)"` on the wrapping `<g>` (computed in C++, unit-tested numerically — see `SvgDomSpriteBatchRenderer::BuildDrawCommandEXT`) |
+| `Texture2D` + in-bounds `sourceRectangle` | the nested `<svg>`'s own `width`/`height`/`viewBox` crop an `<image>` sized to the full texture — SVG's intrinsic nested-viewport clipping, no separate `<clipPath>` needed |
+| `Texture2D` + out-of-bounds `sourceRectangle` under `Wrap`/symmetric `Mirror` (SVGDOM-1) | a `<rect>` filled by a per-pool-slot `<pattern patternUnits="userSpaceOnUse">`, phase-offset by `x`/`y` (`-sourceRect.{X,Y} mod patternWidth/Height`, non-negative) so the tile grid lines up with the requested source origin; `Mirror` reuses `Wrap`'s plain `repeat` against a pre-built quadrant-mirrored texture variant instead of a separate primitive (neither SVG nor CSS expose one) |
 | tint (RGB and A together) | a cached `feColorMatrix` filter (`url(#cna-svg-dom-tint-…)`), omitted entirely for `Color.White` with a non-`Opaque` blend — the common case carries no filter attribute at all |
-| `BlendState.Additive` | `mix-blend-mode: plus-lighter` on the sprite's own `<svg>` wrapper |
+| `BlendState.Additive` | `mix-blend-mode: plus-lighter` on the sprite's own wrapping `<g>` |
 | `BlendState.Opaque` | the same accepted "alpha-stripped" deviation `HTML_DOM`'s own `<div>` path documents (forced via the filter's alpha row, `0 0 0 0 1`) — neither SVG nor CSS compositing exposes a per-element Porter-Duff "replace" against the backdrop |
 | `SpriteBatch` draw order | DOM document order |
 | `Clear` | the backbuffer `<rect>`'s own `fill`, plus rewinding the pooled-sprite cursor to 0 |
@@ -130,7 +134,7 @@ a block.
 | Feature | Status | Notes |
 |---|---|---|
 | `TextureFilter` (magnification) | 🟨 | `image-rendering: auto` vs `pixelated` on the sprite's own `<svg>` wrapper, the same magnification-dominant grouping `SDL_RENDERER`/`CANVAS`/`HTML_DOM` use. Ordinal validation (only `Linear`/`Point` accepted) is ✅ unit-tested. |
-| `TextureAddressMode` recording | ✅ | `SetSamplerAddressMode` validates and records U/V ordinals (✅ unit-tested); only actually consulted once a source rectangle leaves the texture, which V1 always rejects regardless of mode (see §1). |
+| `TextureAddressMode` (`Wrap`/symmetric `Mirror`, out-of-bounds `sourceRectangle`) | ✅ | `SetSamplerAddressMode` validates and records U/V ordinals; once a source rectangle leaves the texture, `Wrap` and symmetric `Mirror` (same mode on both axes) tile via a `<pattern>` fill (SVG path) or direct wrap/mirror texel sampling (render-target path) instead of throwing — ✅ unit-tested (SVGDOM-1). Out-of-bounds `Clamp` and mixed per-axis addressing still throw (see §1). |
 
 ## 5. Viewport / PresentationParameters / Rasterizer
 
@@ -163,10 +167,15 @@ natively (`SvgDom3DSurfaceTest`).
 
 1. **No backbuffer readback** — no browser API rasterizes a live SVG subtree synchronously.
    Render into a `RenderTarget2D` and read that, or use `CANVAS`.
-2. **`TextureAddressMode::Wrap`/`Mirror`/out-of-bounds `Clamp` are not yet implemented** (SVGDOM-1)
-   — every draw's `sourceRectangle` must lie within the texture; violating this throws
-   deterministically rather than approximating. A narrower boundary than `HTML_DOM`'s own
-   edge-extension/tiling variant cache.
+2. **`TextureAddressMode::Wrap` and symmetric `Mirror` (same mode on both axes) are implemented**
+   for an out-of-bounds `sourceRectangle` (SVGDOM-1): the SVG backbuffer path tiles via a per-sprite
+   `<pattern>` fill (a pre-built quadrant-mirrored texture variant reproduces `Mirror` with a plain
+   `repeat`), and the render-target-bound Canvas2D path samples every output texel directly through
+   wrap/mirror addressing in C++ (`PrepareTiledSpritePixelsEXT`). Out-of-bounds `Clamp` and mixed
+   per-axis addressing (e.g. `Wrap` on U, `Mirror` on V) remain unimplemented and still throw
+   deterministically — see `ValidateAddressModesEXT`. Clamp-overflow edge-extension is tracked as a
+   separate follow-up (SVGDOM-3); `HTML_DOM`'s own edge-extension/tiling variant cache remains a
+   wider boundary than this renderer's.
 3. **A single global scissor region**, not `HTML_DOM`'s own per-batch-isolated regions (HTMLDOM-94)
    — a later batch's different `ScissorRectangle` retroactively affects the clip every pooled
    sprite in the shared group uses, since there is only one `<clipPath>` for the whole frame. Real
@@ -190,7 +199,7 @@ natively (`SvgDom3DSurfaceTest`).
 
 | Layer | Status |
 |---|---|
-| Native compile of every pure-C++ algorithm (blend mapping, PNG/base64/un-premultiply, sprite matrix encoder, source-rect validation, texture/render-target CPU-side lifecycle, the 3D throw surface) | ✅ native, this environment, 64/64 GTest cases (`cna_test_svgdom_host`) |
+| Native compile of every pure-C++ algorithm (blend mapping, PNG/base64/un-premultiply, sprite matrix encoder, address-mode validation, mirror-tiled variant construction, tiled pixel sampling, texture/render-target CPU-side lifecycle, the 3D throw surface) | ✅ native, this environment, 81/81 GTest cases (`cna_test_svgdom_host`) |
 | Native HEADLESS `CnaTests` regression after this renderer's shared-registry edits | ✅ native, this environment (cross-renderer control) |
 | `-DCNA_GRAPHICS_RENDERER=SVG_DOM` Emscripten configure/compile/link | 🟨 external platform gate — no Emscripten SDK available in this environment |
 | Real browser DOM output (headless Chromium or otherwise) | 🟨 external platform gate — not run |
