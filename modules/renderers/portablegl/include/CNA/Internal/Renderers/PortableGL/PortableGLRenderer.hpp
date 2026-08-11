@@ -145,6 +145,23 @@ namespace CNA::Internal::Renderers::PortableGL
          */
         void UpdatePixels(const uint8_t* rgba, int stride) override;
 
+        /**
+         * @brief Uploads a mip level; only level 0 exists on a PortableGL texture.
+         *
+         * A PortableGL texture carries exactly one image (`glGenerateMipmap` is an upstream no-op
+         * and this renderer allocates no chain), and `texture2D()` samples that one image whatever
+         * the minification. A level above 0 is therefore not renderer state at all: `Texture2D`
+         * keeps its own CPU copy of it, which is what answers `GetData`, and no draw on this
+         * renderer could ever select it. Stated as an explicit override rather than inherited, so
+         * the decision is visible where the data arrives.
+         *
+         * @param level  Mip level to write.
+         * @param rgba   Source pixels, tightly packed RGBA8 rows, top row first.
+         * @param levelW Width of this level in texels.
+         * @param levelH Height of this level in texels.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+
         /** @brief CNAEXT. Real PortableGL texture object handle (`glGenTextures` id). */
         CNAEXT [[nodiscard]] unsigned int GLTextureHandle() const { return glTexture_; }
 
@@ -347,6 +364,30 @@ namespace CNA::Internal::Renderers::PortableGL
          * @param pixels Destination for `w * h * 4` bytes.
          */
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
+
+        /**
+         * @brief Reports the format the back buffer really has, ignoring the request.
+         *
+         * A PortableGL context is created with one fixed pixel layout (the default 32-bit
+         * `PGL_ABGR32`, i.e. RGBA8 in memory order), so a game that asks for anything else does
+         * not get it. Reporting the applied format keeps `PresentationParameters.BackBufferFormat`
+         * describing the surface that exists rather than echoing an unhonoured request.
+         *
+         * @param requestedFormat Requested `SurfaceFormat` ordinal.
+         * @return `SurfaceFormat::Color`'s ordinal, always.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+
+        /**
+         * @brief Reports the depth/stencil format the back buffer really has.
+         *
+         * PortableGL's default build allocates a combined 24-bit depth + 8-bit stencil buffer
+         * unconditionally; there is no configuration in which the depth or stencil plane is absent.
+         *
+         * @param requestedFormat Requested `DepthFormat` ordinal.
+         * @return `DepthFormat::Depth24Stencil8`'s ordinal, always.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
 
         /** @brief Always null: this renderer needs no window. */
         [[nodiscard]] SDL_Window* GetWindowInternal() const override { return nullptr; }

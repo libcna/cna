@@ -71,6 +71,7 @@ reaches it, and one of the permanent tests above.
 | Anisotropic filtering, and any `TextureFilter` whose minification and magnification components differ | `texture2D()` samples with a single per-texture filter, and a PortableGL texture has exactly one mip level. | `SpriteBatch.Begin` with such a `SamplerState` throws. `PortableGL_Sampler` check E. |
 | Mip mapping | No mip storage; `glGenerateMipmap` is an upstream no-op. | Mip levels above 0 are not uploaded to the renderer; `Texture2D`'s own CPU shadow answers `GetData`. |
 | `GraphicsDevice.SamplerStates[n]` | No PortableGL draw path samples a texture through a device sampler slot: the 3D route refuses every textured effect and `SpriteBatch` carries its own sampler channel. | Accepted and inert, documented at `PortableGLRenderer::ApplySamplerState`. |
+| A requested `SurfaceFormat`/`DepthFormat` other than `Color`/`Depth24Stencil8` | A PortableGL context has one fixed pixel layout and always allocates a combined 24-bit depth + 8-bit stencil buffer. | `GetAppliedBackBufferFormatEXT`/`GetAppliedDepthStencilFormatEXT` report what really exists, so `PresentationParameters` describes the surface rather than echoing the request. |
 
 ## Deliberate divergences worth knowing about
 

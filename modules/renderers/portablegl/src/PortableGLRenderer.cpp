@@ -628,6 +628,16 @@ namespace CNA::Internal::Renderers::PortableGL
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
     }
 
+    void PortableGLTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba,
+                                                      int levelW, int levelH)
+    {
+        // See the declaration: level 0 is the only image a PortableGL texture has. Levels above it
+        // are kept by Texture2D itself and are not renderer state here.
+        if (level == 0)
+            UpdatePixels(rgba, levelW * 4);
+        (void)levelH;
+    }
+
     void PortableGLTextureRenderer::ApplySamplerState(int filter, int addressU, int addressV) const
     {
         // Translate everything first: a refused ordinal must not leave the texture half-updated.
@@ -964,6 +974,16 @@ namespace CNA::Internal::Renderers::PortableGL
                 std::memcpy(pixels + dstIndex, buf + srcIndex, 4);
             }
         }
+    }
+
+    int PortableGLRenderer::GetAppliedBackBufferFormatEXT(int /*requestedFormat*/) const
+    {
+        return 0;  // SurfaceFormat::Color -- PortableGL's fixed 32-bit pixel layout
+    }
+
+    int PortableGLRenderer::GetAppliedDepthStencilFormatEXT(int /*requestedFormat*/) const
+    {
+        return 3;  // DepthFormat::Depth24Stencil8 -- PortableGL's unconditional PGL_D24S8 buffer
     }
 
     std::unique_ptr<ITextureRenderer> PortableGLRenderer::CreateTexture(const ImageData& data)
