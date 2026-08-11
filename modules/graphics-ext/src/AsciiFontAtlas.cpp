@@ -1,4 +1,7 @@
-#include "CNA/Internal/Renderers/Ascii/AsciiFontAtlas.hpp"
+// SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/Graphics/Ascii/AsciiFontAtlas.hpp"
+
+#ifdef CNA_CNAEXT
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -10,7 +13,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace CNA::Internal::Renderers::Ascii
+namespace CNA::Internal::Graphics::Ascii
 {
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Rectangle;
@@ -113,3 +116,5 @@ namespace CNA::Internal::Renderers::Ascii
                           kerning, /*defaultCharacter=*/static_cast<charcs>(' '));
     }
 }
+
+#endif // CNA_CNAEXT
