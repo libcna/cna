@@ -1,5 +1,7 @@
 #include "CNA/Internal/Renderers/Blend2D/Blend2DRenderer.hpp"
 
+#include <cstdint>
+
 namespace CNA::Internal::Renderers::Blend2D
 {
     Blend2DRenderTargetRenderer::Blend2DRenderTargetRenderer(Blend2DRenderer& owner, int width,
@@ -29,7 +31,14 @@ namespace CNA::Internal::Renderers::Blend2D
                                               int dataLength) const
     {
         if (level != 0) return false;
-        if (dataLength < w * h * 4) return false;
+        if (w <= 0 || h <= 0) return false;
+        // 64-bit product: dataLength is caller-supplied and must not overflow int before the
+        // comparison runs; ReadPixelsRgba independently bounds-checks x/y/w/h against the surface.
+        if (dataLength < 0 ||
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4 > dataLength)
+        {
+            return false;
+        }
         return surface_.ReadPixelsRgba(x, y, w, h, static_cast<std::uint8_t*>(data));
     }
 } // namespace CNA::Internal::Renderers::Blend2D

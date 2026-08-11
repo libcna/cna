@@ -1,9 +1,23 @@
 #pragma once
 
+#include <bit>
 #include <cstdint>
 
 namespace CNA::Internal::Renderers::Blend2D
 {
+    // BL_FORMAT_PRGB32 is documented (blend2d/core/format.h) as the Cairo CAIRO_FORMAT_ARGB32 /
+    // Qt QImage::Format_ARGB32_Premultiplied equivalent: a packed 0xAARRGGBB 32-bit quantity
+    // stored in NATIVE byte order, exactly like those two formats. Its in-memory BYTE layout is
+    // therefore host-endian-dependent -- BGRA on little-endian (the byte layout every conversion
+    // function below assumes), ARGB on big-endian. CNA has no big-endian target anywhere in this
+    // codebase (no CNA source references __BYTE_ORDER__/std::endian for a big-endian path), so
+    // rather than leave that assumption undocumented, fail the build with a truthful diagnostic on
+    // a host where it would silently produce channel-swapped pixels instead.
+    static_assert(std::endian::native == std::endian::little,
+                 "CNA's BLEND2D renderer assumes BL_FORMAT_PRGB32 is stored as native-endian "
+                 "0xAARRGGBB, i.e. BGRA byte order on little-endian hosts (Blend2DPixelConvert.hpp). "
+                 "This has not been implemented or verified for a big-endian host.");
+
     /**
      * @brief Converts one row of straight (non-premultiplied) top-row-first RGBA8 bytes into
      * Blend2D's native BL_FORMAT_PRGB32 storage: premultiplied alpha, BGRA byte order (the

@@ -10,30 +10,72 @@ completed frame back, and presents it through an SDL streaming texture -- the sa
 SDL presentation" shape the SKIA renderer already established (`docs/skia-renderer.md`). SDL never
 executes a Blend2D draw command; it only displays the finished image.
 
-The implemented surface is intentionally bounded to a real 2D vertical slice: `Clear`, `Present`,
-backbuffer/render-target readback, virtual-resolution resize, all five presentation modes
-(delegated to SDL's own logical-presentation scaling, matching SKIA), scissor clipping, `Texture2D`
-upload/readback, `RenderTarget2D` render/unbind/sample, and every `SpriteBatch` `Draw` overload
-(position, rotation, origin, non-uniform scale, source rectangle, flips, tint colour). The 3D
-pipeline (vertex/index buffers as real GPU storage, `DrawColoredPrimitives`, depth/stencil,
-occlusion queries, cube/volume textures, custom `Effect` compilation) has no Blend2D equivalent at
-all and is truthfully refused rather than silently no-opped: every 3D draw call throws through
-`Ensure3DSupported`/`HandleUnsupported3DCall`, and `SupportsCapability(GraphicsCapability::ThreeD)`
-reports `false`.
+See `plan_blend2d.md` for the task-level remediation history and remaining boundaries.
+
+The implemented surface is a real 2D vertical slice: `Clear`, `Present`, backbuffer/render-target
+readback, virtual-resolution resize, all five presentation modes, scissor clipping gated by
+`RasterizerState.ScissorTestEnable`, the XNA `Viewport` rectangle, `SpriteBatch.Begin`'s transform
+matrix/sampler filter/sampler address mode, `Texture2D` upload/readback (with the caller's actual
+row stride honored), `RenderTarget2D` render/unbind/sample, and every `SpriteBatch.Draw` overload
+(position, rotation, origin, non-uniform scale including a negative-scale mirror, source
+rectangle, flips, tint colour) -- including out-of-range source rectangles and self-sampling a
+render target, both handled safely rather than left as an out-of-bounds read. The 3D pipeline
+(vertex/index buffers as real GPU storage, `DrawColoredPrimitives`, depth/stencil, occlusion
+queries, cube/volume textures, custom `Effect` compilation) has no Blend2D equivalent at all and is
+truthfully refused rather than silently no-opped: every 3D draw call and every
+depth/stencil-enabling `DepthStencilState` throws through `Ensure3DSupported`/
+`HandleUnsupported3DCall`, and `SupportsCapability(GraphicsCapability::ThreeD)` reports `false`.
 
 ## Verified capability boundary
 
+Every row below is exercised by `Blend2D_Correctness`
+(`modules/renderers/blend2d/examples/blend2d_renderer_correctness_test.cpp`, 112 pixel-level
+checks run under `SDL_VIDEODRIVER=dummy` -- no real display required -- and clean under
+AddressSanitizer/UndefinedBehaviorSanitizer/LeakSanitizer) unless noted otherwise.
+
 | CNA feature | Blend2D route | Direct/emulation decision | Evidence |
 |---|---|---|---|
-| Clear, Present, resize, all five presentation modes, backbuffer readback | Direct CPU raster + SDL presentation | Real `BLContext::fill_all`/`blit_image`; SDL only displays the finished RGBA8 frame. | `Blend2D_Surface_Raster`, `Blend2D_Smoke` |
-| `SpriteBatch` position/dest-rect/source-rect/rotation/origin/scale/flip/tint overloads | Direct 2D path | `BLContext` transform stack (`translate`/`rotate`/`scale`) plus `blit_image`; a non-white tint builds a genuine CPU-multiplied premultiplied sub-image, since Blend2D's stock blit has no per-draw colour modulation of its own. | `Blend2D_Smoke` (pixel-exact draw + surrounding-pixel isolation checks) |
-| `Texture2D` upload/readback | Direct premultiplied `BLImage` path | Straight RGBA8 CNA bytes convert to/from Blend2D's premultiplied, channel-swapped (`BGRA`) native storage on every transfer (`Blend2DPixelConvert.hpp`) -- never a raw byte copy. | `Blend2D_Smoke` |
-| `RenderTarget2D` render/unbind/sample | Direct bindable `BLImage`/`BLContext` target | Each target owns its own `Blend2DSurface`; `BindAsRenderTarget`/`UnbindAsRenderTarget` switch the renderer's single tracked active surface, matching XNA's "operations apply to the current target" contract. Mip chains and MSAA are not implemented (see below). | `Blend2D_Smoke` (render/unbind/sample round trip) |
-| Scissor clipping | Direct `clip_to_rect` | `SetScissorRect` calls `restore_clipping()` then `clip_to_rect()` on the active context. | -- |
-| `Additive` blend preset | Direct `BL_COMP_OP_PLUS` | `ApplyBlendState` recognizes the `Opaque` (`SRC_COPY`) and `Additive` (`PLUS`) raw factor/function tuples as exact Blend2D composition operators. | -- |
-| `AlphaBlend`/`NonPremultiplied`/custom `BlendState` | Bounded: all render through the same premultiplied `SRC_OVER` path | A truthful, documented v1 boundary, not a silent divergence: `AlphaBlend` is `SpriteBatch`'s default and composites correctly; every CNA-owned Blend2D texture/target is stored premultiplied regardless of the caller's blend-state choice, so `NonPremultiplied` composites correctly too, just without a distinct native operator. | -- |
-| 3D pipeline (vertex/index buffers as GPU storage, `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`, depth/stencil, occlusion queries, `Texture3D`/`TextureCube`, custom `Effect` compilation, instancing, MRT, wireframe) | Unsupported | Blend2D has no 3D or programmable-shader concept at all. Vertex/index buffer *handles* exist (bookkeeping only, matching `IVertexBufferRenderer`/`IIndexBufferRenderer`'s required interface) but are never consumed by a real draw; every 3D draw call and `SupportsCapability` entry reports the honest `false`/throw. | `Blend2D_Smoke` (3D `DrawPrimitives` throw check) |
-| Mip chains, MSAA, cube/volume sampling | Unsupported | `CreateRenderTarget2D`'s `mipMap`/`multiSampleCount` parameters are accepted but not honored (single level, 0 samples) -- a documented v1 boundary, not a correctness claim. | -- |
+| Clear, Present, resize, all five presentation modes, backbuffer readback | Direct CPU raster + SDL presentation | Real `BLContext::fill_all`/`blit_image`; SDL only displays the finished RGBA8 frame. | `Blend2D_Surface_Raster`, `Blend2D_Smoke`, `Blend2D_Correctness` (`TestPresentationModes`) |
+| `FixedHeightDynamicWidth` presentation mode | Direct, aspect-derived | Logical width = `round(outputWidth * requestedHeight / outputHeight)`, re-derived on every `Clear`/`Present`/`GetViewportSize` while no render target is bound, exactly matching `SkiaRenderer::RecreateBackbuffer`/`RefreshDynamicBackbufferIfNeeded`'s formula and timing. | `Blend2D_Correctness` (`TestPresentationModes`, including a simulated output-size change via `DebugSetPresentationOutputSizeEXT`) |
+| `SpriteBatch` position/dest-rect/source-rect/rotation/origin/scale/flip/tint overloads | Direct 2D path | `BLContext` transform stack (`apply_transform`/`translate`/`rotate`/`scale`) plus `blit_image`. Flips (`SpriteEffects` and/or a negative destination scale) mirror the drawn content about the destination rectangle's own local center, matching FNA/XNA's per-vertex geometry -- not a naive `scale(-1,1)` about the coordinate origin, which used to move a flipped sprite off its requested destination rectangle. A negative destination scale and `SpriteEffects` compose by XOR (both together cancel out), matching `SoftwareSpriteBatchRenderer`'s reference derivation. A non-white tint (or an out-of-bounds/self-sampling source, see below) resolves a genuine CPU-multiplied, address-mode-aware premultiplied sub-image, since Blend2D's stock blit has no per-draw colour modulation of its own. | `Blend2D_Smoke`, `Blend2D_Correctness` (`TestFlipOriginRotation`, `TestTintChain`) |
+| Source rectangle safety (negative origin, oversized, entirely outside the texture, self-sampling) | Direct blit when fully in-bounds; safe resolved-copy otherwise | Every source pixel read for the tint/resolve path is bounds-mapped through the active `TextureAddressMode` (Clamp/Wrap/Mirror) before it is read, so no source rectangle can produce an out-of-bounds read; the in-bounds fast path is additionally protected by Blend2D's own `blit_image` bounds check (`BL_ERROR_INVALID_VALUE`, checked). Drawing a render target while it is the active target snapshots an independent copy first rather than assuming Blend2D permits self-referential source/destination blits. | `Blend2D_Correctness` (`TestSourceRectangles`, `TestRenderTargets`'s self-sampling checks), clean under ASan/UBSan/LeakSanitizer |
+| Sampler filter (`SpriteBatch.Begin`'s `SamplerState.Filter`) | Direct `BLContext::set_pattern_quality` | All 9 `TextureFilter` values decompose to their magnification component (Blend2D has no separate min/mag/mip control or mip chain), matching `SdlRenderer`'s own established decomposition: `Point`-family -> `BL_PATTERN_QUALITY_NEAREST`, `Linear`-family -> `BL_PATTERN_QUALITY_BILINEAR`. | `Blend2D_Correctness` (`TestSamplerFilter`) |
+| Sampler address mode (`SamplerState.AddressU`/`AddressV`) | Direct, per-pixel | Wrap/Clamp/Mirror are implemented exactly (not approximated) for the resolved-copy source path described above; independent per-axis modes are supported. | `Blend2D_Correctness` (`TestSamplerAddressModes`) |
+| `SpriteBatch.Begin`'s transform matrix | Direct `BLContext::apply_transform` | Composed as the outermost transform around each sprite's own placement, matching `SkiaSpriteBatchRenderer`/`SoftwareSpriteBatchRenderer`'s identical ordering. | `Blend2D_Correctness` (`TestTransformMatrix`, `TestScissor`'s target-space check) |
+| Custom `Effect` | Rejected (not `Opaque`/discarded) | Blend2D has no shader/effect pipeline; only `null` or the exact stock `SpriteEffect` (which owns no renderer program) is accepted. A real custom `Effect` throws instead of silently rendering through the built-in sprite path. | `Blend2D_Correctness` (`TestCustomEffectRejection`) |
+| `Texture2D` upload/readback, including a caller row stride wider than `width * 4` | Direct premultiplied `BLImage` path | Straight RGBA8 CNA bytes convert to/from Blend2D's premultiplied, channel-swapped (`BGRA`) native storage on every transfer (`Blend2DPixelConvert.hpp`) using the caller's actual stride, never a hardcoded `width * 4` assumption. | `Blend2D_Smoke`, `Blend2D_Correctness` (`TestTextureStride`) |
+| `RenderTarget2D` render/unbind/switch/self-sample/destruction | Direct bindable `BLImage`/`BLContext` target | Each target owns its own `Blend2DSurface`; `BindAsRenderTarget`/`UnbindAsRenderTarget` switch the renderer's single tracked active surface, matching XNA's "operations apply to the current target" contract. Destroying a bound target clears the active pointer; destroying an unbound one is a no-op. Mip chains and MSAA are not implemented (see below). | `Blend2D_Smoke`, `Blend2D_Correctness` (`TestRenderTargets`) |
+| Scissor clipping | Direct `clip_to_rect`, gated by `ScissorTestEnable` | `SetScissorRect`/`ApplyRasterizerState` only record state; `Blend2DSpriteBatchRenderer` re-applies the clip fresh on every draw, in target space (before the transform matrix or any per-sprite transform), on whichever `BLContext` is currently active -- so it cannot leak across a render-target switch or an intervening `ScissorTestEnable` toggle the way an eagerly-applied, persistent clip would. | `Blend2D_Correctness` (`TestScissor`) |
+| `Viewport` | Direct `clip_to_rect` + translate | SpriteBatch coordinates are viewport-local, matching every other CNA 2D renderer's contract: a non-default viewport (e.g. split-screen) clips to and offsets by the viewport rectangle, applied fresh on every draw in target space, before the transform matrix. | `Blend2D_Correctness` (`TestViewport`) |
+| `ColorWriteChannels` (render-target slot 0 only) | Direct fast path when unmasked; bounded whole-surface merge otherwise | Blend2D has no native per-channel colour write mask. The common (`ColorWriteChannels == All`) case uses the ordinary native-comp-op blit with no extra cost; a non-default mask snapshots the whole active surface's premultiplied bytes before the draw, lets Blend2D's real rasterizer perform the composite, then merges the two premultiplied buffers per channel (matching `SkiaRenderer`'s own masked-write precedent of merging in its native premultiplied representation). `ColorWriteChannels1/2/3` (unimplemented MRT slots) and a non-default `MultiSampleMask` are rejected outright. | `Blend2D_Correctness` (`TestColorWriteChannels`, `TestBlendPresets`'s rejection checks) |
+| `Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` blend presets | Direct exact `BLCompOp` mapping | `Opaque` -> `BL_COMP_OP_SRC_COPY` (a literal copy, source alpha included -- it does not force full opacity, matching real XNA). `AlphaBlend` and `NonPremultiplied` both -> `BL_COMP_OP_SRC_OVER`: numerically identical here because every CNA-owned Blend2D texture/target is stored premultiplied regardless of which `BlendState` the caller selects, so `NonPremultiplied`'s on-the-fly premultiply and `AlphaBlend`'s already-premultiplied assumption converge on the same bytes. `Additive` -> `BL_COMP_OP_PLUS`. All four verified against a semi-transparent source over a semi-transparent destination, not just opaque colours. | `Blend2D_Correctness` (`TestBlendPresets`, `TestTintChain`) |
+| Any other `BlendState` (independent alpha factors/function, or a colour factor/function combination outside the four stock presets) | Rejected | Blend2D's `BLCompOp` set is Porter-Duff/blend-mode based, not the generic per-factor equation XNA's `BlendState` exposes, so only the four exact stock tuples above have a real Blend2D operator. Every other combination throws rather than silently falling back to `SRC_OVER`. | `Blend2D_Correctness` (`TestBlendPresets`'s rejection checks) |
+| Cross-renderer resource safety | Rejected with a clear exception | A `Texture2D`/`RenderTarget2D` created by a different renderer throws `std::invalid_argument` before any native memory is touched, not an unchecked `dynamic_cast` producing an undiagnosable `std::bad_cast`. | `Blend2D_Correctness` (`TestCrossRendererSafety`) |
+| `Begin`/`End` state machine | Guarded | A double `Begin()` or a stray `End()` throws without corrupting the renderer for the next, valid `Begin()`/`End()` cycle; a rejected `SetSamplerFilter`/`SetSamplerAddressMode`/`SetCustomEffect` during `Begin()`-adjacent setup does not poison subsequent batches. | `Blend2D_Correctness` (`TestBeginEndStateMachine`) |
+| `DepthStencilState` | `None` accepted; anything depth/stencil-enabling rejected | Matches `SupportsDepthStencil() == false` / `SupportsCapability(StencilBuffer) == false`: `ApplyDepthStencilState`/`SetReferenceStencil` now reject a real depth-test/write/stencil request (found during a second, independent audit pass) instead of silently accepting state that could never actually apply. | -- |
+| 3D pipeline (vertex/index buffers as GPU storage, `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`, occlusion queries, `Texture3D`/`TextureCube`, custom `Effect` compilation, instancing, MRT, wireframe) | Unsupported | Blend2D has no 3D or programmable-shader concept at all. Vertex/index buffer *handles* exist (bookkeeping only, matching `IVertexBufferRenderer`/`IIndexBufferRenderer`'s required interface) but are never consumed by a real draw; every 3D draw call and `SupportsCapability` entry reports the honest `false`/throw. | `Blend2D_Smoke` (3D `DrawPrimitives` throw check) |
+| Mip chains, MSAA, cube/volume sampling | Unsupported | `CreateRenderTarget2D`'s `mipMap`/`multiSampleCount` parameters are accepted but not honored (single level, 0 samples) -- a documented boundary, not a correctness claim. | -- |
+
+## Memory safety and error handling
+
+Every `BLContext`/`BLImage` call that can genuinely fail (a non-finite transform, an
+out-of-bounds image area, an allocation failure) is routed through `Blend2DCheckEXT`
+(`Blend2DCheckedCallEXT.hpp`), which throws with Blend2D's own error code rather than silently
+continuing after a discarded `BLResult`. `BLContext::save()`/`restore()` around each draw's
+transform/clip state uses an RAII guard (`ScopedContextStateEXT`) so an exception partway through
+a draw cannot leave a stale transform or clip attached to the surface's `BLContext`, corrupting
+every subsequent draw on it.
+
+`BL_FORMAT_PRGB32`'s in-memory byte order (`BGRA` on a little-endian host) is host-endian
+dependent by Blend2D's own documentation (it is defined as the Cairo `CAIRO_FORMAT_ARGB32` / Qt
+`QImage::Format_ARGB32_Premultiplied` equivalent). CNA has no big-endian target anywhere in this
+codebase, so rather than leave that assumption undocumented, `Blend2DPixelConvert.hpp` fails the
+build with a truthful `static_assert` on a big-endian host instead of silently producing
+channel-swapped pixels.
+
+Hostile inputs (negative/oversized source rectangles, self-sampling) are covered by
+`Blend2D_Correctness` and pass clean under AddressSanitizer, UndefinedBehaviorSanitizer, and
+LeakSanitizer (`-DCNA_SANITIZE=address,undefined`).
 
 ## Dependency policy
 
@@ -67,16 +109,27 @@ cmake --build cmake-build-blend2d --parallel 4
 A fresh configure fetches Blend2D and AsmJit via `FetchContent` (network required unless
 `CNA_BLEND2D_ROOT`/`CNA_ASMJIT_ROOT` point at existing local checkouts).
 
+For a sanitizer run:
+
+```sh
+cmake -S . -B cmake-build-blend2d-asan \
+  -DCNA_GRAPHICS_RENDERER=BLEND2D \
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_SANITIZE=address,undefined
+cmake --build cmake-build-blend2d-asan --parallel 4
+```
+
 ## Pixel format and premultiplication
 
 Blend2D's `BL_FORMAT_PRGB32` native storage is premultiplied alpha with `BGRA` in-memory byte
-order (the byte layout of its packed `0xAARRGGBB` value on a little-endian host). CNA's own
-transfer contract (`ImageData`, `ITextureRenderer::GetData`/`UpdatePixels`) is always straight
-(non-premultiplied) top-row-first `RGBA8`, matching every other renderer in this codebase. Every
-transfer into or out of a Blend2D-owned `BLImage` -- texture upload, texture readback, backbuffer/
-render-target readback, and the tint sub-image `SpriteBatch` builds for a non-white draw colour --
-converts explicitly through `Blend2DPixelConvert.hpp`; there is no raw byte copy anywhere in this
-renderer.
+order (the byte layout of its packed `0xAARRGGBB` value on a little-endian host -- see "Memory
+safety and error handling" above). CNA's own transfer contract (`ImageData`,
+`ITextureRenderer::GetData`/`UpdatePixels`) is always straight (non-premultiplied) top-row-first
+`RGBA8`, matching every other renderer in this codebase. Every transfer into or out of a
+Blend2D-owned `BLImage` -- texture upload, texture readback, backbuffer/render-target readback, and
+the resolved sub-image `SpriteBatch` builds for a non-white draw colour or an out-of-bounds/
+self-sampling source -- converts explicitly through `Blend2DPixelConvert.hpp`; there is no raw byte
+copy anywhere in this renderer.
 
 ## Test coverage
 
@@ -92,6 +145,12 @@ renderer.
   `SpriteBatch` draw (both inside the destination rectangle and outside it, proving the surrounding
   clear colour is untouched), a `RenderTarget2D` render/unbind/sample round trip, and that
   `VertexBuffer`/`IndexBuffer` handles honestly report back their given counts.
+- `Blend2D_Correctness`
+  (`modules/renderers/blend2d/examples/blend2d_renderer_correctness_test.cpp`): 112 deterministic
+  pixel-level checks driving `Blend2DRenderer`/`Blend2DSpriteBatchRenderer` directly against a real
+  `SDL_Window` under `SDL_VIDEODRIVER=dummy` (no real display required, so this runs in headless
+  CI). Covers every row of the capability table above, including hostile source rectangles and
+  self-sampling under sanitizers.
 
-Both are registered as CTests via `cna_register_renderer_test()` and follow the repository's
+All three are registered as CTests via `cna_register_renderer_test()` and follow the repository's
 `SKIP_RETURN_CODE 77` headless-safe convention (`cna_apply_skip_convention()`).

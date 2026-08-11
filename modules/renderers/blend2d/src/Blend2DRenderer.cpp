@@ -1,7 +1,9 @@
 #include "CNA/Internal/Renderers/Blend2D/Blend2DRenderer.hpp"
+#include "CNA/Internal/Renderers/Blend2D/Blend2DCheckedCallEXT.hpp"
 #include "CNA/Internal/Renderers/Blend2D/Blend2DPixelConvert.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <vector>
 
@@ -17,6 +19,10 @@ namespace CNA::Internal::Renderers::Blend2D
                 case CnaPresentationMode::Overscan: return SDL_LOGICAL_PRESENTATION_OVERSCAN;
                 case CnaPresentationMode::Stretch: return SDL_LOGICAL_PRESENTATION_STRETCH;
                 case CnaPresentationMode::NativeBackBuffer: return SDL_LOGICAL_PRESENTATION_DISABLED;
+                // FixedHeightDynamicWidth's logical WIDTH is recomputed (RecreateBackbuffer) so the
+                // canvas already matches the output aspect ratio; LETTERBOX with a matching aspect
+                // ratio fills the surface exactly with no bars, matching XNA/Windows Phone
+                // behaviour (see the CnaPresentationMode doc comment).
                 case CnaPresentationMode::FixedHeightDynamicWidth: return SDL_LOGICAL_PRESENTATION_LETTERBOX;
             }
             return SDL_LOGICAL_PRESENTATION_LETTERBOX;
@@ -26,11 +32,13 @@ namespace CNA::Internal::Renderers::Blend2D
     Blend2DRenderer::Blend2DRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
                                      CnaPresentationMode presentationMode, int swapInterval)
         : window_(window)
-        , virtualWidth_(virtualWidth > 0 ? virtualWidth : 1)
-        , virtualHeight_(virtualHeight > 0 ? virtualHeight : 1)
+        , virtualWidth_(1)
+        , virtualHeight_(1)
+        , preferredVirtualWidth_(virtualWidth)
+        , preferredVirtualHeight_(virtualHeight)
         , presentationMode_(presentationMode)
         , swapInterval_(swapInterval)
-        , backbuffer_(virtualWidth_, virtualHeight_)
+        , backbuffer_(1, 1)
     {
         if (!window_)
             throw std::runtime_error("Blend2DRenderer initialized with null window.");
@@ -43,13 +51,7 @@ namespace CNA::Internal::Renderers::Blend2D
                 throw std::runtime_error(std::string("Blend2D SDL_CreateRenderer failed: ") + SDL_GetError());
 
             SetSwapInterval(swapInterval_);
-            RecreatePresentationTexture();
-            if (!SDL_SetRenderLogicalPresentation(presentRenderer_, virtualWidth_, virtualHeight_,
-                                                  ToSdlPresentation(presentationMode_)))
-            {
-                throw std::runtime_error(
-                    std::string("Blend2D SDL_SetRenderLogicalPresentation failed: ") + SDL_GetError());
-            }
+            RecreateBackbuffer(virtualWidth, virtualHeight);
 
             IGraphicsRenderer::RegisterForWindow(window_, this);
             registered = true;
@@ -92,6 +94,85 @@ namespace CNA::Internal::Renderers::Blend2D
             throw std::runtime_error(std::string("Blend2D SDL_CreateTexture failed: ") + SDL_GetError());
     }
 
+    void Blend2DRenderer::GetPresentationOutputSize(int& width, int& height) const
+    {
+        if (debugOutputSizeOverride_)
+        {
+            width = debugOutputWidth_;
+            height = debugOutputHeight_;
+            return;
+        }
+        width = 0;
+        height = 0;
+        (void)SDL_GetRenderOutputSize(presentRenderer_, &width, &height);
+    }
+
+    void Blend2DRenderer::RecreateBackbuffer(int requestedWidth, int requestedHeight)
+    {
+        int outputWidth = 0;
+        int outputHeight = 0;
+        GetPresentationOutputSize(outputWidth, outputHeight);
+
+        const int height = requestedHeight > 0 ? requestedHeight : std::max(outputHeight, 1);
+        int width = requestedWidth;
+        // FixedHeightDynamicWidth derives the logical width from the live output aspect ratio:
+        // logicalW = round(outputW * preferredH / outputH). See the CnaPresentationMode doc
+        // comment (IGraphicsRenderer.hpp) -- matches SkiaRenderer::RecreateBackbuffer exactly.
+        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && requestedHeight > 0 && outputHeight > 0)
+            width = static_cast<int>(static_cast<double>(outputWidth) * requestedHeight / outputHeight + 0.5);
+        if (width <= 0) width = std::max(outputWidth, 1);
+
+        virtualWidth_ = width > 0 ? width : 1;
+        virtualHeight_ = height > 0 ? height : 1;
+        backbuffer_.Resize(virtualWidth_, virtualHeight_);
+        RecreatePresentationTexture();
+        if (!SDL_SetRenderLogicalPresentation(presentRenderer_, virtualWidth_, virtualHeight_,
+                                              ToSdlPresentation(presentationMode_)))
+        {
+            throw std::runtime_error(
+                std::string("Blend2D SDL_SetRenderLogicalPresentation failed: ") + SDL_GetError());
+        }
+    }
+
+    void Blend2DRenderer::RefreshDynamicBackbufferIfNeeded()
+    {
+        if (presentationMode_ != CnaPresentationMode::FixedHeightDynamicWidth
+            || activeRenderTarget_ != nullptr || preferredVirtualHeight_ <= 0)
+        {
+            return;
+        }
+
+        int outputWidth = 0;
+        int outputHeight = 0;
+        GetPresentationOutputSize(outputWidth, outputHeight);
+        if (outputWidth <= 0 || outputHeight <= 0)
+            return;
+
+        const int desiredWidth = static_cast<int>(
+            static_cast<double>(outputWidth) * preferredVirtualHeight_ / outputHeight + 0.5);
+        if (desiredWidth > 0
+            && (desiredWidth != virtualWidth_ || preferredVirtualHeight_ != virtualHeight_))
+        {
+            RecreateBackbuffer(preferredVirtualWidth_, preferredVirtualHeight_);
+        }
+    }
+
+    void Blend2DRenderer::DebugSetPresentationOutputSizeEXT(int width, int height)
+    {
+        if (width < 0 || height < 0)
+            throw std::out_of_range("Blend2D debug presentation output size must not be negative.");
+        debugOutputSizeOverride_ = true;
+        debugOutputWidth_ = width;
+        debugOutputHeight_ = height;
+    }
+
+    void Blend2DRenderer::DebugClearPresentationOutputSizeEXT()
+    {
+        debugOutputSizeOverride_ = false;
+        debugOutputWidth_ = 0;
+        debugOutputHeight_ = 0;
+    }
+
     Blend2DSurface& Blend2DRenderer::ActiveSurface() noexcept
     {
         return activeRenderTarget_ ? activeRenderTarget_->Surface() : backbuffer_;
@@ -104,6 +185,7 @@ namespace CNA::Internal::Renderers::Blend2D
 
     void Blend2DRenderer::Clear(float r, float g, float b, float a)
     {
+        RefreshDynamicBackbufferIfNeeded();
         ActiveSurface().Clear(r, g, b, a);
     }
 
@@ -127,26 +209,27 @@ namespace CNA::Internal::Renderers::Blend2D
         {
             throw std::runtime_error(std::string("Blend2D SDL presentation failed: ") + SDL_GetError());
         }
+
+        // A resize can arrive between draws without a ClientSizeChanged notification. Preserve the
+        // just-completed frame, then make the raster backbuffer match the new dynamic width for
+        // the next frame -- GraphicsDevice::Present immediately queries GetViewportSize(), so its
+        // public viewport observes this replacement in the same Present call (mirrors
+        // SkiaRenderer::Present).
+        RefreshDynamicBackbufferIfNeeded();
     }
 
     void Blend2DRenderer::GetViewportSize(int& width, int& height)
     {
+        RefreshDynamicBackbufferIfNeeded();
         width = virtualWidth_;
         height = virtualHeight_;
     }
 
     void Blend2DRenderer::SetVirtualResolution(int width, int height)
     {
-        virtualWidth_ = width > 0 ? width : 1;
-        virtualHeight_ = height > 0 ? height : 1;
-        backbuffer_.Resize(virtualWidth_, virtualHeight_);
-        RecreatePresentationTexture();
-        if (!SDL_SetRenderLogicalPresentation(presentRenderer_, virtualWidth_, virtualHeight_,
-                                              ToSdlPresentation(presentationMode_)))
-        {
-            throw std::runtime_error(
-                std::string("Blend2D SDL_SetRenderLogicalPresentation failed: ") + SDL_GetError());
-        }
+        preferredVirtualWidth_ = width;
+        preferredVirtualHeight_ = height;
+        RecreateBackbuffer(width, height);
     }
 
     void Blend2DRenderer::SetPresentationMode(int mode)
@@ -157,12 +240,10 @@ namespace CNA::Internal::Renderers::Blend2D
             throw std::out_of_range("Blend2D received an invalid presentation mode.");
         }
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
-        if (!SDL_SetRenderLogicalPresentation(presentRenderer_, virtualWidth_, virtualHeight_,
-                                              ToSdlPresentation(presentationMode_)))
-        {
-            throw std::runtime_error(
-                std::string("Blend2D SDL_SetRenderLogicalPresentation failed: ") + SDL_GetError());
-        }
+        // A mode change can change the derived logical width (entering/leaving
+        // FixedHeightDynamicWidth), not just which SDL_RendererLogicalPresentation is applied to
+        // the existing size -- recompute the whole backbuffer, mirroring SkiaRenderer.
+        RecreateBackbuffer(preferredVirtualWidth_, preferredVirtualHeight_);
     }
 
     void Blend2DRenderer::SetSwapInterval(int interval)
@@ -242,31 +323,149 @@ namespace CNA::Internal::Renderers::Blend2D
 
     void Blend2DRenderer::SetScissorRect(int x, int y, int w, int h)
     {
-        BLContext& ctx = ActiveSurface().Context();
-        ctx.restore_clipping();
-        ctx.clip_to_rect(BLRectI(x, y, w, h));
+        // Recorded only -- NOT applied to any BLContext here. The scissor rectangle is
+        // target-space state that must be re-applied fresh on every SpriteBatch draw, gated by
+        // RasterizerState.ScissorTestEnable (ApplyRasterizerState below), against whichever
+        // surface/BLContext is active AT DRAW TIME. Applying it eagerly here to
+        // ActiveSurface().Context() (the previous implementation) had two defects: it stayed
+        // permanently attached to that one BLContext even after ScissorTestEnable was set false
+        // (RasterizerState carries that flag on a separate GraphicsDevice property, and the
+        // previous code never read it at all), and it silently stopped applying the moment a
+        // different render target (a different, separately-attached BLContext) became active.
+        scissorX_ = x;
+        scissorY_ = y;
+        scissorW_ = w;
+        scissorH_ = h;
     }
 
-    void Blend2DRenderer::ApplyBlendState(int colorSrcBlend, int /*alphaSrcBlend*/, int colorDstBlend,
-                                          int /*alphaDstBlend*/, int colorBlendFunc,
-                                          int /*alphaBlendFunc*/, const BlendWriteState& /*writeState*/)
+    void Blend2DRenderer::ApplyDepthStencilState(
+        bool depthEnable, bool depthWriteEnable, int /*depthFunc*/,
+        bool stencilEnable, int /*stencilFunc*/, int /*stencilPass*/, int /*stencilFail*/,
+        int /*stencilDepthFail*/, int /*stencilMask*/, int /*stencilWriteMask*/,
+        int /*referenceStencil*/, bool /*twoSidedStencilMode*/, int /*ccwStencilFunc*/,
+        int /*ccwStencilPass*/, int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+    {
+        // DepthStencilState.None (every field disabled) is part of the normal SpriteBatch 2D
+        // contract and describes the absence of a depth/stencil operation, so accepting it does
+        // not claim an attachment this renderer does not have.
+        if (depthEnable || depthWriteEnable || stencilEnable)
+            HandleUnsupported3DCall("BLEND2D", "ApplyDepthStencilState");
+    }
+
+    void Blend2DRenderer::SetReferenceStencil(int value)
+    {
+        // Zero accompanies the accepted disabled state above; a nonzero reference only has
+        // meaning together with the unsupported stencil pipeline.
+        if (value != 0)
+            HandleUnsupported3DCall("BLEND2D", "SetReferenceStencil");
+    }
+
+    void Blend2DRenderer::SetViewport(int x, int y, int w, int h, float /*minDepth*/, float /*maxDepth*/)
+    {
+        // Recorded only, applied per-draw by Blend2DSpriteBatchRenderer -- same reasoning as
+        // SetScissorRect (see that method's doc comment): the active BLContext at draw time may
+        // belong to a different render target than the one active when SetViewport was called.
+        viewportSet_ = true;
+        viewportX_ = x;
+        viewportY_ = y;
+        viewportW_ = w;
+        viewportH_ = h;
+    }
+
+    void Blend2DRenderer::ApplyRasterizerState(int /*cullMode*/, int fillMode, bool scissorTestEnable,
+                                               float /*depthBias*/, float /*slopeScaleDepthBias*/)
+    {
+        // FillMode::WireFrame has no meaning for a filled 2D sprite/vector rasterizer and this
+        // renderer advertises GraphicsCapability::WireFrame == false; reject rather than silently
+        // drawing filled geometry while claiming wireframe was honoured.
+        constexpr int kFillModeSolid = 0;
+        if (fillMode != kFillModeSolid)
+            throw std::runtime_error("BLEND2D does not support RasterizerState::FillMode::WireFrame.");
+        // CullMode/DepthBias/SlopeScaleDepthBias only affect a 3D pipeline this renderer does not
+        // have; every 3D draw entry point rejects independently (DrawColoredPrimitives etc.).
+        scissorTestEnabled_ = scissorTestEnable;
+    }
+
+    void Blend2DRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend,
+                                          int alphaDstBlend, int colorBlendFunc, int alphaBlendFunc,
+                                          const BlendWriteState& writeState)
     {
         // Raw Microsoft::Xna::Framework::Graphics::Blend/BlendFunction ordinals (see those
         // headers): One=0, Zero=1, SourceAlpha=4, InverseSourceAlpha=5; BlendFunction::Add=0.
-        // Blend2D genuinely supports SRC_COPY (Opaque) and PLUS (Additive) as exact composition
-        // operators; every other tuple (AlphaBlend, NonPremultiplied, and any custom BlendState)
-        // renders through the same premultiplied SRC_OVER composite path -- a truthful, documented
-        // v1 boundary (docs/blend2d-renderer.md), not a silent divergence: AlphaBlend is XNA
-        // SpriteBatch's default and renders correctly; NonPremultiplied composites correctly too
-        // since every CNA-owned Blend2D texture/target is stored premultiplied regardless of the
-        // caller's blend-state choice.
-        const bool add = colorBlendFunc == 0;
-        if (add && colorSrcBlend == 0 && colorDstBlend == 1)
-            appliedCompOp_ = BL_COMP_OP_SRC_COPY;
-        else if (add && colorSrcBlend == 4 && colorDstBlend == 0)
-            appliedCompOp_ = BL_COMP_OP_PLUS;
+        //
+        // Blend2D's BLCompOp set is Porter-Duff/blend-mode based, not the generic
+        // (srcFactor,dstFactor,equation) pair XNA's BlendState exposes, so only tuples that
+        // correspond EXACTLY to a native Blend2D composition operator are accepted; every other
+        // combination is refused rather than silently approximated with SRC_OVER. The four stock
+        // XNA presets all use identical colour and alpha factors/functions, so both channel
+        // groups are validated together:
+        //
+        //   Opaque:           (One,Zero,Add)              -> BL_COMP_OP_SRC_COPY   (exact)
+        //   AlphaBlend:       (One,InverseSourceAlpha,Add) -> BL_COMP_OP_SRC_OVER   (exact: every
+        //     CNA-owned Blend2D texture/target already stores premultiplied pixels, so blitting
+        //     with Blend2D's native SRC_OVER already computes src*1 + dst*(1-srcA) against that
+        //     premultiplied source -- exactly AlphaBlend's GPU equation.)
+        //   NonPremultiplied: (SourceAlpha,InverseSourceAlpha,Add) -> BL_COMP_OP_SRC_OVER (exact
+        //     for the same reason: NonPremultiplied's equation exists to premultiply a STRAIGHT
+        //     source on the fly, but Blend2D's stored source is already premultiplied regardless
+        //     of which BlendState the caller selects, so the two presets are numerically
+        //     identical here.)
+        //   Additive:         (SourceAlpha,One,Add)        -> BL_COMP_OP_PLUS       (exact:
+        //     Sca(premultiplied) + Dca, Sa + Da is exactly BL_COMP_OP_PLUS.)
+        constexpr int kOne = 0, kZero = 1, kSourceAlpha = 4, kInverseSourceAlpha = 5, kAdd = 0;
+        const bool colorAlphaMatch = colorSrcBlend == alphaSrcBlend && colorDstBlend == alphaDstBlend
+            && colorBlendFunc == alphaBlendFunc;
+
+        BLCompOp resolved;
+        if (colorBlendFunc == kAdd && colorAlphaMatch)
+        {
+            if (colorSrcBlend == kOne && colorDstBlend == kZero)
+                resolved = BL_COMP_OP_SRC_COPY;
+            else if (colorSrcBlend == kOne && colorDstBlend == kInverseSourceAlpha)
+                resolved = BL_COMP_OP_SRC_OVER;
+            else if (colorSrcBlend == kSourceAlpha && colorDstBlend == kInverseSourceAlpha)
+                resolved = BL_COMP_OP_SRC_OVER;
+            else if (colorSrcBlend == kSourceAlpha && colorDstBlend == kOne)
+                resolved = BL_COMP_OP_PLUS;
+            else
+            {
+                throw std::runtime_error(
+                    "BLEND2D only implements the stock BlendState presets (Opaque, AlphaBlend, "
+                    "NonPremultiplied, Additive); this colour blend factor/function combination "
+                    "has no exact Blend2D composition operator.");
+            }
+        }
         else
-            appliedCompOp_ = BL_COMP_OP_SRC_OVER;
+        {
+            throw std::runtime_error(
+                "BLEND2D only implements the stock BlendState presets (Opaque, AlphaBlend, "
+                "NonPremultiplied, Additive); this renderer's colour and alpha blend "
+                "factors/functions must match one of those four presets exactly (independent "
+                "alpha-channel blend equations have no exact Blend2D composition operator).");
+        }
+
+        // BlendWriteState: Blend2D has exactly one active render target (no MRT) and no native
+        // per-sample coverage mask, so only slot 0's ColorWriteChannels can be honoured at all;
+        // slots 1-3 and a non-default MultiSampleMask are refused outright rather than silently
+        // discarded (mirrors SkiaRenderer::ApplyBlendState's identical one-target/no-MSAA limits).
+        constexpr int kColorWriteAll = 15;
+        const int colorWriteMask = writeState.colorWriteChannels[0];
+        if (colorWriteMask < 0 || colorWriteMask > kColorWriteAll)
+            throw std::runtime_error("BLEND2D received an invalid ColorWriteChannels mask.");
+        for (int target = 1; target < 4; ++target)
+        {
+            if (writeState.colorWriteChannels[target] != kColorWriteAll)
+            {
+                throw std::runtime_error(
+                    "BLEND2D has one render target and does not implement ColorWriteChannels1-3.");
+            }
+        }
+        if (writeState.multiSampleMask != ~0u)
+            throw std::runtime_error("BLEND2D does not implement non-default MultiSampleMask values (no MSAA).");
+
+        // Commit only after every validation above succeeds.
+        appliedCompOp_ = resolved;
+        colorWriteMask_ = colorWriteMask;
     }
 
     bool Blend2DRenderer::SupportsCapability(CNA::GraphicsCapability capability) const

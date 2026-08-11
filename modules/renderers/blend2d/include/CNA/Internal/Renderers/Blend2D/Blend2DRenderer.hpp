@@ -66,13 +66,16 @@ namespace CNA::Internal::Renderers::Blend2D
      * @brief Internal mixin exposing the concrete BLImage backing a texture-shaped renderer
      * handle (plain texture or bindable render target).
      *
-     * ISpriteBatchRenderer::Draw() receives only the abstract ITextureRenderer&, and dynamic_cast
-     * to this interface is the safe way to reach the real image for blit_image() -- both concrete
-     * classes below multiply-inherit it, so the cast can only fail if a *different* renderer's
-     * texture handle reached this renderer, which is a caller bug worth a loud std::bad_cast
-     * rather than a silent no-op (the same UB concern SdlRenderer.cpp's Draw() overloads document
-     * for their own sibling-class RenderTarget/Texture handles, resolved here through a real
-     * virtual interface instead of relying on GetNativeTexture() alone).
+     * ISpriteBatchRenderer::Draw() receives only the abstract ITextureRenderer&, and a checked
+     * `dynamic_cast<const Blend2DNativeImageSourceEXT*>` (Blend2DSpriteBatchRenderer.cpp's
+     * RequireNativeImageEXT) is the safe way to reach the real image for blit_image() -- both
+     * concrete classes below multiply-inherit it. The cast can only fail if a *different*
+     * renderer's texture handle reaches this renderer, a caller bug that RequireNativeImageEXT
+     * turns into a deliberate std::invalid_argument with an actionable message, thrown before any
+     * native BLImage memory is touched -- not an accidental, undiagnosable std::bad_cast (the same
+     * UB concern SdlRenderer.cpp's Draw() overloads document for their own sibling-class
+     * RenderTarget/Texture handles, resolved here through a real virtual interface instead of
+     * relying on GetNativeTexture() alone).
      */
     class Blend2DNativeImageSourceEXT
     {
@@ -108,6 +111,23 @@ namespace CNA::Internal::Renderers::Blend2D
     /// RenderTarget2D handle: owns its own Blend2DSurface (context-bound BLImage) so it can be
     /// drawn into directly, then sampled as an ordinary texture once unbound -- the established
     /// "render, unbind, sample" render-target contract this codebase's other renderers use.
+    ///
+    /// Sampling a render target WHILE it is still the active target (drawing it onto itself) is
+    /// handled by Blend2DSpriteBatchRenderer::DrawQuad's self-sampling check, which snapshots an
+    /// independent copy before drawing rather than assuming Blend2D permits reading a BLImage
+    /// through blit_image() while that same image is the live target of its own attached
+    /// BLContext -- the pinned v0.21.2 source establishes only that a synchronous context's
+    /// completed draws are visible to get_data()/make_mutable() (Blend2DSurface's own doc
+    /// comment), not that self-referential source/destination blits are well-defined.
+    ///
+    /// Lifetime: owner_ is a raw reference, safe under CNA's established GraphicsResource
+    /// contract -- GraphicsDevice::Dispose() (GraphicsDevice.cpp) disposes every tracked
+    /// GraphicsResource (which includes every live RenderTarget2D/Texture2D) BEFORE it tears down
+    /// its IGraphicsRenderer, so a Blend2DRenderTargetRenderer is always destroyed while owner_ is
+    /// still valid under normal (documented) disposal order -- the same raw-backpointer contract
+    /// GraphicsResource itself uses for its own GraphicsDevice* and SdlRenderTargetRenderer uses
+    /// for its native handle. A leaked RenderTarget2D that outlives an explicitly-disposed
+    /// GraphicsDevice is a pre-existing, codebase-wide caller error, not a BLEND2D-specific gap.
     class Blend2DRenderTargetRenderer final : public IRenderTargetRenderer,
                                                public Blend2DNativeImageSourceEXT
     {
@@ -149,11 +169,13 @@ namespace CNA::Internal::Renderers::Blend2D
     };
 
     /// Real Blend2D-backed 2D sprite batch: every Draw() overload composes a BLContext transform
-    /// (translate to destination, rotate, flip via negative scale, offset by the scaled origin)
-    /// and blits the source sub-rectangle through blit_image() -- genuine per-draw rasterization,
-    /// not a recorded or no-op placeholder. A non-white tint builds a temporary premultiplied
-    /// sub-image (BuildTintedSubImageEXT) since Blend2D's stock image blit has no per-draw colour
-    /// modulation of its own.
+    /// (transform matrix, translate to destination, rotate, mirror-about-center flip, offset by
+    /// the scaled origin) and blits the source sub-rectangle through blit_image() -- genuine
+    /// per-draw rasterization, not a recorded or no-op placeholder. A non-white tint, or a source
+    /// rectangle/address mode that requires sampling outside the texture's own bounds, resolves a
+    /// temporary premultiplied sub-image (ResolveSourceImageEXT) since Blend2D's stock image blit
+    /// has no per-draw colour modulation and its blit_image() rejects an out-of-bounds source area
+    /// outright rather than extending it.
     class Blend2DSpriteBatchRenderer final : public ISpriteBatchRenderer
     {
     public:
@@ -161,6 +183,12 @@ namespace CNA::Internal::Renderers::Blend2D
 
         void Begin() override;
         void End() override;
+
+        void SetTransformMatrix(const Matrix& m) override;
+        void SetCustomEffect(Effect* effect) override;
+        void SetSamplerFilter(int textureFilter) override;
+        void SetSamplerAddressMode(int addressU, int addressV) override;
+        void SetImmediateMode(bool immediate) override;
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture, const Rectangle& destinationRectangle,
@@ -176,6 +204,19 @@ namespace CNA::Internal::Renderers::Blend2D
 
         Blend2DRenderer& renderer_;
         bool begun_ = false;
+        /// Raw Microsoft::Xna::Framework::Graphics::TextureFilter ordinal from the most recent
+        /// SetSamplerFilter(); see SamplerFilterToPatternQualityEXT() in the .cpp for the mapping.
+        int textureFilter_ = 0;
+        /// Raw TextureAddressMode ordinals (0=Wrap,1=Clamp,2=Mirror) from the most recent
+        /// SetSamplerAddressMode(); Clamp matches SpriteBatch.Begin's SamplerState.LinearClamp
+        /// default (Microsoft::Xna::Framework::Graphics::SpriteBatch.cpp always calls
+        /// SetSamplerAddressMode before Begin(), so this default is never actually observed).
+        int addressU_ = 1;
+        int addressV_ = 1;
+        /// Outer transform applied after each sprite's own local translate/rotate/flip, matching
+        /// SoftwareSpriteBatchRenderer's placeCorner()/SkiaSpriteBatchRenderer's canvas->concat()
+        /// ordering: SetTransformMatrix() composes on top of the fully-placed sprite quad.
+        Matrix transformMatrix_ = Matrix::getIdentityProperty();
     };
 
     /**
@@ -251,12 +292,74 @@ namespace CNA::Internal::Renderers::Blend2D
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
 
         void SetScissorRect(int x, int y, int w, int h) override;
+        /// Records the XNA Viewport rectangle. SpriteBatch coordinates are viewport-local (Task
+        /// 880, matching every other CNA renderer's own SpriteBatch contract -- see
+        /// SoftwareSpriteBatchRenderer::Draw's REMED-GFX-073 comment): a non-default
+        /// (non-full-backbuffer) viewport, e.g. split-screen, must clip to and offset by this
+        /// rectangle. The shared IGraphicsRenderer default is a silent no-op, which would
+        /// otherwise leave every BLEND2D sprite positioned at true backbuffer coordinates
+        /// regardless of the active Viewport. Depth range has no meaning for this 2D-only
+        /// renderer.
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
+
+        /// CNAEXT. Current viewport state for Blend2DSpriteBatchRenderer to re-apply on every
+        /// draw -- see SetViewport's own doc comment.
+        void GetViewportStateEXT(bool& set, int& x, int& y, int& w, int& h) const noexcept
+        {
+            set = viewportSet_;
+            x = viewportX_;
+            y = viewportY_;
+            w = viewportW_;
+            h = viewportH_;
+        }
+        /// Records RasterizerState.ScissorTestEnable (the shared IGraphicsRenderer default is a
+        /// silent no-op, which previously meant SetScissorRect's rectangle stayed clipping forever
+        /// once set, even after the caller disabled the scissor test). FillMode::WireFrame is
+        /// rejected; CullMode/depth-bias fields are meaningless for this 2D-only renderer.
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend,
                              int alphaDstBlend, int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
 
+        /// CNAEXT. Current scissor state for Blend2DSpriteBatchRenderer to re-apply, gated by
+        /// enabled, on whatever BLContext is active at each draw -- see SetScissorRect's own doc
+        /// comment for why the clip is not applied here.
+        void GetScissorStateEXT(bool& enabled, int& x, int& y, int& w, int& h) const noexcept
+        {
+            enabled = scissorTestEnabled_;
+            x = scissorX_;
+            y = scissorY_;
+            w = scissorW_;
+            h = scissorH_;
+        }
+
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        /// The shared IGraphicsRenderer::ApplyDepthStencilState/SetReferenceStencil defaults are
+        /// silent no-ops, which would let a caller set a real depth-test/write/stencil state (or
+        /// a nonzero reference stencil) on a renderer that can never actually apply it -- SupportsDepthStencil()/
+        /// SupportsCapability(StencilBuffer) both correctly report false, but nothing enforced
+        /// that before this override. DepthStencilState.None (depthEnable=depthWriteEnable=
+        /// stencilEnable=false, the state every SpriteBatch::Begin applies) is accepted, matching
+        /// this renderer's genuine 2D contract; anything else routes through the same
+        /// HandleUnsupported3DCall policy every other unsupported-3D entry point here uses.
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc, int stencilPass,
+                                    int stencilFail, int stencilDepthFail, int stencilMask,
+                                    int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode, int ccwStencilFunc,
+                                    int ccwStencilPass, int ccwStencilFail,
+                                    int ccwStencilDepthFail) override;
+        void SetReferenceStencil(int value) override;
+
+        /// CNAEXT. The raw XNA ColorWriteChannels mask (bit0=R,1=G,2=B,3=A; 15=All) most recently
+        /// applied via ApplyBlendState's BlendWriteState -- used by Blend2DSpriteBatchRenderer to
+        /// decide between the fast native-blit path (mask==15, the overwhelming common case) and
+        /// the bounded whole-surface snapshot/merge path a partial mask requires (Blend2D has no
+        /// native per-channel colour write mask).
+        [[nodiscard]] int ActiveColorWriteMaskEXT() const noexcept { return colorWriteMask_; }
 
         // Ensure3DSupported() deliberately keeps the shared IGraphicsRenderer no-op default
         // (not overridden here): GraphicsDevice's own DrawUserPrimitives/DrawUserIndexedPrimitives
@@ -301,19 +404,73 @@ namespace CNA::Internal::Renderers::Blend2D
 
     private:
         void RecreatePresentationTexture();
+        /// Queries the real physical output size of presentRenderer_ (SDL_GetRenderOutputSize),
+        /// or the debug override when DebugSetPresentationOutputSizeEXT() is active.
+        void GetPresentationOutputSize(int& width, int& height) const;
+        /// Rebuilds the backbuffer (and, when needed, the presentation texture/logical
+        /// presentation) for @p requestedWidth/@p requestedHeight, deriving the actual logical
+        /// width from the live SDL output aspect ratio when presentationMode_ is
+        /// FixedHeightDynamicWidth -- mirrors SkiaRenderer::RecreateBackbuffer exactly (same
+        /// formula: outputWidth * requestedHeight / outputHeight, rounded).
+        void RecreateBackbuffer(int requestedWidth, int requestedHeight);
+        /// Re-derives and applies the FixedHeightDynamicWidth logical width when the live SDL
+        /// output aspect ratio has changed since the backbuffer was last built (a resize can
+        /// arrive between draws with no explicit notification) -- mirrors
+        /// SkiaRenderer::RefreshDynamicBackbufferIfNeeded. No-op for every other presentation mode
+        /// and while a RenderTarget2D is bound (a render target's own fixed size is never
+        /// dynamic).
+        void RefreshDynamicBackbufferIfNeeded();
 
         SDL_Window* window_;
         SDL_Renderer* presentRenderer_ = nullptr;
         SDL_Texture* presentTexture_ = nullptr;
         int virtualWidth_;
         int virtualHeight_;
+        /// CNAEXT. The caller's originally requested virtual size, preserved across
+        /// FixedHeightDynamicWidth recomputations of virtualWidth_/virtualHeight_ -- mirrors
+        /// SkiaRenderer's preferredVirtualWidth_/preferredVirtualHeight_ split between "what the
+        /// game asked for" and "what is currently allocated".
+        int preferredVirtualWidth_;
+        int preferredVirtualHeight_;
         CnaPresentationMode presentationMode_;
         int swapInterval_;
+        /// CNAEXT. Debug-only presentation output size override (window-independent tests have no
+        /// real SDL output to query); mirrors SkiaRenderer's own DebugSetPresentationOutputSizeEXT.
+        bool debugOutputSizeOverride_ = false;
+        int debugOutputWidth_ = 0;
+        int debugOutputHeight_ = 0;
 
         Blend2DSurface backbuffer_;
         Blend2DRenderTargetRenderer* activeRenderTarget_ = nullptr;
 
         bool blendEnabled_ = true;
         BLCompOp appliedCompOp_ = BL_COMP_OP_SRC_OVER;
+        /// Raw XNA ColorWriteChannels mask for render-target slot 0 (Blend2D has exactly one
+        /// active target), applied by every SpriteBatch draw; see ActiveColorWriteMaskEXT().
+        int colorWriteMask_ = 15;
+
+        /// RasterizerState.ScissorTestEnable, from ApplyRasterizerState(); the scissor rectangle
+        /// itself, from SetScissorRect(). Neither is applied until a SpriteBatch draw re-reads
+        /// both via GetScissorStateEXT() -- see SetScissorRect's doc comment.
+        bool scissorTestEnabled_ = false;
+        int scissorX_ = 0;
+        int scissorY_ = 0;
+        int scissorW_ = 0;
+        int scissorH_ = 0;
+
+        /// GraphicsDevice.Viewport, from SetViewport(); see GetViewportStateEXT().
+        bool viewportSet_ = false;
+        int viewportX_ = 0;
+        int viewportY_ = 0;
+        int viewportW_ = 0;
+        int viewportH_ = 0;
+
+    public:
+        /// CNAEXT. Test-only presentation output size override so FixedHeightDynamicWidth's
+        /// aspect-derived width can be exercised deterministically without a real, resizable
+        /// window (mirrors SkiaRenderer::DebugSetPresentationOutputSizeEXT/
+        /// DebugClearPresentationOutputSizeEXT exactly).
+        void DebugSetPresentationOutputSizeEXT(int width, int height);
+        void DebugClearPresentationOutputSizeEXT();
     };
 } // namespace CNA::Internal::Renderers::Blend2D
