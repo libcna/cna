@@ -188,35 +188,25 @@ computed the wrong pixel; a `RenderTarget2D` public-property boundary and a filt
 were asserted but not actually regression-tested against the real public API/a genuinely
 distinguishing case.
 
-- **BLEND2D-20 (P0).** `ApplyBlendState` mapped `NonPremultiplied` to `BL_COMP_OP_SRC_OVER` and
-  `Additive` to `BL_COMP_OP_PLUS` as if they were exact native operators. This is correct for the
-  COLOUR channel (`Sc*Sa` computed by the `SourceAlpha` colour factor is algebraically the same
-  byte Blend2D's native premultiplied storage already holds) but wrong for ALPHA: both presets set
-  `AlphaSourceBlend=SourceAlpha` (not `AlphaBlend`'s `One`), so XNA's true alpha equation is
-  independent of the colour equation — `Da'=Sa*Sa+Da*(1-Sa)` for `NonPremultiplied`,
-  `Da'=Sa*Sa+Da` for `Additive` — which native `SRC_OVER`/`PLUS` (multiplying by `Sa` only once)
-  cannot reproduce whenever `Sa` is neither 0 nor 1. Fixed with a bounded CPU-assisted correction
-  (`ApplyIndependentAlphaCorrectionEXT` in `Blend2DSpriteBatchRenderer.cpp`, semantically informed
-  by `SkiaRenderer`'s own masked-blend precedent, not copied from it): the real draw still goes
-  through the native `BLCompOp` blit for its (already-correct) colour bytes; a second pass renders
-  the same draw onto a transparent scratch canvas via `SRC_OVER` — which collapses to exactly `Sa`
-  against a zero destination alpha, recovering Blend2D's true per-pixel effective source alpha
-  including AA/clip/coverage — and combines it with a whole-surface pre-draw alpha snapshot to
-  compute and write back the true independent alpha equation over just the alpha byte. This
-  surfaced a real, previously-latent bug in `Blend2DPixelConvert.hpp`'s
-  `ConvertPremultipliedBgraRowToStraightRgba`: a stored premultiplied colour byte can legitimately
-  exceed the new, smaller alpha byte under the corrected equation (an expected consequence of an
-  independent alpha equation on premultiplied-native storage), and the unclamped
+- **BLEND2D-20 (P0, superseded by BLEND2D-24 below).** `ApplyBlendState` mapped `NonPremultiplied`
+  to `BL_COMP_OP_SRC_OVER` and `Additive` to `BL_COMP_OP_PLUS` as if they were exact native
+  operators. First fix attempt: left the native draw's colour bytes as-is (believed correct — see
+  BLEND2D-24, this belief was itself wrong) and corrected only the ALPHA byte via a bounded
+  CPU-assisted pass (`ApplyIndependentAlphaCorrectionEXT`), reasoning that `Sc*Sa` (the
+  `SourceAlpha` colour factor applied to the straight source colour) is algebraically the same byte
+  Blend2D's native premultiplied storage already holds. This surfaced a real, previously-latent bug
+  in `Blend2DPixelConvert.hpp`'s `ConvertPremultipliedBgraRowToStraightRgba`: a stored premultiplied
+  colour byte can legitimately exceed a newly-reduced alpha byte, and the unclamped
   `static_cast<uint8_t>` unpremultiply division would silently wrap instead of clamping to 255;
-  fixed with an explicit `std::min(255, …)` clamp on all three channels.
-- **BLEND2D-21 (P0 test oracle).** `TestBlendPresets` asserted `NonPremultiplied == AlphaBlend`
-  (true only for BLEND2D-9's uncorrected native mapping) and derived `Additive`'s expected pixel
-  from native `PLUS` behaviour instead of `BlendState`'s own factor tuples. Rewritten to derive
-  every preset's expected alpha independently from `BlendState.cpp`'s real
-  `(ColorSourceBlend, ColorDestinationBlend, AlphaSourceBlend, AlphaDestinationBlend)` tuples, with
-  alpha checked in isolation (`CheckAlpha`) before the combined RGBA check, and the
-  `NonPremultiplied` clamp-on-unpremultiply documented as a genuine boundary rather than adjusted
-  away.
+  fixed with an explicit `std::min(255, …)` clamp on all three channels (this clamp itself remains
+  correct defensive hardening after BLEND2D-24 — see there for why it is no longer load-bearing).
+- **BLEND2D-21 (P0 test oracle, superseded by BLEND2D-24 below).** `TestBlendPresets` asserted
+  `NonPremultiplied == AlphaBlend` (true only for BLEND2D-9's uncorrected native mapping) and
+  derived `Additive`'s expected pixel from native `PLUS` behaviour instead of `BlendState`'s own
+  factor tuples. First fix attempt: derived expected alpha independently from `BlendState.cpp`'s
+  real factor tuples with alpha checked in isolation (`CheckAlpha`), but the expected RGB values
+  (`NonPremultiplied` → `(255,85,0,96)`, `Additive` → `(128,0,255,128)`) were still wrong — see
+  BLEND2D-24.
 - **BLEND2D-22 (P1).** `Blend2DRenderTargetRenderer` overrode `HasRealDepthBuffer()` to `false`
   but not `GetAppliedDepthStencilFormatEXT()`, so `RenderTarget2D.cpp` (which populates the public
   `DepthStencilFormat` property from that method, not from `HasRealDepthBuffer`) could report
@@ -254,6 +244,80 @@ distinguishing case.
   geometric containment), and render-target bind/switch/self-sample (behavioural round-trips, not
   derived pixel maths). No further instances of the bug class were found beyond BLEND2D-20/21/23
   above.
+
+### Remediation pass — BLEND2D-20's own colour claim was still wrong (final P0 correction)
+
+A second independent review of BLEND2D-20/21 (starting SHA `ad779eb4d`) found the READY verdict
+was STILL incorrect: the alpha equation was now right, but the reasoning that the native
+`BL_COMP_OP_SRC_OVER`/`PLUS` colour bytes were "already correct" for `NonPremultiplied`/`Additive`
+was itself wrong, and `TestBlendPresets`' corrected-looking RGB expectations
+(`NonPremultiplied` → `(255,85,0,96)`, `Additive` → `(128,0,255,128)`) were artifacts of that
+mistake, not the true XNA result.
+
+- **BLEND2D-24 (P0, final).** `Sc*Sa` (the source's own premultiplied contribution, `Sca`) being
+  algebraically identical between XNA's colour equation and native `SRC_OVER`/`PLUS`'s colour
+  equation does NOT make the two operators' full colour output identical: native compositing
+  premultiplies the blended straight colour against the OLD destination alpha `Da`
+  (`Dca'=Sca+Dca*(1-Sa)`, which is `sourceStraight*Sa + destinationStraight*Da*(1-Sa)` once
+  expanded), but XNA's true `Cout` must be premultiplied against the NEW `Aout` — and `Aout != Da`
+  whenever `Sa` is neither 0 nor 1, which is exactly when the independent alpha equation matters at
+  all. Confirmed against `SkiaRenderer.cpp`'s `MaskedBlendEffect()` runtime blender — the actual
+  semantic oracle for this renderer's whole `NonPremultiplied`/`Additive` route (per
+  `SkiaBlendMapping.hpp`'s `RuntimeNonPremultiplied`/`RuntimeAdditive` routes, both tagged source-
+  alpha-convention `Straight`) — which recovers straight destination colour (`dstColor=Dca/Da`),
+  computes `Cout`/`Aout` in straight space, and stores `Cout*Aout`/`Aout`, never retaining any
+  native-op colour byte.
+
+  Reworked `ApplyIndependentAlphaCorrectionEXT` into `ApplyIndependentBlendCorrectionEXT`
+  (`Blend2DSpriteBatchRenderer.cpp`): the native `BLCompOp` draw is now only a STAGING pass whose
+  colour AND alpha bytes are both unconditionally overwritten. The existing scratch-canvas pass
+  (SRC_OVER onto a transparent destination) already recovers, per pixel, both the effective source
+  alpha `Sa` (its alpha channel) AND the source's own premultiplied contribution `Sca` (its colour
+  channel, since `Dca'=Sca+0*(1-Sa)=Sca` when `Dca=0`) — reusing Blend2D's rasterizer for
+  interpolation/coverage/transform/filter rather than a separate geometry pass. Combined with the
+  existing whole-surface pre-draw snapshot (`Da`, `Dca`), the correction now computes, per touched
+  pixel: `dstColor=Da>0 ? Dca/Da : 0`, `Cout=saturate(Sca+dstColor*colorDstFactor)`,
+  `Aout=saturate(Sa*Sa+Da*colorDstFactor)` (`colorDstFactor=(1-Sa)` for `NonPremultiplied`, `1` for
+  `Additive`), then stores `(Cout*Aout, Aout)`. `Cout` is saturated to `[0,1]` BEFORE the
+  `Cout*Aout` repremultiply (matching `MaskedBlendEffect`'s own `saturate()` placement) — this is
+  not cosmetic: `Additive`'s colour weights (`Sa + 1`) do not sum to 1, so an unsaturated `Cout` can
+  genuinely exceed 1.0 (real, expected additive colour "blow out"), and premultiplying an
+  unsaturated `Cout` would itself produce an invalid PRGB32 pixel (`R,G,B > A`). Because `Cout` is
+  provably `<=1` after saturation, `stored.rgb = Cout*Aout <= Aout` holds by construction for every
+  touched pixel, including partial-coverage (antialiased) ones — the correction reads the SAME
+  per-pixel scratch-canvas `Sca`/`Sa` the alpha side uses, so an antialiased edge column's colour
+  is corrected with the SAME effective coverage as its alpha, not the center-pixel-only case.
+
+  `TestBlendPresets` rewritten (again) with the true independent oracle:
+  `NonPremultiplied` (`halfRed` on semi-transparent green) → **old wrong** `(255,85,0,96)` →
+  **corrected** `(128,128,0,96)`; `Additive` (`halfBlue` on semi-transparent red) → **old wrong**
+  `(128,0,255,128)` → **corrected** `(255,0,128,128)`. Both hand-derivations were independently
+  cross-checked against the actual built output (not derived from it) and matched exactly, with
+  zero tolerance needed. Added `TestPrgb32Invariant` (`Blend2D_Correctness`): reads Blend2D's raw
+  native premultiplied bytes directly via `Blend2DRenderer::ActiveSurface().Image().get_data()`
+  (not the straight-RGBA readback path, which would hide a violation behind
+  `Blend2DPixelConvert.hpp`'s defensive clamp) and asserts `R,G,B <= A` for every pixel across a
+  48-combination source-alpha/destination-alpha sweep (`Sa`/`Da` bytes spanning `0`/`1`/mid-
+  range/`255`) for both presets — 0 violations after the fix (28 checks failed with a genuine
+  `R,G,B > A` violation against `ad779eb4d`'s alpha-only correction, confirming the invariant is
+  now upheld by construction, not by luck). Added `TestBlendCorrectionEdgeCoverage`: an axis-
+  aligned fractional-scale draw (`SetTransformMatrix(Matrix::CreateScale(2.5f,1,1))`, Point
+  sampling to isolate coverage from bilinear blur) produces an exactly-derivable 50% analytic AA
+  coverage column; the half-covered column's colour AND alpha were independently hand-derived by
+  substituting the half-effective `Sa` into the same Skia oracle and matched the built output
+  exactly (again zero tolerance needed), proving the corrected colour route uses the identical
+  per-pixel coverage the alpha side already recovers — not a center-pixel-only fix that leaves
+  antialiased edges wrong.
+
+  `Blend2DPixelConvert.hpp`'s unpremultiply clamp remains (defensive hardening against a
+  malformed/out-of-contract PRGB32 pixel from any future producer) but is no longer load-bearing
+  for this renderer's own output — `TestPrgb32Invariant` is the regression proof of that claim, not
+  just a comment asserting it.
+
+  All 28 of the newly-added/rewritten checks above fail against `ad779eb4d` (confirmed by building
+  and running this exact test file against `ad779eb4d`'s unmodified implementation in an isolated
+  worktree) and pass against the corrected implementation; every one of the 305 checks that already
+  passed under `ad779eb4d` still passes unchanged.
 
 ### Remaining boundaries (explicit, not silently accepted)
 

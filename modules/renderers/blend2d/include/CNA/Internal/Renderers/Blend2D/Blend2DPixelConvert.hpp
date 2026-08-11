@@ -49,13 +49,17 @@ namespace CNA::Internal::Renderers::Blend2D
     /// Inverse of ConvertStraightRgbaRowToPremultipliedBgra: reads one row of Blend2D's native
     /// premultiplied BGRA storage and writes straight top-row-first RGBA8 bytes.
     ///
-    /// A premultiplied colour byte can legitimately exceed the stored alpha byte -- not just from
-    /// a corrupt/adversarial buffer, but as a genuine, expected result of blending BlendState::
-    /// NonPremultiplied/Additive onto this renderer's premultiplied-native storage (their
-    /// independent Sa*Sa alpha term can end up smaller than the Sa-scaled colour a native
-    /// Porter-Duff operator already wrote -- see Blend2DRenderer::ApplyBlendState's doc comment
-    /// and ApplyIndependentAlphaCorrectionEXT). The unpremultiplied channel is then mathematically
-    /// >255 and MUST clamp, not silently wrap through an unchecked `uint8_t` cast.
+    /// The `std::min(255, ...)` below is DEFENSIVE hardening against a malformed/out-of-contract
+    /// PRGB32 pixel (an RGB channel greater than its own alpha byte), never a substitute for
+    /// coherent premultiplied storage. Every pixel this renderer itself writes -- including
+    /// BlendState::NonPremultiplied/Additive's bounded CPU correction
+    /// (ApplyIndependentBlendCorrectionEXT), which saturates its logical straight-space colour to
+    /// [0,1] BEFORE repremultiplying against the newly computed alpha -- provably satisfies
+    /// R,G,B <= A by construction (see Blend2D_Correctness::TestPrgb32Invariant, which reads raw
+    /// native bytes back and asserts this holds for real NonPremultiplied/Additive output,
+    /// including antialiased/rotated edges). The clamp exists purely so a division that would
+    /// otherwise silently wrap through an unchecked `uint8_t` cast instead saturates, for any
+    /// future or third-party PRGB32 producer that does not uphold that invariant.
     inline void ConvertPremultipliedBgraRowToStraightRgba(const std::uint8_t* srcBgra,
                                                            std::uint8_t* dstRgba,
                                                            int pixelCount)

@@ -643,16 +643,22 @@ namespace
         // Every expected value below is derived independently from BlendState.cpp's real stock
         // factor tuples (Opaque=One/Zero, AlphaBlend=One/InverseSourceAlpha,
         // NonPremultiplied=SourceAlpha/InverseSourceAlpha, Additive=SourceAlpha/One, all with
-        // matching Alpha*Blend factors), NOT from Blend2D's BLCompOp behaviour. The XNA blend
-        // equation is evaluated per-channel and independently for colour vs. alpha:
-        //   Dca' = Sc*ColorSrcFactor + Dca*ColorDstFactor      (colour, on premultiplied storage)
-        //   Da'  = Sa*AlphaSrcFactor + Da*AlphaDstFactor        (alpha, independently)
-        // where Sc is the source's OWN premultiplied byte (Sc_straight*Sa) -- so a SourceAlpha
-        // colour factor multiplies Sc_straight by Sa, which is algebraically identical to Sc
-        // (the stored premultiplied byte) itself. That is why NonPremultiplied's colour channel
-        // is byte-identical to AlphaBlend's (both End up as Sca + Dca*(1-Sa)) while its ALPHA
-        // channel is NOT (AlphaSrcFactor=SourceAlpha introduces an independent Sa*Sa term that
-        // native Porter-Duff SRC_OVER, which only ever multiplies by Sa once, cannot reproduce).
+        // matching Alpha*Blend factors), NOT from Blend2D's BLCompOp behaviour. Opaque/AlphaBlend
+        // evaluate colour and alpha on Blend2D's own premultiplied storage directly (their
+        // ColorSourceBlend is One, i.e. the destination's OWN premultiplied byte is one of the two
+        // additive terms). NonPremultiplied/Additive are different: BOTH ColorSourceBlend and
+        // AlphaSourceBlend are SourceAlpha, so XNA evaluates them from the SAME straight-space
+        // equation pair -- the semantic oracle is SkiaRenderer.cpp's MaskedBlendEffect() runtime
+        // blender, NOT Blend2D's BLCompOp:
+        //   dstColor = Da>0 ? Dca/Da : 0                       (recovered straight destination RGB)
+        //   NonPremul: Cout=saturate(Sca+dstColor*(1-Sa))        Aout=saturate(Sa*Sa+Da*(1-Sa))
+        //   Additive:  Cout=saturate(Sca+dstColor)               Aout=saturate(Sa*Sa+Da)
+        //   stored = (Cout*Aout, Aout)
+        // where Sca is the source's own premultiplied byte (Sc_straight*Sa). Critically, Cout must
+        // be premultiplied against the NEW Aout, not the OLD Da -- so, unlike AlphaBlend, NEITHER
+        // NonPremultiplied's NOR Additive's colour bytes are identical to what native
+        // BL_COMP_OP_SRC_OVER/PLUS would produce (those premultiply against Da instead), even
+        // though native compositing's OWN colour formula happens to use the same Sca term.
         SDL_Window* window = MakeWindow(8, 8);
         auto renderer = MakeRenderer(window, 8, 8);
         auto sb = renderer->CreateSpriteBatch();
@@ -685,45 +691,45 @@ namespace
         CheckAlpha(*renderer, 0, 0, 160, "BlendState::AlphaBlend: Da'=Sa+Da*(1-Sa)=160", 2);
         CheckPixel(*renderer, 0, 0, Color(204, 51, 0, 160), "BlendState::AlphaBlend, semi-transparent src AND dst", 3);
 
-        // NonPremultiplied (SourceAlpha,InverseSourceAlpha): colour factor pair is the SAME as
-        // AlphaBlend's (SourceAlpha applied to the straight source colour is algebraically
-        // identical to the source's own premultiplied byte, Sc*Sa == Sca), so the RGB result MUST
-        // match AlphaBlend's exactly: Dca_r'=128, Dca_g'=32. But the ALPHA factor is ALSO
-        // SourceAlpha (not AlphaBlend's One), giving an independent equation:
-        //   Da' = Sa*Sa + Da*(1-Sa) = (128/255)^2 + (64/255)*(1-128/255) = 0.376948 -> 96 (byte)
-        // This is NOT 160 (AlphaBlend's alpha) -- the two presets diverge here, which is exactly
-        // the P0 defect this test now proves is fixed. Unpremultiplied by the NEW Da'=96, the
-        // SAME premultiplied colour bytes (128,0,32/*sic, 32 is green*/,...) now divide out to a
-        // value that exceeds 255 for red (128*255/96 = 340) -- a genuine, expected consequence of
-        // an independent alpha equation applied to premultiplied-native storage, not a test bug;
-        // the implementation must clamp rather than wrap. R clamps to 255, G = (32*255+48)/96 = 85.
+        // NonPremultiplied (SourceAlpha,InverseSourceAlpha) against the SAME semi-transparent
+        // green destination as AlphaBlend above, per the MaskedBlendEffect oracle:
+        //   Sa=128/255=0.501961, Sca=(0.501961,0,0) (straight red * Sa)
+        //   Da=64/255=0.250980, Dca=(0,0.250980,0), dstColor=Dca/Da=(0,1,0) (straight green)
+        //   Aout = Sa*Sa + Da*(1-Sa) = 0.251964 + 0.250980*0.498039 = 0.376974 -> byte 96
+        //   Cout = saturate(Sca + dstColor*(1-Sa)) = (0.501961, 0.498039, 0) (already in [0,1])
+        //   stored = Cout*Aout = (0.189165, 0.187740, 0), i.e. premultiplied bytes ~=(48,48,0), A=96
+        // Unpremultiplied by the stored A=96 on readback: R=(48*255+48)/96=128, G=(48*255+48)/96=128.
+        // This is NEITHER AlphaBlend's (204,51,0,160) NOR native SRC_OVER's colour (which would
+        // premultiply the same straight blend against the OLD Da=64, not the NEW Aout=96) -- the
+        // colour bytes are recomputed from scratch against the new alpha, not merely alpha-corrected.
         ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendInverseSourceAlpha);
         renderer->Clear(0, 1, 0, 64.0f / 255.0f);
         sb->Begin();
         sb->Draw(*halfRed, 0.0f, 0.0f);
         sb->End();
         CheckAlpha(*renderer, 0, 0, 96,
-                  "BlendState::NonPremultiplied: Da'=Sa*Sa+Da*(1-Sa)=96 (independent of AlphaBlend's Da'=160)", 2);
-        CheckPixel(*renderer, 0, 0, Color(255, 85, 0, 96),
-                  "BlendState::NonPremultiplied: RGB matches AlphaBlend's premultiplied bytes (clamped on unpremultiply), alpha does not", 3);
+                  "BlendState::NonPremultiplied: Aout=Sa*Sa+Da*(1-Sa)=96 (independent of AlphaBlend's Da'=160)", 2);
+        CheckPixel(*renderer, 0, 0, Color(128, 128, 0, 96),
+                  "BlendState::NonPremultiplied: full straight-space Skia-oracle colour+alpha recompute (NOT AlphaBlend's RGB, NOT native SRC_OVER's RGB)", 3);
 
-        // Additive (SourceAlpha,One) against a semi-transparent destination. Colour: Dca'=Sca+Dca
-        // (same as native PLUS, for the same Sc*Sa==Sca reason as above). Source straight
-        // (0,0,255,128) premultiplies to (0,0,128,128); destination Clear(1,0,0,64/255)
-        // premultiplies to (64,0,0,64).
-        //   Dca_r'=0+64=64  Dca_g'=0+0=0  Dca_b'=128+0=128
-        //   Da' = Sa*Sa + Da = (128/255)^2 + 64/255 = 0.502918 -> 128 (byte)
-        // This is NOT native PLUS's Sa+Da=192 -- Additive's alpha diverges from naive Porter-Duff
-        // addition the same way NonPremultiplied's does. Unpremultiplied by the NEW Da'=128:
-        // R=(64*255+64)/128=128, G=0, B=(128*255+64)/128=255 (floors from 255.5, no overflow).
+        // Additive (SourceAlpha,One) against a semi-transparent RED destination:
+        //   Sa=128/255=0.501961, Sca=(0,0,0.501961) (straight blue * Sa)
+        //   Da=64/255=0.250980, Dca=(0.250980,0,0), dstColor=Dca/Da=(1,0,0) (straight red)
+        //   Aout = Sa*Sa + Da = 0.251964 + 0.250980 = 0.502944 -> byte 128
+        //   Cout = saturate(Sca + dstColor) = saturate((1,0,0.501961)) = (1,0,0.501961)
+        //   stored = Cout*Aout = (0.502944, 0, 0.252471), i.e. premultiplied bytes ~=(128,0,64), A=128
+        // Unpremultiplied by the stored A=128: R=(128*255+64)/128=255 (floors from 255.5),
+        // G=0, B=(64*255+64)/128=128. This is NEITHER native PLUS's colour (premultiplied against
+        // the OLD Da=64) NOR the previous alpha-only-corrected byte-substitution result.
         auto halfBlue = renderer->CreateTexture(SolidImage(1, 1, Color(0, 0, 255, 128)));
         ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendOne);
         renderer->Clear(1, 0, 0, 64.0f / 255.0f);
         sb->Begin();
         sb->Draw(*halfBlue, 0.0f, 0.0f);
         sb->End();
-        CheckAlpha(*renderer, 0, 0, 128, "BlendState::Additive: Da'=Sa*Sa+Da=128 (not native PLUS's Sa+Da=192)", 2);
-        CheckPixel(*renderer, 0, 0, Color(128, 0, 255, 128), "BlendState::Additive, semi-transparent src and dst", 3);
+        CheckAlpha(*renderer, 0, 0, 128, "BlendState::Additive: Aout=Sa*Sa+Da=128 (not native PLUS's Sa+Da=192)", 2);
+        CheckPixel(*renderer, 0, 0, Color(255, 0, 128, 128),
+                  "BlendState::Additive: full straight-space Skia-oracle colour+alpha recompute", 3);
 
         // Unsupported / unrecognized combination must be REJECTED, not silently approximated.
         CheckThrows("Non-stock colour blend factor combination", [&] {
@@ -750,6 +756,192 @@ namespace
             writeState.multiSampleMask = 0x1;
             renderer->ApplyBlendState(kBlendOne, kBlendOne, kBlendZero, kBlendZero, kFuncAdd, kFuncAdd, writeState);
         });
+
+        ApplyStockBlend(*renderer, kBlendOne, kBlendInverseSourceAlpha);
+        SDL_DestroyWindow(window);
+    }
+
+    // ------------------------------------------------------------------
+    // PRGB32 storage invariant: every renderer-owned pixel must satisfy R,G,B <= A. Reads Blend2D's
+    // raw native premultiplied bytes directly (not through the straight-RGBA readback path, which
+    // would hide an invariant violation behind Blend2DPixelConvert.hpp's defensive clamp) to prove
+    // BlendState::NonPremultiplied/Additive's bounded correction produces coherent PRGB32 storage
+    // on its own, i.e. that clamp is hardening, never load-bearing, for genuine renderer output.
+    // ------------------------------------------------------------------
+    void CheckPrgb32Invariant(Blend2DRenderer& renderer, const std::string& label)
+    {
+        BLImageData data{};
+        const bool ok = renderer.ActiveSurface().Image().get_data(&data) == BL_SUCCESS;
+        Check(ok, label + ": BLImage::get_data succeeds");
+        if (!ok)
+            return;
+
+        const auto* base = static_cast<const std::uint8_t*>(data.pixel_data);
+        bool invariantHolds = true;
+        int failX = -1, failY = -1;
+        std::uint8_t failB = 0, failG = 0, failR = 0, failA = 0;
+        for (int y = 0; y < renderer.ActiveSurface().Height() && invariantHolds; ++y)
+        {
+            const std::uint8_t* row = base + static_cast<std::ptrdiff_t>(y) * data.stride;
+            for (int x = 0; x < renderer.ActiveSurface().Width(); ++x)
+            {
+                const std::size_t idx = static_cast<std::size_t>(x) * 4;
+                // BL_FORMAT_PRGB32 is BGRA byte order on this little-endian-only renderer.
+                const std::uint8_t b = row[idx + 0], g = row[idx + 1], r = row[idx + 2], a = row[idx + 3];
+                if (b > a || g > a || r > a)
+                {
+                    invariantHolds = false;
+                    failX = x; failY = y; failB = b; failG = g; failR = r; failA = a;
+                    break;
+                }
+            }
+        }
+        Check(invariantHolds,
+             label + ": every pixel satisfies R,G,B <= A (valid PRGB32)" +
+                 (invariantHolds ? "" :
+                      " -- FIRST VIOLATION at (" + std::to_string(failX) + "," + std::to_string(failY) +
+                          ") B=" + std::to_string(failB) + " G=" + std::to_string(failG) +
+                          " R=" + std::to_string(failR) + " A=" + std::to_string(failA)));
+    }
+
+    void TestPrgb32Invariant()
+    {
+        SDL_Window* window = MakeWindow(8, 8);
+        auto renderer = MakeRenderer(window, 8, 8);
+        auto sb = renderer->CreateSpriteBatch();
+
+        // The two scenarios from TestBlendPresets, which the P0 fix's oracle rewrite already
+        // proves produce the expected RGBA bytes -- re-checked here for the raw-storage invariant
+        // specifically, independent of what CheckPixel's straight-RGBA readback would show.
+        auto halfRed = renderer->CreateTexture(SolidImage(1, 1, Color(255, 0, 0, 128)));
+        ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendInverseSourceAlpha);
+        renderer->Clear(0, 1, 0, 64.0f / 255.0f);
+        sb->Begin();
+        sb->Draw(*halfRed, 0.0f, 0.0f);
+        sb->End();
+        CheckPrgb32Invariant(*renderer, "NonPremultiplied, Sa=128/255 over Da=64/255");
+
+        auto halfBlue = renderer->CreateTexture(SolidImage(1, 1, Color(0, 0, 255, 128)));
+        ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendOne);
+        renderer->Clear(1, 0, 0, 64.0f / 255.0f);
+        sb->Begin();
+        sb->Draw(*halfBlue, 0.0f, 0.0f);
+        sb->End();
+        CheckPrgb32Invariant(*renderer, "Additive, Sa=128/255 over Da=64/255");
+
+        // A broad sweep across source alpha / destination alpha byte combinations, including the
+        // boundary cases (Sa/Da at 0, 1, and 255) most likely to expose a rounding-induced
+        // invariant violation -- not just the one arbitrarily chosen pair above. Additive is the
+        // riskier preset (its Cout weights, Sa+1, do not sum to 1, so an unsaturated Cout can
+        // exceed 1.0 -- exactly the case the saturate-before-repremultiply ordering guards).
+        const int saValues[] = {1, 32, 64, 127, 128, 200, 254, 255};
+        const int daValues[] = {0, 1, 64, 128, 200, 255};
+        for (int saByte : saValues)
+        {
+            auto sweepTex = renderer->CreateTexture(
+                SolidImage(1, 1, Color(200, 100, 50, saByte)));
+            for (int daByte : daValues)
+            {
+                ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendInverseSourceAlpha);
+                renderer->Clear(10.0f / 255.0f, 150.0f / 255.0f, 220.0f / 255.0f, daByte / 255.0f);
+                sb->Begin();
+                sb->Draw(*sweepTex, 0.0f, 0.0f);
+                sb->End();
+                CheckPrgb32Invariant(*renderer, "NonPremultiplied sweep Sa=" + std::to_string(saByte) +
+                                              " Da=" + std::to_string(daByte));
+
+                ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendOne);
+                renderer->Clear(10.0f / 255.0f, 150.0f / 255.0f, 220.0f / 255.0f, daByte / 255.0f);
+                sb->Begin();
+                sb->Draw(*sweepTex, 0.0f, 0.0f);
+                sb->End();
+                CheckPrgb32Invariant(*renderer, "Additive sweep Sa=" + std::to_string(saByte) +
+                                              " Da=" + std::to_string(daByte));
+            }
+        }
+
+        ApplyStockBlend(*renderer, kBlendOne, kBlendInverseSourceAlpha);
+        SDL_DestroyWindow(window);
+    }
+
+    // ------------------------------------------------------------------
+    // NonPremultiplied/Additive at a partial-coverage (antialiased) edge pixel: proves the
+    // corrected COLOUR route uses the SAME per-pixel effective coverage the scratch pass recovers
+    // for alpha, not just the fully-covered interior. Uses a fractional, axis-aligned destination
+    // scale (2.5x via SetTransformMatrix) rather than a rotation, so the analytic AA coverage at
+    // the boundary column is exactly derivable (a rotated edge's exact sub-pixel coverage depends
+    // on rasterizer implementation details this test should not need to reverse-engineer): a
+    // 1x1 source scaled to a device-space rect spanning x in [0,2.5) covers column x=0 fully and
+    // column x=2 at exactly 50% (linear axis-aligned coverage AA), verified independently against
+    // BOTH TestPrgb32Invariant's invariant AND a half-effective-alpha instance of the same
+    // straight-space Skia oracle TestBlendPresets uses.
+    // ------------------------------------------------------------------
+    void TestBlendCorrectionEdgeCoverage()
+    {
+        SDL_Window* window = MakeWindow(8, 8);
+        auto renderer = MakeRenderer(window, 8, 8);
+        auto sb = renderer->CreateSpriteBatch();
+        sb->SetSamplerFilter(1); // Point: isolates AA edge coverage from bilinear sampling blur.
+
+        auto halfRed = renderer->CreateTexture(SolidImage(1, 1, Color(255, 0, 0, 128)));
+
+        // NonPremultiplied: full-coverage column (x=0) must match TestBlendPresets' own Sa=128/255
+        // result; the half-coverage column (x=2, effective Sa'=Sa/2) is independently derived from
+        // the SAME oracle with saEff substituted for Sa.
+        ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendInverseSourceAlpha);
+        renderer->Clear(0, 1, 0, 64.0f / 255.0f);
+        sb->SetTransformMatrix(Matrix::CreateScale(2.5f, 1.0f, 1.0f));
+        sb->Begin();
+        sb->Draw(*halfRed, 0.0f, 0.0f);
+        sb->End();
+        sb->SetTransformMatrix(Matrix::getIdentityProperty());
+
+        // Full coverage: identical to TestBlendPresets' NonPremultiplied result, (128,128,0,96).
+        CheckPixel(*renderer, 0, 0, Color(128, 128, 0, 96),
+                  "NonPremultiplied edge coverage: fully-covered column matches TestBlendPresets' Sa=128/255 result", 3);
+
+        // Half coverage (x=2): saEff = 0.5 * 128/255 = 0.250980. Sca_eff = straight red * saEff =
+        // (0.250980, 0, 0). Da = 64/255 = 0.250980 (unchanged, this column's own background).
+        // dstColor = (0,1,0). Aout = saEff^2 + Da*(1-saEff) = 0.062991 + 0.250980*0.749020 =
+        // 0.250973 -> byte round(0.250973*255) ~= 64. Cout = saturate(Sca_eff + dstColor*(1-saEff))
+        // = (0.250980, 0.749020, 0). stored = Cout*Aout ~= (0.062985, 0.188008, 0) -> premultiplied
+        // bytes ~=(16,48,0), A~=64. Unpremultiplied: R=(16*255+32)/64~=64, G=(48*255+32)/64~=191.
+        CheckAlpha(*renderer, 2, 0, 64, "NonPremultiplied edge coverage: half-covered column alpha ~=64", 3);
+        CheckPixel(*renderer, 2, 0, Color(64, 191, 0, 64),
+                  "NonPremultiplied edge coverage: half-covered column colour uses the SAME effective coverage as alpha", 6);
+
+        // Uncovered column (x=4, well past the 2.5-wide draw): must be completely untouched by
+        // this draw -- the background Clear colour, unmodified.
+        CheckPixel(*renderer, 4, 0, Color(0, 255, 0, 64),
+                  "NonPremultiplied edge coverage: uncovered column is untouched (raw premultiplied Clear bytes)");
+
+        CheckPrgb32Invariant(*renderer, "NonPremultiplied edge coverage draw");
+
+        // Additive: same fractional-scale setup, different destination/blend.
+        auto halfBlue = renderer->CreateTexture(SolidImage(1, 1, Color(0, 0, 255, 128)));
+        ApplyStockBlend(*renderer, kBlendSourceAlpha, kBlendOne);
+        renderer->Clear(1, 0, 0, 64.0f / 255.0f);
+        sb->SetTransformMatrix(Matrix::CreateScale(2.5f, 1.0f, 1.0f));
+        sb->Begin();
+        sb->Draw(*halfBlue, 0.0f, 0.0f);
+        sb->End();
+        sb->SetTransformMatrix(Matrix::getIdentityProperty());
+
+        CheckPixel(*renderer, 0, 0, Color(255, 0, 128, 128),
+                  "Additive edge coverage: fully-covered column matches TestBlendPresets' Sa=128/255 result", 3);
+
+        // Half coverage (x=2): saEff=0.250980, Sca_eff=(0,0,0.250980), Da=0.250980, dstColor=(1,0,0).
+        // Aout = saEff^2 + Da = 0.062991 + 0.250980 = 0.313971 -> byte ~=80. Cout=saturate(Sca_eff+
+        // dstColor)=saturate((1,0,0.250980))=(1,0,0.250980). stored=Cout*Aout~=(0.313971,0,0.078807)
+        // -> bytes ~=(80,0,20), A~=80. Unpremultiplied: R=(80*255+40)/80=255, B=(20*255+40)/80~=64.
+        CheckAlpha(*renderer, 2, 0, 80, "Additive edge coverage: half-covered column alpha ~=80", 3);
+        CheckPixel(*renderer, 2, 0, Color(255, 0, 64, 80),
+                  "Additive edge coverage: half-covered column colour uses the SAME effective coverage as alpha", 6);
+
+        CheckPixel(*renderer, 4, 0, Color(255, 0, 0, 64),
+                  "Additive edge coverage: uncovered column is untouched (raw premultiplied Clear bytes)");
+
+        CheckPrgb32Invariant(*renderer, "Additive edge coverage draw");
 
         ApplyStockBlend(*renderer, kBlendOne, kBlendInverseSourceAlpha);
         SDL_DestroyWindow(window);
@@ -1085,6 +1277,8 @@ int main()
     TestScissor();
     TestViewport();
     TestBlendPresets();
+    TestPrgb32Invariant();
+    TestBlendCorrectionEdgeCoverage();
     TestColorWriteChannels();
     TestTintChain();
     TestRenderTargets();

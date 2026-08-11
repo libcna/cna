@@ -404,24 +404,29 @@ namespace CNA::Internal::Renderers::Blend2D
         //     in BOTH channels: every CNA-owned Blend2D texture/target already stores premultiplied
         //     pixels, so native SRC_OVER's Dca'=Sca+Dca(1-Sa), Da'=Sa+Da(1-Sa) is byte-identical to
         //     AlphaBlend's own (ColorSourceBlend=One, AlphaSourceBlend=One) equation.
-        //   NonPremultiplied: (SourceAlpha,InverseSourceAlpha,Add)     -> BL_COMP_OP_SRC_OVER for
-        //     COLOUR ONLY, plus a bounded CPU alpha correction (see below). NonPremultiplied's
-        //     ColorSourceBlend is SourceAlpha, so its colour equation Dca'=Sc*Sa+Dca(1-Sa) is
-        //     algebraically identical to native SRC_OVER's (Sc*Sa is exactly the source's own
-        //     stored premultiplied byte) -- the colour channels ARE byte-identical to AlphaBlend's
-        //     output. But NonPremultiplied's AlphaSourceBlend is ALSO SourceAlpha (not One), giving
-        //     Da'=Sa*Sa+Da(1-Sa) -- an independent Sa^2 term native SRC_OVER's alpha equation
-        //     (Sa+Da(1-Sa)) does not have. Confirmed against SkiaRenderer.cpp's own masked-blender
-        //     oracle (nonPremulAlpha = src.a*src.a + dst.a*(1-src.a)).
-        //   Additive:         (SourceAlpha,One,Add)                    -> BL_COMP_OP_PLUS for
-        //     COLOUR ONLY (Dca'=Sc*Sa+Dca is byte-identical to native PLUS's Sca+Dca), plus the
-        //     same bounded alpha correction: Da'=Sa*Sa+Da, not native PLUS's Sa+Da (Skia's
-        //     additiveAlpha = src.a*src.a + dst.a is the identical derivation).
+        //   NonPremultiplied: (SourceAlpha,InverseSourceAlpha,Add)     -> BL_COMP_OP_SRC_OVER as a
+        //     STAGING draw only, plus a bounded CPU colour+alpha correction (see below). Both
+        //     ColorSourceBlend and AlphaSourceBlend are SourceAlpha here, so XNA evaluates colour
+        //     and alpha from the SAME straight-space equation pair: dstColor=Dca/Da (recovered
+        //     straight destination colour), Cout=saturate(Sca+dstColor*(1-Sa)),
+        //     Aout=saturate(Sa*Sa+Da*(1-Sa)), stored=(Cout*Aout, Aout) -- matching
+        //     SkiaRenderer.cpp's MaskedBlendEffect() runtime-blender oracle exactly (its
+        //     nonPremulColor/nonPremulAlpha). This is NOT the same as native SRC_OVER's colour
+        //     result: native premultiplies the blended straight colour against the OLD destination
+        //     alpha Da, but XNA's Cout must be premultiplied against the NEW Aout, which differs
+        //     from Da whenever Sa is neither 0 nor 1 -- so both the colour AND alpha bytes native
+        //     SRC_OVER wrote are overwritten by the correction, not just alpha.
+        //   Additive:         (SourceAlpha,One,Add)                    -> BL_COMP_OP_PLUS as a
+        //     STAGING draw only, plus the same bounded colour+alpha correction:
+        //     Cout=saturate(Sca+dstColor), Aout=saturate(Sa*Sa+Da), stored=(Cout*Aout, Aout)
+        //     (Skia's additiveColor/additiveAlpha is the identical derivation). Additive's colour
+        //     weights (Sa + 1) do not sum to 1, so Cout can genuinely exceed 1.0 before saturation
+        //     -- a real, expected additive "blow out" XNA/FNA also clip -- which is exactly why
+        //     Cout is saturated BEFORE the Cout*Aout repremultiply, not after.
         //
-        // The colour-channel equivalence above means the native blit_image call already writes the
-        // CORRECT premultiplied colour bytes for all four presets; only NonPremultiplied/Additive's
-        // ALPHA byte needs a follow-up correction, applied by
-        // Blend2DSpriteBatchRenderer::ApplyIndependentAlphaCorrectionEXT (driven by
+        // For BOTH NonPremultiplied and Additive, the native blit_image call above is only a
+        // staging draw whose colour AND alpha bytes are unconditionally overwritten by
+        // Blend2DSpriteBatchRenderer::ApplyIndependentBlendCorrectionEXT (driven by
         // ActiveBlendPresetEXT() below, since appliedCompOp_ alone cannot distinguish AlphaBlend
         // from NonPremultiplied or a plain PLUS from Additive -- both pairs resolve to the same
         // BLCompOp).

@@ -195,10 +195,10 @@ namespace CNA::Internal::Renderers::Blend2D
         /// Everything one sprite draw applies to a BLContext AFTER set_comp_op/set_pattern_quality:
         /// viewport clip, scissor clip, viewport-local origin shift, the Begin() transform matrix,
         /// per-sprite translate/rotate/flip, and the final blit_image call. Extracted so
-        /// ApplyIndependentAlphaCorrectionEXT's auxiliary "effective source alpha" recovery pass
-        /// (below) can replay the IDENTICAL geometry/clipping/sampling against a scratch context --
-        /// the two passes must touch exactly the same destination pixels for the recovered
-        /// per-pixel alpha to correspond to what the real draw actually painted.
+        /// ApplyIndependentBlendCorrectionEXT's auxiliary "effective source colour/alpha" recovery
+        /// pass (below) can replay the IDENTICAL geometry/clipping/sampling against a scratch
+        /// context -- the two passes must touch exactly the same destination pixels for the
+        /// recovered per-pixel values to correspond to what the real draw actually painted.
         void PlaceAndBlitEXT(BLContext& ctx, const BLImage& img, const Matrix& transformMatrix,
                              bool viewportSet, int viewportX, int viewportY, int viewportW, int viewportH,
                              bool scissorEnabled, int scissorX, int scissorY, int scissorW, int scissorH,
@@ -240,35 +240,50 @@ namespace CNA::Internal::Renderers::Blend2D
                 "BLContext::blit_image");
         }
 
-        /// Bounded CPU correction for BlendState::NonPremultiplied/Additive's INDEPENDENT alpha
-        /// equation (Sa*Sa+Da*(1-Sa) / Sa*Sa+Da respectively -- Blend2DRenderer::ApplyBlendState's
-        /// doc comment derives both from BlendState.cpp's real factors, cross-checked against
-        /// SkiaRenderer.cpp's masked-blender oracle), which no single Blend2D BLCompOp can express
-        /// -- even though the COLOUR channels of both presets are already byte-identical to native
-        /// SRC_OVER/PLUS and so are already correct after the real draw this function runs after.
+        /// Bounded CPU correction for BlendState::NonPremultiplied/Additive, which no single
+        /// Blend2D BLCompOp can express: both presets set ColorSourceBlend=AlphaSourceBlend=
+        /// SourceAlpha, so XNA evaluates colour and alpha from the same straight-space equation
+        /// pair (matching SkiaRenderer.cpp's MaskedBlendEffect() runtime-blender oracle, the
+        /// semantic source of truth here -- NOT native BLCompOp behaviour):
+        ///   dstColor    = Da > 0 ? Dca/Da : 0                         (recover straight dest RGB)
+        ///   NonPremul:  Cout = saturate(Sca + dstColor*(1-Sa))          Aout = saturate(Sa*Sa+Da*(1-Sa))
+        ///   Additive:   Cout = saturate(Sca + dstColor)                 Aout = saturate(Sa*Sa+Da)
+        ///   stored.rgb  = Cout * Aout                                   stored.a = Aout
+        /// where Sca is the source's OWN premultiplied contribution (straight source colour times
+        /// Sa) -- Skia's shader receives this directly as its already-premultiplied `src.rgb`
+        /// input; this renderer recovers the per-pixel equivalent from the scratch pass below.
+        /// Note this REPLACES both the colour and alpha bytes the real (native-BLCompOp) draw
+        /// wrote -- native SRC_OVER/PLUS colour math premultiplies the blended straight colour
+        /// against the OLD destination alpha (Da), but XNA's Cout must be premultiplied against
+        /// the NEW alpha (Aout, which differs from Da whenever Sa is neither 0 nor 1), so the
+        /// native draw's colour bytes are only a staging step, not the final answer, for these two
+        /// presets specifically.
         ///
         /// Renders the identical transformed blit a SECOND time onto a fresh, fully transparent
         /// scratch canvas the same size as the active surface, using SRC_OVER: since the scratch
-        /// destination starts at alpha=0, SRC_OVER's own alpha equation Sa+Da*(1-Sa) collapses to
-        /// exactly Sa -- so the scratch canvas's resulting alpha channel IS the per-pixel EFFECTIVE
-        /// source alpha Blend2D's real rasterizer used for the actual draw, antialiased edge
-        /// coverage/sampling/rotation/clipping all included -- reusing Blend2D's own rasterizer for
-        /// the hard part rather than reimplementing it (and avoiding the algebraic inverse's
-        /// division-by-(1-Da) degeneracy when the destination was already fully opaque). Combined
-        /// with @p beforeBytes (the destination's state BEFORE the real draw, snapshotted by the
-        /// caller), the true per-pixel alpha is computed and written back over just the alpha byte
-        /// of every surface pixel -- the colour bytes the real draw already wrote are untouched.
+        /// destination starts at alpha=0, SRC_OVER's own equations Dca'=Sca+Dca*(1-Sa)=Sca and
+        /// Da'=Sa+Da*(1-Sa)=Sa collapse to exactly the source's own premultiplied contribution and
+        /// effective alpha -- so the scratch canvas IS both Sca and Sa as Blend2D's real
+        /// rasterizer actually produced them for this draw, antialiased edge coverage/sampling/
+        /// rotation/clipping all included -- reusing Blend2D's own rasterizer for the hard part
+        /// rather than reimplementing it. Combined with @p beforeBytes (the destination's state
+        /// BEFORE the real draw, snapshotted by the caller), the true per-pixel colour and alpha
+        /// are computed and written back over every touched surface pixel.
         ///
-        /// A corrected alpha can end up SMALLER than the (unmodified, already-correct) premultiplied
-        /// colour bytes already stored -- a genuine, expected consequence of NonPremultiplied/
-        /// Additive's independent alpha equation combined with Blend2D's premultiplied-native
-        /// storage, not a bug here; ConvertPremultipliedBgraRowToStraightRgba's caller-facing
-        /// unpremultiply clamps rather than wrapping when that happens.
+        /// `Cout` is saturated to [0,1] BEFORE multiplying by `Aout` (matching MaskedBlendEffect's
+        /// own `saturate(...)` placement) specifically so `stored.rgb = Cout*Aout <= Aout` holds by
+        /// construction for every touched pixel -- Additive's colour weights (Sa + 1) do not sum to
+        /// 1, so an unsaturated Cout can genuinely exceed 1.0 (a real, expected additive "blow out"
+        /// XNA/FNA also clip), and premultiplying an unsaturated Cout would produce a PRGB32 pixel
+        /// with an RGB channel greater than its own alpha, which is not a valid representation this
+        /// renderer relies on anywhere else. `Blend2DPixelConvert.hpp`'s unpremultiply clamp is
+        /// defensive hardening only, never load-bearing for renderer-owned output after this fix
+        /// (see `Blend2D_Correctness::TestPrgb32Invariant`).
         ///
         /// Bounded to the whole active surface (same "simple and always correct for any
         /// rotation/clip" tradeoff DrawQuad's ColorWriteChannels merge below already accepts)
         /// rather than computing a tighter bounding box.
-        void ApplyIndependentAlphaCorrectionEXT(
+        void ApplyIndependentBlendCorrectionEXT(
             Blend2DSurface& activeSurface, const BLImage& img, const Matrix& transformMatrix,
             bool viewportSet, int viewportX, int viewportY, int viewportW, int viewportH,
             bool scissorEnabled, int scissorX, int scissorY, int scissorW, int scissorH, double destX,
@@ -279,10 +294,10 @@ namespace CNA::Internal::Renderers::Blend2D
         {
             BLImage scratch;
             Blend2DCheckEXT(scratch.create(survW, survH, BL_FORMAT_PRGB32),
-                            "BLImage::create (alpha-correction scratch)");
+                            "BLImage::create (blend-correction scratch)");
             {
                 BLImageData sd{};
-                Blend2DCheckEXT(scratch.make_mutable(&sd), "BLImage::make_mutable (alpha-correction scratch zero)");
+                Blend2DCheckEXT(scratch.make_mutable(&sd), "BLImage::make_mutable (blend-correction scratch zero)");
                 auto* base = static_cast<std::uint8_t*>(sd.pixel_data);
                 for (int row = 0; row < survH; ++row)
                 {
@@ -292,21 +307,21 @@ namespace CNA::Internal::Renderers::Blend2D
             }
 
             BLContext scratchCtx;
-            Blend2DCheckEXT(scratchCtx.begin(scratch), "BLContext::begin (alpha-correction scratch)");
-            Blend2DCheckEXT(scratchCtx.set_comp_op(BL_COMP_OP_SRC_OVER), "BLContext::set_comp_op (alpha-correction scratch)");
+            Blend2DCheckEXT(scratchCtx.begin(scratch), "BLContext::begin (blend-correction scratch)");
+            Blend2DCheckEXT(scratchCtx.set_comp_op(BL_COMP_OP_SRC_OVER), "BLContext::set_comp_op (blend-correction scratch)");
             Blend2DCheckEXT(scratchCtx.set_pattern_quality(patternQuality),
-                            "BLContext::set_pattern_quality (alpha-correction scratch)");
+                            "BLContext::set_pattern_quality (blend-correction scratch)");
             PlaceAndBlitEXT(scratchCtx, img, transformMatrix, viewportSet, viewportX, viewportY,
                            viewportW, viewportH, scissorEnabled, scissorX, scissorY, scissorW,
                            scissorH, destX, destY, rotation, effectiveFlipH, effectiveFlipV, rectX,
                            rectY, rectW, rectH, blitSrcX, blitSrcY, sw, sh);
-            Blend2DCheckEXT(scratchCtx.end(), "BLContext::end (alpha-correction scratch)");
+            Blend2DCheckEXT(scratchCtx.end(), "BLContext::end (blend-correction scratch)");
 
             BLImageData scratchData{};
-            Blend2DCheckEXT(scratch.get_data(&scratchData), "BLImage::get_data (alpha-correction scratch readback)");
+            Blend2DCheckEXT(scratch.get_data(&scratchData), "BLImage::get_data (blend-correction scratch readback)");
             BLImageData afterData{};
             Blend2DCheckEXT(activeSurface.Image().make_mutable(&afterData),
-                            "BLImage::make_mutable (alpha-correction write-back)");
+                            "BLImage::make_mutable (blend-correction write-back)");
 
             const auto* scratchBase = static_cast<const std::uint8_t*>(scratchData.pixel_data);
             auto* afterBase = static_cast<std::uint8_t*>(afterData.pixel_data);
@@ -318,15 +333,33 @@ namespace CNA::Internal::Renderers::Blend2D
                 for (int col = 0; col < survW; ++col)
                 {
                     const std::size_t idx = static_cast<std::size_t>(col) * 4;
-                    const double saEff = scratchRow[idx + 3] / 255.0;
-                    if (saEff <= 0.0)
-                        continue; // Untouched by this draw -- destination alpha stays as-is.
-                    const double daBefore = beforeRow[idx + 3] / 255.0;
-                    const double trueAlpha = additive
-                        ? saEff * saEff + daBefore
-                        : saEff * saEff + daBefore * (1.0 - saEff);
-                    const double clamped = std::clamp(trueAlpha, 0.0, 1.0);
-                    afterRow[idx + 3] = static_cast<std::uint8_t>(clamped * 255.0 + 0.5);
+                    const double sa = scratchRow[idx + 3] / 255.0;
+                    if (sa <= 0.0)
+                        continue; // Untouched by this draw -- destination stays exactly as-is.
+
+                    // BL_FORMAT_PRGB32 is BGRA byte order on this little-endian-only renderer.
+                    const double scaB = scratchRow[idx + 0] / 255.0;
+                    const double scaG = scratchRow[idx + 1] / 255.0;
+                    const double scaR = scratchRow[idx + 2] / 255.0;
+
+                    const double da = beforeRow[idx + 3] / 255.0;
+                    const double dcaB = beforeRow[idx + 0] / 255.0;
+                    const double dcaG = beforeRow[idx + 1] / 255.0;
+                    const double dcaR = beforeRow[idx + 2] / 255.0;
+                    const double dstB = da > 0.0 ? dcaB / da : 0.0;
+                    const double dstG = da > 0.0 ? dcaG / da : 0.0;
+                    const double dstR = da > 0.0 ? dcaR / da : 0.0;
+
+                    const double aout = std::clamp(additive ? (sa * sa + da) : (sa * sa + da * (1.0 - sa)),
+                                                   0.0, 1.0);
+                    const double coutB = std::clamp(additive ? (scaB + dstB) : (scaB + dstB * (1.0 - sa)), 0.0, 1.0);
+                    const double coutG = std::clamp(additive ? (scaG + dstG) : (scaG + dstG * (1.0 - sa)), 0.0, 1.0);
+                    const double coutR = std::clamp(additive ? (scaR + dstR) : (scaR + dstR * (1.0 - sa)), 0.0, 1.0);
+
+                    afterRow[idx + 3] = static_cast<std::uint8_t>(aout * 255.0 + 0.5);
+                    afterRow[idx + 0] = static_cast<std::uint8_t>(coutB * aout * 255.0 + 0.5);
+                    afterRow[idx + 1] = static_cast<std::uint8_t>(coutG * aout * 255.0 + 0.5);
+                    afterRow[idx + 2] = static_cast<std::uint8_t>(coutR * aout * 255.0 + 0.5);
                 }
             }
         }
@@ -499,16 +532,17 @@ namespace CNA::Internal::Renderers::Blend2D
         const int colorWriteMask = renderer_.ActiveColorWriteMaskEXT();
         const bool needsWriteMask = colorWriteMask != 15;
         const Blend2DBlendPresetEXT activePreset = renderer_.ActiveBlendPresetEXT();
-        const bool needsAlphaCorrection = activePreset == Blend2DBlendPresetEXT::NonPremultiplied ||
+        const bool needsBlendCorrection = activePreset == Blend2DBlendPresetEXT::NonPremultiplied ||
                                           activePreset == Blend2DBlendPresetEXT::Additive;
 
         // Blend2D has no native per-channel colour write mask, and no single BLCompOp can express
-        // NonPremultiplied/Additive's independent alpha equation (see ApplyIndependentAlphaCorrectionEXT's
-        // doc comment) -- both are realized as bounded post-processes that need the destination's
-        // state from BEFORE the real draw, so it is snapshotted up front for whichever (or both) is
-        // needed. Bounded to the whole surface (simple and always correct for any rotation/clip),
-        // acceptable since neither is the fast/common path (mask==15 with AlphaBlend/Opaque is).
-        const bool needsBeforeSnapshot = needsWriteMask || needsAlphaCorrection;
+        // NonPremultiplied/Additive's independent colour+alpha equations (see
+        // ApplyIndependentBlendCorrectionEXT's doc comment) -- both are realized as bounded
+        // post-processes that need the destination's state from BEFORE the real draw, so it is
+        // snapshotted up front for whichever (or both) is needed. Bounded to the whole surface
+        // (simple and always correct for any rotation/clip), acceptable since neither is the
+        // fast/common path (mask==15 with AlphaBlend/Opaque is).
+        const bool needsBeforeSnapshot = needsWriteMask || needsBlendCorrection;
         std::vector<std::uint8_t> beforeBytes;
         BLImageData beforeData{};
         int survW = 0, survH = 0;
@@ -528,7 +562,7 @@ namespace CNA::Internal::Renderers::Blend2D
         // SetScissorRect state exactly, on whichever BLContext is active right now -- neither can
         // leak stale state across a render-target switch or an intervening state change the way a
         // persistently-applied clip would. Captured once here (rather than inside PlaceAndBlitEXT)
-        // so the real draw and, when needed, ApplyIndependentAlphaCorrectionEXT's auxiliary pass
+        // so the real draw and, when needed, ApplyIndependentBlendCorrectionEXT's auxiliary pass
         // apply byte-identical clipping.
         bool viewportSet = false;
         int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
@@ -542,9 +576,9 @@ namespace CNA::Internal::Renderers::Blend2D
                         destY, rotation, effectiveFlipH, effectiveFlipV, rectX, rectY, rectW, rectH,
                         blitSrcX, blitSrcY, sw, sh);
 
-        if (needsAlphaCorrection)
+        if (needsBlendCorrection)
         {
-            ApplyIndependentAlphaCorrectionEXT(
+            ApplyIndependentBlendCorrectionEXT(
                 activeSurface, *img, transformMatrix_, viewportSet, viewportX, viewportY, viewportW,
                 viewportH, scissorEnabled, scissorX, scissorY, scissorW, scissorH, destX, destY,
                 rotation, effectiveFlipH, effectiveFlipV, rectX, rectY, rectW, rectH, blitSrcX,
