@@ -445,6 +445,11 @@
       "divergentFields": [
         "skin"
       ],
+      "divergentFieldsByLayer": {
+        "L4": [
+          "skin"
+        ]
+      },
       "owner": "GLTF-SKIN",
       "owningTasks": [
         "GLTF-245",
@@ -452,6 +457,8 @@
         "GLTF-248",
         "GLTF-260"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "status": "known-failing",
       "currentActual": {
         "boneCount": 1,

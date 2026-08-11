@@ -212,6 +212,12 @@ namespace CnaTest::GltfOracle
         return member.type == CNA::Internal::JsonType::Boolean ? member.boolValue : fallback;
     }
 
+    bool IsOpenDefect(const CNA::Internal::JsonValue& defect)
+    {
+        const std::string status = StringOr(defect, "status", "");
+        return status == "known-failing" || status == "partially-remediated";
+    }
+
     bool IsKnownDefectField(const CNA::Internal::JsonValue& expected, const std::string& layer,
                              const std::string& field)
     {
@@ -219,9 +225,14 @@ namespace CnaTest::GltfOracle
         if (defects.type != CNA::Internal::JsonType::Array) { return false; }
         for (const CNA::Internal::JsonValue& defect : defects.arrayValue)
         {
-            if (StringOr(defect, "status", "") != "known-failing") { continue; }
-            if (StringOr(defect, "firstDivergentLayer", "") != layer) { continue; }
-            for (const std::string& divergent : Strings(Member(defect, "divergentFields")))
+            // A defect the corpus records as fixed suppresses nothing: its fixture goes back under
+            // full conformance assertion, which is what turns the record into a regression witness.
+            if (!IsOpenDefect(defect)) { continue; }
+            // divergentFieldsByLayer is authoritative -- a defect usually breaks exactly one layer,
+            // but an import CNA rejects outright has no semantic mesh at L3 *and* no world
+            // geometry at L4, and both have to be declared for the suppression to be honest.
+            for (const std::string& divergent :
+                 Strings(Member(Member(defect, "divergentFieldsByLayer"), layer)))
             {
                 if (divergent == field) { return true; }
             }

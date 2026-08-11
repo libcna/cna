@@ -202,10 +202,20 @@
         "topologyCarried",
         "triangles"
       ],
+      "divergentFieldsByLayer": {
+        "L3": [
+          "mode",
+          "modeName",
+          "topologyCarried",
+          "triangles"
+        ]
+      },
       "owner": "GLTF-MESH",
       "owningTasks": [
         "GLTF-071"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "status": "known-failing",
       "currentActual": {
         "indices": [

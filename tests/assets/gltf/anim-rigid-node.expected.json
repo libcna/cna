@@ -414,6 +414,11 @@
       "divergentFields": [
         "animation"
       ],
+      "divergentFieldsByLayer": {
+        "L4": [
+          "animation"
+        ]
+      },
       "owner": "GLTF-ANIMATION",
       "owningTasks": [
         "GLTF-103",
@@ -421,6 +426,8 @@
         "GLTF-114",
         "GLTF-284"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "status": "known-failing",
       "currentActual": {
         "importedClipCount": 0,

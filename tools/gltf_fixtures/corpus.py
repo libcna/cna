@@ -82,10 +82,19 @@ def corpus_manifest(fixtures: list[Fixture], files: dict[str, bytes]) -> dict[st
                 "summary": defect.summary,
                 "owner": defect.owner,
                 "owningTasks": list(defect.owning_tasks),
+                "closedTasks": list(defect.closed_tasks),
+                "remainingTasks": list(defect.remaining_tasks),
                 "firstDivergentLayer": defect.first_divergent_layer,
                 "status": defect.status,
                 "fixtures": [],
             })
+            # One defect reproduced by several fixtures (D5 owns two) must tell the same story in
+            # each of them, or the ledger's own status would depend on iteration order.
+            if record["status"] != defect.status or record["closedTasks"] != list(defect.closed_tasks):
+                raise ValueError(
+                    f"{defect.id}: fixtures disagree about its remediation state "
+                    f"({fixture.id} says {defect.status!r}/{defect.closed_tasks}, an earlier "
+                    f"fixture said {record['status']!r}/{record['closedTasks']})")
             record["fixtures"].append(fixture.id)
 
     return {

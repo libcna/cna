@@ -50,6 +50,8 @@
         "GLTF-114",
         "GLTF-115"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "firstDivergentLayer": "L4",
       "status": "known-failing",
       "fixtures": [
@@ -66,6 +68,8 @@
         "GLTF-114",
         "GLTF-115"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "firstDivergentLayer": "L4",
       "status": "known-failing",
       "fixtures": [
@@ -82,6 +86,8 @@
         "GLTF-114",
         "GLTF-115"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "firstDivergentLayer": "L4",
       "status": "known-failing",
       "fixtures": [
@@ -90,13 +96,17 @@
     },
     {
       "id": "D4",
-      "summary": "A sparse index accessor decodes to all zeros. cgltf_accessor_read_index returns 0 when accessor->is_sparse or accessor->buffer_view is null, with no error channel, and ExtractMesh checks neither.",
+      "summary": "A sparse index accessor decoded to all zeros. cgltf_accessor_read_index returns 0 when accessor->is_sparse or accessor->buffer_view is null, with no error channel, and ExtractMesh checked neither. GLTF-063 replaced that call with a CNA-side sparse-aware, bounds-checked index reader.",
       "owner": "GLTF-ACCESSOR",
       "owningTasks": [
         "GLTF-063"
       ],
+      "closedTasks": [
+        "GLTF-063"
+      ],
+      "remainingTasks": [],
       "firstDivergentLayer": "L3",
-      "status": "known-failing",
+      "status": "fixed",
       "fixtures": [
         "sparse-indices"
       ]
@@ -108,6 +118,8 @@
       "owningTasks": [
         "GLTF-071"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "firstDivergentLayer": "L3",
       "status": "known-failing",
       "fixtures": [
@@ -125,6 +137,8 @@
         "GLTF-114",
         "GLTF-284"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "firstDivergentLayer": "L4",
       "status": "known-failing",
       "fixtures": [
@@ -140,6 +154,8 @@
         "GLTF-228",
         "GLTF-229"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "firstDivergentLayer": "L3",
       "status": "known-failing",
       "fixtures": [
@@ -156,6 +172,8 @@
         "GLTF-248",
         "GLTF-260"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "firstDivergentLayer": "L4",
       "status": "known-failing",
       "fixtures": [
@@ -421,8 +439,8 @@
   "files": [
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 9469,
-      "sha256": "7631461cbf44613ed5dfbde952b5cc4a61e9cc6aa1c22e1adcb074b00d892186"
+      "bytes": 9613,
+      "sha256": "e3fd2de87a96ddf09049b81a454732defa42b0b5403677e4f868a1b38722b96f"
     },
     {
       "path": "anim-rigid-node.glb",
@@ -451,8 +469,8 @@
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 7483,
-      "sha256": "b50f28d01c065e1f6b84993161d18d26ccf678cde2e8edcd21a871a0a3b9c431"
+      "bytes": 7626,
+      "sha256": "5e984f0ed439b54f9e94b52959a662d58ad4feef7b7d041bb3f93e13ee595a01"
     },
     {
       "path": "mat-factor-only-gold.glb",
@@ -466,8 +484,8 @@
     },
     {
       "path": "mode-points.expected.json",
-      "bytes": 4600,
-      "sha256": "6d9b0aee8a976d1ddbe8d01c0e41638b0f6590b5b1666f87c1dad32998b0c9a2"
+      "bytes": 4813,
+      "sha256": "a78b407b89599c99c1ba43ebd180ed50d70e8ba6a7a5a947db2f6fcdc3d06467"
     },
     {
       "path": "mode-points.glb",
@@ -481,8 +499,8 @@
     },
     {
       "path": "mode-triangle-strip.expected.json",
-      "bytes": 5264,
-      "sha256": "1f6cf3fcfafcb97d2c19f011ea6c918ec072e39fba4632de95923e5554c00335"
+      "bytes": 5477,
+      "sha256": "b1c39540764d39d7849b4d37a0ddaae0af22bb3c840937f3a7ec408406d75999"
     },
     {
       "path": "mode-triangle-strip.glb",
@@ -526,8 +544,8 @@
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 9891,
-      "sha256": "4097f131ea3d4daab4b99bac66758c52fbf9a86595956443db0262ada18a7833"
+      "bytes": 10030,
+      "sha256": "4bdb2b990b4e87db0a37e5f52198ed5a649d6fff97fac9fe2e33055752fd53da"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -541,8 +559,8 @@
     },
     {
       "path": "sparse-indices.expected.json",
-      "bytes": 5306,
-      "sha256": "d67e57ef3a179a57438fe0f2fb1056d634ccd44e1a0937c9b20777bc6e9695b3"
+      "bytes": 6105,
+      "sha256": "bf37b1b94aeada87dd7205753033859f73adc49b708e55abd04f3a34d4027ee7"
     },
     {
       "path": "sparse-indices.glb",
@@ -601,8 +619,8 @@
     },
     {
       "path": "xf-matrix-node.expected.json",
-      "bytes": 5716,
-      "sha256": "88b03d8bf342ec94908f1fd923dc36cb0da2f77d533a3a1fe46551b04694ff40"
+      "bytes": 5926,
+      "sha256": "69f3b090687d779b30f9b224438fc680184712dcaed49000c8f3655b864719b0"
     },
     {
       "path": "xf-matrix-node.glb",
@@ -616,8 +634,8 @@
     },
     {
       "path": "xf-parent-child.expected.json",
-      "bytes": 5818,
-      "sha256": "da70fdcf6b5ec59bb6e64aba0b07f86c00a22fd27b8c277f00a43eacf278ff8c"
+      "bytes": 6028,
+      "sha256": "11f1b54a95e3efb26c89419ecede196674f8e9945f9933a168699384dafe7fab"
     },
     {
       "path": "xf-parent-child.glb",
@@ -631,8 +649,8 @@
     },
     {
       "path": "xf-shared-mesh.expected.json",
-      "bytes": 6702,
-      "sha256": "dcf25adf1b7b38c8d5e1651475f872f31be942e6694e3a6b17f8c348e12fea9a"
+      "bytes": 6912,
+      "sha256": "6153b7ab0d367af14c09b9d7cf7c88ba2997720ea82c6dab1665930776e6c25b"
     },
     {
       "path": "xf-shared-mesh.glb",

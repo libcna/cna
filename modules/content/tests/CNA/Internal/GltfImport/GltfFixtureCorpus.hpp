@@ -118,16 +118,27 @@ namespace CnaTest::GltfOracle
                                bool fallback);
 
     /**
+     * @brief True when a defect record is still open (`known-failing` or `partially-remediated`).
+     *
+     * A `fixed` record stays in the corpus forever as the regression witness for the task that
+     * closed it, but it no longer suppresses anything.
+     *
+     * @param defect One entry of a fixture's `defects[]` array.
+     * @return True when the defect still breaks something.
+     */
+    [[nodiscard]] bool IsOpenDefect(const CNA::Internal::JsonValue& defect);
+
+    /**
      * @brief True when @p fixture records a still-open defect that breaks @p field at @p layer.
      *
      * This is what keeps a known defect from suppressing more than it actually breaks: a defect
-     * lists the exact fields it corrupts, so every other field of the same layer stays under full
-     * conformance assertion.
+     * lists the exact fields it corrupts, per layer, so every other field of the same layer stays
+     * under full conformance assertion.
      *
      * @param expected The fixture's parsed expectation manifest.
      * @param layer The oracle layer, e.g. "L3".
      * @param field The field name within that layer, e.g. "indices".
-     * @return True when a `known-failing` defect covers that field at that layer.
+     * @return True when an open defect covers that field at that layer.
      */
     [[nodiscard]] bool IsKnownDefectField(const CNA::Internal::JsonValue& expected,
                                            const std::string& layer, const std::string& field);

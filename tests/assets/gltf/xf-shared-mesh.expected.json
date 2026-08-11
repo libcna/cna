@@ -300,6 +300,13 @@
         "worldPositions",
         "worldBounds"
       ],
+      "divergentFieldsByLayer": {
+        "L4": [
+          "worldMatrixColumnMajor",
+          "worldPositions",
+          "worldBounds"
+        ]
+      },
       "owner": "GLTF-TRANSFORM",
       "owningTasks": [
         "GLTF-103",
@@ -307,6 +314,8 @@
         "GLTF-114",
         "GLTF-115"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "status": "known-failing",
       "currentActual": {
         "worldBounds": {

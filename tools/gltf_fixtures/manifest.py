@@ -110,13 +110,32 @@ class MeshInstance:
     parent_path: list[int]
 
 
+#: Every state a defect record may be in. A record is **never deleted** -- a remediated defect
+#: stays in the corpus as the regression witness that proves it has not come back.
+#:
+#: ``known-failing``        no owning task has landed; CNA is wrong in exactly the recorded way and
+#:                          a ``GltfKnownDefect`` test asserts that.
+#: ``partially-remediated`` one owning task landed and changed the behaviour, but the defect is not
+#:                          fully fixed. ``closed_tasks`` names what landed, ``remaining_tasks``
+#:                          what is left, and ``current_actual`` describes the *new* behaviour.
+#: ``fixed``                every owning task landed. ``divergent_fields`` is empty, so the
+#:                          conformance suite asserts the layer in full and the defect reappearing
+#:                          fails an ordinary green test.
+DEFECT_STATUSES = ("known-failing", "partially-remediated", "fixed")
+
+#: The statuses under which a defect still suppresses conformance assertions.
+OPEN_DEFECT_STATUSES = ("known-failing", "partially-remediated")
+
+
 @dataclass
 class Defect:
     """A proven CNA defect this fixture exposes, with the evidence recorded separately from truth.
 
     ``current_actual`` is what CNA produces **today**. It is never an expectation: it is dated
     evidence that lets a later test assert "still broken in exactly the documented way", so the
-    remediation task that fixes it fails loudly here instead of passing silently.
+    remediation task that fixes it fails loudly here instead of passing silently. When a task lands
+    and changes the behaviour, ``current_actual`` is updated to the new behaviour and the value it
+    replaced moves to ``prior_actual`` -- the history is kept, never overwritten.
     """
 
     id: str
@@ -129,7 +148,57 @@ class Defect:
     #: skip these and only these, so a defect confined to one field (D7 loses the material and
     #: nothing else) never suppresses checking of the fields that are correct.
     divergent_fields: list[str] = field(default_factory=list)
+    #: Fields this defect breaks at layers *other* than ``first_divergent_layer``, keyed by layer.
+    #: A defect usually diverges at exactly one layer, but not always: an import CNA rejects
+    #: outright produces no semantic mesh at L3 *and* no world geometry at L4.
+    also_divergent: dict[str, list[str]] = field(default_factory=dict)
     status: str = "known-failing"
+    #: Owning tasks that have landed. Empty while the defect is untouched.
+    closed_tasks: list[str] = field(default_factory=list)
+    #: Owning tasks still to land before the defect can be marked ``fixed``.
+    remaining_tasks: list[str] = field(default_factory=list)
+    #: What CNA produced before the most recent ``closed_tasks`` entry landed. Dated evidence: it
+    #: keeps the original forensic measurement readable after the behaviour has moved on.
+    prior_actual: dict[str, Any] | None = None
+
+    def divergent_by_layer(self) -> dict[str, list[str]]:
+        """Every layer this defect breaks, mapped to the fields it breaks there."""
+        out: dict[str, list[str]] = {}
+        if self.divergent_fields:
+            out[self.first_divergent_layer] = list(self.divergent_fields)
+        for layer, fields in self.also_divergent.items():
+            merged = out.setdefault(layer, [])
+            merged.extend(f for f in fields if f not in merged)
+        return {layer: out[layer] for layer in sorted(out)}
+
+    def record(self) -> dict[str, Any]:
+        """The emitted ``defects[]`` entry."""
+        if self.status not in DEFECT_STATUSES:
+            raise ValueError(f"{self.id}: unknown defect status {self.status!r}")
+        if self.status == "fixed" and self.divergent_by_layer():
+            raise ValueError(
+                f"{self.id}: a fixed defect may not still declare divergent fields -- a fixed "
+                "defect suppresses nothing, which is what makes it a regression witness")
+        if self.status in OPEN_DEFECT_STATUSES and not self.divergent_by_layer():
+            raise ValueError(
+                f"{self.id}: an open defect must name the fields it breaks, or the conformance "
+                "suite would assert them and fail")
+        entry: dict[str, Any] = {
+            "id": self.id,
+            "summary": self.summary,
+            "firstDivergentLayer": self.first_divergent_layer,
+            "divergentFields": list(self.divergent_fields),
+            "divergentFieldsByLayer": self.divergent_by_layer(),
+            "owner": self.owner,
+            "owningTasks": list(self.owning_tasks),
+            "closedTasks": list(self.closed_tasks),
+            "remainingTasks": list(self.remaining_tasks),
+            "status": self.status,
+            "currentActual": self.current_actual,
+        }
+        if self.prior_actual is not None:
+            entry["priorActual"] = self.prior_actual
+        return entry
 
 
 @dataclass
@@ -177,19 +246,7 @@ class Fixture:
             "l2": {"accessors": self.builder.accessor_records},
             "l3": self.l3,
             "l4": self.l4,
-            "defects": [
-                {
-                    "id": d.id,
-                    "summary": d.summary,
-                    "firstDivergentLayer": d.first_divergent_layer,
-                    "divergentFields": list(d.divergent_fields),
-                    "owner": d.owner,
-                    "owningTasks": list(d.owning_tasks),
-                    "status": d.status,
-                    "currentActual": d.current_actual,
-                }
-                for d in self.defects
-            ],
+            "defects": [d.record() for d in self.defects],
         }
         return _clean(doc)
 

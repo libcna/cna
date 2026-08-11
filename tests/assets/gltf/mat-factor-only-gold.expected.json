@@ -281,12 +281,19 @@
       "divergentFields": [
         "material"
       ],
+      "divergentFieldsByLayer": {
+        "L3": [
+          "material"
+        ]
+      },
       "owner": "GLTF-MATERIAL",
       "owningTasks": [
         "GLTF-217",
         "GLTF-228",
         "GLTF-229"
       ],
+      "closedTasks": [],
+      "remainingTasks": [],
       "status": "known-failing",
       "currentActual": {
         "usePbr": false,

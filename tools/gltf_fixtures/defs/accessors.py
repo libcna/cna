@@ -126,12 +126,13 @@ def sparse_position() -> Fixture:
 
 
 def sparse_indices() -> Fixture:
-    """f3 -- a sparse **index** accessor. Proves **D4**.
+    """f3 -- a sparse **index** accessor. Proved **D4**; the regression witness for `GLTF-063`.
 
     The base array already forms a valid first triangle; the sparse override replaces the last
     element so the second triangle is non-degenerate. A conforming reader produces
-    ``[0,1,2,0,2,3]``. CNA reads indices through ``cgltf_accessor_read_index``, which returns 0 for
-    every element of a sparse accessor with no error channel, collapsing the quad to a point.
+    ``[0,1,2,0,2,3]``. CNA read indices through ``cgltf_accessor_read_index``, which returns 0 for
+    every element of a sparse accessor with no error channel, collapsing the quad to a point;
+    `GLTF-063`'s own reader resolves the override, so this now asserts as ordinary conformance.
     """
     b = GltfBuilder("sparse-indices")
     position = b.add_packed_accessor(usage="POSITION", values=_QUAD_POSITIONS,
@@ -161,8 +162,9 @@ def sparse_indices() -> Fixture:
     return Fixture(
         id="sparse-indices", audit_fixture="f3", owning_group="accessors",
         description="A sparse index accessor whose override turns a degenerate second triangle "
-                    "into a real one. L2 passes (the data is readable and cgltf resolves it); L3 "
-                    "fails, which localises D4 precisely to CNA's index-reading call.",
+                    "into a real one. L2 always passed (the data is readable and cgltf resolves "
+                    "it) while L3 did not, which localised D4 precisely to CNA's index-reading "
+                    "call; GLTF-063 replaced that call and the fixture now passes at every layer.",
         builder=b, validated_layers=["L1", "L2", "L3"],
         referencing_groups=["topology"],
         features=["accessor.sparse on indices", "UNSIGNED_SHORT indices"],
@@ -173,16 +175,29 @@ def sparse_indices() -> Fixture:
         l4=world_positions(b, {mesh: list(_QUAD_POSITIONS)}),
         defects=[Defect(
             id="D4", owner="GLTF-ACCESSOR", first_divergent_layer="L3",
-            summary="A sparse index accessor decodes to all zeros. cgltf_accessor_read_index "
+            summary="A sparse index accessor decoded to all zeros. cgltf_accessor_read_index "
                     "returns 0 when accessor->is_sparse or accessor->buffer_view is null, with no "
-                    "error channel, and ExtractMesh checks neither.",
+                    "error channel, and ExtractMesh checked neither. GLTF-063 replaced that call "
+                    "with a CNA-side sparse-aware, bounds-checked index reader.",
             owning_tasks=["GLTF-063"],
-            divergent_fields=["indices", "triangles"],
+            closed_tasks=["GLTF-063"],
+            status="fixed",
+            divergent_fields=[],
             current_actual={
+                "indices": list(_SPARSE_INDEX_EXPECTED),
+                "note": "The decoded indices are the spec-derived ones. Nothing is suppressed any "
+                        "more: GltfConformanceL3 asserts this fixture's index list in full, so D4 "
+                        "reappearing fails an ordinary green test rather than needing a "
+                        "known-defect test of its own.",
+            },
+            prior_actual={
                 "indices": [0, 0, 0, 0, 0, 0],
-                "note": "Every index reads back as 0, so the quad collapses to a single "
-                        "degenerate point. The L2 dump of the same accessor is correct, which is "
-                        "the evidence that the accessor layer is not at fault.",
+                "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+                "note": "What the forensic audit measured before GLTF-063: every index read back "
+                        "as 0, so the quad collapsed to a single degenerate point. The L2 dump of "
+                        "the same accessor was already correct, which is the evidence that "
+                        "localised the defect to the index-reading call rather than the accessor "
+                        "layer.",
             },
         )],
     )

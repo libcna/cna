@@ -14,13 +14,17 @@
 // it fails here with the fixture and the task id named, so the implementer cannot mistake a
 // partial fix for a complete one. Converting a case to passing is a manifest change in
 // tools/gltf_fixtures (set the defect's status to "fixed" and drop its divergentFields) plus
-// deleting the test below -- never a change to the fixture or to its expected values.
+// deleting the test below -- never a change to the fixture or to its expected values. The record
+// itself is never deleted: a remediated defect stays in the corpus as the regression witness, and
+// the ledger test at the end of this file asserts both directions of that bookkeeping.
 //
-// None of D1-D8 is fixed by this batch. The corresponding remediation tasks are named in each
-// test and in each fixture's manifest.
+// Current state: D4 is FIXED (GLTF-063). D1-D3 and D5-D8 are still open and still assert the
+// divergence the forensic audit recorded.
 
+#include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -202,60 +206,12 @@ TEST(GltfKnownDefect, D3_NodeMatrixIsDiscarded)
 }
 
 // --- D4: the index path --------------------------------------------------------------------------
-
-TEST(GltfKnownDefect, D4_SparseIndexAccessorDecodesToAllZeros)
-{
-    // Owned by GLTF-063.
-    const LoadedFixture fixture("sparse-indices");
-    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-    const JsonValue& defect = DefectRecord(fixture, "D4");
-    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D4"));
-
-    // The localisation that matters: at L2 the very same accessor decodes perfectly, because
-    // cgltf_accessor_unpack_floats resolves sparse data. The accessor layer is not at fault; only
-    // CNA's separate index-reading call is. This is why GLTF-041 locks the attribute path rather
-    // than rewriting it.
-    const JsonValue& expectedAccessors = Path(fixture.Expected(), "l2.accessors");
-    for (const JsonValue& expectedAccessor : expectedAccessors.arrayValue)
-    {
-        if (StringOr(expectedAccessor, "usage", "") != "indices") { continue; }
-        const AccessorDump l2 = DumpAccessorEXT(
-            fixture.Data(), static_cast<std::size_t>(NumberOr(expectedAccessor, "index", -1)));
-        ASSERT_TRUE(l2.decoded) << l2.error;
-        ASSERT_TRUE(l2.sparse) << "the fixture's index accessor is supposed to be sparse";
-        const std::vector<double> expectedValues = Numbers(Member(expectedAccessor, "values"));
-        ASSERT_EQ(expectedValues.size(), l2.values.size());
-        for (std::size_t i = 0; i < expectedValues.size(); ++i)
-        {
-            EXPECT_NEAR(expectedValues[i], static_cast<double>(l2.values[i]), kTolerance)
-                << "L2 index accessor component[" << i << "] -- the data itself is readable";
-        }
-    }
-
-    // At L3 the same indices come back as zeros.
-    const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
-    ASSERT_EQ(1u, extracted.size());
-    ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
-
-    const std::vector<double> brokenIndices = Numbers(Member(CurrentActual(defect), "indices"));
-    ASSERT_EQ(brokenIndices.size(), extracted[0].dump.indices.size());
-    for (std::size_t i = 0; i < brokenIndices.size(); ++i)
-    {
-        EXPECT_EQ(static_cast<std::uint32_t>(brokenIndices[i]), extracted[0].dump.indices[i])
-            << "indices[" << i << "] -- D4 no longer reproduces exactly as recorded. If GLTF-063 "
-               "landed, mark D4 fixed in tools/gltf_fixtures and delete this test.";
-    }
-
-    const std::vector<double> specIndices =
-        Numbers(Member(Path(fixture.Expected(), "l3.primitives").arrayValue.at(0), "indices"));
-    bool diverges = false;
-    for (std::size_t i = 0; i < specIndices.size() && i < extracted[0].dump.indices.size(); ++i)
-    {
-        diverges = diverges ||
-            static_cast<std::uint32_t>(specIndices[i]) != extracted[0].dump.indices[i];
-    }
-    EXPECT_TRUE(diverges) << "the decoded indices now match the specification";
-}
+//
+// REMEDIATED by GLTF-063. There is deliberately no known-defect test here any more: with the
+// defect record marked fixed and its divergentFields empty, GltfConformanceL3 asserts
+// sparse-indices' index list in full, so D4 reappearing fails an ordinary green test. The
+// corresponding regression assertions live in GltfIndexDecodeTests.cpp, and the record itself
+// stays in the corpus as the witness (see the ledger test at the end of this file).
 
 // --- D5: primitive topology ----------------------------------------------------------------------
 
@@ -459,11 +415,16 @@ TEST(GltfKnownDefect, D8_SkinAncestorChainIsDroppedWhileInverseBindMatricesAreKe
 
 // --- Ledger completeness -------------------------------------------------------------------------
 
-TEST(GltfKnownDefect, EveryDefectInTheCorpusLedgerHasAnExecutableTestHere)
+TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
 {
     // Adding a defect fixture to the generator without an executable test would leave the defect
-    // documented but unproven, which is exactly the failure mode this batch exists to remove.
-    const std::set<std::string> covered = {"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"};
+    // documented but unproven, which is exactly the failure mode this batch exists to remove. The
+    // converse matters just as much: a defect the corpus records as remediated must NOT still have
+    // a "still broken" test here, or the file would start lying about the state of the code.
+    const std::set<std::string> open = {"D1", "D2", "D3", "D5", "D6", "D7", "D8"};
+    // Remediated defects, and the task that closed each. Their records stay in the corpus as
+    // regression witnesses and their fixtures are asserted by the ordinary conformance suites.
+    const std::map<std::string, std::string> remediated = {{"D4", "GLTF-063"}};
 
     const JsonValue& ledger = Member(CorpusManifest(), "defectLedger");
     ASSERT_EQ(JsonType::Array, ledger.type);
@@ -473,16 +434,38 @@ TEST(GltfKnownDefect, EveryDefectInTheCorpusLedgerHasAnExecutableTestHere)
         const std::string id = StringOr(defect, "id", "");
         ASSERT_FALSE(id.empty());
         recorded.insert(id);
-        EXPECT_TRUE(covered.count(id) != 0)
-            << id << " is recorded in the corpus but has no known-defect test in this file";
         EXPECT_FALSE(Strings(Member(defect, "owningTasks")).empty())
             << id << " names no remediation task";
         EXPECT_FALSE(Member(defect, "fixtures").arrayValue.empty())
             << id << " is not reproduced by any fixture";
+
+        const std::string status = StringOr(defect, "status", "");
+        const auto closed = remediated.find(id);
+        if (closed != remediated.end())
+        {
+            EXPECT_EQ("fixed", status)
+                << id << " is listed here as remediated but the corpus still calls it " << status;
+            const std::vector<std::string> closedTasks = Strings(Member(defect, "closedTasks"));
+            EXPECT_NE(closedTasks.end(),
+                      std::find(closedTasks.begin(), closedTasks.end(), closed->second))
+                << id << " does not name " << closed->second << " as the task that closed it";
+            continue;
+        }
+        EXPECT_TRUE(open.count(id) != 0)
+            << id << " is recorded in the corpus but has no known-defect test in this file";
+        EXPECT_NE("fixed", status)
+            << id << " is marked fixed in the corpus but this file still asserts it is broken. "
+                     "Delete its known-defect test and move it into the remediated list here.";
     }
-    for (const std::string& id : covered)
+    for (const std::string& id : open)
     {
         EXPECT_TRUE(recorded.count(id) != 0)
             << id << " has a test here but is no longer recorded in the corpus ledger";
+    }
+    for (const auto& [id, task] : remediated)
+    {
+        EXPECT_TRUE(recorded.count(id) != 0)
+            << id << " was remediated by " << task << " but its record was deleted from the "
+            << "corpus ledger -- a remediated defect stays as the regression witness";
     }
 }
