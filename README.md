@@ -165,7 +165,7 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 
 ## 6. 🔌 Renderer System
 
-CNA exposes **42 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+CNA exposes **44 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
 configuration). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 

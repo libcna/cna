@@ -61,6 +61,7 @@ IDENTITIES = [
     ("LLGL", "Llgl"),
     ("METAL", "Metal"),
     ("FNA3D", "Fna3d"),
+    ("SVG_DOM", "SvgDom"),
 ]
 
 

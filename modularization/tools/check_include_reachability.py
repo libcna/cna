@@ -53,6 +53,7 @@ FAMILY = {"Ascii": "ascii", "Bgfx": "bgfx", "Canvas": "canvas", "DirectX10": "di
           "OpenGL1": "opengl1", "OpenGL2": "opengl2", "OpenGL4": "opengl4",
           "OpenGLES1": "opengles1", "SdlGpu": "sdl-gpu", "SdlRenderer": "sdl-renderer",
           "Skia": "skia", "Software": "software", "Sokol": "sokol", "Stub": "stub",
+          "SvgDom": "svg-dom",
           "Vulkan": "vulkan", "WebGPU": "webgpu", "Wicked": "wicked",
           "D3DCommon": "common/d3d"}
 

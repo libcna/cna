@@ -135,7 +135,10 @@ namespace CNA
 
         /** @brief FNA3D (FNA-XNA/FNA3D), the XNA-shaped C graphics library FNA itself renders
          * through; it selects SDL_GPU, Direct3D 11 or OpenGL internally at runtime. */
-        Fna3d
+        Fna3d,
+
+        /** @brief SVG DOM (Emscripten only, 2D-only): SpriteBatch output as real SVG elements. */
+        SvgDom
     };
 
     /**
@@ -241,6 +244,8 @@ namespace CNA
         return GraphicsRendererType::Metal;
 #elif defined(CNA_RENDERER_FNA3D)
         return GraphicsRendererType::Fna3d;
+#elif defined(CNA_RENDERER_SVG_DOM)
+        return GraphicsRendererType::SvgDom;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -303,6 +308,7 @@ namespace CNA
             case GraphicsRendererType::Llgl:          return "LLGL";
             case GraphicsRendererType::Metal:          return "METAL";
             case GraphicsRendererType::Fna3d:         return "FNA3D";
+            case GraphicsRendererType::SvgDom:         return "SVG_DOM";
         }
         return "UNKNOWN";
     }

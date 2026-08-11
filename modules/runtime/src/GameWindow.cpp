@@ -363,9 +363,21 @@ namespace Microsoft::Xna::Framework
         int width = clientBounds_.Width;
         int height = clientBounds_.Height;
 
+        // Emscripten: SDL3's video backend can report "not initialized" for the first one or two
+        // event-loop ticks after a real SDL_CreateWindow() has already returned a valid window --
+        // the browser-side canvas/context setup it depends on finishes asynchronously, strictly
+        // after control has already returned to C++. This is a real, reproducible startup race
+        // (discovered driving CNA's own Emscripten renderers in a real browser for the first time),
+        // not a caller error: SDL_GetWindowSize failing here is always reached from an event-driven
+        // refresh (a real SDL_EVENT_WINDOW_*_CHANGED the browser itself fired) or a plain property
+        // read, neither of which is a context where "throw and unwind the whole game loop" is an
+        // acceptable response to one transient platform hiccup. Falling back to the last-known
+        // bounds this one tick -- exactly like the `window_ == nullptr` branch above already does --
+        // means the next real resize event (or the next explicit query, once the race has resolved)
+        // still produces the correct size; nothing is permanently lost.
         if (!SDL_GetWindowSize(window_, &width, &height))
         {
-            throw makeSdlError("SDL_GetWindowSize");
+            return clientBounds_;
         }
 
         return Rectangle(0, 0, width, height);

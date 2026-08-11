@@ -1261,16 +1261,20 @@ public:
 };
 
 int main(int argc, char* argv[]) {
-    House3DDemo game;
+    // Heap-allocated, not a local: under Emscripten, emscripten_set_main_loop(...,
+    // simulateInfiniteLoop=1) unwinds this stack frame via a JS-level throw (see
+    // docs/emscripten-mainloop-game-lifetime.md) -- a stack-local Game here would have its
+    // storage reclaimed while the loop callback still holds a raw pointer to it.
+    auto* game = new House3DDemo();
 
     for (int i = 1; i < argc; ++i)
     {
         if (std::string(argv[i]) == "--smoke" && i + 1 < argc)
-            game.SetSmokeFrames(std::stoi(argv[++i]));
+            game->SetSmokeFrames(std::stoi(argv[++i]));
         else if (std::string(argv[i]) == "--smoke")
-            game.SetSmokeFrames(3);
+            game->SetSmokeFrames(3);
     }
 
-    game.Run();
+    game->Run();
     return 0;
 }

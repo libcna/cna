@@ -28,7 +28,7 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 
 Explicitly **not** true today, and not to be stated as true anywhere:
 
-- CNA does **not** have 55 renderers. It has 41.
+- CNA does **not** have 55 renderers. It has 42 (41 plus the standalone `SVG_DOM` addition below).
 - Modularization is complete **and promoted**, including the final physical module/package
   layout: `develop` is a module-oriented monorepo as of 2026-08-10 (`41028e995` target graph +
   physical layout, then `3ecbbce72` `modules/<name>/{include,src,tests}`; both no-loss-proven —
@@ -92,7 +92,7 @@ This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer imp
 | 1 | `OPENGLES2` | **DONE (2026-08-10, `feature/renderer-opengles2`)** — public CNA OpenGL ES 2 renderer/profile, reusing the EasyGL/MetaGL ES 2 capability as its own fifth GL profile (`CNA_GL_PROFILE_OPENGLES2`) with truthful ES 2.0 capability and platform reporting. See `plan_opengles2.md` / `docs/opengles2-renderer.md`. |
 | 2 | `FNA3D` | Based on the FNA3D graphics library. **IMPLEMENTED on its own lane** (`feature/renderer-fna3d`), not yet integrated into `develop`: FNA3D pinned at release 26.08, executing XNA's own compiled stock effects through MojoShader. See `docs/fna3d-renderer.md` and `plan_fna3d.md`. Integrating it makes the public count 42. |
 | 3 | `OPENVG` | OpenVG. |
-| 4 | `SVG_DOM` | SVG DOM. |
+| 4 | `SVG_DOM` | **DELIVERED** (outside this phase, via a dedicated owner instruction on its own `feature/renderer-svg-dom` lane). Emscripten-only, 2D-only; renders `SpriteBatch` output as real pooled SVG DOM elements (`<svg>`/`<image>`/`feColorMatrix`), distinct from both `CANVAS` (rasterized) and `HTML_DOM` (CSS `<div>`s). See `docs/svg-dom-renderer.md` for the capability boundary — native host-contract tests pass (64/64); real-browser validation remains an external Emscripten-SDK gate. |
 | 5 | `IGL` | Facebook IGL — https://github.com/facebook/igl |
 | 6 | `NVRHI` | NVIDIA NVRHI. |
 | 7 | `KORE` | Kode/Kore — https://github.com/Kode/Kore |
