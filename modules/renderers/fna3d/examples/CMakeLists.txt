@@ -40,6 +40,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_RenderTarget COMMAND cna_test_fna3d_rendertarget
         TIMEOUT 120 LABELS "Fna3d")
 
+    cna_fna3d_test(cna_test_fna3d_buffers fna3d_buffers_test.cpp)
+    cna_register_renderer_test(NAME Fna3d_Buffers COMMAND cna_test_fna3d_buffers
+        TIMEOUT 120 LABELS "Fna3d")
+
     cna_fna3d_test(cna_test_fna3d_rendertarget_advanced fna3d_rendertarget_advanced_test.cpp)
     cna_register_renderer_test(NAME Fna3d_RenderTarget_Advanced
         COMMAND cna_test_fna3d_rendertarget_advanced TIMEOUT 120 LABELS "Fna3d")
