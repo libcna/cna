@@ -20,6 +20,8 @@
 #include <gtest/gtest.h>
 #include <sstream>
 
+#include "CNA/GraphicsCapability.hpp"
+
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -207,6 +209,15 @@ namespace
 
 TEST_F(XnbContainerFuzzTest, MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly)
 {
+    // Model loading unconditionally rejects with std::runtime_error (not in RunContainerFuzz's
+    // "clean rejection" catch list, which enumerates content/parsing exceptions, not capability
+    // rejections) on a renderer with no 3D pipeline -- every mutation would hit that same
+    // categorical rejection before the container parser it fuzzes is even reached, so there is
+    // nothing left for this fuzz pass to exercise. Texture2D/SoundEffect below are unaffected and
+    // keep running everywhere.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     RunContainerFuzz<Model>(
         "tests/assets/xnb/monogame/windows/uncompressed/BlenderDefaultCube.xnb", "fixture",
         0x584E42ULL, // "XNB" in hex-ish, arbitrary fixed seed

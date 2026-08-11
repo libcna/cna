@@ -151,6 +151,14 @@ namespace Microsoft::Xna::Framework::Graphics
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
+            // The OPENVG renderer creates its own real desktop OpenGL context (SDL_GL_CreateContext,
+            // same "own GL context, no EasyGL" shape as OPENGL1/OPENGL2/OPENGL4 above) and attaches
+            // ShivaVG's OpenVG context on top of it via vgCreateContextSH -- same "SDL rejects a
+            // non-SDL_WINDOW_OPENGL window" requirement as every other renderer in this block.
+#ifdef CNA_RENDERER_OPENVG
+            windowFlags |= SDL_WINDOW_OPENGL;
+#endif
+
             // plan_magnum.md MAGNUM-3: Magnum renders through an OpenGL context CNA creates on
             // this same SDL window, so the window needs the identical OpenGL flag EasyGL asks for
             // just above -- SDL cannot attach a GL context to a window that was not created with
@@ -2864,6 +2872,22 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (renderTarget && renderTarget->getIsDisposedProperty())
             throw System::ObjectDisposedException(renderTarget->getNameProperty());
+        // REMED-GFX-OPENVG-P0-8: a renderer with no real RenderTarget2D storage (or that refused
+        // this target's particular width/height/format/depthFormat/multiSampleCount combination)
+        // leaves RenderTarget2D::GetRenderTargetRenderer() null -- see RenderTarget2D.cpp's own
+        // CreateValidatedRenderTargetRenderer comment for why construction itself does not throw.
+        // Passing that null pointer to IGraphicsRenderer::SetRenderTarget2D() used to silently hit
+        // its shared no-op default, leaving the real backbuffer bound while renderTargetBound_/
+        // currentRenderTargets_ below claimed a render target was active -- every subsequent draw
+        // silently landed on the backbuffer instead. Checked and thrown BEFORE any state below is
+        // touched, matching SetRenderTargets(vector<RenderTargetBinding>)'s identical check for the
+        // MRT path (both now report the same failure the same way for every renderer).
+        if (renderTarget && !renderTarget->GetRenderTargetRenderer())
+        {
+            throw System::NotSupportedException(
+                "SetRenderTarget: this renderer does not support RenderTarget2D (or refused this "
+                "target's width/height/format/depthFormat/multiSampleCount combination).");
+        }
         if (renderer_)
             renderer_->SetRenderTarget2D(renderTarget ? renderTarget->GetRenderTargetRenderer() : nullptr);
 

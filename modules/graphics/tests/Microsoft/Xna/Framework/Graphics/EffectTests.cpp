@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -185,6 +186,15 @@ protected:
             VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
             VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0)
         });
+    }
+
+    void SetUp() override
+    {
+        // DrawPrimitives with a bound VertexBuffer is inherently a 3D-pipeline entry point -- a
+        // renderer that honestly reports no 3D pipeline rejects VertexBuffer construction itself
+        // before either test body reaches the missing-effect guard it exercises.
+        if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+            GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     }
 };
 

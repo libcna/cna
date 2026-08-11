@@ -13,6 +13,8 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+
+#include "CNA/GraphicsCapability.hpp"
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -174,6 +176,13 @@ protected:
 
 TEST_F(CnjModelSharedAnimationClipTest, TwoModelsShareOneCnjAnimationClip)
 {
+    // Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline rejects it
+    // before the animation-clip sharing this test actually exercises is ever reached. Guarded
+    // per-test (not in a fixture-wide SetUp()) so MissingSharedClipThrows below, whose throw
+    // happens earlier for an unrelated reason (a missing file), keeps running everywhere.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     ScratchContentRoot root;
 
     WriteFile(root.path() / "walk.cnj", R"({
@@ -212,6 +221,10 @@ TEST_F(CnjModelSharedAnimationClipTest, TwoModelsShareOneCnjAnimationClip)
 
 TEST_F(CnjModelSharedAnimationClipTest, RawClipBinStillWorksUnchanged)
 {
+    // See TwoModelsShareOneCnjAnimationClip above: Model loading needs a real VertexBuffer.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     ScratchContentRoot root;
     WriteClipBin(root.path() / "run.clip.bin", 1.25);
     WriteSkinnedQuadModelFixture(root.path(), "modelC", "run.clip.bin");

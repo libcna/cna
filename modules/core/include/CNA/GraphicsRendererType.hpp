@@ -138,7 +138,10 @@ namespace CNA
         Fna3d,
 
         /** @brief SVG DOM (Emscripten only, 2D-only): SpriteBatch output as real SVG elements. */
-        SvgDom
+        SvgDom,
+
+        /** @brief OpenVG 1.1 vector graphics (2D-only), implemented by ShivaVG on top of desktop OpenGL. */
+        OpenVg
     };
 
     /**
@@ -246,6 +249,8 @@ namespace CNA
         return GraphicsRendererType::Fna3d;
 #elif defined(CNA_RENDERER_SVG_DOM)
         return GraphicsRendererType::SvgDom;
+#elif defined(CNA_RENDERER_OPENVG)
+        return GraphicsRendererType::OpenVg;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -309,6 +314,7 @@ namespace CNA
             case GraphicsRendererType::Metal:          return "METAL";
             case GraphicsRendererType::Fna3d:         return "FNA3D";
             case GraphicsRendererType::SvgDom:         return "SVG_DOM";
+            case GraphicsRendererType::OpenVg:         return "OPENVG";
         }
         return "UNKNOWN";
     }

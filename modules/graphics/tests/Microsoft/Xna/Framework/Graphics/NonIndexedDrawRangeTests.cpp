@@ -639,6 +639,17 @@ namespace
     protected:
         GraphicsDevice device;
 
+        // GTEST_SKIP() only unwinds the function it is called from; called from an ordinary
+        // member function like RequireRangeRendering() below it cannot skip the test body that
+        // invokes it. SetUp() is where GoogleTest itself checks for a skip, so the capability gate
+        // has to run here too -- RequireRangeRendering() keeps its own copy for the state-setup
+        // calls that follow it, which only run once SetUp() has already let the test proceed.
+        void SetUp() override
+        {
+            if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
+        }
+
         /// Explicit device state for the whole fixture: nothing here may depend on a framework
         /// default, because a default-valued no-op fallback would let a buggy path pass.
         void RequireRangeRendering()

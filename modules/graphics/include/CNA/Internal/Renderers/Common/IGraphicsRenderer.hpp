@@ -1907,9 +1907,14 @@ namespace CNA::Internal::Renderers
          * Callers must invoke this only for operations permanently unsupported by a 2D-only
          * renderer. If it returns, WarnAndStub is active and the caller must perform a safe no-op
          * or return a valid null-object resource.
+         *
+         * const so a renderer's Ensure3DSupported() override (itself const, since it runs ahead
+         * of any state mutation) can call this directly as its earliest-possible guard, instead of
+         * only the later factory/draw methods that already call it. warnedUnsupported3DCalls_ is
+         * mutable for exactly this reason.
          */
         void HandleUnsupported3DCall(std::string_view rendererName,
-                                     std::string_view methodName)
+                                     std::string_view methodName) const
         {
             const std::string failureMessage =
                 std::string(rendererName) + " does not support 3D: " + std::string(methodName);
@@ -1940,7 +1945,7 @@ namespace CNA::Internal::Renderers
     private:
         CNA::Unsupported3DGraphicsCallBehavior unsupported3DGraphicsCallBehavior_ =
             CNA::Unsupported3DGraphicsCallBehavior::Throw;
-        std::unordered_set<std::string> warnedUnsupported3DCalls_;
+        mutable std::unordered_set<std::string> warnedUnsupported3DCalls_;
 
         static std::unordered_map<SDL_Window*, IGraphicsRenderer*>& windowRegistry()
         {

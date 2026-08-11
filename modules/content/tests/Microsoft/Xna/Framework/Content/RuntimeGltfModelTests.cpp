@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
@@ -453,6 +454,10 @@ TEST(RuntimeGltfModelTest, LoadsUnskinnedTexturedModelDirectlyFromGltf)
     WriteFile(contentRoot.path() / "basic.gltf", kBasicTexturedGltf);
 
     GraphicsDevice gd;
+    // Runtime glTF Model loading builds a real VertexBuffer -- a renderer with no 3D
+    // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -481,6 +486,10 @@ TEST(RuntimeGltfModelTest, LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversed
     WriteFile(contentRoot.path() / "skinned.gltf", kSkinnedAnimatedGltf);
 
     GraphicsDevice gd;
+    // Runtime glTF Model loading builds a real VertexBuffer -- a renderer with no 3D
+    // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -525,6 +534,10 @@ TEST(RuntimeGltfModelTest, LoadsMorphTargetDataWithDefaultWeightsAndWeightAnimat
     WriteFile(contentRoot.path() / "morph.gltf", kMorphedTriangleGltf);
 
     GraphicsDevice gd;
+    // Runtime glTF Model loading builds a real VertexBuffer -- a renderer with no 3D
+    // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -570,6 +583,10 @@ TEST(RuntimeGltfModelTest, LoadsCubicSplineMorphWeightAnimationFromGltf)
     WriteFile(contentRoot.path() / "morphcubic.gltf", kCubicSplineMorphedTriangleGltf);
 
     GraphicsDevice gd;
+    // Runtime glTF Model loading builds a real VertexBuffer -- a renderer with no 3D
+    // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -603,6 +620,10 @@ TEST(RuntimeGltfModelTest, LoadsPbrMaterialWithAllFourMapsAndFactorsFromGltf)
     WriteFile(contentRoot.path() / "pbr.gltf", kPbrTriangleGltf);
 
     GraphicsDevice gd;
+    // Runtime glTF Model loading builds a real VertexBuffer -- a renderer with no 3D
+    // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -645,6 +666,10 @@ TEST(RuntimeGltfModelTest, LoadsSkinnedPbrMaterialDirectlyFromGltf)
     WriteFile(contentRoot.path() / "skinnedpbr.gltf", kSkinnedPbrTriangleGltf);
 
     GraphicsDevice gd;
+    // Runtime glTF Model loading builds a real VertexBuffer -- a renderer with no 3D
+    // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -676,6 +701,10 @@ TEST(RuntimeGltfModelTest, RemapsOcclusionTextureBrightnessForDualTextureEffectF
     WriteFile(contentRoot.path() / "dualtex.gltf", kDualTextureGltf);
 
     GraphicsDevice gd;
+    // Runtime glTF Model loading builds a real VertexBuffer -- a renderer with no 3D
+    // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -737,6 +766,10 @@ TEST(RuntimeGltfModelTest, AppliesKhrLightsPunctualToBasicEffectFromGltf)
     WriteFile(contentRoot.path() / "lit.gltf", kBasicTexturedWithLightGltf);
 
     GraphicsDevice gd;
+    // Runtime glTF Model loading builds a real VertexBuffer -- a renderer with no 3D
+    // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 

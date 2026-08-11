@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -94,11 +95,36 @@ TEST(TextureCollectionValidationTest, LiveTexture_DoesNotThrowForDisposedCheck)
 // TextureCollection — active render targets cannot simultaneously be sampled
 // =============================================================================
 
+namespace
+{
+    // Renderer-neutral capability gate (not an OPENVG-specific skip): a renderer with no real
+    // RenderTarget2D storage throws System::NotSupportedException out of SetRenderTarget itself
+    // (GraphicsDevice::SetRenderTarget's own transactional check -- see its own comment) before
+    // any of these tests' actual subject (texture-slot binding conflict validation) is reached.
+    // Tied to the real runtime behavior rather than a renderer-name list, so it stays correct for
+    // any current or future renderer that genuinely lacks RenderTarget2D.
+    bool BindOrSkip(GraphicsDevice& gd, RenderTarget2D& target)
+    {
+        try
+        {
+            gd.SetRenderTarget(&target);
+            return true;
+        }
+        catch (const System::NotSupportedException&)
+        {
+            return false;
+        }
+    }
+}
+
 TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToPixelTextureSlot)
 {
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    gd.SetRenderTarget(&target);
+    if (!BindOrSkip(gd, target))
+    {
+        GTEST_SKIP() << "this renderer does not support RenderTarget2D";
+    }
 
     EXPECT_THROW(
         gd.getTexturesProperty()(0, &target),
@@ -110,7 +136,10 @@ TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToVertexTextur
 {
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    gd.SetRenderTarget(&target);
+    if (!BindOrSkip(gd, target))
+    {
+        GTEST_SKIP() << "this renderer does not support RenderTarget2D";
+    }
 
     EXPECT_THROW(
         gd.getVertexTexturesProperty()(0, &target),
@@ -122,7 +151,10 @@ TEST(TextureCollectionValidationTest, RenderTargetCanBindForSamplingAfterUnbind)
 {
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    gd.SetRenderTarget(&target);
+    if (!BindOrSkip(gd, target))
+    {
+        GTEST_SKIP() << "this renderer does not support RenderTarget2D";
+    }
     gd.SetRenderTarget(nullptr);
 
     EXPECT_NO_THROW(gd.getTexturesProperty()(0, &target));
@@ -179,13 +211,17 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // Diligent left this list at plan_diligent.md DILIGENT-24: it is now real-MRT-capable
     // too (up to four attachments), so 4 real targets bind cleanly here as well.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
-#elif defined(CNA_RENDERER_STUB)
+#elif defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_OPENVG)
     // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr
     // CreateRenderTarget2D()/CreateRenderTargetCube() defaults -- so this is a different case from
     // the single-target renderers above, which support one. GraphicsDevice rejects the bind before
     // reaching the renderer, because RenderTarget2D::GetRenderTargetRenderer() is null. Rejecting is
     // the correct behaviour and the reason it is asserted here: a no-op renderer must not report
     // false success for a target it cannot honour.
+    //
+    // OPENVG shares this exact shape for a different reason: ShivaVG has no off-screen
+    // VGImage-surface/FBO equivalent to bind as a render target (docs/openvg-renderer.md), so
+    // OpenVgRenderer also keeps the nullptr CreateRenderTarget2D() default.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #elif defined(CNA_RENDERER_OPENGLES1)
     // plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
@@ -221,9 +257,9 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-#if defined(CNA_RENDERER_STUB)
-    // Same Stub contract as the four-target case above: no render-target support of any kind, so
-    // even a single binding is refused deterministically rather than silently accepted.
+#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_OPENVG)
+    // Same Stub/OpenVG contract as the four-target case above: no render-target support of any
+    // kind, so even a single binding is refused deterministically rather than silently accepted.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
@@ -267,6 +303,14 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_SeventeenBindingsThrow)
 TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 {
     GraphicsDevice gd;
+    // VertexBuffer/DrawPrimitives are inherently 3D concepts -- a permanently 2D-only renderer
+    // (OpenVG, and likewise Canvas/SDL_Renderer/ASCII/GDI/DirectX1/etc. if this test is ever run
+    // against them) has no real vertex-buffer factory to construct one at all, so there is no
+    // "empty vertex-buffer state DrawPrimitives should reject" to observe. Found running this file
+    // for the first time against a native, CI-runnable 2D-only renderer (OPENVG) -- this test was
+    // previously ungated and unconditionally required CreateVertexBuffer() to succeed.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     VertexBuffer vertexBuffer(gd, 3);
     gd.SetVertexBuffer(&vertexBuffer);
     gd.SetVertexBuffers({});

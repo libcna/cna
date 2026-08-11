@@ -77,6 +77,14 @@ namespace Microsoft::Xna::Framework::Graphics
 #else
         Texture::ValidateFormat(format);
 #endif
+        // A renderer with no real RenderTarget2D storage (or that refused this particular
+        // request, e.g. OpenGL1 without GL_ARB_framebuffer_object) returns nullptr here.
+        // Construction is deliberately allowed to succeed anyway -- Texture3D/TextureCube
+        // establish the same "null-object" convention elsewhere in this file's sibling classes
+        // (REMED-CONTENT-004, Task 774): every operation that actually needs real storage
+        // (Texture2D::SetData/GetData, and GraphicsDevice::SetRenderTarget's bind path) checks
+        // for a null renderer at its own point of use and throws NotSupportedException there,
+        // rather than construction eagerly refusing an object that may never be bound or sampled.
         return std::shared_ptr<IRenderTargetRenderer>(
             device.GetRenderer().CreateRenderTarget2DEXT(
                 width, height, static_cast<int>(depthFormat), preserveContents, mipMap,

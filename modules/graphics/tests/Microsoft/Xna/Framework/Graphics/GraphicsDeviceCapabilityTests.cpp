@@ -113,6 +113,10 @@ constexpr bool kExpectCustomEffects         = false;
 // exactly one colour result (no MRT mechanism), a raster surface has no samples-passed query to
 // report, and this renderer implements no custom-shader Effect ABI at all (CreateEffectRenderer
 // keeps the shared nullptr default). All three are honest structural refusals, not gaps.
+#elif defined(CNA_RENDERER_OPENVG)
+// OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query concept
+// at all -- and no programmable shader stage for a genuinely custom Effect (same reasoning as
+// Canvas/Skia's own arms just above/below).
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = false;
 constexpr bool kExpectCustomEffects         = false;
@@ -160,6 +164,22 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
         << "this 2D-only raster renderer claims a depth/stencil buffer -- its render targets have "
            "no attachment, and DepthStencilState::None is accepted only as the absence of one";
+}
+#elif defined(CNA_RENDERER_OPENVG)
+TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
+{
+    GraphicsDevice gd;
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
+        << "OpenVG (ShivaVG) claims a 3D pipeline -- every 3D route it owns refuses through "
+           "HandleUnsupported3DCall(), so a true report cannot be backed by anything";
+}
+
+TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
+{
+    GraphicsDevice gd;
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
+        << "OpenVG has no depth/stencil concept whatsoever -- OpenVgRenderer::SupportsDepthStencil "
+           "returns false unconditionally";
 }
 #else
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
@@ -340,6 +360,15 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_FALSE(reported)
         << "Blend2D claims WireFrame support -- this raster renderer has no polygon fill mode and "
            "no 3D draw route, so a true report cannot be backed by any rendering path";
+#elif defined(CNA_RENDERER_OPENVG)
+    // OpenVG is a 2D vector-graphics API: no polygon fill mode, no vertex/primitive route, no 3D
+    // pipeline at all. Same truthful-false shape as Skia/DIRECTX1 -- OpenVgRenderer's own 3D
+    // pure-virtuals all refuse through HandleUnsupported3DCall() before any topology could reach a
+    // draw. Like Skia/DIRECTX1/Stub it has no pixel route to measure, which is why
+    // WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE undefined here.
+    EXPECT_FALSE(reported)
+        << "OpenVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
+           "report cannot be backed by any rendering path";
 #elif defined(CNA_RENDERER_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that
     // rasterizes nothing and keeps no state, so there is no rendering path a true report could

@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
@@ -146,6 +147,10 @@ TEST(BlendMorphTargetsEXTTest, WrongWeightCountThrows)
 TEST(SetMorphWeightsEXTTest, ReuploadsTheVertexBufferAndUpdatesStoredWeights)
 {
     GraphicsDevice device;
+    // VertexBuffer/ModelMeshPart are inherently 3D-pipeline concepts -- a renderer that honestly
+    // reports no 3D pipeline has nothing to reupload.
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     VertexBuffer vb(device, 3);
     const auto baseBytes = BuildBaseTriangleBytes();
     vb.SetDataRaw(baseBytes.data(), 3, 32);
@@ -165,6 +170,11 @@ TEST(SetMorphWeightsEXTTest, ReuploadsTheVertexBufferAndUpdatesStoredWeights)
 TEST(SetMorphWeightsEXTTest, MissingTagThrows)
 {
     GraphicsDevice device;
+    // VertexBuffer/ModelMeshPart are inherently 3D-pipeline concepts -- a renderer that honestly
+    // reports no 3D pipeline has no ModelMeshPart for SetMorphWeightsEXT to reject a missing tag
+    // on.
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     VertexBuffer vb(device, 1);
     IndexBuffer ib(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
     ModelMeshPart part(&vb, &ib, 1, 1, 0, 0);
