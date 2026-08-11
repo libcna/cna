@@ -98,6 +98,16 @@ constexpr bool kExpectCustomEffects         = false;
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = false;
 constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_RENDERER_PORTABLEGL)
+// PortableGL owns exactly one framebuffer per context and creates no render targets at all
+// (SetRenderTargets refuses every non-empty binding), has no occlusion-query mechanism, and its
+// shader stage is a pair of C function pointers with nothing for a CNA Effect to be compiled into
+// (PortableGLSpriteBatchRenderer::SetCustomEffect refuses a non-null Effect rather than drawing
+// with the built-in sprite shader). All three answers are structural, and each is backed by a
+// refusal in modules/renderers/portablegl/examples/portablegl_rejection_test.cpp.
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
 #elif defined(CNA_RENDERER_DILIGENT)
 // plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own
 // honest, narrower profile at this point in its implementation -- no custom ShaderEffect

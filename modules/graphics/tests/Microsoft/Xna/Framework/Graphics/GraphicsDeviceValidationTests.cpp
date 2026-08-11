@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -188,6 +189,12 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // the correct behaviour and the reason it is asserted here: a no-op renderer must not report
     // false success for a target it cannot honour.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+#elif defined(CNA_RENDERER_PORTABLEGL)
+    // PortableGL owns exactly one framebuffer per context and creates no render targets at all --
+    // the same shape as Stub above: GraphicsDevice rejects the bind before reaching the renderer
+    // because RenderTarget2D::GetRenderTargetRenderer() is null, and PortableGLRenderer::
+    // SetRenderTargets() refuses a non-empty set as well, so neither layer can accept one silently.
+    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #elif defined(CNA_RENDERER_OPENGLES1)
     // plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
     // adds one -- a third distinct case from the single-target renderers above (which support one)
@@ -213,9 +220,10 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-#if defined(CNA_RENDERER_STUB)
-    // Same Stub contract as the four-target case above: no render-target support of any kind, so
-    // even a single binding is refused deterministically rather than silently accepted.
+#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)
+    // Same Stub contract as the four-target case above, and the same for PortableGL: no
+    // render-target support of any kind, so even a single binding is refused deterministically
+    // rather than silently accepted.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));

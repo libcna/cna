@@ -159,6 +159,13 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     ++enabled;
 #endif
 
+    // The PORTABLEGL identity, registered here at the same time it was registered everywhere
+    // else -- the omission this whole comment block records is exactly what a new renderer keeps
+    // reproducing when only the non-test registries are updated.
+#ifdef CNA_RENDERER_PORTABLEGL
+    ++enabled;
+#endif
+
     EXPECT_EQ(enabled, 1);
 }
 
