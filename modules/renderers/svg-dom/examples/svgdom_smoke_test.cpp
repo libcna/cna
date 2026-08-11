@@ -44,7 +44,7 @@ using namespace CNA::Internal::Renderers::SvgDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 12;
+    constexpr int kExpectedChecks = 13;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(int, JsSurfaceExists, (), {
@@ -187,15 +187,20 @@ protected:
                   "a Color::White (identity) tint carries no feColorMatrix filter -- zero overhead "
                   "for the overwhelmingly common untinted case");
 
+            // This Begin/End pair shares slot 0's own unscissored clip state with the draw above
+            // (SVGDOM-A coalescing), so it becomes slot 0's SECOND child (index 1), not a fresh
+            // index 0 -- checking index 0 here would inspect the first (untinted) sprite instead
+            // of this one.
             spriteBatch_->Begin();
             spriteBatch_->Draw(*texture_, Vector2(0, 0), Color(128, 64, 32, 255));
             spriteBatch_->End();
-            check(JsSpriteHasFilter(0) == 1, "a non-white tint is applied via a real SVG feColorMatrix filter");
+            check(JsSpriteHasFilter(1) == 1, "a non-white tint is applied via a real SVG feColorMatrix filter");
 
+            // Same coalescing as above: this is slot 0's THIRD child (index 2).
             spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Additive);
             spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
             spriteBatch_->End();
-            check(JsSpriteIsAdditive(0) == 1,
+            check(JsSpriteIsAdditive(2) == 1,
                   "BlendState::Additive sets mix-blend-mode: plus-lighter on the sprite element");
 
             // Render target: draw a solid colour into it and read it back for real.
@@ -236,7 +241,11 @@ public:
 
 int main()
 {
-    SvgDomSmokeTest game;
-    game.Run();
-    return game.getResult();
+    // Heap-allocated, not a local: emscripten_set_main_loop(..., simulateInfiniteLoop=1) unwinds
+    // this stack frame via a JS-level throw (see docs/emscripten-mainloop-game-lifetime.md) --
+    // a stack-local Game here would have its storage reclaimed while the loop callback still
+    // holds a raw pointer to it.
+    SvgDomSmokeTest* game = new SvgDomSmokeTest();
+    game->Run();
+    return game->getResult();
 }

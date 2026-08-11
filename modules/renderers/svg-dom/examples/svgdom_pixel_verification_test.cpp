@@ -149,7 +149,14 @@ class SvgDomPixelVerificationTest : public Game
     // ---------------------------------------------------------------------------------------
     void CheckUpdatePixelsCanvasCoherence(GraphicsDevice& dev)
     {
-        auto rt = std::make_unique<RenderTarget2D>(dev, 4, 4);
+        // RenderTargetUsage::PreserveContents (not the 2-arg ctor's DiscardContents default) --
+        // DiscardContents auto-clears to black on every SetRenderTarget() bind (real, documented
+        // XNA/FNA behavior -- see GraphicsDevice::SetRenderTarget's own DiscardContents handling),
+        // which would make the re-bind below always fail for a reason unrelated to what this check
+        // actually tests (canvas/CPU-buffer coherence, not content-preservation policy).
+        auto rt = std::make_unique<RenderTarget2D>(dev, 4, 4, false, SurfaceFormat::Color,
+                                                    DepthFormat::None, 0,
+                                                    RenderTargetUsage::PreserveContents);
         dev.SetRenderTarget(rt.get());
         dev.Clear(Color(0, 255, 0, 255)); // green baseline
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -312,7 +319,11 @@ public:
 
 int main()
 {
-    SvgDomPixelVerificationTest game;
-    game.Run();
-    return game.getResult();
+    // Heap-allocated, not a local: emscripten_set_main_loop(..., simulateInfiniteLoop=1) unwinds
+    // this stack frame via a JS-level throw (see docs/emscripten-mainloop-game-lifetime.md) --
+    // a stack-local Game here would have its storage reclaimed while the loop callback still
+    // holds a raw pointer to it.
+    SvgDomPixelVerificationTest* game = new SvgDomPixelVerificationTest();
+    game->Run();
+    return game->getResult();
 }
