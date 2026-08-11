@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Xnb/ModelContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/StockEffectContentTypeReaders.hpp"
@@ -67,6 +68,12 @@ TEST_F(ModelContentTypeReaderTest, AllFourReadersAreRegisteredUnderRealFnaCanoni
 
 TEST_F(ModelContentTypeReaderTest, LoadRealMonoGameFixtureEndToEnd)
 {
+    // Model loading builds a real VertexBuffer/IndexBuffer -- inherently 3D-pipeline concepts a
+    // renderer with no 3D pipeline has no storage for. Guarded per-test (not in SetUp()) so the
+    // pure reader-registration test above, which never loads a Model, keeps running everywhere.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     Model model = cm.Load<Model>("BlenderDefaultCube");
 
     // --- Bones (XNB-37): 2 bones, RootNode -> Cube, real multi-bone hierarchy ---
@@ -142,6 +149,9 @@ TEST_F(ModelContentTypeReaderTest, LoadingTwiceReusesTheCachedModelLikeAnyOtherA
     // resources live behind setOwnedResources()), not a fresh decode. Confirmed here via pointer
     // identity of the underlying VertexBuffer, since that's what would actually double the GPU
     // memory/upload cost if caching silently didn't work for this type.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     Model first = cm.Load<Model>("BlenderDefaultCube");
     Model second = cm.Load<Model>("BlenderDefaultCube");
 

@@ -11,6 +11,7 @@
 
 #include "System/NotSupportedException.hpp"
 
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -177,6 +178,13 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATextureCubeFix
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsAModelFixtureWithNoOtherSetup)
 {
+    // Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline rejects it
+    // before this test's ModelReader round-trip is reached. Guarded per-test (not in the shared
+    // fixture's SetUp()) so the SpriteFont/SoundEffect/Song/Texture2D fixtures in this same file,
+    // none of which need a 3D pipeline, keep running everywhere.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     ContentManager cm(nullptr, kUncompressedDir);
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("BlenderDefaultCube");

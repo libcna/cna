@@ -5,6 +5,8 @@
 #include <fstream>
 #include <gtest/gtest.h>
 
+#include "CNA/GraphicsCapability.hpp"
+
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -222,6 +224,14 @@ TEST_F(ContentManagerSkinnedModelTest, OutOfRangeIndexThrows)
 // off the parts array's own boundary tracking for what follows.
 TEST_F(ContentManagerSkinnedModelTest, PartNameWithUnbalancedEmbeddedBraceParsesCorrectly)
 {
+    // SkinnedModelEXT loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before the manifest parsing this test actually exercises is ever reached.
+    // Guarded per-test (not in a fixture-wide SetUp()) so the malformed-data early-throw tests
+    // above, whose ContentLoadException happens earlier for unrelated reasons, keep running
+    // everywhere.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     ScratchContentRoot root;
     WriteFile(root.path() / "avatar.skinnedmodel.json",
               R"({"skeleton": "skeleton.bin", "parts": [)"
@@ -262,6 +272,11 @@ namespace
 // own directory.
 TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromNestedButUnderRootManifestDirectory)
 {
+    // See PartNameWithUnbalancedEmbeddedBraceParsesCorrectly above: SkinnedModelEXT loading
+    // needs a real VertexBuffer.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     ScratchContentRoot root;
     const auto manifestDir = root.path() / "nested" / "deep";
     std::filesystem::create_directories(manifestDir);
@@ -297,6 +312,11 @@ TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromNestedButUnderRootManifes
 // previously unverified by any test.
 TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromManifestOutsideContentRoot)
 {
+    // See PartNameWithUnbalancedEmbeddedBraceParsesCorrectly above: SkinnedModelEXT loading
+    // needs a real VertexBuffer.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     ScratchContentRoot scratch;
     const auto root = scratch.path() / "Content";
     const auto outside = scratch.path() / "Outside";

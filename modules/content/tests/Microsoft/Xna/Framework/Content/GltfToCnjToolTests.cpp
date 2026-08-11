@@ -51,6 +51,7 @@
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
@@ -909,6 +910,12 @@ TEST(GltfToCnjToolTest, ConvertsIndexlessDualBoneSkinnedFixtureAndLoadsBackThrou
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "tiny_Spin.cnj"));
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -1021,6 +1028,12 @@ TEST(GltfToCnjToolTest, ExtractsEmbeddedBaseColorTextureAndLoadsIt)
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "textest_tex0.png"));
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -1054,6 +1067,12 @@ TEST(GltfToCnjToolTest, ImportsAllSkinsAsSeparateModels)
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "ms_SkinB.cnj"));
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -1080,6 +1099,12 @@ TEST(GltfToCnjToolTest, StepInterpolatedChannelHoldsValueAcrossAForeignResampleT
     ASSERT_EQ(exitCode, 0);
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
@@ -1170,6 +1195,12 @@ TEST(GltfToCnjToolTest, OnlyImportsNodesReachableFromTheDefaultScene)
     EXPECT_FALSE(std::filesystem::exists(contentRoot.path() / "scenetest_mesh1_verts.bin"));
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("scenetest");
@@ -1188,6 +1219,12 @@ TEST(GltfToCnjToolTest, EvaluatesCubicSplineWithRealHermiteBasis)
     ASSERT_EQ(exitCode, 0);
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("cubictest");
@@ -1241,6 +1278,12 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnBasicEffect)
     EXPECT_EQ(readRgba(2), (std::array<std::uint8_t, 4>{0, 0, 255, 255}));
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("colortest");
@@ -1273,6 +1316,12 @@ TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
     EXPECT_NEAR(pos1[0], 1.0f, 1e-4f);
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("scaletest");
@@ -1310,6 +1359,12 @@ TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffe
     ASSERT_EQ(bytes.size(), 3u * 20u); // stride 20, VertexPositionTexture (no Normal)
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("dualtex");
@@ -1364,6 +1419,12 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEf
     EXPECT_EQ(static_cast<int>(color0[3]), 255);
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skincolor");
@@ -1404,6 +1465,12 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_NEAR(tangent0[3], 1.0f, 1e-5f);
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("pbr");
@@ -1456,6 +1523,12 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineC
     EXPECT_NEAR(weight0[0], 1.0f, 1e-5f);
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skinnedpbr");
@@ -1489,6 +1562,12 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "morph_mesh0_morph.bin"));
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("morph");
@@ -1538,6 +1617,12 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsCubicSplineMorphWeightsThroughTheOff
     ASSERT_EQ(exitCode, 0);
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("morphcubic");
@@ -1620,6 +1705,12 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsKhrLightsPunctualThroughTheOfflineCn
     EXPECT_NE(cnjText.find("\"lights\""), std::string::npos);
 
     GraphicsDevice gd;
+    // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before this test's ContentManager::Load<Model> is reached. The offline
+    // glTF->.cnj conversion above this point does not touch the renderer and has already
+    // run and recorded its own assertions.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("lit");

@@ -162,6 +162,17 @@ namespace
     protected:
         GraphicsDevice device;
 
+        // GTEST_SKIP() only unwinds the function it is called from -- invoked from this ordinary
+        // member function it printed "Skipped" but let the calling TEST_F body keep running into
+        // a real VertexBuffer construction, which then threw on a renderer with no 3D pipeline.
+        // The actual gate has to run in SetUp() (a location GoogleTest itself calls directly),
+        // which is where GTEST_SKIP() genuinely prevents the test body from executing.
+        void SetUp() override
+        {
+            if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+                GTEST_SKIP() << "Renderer explicitly does not support vertex buffers";
+        }
+
         void RequireVertexBuffers()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))

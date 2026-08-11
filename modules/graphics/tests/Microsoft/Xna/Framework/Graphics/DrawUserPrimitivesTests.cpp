@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -165,7 +166,15 @@ protected:
         { Vector3(0.f,1.f,0.f), Vector3(0.f,0.f,1.f), Vector2(0.f,1.f) }
     };
 
-    void SetUp() override { fx.Apply(); }
+    void SetUp() override
+    {
+        // DrawUserPrimitives is inherently a 3D-pipeline entry point -- a renderer that honestly
+        // reports no 3D pipeline (GraphicsCapability::ThreeD) rejects it before ever reaching the
+        // primitiveCount argument guard this fixture exercises.
+        if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+            GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+        fx.Apply();
+    }
 };
 
 // --- VertexPositionColor ---

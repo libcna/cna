@@ -10,6 +10,8 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+
+#include "CNA/GraphicsCapability.hpp"
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -129,6 +131,14 @@ protected:
 
 TEST_F(CnjModelTest, LoadsRealCnjFixture)
 {
+    // Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline rejects it
+    // before the mesh/mesh-part structure this test actually exercises is ever reached. Guarded
+    // per-test (not in a fixture-wide SetUp()) so MismatchedTypeThrowsContentLoadException below,
+    // whose throw happens earlier for an unrelated reason (a type mismatch), keeps running
+    // everywhere.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     ScratchContentRoot root;
     WriteQuadModelFixture(root.path());
 

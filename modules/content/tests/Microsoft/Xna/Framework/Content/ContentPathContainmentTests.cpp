@@ -11,6 +11,8 @@
 #include <fstream>
 #include <functional>
 #include <gtest/gtest.h>
+
+#include "CNA/GraphicsCapability.hpp"
 #include <iterator>
 #include <memory>
 #include <string>
@@ -689,6 +691,13 @@ TEST_F(ContentPathContainmentTest, IndirectContentAssetReferencesCannotEscapeCon
         modelCases.push_back({"indirect_" + std::string(field), field, map, outsideTexture});
     }
 
+    // Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline rejects it
+    // before the path-containment checks below are ever reached. The Effect/SpriteFont
+    // containment checks above this point are unaffected (neither needs a VertexBuffer) and have
+    // already run and recorded their own results, so only this trailing Model section is skipped.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     for (const ModelCase& testCase : modelCases)
     {
         WriteModelManifest(
@@ -842,6 +851,11 @@ TEST_F(ContentPathContainmentTest, ModelRootRelativeBinaryFieldsCannotEscapeCont
 
 TEST_F(ContentPathContainmentTest, ModelNormalizedInRootBinaryFieldsStillLoad)
 {
+    // Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline rejects it
+    // before the path-normalization this test actually exercises is ever reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     ScratchTree tree;
     fs::create_directories(tree.root() / "nested");
     WriteOneBoneSkeleton(tree.root() / "safe.skeleton.bin");
@@ -870,6 +884,12 @@ TEST_F(ContentPathContainmentTest, ModelNormalizedInRootBinaryFieldsStillLoad)
 
 TEST_F(ContentPathContainmentTest, SkinnedModelManifestFieldsCannotEscapeContentRoot)
 {
+    // SkinnedModelEXT loading builds a real VertexBuffer -- a renderer with no 3D pipeline
+    // rejects it before the path-containment checks this test actually exercises are ever
+    // reached.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
     ScratchTree tree;
     const fs::path bundle = tree.root() / "avatar";
     WriteZeroBoneSkeleton(bundle / "safe.skeleton.bin");

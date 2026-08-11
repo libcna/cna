@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <gtest/gtest.h>
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
@@ -315,6 +316,15 @@ class SkinnedModelEXTPartTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd;
+
+    void SetUp() override
+    {
+        // Every test in this fixture constructs a real VertexBuffer/IndexBuffer to build a
+        // ModelMeshPart -- inherently 3D-pipeline concepts a renderer with no 3D pipeline has no
+        // storage for.
+        if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+            GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+    }
 };
 
 // Task 13.3: AddPartEXT's own bookkeeping had zero coverage in the plain unit-test tree before
