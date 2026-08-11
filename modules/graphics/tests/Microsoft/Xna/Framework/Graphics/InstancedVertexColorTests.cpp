@@ -535,6 +535,19 @@ class InstancedVertexColorTest : public ::testing::Test
 protected:
     GraphicsDevice device;
 
+    /// GTEST_SKIP() only suppresses the remaining TEST BODY when raised from SetUp() --
+    /// raised inside a helper the body calls, it merely returns from the helper (the exact
+    /// reason the multi-stream skip is a macro). Hardware instancing is this whole file's
+    /// subject, so a renderer profile reporting GraphicsCapability::Instancing = false
+    /// (e.g. OPENGLES2 -- core OpenGL ES 2.0 has no glDrawElementsInstanced/
+    /// glVertexAttribDivisor, docs/opengles2-renderer.md) skips every leg here up front.
+    void SetUp() override
+    {
+        if (!device.SupportsCapability(GraphicsCapability::Instancing))
+            GTEST_SKIP() << "Renderer reports GraphicsCapability::Instancing = false: hardware "
+                            "instancing is unavailable on this renderer profile";
+    }
+
     void RequireInstancedRendering()
     {
         if (!device.SupportsCapability(GraphicsCapability::ThreeD))

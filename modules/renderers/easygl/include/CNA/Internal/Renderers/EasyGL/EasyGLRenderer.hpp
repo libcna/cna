@@ -345,7 +345,8 @@ namespace CNA::Internal::Renderers::EasyGL
     {
     public:
         EasyGLTextureCubeRenderer(int size, bool mipMap, int surfaceFormat);
-        ~EasyGLTextureCubeRenderer() override = default;
+        /** @brief Releases the GL cube texture (and, under OPENGLES2, its level-registry entry). */
+        ~EasyGLTextureCubeRenderer() override;
 
         /// REMED-GFX-135: true only once the requested face/mip rectangle has been uploaded into a
         /// level this texture really allocated and GL reported no error; false for an out-of-range

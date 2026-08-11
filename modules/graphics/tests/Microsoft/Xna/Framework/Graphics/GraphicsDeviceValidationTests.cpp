@@ -202,6 +202,15 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // first and silently dropping the rest, which is also why
     // SupportsCapability(MultipleRenderTargets) reports false.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+#elif defined(CNA_RENDERER_EASYGL) && defined(CNA_GL_PROFILE_OPENGLES2)
+    // docs/opengles2-renderer.md: single-colour-attachment refusal, like OPENGLES1/OPENGL1 above
+    // -- core OpenGL ES 2.0 has no glDrawBuffers, a single RenderTarget2D binds normally through
+    // the family's FBO path, and SupportsCapability(MultipleRenderTargets) reports false. The
+    // exception TYPE deliberately stays the EasyGL family's own established over-the-ceiling
+    // std::runtime_error (the profile pins the ceiling to 1), which the family's
+    // lifecycle/diagnostic tests already catch as the recorded MRT boundary -- not
+    // OPENGLES1/OPENGL1's System::NotSupportedException.
+    EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
 #endif

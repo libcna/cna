@@ -10,6 +10,9 @@ namespace CNA
         /** @brief SDL_Renderer (2D-only). */
         SdlRenderer,
 
+        /** @brief OpenGL ES 2.0 (desktop/mobile, GLSL ES 1.00), internally implemented by EasyGL. */
+        OpenGLES2,
+
         /** @brief OpenGL ES (desktop/mobile GLES 3.0), internally implemented by EasyGL. */
         OpenGLES3,
 
@@ -136,9 +139,9 @@ namespace CNA
      * sets per renderer, so this is a compile-time constant -- usable in a constant expression
      * (e.g. static_assert(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::OpenGLES3)).
      *
-     * The 4 GL-family public renderers (OPENGLES3/OPENGL33/WEBGL1/WEBGL2) all share the internal
-     * CNA_RENDERER_EASYGL identity (see plan_glbackends.md) -- the CNA_GL_PROFILE_* compile
-     * definition set alongside it distinguishes which of the 4 public names was selected.
+     * The 5 GL-family public renderers (OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2) all share the
+     * internal CNA_RENDERER_EASYGL identity (see plan_glbackends.md) -- the CNA_GL_PROFILE_*
+     * compile definition set alongside it distinguishes which of the 5 public names was selected.
      *
      * @return The active GraphicsRendererType, determined at compile time by CNA_GRAPHICS_RENDERER.
      */
@@ -153,6 +156,8 @@ namespace CNA
         return GraphicsRendererType::WebGL1;
 #elif defined(CNA_GL_PROFILE_WEBGL2)
         return GraphicsRendererType::WebGL2;
+#elif defined(CNA_GL_PROFILE_OPENGLES2)
+        return GraphicsRendererType::OpenGLES2;
 #else // CNA_GL_PROFILE_OPENGLES3 (default within CNA_RENDERER_EASYGL)
         return GraphicsRendererType::OpenGLES3;
 #endif
@@ -246,6 +251,7 @@ namespace CNA
         switch (getCurrentGraphicsRendererType())
         {
             case GraphicsRendererType::SdlRenderer: return "SDL_RENDERER";
+            case GraphicsRendererType::OpenGLES2:    return "OPENGLES2";
             case GraphicsRendererType::OpenGLES3:    return "OPENGLES3";
             case GraphicsRendererType::OpenGL33:    return "OPENGL33";
             case GraphicsRendererType::WebGL1:       return "WEBGL1";

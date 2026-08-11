@@ -1,9 +1,11 @@
 # WEBGL1 (Emscripten, GLSL ES 1.00 → WebGL 1.0) Renderer — Status
 
-`WEBGL1` is one of the 4 public GL-family `CNA_GRAPHICS_RENDERER` values introduced by
-`plan_glbackends.md` — it shares its entire implementation with `OPENGLES3`/`OPENGL33`/`WEBGL2`
-(`src/Graphics/Renderers/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
-compile time by the `CNA_GL_PROFILE_WEBGL1` definition. Unlike the other 3 profiles (all
+`WEBGL1` is one of the public GL-family `CNA_GRAPHICS_RENDERER` values (the original 4 were
+introduced by `plan_glbackends.md`; the Phase-2 expansion later added `OPENGLES2`, this
+profile's native twin — see `docs/opengles2-renderer.md`) — it shares its entire implementation
+with `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL2`
+(`modules/renderers/easygl/`, on top of the sibling `easy-gl` library), distinguished at
+compile time by the `CNA_GL_PROFILE_WEBGL1` definition. Unlike the ES 3.0-class profiles (all
 GLSL ES 3.00 / desktop GLSL 3.30 core, close enough in body syntax to share one shader source),
 `WEBGL1` requests a GLES 2.0-shaped context (mapping to a real WebGL 1.0 context under Emscripten)
 and needs a real GLSL ES 1.00 shader rewrite, not just a header swap.

@@ -142,6 +142,13 @@ namespace
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", false, Support::Unsupported, false, false,
                                  false, Support::Unsupported, false, true, false};
+#elif defined(CNA_RENDERER_EASYGL) && defined(CNA_GL_PROFILE_OPENGLES2)
+    // The OPENGLES2 GL profile: identical to the EASYGL contract below except MSAA -- core
+    // OpenGL ES 2.0 has no multisample renderbuffers/blit (docs/opengles2-renderer.md), so a
+    // multisampled cube request degrades to single-sample (applied 0, `msaaCubeTargets` false,
+    // same declaration shape as SKIA's truthful clamp) and `msaaPreserves` is never consulted.
+    constexpr Contract kContract{"EASYGL(OPENGLES2)", true, Support::Exact, true, true,
+                                 false, Support::Exact, false, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
     // `msaaPreserves` was false here, measured: this renderer allocated ONE multisample colour
     // renderbuffer shared by all six faces (the same allocation choice Vulkan and SdlGpu made), so

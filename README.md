@@ -26,7 +26,7 @@ ctest --test-dir build --output-on-failure
 - **Overall XNA 4.0 API surface:** 227 of 245 public FNA types are present in CNA (**92.7%**, computed 2026-07-11 by diffing FNA's public type list against CNA's headers) — 100% for `Graphics`/`Audio`/`Input`(+`Touch`)/`Storage`; the real gap is `.Content` (4/12 — no `.xnb` reader, by design) and `.Media` (25/25 present, but 14 are shells). See `docs/xna-4-api-coverage.md`. **Note this is a different metric from the Graphics bullet above** — this one counts whether a type/class exists at all across every XNA namespace (a raw presence count), while the Graphics "~90%" figure is a narrower, bug-weighted quality gate scoped to just the ~26 major Graphics classes (it also counts behavioral correctness, not just presence — Graphics itself is 91/91 = 100% present). The two numbers measuring different things is expected, not a typo or a contradiction.
 - **The two gaps that matter most to a real port:** no `.xnb` content pipeline (CNA loads raw assets + JSON descriptors instead) and no compiled `.fx` shader bytecode support (`Effect(GraphicsDevice&, byte[])`) — the latter is the single biggest real gap, blocking 23 of the 86 official XNA samples in `../cna-samples`. See `docs/migration-guide.md`.
 - **`SDL_RENDERER` renderer:** Implemented path focused on practical 2D rendering workflows; 2D-only by design (3D calls throw).
-- **`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not four separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) and `WEBGL1` (Emscripten, GLES 2.0 → WebGL 1.0) are newer and still landing — see `plan_glbackends.md` for current per-profile status.
+- **`OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not five separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) and `WEBGL1` (Emscripten, GLES 2.0 → WebGL 1.0) are newer and still landing — see `plan_glbackends.md` for current per-profile status. `OPENGLES2` (native GLES 2.0, GLSL ES 1.00, Phase-2 expansion) carries a deliberately narrower ES 2.0 capability boundary — see [`docs/opengles2-renderer.md`](docs/opengles2-renderer.md).
 - **`VULKAN` renderer:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature renderer; the one remaining named gap is an isolated `RasterizerState.DepthBias` sub-case. See `docs/xna-4-api-coverage.md`'s per-renderer table for current detail.
 - **`BGFX` renderer:** Broad 2D+3D functionality, largely pixel-verified parity with EasyGL/Vulkan as of this project's Phase 72 — but not unqualified full parity: known real limitations remain, including a `Depth24Stencil8`-attached `RenderTargetCube` face producing no colour output (Task 952, deferred, root cause not yet found), `DrawIndexedPrimitivesEx` silently discarding `startIndex`/`baseVertex` on a sub-range indexed draw (Task 954), and occlusion-query pixel-count correctness that can't be verified under this project's own sandbox's software GL driver. See `NEXT.md` §5 for the current, complete list.
 - **`SOKOL` renderer:** Experimental renderer on `sokol_gfx`, a single-header GPU abstraction (OpenGL 4.1 core today; GLES3/D3D11/Metal/WebGPU are wired but unimplemented). The current baseline covers context/pass lifecycle, the full `Clear` family, back-buffer read-back, `Texture2D`, `TextureCube`, vertex/index buffers, a pixel-verified `SpriteBatch` with real `BlendState`/`SamplerState` support, vertex-coloured/textured/lit/dual-textured/skinned/environment-mapped 3D geometry (`BasicEffect` with real depth testing, face culling, ambient + up to 3 per-pixel directional lights, specular, emissive, alpha test and fog; `DualTextureEffect`; `SkinnedEffect` with a 72-bone palette; `EnvironmentMapEffect` with real cube-map reflection and Fresnel), `Viewport.MinDepth`/`MaxDepth`, instanced draws, custom `ShaderEffect`s (raw-GL bypass of the `sg_pipeline` path, both `SpriteBatch` and 3D draws), MRT (2-4 `RenderTarget2D` targets via a real multi-attachment `sg_pass`), and `RenderTarget2D`/`RenderTargetCube` (real colour + depth-stencil attachments, MSAA, correct sampling orientation, immediate first-use, direct `GetData` readback, mip-mapped rendering). PBR shading, `RenderTargetCube` MSAA (a permanent sokol_gfx boundary), and `Texture3D` sampling are not implemented and fail loudly. See [`docs/sokol-renderer.md`](docs/sokol-renderer.md) and `plan_sokol.md`.
@@ -165,7 +165,7 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 
 ## 6. 🔌 Renderer System
 
-CNA exposes **40 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+CNA exposes **41 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
 configuration). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
@@ -175,6 +175,7 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 
 - `SDL_RENDERER`
 - `SDL_GPU`
+- `OPENGLES2` (native OpenGL ES 2.0, GLSL ES 1.00; internal implementation: EasyGL -- see [`docs/opengles2-renderer.md`](docs/opengles2-renderer.md))
 - `OPENGLES3` (internal implementation: EasyGL)
 - `OPENGL33` (internal implementation: EasyGL)
 - `WEBGL1` (Emscripten only; internal implementation: EasyGL)
@@ -187,8 +188,8 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `HEADLESS`
 - `SOFTWARE`
 - `STUB`
-- `OPENGLES1` (genuine OpenGL ES 1.1 fixed-function, "Common"/CM profile -- independent of the `OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` family (internally EasyGL, targeting ES 3.0/WebGL2), which cannot create an ES 1.1 context; needs a real system `libGLESv1_CM`)
-- `OPENGL4` (real desktop OpenGL 4.x core profile -- deliberately independent of the `OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` family (internally EasyGL), which cannot create a desktop 4.x core-profile context)
+- `OPENGLES1` (genuine OpenGL ES 1.1 fixed-function, "Common"/CM profile -- independent of the `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` family (internally EasyGL, a shader-based programmable pipeline), which cannot create an ES 1.1 context; needs a real system `libGLESv1_CM`)
+- `OPENGL4` (real desktop OpenGL 4.x core profile -- deliberately independent of the `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` family (internally EasyGL), which cannot create a desktop 4.x core-profile context)
 - `OPENGL1` (legacy desktop OpenGL 1.x fixed-function -- Historical class, independent of the EasyGL-implemented GL family and of `OPENGL4`; desktop Linux/Windows only)
 - `OPENGL2` (native desktop OpenGL 2.1 compatibility profile, GLSL 1.10 -- independent of the EasyGL-implemented GL family and of the other GL renderers)
 - `DIRECTX9` (Windows-only; native Direct3D 9 running Microsoft's own vendored Stock Effects HLSL bytecode)
@@ -304,7 +305,7 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - **Language:** C++23
 - **Core platform/runtime library:** SDL3 (vendored via Git submodule at `third_party/SDL`)
 - **Media integration:** `SDL3_image`, `SDL3_mixer` (vendored via Git submodules)
-- **Graphics dependency:** `easy-gl` (for the `OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers),
+- **Graphics dependency:** `easy-gl` (for the `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` renderers),
   resolved from the canonical `../easy-gl` sibling; EasyGL in turn resolves `../meta-gl`
 - **Networking:** [ENet](http://enet.bespin.org/) (vendored directly at `third_party/enet`) —
   reliable-UDP transport backing `Microsoft::Xna::Framework::Net`'s `SystemLink` sessions
@@ -320,8 +321,8 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - C++23-capable compiler (GCC 12+ or Clang 15+)
 - Dependency directories available to CMake:
     - `../sharp-runtime`
-    - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2`
-      renderers)
+    - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES2`/`OPENGLES3`/`OPENGL33`/
+      `WEBGL1`/`WEBGL2` renderers)
 - SDL3, SDL3_image, and SDL3_mixer are built from vendored submodules by default — no system SDL packages required.
 
 ### Prerequisites (Windows)

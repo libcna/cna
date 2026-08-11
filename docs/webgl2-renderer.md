@@ -1,8 +1,9 @@
 # WEBGL2 (Emscripten, GLES 3.0 → WebGL 2.0) Renderer — Status
 
-`WEBGL2` is one of the 4 public GL-family `CNA_GRAPHICS_RENDERER` values introduced by
-`plan_glbackends.md` — it shares its entire implementation with `OPENGLES3`/`OPENGL33`/`WEBGL1`
-(`src/Graphics/Renderers/EasyGL/`, on top of the sibling `easy-gl` library), distinguished at
+`WEBGL2` is one of the public GL-family `CNA_GRAPHICS_RENDERER` values (the original 4 were
+introduced by `plan_glbackends.md`; the Phase-2 expansion later added `OPENGLES2`) — it shares
+its entire implementation with `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`
+(`modules/renderers/easygl/`, on top of the sibling `easy-gl` library), distinguished at
 compile time by the `CNA_GL_PROFILE_WEBGL2` definition. Unlike `OPENGLES3`/`OPENGL33` (native
 desktop/mobile), `WEBGL2` only builds for Emscripten and requests the same GLES 3.0 context
 `OPENGLES3` does — Emscripten/browsers map a GLES-3.0-shaped SDL3 GL context request to a real

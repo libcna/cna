@@ -1,5 +1,24 @@
 # NEXT.md
 
+## PHASE-2 RENDERER EXPANSION STARTED: OPENGLES2 ADDED (2026-08-10, feature/renderer-opengles2)
+
+> The first Phase-2 addition (FUTURE.md "Planned additions" #1) is implemented on the dedicated
+> branch **`feature/renderer-opengles2`**, rooted exactly at the pre-expansion promotion head
+> `4c93f185c` (not merged into `develop`; no other renderer was started). Public renderer
+> identity count **41 -> 42**: `GraphicsRendererType::OpenGLES2` / `OPENGLES2` /
+> `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGLES2` -- the **fifth public GL-family profile**
+> on the shared EasyGL implementation (implementation-family count unchanged at 38), pairing
+> WEBGL1's GLSL ES 1.00 shader dialect with a native GLES 2.0 context request and genuine
+> ES 2.0-only GL mechanics (per-texture sampler state, baseVertex attribute-pointer emulation,
+> combined-FBO readback, unsized RGBA storage, split depth+stencil attach; MSAA/MRT/occlusion/
+> Texture3D/instancing/multi-stream truthfully refused). `check_renderer_identities.py` = 42;
+> OPENGLES1 and OPENGLES3 are untouched, so the family finally reads OPENGLES1/OPENGLES2/
+> OPENGLES3 exactly as `docs/RendererNamingMigration.md` §3 reserved. Plan: `plan_opengles2.md`;
+> capability boundary and runtime-extension gates: `docs/opengles2-renderer.md`; registry:
+> `docs/renderer-registry.md` (42 rows). The full EasyGL example/pixel suite registers and runs
+> under this profile (first live GLSL ES 1.00 driver execution in this project), with OPENGLES3
+> and OPENGL33 re-run as regression controls.
+
 ## PRE-RENDERER-EXPANSION NORMALIZATION PROMOTED AND PUBLISHED (2026-08-10)
 
 > `develop` was fast-forwarded to the accepted combined descendant

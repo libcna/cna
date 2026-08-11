@@ -106,10 +106,14 @@ Native Microsoft vocabulary intentionally retained:
 The established OpenGL ES 3.x EasyGL route is now selected as **OPENGLES3**:
 `GraphicsRendererType::OpenGLES3`, `-DCNA_GRAPHICS_RENDERER=OPENGLES3` (still the
 Linux default), `CNA_RENDERER_OPENGLES3` option, `CNA_GL_PROFILE_OPENGLES3`
-profile define. `OPENGLES1` is unchanged; **OPENGLES2 does not exist yet** — the
-future expansion adds it so the family reads OPENGLES1/OPENGLES2/OPENGLES3.
-EasyGL remains the internal shared implementation of the four GL profiles
-(`CNA_RENDERER_EASYGL`, `cna_renderer_easygl`, `EasyGLRenderer`) and is still not
+profile define. `OPENGLES1` is unchanged; **OPENGLES2 did not exist yet at
+migration time** — the future expansion was reserved to add it so the family
+reads OPENGLES1/OPENGLES2/OPENGLES3. (Since realized: the Phase-2 expansion
+added `OPENGLES2` on 2026-08-10 on exactly that reserved name — see
+`plan_opengles2.md` / `docs/opengles2-renderer.md`.)
+EasyGL remains the internal shared implementation of the GL profiles (four at
+migration time, five since the `OPENGLES2` addition:
+`CNA_RENDERER_EASYGL`, `cna_renderer_easygl`, `EasyGLRenderer`) and is still not
 a public identity. bgfx's upstream `RendererType::OpenGLES` is untouched.
 
 ## 4. NOXNA → CNAEXT

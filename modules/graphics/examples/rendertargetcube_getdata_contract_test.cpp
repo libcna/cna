@@ -153,6 +153,14 @@ namespace
     // by GraphicsDevice::SetRenderTargets and there is no resource to read.
     constexpr Contract kContract{"SOFTWARE", false, Support::Unsupported, Support::Unsupported,
                                  true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
+#elif defined(CNA_RENDERER_EASYGL) && defined(CNA_GL_PROFILE_OPENGLES2)
+    // The OPENGLES2 GL profile of the EasyGL family: identical to the EASYGL contract below
+    // except MSAA -- core OpenGL ES 2.0 has no multisample renderbuffers/blit
+    // (docs/opengles2-renderer.md), so a multisampled cube request degrades to single-sample
+    // (applied 0, `msaaCubeTargets` false) and the "multisampled" readback probe reads the same
+    // ordinary single-sample face exactly.
+    constexpr Contract kContract{"EASYGL(OPENGLES2)", true, Support::Exact, Support::Exact,
+                                 true, false, Support::Exact, MipTargets::Real, true, true, true, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
