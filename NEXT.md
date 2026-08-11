@@ -1,6 +1,16 @@
 # NEXT.md
 
-## FNA3D RENDERER LANE — IMPLEMENTED, AWAITING INTEGRATION (2026-08-10)
+## FNA3D RENDERER LANE — IMPLEMENTED, NOT YET VALIDATED (2026-08-11)
+
+> **Do not merge as "FNA3D complete."** An external audit (2026-08-11) found several tasks marked
+> **done** on the strength of code existing rather than a test proving it — sharpest case FNA3D-10,
+> which claimed RenderTargetCube + mips + MRT while `Fna3d_RenderTarget` renders none of the three
+> and the cube "test" is a non-null pointer check. Statuses in `plan_fna3d.md` are corrected and a
+> conformance phase FNA3D-26..35 is open. FNA3D-26 is closed: the 39-scene XNA oracle corpus now
+> runs through this renderer (10/39 exact, 0 render failures, at the EasyGL baseline) — see
+> `docs/fna3d-parity-report.md`, which also records two undiagnosed rows (`skinned_pixellighting_`
+> `twobone`/`fourbone`) where FNA3D is worse than EasyGL.
+
 
 > The first renderer-expansion lane. **`FNA3D` is CNA's 42nd public renderer identity**
 > (`GraphicsRendererType::Fna3d`, `-DCNA_GRAPHICS_RENDERER=FNA3D`, `CNA_RENDERER_FNA3D`,

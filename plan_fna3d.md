@@ -72,14 +72,14 @@ native API: it picks SDL_GPU, Direct3D 11 or OpenGL at runtime. That is still on
 | FNA3D-2 | Identity registration: enum, selector, option, dispatch, module directory, validators 41→42 | **done** |
 | FNA3D-3 | Window-flag hook in `GraphicsDevice::getRendererWindowFlags()` | **done** |
 | FNA3D-4 | Device creation, teardown, clear family, present, presentation modes, readback | **done** — `Fna3d_Smoke` |
-| FNA3D-5 | Stock-effect loading, parameter writes with FNA's own packing, technique/pass application | **done** |
+| FNA3D-5 | Stock-effect loading, parameter writes with FNA's own packing, technique/pass application | **implemented, partially validated** — parameter packing is proven only for the effects FNA3D-8 renders plus FNA3D-26's corpus |
 | FNA3D-6 | 2D SpriteBatch through the stock SpriteEffect | **done** — `Fna3d_2D` |
-| FNA3D-7 | Textures 2D/3D/Cube, mip levels, sub-rectangle upload and readback | **done** |
-| FNA3D-8 | 3D draw routes and the stock-effect variant mapping | **done** — `Fna3d_3D` |
-| FNA3D-9 | Vertex and index buffers, `SetDataOptions`, per-stream declarations | **done** |
-| FNA3D-10 | Render targets 2D and cube: MSAA resolve, mips, depth/stencil, MRT, `PreserveContents` | **done** — `Fna3d_RenderTarget` |
+| FNA3D-7 | Textures 2D/3D/Cube, mip levels, sub-rectangle upload and readback | **implemented, partially validated** — cube faces and mip levels are not pixel-verified |
+| FNA3D-8 | 3D draw routes and the stock-effect variant mapping | **implemented, partially validated** — `Fna3d_3D` renders BasicEffect + AlphaTestEffect only; DualTexture/EnvironmentMap/Skinned, lighting variants and fog are covered only by FNA3D-26's corpus, with two open rows |
+| FNA3D-9 | Vertex and index buffers, `SetDataOptions`, per-stream declarations | **implemented, partially validated** — no runtime test splits attributes across two real streams, and no `SetDataOptions` behaviour test exists |
+| FNA3D-10 | Render targets 2D and cube: MSAA resolve, mips, depth/stencil, MRT, `PreserveContents` | **implemented, NOT validated for cube / mips / MRT** — `Fna3d_RenderTarget` covers only RT2D; the cube "test" is a non-null check |
 | FNA3D-11 | Occlusion queries | **done** |
-| FNA3D-12 | Blend / depth-stencil / rasterizer / sampler state, write masks, scissor, viewport | **done** — `Fna3d_State` |
+| FNA3D-12 | Blend / depth-stencil / rasterizer / sampler state, write masks, scissor, viewport | **implemented, partially validated** — `Fna3d_State` covers blend/depth/stencil/scissor/viewport/write masks; sampler filter and address modes are not systematically covered |
 | FNA3D-13 | Truthful capability reporting and deterministic rejections | **done** |
 | FNA3D-14 | Capability + rejection example test | **done** — `Fna3d_Capabilities` |
 | FNA3D-15 | Unit tests: stock-effect `ShaderIndex` arithmetic | **done** |
@@ -94,12 +94,37 @@ native API: it picks SDL_GPU, Direct3D 11 or OpenGL at runtime. That is still on
 | FNA3D-24 | `FNA3D_LinkedVersion()` vs `FNA3D_COMPILED_VERSION` check at device creation | **done** |
 | FNA3D-25 | Sampler-slot ceiling: refuse a bind past the driver's real fragment texture-slot count | **done** |
 
+## Validation / conformance phase (FNA3D-26+)
+
+Added after an external audit found that several tasks above were marked **done** on the strength
+of code existing rather than a test proving it — most sharply FNA3D-10, which claimed cube, mips
+and MRT while the test it cited renders none of the three. The statuses above are corrected; this
+phase is what has to close them. Nothing here is a new feature: it is the missing proof for
+features that are already written.
+
+| ID | Task | Status |
+|---|---|---|
+| FNA3D-26 | XNA oracle conformance: build `cna_oracle_render_fna3d` and run the 39-scene corpus against the real XNA 4.0 reference images | **done** — 10/39 exact, 0 failed to render, at the EasyGL baseline; `docs/fna3d-parity-report.md` |
+| FNA3D-27a | Diagnose the two corpus rows where FNA3D is worse than EasyGL: `skinned_pixellighting_twobone_quad` (21880 vs 7956–8569) and `skinned_pixellighting_fourbone_quad` (19378) | **open — undiagnosed** |
+| FNA3D-27 | Runtime pixel coverage for the three stock effects `Fna3d_3D` never renders: DualTexture, EnvironmentMap, Skinned — plus the lighting variants and fog | **open** (corpus covers them; a renderer-local oracle test does not yet) |
+| FNA3D-28 | Real multi-stream draw: split one `VertexDeclaration`'s attributes across two genuine vertex buffers and verify pixels. `MultiStreamVertexInput` is reported true on a non-null capability check alone today | **open** |
+| FNA3D-29 | Buffer update semantics: `Discard` / `NoOverwrite` / `None`, partial updates, non-zero offsets, reallocation-then-write, consecutive updates | **open** |
+| FNA3D-30 | `RenderTargetCube`: render each of the six faces, read back, and sample — the current check only asserts a non-null pointer | **open** |
+| FNA3D-31 | MRT: bind two or more real targets, draw into all of them, verify each one's contents independently | **open** |
+| FNA3D-32 | Render-target mipmaps: render level 0, generate/resolve, then sample and read back a level above 0 | **open** |
+| FNA3D-33 | Sampler conformance: Point/Linear/Anisotropic, Wrap/Clamp/Mirror per axis, mip filtering, `MaxMipLevel`, LOD bias, `MaxAnisotropy` | **open** |
+| FNA3D-34 | Driver matrix: the same core conformance suite on OpenGL, Direct3D 11 and SDL_GPU | **open — external gate** (no Vulkan ICD, no Windows on this host) |
+| FNA3D-35 | Negative / lifetime suite: cross-device resources, use-after-destroy, invalid regions and levels, teardown with outstanding resources, resize/recreate | **open** |
+
+The renderer's status stays **implemented**, not **validated**, until FNA3D-27..33 and FNA3D-35 are
+closed. FNA3D-34 is an external gate and cannot be closed on this host.
+
 ## Deferred / external gates
 
 | Item | State |
 |---|---|
 | SDL_GPU driver | Not exercised in CNA's containers (no Vulkan ICD, so FNA3D declines it and falls through to OpenGL). The renderer code is driver-agnostic; validating it needs a machine with a working Vulkan/Metal/D3D12 stack. |
-| Direct3D 11 driver | Windows or DXVK-native only. External gate. |
+| Direct3D 11 driver | Windows or DXVK-native only. External gate. The renderer code is driver-agnostic in the sense that it makes the same FNA3D calls; it is **not** established that the observable results match, and this lane has already found three driver-dependent behaviours (sub-rectangle readback origin, volume readback, compressed readback), so an OpenGL pass must not be read as validating the other drivers. |
 | macOS / iOS | Not exercised. External gate. |
 | Custom `ShaderEffect` | Blocked upstream by design (divergence 1). Would need FNA3D to gain a shader-source entry point, or CNA to ship a D3D9 effect compiler. |
 | Instanced drawing | Blocked by divergence 2, which is divergence 1 again. |
