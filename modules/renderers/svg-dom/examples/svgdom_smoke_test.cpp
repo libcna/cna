@@ -57,35 +57,45 @@ namespace
         return canvas && canvas.style.visibility === 'hidden' ? 1 : 0;
     });
 
-    EM_JS(int, JsSpriteGroupChildCount, (), {
-        const group = Module['cnaSvgDomSpriteGroup'];
-        return group ? group.children.length : -1;
+    // SVGDOM-A: sprites now live inside per-FLUSH ordered slots (Module['cnaSvgDomFlushSlots']),
+    // not one fixed global sprite group -- consecutive flushes sharing the same (here: absent)
+    // clip state coalesce into the SAME slot (slot 0), exactly the scenario every Begin/Draw/End
+    // pair below produces (no scissor/viewport set anywhere in this test), so slot 0's own
+    // container is where every sprite below actually lands, same as the old fixed group was.
+    EM_JS(int, JsFlushSlot0ChildCount, (), {
+        const slots = Module['cnaSvgDomFlushSlots'];
+        const slot0 = slots && slots[0];
+        return slot0 ? slot0.container.children.length : -1;
     });
 
-    /// 1 when sprite `i` is a nested <svg> containing an <image> with a data:image/png href.
+    /// 1 when sprite `i` (in flush slot 0) is a nested <svg> containing an <image> with a
+    /// data:image/png href.
     EM_JS(int, JsSpriteHasImageWithPngHref, (int i), {
-        const group = Module['cnaSvgDomSpriteGroup'];
-        if (!group || !group.children[i]) return 0;
-        const image = group.children[i].querySelector('image');
+        const slots = Module['cnaSvgDomFlushSlots'];
+        const slot0 = slots && slots[0];
+        if (!slot0 || !slot0.container.children[i]) return 0;
+        const image = slot0.container.children[i].querySelector('image');
         if (!image) return 0;
         const href = image.getAttributeNS('http://www.w3.org/1999/xlink', 'href') ||
                     image.getAttribute('href') || "";
         return href.indexOf('data:image/png') === 0 ? 1 : 0;
     });
 
-    /// 1 when sprite `i`'s <image> carries a filter="url(...)" attribute (a non-white tint).
+    /// 1 when sprite `i` (in flush slot 0) carries a filter="url(...)" attribute on its own
+    /// wrapping <g> (a non-white tint).
     EM_JS(int, JsSpriteHasFilter, (int i), {
-        const group = Module['cnaSvgDomSpriteGroup'];
-        if (!group || !group.children[i]) return 0;
-        const image = group.children[i].querySelector('image');
-        return (image && image.getAttribute('filter')) ? 1 : 0;
+        const slots = Module['cnaSvgDomFlushSlots'];
+        const slot0 = slots && slots[0];
+        if (!slot0 || !slot0.container.children[i]) return 0;
+        return slot0.container.children[i].getAttribute('filter') ? 1 : 0;
     });
 
-    /// 1 when sprite `i`'s own <svg> wrapper has mix-blend-mode: plus-lighter.
+    /// 1 when sprite `i` (in flush slot 0)'s own wrapping <g> has mix-blend-mode: plus-lighter.
     EM_JS(int, JsSpriteIsAdditive, (int i), {
-        const group = Module['cnaSvgDomSpriteGroup'];
-        if (!group || !group.children[i]) return 0;
-        return group.children[i].style.mixBlendMode === 'plus-lighter' ? 1 : 0;
+        const slots = Module['cnaSvgDomFlushSlots'];
+        const slot0 = slots && slots[0];
+        if (!slot0 || !slot0.container.children[i]) return 0;
+        return slot0.container.children[i].style.mixBlendMode === 'plus-lighter' ? 1 : 0;
     });
 
     EM_JS(int, JsSupportsPlusLighter, (), {
@@ -102,7 +112,7 @@ namespace
 #else
     int JsSurfaceExists() { return 0; }
     int JsCanvasHidden() { return 0; }
-    int JsSpriteGroupChildCount() { return -1; }
+    int JsFlushSlot0ChildCount() { return -1; }
     int JsSpriteHasImageWithPngHref(int) { return 0; }
     int JsSpriteHasFilter(int) { return 0; }
     int JsSpriteIsAdditive(int) { return 0; }
@@ -170,7 +180,7 @@ protected:
             spriteBatch_->Begin();
             spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
             spriteBatch_->End();
-            check(JsSpriteGroupChildCount() == 1, "one sprite element was appended for one Draw()");
+            check(JsFlushSlot0ChildCount() == 1, "one sprite element was appended for one Draw()");
             check(JsSpriteHasImageWithPngHref(0) == 1,
                   "the sprite is a nested <svg> containing an <image> with a data:image/png href");
             check(JsSpriteHasFilter(0) == 0,
@@ -192,14 +202,14 @@ protected:
             dev.SetRenderTarget(renderTarget_.get());
             dev.Clear(Color(10, 20, 30, 255));
             dev.SetRenderTarget(nullptr);
-            std::vector<std::uint8_t> pixels(4 * 4 * 4, 0);
-            renderTarget_->GetData(pixels);
-            check(pixels[0] == 10 && pixels[1] == 20 && pixels[2] == 30 && pixels[3] == 255,
+            std::vector<Color> pixels(4 * 4, Color(0xCD, 0xCD, 0xCD, 0xCD));
+            renderTarget_->GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            check(pixels[0] == Color(10, 20, 30, 255),
                   "RenderTarget2D::Clear + GetData round-trips through the real private canvas");
 
             bool threw = false;
-            std::vector<std::uint8_t> backbuffer(4 * 4 * 4, 0);
-            try { dev.GetBackBufferData(backbuffer); }
+            std::vector<Color> backbuffer(4 * 4, Color(0xCD, 0xCD, 0xCD, 0xCD));
+            try { dev.GetBackBufferData(backbuffer.data(), 0, static_cast<int>(backbuffer.size())); }
             catch (const std::exception&) { threw = true; }
             check(threw,
                   "reading back the SVG backbuffer throws -- no browser API rasterizes a live SVG "

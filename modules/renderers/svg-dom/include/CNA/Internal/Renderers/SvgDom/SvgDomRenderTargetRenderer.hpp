@@ -85,10 +85,39 @@ namespace CNA::Internal::Renderers::SvgDom
         /** @brief CNAEXT. Returns this target's id into `Module['cnaSvgDomTextures']`. */
         [[nodiscard]] int GetCanvasIdEXT() const { return texture_.GetCanvasIdEXT(); }
 
-        /** @brief CNAEXT. Read-only access to the CPU-side RGBA8 buffer (may be stale; see GetData). */
-        [[nodiscard]] const std::vector<std::uint8_t>& GetPixelsEXT() const { return texture_.GetPixelsEXT(); }
+        /**
+         * @brief CNAEXT. Read-only access to the CPU-side RGBA8 buffer, refreshed from the canvas
+         * first if a bind has left it stale (SVGDOM-D/E) -- so a render target drawn into and then
+         * immediately used as a Draw() source (or the render-target-bound Canvas2D draw path's own
+         * source pixel extraction) always sees current content, not a snapshot from before the most
+         * recent bind.
+         */
+        [[nodiscard]] const std::vector<std::uint8_t>& GetPixelsEXT() const
+        {
+            EnsureFreshEXT();
+            return texture_.GetPixelsEXT();
+        }
+
+        /**
+         * @brief CNAEXT. Data-URI accessor for sampling this render target as an ordinary Draw()
+         * source texture (SVGDOM-E) -- refreshed from the canvas first if stale, for the same reason
+         * as @ref GetPixelsEXT.
+         */
+        [[nodiscard]] const std::string& GetDataUriEXT(int variantMode) const
+        {
+            EnsureFreshEXT();
+            return texture_.GetDataUriEXT(variantMode);
+        }
 
     private:
+        /**
+         * @brief Refreshes the CPU-side buffer from the canvas if @ref dirty_, matching @ref
+         * GetData's own readback contract. Extracted so GetData, GetPixelsEXT and GetDataUriEXT all
+         * apply IDENTICAL staleness handling (SVGDOM-D/E) -- a caller can never observe canvas
+         * content through one accessor and stale CPU-buffer content through another.
+         */
+        void EnsureFreshEXT() const;
+
         /// Mutable: GetData() is const (ITextureRenderer's own contract) but must be able to
         /// refresh this from a real getImageData readback the first time it is called after a bind.
         mutable SvgDomTextureRenderer texture_;

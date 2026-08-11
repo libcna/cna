@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SvgDom/SvgDomSpriteBatchRenderer.hpp"
 #include "CNA/Internal/Renderers/SvgDom/SvgDomTextureRenderer.hpp"
+#include "CNA/Internal/Renderers/SvgDom/SvgDomRenderTargetRenderer.hpp"
 
 #include <cmath>
 #include <stdexcept>
@@ -25,24 +26,25 @@
 // count, same per-sprite texture/geometry/tint/addressing) costs no DOM writes beyond the initial
 // pool creation -- only `transform` typically changes frame to frame for a moving sprite.
 EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stride,
-                                           int scissorEnabled, int sx, int sy, int sw, int sh), {
+                                           int clipActive, int cx, int cy, int cw, int ch), {
     if (typeof document === 'undefined') return;
     const root = Module['cnaSvgDomRoot'];
     const defs = Module['cnaSvgDomDefs'];
-    const getRegion = Module['cnaSvgDomGetRegion'];
-    if (!root || !getRegion) return;
+    const claimSlot = Module['cnaSvgDomClaimFlushSlot'];
+    if (!root || !claimSlot) return;
 
-    // SVGDOM-4: this flush is one whole SpriteBatch Begin/End batch, so the scissor rect current
-    // RIGHT NOW (whatever the game's last SetScissorRect call recorded, gated by
-    // RasterizerState.ScissorTestEnable at End()) is the one that applies to every sprite in it --
-    // matching real XNA/FNA semantics, where ScissorRectangle is read once the batch's draw calls
-    // are actually issued. cnaSvgDomGetRegion resolves that rect to an isolated <g> container (its
-    // own <clipPath>, its own sprite pool) so a LATER batch's different scissor rect can never reach
-    // back and reclip sprites THIS batch already flushed.
-    const region = getRegion(scissorEnabled ? { x: sx, y: sy, w: sw, h: sh } : null);
-    const container = region.container;
-    const pool = region.pool;
-    let used = region.used;
+    // SVGDOM-A/F: this flush is one whole SpriteBatch Begin/End batch, so the effective clip rect
+    // (Viewport ∩ Scissor, computed once in C++ by ComputeEffectiveClipRectEXT) current RIGHT NOW
+    // is the one that applies to every sprite in it -- matching real XNA/FNA semantics, where both
+    // Viewport and ScissorRectangle are read once the batch's draw calls are actually issued.
+    // cnaSvgDomClaimFlushSlot resolves this flush to its own document-ordered <g> slot (with its own
+    // <clipPath> when the rect isn't the whole surface) so DOM order always equals actual flush
+    // order -- a later batch's different clip state can never reach back and reclip, or repaint
+    // under, sprites THIS batch already flushed.
+    const slot = claimSlot(clipActive ? { x: cx, y: cy, w: cw, h: ch } : null);
+    const container = slot.container;
+    const pool = slot.pool;
+    let used = slot.used;
 
     const svgNS = 'http://www.w3.org/2000/svg';
     const xlinkNS = 'http://www.w3.org/1999/xlink';
@@ -178,7 +180,7 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
             prev.filter = filterAttr;
         }
     }
-    region.used = used;
+    slot.used = used;
 });
 
 // Render-target-bound path: one call per sprite (simpler than the batched array the SVG path
@@ -204,6 +206,35 @@ EM_JS(void, CNA_SvgDom_DrawSpriteToTarget, (int targetId, const void* pixels, in
     ctx.globalCompositeOperation = opaque ? 'copy' : (additive ? 'lighter' : 'source-over');
     ctx.drawImage(scratch, 0, 0);
     ctx.restore();
+});
+
+// SVGDOM-B/F: brackets one whole render-target-bound flush with the SAME effective clip rect
+// (Viewport ∩ Scissor) the SVG backbuffer path applies via cnaSvgDomClaimFlushSlot -- previously
+// this path consulted neither Viewport nor ScissorRectangle at all, so the same SpriteBatch drew
+// differently depending only on whether its target was the SVG backbuffer or a RenderTarget2D.
+// ctx.save() here nests around each sprite's own per-draw save()/restore() in
+// CNA_SvgDom_DrawSpriteToTarget (a plain stack push), so the clip set here remains in effect for
+// the whole flush until CNA_SvgDom_EndTargetScissor's own restore() -- matching the SVG path's
+// batch-level (not per-sprite) clip granularity exactly. Captured ONCE per Flush() call, so a
+// scissor/viewport change made AFTER a batch's End() already ran never retroactively reclips it.
+EM_JS(void, CNA_SvgDom_BeginTargetScissor, (int targetId, int clipActive,
+                                            int cx, int cy, int cw, int ch), {
+    const entry = Module['cnaSvgDomTextures'] && Module['cnaSvgDomTextures'][targetId];
+    if (!entry || !entry.ctx) return;
+    const ctx = entry.ctx;
+    ctx.save();
+    if (clipActive) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.beginPath();
+        ctx.rect(cx, cy, Math.max(0, cw), Math.max(0, ch));
+        ctx.clip();
+    }
+});
+
+EM_JS(void, CNA_SvgDom_EndTargetScissor, (int targetId), {
+    const entry = Module['cnaSvgDomTextures'] && Module['cnaSvgDomTextures'][targetId];
+    if (!entry || !entry.ctx) return;
+    entry.ctx.restore();
 });
 #endif
 
@@ -332,20 +363,77 @@ namespace CNA::Internal::Renderers::SvgDom
             if (c.flags & SvgFlagAdditive) return DomCompositeOp::Additive;
             return DomCompositeOp::NonPremultiplied;
         }
+
+        // SVGDOM-E: IRenderTargetRenderer and SvgDomTextureRenderer both descend from
+        // ITextureRenderer along two SEPARATE branches (SvgDomRenderTargetRenderer *contains* a
+        // SvgDomTextureRenderer, it does not inherit from one) -- so a source texture handed to
+        // Draw() may be either a plain SvgDomTextureRenderer OR a SvgDomRenderTargetRenderer (a
+        // RenderTarget2D sampled back as a texture). The previous code's
+        // `static_cast<const SvgDomTextureRenderer&>(texture)` silently reinterpreted a
+        // SvgDomRenderTargetRenderer's memory as a same-offset SvgDomTextureRenderer whenever that
+        // happened -- undefined behaviour in every build, not only Emscripten. A contained
+        // dynamic_cast against the two known concrete types is the safe equivalent, the same
+        // conclusion HtmlDom's own TextureIdOf reached for the identical sibling-class shape.
+        const SvgDomRenderTargetRenderer* AsRenderTargetEXT(const ITextureRenderer& texture)
+        {
+            return dynamic_cast<const SvgDomRenderTargetRenderer*>(&texture);
+        }
+
+        int CanvasIdOfEXT(const ITextureRenderer& texture)
+        {
+            if (const auto* rt = AsRenderTargetEXT(texture)) return rt->GetCanvasIdEXT();
+            if (const auto* t = dynamic_cast<const SvgDomTextureRenderer*>(&texture)) return t->GetCanvasIdEXT();
+            return 0;
+        }
+
+        // Refreshes-if-stale (SVGDOM-D/E) then returns the CPU-side pixel buffer to sample: a plain
+        // texture's own buffer, or -- for a render target -- the buffer EnsureFreshEXT() has just
+        // reconciled with its canvas, so a render target drawn into and immediately sampled (without
+        // an explicit GetData call in between) never serves stale pixels.
+        const std::vector<std::uint8_t>& PixelsOfEXT(const ITextureRenderer& texture)
+        {
+            if (const auto* rt = AsRenderTargetEXT(texture)) return rt->GetPixelsEXT();
+            if (const auto* t = dynamic_cast<const SvgDomTextureRenderer*>(&texture)) return t->GetPixelsEXT();
+            static const std::vector<std::uint8_t> empty;
+            return empty;
+        }
+
+        // Eagerly registers (idempotent, cached) the JS-side data URI for the requested variant --
+        // needed before a command referencing this texture/render-target can be flushed to the SVG
+        // backbuffer path. Refreshes a render target from its canvas first (SVGDOM-D/E) so sampling
+        // it as a Draw() source always reflects what was most recently rendered into it.
+        const std::string& DataUriOfEXT(const ITextureRenderer& texture, int variantMode)
+        {
+            if (const auto* rt = AsRenderTargetEXT(texture)) return rt->GetDataUriEXT(variantMode);
+            if (const auto* t = dynamic_cast<const SvgDomTextureRenderer*>(&texture)) return t->GetDataUriEXT(variantMode);
+            static const std::string empty;
+            return empty;
+        }
     }
 
     void SvgDomSpriteBatchRenderer::Flush(const SvgDomDrawCommand* cmds,
-                                          const SvgDomTextureRenderer* const* textures, int count)
+                                          const ITextureRenderer* const* textures, int count)
     {
         if (count <= 0) return;
 #if defined(__EMSCRIPTEN__)
+        // SVGDOM-B/F: captured ONCE per flush (batch-level timing, matching real XNA/FNA -- both
+        // Viewport and ScissorRectangle are read when the batch's draws are actually issued, not
+        // retroactively when a LATER batch changes them), and applied identically on both the SVG
+        // backbuffer path and the render-target-bound Canvas2D path below -- previously only the
+        // SVG path consulted either at all.
+        float cx = 0, cy = 0, cw = 0, ch = 0;
+        const bool clipActive = ComputeEffectiveClipRectEXT(cx, cy, cw, ch);
+
         const int boundTarget = GetBoundRenderTargetIdEXT();
         if (boundTarget != 0)
         {
+            CNA_SvgDom_BeginTargetScissor(boundTarget, clipActive ? 1 : 0,
+                                          static_cast<int>(cx), static_cast<int>(cy),
+                                          static_cast<int>(cw), static_cast<int>(ch));
             for (int i = 0; i < count; ++i)
             {
                 const SvgDomDrawCommand& c = cmds[i];
-                const SvgDomTextureRenderer* tex = textures[i];
+                const ITextureRenderer* tex = textures[i];
                 if (!tex) continue;
                 const Color tint(static_cast<std::uint8_t>(c.packedColor & 0xFF),
                                  static_cast<std::uint8_t>((c.packedColor >> 8) & 0xFF),
@@ -353,14 +441,15 @@ namespace CNA::Internal::Renderers::SvgDom
                                  static_cast<std::uint8_t>((c.packedColor >> 24) & 0xFF));
                 const DomCompositeOp op = ReconstructOpEXT(c);
                 const bool tiled = (c.flags & SvgFlagTiled) != 0;
+                const std::vector<std::uint8_t>& fullPixels = PixelsOfEXT(*tex);
                 const std::vector<std::uint8_t> pixels = tiled
                     ? PrepareTiledSpritePixelsEXT(
-                          tex->GetPixelsEXT(), tex->GetWidth(), tex->GetHeight(),
+                          fullPixels, tex->GetWidth(), tex->GetHeight(),
                           static_cast<int>(c.sx), static_cast<int>(c.sy),
                           static_cast<int>(c.sw), static_cast<int>(c.sh),
                           (c.flags & SvgFlagMirrorTiled) != 0, tint, op)
                     : PrepareSpritePixelsEXT(
-                          tex->GetPixelsEXT(), tex->GetWidth(),
+                          fullPixels, tex->GetWidth(),
                           static_cast<int>(c.sx), static_cast<int>(c.sy),
                           static_cast<int>(c.sw), static_cast<int>(c.sh), tint, op);
                 CNA_SvgDom_DrawSpriteToTarget(
@@ -368,6 +457,7 @@ namespace CNA::Internal::Renderers::SvgDom
                     c.m0, c.m1, c.m2, c.m3, c.m4, c.m5,
                     (op == DomCompositeOp::Additive) ? 1 : 0, (op == DomCompositeOp::Opaque) ? 1 : 0);
             }
+            CNA_SvgDom_EndTargetScissor(boundTarget);
             return;
         }
 
@@ -375,12 +465,9 @@ namespace CNA::Internal::Renderers::SvgDom
         // here -- a frame commonly contains several SpriteBatch Begin/End blocks (e.g. one per
         // layer), and clearing on every flush would wipe out sprites an earlier batch in the SAME
         // frame already flushed.
-        float sx = 0, sy = 0, sw = 0, sh = 0;
-        const bool scissorEnabled = GetCurrentScissorEnableEXT();
-        GetCurrentScissorRectEXT(sx, sy, sw, sh);
-        CNA_SvgDom_FlushSpritesToSvg(cmds, count, SvgDomDrawCommandFields, scissorEnabled ? 1 : 0,
-                                     static_cast<int>(sx), static_cast<int>(sy),
-                                     static_cast<int>(sw), static_cast<int>(sh));
+        CNA_SvgDom_FlushSpritesToSvg(cmds, count, SvgDomDrawCommandFields, clipActive ? 1 : 0,
+                                     static_cast<int>(cx), static_cast<int>(cy),
+                                     static_cast<int>(cw), static_cast<int>(ch));
 #else
         (void)cmds; (void)textures;
 #endif
@@ -439,14 +526,14 @@ namespace CNA::Internal::Renderers::SvgDom
     {
         if (!begun_)
             throw std::runtime_error("SvgDomSpriteBatchRenderer::Draw called before Begin().");
-        const auto& tex = static_cast<const SvgDomTextureRenderer&>(texture);
-        if (tex.GetCanvasIdEXT() == 0) return;
+        const int canvasId = CanvasIdOfEXT(texture);
+        if (canvasId == 0) return;
         if (sourceRectangle.Width <= 0 || sourceRectangle.Height <= 0 ||
             destinationRectangle.Width == 0 || destinationRectangle.Height == 0)
             return;
 
         SvgDomDrawCommand cmd = BuildDrawCommandEXT(
-            tex.GetCanvasIdEXT(), texture.GetWidth(), texture.GetHeight(), destinationRectangle,
+            canvasId, texture.GetWidth(), texture.GetHeight(), destinationRectangle,
             sourceRectangle, color, rotation, origin, effects, smoothingEnabled_,
             addressU_, addressV_, GetCurrentCompositeOpEXT());
 
@@ -454,32 +541,37 @@ namespace CNA::Internal::Renderers::SvgDom
         // offset on top of the intrinsic per-sprite placement BuildDrawCommandEXT already produced.
         // Real XNA/FNA applies both AFTER the sprite's own placement, and the viewport offset
         // strictly after the batch transform (rasterizer stage, past the projection matrix) -- see
-        // SetCurrentViewportOffsetEXT's own doc.
+        // SetCurrentViewportRectEXT's own doc. Width/Height (SVGDOM-F) do not affect this per-sprite
+        // translation at all -- they only ever bound the CLIP rect applied at flush time (Flush()) --
+        // so only X/Y are read here, matching this project's own cross-renderer SpriteBatch contract
+        // (spritebatch_custom_viewport_test.cpp Check A/C: Viewport is a translation + a hard clip,
+        // never an extra coordinate rescale).
         Mat2x3 composed{cmd.m0, cmd.m1, cmd.m2, cmd.m3, cmd.m4, cmd.m5};
         if (hasMatrix_)
         {
             const Mat2x3 batch{matrix_[0], matrix_[1], matrix_[2], matrix_[3], matrix_[4], matrix_[5]};
             composed = Compose(batch, composed);
         }
-        float vpX = 0, vpY = 0;
-        GetCurrentViewportOffsetEXT(vpX, vpY);
+        float vpX = 0, vpY = 0, vpW = 0, vpH = 0;
+        GetCurrentViewportRectEXT(vpX, vpY, vpW, vpH);
         if (vpX != 0.0f || vpY != 0.0f)
             composed = Compose(MatTranslate(vpX, vpY), composed);
         cmd.m0 = composed.a; cmd.m1 = composed.b; cmd.m2 = composed.c;
         cmd.m3 = composed.d; cmd.m4 = composed.e; cmd.m5 = composed.f;
 
         // Ensures the texture's needed pixel variant has a JS-side data URI registered before this
-        // command can be flushed to the SVG path (idempotent, cached by SvgDomTextureRenderer).
-        (void)tex.GetDataUriEXT(cmd.variantMode);
+        // command can be flushed to the SVG path (idempotent, cached; refreshed from the canvas
+        // first when the source is a currently/recently-bound render target -- SVGDOM-D/E).
+        (void)DataUriOfEXT(texture, cmd.variantMode);
 
         if (immediateMode_)
         {
-            const SvgDomTextureRenderer* texPtr = &tex;
+            const ITextureRenderer* texPtr = &texture;
             Flush(&cmd, &texPtr, 1);
             return;
         }
         commands_.push_back(cmd);
-        commandTextures_.push_back(&tex);
+        commandTextures_.push_back(&texture);
     }
 
     void SvgDomSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)

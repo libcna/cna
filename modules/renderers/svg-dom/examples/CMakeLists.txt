@@ -15,6 +15,23 @@ if(EMSCRIPTEN AND CNA_BUILD_TESTS)
     target_link_options(cna_test_svgdom_smoke PRIVATE
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1)
+
+    # Deep-remediation browser test suite (SVGDOM-A..H): RT-based deterministic pixel checks
+    # (SVGDOM-B/D/E/F) and the SVG-backbuffer draw-order regression (SVGDOM-A), which needs a real
+    # Playwright screenshot since no API rasterizes a live SVG subtree to pixels synchronously.
+    add_executable(cna_test_svgdom_pixel_verification svgdom_pixel_verification_test.cpp)
+    target_link_libraries(cna_test_svgdom_pixel_verification PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    set_target_properties(cna_test_svgdom_pixel_verification PROPERTIES SUFFIX ".html")
+    target_link_options(cna_test_svgdom_pixel_verification PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sEXIT_RUNTIME=1)
+
+    add_executable(cna_test_svgdom_scissor_order svgdom_scissor_order_test.cpp)
+    target_link_libraries(cna_test_svgdom_scissor_order PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    set_target_properties(cna_test_svgdom_scissor_order PROPERTIES SUFFIX ".html")
+    target_link_options(cna_test_svgdom_scissor_order PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sEXIT_RUNTIME=1)
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

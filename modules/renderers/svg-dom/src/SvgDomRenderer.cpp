@@ -41,110 +41,111 @@ EM_JS(void, CNA_SvgDom_EnsureRoot, (), {
     const bg = document.createElementNS(svgNS, 'rect');
     bg.setAttribute('x', 0); bg.setAttribute('y', 0);
     bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%');
-    const spriteGroup = document.createElementNS(svgNS, 'g');
     root.appendChild(defs);
     root.appendChild(bg);
-    root.appendChild(spriteGroup);
     (canvas.parentNode || document.body).insertBefore(root, canvas.nextSibling);
     Module['cnaSvgDomOriginalCanvasVisibility'] = canvas.style.visibility;
     canvas.style.visibility = 'hidden';
     Module['cnaSvgDomRoot'] = root;
     Module['cnaSvgDomDefs'] = defs;
     Module['cnaSvgDomBackgroundRect'] = bg;
-    Module['cnaSvgDomSpriteGroup'] = spriteGroup;
     Module['cnaSvgDomBoundCtx'] = null;
     Module['cnaSvgDomFilterCache'] = {};
 
-    // SVGDOM-4 (was "V1: a single global scissor region"): every distinct ScissorRectangle a
-    // batch's End() actually observes (RasterizerState.ScissorTestEnable true) gets its OWN sibling
-    // <g> container with its own <clipPath>, so a LATER batch's different scissor rect can never
-    // reach back and reclip sprites an EARLIER batch already flushed into a different region -- the
-    // same shape HtmlDom's own per-region isolation (HTMLDOM-94) uses, independently applied here to
-    // SVG's own clip-path primitive. The 'full' region (no scissor, or a rect that already covers
-    // the whole logical surface) is the pre-existing flat path: its container IS spriteGroup itself
-    // and carries no clip-path attribute at all, so the overwhelmingly common no-scissor case costs
-    // nothing beyond what it always did.
-    //
-    // Narrower than HtmlDom's own final state on purpose: paint order across DIFFERENT regions
-    // within the same frame reflects each region's own FIRST-creation order (DOM position), not a
-    // per-flush z-index counter (HTMLDOM-103) -- a documented, accepted V1 gap for the rare case of
-    // several differently-scissored batches needing to interleave paint order against each other
-    // within one frame. A region's own clip rect is fixed at creation and never needs resize-driven
-    // re-derivation the way HtmlDom's CSS inset() does (HTMLDOM-93): SVG's <clipPath> rect is
-    // absolute x/y/width/height in the (also absolute) viewBox space, not edge-relative insets.
-    Module['cnaSvgDomRegions'] = {
-        'full': { container: spriteGroup, pool: [], used: 0, highWater: 0, rect: null }
-    };
-    Module['cnaSvgDomRegionOrder'] = [];
-    Module['cnaSvgDomRegionsTouchedThisFrame'] = new Set();
-    Module['cnaSvgDomMaxRegions'] = 16;
+    // SVGDOM-A (was: sibling containers keyed by CLIP-RECT IDENTITY, so cross-region paint order
+    // followed each region's own first-CREATION order rather than the actual per-flush draw
+    // sequence -- a batch drawn 4th could wrongly paint UNDER a batch drawn 1st merely because the
+    // 1st batch's rect happened to get its container created first). Fixed architecture: ONE
+    // ordered array of per-FLUSH slots, appended to `root` in flush order and NEVER reordered after
+    // creation, so DOM document order is BY CONSTRUCTION identical to actual SpriteBatch flush
+    // order -- SVG's own fundamental painting model (later document order paints on top) then does
+    // the rest correctly, with no reliance on any browser's CSS z-index-on-SVG support. Consecutive
+    // flushes that share the exact same effective clip rect (Viewport ∩ Scissor, SVGDOM-F) are
+    // coalesced into the SAME slot (see cnaSvgDomClaimFlushSlot below) so the common case -- many
+    // unscissored draws, or Immediate-mode sprites sharing one clip state -- still shares one pooled
+    // container the way the old 'full' region did, rather than paying one wrapper <g> per flush.
+    Module['cnaSvgDomFlushSlots'] = [];
+    Module['cnaSvgDomFlushCursor'] = 0;
+    Module['cnaSvgDomFlushHighWater'] = 0;
+    Module['cnaSvgDomLastFlushKey'] = null;
+    Module['cnaSvgDomFrameToken'] = 0;
+    Module['cnaSvgDomNextClipId'] = 0;
 
-    // Resolves the region that should own sprites drawn under the given scissor rect (an
-    // {x,y,w,h} object in absolute logical/viewBox pixels, or null for "no scissor rect active").
-    Module['cnaSvgDomGetRegion'] = function (rect) {
-        const regions = Module['cnaSvgDomRegions'];
+    // Resolves (creating or reusing, always in flush-chronological order) the slot that should own
+    // sprites drawn under the given effective clip rect (an {x,y,w,h} object in absolute
+    // logical/viewBox pixels -- already the Viewport ∩ Scissor intersection, see
+    // SvgDomState::ComputeEffectiveClipRectEXT -- or null when nothing clips this flush).
+    Module['cnaSvgDomClaimFlushSlot'] = function (rect) {
         const logicalW = Module['cnaSvgDomLogicalW'] || 0;
         const logicalH = Module['cnaSvgDomLogicalH'] || 0;
         const isFull = !rect || (rect.x <= 0 && rect.y <= 0 &&
                                   rect.x + rect.w >= logicalW && rect.y + rect.h >= logicalH);
-        if (isFull) return regions['full'];
+        const key = isFull ? 'full' : (rect.x + ',' + rect.y + ',' + rect.w + ',' + rect.h);
 
-        const key = rect.x + ',' + rect.y + ',' + rect.w + ',' + rect.h;
-        let region = regions[key];
-        if (region) {
-            Module['cnaSvgDomRegionsTouchedThisFrame'].add(key);
-            const order = Module['cnaSvgDomRegionOrder'];
-            const idx = order.indexOf(key);
-            if (idx >= 0) { order.splice(idx, 1); order.push(key); }
-            return region;
+        const slots = Module['cnaSvgDomFlushSlots'];
+        let idx;
+        if (Module['cnaSvgDomLastFlushKey'] === key && Module['cnaSvgDomFlushCursor'] > 0) {
+            // Coalesce: this flush's clip state is identical to the flush immediately before it in
+            // THIS frame, so it shares that flush's own slot (and DOM position) instead of claiming
+            // a new one -- this is what keeps many same-state Immediate/Deferred flushes as cheap as
+            // the old single 'full' region was, while flushes separated by a DIFFERENT clip state
+            // still each get their own, correctly ordered slot.
+            idx = Module['cnaSvgDomFlushCursor'] - 1;
+        } else {
+            idx = Module['cnaSvgDomFlushCursor']++;
+        }
+        Module['cnaSvgDomLastFlushKey'] = key;
+
+        let slot = slots[idx];
+        if (!slot) {
+            const svgNS2 = 'http://www.w3.org/2000/svg';
+            const container = document.createElementNS(svgNS2, 'g');
+            // New slots always append at the end: slot index N is therefore always the (N+1)th
+            // sprite-bearing child of root, forever -- the invariant that makes document order
+            // equal flush order without ever needing to reorder an existing node.
+            root.appendChild(container);
+            slot = { container: container, pool: [], used: 0, spriteHighWater: 0,
+                     clipId: null, clipPathEl: null, clipRectEl: null, clipKey: undefined,
+                     frameToken: -1 };
+            slots[idx] = slot;
+        }
+        if (slot.container.style.display === 'none') slot.container.style.display = '';
+
+        const frameToken = Module['cnaSvgDomFrameToken'];
+        if (slot.frameToken !== frameToken) {
+            // First touch on this slot THIS frame (a fresh claim, not a same-frame coalesce): any
+            // sprites it held are from an EARLIER frame and must not be treated as already written
+            // this flush.
+            slot.used = 0;
+            slot.frameToken = frameToken;
         }
 
-        // LRU-evict the least-recently-used region not already touched this frame, at capacity --
-        // bounds a pathological game cycling through many distinct scissor rects. Never evicts a
-        // region this SAME frame's own earlier flushes already depend on (HTMLDOM-103's own
-        // reasoning, independently applied here).
-        const order = Module['cnaSvgDomRegionOrder'];
-        const touchedThisFrame = Module['cnaSvgDomRegionsTouchedThisFrame'];
-        while (order.length >= Module['cnaSvgDomMaxRegions']) {
-            let evictIdx = -1;
-            for (let i = 0; i < order.length; ++i) {
-                if (!touchedThisFrame.has(order[i])) { evictIdx = i; break; }
+        if (slot.clipKey !== key) {
+            if (isFull) {
+                if (slot.container.hasAttribute('clip-path')) slot.container.removeAttribute('clip-path');
+            } else {
+                if (!slot.clipPathEl) {
+                    const svgNS3 = 'http://www.w3.org/2000/svg';
+                    const clipPath = document.createElementNS(svgNS3, 'clipPath');
+                    const clipId = 'cna-svg-dom-clip-' + (Module['cnaSvgDomNextClipId'] =
+                        (Module['cnaSvgDomNextClipId'] || 0) + 1);
+                    clipPath.id = clipId;
+                    const clipRectEl = document.createElementNS(svgNS3, 'rect');
+                    clipPath.appendChild(clipRectEl);
+                    defs.appendChild(clipPath);
+                    slot.clipPathEl = clipPath;
+                    slot.clipId = clipId;
+                    slot.clipRectEl = clipRectEl;
+                    slot.container.setAttribute('clip-path', 'url(#' + clipId + ')');
+                }
+                slot.clipRectEl.setAttribute('x', rect.x);
+                slot.clipRectEl.setAttribute('y', rect.y);
+                slot.clipRectEl.setAttribute('width', Math.max(0, rect.w));
+                slot.clipRectEl.setAttribute('height', Math.max(0, rect.h));
             }
-            if (evictIdx < 0) {
-                console.warn('[CNA] SVG_DOM: scissor-region cap (' + Module['cnaSvgDomMaxRegions'] +
-                             ') exceeded within a single frame -- every existing region is still ' +
-                             'active this frame, so none were evicted.');
-                break;
-            }
-            const evictKey = order[evictIdx];
-            order.splice(evictIdx, 1);
-            const evictRegion = regions[evictKey];
-            if (evictRegion && evictRegion.container.parentNode) {
-                evictRegion.container.parentNode.removeChild(evictRegion.container);
-            }
-            delete regions[evictKey];
+            slot.clipKey = key;
         }
-
-        const svgNS2 = 'http://www.w3.org/2000/svg';
-        const container = document.createElementNS(svgNS2, 'g');
-        const clipPath = document.createElementNS(svgNS2, 'clipPath');
-        const clipId = 'cna-svg-dom-region-' + (Module['cnaSvgDomRegionNextId'] =
-            (Module['cnaSvgDomRegionNextId'] || 0) + 1);
-        clipPath.id = clipId;
-        const clipRectEl = document.createElementNS(svgNS2, 'rect');
-        clipRectEl.setAttribute('x', rect.x); clipRectEl.setAttribute('y', rect.y);
-        clipRectEl.setAttribute('width', Math.max(0, rect.w));
-        clipRectEl.setAttribute('height', Math.max(0, rect.h));
-        clipPath.appendChild(clipRectEl);
-        defs.appendChild(clipPath);
-        container.setAttribute('clip-path', 'url(#' + clipId + ')');
-        root.appendChild(container);
-
-        region = { container: container, pool: [], used: 0, highWater: 0, rect: rect };
-        regions[key] = region;
-        touchedThisFrame.add(key);
-        order.push(key);
-        return region;
+        return slot;
     };
 });
 
@@ -162,12 +163,14 @@ EM_JS(void, CNA_SvgDom_DestroyRoot, (), {
     Module['cnaSvgDomRoot'] = null;
     Module['cnaSvgDomDefs'] = null;
     Module['cnaSvgDomBackgroundRect'] = null;
-    Module['cnaSvgDomSpriteGroup'] = null;
     Module['cnaSvgDomFilterCache'] = null;
-    Module['cnaSvgDomRegions'] = null;
-    Module['cnaSvgDomRegionOrder'] = null;
-    Module['cnaSvgDomRegionsTouchedThisFrame'] = null;
-    Module['cnaSvgDomGetRegion'] = null;
+    Module['cnaSvgDomFlushSlots'] = null;
+    Module['cnaSvgDomFlushCursor'] = 0;
+    Module['cnaSvgDomFlushHighWater'] = 0;
+    Module['cnaSvgDomLastFlushKey'] = null;
+    Module['cnaSvgDomFrameToken'] = 0;
+    Module['cnaSvgDomNextClipId'] = 0;
+    Module['cnaSvgDomClaimFlushSlot'] = null;
 });
 
 // XNA's Clear overwrites everything drawn so far: repaints the background and drops every sprite
@@ -194,40 +197,54 @@ EM_JS(void, CNA_SvgDom_Clear, (double r, double g, double b, double a), {
     if (!bg) return;
     bg.setAttribute('fill', 'rgba(' + Math.round(r * 255) + ',' + Math.round(g * 255) + ',' +
                     Math.round(b * 255) + ',' + a + ')');
-    // plan_svg_dom.md: Clear() is this renderer's own "frame start" marker (XNA games call it once
-    // per frame, before any Draw()) -- rewinds EVERY region's own pooled-sprite cursor to 0 rather
-    // than tearing any pool down, so a steady frame reuses the SAME elements
-    // CNA_SvgDom_FlushSpritesToSvg dirty-diffs against instead of paying create/destroy churn every
-    // frame. The pool elements themselves are hidden/shown by CNA_SvgDom_PresentFrame's own
-    // high-water-mark bookkeeping. Also resets which regions this NEW frame has touched, so
-    // cnaSvgDomGetRegion's own LRU eviction can never remove a region a draw call earlier THIS frame
-    // still depends on (SVGDOM-4, mirroring HtmlDom's HTMLDOM-103 reasoning).
-    const regions = Module['cnaSvgDomRegions'];
-    if (regions) for (const key in regions) regions[key].used = 0;
-    if (Module['cnaSvgDomRegionsTouchedThisFrame']) Module['cnaSvgDomRegionsTouchedThisFrame'].clear();
+    // GraphicsDevice.Clear is a real OPERATION, not merely a "frame start" convention: it must erase
+    // everything drawn so far into the active target while leaving anything drawn AFTER it alone
+    // (Draw, Clear, Draw, Present must show only the second Draw's content -- both for the
+    // backbuffer and mid-frame). Rewinding the flush cursor to 0 (not tearing any pool down) means
+    // the very NEXT flush reclaims slot 0 first, overwriting whatever it held, exactly reproducing
+    // that "erase everything before, keep everything after" contract; Present()'s own high-water
+    // hide (below) then hides any slot nothing after this Clear() reclaimed this frame. Bumping the
+    // frame token (rather than eagerly resetting every slot's own `used`) is what lets
+    // cnaSvgDomClaimFlushSlot cheaply tell "was this slot already touched since the last Clear()" so
+    // a stale slot beyond this frame's flush count keeps its LAST frame's sprite count until Present
+    // decides whether to hide it, instead of an O(slot count) sweep on every single Clear() call.
+    Module['cnaSvgDomFlushCursor'] = 0;
+    Module['cnaSvgDomLastFlushKey'] = null;
+    Module['cnaSvgDomFrameToken'] = (Module['cnaSvgDomFrameToken'] || 0) + 1;
 });
 
-// Ends the frame: hides only the pooled sprite elements this frame did not use, per region, each
-// tracked by its own high-water mark (the same shape HtmlDom's own CNA_HtmlDom_PresentFrame uses),
-// so a steady sprite count touches nothing here at all. There is nothing to swap -- the browser
-// compositor presents the SVG subtree on its next paint tick. Each region's own `used` cursor is
-// rewound to 0 by CNA_SvgDom_Clear (this renderer's own frame-start marker), not here.
+// Ends the frame: hides whole flush-slot containers this frame's flush count did not reach (a
+// frame with fewer distinct clip-state flushes than the previous one), tracked by a high-water
+// mark over the SLOT array itself (SVGDOM-A) -- then, within every slot actually used this frame,
+// hides only the pooled sprite elements it did not reuse, each tracked by its OWN per-slot
+// high-water mark (the same shape HtmlDom's own CNA_HtmlDom_PresentFrame uses for its regions), so
+// a steady frame (same flush sequence, same per-flush sprite counts) touches nothing here at all.
+// There is nothing to swap -- the browser compositor presents the SVG subtree on its next paint
+// tick. Cursors are rewound by CNA_SvgDom_Clear (this renderer's own frame-start marker), not here.
 EM_JS(void, CNA_SvgDom_PresentFrame, (), {
-    const regions = Module['cnaSvgDomRegions'];
-    if (!regions) return;
-    for (const key in regions) {
-        const region = regions[key];
-        const pool = region.pool;
-        const used = region.used || 0;
-        const high = region.highWater || 0;
-        for (let i = used; i < high; ++i) {
-            const entryEl = pool[i];
+    const slots = Module['cnaSvgDomFlushSlots'];
+    if (!slots) return;
+    const cursor = Module['cnaSvgDomFlushCursor'] || 0;
+    const high = Module['cnaSvgDomFlushHighWater'] || 0;
+    for (let i = cursor; i < high; ++i) {
+        const slot = slots[i];
+        if (slot && slot.container.style.display !== 'none') slot.container.style.display = 'none';
+    }
+    Module['cnaSvgDomFlushHighWater'] = cursor;
+
+    for (let i = 0; i < cursor; ++i) {
+        const slot = slots[i];
+        const pool = slot.pool;
+        const used = slot.used || 0;
+        const spriteHigh = slot.spriteHighWater || 0;
+        for (let j = used; j < spriteHigh; ++j) {
+            const entryEl = pool[j];
             if (entryEl && !entryEl.cna.hidden) {
                 entryEl.g.style.display = 'none';
                 entryEl.cna.hidden = true;
             }
         }
-        region.highWater = used;
+        slot.spriteHighWater = used;
     }
 });
 
@@ -246,9 +263,9 @@ EM_JS(void, CNA_SvgDom_ApplySurfaceGeometry, (int logicalW, int logicalH,
     root.style.top = offsetY + 'px';
     root.style.width = (logicalW * scaleX) + 'px';
     root.style.height = (logicalH * scaleY) + 'px';
-    // cnaSvgDomGetRegion's own "does this rect already cover the whole surface" collapse-to-'full'
-    // check (SVGDOM-4) needs the CURRENT logical size -- stashed here rather than re-queried from
-    // the SDL window, mirroring HtmlDom's own cnaDomLogicalW/H.
+    // cnaSvgDomClaimFlushSlot's own "does this rect already cover the whole surface"
+    // collapse-to-'full' check (SVGDOM-A/F) needs the CURRENT logical size -- stashed here rather
+    // than re-queried from the SDL window, mirroring HtmlDom's own cnaDomLogicalW/H.
     Module['cnaSvgDomLogicalW'] = logicalW;
     Module['cnaSvgDomLogicalH'] = logicalH;
 });
@@ -294,10 +311,17 @@ namespace CNA::Internal::Renderers::SvgDom
         SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
         SetCurrentScissorEnableEXT(false);
         SetCurrentScissorRectEXT(0, 0, 0, 0);
-        SetCurrentViewportOffsetEXT(0, 0);
+        SetCurrentViewportRectEXT(0, 0, 0, 0);
 #if defined(__EMSCRIPTEN__)
         CNA_SvgDom_EnsureRoot();
 #endif
+        // SVGDOM-C: publish real logical geometry immediately, not only from the first Present().
+        // A game can legally SpriteBatch-draw (with a scissor rect) before its first Present() ever
+        // runs; without this, cnaSvgDomLogicalW/H stay 0 until then, so
+        // cnaSvgDomClaimFlushSlot's own "does this rect already cover the whole surface" check
+        // misclassifies a real sub-rect clip as covering nothing (0x0), collapsing it to the
+        // unclipped 'full' slot.
+        ApplySurfaceGeometryEXT();
     }
 
     SvgDomRenderer::~SvgDomRenderer()
@@ -402,6 +426,11 @@ namespace CNA::Internal::Renderers::SvgDom
     {
         virtualWidth_ = width;
         virtualHeight_ = height;
+        // SVGDOM-C: push the new geometry to JS immediately rather than waiting for the next
+        // Present() -- a game can legally SpriteBatch-draw (with a scissor rect) in the SAME frame
+        // it changes virtual resolution, before Present() ever runs, and that draw's "does this
+        // scissor rect cover the whole surface" classification must see the NEW logical size.
+        ApplySurfaceGeometryEXT();
     }
 
     void SvgDomRenderer::SetPresentationMode(int mode)
@@ -411,6 +440,7 @@ namespace CNA::Internal::Renderers::SvgDom
             throw std::out_of_range(
                 "SVG_DOM renderer: invalid CnaPresentationMode ordinal " + std::to_string(mode));
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
+        ApplySurfaceGeometryEXT(); // SVGDOM-C: same reasoning as SetVirtualResolution above.
     }
 
     bool SvgDomRenderer::TransformWindowToLogical(float windowX, float windowY,
@@ -562,8 +592,13 @@ namespace CNA::Internal::Renderers::SvgDom
 
     void SvgDomRenderer::SetViewport(int x, int y, int w, int h, float, float)
     {
-        (void)w; (void)h;
-        SetCurrentViewportOffsetEXT(static_cast<float>(x), static_cast<float>(y));
+        // SVGDOM-F: Width/Height are retained (not just X/Y) -- they define an unconditional clip
+        // rectangle every draw (SVG backbuffer or render-target-bound Canvas2D) must honour,
+        // independent of RasterizerState.ScissorTestEnable; see ComputeEffectiveClipRectEXT and its
+        // callers in SvgDomSpriteBatchRenderer::Flush. minDepth/maxDepth stay ignored -- no depth
+        // buffer exists on this renderer.
+        SetCurrentViewportRectEXT(static_cast<float>(x), static_cast<float>(y),
+                                  static_cast<float>(w), static_cast<float>(h));
     }
 
     void SvgDomRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

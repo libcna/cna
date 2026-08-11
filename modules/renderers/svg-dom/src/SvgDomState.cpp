@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SvgDom/SvgDomState.hpp"
 
+#include <algorithm>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -77,12 +79,12 @@ namespace CNA::Internal::Renderers::SvgDom
             return rect;
         }
 
-        struct Offset2f { float x = 0, y = 0; };
-
-        Offset2f& CurrentViewportOffset()
+        // w/h <= 0 means "unset" -- no SetViewport call yet, matching the pre-viewport-clip default
+        // of "the whole target, no clip" (SVGDOM-F).
+        Rect4f& CurrentViewportRect()
         {
-            static Offset2f offset;
-            return offset;
+            static Rect4f rect;
+            return rect;
         }
     }
 
@@ -105,12 +107,47 @@ namespace CNA::Internal::Renderers::SvgDom
         x = r.x; y = r.y; w = r.w; h = r.h;
     }
 
-    void SetCurrentViewportOffsetEXT(float x, float y) { CurrentViewportOffset() = {x, y}; }
-
-    void GetCurrentViewportOffsetEXT(float& x, float& y)
+    void SetCurrentViewportRectEXT(float x, float y, float w, float h)
     {
-        const Offset2f& o = CurrentViewportOffset();
-        x = o.x; y = o.y;
+        CurrentViewportRect() = {x, y, w, h};
+    }
+
+    void GetCurrentViewportRectEXT(float& x, float& y, float& w, float& h)
+    {
+        const Rect4f& r = CurrentViewportRect();
+        x = r.x; y = r.y; w = r.w; h = r.h;
+    }
+
+    bool ComputeEffectiveClipRectEXT(float& outX, float& outY, float& outW, float& outH)
+    {
+        float vx = 0, vy = 0, vw = 0, vh = 0;
+        GetCurrentViewportRectEXT(vx, vy, vw, vh);
+        const bool hasViewport = vw > 0.0f && vh > 0.0f;
+
+        const bool scissorOn = GetCurrentScissorEnableEXT();
+        float sx = 0, sy = 0, sw = 0, sh = 0;
+        if (scissorOn) GetCurrentScissorRectEXT(sx, sy, sw, sh);
+
+        if (!hasViewport && !scissorOn) return false;
+
+        constexpr float kInf = std::numeric_limits<float>::max();
+        float x1 = hasViewport ? vx : -kInf;
+        float y1 = hasViewport ? vy : -kInf;
+        float x2 = hasViewport ? vx + vw : kInf;
+        float y2 = hasViewport ? vy + vh : kInf;
+        if (scissorOn)
+        {
+            x1 = std::max(x1, sx);
+            y1 = std::max(y1, sy);
+            x2 = std::min(x2, sx + sw);
+            y2 = std::min(y2, sy + sh);
+        }
+
+        outX = x1;
+        outY = y1;
+        outW = std::max(0.0f, x2 - x1);
+        outH = std::max(0.0f, y2 - y1);
+        return true;
     }
 
     int GetBoundRenderTargetIdEXT() { return BoundRenderTargetId(); }

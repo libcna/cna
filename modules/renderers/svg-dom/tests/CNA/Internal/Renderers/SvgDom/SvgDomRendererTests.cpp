@@ -125,13 +125,80 @@ TEST(SvgDomSharedState, ScissorRectRoundTrips)
     EXPECT_FLOAT_EQ(x, 1); EXPECT_FLOAT_EQ(y, 2); EXPECT_FLOAT_EQ(w, 3); EXPECT_FLOAT_EQ(h, 4);
 }
 
-TEST(SvgDomSharedState, ViewportOffsetRoundTrips)
+TEST(SvgDomSharedState, ViewportRectRoundTrips)
 {
-    SetCurrentViewportOffsetEXT(5, 6);
-    float x = 0, y = 0;
-    GetCurrentViewportOffsetEXT(x, y);
-    EXPECT_FLOAT_EQ(x, 5); EXPECT_FLOAT_EQ(y, 6);
-    SetCurrentViewportOffsetEXT(0, 0);
+    SetCurrentViewportRectEXT(5, 6, 100, 200);
+    float x = 0, y = 0, w = 0, h = 0;
+    GetCurrentViewportRectEXT(x, y, w, h);
+    EXPECT_FLOAT_EQ(x, 5); EXPECT_FLOAT_EQ(y, 6); EXPECT_FLOAT_EQ(w, 100); EXPECT_FLOAT_EQ(h, 200);
+    SetCurrentViewportRectEXT(0, 0, 0, 0);
+}
+
+// ---------------------------------------------------------------------------------------------
+// SVGDOM-F: ComputeEffectiveClipRectEXT (Viewport ∩ Scissor)
+// ---------------------------------------------------------------------------------------------
+
+class SvgDomEffectiveClipTest : public ::testing::Test
+{
+protected:
+    void TearDown() override
+    {
+        SetCurrentViewportRectEXT(0, 0, 0, 0);
+        SetCurrentScissorEnableEXT(false);
+        SetCurrentScissorRectEXT(0, 0, 0, 0);
+    }
+};
+
+TEST_F(SvgDomEffectiveClipTest, NeitherViewportNorScissorMeansNoClip)
+{
+    float x = 0, y = 0, w = 0, h = 0;
+    EXPECT_FALSE(ComputeEffectiveClipRectEXT(x, y, w, h));
+}
+
+TEST_F(SvgDomEffectiveClipTest, ViewportAloneClipsEvenWithoutScissor)
+{
+    SetCurrentViewportRectEXT(10, 20, 30, 40);
+    SetCurrentScissorEnableEXT(false);
+    float x = 0, y = 0, w = 0, h = 0;
+    ASSERT_TRUE(ComputeEffectiveClipRectEXT(x, y, w, h));
+    EXPECT_FLOAT_EQ(x, 10); EXPECT_FLOAT_EQ(y, 20); EXPECT_FLOAT_EQ(w, 30); EXPECT_FLOAT_EQ(h, 40);
+}
+
+TEST_F(SvgDomEffectiveClipTest, ScissorAloneClipsEvenWithoutACustomViewport)
+{
+    SetCurrentScissorEnableEXT(true);
+    SetCurrentScissorRectEXT(1, 2, 3, 4);
+    float x = 0, y = 0, w = 0, h = 0;
+    ASSERT_TRUE(ComputeEffectiveClipRectEXT(x, y, w, h));
+    EXPECT_FLOAT_EQ(x, 1); EXPECT_FLOAT_EQ(y, 2); EXPECT_FLOAT_EQ(w, 3); EXPECT_FLOAT_EQ(h, 4);
+}
+
+TEST_F(SvgDomEffectiveClipTest, DisabledScissorIsIgnoredEvenIfARectIsRecorded)
+{
+    SetCurrentScissorEnableEXT(false);
+    SetCurrentScissorRectEXT(1, 2, 3, 4); // recorded but not enabled -- must not clip
+    float x = 0, y = 0, w = 0, h = 0;
+    EXPECT_FALSE(ComputeEffectiveClipRectEXT(x, y, w, h));
+}
+
+TEST_F(SvgDomEffectiveClipTest, ViewportAndScissorIntersect)
+{
+    SetCurrentViewportRectEXT(0, 0, 100, 100);
+    SetCurrentScissorEnableEXT(true);
+    SetCurrentScissorRectEXT(50, 50, 100, 100); // extends past the viewport's own right/bottom edge
+    float x = 0, y = 0, w = 0, h = 0;
+    ASSERT_TRUE(ComputeEffectiveClipRectEXT(x, y, w, h));
+    EXPECT_FLOAT_EQ(x, 50); EXPECT_FLOAT_EQ(y, 50); EXPECT_FLOAT_EQ(w, 50); EXPECT_FLOAT_EQ(h, 50);
+}
+
+TEST_F(SvgDomEffectiveClipTest, DisjointViewportAndScissorProduceAnEmptyButActiveClip)
+{
+    SetCurrentViewportRectEXT(0, 0, 10, 10);
+    SetCurrentScissorEnableEXT(true);
+    SetCurrentScissorRectEXT(100, 100, 10, 10); // does not overlap the viewport at all
+    float x = 0, y = 0, w = 0, h = 0;
+    ASSERT_TRUE(ComputeEffectiveClipRectEXT(x, y, w, h)); // still "active" -- must clip everything away
+    EXPECT_FLOAT_EQ(w, 0); EXPECT_FLOAT_EQ(h, 0);
 }
 
 TEST(SvgDomSharedState, BoundRenderTargetIdRoundTrips)
@@ -367,6 +434,22 @@ TEST(SvgDomTextureRendererSizeValidation, RenderTargetRejectsZeroOrNegativeDimen
     EXPECT_THROW(SvgDomRenderTargetRenderer(4, -1), System::ArgumentOutOfRangeException);
 }
 
+TEST(SvgDomTextureRendererSizeValidation, OverflowingDimensionsAreRejectedRatherThanWrapping)
+{
+    // width*height*4 would overflow a 32-bit int (and wasm32's 32-bit std::size_t) well before
+    // std::vector could actually allocate it -- must be a deterministic exception, not a wrapped
+    // small allocation later read/written out of bounds.
+    EXPECT_THROW(SvgDomTextureRenderer(100000, 100000), System::ArgumentOutOfRangeException);
+}
+
+TEST(SvgDomTextureRendererTest, GetDataRejectsOverflowingRegionsSafely)
+{
+    SvgDomTextureRenderer tex(MakeImage(2, 2, Sample2x2()));
+    std::uint8_t out[4] = {};
+    EXPECT_FALSE(tex.GetData(0, std::numeric_limits<int>::max() - 1, 0, 4, 1, out, 4));
+    EXPECT_FALSE(tex.GetData(0, 0, std::numeric_limits<int>::max() - 1, 1, 4, out, 4));
+}
+
 TEST(SvgDomRenderTargetRendererTest, NeverBoundGetDataServesTheCpuBufferDirectly)
 {
     SvgDomRenderTargetRenderer rt(2, 2);
@@ -386,6 +469,76 @@ TEST(SvgDomRenderTargetRendererTest, DirtyAfterBindReturnsFalseWithoutABrowser)
     // No Emscripten canvas exists in this host build -- honest false, not stale/fabricated data.
     EXPECT_FALSE(rt.GetData(0, 0, 0, 1, 1, out, 4));
     rt.UnbindAsRenderTarget();
+}
+
+// ---------------------------------------------------------------------------------------------
+// SVGDOM-D: UpdatePixels/canvas coherence -- authoritative-state transitions
+// ---------------------------------------------------------------------------------------------
+
+TEST(SvgDomRenderTargetRendererTest, UpdatePixelsWhileNotBoundIsImmediatelyAuthoritative)
+{
+    SvgDomRenderTargetRenderer rt(2, 2);
+    std::vector<std::uint8_t> pixels(16, 0);
+    pixels[4] = 1; pixels[5] = 2; pixels[6] = 3; pixels[7] = 4;
+    rt.UpdatePixels(pixels.data(), 8);
+    std::uint8_t out[4] = {};
+    // Never bound (or unbound before this SetData) -- must serve the CPU buffer directly, no
+    // (unavailable-on-native) canvas readback required.
+    ASSERT_TRUE(rt.GetData(0, 1, 0, 1, 1, out, 4));
+    EXPECT_EQ(out[0], 1); EXPECT_EQ(out[1], 2); EXPECT_EQ(out[2], 3); EXPECT_EQ(out[3], 4);
+}
+
+TEST(SvgDomRenderTargetRendererTest, UnbindThenSetDataThenGetDataNeedsNoReadback)
+{
+    SvgDomRenderTargetRenderer rt(2, 2);
+    rt.BindAsRenderTarget();
+    rt.UnbindAsRenderTarget(); // BindAsRenderTarget's dirty_=true is untouched by Unbind alone
+    std::vector<std::uint8_t> pixels(16, 9);
+    rt.UpdatePixels(pixels.data(), 8); // SetData after unbind must make the CPU buffer authoritative
+    std::uint8_t out[4] = {};
+    ASSERT_TRUE(rt.GetData(0, 0, 0, 1, 1, out, 4));
+    EXPECT_EQ(out[0], 9);
+}
+
+TEST(SvgDomRenderTargetRendererTest, SetDataWhileStillBoundIsAuthoritativeOnANativeBuild)
+{
+    // SVGDOM-D: a native (non-Emscripten) build has no canvas at all, so nothing could have drawn
+    // into this target regardless of its bound state -- UpdatePixels() is unconditionally
+    // authoritative here, bound or not. (EnsureFreshEXT's own "always re-verify while bound" re-read
+    // is an Emscripten-only concern -- a REAL canvas can receive real draws there; see
+    // CNA_SvgDom_DrawSpriteToTarget/CNA_SvgDom_Clear -- covered by the browser test suite instead,
+    // since it requires an actual canvas to demonstrate.)
+    SvgDomRenderTargetRenderer rt(2, 2);
+    rt.BindAsRenderTarget();
+    std::vector<std::uint8_t> pixels(16, 5);
+    rt.UpdatePixels(pixels.data(), 8);
+    std::uint8_t out[4] = {};
+    ASSERT_TRUE(rt.GetData(0, 0, 0, 1, 1, out, 4));
+    EXPECT_EQ(out[0], 5);
+    rt.UnbindAsRenderTarget();
+    ASSERT_TRUE(rt.GetData(0, 0, 0, 1, 1, out, 4));
+    EXPECT_EQ(out[0], 5);
+}
+
+TEST(SvgDomRenderTargetRendererTest, GetPixelsEXTAndGetDataUriEXTAgreeWithGetDataOnStaleness)
+{
+    SvgDomRenderTargetRenderer rt(2, 2);
+    rt.BindAsRenderTarget();
+    // No browser canvas to refresh from -- GetPixelsEXT/GetDataUriEXT must not fabricate content;
+    // EnsureFreshEXT leaves the CPU buffer (all zero from construction) as the only honest answer,
+    // matching GetData's own `false` for the identical state.
+    EXPECT_EQ(rt.GetPixelsEXT().size(), 16u);
+    EXPECT_NO_THROW(rt.GetDataUriEXT(0));
+    rt.UnbindAsRenderTarget();
+}
+
+TEST(SvgDomRenderTargetRendererTest, GetDataRejectsOverflowingRegionsSafely)
+{
+    SvgDomRenderTargetRenderer rt(4, 4);
+    std::uint8_t out[4] = {};
+    // x + w would overflow a plain 32-bit int; must be rejected, not wrap into a false pass.
+    EXPECT_FALSE(rt.GetData(0, std::numeric_limits<int>::max() - 1, 0, 4, 1, out, 4));
+    EXPECT_FALSE(rt.GetData(0, 0, std::numeric_limits<int>::max() - 1, 1, 4, out, 4));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -738,6 +891,56 @@ TEST(SvgDomSpriteBatch, SetImmediateModeIsAcceptedAndDoesNotThrow)
     batch.End();
 }
 
+// ---------------------------------------------------------------------------------------------
+// SVGDOM-E: drawing a RenderTarget2D-as-texture must not reinterpret its memory as a
+// SvgDomTextureRenderer (the previous static_cast was undefined behaviour on EVERY build, not only
+// Emscripten -- these assertions exercise the exact QueueDraw code path that cast through, and pass
+// only because CanvasIdOfEXT/DataUriOfEXT/PixelsOfEXT now dynamic_cast-dispatch correctly).
+// ---------------------------------------------------------------------------------------------
+
+TEST(SvgDomSpriteBatch, DrawingARenderTargetAsASourceTextureResolvesItsRealCanvasId)
+{
+    SvgDomRenderTargetRenderer rt(4, 4);
+    SvgDomSpriteBatchRenderer batch;
+    batch.Begin();
+    EXPECT_NO_THROW(batch.Draw(rt, 0.0f, 0.0f));
+    ASSERT_EQ(batch.GetCommandsEXT().size(), 1u);
+    EXPECT_EQ(batch.GetCommandsEXT()[0].textureId, rt.GetCanvasIdEXT());
+    EXPECT_GT(rt.GetCanvasIdEXT(), 0);
+}
+
+TEST(SvgDomSpriteBatch, DrawingARenderTargetAsASourceTextureEncodesItsActualPixels)
+{
+    SvgDomRenderTargetRenderer rt(2, 2);
+    std::vector<std::uint8_t> pixels(16, 0);
+    pixels[0] = 200; pixels[1] = 100; pixels[2] = 50; pixels[3] = 255; // pixel (0,0)
+    rt.UpdatePixels(pixels.data(), 8);
+
+    SvgDomSpriteBatchRenderer batch;
+    batch.Begin();
+    batch.Draw(rt, 0.0f, 0.0f);
+    ASSERT_EQ(batch.GetCommandsEXT().size(), 1u);
+
+    // GetDataUriEXT (invoked by QueueDraw via the dynamic_cast bridge, not the old UB static_cast)
+    // must encode THIS render target's real, just-uploaded pixels, not garbage read from a
+    // misinterpreted SvgDomRenderTargetRenderer laid out as a SvgDomTextureRenderer.
+    const std::string uri = rt.GetDataUriEXT(0);
+    EXPECT_EQ(uri.rfind("data:image/png;base64,", 0), 0u);
+    EXPECT_GT(uri.size(), 22u);
+}
+
+TEST(SvgDomSpriteBatch, DrawingARenderTargetAsASourceTextureInImmediateModeDoesNotCrash)
+{
+    // Immediate mode calls Flush() synchronously from within Draw(); on a native (non-Emscripten)
+    // build this is a no-op past QueueDraw, but QueueDraw's own texture resolution still runs.
+    SvgDomRenderTargetRenderer rt(4, 4);
+    SvgDomSpriteBatchRenderer batch;
+    batch.SetImmediateMode(true);
+    batch.Begin();
+    EXPECT_NO_THROW(batch.Draw(rt, 0.0f, 0.0f));
+    batch.End();
+}
+
 TEST(SvgDomSpriteBatch, ZeroSizedSourceOrDestinationRectanglesAreSilentlySkipped)
 {
     SvgDomSpriteBatchRenderer batch;
@@ -893,13 +1096,15 @@ TEST_F(SvgDom3DSurfaceTest, ApplyRasterizerStateReadsScissorTestEnable)
     EXPECT_THROW(renderer.ApplyRasterizerState(0, 0, false, 1.0f), std::runtime_error);
 }
 
-TEST_F(SvgDom3DSurfaceTest, SetViewportRecordsTheOffsetWithoutThrowing)
+TEST_F(SvgDom3DSurfaceTest, SetViewportRecordsTheFullRectWithoutThrowing)
 {
-    EXPECT_NO_THROW(renderer.SetViewport(10, 20, 100, 100, 0.0f, 1.0f));
-    float x = 0, y = 0;
-    GetCurrentViewportOffsetEXT(x, y);
+    EXPECT_NO_THROW(renderer.SetViewport(10, 20, 100, 150, 0.0f, 1.0f));
+    float x = 0, y = 0, w = 0, h = 0;
+    GetCurrentViewportRectEXT(x, y, w, h);
     EXPECT_FLOAT_EQ(x, 10.0f);
     EXPECT_FLOAT_EQ(y, 20.0f);
+    EXPECT_FLOAT_EQ(w, 100.0f); // SVGDOM-F: Width/Height are retained now, not discarded
+    EXPECT_FLOAT_EQ(h, 150.0f);
     renderer.SetViewport(0, 0, 800, 480, 0.0f, 1.0f);
 }
 

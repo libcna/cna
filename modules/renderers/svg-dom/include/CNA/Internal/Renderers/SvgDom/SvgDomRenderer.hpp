@@ -109,11 +109,13 @@ namespace CNA::Internal::Renderers::SvgDom
         /**
          * @brief Clips subsequent rendering to the given rectangle, in logical game pixels.
          *
-         * Implemented as a real SVG `<clipPath>` (see docs/svg-dom-renderer.md). Only actually
-         * applied when `RasterizerState.ScissorTestEnable` is true (see `ApplyRasterizerState`).
-         * V1 scope: a SINGLE global clip shared by the whole frame's sprite group, re-evaluated at
-         * the most recent `SpriteBatch` flush -- a real, smaller-scope boundary than `HtmlDom`'s own
-         * per-batch-isolated clip regions (HTMLDOM-94), documented, not silently approximated.
+         * Recorded only when `RasterizerState.ScissorTestEnable` is true (see
+         * `ApplyRasterizerState`); realized as a real SVG `<clipPath>` per flush (SVGDOM-A), and as a
+         * real Canvas2D `clip()` bracket on the render-target-bound path (SVGDOM-B). Intersected with
+         * the active `Viewport` rectangle (SVGDOM-F) -- see
+         * `SvgDomState::ComputeEffectiveClipRectEXT`. Each `SpriteBatch` flush claims its own
+         * document-ordered slot, so cross-flush paint order always matches actual draw order
+         * regardless of how scissor rects interleave (see docs/svg-dom-renderer.md).
          *
          * @param x Left edge of the clip rectangle, in logical pixels.
          * @param y Top edge of the clip rectangle, in logical pixels.
@@ -123,12 +125,15 @@ namespace CNA::Internal::Renderers::SvgDom
         void SetScissorRect(int x, int y, int w, int h) override;
 
         /**
-         * @brief Records the active Viewport's own (X,Y) offset for subsequent sprite draws.
+         * @brief Records the active Viewport rectangle for subsequent sprite draws (SVGDOM-F).
          *
-         * Recorded only -- does not touch the DOM. Composed as the outermost translation on each
-         * sprite's own matrix at `SpriteBatch` flush time (SvgDomSpriteBatchRenderer::QueueDraw),
-         * matching real XNA/FNA's rasterizer-stage `Viewport.X/Y` application, strictly after
-         * `SpriteBatch.Begin(transformMatrix)`.
+         * Recorded only -- does not touch the DOM. The (X,Y) offset is composed as the outermost
+         * translation on each sprite's own matrix at `SpriteBatch` flush time
+         * (SvgDomSpriteBatchRenderer::QueueDraw), matching real XNA/FNA's rasterizer-stage
+         * `Viewport.X/Y` application, strictly after `SpriteBatch.Begin(transformMatrix)`.
+         * Width/Height define an unconditional clip rectangle (independent of
+         * `RasterizerState.ScissorTestEnable`), intersected with any active scissor rect -- see
+         * `SvgDomState::ComputeEffectiveClipRectEXT`.
          *
          * `minDepth`/`maxDepth` are ignored -- this renderer has no depth buffer.
          */

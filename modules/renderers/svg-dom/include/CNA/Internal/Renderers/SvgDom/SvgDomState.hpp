@@ -111,17 +111,43 @@ namespace CNA::Internal::Renderers::SvgDom
     void GetCurrentScissorRectEXT(float& x, float& y, float& w, float& h);
 
     /**
-     * @brief CNAEXT. Records the active GraphicsDevice.Viewport's own (X,Y) offset.
+     * @brief CNAEXT. Records the active GraphicsDevice.Viewport rectangle (SVGDOM-F).
      *
      * plan_svg_dom.md design decision 6: real XNA/FNA applies Viewport.X/Y strictly after
-     * SpriteBatch's own Begin(transformMatrix), so it is composed as the OUTERMOST translation on
+     * SpriteBatch's own Begin(transformMatrix), so (X,Y) is composed as the OUTERMOST translation on
      * top of each sprite's own placement (see SvgDomSpriteBatchRenderer::QueueDraw) -- the same
      * ordering HtmlDom's own per-batch viewport offset uses, independently re-derived here.
+     * Width/Height are retained too (unlike the pre-SVGDOM-F renderer, which discarded them): per
+     * this project's own cross-renderer SpriteBatch contract (spritebatch_custom_viewport_test.cpp),
+     * a Viewport smaller than the active target must unconditionally CLIP rendering to its own
+     * rectangle -- independent of RasterizerState.ScissorTestEnable -- while never rescaling sprite
+     * coordinates. See ComputeEffectiveClipRectEXT.
+     *
+     * @param w,h Width/Height; a non-positive value means "unset" (full target, no viewport clip) --
+     *            the state before any SetViewport call, matching real XNA's default full-target
+     *            Viewport being a no-op for this renderer's own clip purposes.
      */
-    void SetCurrentViewportOffsetEXT(float x, float y);
+    void SetCurrentViewportRectEXT(float x, float y, float w, float h);
 
-    /** @brief CNAEXT. Returns the active viewport offset; (0,0) before any SetViewport call. */
-    void GetCurrentViewportOffsetEXT(float& x, float& y);
+    /**
+     * @brief CNAEXT. Returns the active viewport rectangle; w/h are <= 0 before any SetViewport
+     * call (full target, no clip).
+     */
+    void GetCurrentViewportRectEXT(float& x, float& y, float& w, float& h);
+
+    /**
+     * @brief CNAEXT. Intersects the active Viewport rectangle (if set) with the scissor rectangle
+     * (if RasterizerState.ScissorTestEnable is true) into the one effective clip rect a flush should
+     * apply (SVGDOM-F). Pure function over the C++-side state above -- no DOM access.
+     *
+     * @param x,y,w,h Receive the effective clip rectangle, in absolute logical/target pixels, when
+     *                this returns true. Meaningless when it returns false.
+     * @return False when neither the viewport nor the scissor rect constrains anything (the caller
+     *         should skip clip-path/clip-region work entirely -- the common, cheap case); true
+     *         otherwise, including when the intersection is empty (w or h == 0), which the caller
+     *         must still apply (it correctly clips everything away).
+     */
+    [[nodiscard]] bool ComputeEffectiveClipRectEXT(float& x, float& y, float& w, float& h);
 
     /**
      * @brief CNAEXT. Returns the JS-side canvas id of the currently bound render target.

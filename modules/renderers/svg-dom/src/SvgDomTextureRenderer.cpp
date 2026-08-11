@@ -8,7 +8,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 #if defined(__EMSCRIPTEN__)
@@ -27,10 +29,35 @@ EM_JS(void, CNA_SvgDom_RegisterTextureVariant, (int id, int variantMode, const c
     if (typeof document === 'undefined') return;
     if (!Module['cnaSvgDomTextures']) Module['cnaSvgDomTextures'] = {};
     let entry = Module['cnaSvgDomTextures'][id];
-    if (!entry) { entry = { variants: {}, variantDims: {}, w: texW, h: texH }; Module['cnaSvgDomTextures'][id] = entry; }
+    if (!entry) { entry = { w: texW, h: texH }; Module['cnaSvgDomTextures'][id] = entry; }
+    // SVGDOM-E: additive, not "only when the entry doesn't exist yet". A render target's own entry
+    // (created by CNA_SvgDom_CreateTargetCanvas: { canvas, ctx, w, h, isRenderTarget: true }) already
+    // exists by the time a RenderTarget2D is first sampled as an ordinary Draw() source -- the OLD
+    // code's `if (!entry) {...}` skipped initializing variants/variantDims for that pre-existing
+    // shape entirely, so the very next line (`entry.variants[variantMode] = ...`) threw
+    // "Cannot set properties of undefined" the instant any game did SpriteBatch.Draw(renderTarget).
+    // One entry now coherently supports BOTH roles at once: a render target IS-A texture (matching
+    // IRenderTargetRenderer : ITextureRenderer), so its registry entry can carry canvas/ctx AND
+    // variants/variantDims simultaneously -- ordinary textures never gain canvas/ctx (their id is
+    // never passed to CNA_SvgDom_CreateTargetCanvas), so this never runs the other direction.
+    if (!entry.variants) entry.variants = {};
+    if (!entry.variantDims) entry.variantDims = {};
     entry.variants[variantMode] = UTF8ToString(uri);
     entry.variantDims[variantMode] = { w: variantW, h: variantH };
     entry.w = texW; entry.h = texH;
+});
+
+// SVGDOM (texture lifecycle): the counterpart to CNA_SvgDom_RegisterTextureVariant -- removes an
+// ordinary texture's JS registry entry (including its cached base64 PNG data-URI strings) when the
+// owning SvgDomTextureRenderer is destroyed. Without this, every destroyed Texture2D leaked its
+// registry entry forever (ids are never reused -- AllocateTextureIdEXT is a monotonically
+// increasing counter -- so this was a pure, unbounded leak across a game's lifetime, not a
+// use-after-free risk, but a real one on top of `delete` on a missing key being a harmless no-op
+// for a texture that was constructed but never actually drawn (GetDataUriEXT lazily creates the
+// entry on first use, so plenty of short-lived textures never had one to begin with).
+EM_JS(void, CNA_SvgDom_DestroyTexture, (int id), {
+    const reg = Module['cnaSvgDomTextures'];
+    if (reg) delete reg[id];
 });
 #endif
 
@@ -168,6 +195,19 @@ namespace CNA::Internal::Renderers::SvgDom
                 throw System::ArgumentOutOfRangeException(
                     "SVG_DOM renderer: texture width/height must be positive (got " +
                     std::to_string(width) + "x" + std::to_string(height) + ").");
+            // Overflow-safe upper bound: width_*height_*4 (the tightly packed RGBA8 buffer size)
+            // must stay representable both as a native std::size_t (32-bit on Emscripten/wasm32 --
+            // the platform this renderer actually ships on, unlike a 64-bit native test host) and as
+            // the plain `int` this renderer's own GetData/UpdatePixels/EncodePngEXT surface uses
+            // throughout (dataLength comparisons, PNG row strides, ...). Computed in int64_t so the
+            // check itself cannot overflow before it has a chance to reject an oversized request.
+            const std::int64_t byteCount =
+                static_cast<std::int64_t>(width) * static_cast<std::int64_t>(height) * 4;
+            if (byteCount > static_cast<std::int64_t>(std::numeric_limits<std::int32_t>::max()))
+                throw System::ArgumentOutOfRangeException(
+                    "SVG_DOM renderer: texture " + std::to_string(width) + "x" + std::to_string(height) +
+                    " (" + std::to_string(byteCount) + " RGBA8 bytes) exceeds what this renderer can "
+                    "represent -- its buffer sizes and lengths are plain 32-bit int throughout.");
         }
     }
 
@@ -186,7 +226,12 @@ namespace CNA::Internal::Renderers::SvgDom
         pixels_.assign(static_cast<std::size_t>(width_) * height_ * 4, 0);
     }
 
-    SvgDomTextureRenderer::~SvgDomTextureRenderer() = default;
+    SvgDomTextureRenderer::~SvgDomTextureRenderer()
+    {
+#if defined(__EMSCRIPTEN__)
+        CNA_SvgDom_DestroyTexture(id_);
+#endif
+    }
 
     void SvgDomTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
@@ -208,8 +253,13 @@ namespace CNA::Internal::Renderers::SvgDom
     {
         if (level != 0 || !data) return false;
         if (x < 0 || y < 0 || w <= 0 || h <= 0) return false;
-        if (x + w > width_ || y + h > height_) return false;
-        if (dataLength < w * h * 4) return false;
+        // Overflow-safe (see ValidateSize's own comment): x/y/w/h/dataLength are caller-controlled
+        // ints reaching this from the public Texture2D::GetData surface. Plain `int` arithmetic for
+        // x+w, y+h or w*h*4 can wrap for inputs near INT_MAX, which would let an out-of-bounds
+        // region slip past these checks and into the per-row memcpy below.
+        if (static_cast<std::int64_t>(x) + w > width_ || static_cast<std::int64_t>(y) + h > height_)
+            return false;
+        if (static_cast<std::int64_t>(dataLength) < static_cast<std::int64_t>(w) * h * 4) return false;
 
         auto* out = static_cast<std::uint8_t*>(data);
         for (int row = 0; row < h; ++row)

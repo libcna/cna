@@ -236,8 +236,12 @@ namespace CNA::Internal::Renderers::SvgDom
                        SpriteEffects effects);
 
         /// Flushes @p count commands (and their index-aligned source textures, needed only by the
-        /// render-target-bound Canvas2D path to reach each texture's own CPU pixel buffer).
-        void Flush(const SvgDomDrawCommand* cmds, const SvgDomTextureRenderer* const* textures,
+        /// render-target-bound Canvas2D path to reach each texture's own CPU pixel buffer). Textures
+        /// are stored as the generic ITextureRenderer* (SVGDOM-E): the source may be an ordinary
+        /// SvgDomTextureRenderer OR a SvgDomRenderTargetRenderer (a RenderTarget2D sampled as a
+        /// texture) -- sibling concrete classes, not a subclass relationship, resolved via the
+        /// dynamic_cast helpers in the .cpp rather than an unsafe static_cast.
+        void Flush(const SvgDomDrawCommand* cmds, const ITextureRenderer* const* textures,
                   int count);
 
         bool begun_ = false;
@@ -248,7 +252,7 @@ namespace CNA::Internal::Renderers::SvgDom
         int addressV_ = 1;
         std::vector<SvgDomDrawCommand> commands_;
         /// Index-aligned with commands_; only consulted by the render-target draw path.
-        std::vector<const SvgDomTextureRenderer*> commandTextures_;
+        std::vector<const ITextureRenderer*> commandTextures_;
         /// Batch transform, flattened to the six matrix() components.
         float matrix_[6] = {1, 0, 0, 1, 0, 0};
         bool hasMatrix_ = false;
