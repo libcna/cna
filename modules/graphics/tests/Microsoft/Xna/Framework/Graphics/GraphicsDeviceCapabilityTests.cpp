@@ -108,6 +108,14 @@ constexpr bool kExpectCustomEffects         = false;
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = false;
 constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_RENDERER_BLEND2D)
+// Another 2D-only renderer, same shape as Skia immediately above: Blend2D's BLContext produces
+// exactly one colour result (no MRT mechanism), a raster surface has no samples-passed query to
+// report, and this renderer implements no custom-shader Effect ABI at all (CreateEffectRenderer
+// keeps the shared nullptr default). All three are honest structural refusals, not gaps.
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
 #elif defined(CNA_RENDERER_DILIGENT)
 // plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own
 // honest, narrower profile at this point in its implementation -- no custom ShaderEffect
@@ -127,20 +135,20 @@ constexpr bool kExpectCustomEffects         = true;
 // answers false, and that is the correct answer, not a gap -- so it gets its own arm rather than
 // a standing red. Only the arm for the renderer being added is written here; the other 2D-only
 // identities in this repository are untouched by this file and keep whatever they answer today.
-#if defined(CNA_RENDERER_SKIA)
+#if defined(CNA_RENDERER_SKIA) || defined(CNA_RENDERER_BLEND2D)
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
     GraphicsDevice gd;
     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
-        << "the Skia raster renderer claims a 3D pipeline -- every 3D route it owns refuses "
-           "through Ensure3DSupported(), so a true report cannot be backed by anything";
+        << "this 2D-only raster renderer claims a 3D pipeline -- every 3D route it owns refuses "
+           "through HandleUnsupported3DCall(), so a true report cannot be backed by anything";
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
 {
     GraphicsDevice gd;
     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
-        << "the Skia raster renderer claims a depth/stencil buffer -- its SkSurface targets have "
+        << "this 2D-only raster renderer claims a depth/stencil buffer -- its render targets have "
            "no attachment, and DepthStencilState::None is accepted only as the absence of one";
 }
 #else
@@ -312,6 +320,16 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_FALSE(reported)
         << "Skia claims WireFrame support -- this raster renderer has no polygon fill mode and no "
            "3D draw route, so a true report cannot be backed by any rendering path";
+#elif defined(CNA_RENDERER_BLEND2D)
+    // Same truthful-false shape as Skia immediately above: Blend2D's BLContext has no polygon fill
+    // mode and no vertex/primitive route at all -- SupportsCapability(ThreeD) is already false, and
+    // DrawColoredPrimitives/DrawIndexedColoredPrimitives refuse every 3D draw before any vertex
+    // input is inspected, so no polygon topology can reach a raster queue to be silently filled
+    // solid. Like Skia, WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE undefined
+    // here (no pixel route to measure).
+    EXPECT_FALSE(reported)
+        << "Blend2D claims WireFrame support -- this raster renderer has no polygon fill mode and "
+           "no 3D draw route, so a true report cannot be backed by any rendering path";
 #elif defined(CNA_RENDERER_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that
     // rasterizes nothing and keeps no state, so there is no rendering path a true report could
