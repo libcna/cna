@@ -18,10 +18,14 @@
 // itself is never deleted: a remediated defect stays in the corpus as the regression witness, and
 // the ledger test at the end of this file asserts both directions of that bookkeeping.
 //
-// Current state: D4 is FIXED (GLTF-063). D5 is PARTIALLY REMEDIATED -- GLTF-071 landed, GLTF-072
-// still owns the topology conversion itself -- so its tests assert the new, explicitly rejected
-// behaviour rather than the old silent reinterpretation, and the audit's original measurement
-// stays on record under priorActual. D1-D3 and D6-D8 are untouched.
+// Current state: D1, D2, D3 and D4 are FIXED (GLTF-113/114/115 and GLTF-063 respectively). D5 is
+// PARTIALLY REMEDIATED -- GLTF-071 landed, GLTF-072 still owns the topology conversion itself --
+// so its tests assert the new, explicitly rejected behaviour rather than the old silent
+// reinterpretation, and the audit's original measurement stays on record under priorActual.
+// D6, D7 and D8 are untouched. D8 in particular is NOT fixed by the node-transform work: giving
+// the scene a real bone hierarchy deliberately parents a skinned mesh to the identity root,
+// because glTF ignores a skinned mesh's own node transform -- the joint ancestry BuildSkeleton
+// drops is still GLTF-245/247/260.
 
 #include <algorithm>
 #include <cmath>
@@ -101,9 +105,10 @@ namespace
         return true;
     }
 
-    /// Shared body for D1/D2/D3: all three are the same mechanism -- the import data model has no
-    /// node and no matrix -- reached through a different authoring style.
-    void ExpectNodeTransformDiscarded(const std::string& fixtureId, const std::string& defectId)
+    /// Shared body for D1/D2/D3 while they were open. Retained only as history in the file
+    /// header; the live assertions now live in GltfConformanceL4. Deliberately unused.
+    [[maybe_unused]] void ExpectNodeTransformDiscarded_Historical(const std::string& fixtureId,
+                                                                   const std::string& defectId)
     {
         const LoadedFixture fixture(fixtureId);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
@@ -218,25 +223,15 @@ namespace
     }
 }
 
-// --- D1/D2/D3: the node transform pipeline that does not exist --------------------------------
-
-TEST(GltfKnownDefect, D1_NodeTranslationIsDiscardedForEveryMeshInstance)
-{
-    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-115.
-    ExpectNodeTransformDiscarded("xf-shared-mesh", "D1");
-}
-
-TEST(GltfKnownDefect, D2_ParentChildTransformCompositionIsDiscarded)
-{
-    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-115.
-    ExpectNodeTransformDiscarded("xf-parent-child", "D2");
-}
-
-TEST(GltfKnownDefect, D3_NodeMatrixIsDiscarded)
-{
-    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-115.
-    ExpectNodeTransformDiscarded("xf-matrix-node", "D3");
-}
+// --- D1/D2/D3: the node transform pipeline ----------------------------------------------------
+//
+// REMEDIATED by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-115. There are deliberately no
+// known-defect tests here any more, for the same reason D4 has none: with all three records marked
+// fixed and their divergentFields empty, GltfConformanceL4 asserts xf-shared-mesh, xf-parent-child
+// and xf-matrix-node's world geometry in full, so any of D1-D3 reappearing fails an ordinary green
+// test rather than needing an inverted one. The records stay in the corpus as regression witnesses,
+// with the audit's original measurements preserved under priorActual, and the ledger test at the
+// end of this file asserts that bookkeeping in both directions.
 
 // --- D4: the index path --------------------------------------------------------------------------
 //
@@ -454,10 +449,11 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
     // documented but unproven, which is exactly the failure mode this batch exists to remove. The
     // converse matters just as much: a defect the corpus records as remediated must NOT still have
     // a "still broken" test here, or the file would start lying about the state of the code.
-    const std::set<std::string> open = {"D1", "D2", "D3", "D5", "D6", "D7", "D8"};
+    const std::set<std::string> open = {"D5", "D6", "D7", "D8"};
     // Remediated defects, and the task that closed each. Their records stay in the corpus as
     // regression witnesses and their fixtures are asserted by the ordinary conformance suites.
-    const std::map<std::string, std::string> remediated = {{"D4", "GLTF-063"}};
+    const std::map<std::string, std::string> remediated = {
+        {"D1", "GLTF-114"}, {"D2", "GLTF-114"}, {"D3", "GLTF-114"}, {"D4", "GLTF-063"}};
 
     const JsonValue& ledger = Member(CorpusManifest(), "defectLedger");
     ASSERT_EQ(JsonType::Array, ledger.type);

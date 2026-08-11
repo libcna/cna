@@ -66,8 +66,9 @@ namespace
             SkeletonResult skeleton;
             const bool hasSkin = group.skin != nullptr;
             if (hasSkin) { skeleton = BuildSkeleton(group.skin, 1.0f); }
-            for (const cgltf_mesh* candidate : group.meshes)
+            for (const MeshInstanceOut& placement : group.instances)
             {
+                const cgltf_mesh* candidate = placement.mesh;
                 if (candidate == nullptr) { continue; }
                 if (static_cast<int>(candidate - data.meshes) != mesh) { continue; }
                 if (static_cast<std::size_t>(primitive) >= candidate->primitives_count) { continue; }

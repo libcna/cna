@@ -290,20 +290,10 @@
   "defects": [
     {
       "id": "D2",
-      "summary": "Parent-to-child transform composition is discarded: no ancestry is walked for a mesh instance at all.",
+      "summary": "Parent-to-child transform composition was discarded: no ancestry was walked for a mesh instance at all. GLTF-113's BuildSceneGraph composes local * parentWorld parent-before-child, and GLTF-114 mirrors that chain as ModelBone parents so Model::CopyAbsoluteBoneTransformsTo recomposes it.",
       "firstDivergentLayer": "L4",
-      "divergentFields": [
-        "worldMatrixColumnMajor",
-        "worldPositions",
-        "worldBounds"
-      ],
-      "divergentFieldsByLayer": {
-        "L4": [
-          "worldMatrixColumnMajor",
-          "worldPositions",
-          "worldBounds"
-        ]
-      },
+      "divergentFields": [],
+      "divergentFieldsByLayer": {},
       "owner": "GLTF-TRANSFORM",
       "owningTasks": [
         "GLTF-103",
@@ -311,10 +301,32 @@
         "GLTF-114",
         "GLTF-115"
       ],
-      "closedTasks": [],
+      "closedTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-115"
+      ],
       "remainingTasks": [],
-      "status": "known-failing",
+      "status": "fixed",
       "currentActual": {
+        "worldBounds": {
+          "min": [
+            0.0,
+            6.0,
+            0.0
+          ],
+          "max": [
+            2.0,
+            8.0,
+            0.0
+          ]
+        },
+        "instanceCount": 1,
+        "instanceWorldMatricesAreAllIdentity": false,
+        "note": "The composed world Y range is the spec-derived [6,8]."
+      },
+      "priorActual": {
         "worldBounds": {
           "min": [
             0.0,
@@ -329,7 +341,8 @@
         },
         "instanceCount": 1,
         "instanceWorldMatricesAreAllIdentity": true,
-        "note": "Decoded Y range is the mesh-local [0,1]; the expected range is [6,8]."
+        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+        "note": "Decoded Y range was the mesh-local [0,1] against an expected [6,8]."
       }
     }
   ]

@@ -86,18 +86,32 @@ def xf_shared_mesh() -> Fixture:
         l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
         defects=[Defect(
             id="D1", owner="GLTF-TRANSFORM", first_divergent_layer="L4",
-            summary="glTF node TRS is discarded for every mesh instance -- MeshGroup carries no "
-                    "cgltf_node and no matrix, so every primitive is emitted mesh-local with an "
-                    "identity bone transform.",
-            owning_tasks=_TRANSFORM_TASKS,
-            divergent_fields=["worldMatrixColumnMajor", "worldPositions", "worldBounds"],
+            summary="glTF node TRS was discarded for every mesh instance -- MeshGroup carried no "
+                    "cgltf_node and no matrix, so every primitive was emitted mesh-local with an "
+                    "identity bone transform. GLTF-113 replaced MeshGroup::meshes with real "
+                    "MeshInstanceOut placements, and GLTF-114 gave both loaders a ModelBone per "
+                    "scene node so the instancing node's transform reaches the model.",
+            owning_tasks=_TRANSFORM_TASKS, closed_tasks=_TRANSFORM_TASKS, status="fixed",
+            divergent_fields=[],
             current_actual={
+                "worldBounds": {"min": [0.0, 0.0, 0.0], "max": [11.0, 1.0, 0.0]},
+                "instanceCount": 2,
+                "instanceWorldMatricesAreAllIdentity": False,
+                "note": "The two instances are placed 10 units apart, so the union spans the "
+                        "spec-derived X range [0,11]. Vertex positions stay mesh-local, which is "
+                        "the point of the bone-hierarchy architecture (GLTF-103 Option A): the "
+                        "shared mesh is instanced, not duplicated. Nothing is suppressed any more "
+                        "-- GltfConformanceL4 asserts this fixture in full.",
+            },
+            prior_actual={
                 "worldBounds": {"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]},
                 "instanceCount": 2,
                 "instanceWorldMatricesAreAllIdentity": True,
-                "note": "Both instances decode to the mesh-local X range [0,1]; the expected union "
-                        "is [0,11]. CollectMeshGroups records the mesh twice but no node, so the "
-                        "second instance is an exact duplicate of the first.",
+                "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+                "note": "What the forensic audit measured before GLTF-113/114: both instances "
+                        "decoded to the mesh-local X range [0,1] against an expected union of "
+                        "[0,11]. CollectMeshGroups recorded the mesh twice but no node, so the "
+                        "second instance was an exact duplicate of the first.",
             },
         )],
     )
@@ -122,15 +136,24 @@ def xf_parent_child() -> Fixture:
         l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
         defects=[Defect(
             id="D2", owner="GLTF-TRANSFORM", first_divergent_layer="L4",
-            summary="Parent-to-child transform composition is discarded: no ancestry is walked for "
-                    "a mesh instance at all.",
-            owning_tasks=_TRANSFORM_TASKS,
-            divergent_fields=["worldMatrixColumnMajor", "worldPositions", "worldBounds"],
+            summary="Parent-to-child transform composition was discarded: no ancestry was walked "
+                    "for a mesh instance at all. GLTF-113's BuildSceneGraph composes "
+                    "local * parentWorld parent-before-child, and GLTF-114 mirrors that chain as "
+                    "ModelBone parents so Model::CopyAbsoluteBoneTransformsTo recomposes it.",
+            owning_tasks=_TRANSFORM_TASKS, closed_tasks=_TRANSFORM_TASKS, status="fixed",
+            divergent_fields=[],
             current_actual={
+                "worldBounds": {"min": [0.0, 6.0, 0.0], "max": [2.0, 8.0, 0.0]},
+                "instanceCount": 1,
+                "instanceWorldMatricesAreAllIdentity": False,
+                "note": "The composed world Y range is the spec-derived [6,8].",
+            },
+            prior_actual={
                 "worldBounds": {"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]},
                 "instanceCount": 1,
                 "instanceWorldMatricesAreAllIdentity": True,
-                "note": "Decoded Y range is the mesh-local [0,1]; the expected range is [6,8].",
+                "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+                "note": "Decoded Y range was the mesh-local [0,1] against an expected [6,8].",
             },
         )],
     )
@@ -155,15 +178,24 @@ def xf_matrix_node() -> Fixture:
         l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
         defects=[Defect(
             id="D3", owner="GLTF-TRANSFORM", first_divergent_layer="L4",
-            summary="node.matrix is discarded, by the same mechanism as D1/D2 -- the import data "
-                    "model has nowhere to put it.",
-            owning_tasks=_TRANSFORM_TASKS,
-            divergent_fields=["worldMatrixColumnMajor", "worldPositions", "worldBounds"],
+            summary="node.matrix was discarded, by the same mechanism as D1/D2 -- the import data "
+                    "model had nowhere to put it. BuildSceneGraph reads the node's local transform "
+                    "through cgltf_node_transform_local, which already applies the spec's own "
+                    "'matrix, or else TRS' exclusivity rule, so both authorings now compose alike.",
+            owning_tasks=_TRANSFORM_TASKS, closed_tasks=_TRANSFORM_TASKS, status="fixed",
+            divergent_fields=[],
             current_actual={
+                "worldBounds": {"min": [4.0, 5.0, 6.0], "max": [5.0, 6.0, 6.0]},
+                "instanceCount": 1,
+                "instanceWorldMatricesAreAllIdentity": False,
+                "note": "The composed world X range is the spec-derived [4,5].",
+            },
+            prior_actual={
                 "worldBounds": {"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]},
                 "instanceCount": 1,
                 "instanceWorldMatricesAreAllIdentity": True,
-                "note": "Decoded X range is the mesh-local [0,1]; the expected range is [4,5].",
+                "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+                "note": "Decoded X range was the mesh-local [0,1] against an expected [4,5].",
             },
         )],
     )

@@ -196,13 +196,89 @@ namespace CNA::Internal::GltfImport
         bool pbrUv2Mismatch = false;
     };
 
+    /**
+     * @brief One node of the imported scene graph — the `sceneNodeIndex` identity space.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md GLTF-103/GLTF-113 (Phase 5): glTF
+     * places a mesh through the node that instantiates it, and a node's world transform is the
+     * product of its ancestors' local transforms with its own. Reproducing that graph as CNA
+     * `ModelBone`s (rather than baking it into vertex positions) is what preserves mesh instancing,
+     * rigid node animation, node-attached cameras/lights, and a hierarchy game code can walk.
+     *
+     * This is the **scene-node identity space**, and it is deliberately distinct from a skin's own
+     * GPU bone-palette index space (see `SkeletonResult::oldToNew`, and plan_gltf.md §15.1.2): the
+     * scene graph is ordered by the glTF node graph and must never be reordered to suit a palette.
+     */
+    struct SceneNodeOut
+    {
+        /** @brief The node's name, from the glTF node, or a generated placeholder. */
+        std::string name;
+        /** @brief Index of this node's parent within the same `SceneGraphOut`, or -1 for the root. */
+        int parentIndex = -1;
+        /** @brief The node's own local transform (glTF `matrix`, or its TRS), in XNA row-vector form. */
+        Microsoft::Xna::Framework::Matrix localTransform =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        /** @brief The node's scene-root-relative transform: `local * parentWorld`, in XNA row-vector form. */
+        Microsoft::Xna::Framework::Matrix worldTransform =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        /** @brief The source glTF node, or nullptr for the synthetic scene root at index 0. */
+        const cgltf_node* node = nullptr;
+        /** @brief Index of the source node in `cgltf_data::nodes`, or -1 for the synthetic root. */
+        int gltfNodeIndex = -1;
+    };
+
+    /**
+     * @brief The default scene's node graph, flattened parent-before-child.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Index 0 is always a synthetic identity root, so a
+     * scene with several root nodes still maps onto CNA's single-`Root` `Model` shape without
+     * inventing a transform.
+     */
+    struct SceneGraphOut
+    {
+        /** @brief Every node, parent-before-child; index 0 is the synthetic identity root. */
+        std::vector<SceneNodeOut> nodes;
+        /** @brief Maps a glTF node to its index in `nodes`. */
+        std::unordered_map<const cgltf_node*, int> indexOfNode;
+    };
+
+    /**
+     * @brief One placement of one glTF mesh by one glTF node.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md GLTF-113. A mesh referenced by
+     * several nodes produces one instance per node, each with its own transform — the shape that
+     * makes real instancing expressible, which baking world transforms into vertices would destroy.
+     */
+    struct MeshInstanceOut
+    {
+        /** @brief The instancing node, or nullptr in the "no scene references any mesh" fallback. */
+        const cgltf_node* node = nullptr;
+        /** @brief The mesh this node instantiates. */
+        const cgltf_mesh* mesh = nullptr;
+        /** @brief Index of the instancing node in the owning `SceneGraphOut::nodes` (0 = root). */
+        int sceneNodeIndex = 0;
+        /** @brief The instancing node's scene-root-relative transform, in XNA row-vector form. */
+        Microsoft::Xna::Framework::Matrix worldTransform =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        /**
+         * @brief True when the instancing node also references a skin.
+         *
+         * glTF requires a skinned mesh's own node transform to be ignored — joint transforms alone
+         * place the geometry — so a caller building CNA bones must parent a skinned instance to the
+         * identity scene root rather than to its own node's bone. Completing that rule (the
+         * `inverse(globalTransform(meshNode))` term, and the joint ancestry `BuildSkeleton` still
+         * drops) is plan_gltf.md GLTF-245/GLTF-247/GLTF-260, not this type.
+         */
+        bool skinned = false;
+    };
+
     /** @brief A group of glTF mesh instances sharing the same skin (or no skin at all). */
     struct MeshGroup
     {
         /** @brief The shared skin, or nullptr for an unskinned (static) group. */
         const cgltf_skin* skin = nullptr;
-        /** @brief The glTF meshes belonging to this group. */
-        std::vector<const cgltf_mesh*> meshes;
+        /** @brief The mesh placements belonging to this group, in glTF node order. */
+        std::vector<MeshInstanceOut> instances;
     };
 
     /**
@@ -413,9 +489,43 @@ namespace CNA::Internal::GltfImport
                          const SkeletonResult* skel, float unitScale);
 
     /**
-     * @brief Groups every mesh-bearing node reachable from the file's default scene by which skin
+     * @brief Flattens the file's default scene into a parent-before-child node list with composed
+     * world transforms (plan_gltf.md GLTF-113, Phase 5).
+     *
+     * Index 0 is always a synthetic identity root named "Root"; every node reachable from the
+     * default scene (`data->scene`, or the first scene when that is unset) follows, each preceded
+     * by its parent. A node's local transform is its glTF `matrix` when present and its TRS
+     * otherwise — the two are mutually exclusive per the specification — converted into XNA's
+     * row-vector convention, and its world transform is `local * parentWorld`. A file with no
+     * scenes at all yields just the root, matching `CollectMeshGroups`' own fallback.
+     *
+     * @param data The parsed glTF file.
+     * @return The flattened graph, plus a node-pointer lookup into it.
+     */
+    SceneGraphOut BuildSceneGraph(const cgltf_data* data);
+
+    /**
+     * @brief Groups every mesh **placement** reachable from the file's default scene by which skin
      * (if any) it references, so a file combining multiple independent skinned characters (or a
      * mix of skinned + static scenery) produces one group per skin rather than merging them.
+     *
+     * Each placement is a `MeshInstanceOut` carrying the instancing node and that node's composed
+     * world transform, so a mesh instantiated by several nodes yields several distinct instances
+     * rather than one anonymous duplicate (plan_gltf.md GLTF-113).
+     *
+     * @param data The parsed glTF file.
+     * @param scene The graph `BuildSceneGraph` produced for the same file, used to resolve each
+     * instance's own node index and world transform.
+     * @return One `MeshGroup` per distinct skin (plus one for unskinned meshes, if any exist).
+     */
+    std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data, const SceneGraphOut& scene);
+
+    /**
+     * @brief Convenience overload that builds the scene graph internally.
+     *
+     * Prefer the two-argument form when the caller also needs the graph itself (both model loaders
+     * do, to build their `ModelBone` hierarchies) — this overload exists so call sites that only
+     * want the mesh placements do not have to thread a graph they never read.
      *
      * @param data The parsed glTF file.
      * @return One `MeshGroup` per distinct skin (plus one for unskinned meshes, if any exist).

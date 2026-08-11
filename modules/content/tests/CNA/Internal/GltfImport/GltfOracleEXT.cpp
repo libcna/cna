@@ -263,6 +263,20 @@ namespace CnaTest::GltfOracle
         return Multiply(Multiply(translation, rotation), scale);
     }
 
+    // plan_gltf.md GLTF-113: converts a CNA Matrix back into this oracle's glTF-shaped
+    // column-major array. XNA is row-major with a row-vector convention and glTF is column-major
+    // with a column-vector one, so the two are transposes of the same transform -- and the flat
+    // byte order of a row-major M is therefore already the flat order of column-major M^T. This is
+    // exactly GltfImportCore::ConvertGltfMatrix run backwards, and it is a straight member copy for
+    // the same reason: every matrix crossing here is a plain affine transform.
+    GltfMatrix ToGltfMatrixEXT(const Microsoft::Xna::Framework::Matrix& m)
+    {
+        return GltfMatrix{m.M11, m.M12, m.M13, m.M14,
+                          m.M21, m.M22, m.M23, m.M24,
+                          m.M31, m.M32, m.M33, m.M34,
+                          m.M41, m.M42, m.M43, m.M44};
+    }
+
     std::array<float, 3> TransformPoint(const GltfMatrix& m, float x, float y, float z)
     {
         return {m[0] * x + m[4] * y + m[8] * z + m[12],
@@ -517,8 +531,9 @@ namespace CnaTest::GltfOracle
             const bool hasSkin = group.skin != nullptr;
             if (hasSkin) { skeleton = BuildSkeleton(group.skin, 1.0f); }
 
-            for (const cgltf_mesh* mesh : group.meshes)
+            for (const MeshInstanceOut& placement : group.instances)
             {
+                const cgltf_mesh* mesh = placement.mesh;
                 if (mesh == nullptr) { continue; }
                 for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
                 {
@@ -623,22 +638,35 @@ namespace CnaTest::GltfOracle
             const bool hasSkin = group.skin != nullptr;
             if (hasSkin) { skeleton = BuildSkeleton(group.skin, 1.0f); }
 
-            for (const cgltf_mesh* mesh : group.meshes)
+            for (const MeshInstanceOut& placement : group.instances)
             {
+                const cgltf_mesh* mesh = placement.mesh;
                 if (mesh == nullptr) { continue; }
                 for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
                 {
                     WorldInstance instance;
-                    // MeshGroup carries no cgltf_node* at all, so there is no instancing node to
-                    // report and no transform to compose. That absence is the measurement.
-                    instance.node = -1;
+                    // plan_gltf.md GLTF-113/GLTF-114: MeshGroup now carries the instancing node and
+                    // its composed world transform, so this reports what CNA really places rather
+                    // than a hardcoded identity. A skinned instance is deliberately reported at the
+                    // identity root, matching what both loaders do with it -- glTF ignores a skinned
+                    // mesh's own node transform, and completing that rule is GLTF-245/247/260.
+                    instance.node = placement.node != nullptr
+                        ? static_cast<int>(placement.node - data.nodes) : -1;
+                    instance.nodeName = (placement.node != nullptr && placement.node->name != nullptr)
+                        ? placement.node->name : "";
                     instance.mesh = static_cast<int>(mesh - data.meshes);
-                    instance.worldMatrix = IdentityMatrix();
+                    const GltfMatrix world = placement.skinned
+                        ? IdentityMatrix() : ToGltfMatrixEXT(placement.worldTransform);
+                    instance.worldMatrix = world;
                     try
                     {
                         const MeshOut out = ExtractMesh(&data, mesh->primitives[p], "oracle",
                                                         hasSkin ? &skeleton : nullptr, 1.0f);
-                        instance.worldPositions = DumpMeshOutEXT(out).positions;
+                        for (const std::array<float, 3>& local : DumpMeshOutEXT(out).positions)
+                        {
+                            instance.worldPositions.push_back(
+                                TransformPoint(world, local[0], local[1], local[2]));
+                        }
                     }
                     catch (const std::exception&)
                     {

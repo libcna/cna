@@ -174,7 +174,8 @@ namespace
     // Per-group conversion + .cnj/binary output.
     // ---------------------------------------------------------------------------
 
-    void ConvertGroup(const cgltf_data* data, const MeshGroup& group, const std::string& outName,
+    void ConvertGroup(const cgltf_data* data, const SceneGraphOut& sceneGraph, const MeshGroup& group,
+                       const std::string& outName,
                        const std::filesystem::path& gltfDir, const std::filesystem::path& outputDir,
                        std::unordered_map<const cgltf_image*, std::string>& writtenTextures,
                        std::unordered_map<const cgltf_image*, std::string>& remappedOcclusionTextures,
@@ -197,12 +198,17 @@ namespace
             std::string morphFile;
             std::vector<float> morphWeights;
             std::optional<MorphWeightTrackOut> morphWeightTrack;
+            // plan_gltf.md GLTF-114/GLTF-129 (Phase 5): index into the emitted "bones" array of the
+            // node that instantiates this primitive's mesh -- 0 (the identity root) for a skinned
+            // instance, whose own node transform glTF requires to be ignored.
+            int parentBone = 0;
         };
         std::vector<MeshEntry> meshEntries;
 
         int meshCounter = 0;
-        for (const cgltf_mesh* mesh : group.meshes)
+        for (const MeshInstanceOut& instance : group.instances)
         {
+            const cgltf_mesh* mesh = instance.mesh;
             for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
             {
                 const std::string partName = mesh->name
@@ -364,6 +370,7 @@ namespace
                 entry.morphFile = morphFile;
                 entry.morphWeights = morphWeights;
                 entry.morphWeightTrack = morphWeightTrack;
+                entry.parentBone = instance.skinned ? 0 : instance.sceneNodeIndex;
                 meshEntries.push_back(entry);
                 ++meshCounter;
             }
@@ -420,11 +427,35 @@ namespace
         }
 
         std::ostringstream json;
-        json << "{\n  \"cnjVersion\": 1,\n  \"type\": \"Model\",\n";
+        json << "{\n  \"cnjVersion\": 2,\n  \"type\": \"Model\",\n";
         if (!skeletonFile.empty())
         {
             json << "  \"skeleton\": \"" << JsonEscape(skeletonFile) << "\",\n";
         }
+
+        // plan_gltf.md GLTF-129 (Phase 5): the glTF node graph, one entry per BuildSceneGraph node,
+        // parent-before-child, index 0 the synthetic identity root. Each mesh below names its own
+        // "parentBone" index into this array, so the loader can rebuild the same ModelBone tree the
+        // runtime .gltf path builds directly -- the two paths must place geometry identically
+        // (GLTF-130). "transform" is the node-LOCAL transform in XNA row-major order; the loader
+        // composes world transforms itself, exactly as Model::CopyAbsoluteBoneTransformsTo does.
+        //
+        // cnjVersion 2 adds this array. A version-1 Model .cnj has no "bones" (or a name-only one)
+        // and still loads: the reader falls back to a single Root plus a child bone per mesh.
+        json << "  \"bones\": [\n";
+        for (std::size_t b = 0; b < sceneGraph.nodes.size(); ++b)
+        {
+            const SceneNodeOut& node = sceneGraph.nodes[b];
+            const Matrix& m = node.localTransform;
+            json << "    { \"name\": \"" << JsonEscape(node.name) << "\", \"parent\": " << node.parentIndex
+                 << ", \"transform\": ["
+                 << m.M11 << ", " << m.M12 << ", " << m.M13 << ", " << m.M14 << ", "
+                 << m.M21 << ", " << m.M22 << ", " << m.M23 << ", " << m.M24 << ", "
+                 << m.M31 << ", " << m.M32 << ", " << m.M33 << ", " << m.M34 << ", "
+                 << m.M41 << ", " << m.M42 << ", " << m.M43 << ", " << m.M44 << "] }"
+                 << (b + 1 < sceneGraph.nodes.size() ? "," : "") << "\n";
+        }
+        json << "  ],\n";
 
         // CNB-97 (Phase 14H): KHR_lights_punctual, approximated as up to 3 directional lights
         // (see ExtractPunctualLightsEXT's own doc comment) -- scene-level, so the same extracted
@@ -457,7 +488,8 @@ namespace
         {
             const MeshEntry& e = meshEntries[i];
             json << "    { \"vertices\": \"" << JsonEscape(e.vertFile) << "\", \"indices\": \"" << JsonEscape(e.idxFile)
-                 << "\", \"vertexStride\": " << e.stride << ", \"effect\": \"" << e.effect << "\"";
+                 << "\", \"vertexStride\": " << e.stride << ", \"effect\": \"" << e.effect << "\""
+                 << ", \"parentBone\": " << e.parentBone;
             if (!e.textureFile.empty()) { json << ", \"texture\": \"" << JsonEscape(e.textureFile) << "\""; }
             if (!e.texture2File.empty()) { json << ", \"texture2\": \"" << JsonEscape(e.texture2File) << "\""; }
             if (e.vertexColorEnabled) { json << ", \"vertexColorEnabled\": true"; }
@@ -567,7 +599,10 @@ namespace
         }
 
         std::vector<std::string> warnings;
-        std::vector<MeshGroup> groups = CollectMeshGroups(data);
+        // plan_gltf.md GLTF-113: build the node graph once and share it across every group, so
+        // each group's emitted "bones" array indexes the same scene-node identity space.
+        const SceneGraphOut sceneGraph = BuildSceneGraph(data);
+        std::vector<MeshGroup> groups = CollectMeshGroups(data, sceneGraph);
         if (groups.empty())
         {
             throw std::runtime_error("File contains no mesh instances to import.");
@@ -590,7 +625,7 @@ namespace
                                                              : ("skin" + std::to_string(g)));
                 }
             }
-            ConvertGroup(data, groups[g], outName, gltfDir, opts.outputDir, writtenTextures,
+            ConvertGroup(data, sceneGraph, groups[g], outName, gltfDir, opts.outputDir, writtenTextures,
                          remappedOcclusionTextures, opts.unitScale, warnings);
         }
 

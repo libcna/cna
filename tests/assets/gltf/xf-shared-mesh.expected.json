@@ -331,20 +331,10 @@
   "defects": [
     {
       "id": "D1",
-      "summary": "glTF node TRS is discarded for every mesh instance -- MeshGroup carries no cgltf_node and no matrix, so every primitive is emitted mesh-local with an identity bone transform.",
+      "summary": "glTF node TRS was discarded for every mesh instance -- MeshGroup carried no cgltf_node and no matrix, so every primitive was emitted mesh-local with an identity bone transform. GLTF-113 replaced MeshGroup::meshes with real MeshInstanceOut placements, and GLTF-114 gave both loaders a ModelBone per scene node so the instancing node's transform reaches the model.",
       "firstDivergentLayer": "L4",
-      "divergentFields": [
-        "worldMatrixColumnMajor",
-        "worldPositions",
-        "worldBounds"
-      ],
-      "divergentFieldsByLayer": {
-        "L4": [
-          "worldMatrixColumnMajor",
-          "worldPositions",
-          "worldBounds"
-        ]
-      },
+      "divergentFields": [],
+      "divergentFieldsByLayer": {},
       "owner": "GLTF-TRANSFORM",
       "owningTasks": [
         "GLTF-103",
@@ -352,10 +342,32 @@
         "GLTF-114",
         "GLTF-115"
       ],
-      "closedTasks": [],
+      "closedTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-115"
+      ],
       "remainingTasks": [],
-      "status": "known-failing",
+      "status": "fixed",
       "currentActual": {
+        "worldBounds": {
+          "min": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max": [
+            11.0,
+            1.0,
+            0.0
+          ]
+        },
+        "instanceCount": 2,
+        "instanceWorldMatricesAreAllIdentity": false,
+        "note": "The two instances are placed 10 units apart, so the union spans the spec-derived X range [0,11]. Vertex positions stay mesh-local, which is the point of the bone-hierarchy architecture (GLTF-103 Option A): the shared mesh is instanced, not duplicated. Nothing is suppressed any more -- GltfConformanceL4 asserts this fixture in full."
+      },
+      "priorActual": {
         "worldBounds": {
           "min": [
             0.0,
@@ -370,7 +382,8 @@
         },
         "instanceCount": 2,
         "instanceWorldMatricesAreAllIdentity": true,
-        "note": "Both instances decode to the mesh-local X range [0,1]; the expected union is [0,11]. CollectMeshGroups records the mesh twice but no node, so the second instance is an exact duplicate of the first."
+        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+        "note": "What the forensic audit measured before GLTF-113/114: both instances decoded to the mesh-local X range [0,1] against an expected union of [0,11]. CollectMeshGroups recorded the mesh twice but no node, so the second instance was an exact duplicate of the first."
       }
     }
   ]

@@ -287,20 +287,10 @@
   "defects": [
     {
       "id": "D3",
-      "summary": "node.matrix is discarded, by the same mechanism as D1/D2 -- the import data model has nowhere to put it.",
+      "summary": "node.matrix was discarded, by the same mechanism as D1/D2 -- the import data model had nowhere to put it. BuildSceneGraph reads the node's local transform through cgltf_node_transform_local, which already applies the spec's own 'matrix, or else TRS' exclusivity rule, so both authorings now compose alike.",
       "firstDivergentLayer": "L4",
-      "divergentFields": [
-        "worldMatrixColumnMajor",
-        "worldPositions",
-        "worldBounds"
-      ],
-      "divergentFieldsByLayer": {
-        "L4": [
-          "worldMatrixColumnMajor",
-          "worldPositions",
-          "worldBounds"
-        ]
-      },
+      "divergentFields": [],
+      "divergentFieldsByLayer": {},
       "owner": "GLTF-TRANSFORM",
       "owningTasks": [
         "GLTF-103",
@@ -308,10 +298,32 @@
         "GLTF-114",
         "GLTF-115"
       ],
-      "closedTasks": [],
+      "closedTasks": [
+        "GLTF-103",
+        "GLTF-113",
+        "GLTF-114",
+        "GLTF-115"
+      ],
       "remainingTasks": [],
-      "status": "known-failing",
+      "status": "fixed",
       "currentActual": {
+        "worldBounds": {
+          "min": [
+            4.0,
+            5.0,
+            6.0
+          ],
+          "max": [
+            5.0,
+            6.0,
+            6.0
+          ]
+        },
+        "instanceCount": 1,
+        "instanceWorldMatricesAreAllIdentity": false,
+        "note": "The composed world X range is the spec-derived [4,5]."
+      },
+      "priorActual": {
         "worldBounds": {
           "min": [
             0.0,
@@ -326,7 +338,8 @@
         },
         "instanceCount": 1,
         "instanceWorldMatricesAreAllIdentity": true,
-        "note": "Decoded X range is the mesh-local [0,1]; the expected range is [4,5]."
+        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+        "note": "Decoded X range was the mesh-local [0,1] against an expected [4,5]."
       }
     }
   ]

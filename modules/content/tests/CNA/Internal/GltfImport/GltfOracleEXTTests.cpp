@@ -221,12 +221,17 @@ TEST(GltfOracleEXT, EvaluateWorldPositionsEXTAgreesWithCgltfOnEveryFixture)
     }
 }
 
-TEST(GltfOracleEXT, EvaluateWorldPositionsEXTExposesTheDivergenceWithoutAlteringProductionBehaviour)
+TEST(GltfOracleEXT, EvaluateWorldPositionsEXTDoesNotAlterProductionBehaviour)
 {
-    // The hazard this batch has to avoid: an oracle that "fixes" node transforms by feeding its
-    // own composition back into the import path. The measurement is taken twice around a call to
-    // the oracle, and production output must be identical both times -- while still differing
-    // from the specification, because D1-D3 remain unfixed.
+    // The hazard this test was written to catch: an oracle that "fixes" node transforms by feeding
+    // its own composition back into the import path. The measurement is taken twice around a call
+    // to the oracle, and production output must be identical both times.
+    //
+    // Its second half used to assert that CNA still diverged from the specification on this
+    // fixture, because D1 was open. GLTF-113/GLTF-114 closed D1, so that assertion has been
+    // replaced by its opposite: the two now agree, and the agreement is asserted here as well as
+    // in GltfConformanceL4. What remains unchanged, and is the reason this test still exists, is
+    // that the agreement comes from the production import path -- not from the oracle mutating it.
     const LoadedFixture fixture("xf-shared-mesh");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
@@ -244,6 +249,12 @@ TEST(GltfOracleEXT, EvaluateWorldPositionsEXTExposesTheDivergenceWithoutAltering
     ASSERT_TRUE(expectedWorld.hasBounds);
     const WorldPositions cnaWorld = EvaluateCnaWorldPositionsEXT(fixture.Data());
     ASSERT_TRUE(cnaWorld.hasBounds);
-    EXPECT_GT(std::fabs(expectedWorld.max[0] - cnaWorld.max[0]), 1.0)
-        << "the oracle must still expose the D1 divergence -- it is not this batch's job to fix it";
+    for (std::size_t c = 0; c < 3; ++c)
+    {
+        EXPECT_NEAR(expectedWorld.min[c], cnaWorld.min[c], 1e-4f) << "world bounds min component " << c;
+        EXPECT_NEAR(expectedWorld.max[c], cnaWorld.max[c], 1e-4f) << "world bounds max component " << c;
+    }
+    // The specific number D1 was about: two instances of one mesh, 10 units apart.
+    EXPECT_NEAR(11.0f, cnaWorld.max[0], 1e-4f)
+        << "the two instances of xf-shared-mesh are no longer placed 10 units apart -- D1 is back";
 }

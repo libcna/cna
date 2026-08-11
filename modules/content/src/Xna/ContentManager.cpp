@@ -1238,6 +1238,64 @@ namespace Microsoft::Xna::Framework::Content
             return pos;
         }
 
+        /**
+         * @brief One entry of a Model .cnj's own "bones" array: a node of the imported scene graph.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md GLTF-129 (Phase 5). `transform`
+         * is the bone-LOCAL transform in XNA row-major order; world transforms are composed by
+         * `Model::CopyAbsoluteBoneTransformsTo`, never stored.
+         */
+        struct CnjBoneEntry
+        {
+            std::string name;
+            int parent = -1;
+            Matrix transform = Matrix::getIdentityProperty();
+        };
+
+        // plan_gltf.md GLTF-129 (Phase 5): parses a Model .cnj's "bones" array into a flat,
+        // parent-before-child node list. Returns empty when the field is absent, so a cnjVersion-1
+        // file (no "bones" at all) and a name-only one both degrade to the previous single-Root
+        // behavior rather than failing. Entry 0 is the root; its "parent" defaults to -1 and every
+        // later entry's defaults to 0, so a hand-written file may omit the field for a flat graph.
+        std::vector<CnjBoneEntry> ParseCnjBoneArrayEXT(const std::string& json)
+        {
+            std::vector<CnjBoneEntry> bones;
+            const std::size_t key = json.find("\"bones\"");
+            if (key == std::string::npos) { return bones; }
+            const std::size_t arrayStart = json.find('[', key);
+            if (arrayStart == std::string::npos) { return bones; }
+            const std::size_t arrayEnd = FindMatchingBracketEXT(json, arrayStart, '[', ']');
+
+            std::size_t pos = arrayStart + 1;
+            while (pos < arrayEnd)
+            {
+                const std::size_t objectStart = json.find('{', pos);
+                if (objectStart == std::string::npos || objectStart >= arrayEnd) { break; }
+                const std::size_t objectEnd = FindMatchingBracketEXT(json, objectStart, '{', '}');
+                const std::string entryJson = json.substr(objectStart, objectEnd - objectStart);
+                pos = objectEnd;
+
+                CnjBoneEntry entry;
+                entry.name = ExtractJsonStringField(entryJson, "name");
+                entry.parent = JsonInt(entryJson, "parent", bones.empty() ? -1 : 0);
+                const std::size_t transformKey = entryJson.find("\"transform\"");
+                if (transformKey != std::string::npos)
+                {
+                    const std::vector<float> m =
+                        JsonFloatArrayN(entryJson, entryJson.find('[', transformKey));
+                    if (m.size() == 16)
+                    {
+                        entry.transform = Matrix(m[0],  m[1],  m[2],  m[3],
+                                                  m[4],  m[5],  m[6],  m[7],
+                                                  m[8],  m[9],  m[10], m[11],
+                                                  m[12], m[13], m[14], m[15]);
+                    }
+                }
+                bones.push_back(std::move(entry));
+            }
+            return bones;
+        }
+
         // Morph target CLI/.cnj serialization: extracts a single nested JSON object's substring
         // by key (e.g. a mesh entry's own "morphWeightTrack" field), bracket-depth-aware via
         // FindMatchingBracketEXT so a nested "keys" array's own braces don't truncate it early.
@@ -1824,7 +1882,12 @@ namespace Microsoft::Xna::Framework::Content
                     "' in '" + path + "' -- only glTF 2.0 is supported.");
             }
 
-            const std::vector<MeshGroup> groups = CollectMeshGroups(data);
+            // plan_gltf.md GLTF-113/GLTF-114 (Phase 5): the default scene's node graph, flattened
+            // parent-before-child with composed world transforms. Every ModelBone below mirrors one
+            // of these nodes, so a mesh is placed by its node exactly as glTF specifies rather than
+            // landing at the origin in mesh-local space.
+            const SceneGraphOut sceneGraph = BuildSceneGraph(data);
+            const std::vector<MeshGroup> groups = CollectMeshGroups(data, sceneGraph);
             if (groups.empty())
             {
                 throw ContentLoadException("glTF file '" + path + "' contains no mesh instances to import.");
@@ -1847,13 +1910,23 @@ namespace Microsoft::Xna::Framework::Content
             std::vector<Graphics::ModelBone*> boneRawPtrs;
             std::vector<Graphics::ModelMesh*> meshRawPtrs;
 
+            // One ModelBone per scene node, in the graph's own parent-before-child order, so a
+            // bone's index equals its SceneGraphOut index and Model::CopyAbsoluteBoneTransformsTo
+            // composes the same world transforms BuildSceneGraph computed. Bone 0 is the synthetic
+            // identity root.
+            for (const SceneNodeOut& node : sceneGraph.nodes)
             {
-                auto bone = std::make_unique<Graphics::ModelBone>(0, std::string("Root"));
+                auto bone = std::make_unique<Graphics::ModelBone>(
+                    static_cast<int>(boneRawPtrs.size()), node.name);
+                bone->setTransformProperty(node.localTransform);
                 boneRawPtrs.push_back(bone.get());
                 res->boneOwners.push_back(std::move(bone));
             }
-            Graphics::ModelBone* rootBone = boneRawPtrs.front();
-
+            for (std::size_t i = 1; i < sceneGraph.nodes.size(); ++i)
+            {
+                const int parent = sceneGraph.nodes[i].parentIndex;
+                boneRawPtrs[static_cast<std::size_t>(parent < 0 ? 0 : parent)]->AddChild(boneRawPtrs[i]);
+            }
             if (hasSkin)
             {
                 auto skinningData = std::make_unique<Graphics::SkinningData>();
@@ -1947,8 +2020,9 @@ namespace Microsoft::Xna::Framework::Content
             };
 
             int meshCounter = 0;
-            for (const cgltf_mesh* mesh : group.meshes)
+            for (const MeshInstanceOut& instance : group.instances)
             {
+                const cgltf_mesh* mesh = instance.mesh;
                 for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
                 {
                     const std::string partName = mesh->name
@@ -2034,12 +2108,16 @@ namespace Microsoft::Xna::Framework::Content
                         &device, meshName.empty() ? "mesh" : meshName,
                         std::vector<Graphics::ModelMeshPart*>{partPtr});
 
-                    auto meshBone = std::make_unique<Graphics::ModelBone>(
-                        static_cast<int>(boneRawPtrs.size()), meshName.empty() ? "mesh" : meshName);
-                    rootBone->AddChild(meshBone.get());
-                    meshObj->setParentBoneProperty(meshBone.get());
-                    boneRawPtrs.push_back(meshBone.get());
-                    res->boneOwners.push_back(std::move(meshBone));
+                    // plan_gltf.md GLTF-114: the mesh is parented to the bone of the node that
+                    // instantiates it, so Model::Draw composes the glTF world transform for free.
+                    // A skinned instance is parented to the identity root instead: glTF requires a
+                    // skinned mesh's own node transform to be ignored, because its joints already
+                    // place the geometry. Completing that rule -- the inverse(meshNodeWorld) term
+                    // and the joint ancestry BuildSkeleton still drops -- is GLTF-245/247/260, so
+                    // this is deliberately the conservative half, not a claim that skinning works.
+                    const std::size_t parentBoneIndex = instance.skinned
+                        ? 0u : static_cast<std::size_t>(instance.sceneNodeIndex);
+                    meshObj->setParentBoneProperty(boneRawPtrs[parentBoneIndex]);
 
                     std::shared_ptr<Graphics::Effect> fx;
                     // PBR + skinning combo: SkinnedPbrEffect is a separate class from both
@@ -2174,7 +2252,10 @@ namespace Microsoft::Xna::Framework::Content
                 const std::string json = ReadTextFile(path);
 
                 const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
-                CNA::Internal::ValidateCnjEnvelope(envelope, "Model", path);
+                // plan_gltf.md GLTF-129: Model is the one type with a version 2 -- it adds the
+                // "bones" hierarchy and the per-mesh "parentBone" index. Every other type still
+                // accepts version 1 only, so an unknown future version stays a hard error there.
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Model", path, /*maxVersion=*/2);
                 RejectSourceFileForSelfContainedCnj(envelope, "Model", path);
 
                 const std::string root = cm.getRootDirectoryProperty();
@@ -2187,30 +2268,44 @@ namespace Microsoft::Xna::Framework::Content
                 std::vector<Graphics::ModelBone*> boneRawPtrs;
                 std::vector<Graphics::ModelMesh*> meshRawPtrs;
 
-                // Root bone
+                // plan_gltf.md GLTF-129/GLTF-130 (Phase 5): a cnjVersion-2 Model .cnj carries the
+                // whole node graph in "bones" (parent-before-child, index 0 the identity root) and
+                // each mesh names its own "parentBone" index into it. Rebuilding that tree here is
+                // what makes the offline .cnj path place geometry identically to the runtime
+                // .gltf path, rather than collapsing every part onto an identity root.
+                //
+                // Backward compatible with cnjVersion 1: a file whose "bones" is absent, or holds
+                // only a root name, yields exactly the previous single-Root shape, and the per-mesh
+                // fallback below still gives each mesh its own named child bone.
+                const std::vector<CnjBoneEntry> cnjBones = ParseCnjBoneArrayEXT(json);
+                const bool hasBoneHierarchy = cnjBones.size() > 1;
                 {
-                    std::string rootName = "Root";
-                    const std::size_t bk = json.find("\"bones\"");
-                    if (bk != std::string::npos) {
-                        const std::size_t ba = json.find('[', bk);
-                        if (ba != std::string::npos) {
-                            const std::size_t bo = json.find('{', ba);
-                            if (bo != std::string::npos) {
-                                int d = 1; std::size_t e = bo + 1;
-                                while (e < json.size() && d > 0) {
-                                    if (json[e] == '{') ++d;
-                                    else if (json[e] == '}') --d;
-                                    ++e;
-                                }
-                                const std::string bg = json.substr(bo, e - bo);
-                                const std::string n  = ExtractJsonStringField(bg, "name");
-                                if (!n.empty()) rootName = n;
-                            }
-                        }
-                    }
+                    std::string rootName = cnjBones.empty() ? std::string("Root") : cnjBones.front().name;
+                    if (rootName.empty()) { rootName = "Root"; }
                     auto bone = std::make_unique<Graphics::ModelBone>(0, std::move(rootName));
                     boneRawPtrs.push_back(bone.get());
                     res->boneOwners.push_back(std::move(bone));
+                }
+                for (std::size_t b = 1; b < cnjBones.size(); ++b)
+                {
+                    const CnjBoneEntry& entry = cnjBones[b];
+                    auto bone = std::make_unique<Graphics::ModelBone>(
+                        static_cast<int>(boneRawPtrs.size()),
+                        entry.name.empty() ? ("Node" + std::to_string(b)) : entry.name);
+                    bone->setTransformProperty(entry.transform);
+                    boneRawPtrs.push_back(bone.get());
+                    res->boneOwners.push_back(std::move(bone));
+                }
+                for (std::size_t b = 1; b < cnjBones.size(); ++b)
+                {
+                    const int parent = cnjBones[b].parent;
+                    if (parent < 0 || static_cast<std::size_t>(parent) >= boneRawPtrs.size())
+                    {
+                        throw ContentLoadException(
+                            "Model .cnj bone " + std::to_string(b) + " has an out-of-range parent index ("
+                                + std::to_string(parent) + "): " + path);
+                    }
+                    boneRawPtrs[static_cast<std::size_t>(parent)]->AddChild(boneRawPtrs[b]);
                 }
                 // Task 937: root_ is always bones_.bones_[0] once the model is constructed below
                 // (see Model::Model), so the just-pushed root bone stays at a stable, known index
@@ -2478,13 +2573,39 @@ namespace Microsoft::Xna::Framework::Content
                             // cannon/hatch bone lookups) via Model.Bones["PartName"]. Mesh names
                             // in every currently-known .model.json asset already match the bone
                             // names real ported game code expects.
-                            auto meshBone = std::make_unique<Graphics::ModelBone>(
-                                static_cast<int>(boneRawPtrs.size()),
-                                meshName.empty() ? "mesh" : meshName);
-                            rootBone->AddChild(meshBone.get());
-                            mesh->setParentBoneProperty(meshBone.get());
-                            boneRawPtrs.push_back(meshBone.get());
-                            res->boneOwners.push_back(std::move(meshBone));
+                            // plan_gltf.md GLTF-114/GLTF-129: a cnjVersion-2 file already carries a
+                            // real bone per scene node, so the mesh is attached to the one its own
+                            // "parentBone" names -- that is what makes the offline path place
+                            // geometry where glTF says, instead of at the identity root.
+                            //
+                            // Without a hierarchy (cnjVersion 1, and every hand-written .model.json
+                            // asset) the previous behavior is preserved exactly: give this mesh its
+                            // own real ModelBone (a child of Root, named after the mesh) rather than
+                            // leaving ParentBone null -- Task 937, which unblocked samples whose own
+                            // game code looks up a named bone per rigid part (e.g. SplitScreen/
+                            // TankOnAHeightMap's wheel/turret/cannon/hatch lookups) via
+                            // Model.Bones["PartName"].
+                            if (hasBoneHierarchy)
+                            {
+                                const int parentBone = JsonInt(mg, "parentBone", 0);
+                                if (parentBone < 0 || static_cast<std::size_t>(parentBone) >= boneRawPtrs.size())
+                                {
+                                    throw ContentLoadException(
+                                        "Model mesh names an out-of-range parentBone index ("
+                                            + std::to_string(parentBone) + "): " + path);
+                                }
+                                mesh->setParentBoneProperty(boneRawPtrs[static_cast<std::size_t>(parentBone)]);
+                            }
+                            else
+                            {
+                                auto meshBone = std::make_unique<Graphics::ModelBone>(
+                                    static_cast<int>(boneRawPtrs.size()),
+                                    meshName.empty() ? "mesh" : meshName);
+                                rootBone->AddChild(meshBone.get());
+                                mesh->setParentBoneProperty(meshBone.get());
+                                boneRawPtrs.push_back(meshBone.get());
+                                res->boneOwners.push_back(std::move(meshBone));
+                            }
 
                             // Load effect and register it in the mesh's effect collection.
                             std::shared_ptr<Graphics::Effect> fx;

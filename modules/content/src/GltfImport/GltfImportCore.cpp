@@ -1543,42 +1543,128 @@ namespace CNA::Internal::GltfImport
         return out;
     }
 
-    std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data)
+    SceneGraphOut BuildSceneGraph(const cgltf_data* data)
+    {
+        SceneGraphOut graph;
+
+        // Index 0 is a synthetic identity root. glTF scenes may have several root nodes while CNA's
+        // Model has exactly one Root bone, so inventing an identity parent is the only mapping that
+        // adds no transform of its own.
+        SceneNodeOut root;
+        root.name = "Root";
+        graph.nodes.push_back(root);
+
+        const cgltf_scene* scene = data->scene
+            ? data->scene
+            : (data->scenes_count > 0 ? &data->scenes[0] : nullptr);
+        if (!scene) { return graph; } // no scenes at all -- caller falls back to "every mesh"
+
+        // Explicit stack rather than recursion: a pathological file may nest nodes thousands deep,
+        // and CollectSceneReachableNodes already established that convention for this traversal.
+        // Pushing children in reverse keeps the visit order equal to the file's own child order.
+        struct PendingNode { const cgltf_node* node; int parentIndex; };
+        std::vector<PendingNode> stack;
+        stack.reserve(data->nodes_count + 1);
+        for (cgltf_size i = scene->nodes_count; i > 0; --i)
+        {
+            stack.push_back(PendingNode{scene->nodes[i - 1], 0});
+        }
+
+        while (!stack.empty())
+        {
+            const PendingNode pending = stack.back();
+            stack.pop_back();
+            const cgltf_node* node = pending.node;
+            if (!node) { continue; }
+            // A node reachable by two paths is imported once, at the first path found -- matching
+            // CollectSceneReachableNodes' own de-duplication.
+            if (graph.indexOfNode.find(node) != graph.indexOfNode.end()) { continue; }
+
+            SceneNodeOut out;
+            out.name = node->name ? node->name : ("Node" + std::to_string(graph.nodes.size()));
+            out.parentIndex = pending.parentIndex;
+            out.node = node;
+            out.gltfNodeIndex = static_cast<int>(node - data->nodes);
+
+            // cgltf_node_transform_local already applies the spec's own "matrix, or else TRS"
+            // exclusivity rule, so this needs no separate branch of its own.
+            float localMat[16];
+            cgltf_node_transform_local(node, localMat);
+            out.localTransform = ConvertGltfMatrix(localMat);
+            // Row-vector composition: the parent is always already finalized, because a node is
+            // only ever pushed with a parent index that was assigned before it.
+            out.worldTransform = out.localTransform * graph.nodes[static_cast<std::size_t>(pending.parentIndex)].worldTransform;
+
+            const int index = static_cast<int>(graph.nodes.size());
+            graph.indexOfNode[node] = index;
+            graph.nodes.push_back(std::move(out));
+
+            for (cgltf_size c = node->children_count; c > 0; --c)
+            {
+                stack.push_back(PendingNode{node->children[c - 1], index});
+            }
+        }
+
+        return graph;
+    }
+
+    std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data, const SceneGraphOut& scene)
     {
         std::vector<MeshGroup> groups;
         std::unordered_map<const cgltf_skin*, std::size_t> indexOfSkin;
 
-        const std::unordered_set<const cgltf_node*> reachable = CollectSceneReachableNodes(data);
-
+        // Iterating data->nodes (rather than the scene graph's own order) keeps this function's
+        // established group ordering: groups appear in glTF node-array order, which several
+        // existing tests and the offline tool's own "_static"/"_<skinName>" output naming rely on.
         for (cgltf_size i = 0; i < data->nodes_count; ++i)
         {
             const cgltf_node& node = data->nodes[i];
             if (!node.mesh) { continue; }
-            if (!reachable.empty() && reachable.find(&node) == reachable.end()) { continue; }
+            const auto placed = scene.indexOfNode.find(&node);
+            // A node outside the default scene is not imported. The one exception is a file with
+            // no scenes at all, where the graph is just the root and the fallback below applies.
+            if (placed == scene.indexOfNode.end()) { continue; }
+
+            MeshInstanceOut instance;
+            instance.node = &node;
+            instance.mesh = node.mesh;
+            instance.sceneNodeIndex = placed->second;
+            instance.worldTransform = scene.nodes[static_cast<std::size_t>(placed->second)].worldTransform;
+            instance.skinned = node.skin != nullptr;
 
             auto it = indexOfSkin.find(node.skin);
             if (it == indexOfSkin.end())
             {
                 indexOfSkin[node.skin] = groups.size();
-                groups.push_back(MeshGroup{node.skin, {node.mesh}});
+                groups.push_back(MeshGroup{node.skin, {std::move(instance)}});
             }
             else
             {
-                groups[it->second].meshes.push_back(node.mesh);
+                groups[it->second].instances.push_back(std::move(instance));
             }
         }
 
         // Fallback for files where meshes exist but no scene node references them (unusual but
-        // not invalid) -- treat every mesh in the file as one unskinned group, matching this
-        // library's original node-graph-independent behavior.
+        // not invalid) -- treat every mesh in the file as one unskinned group placed at the
+        // identity root, matching this library's original node-graph-independent behavior.
         if (groups.empty())
         {
             MeshGroup g;
-            for (cgltf_size i = 0; i < data->meshes_count; ++i) { g.meshes.push_back(&data->meshes[i]); }
-            if (!g.meshes.empty()) { groups.push_back(std::move(g)); }
+            for (cgltf_size i = 0; i < data->meshes_count; ++i)
+            {
+                MeshInstanceOut instance;
+                instance.mesh = &data->meshes[i];
+                g.instances.push_back(std::move(instance));
+            }
+            if (!g.instances.empty()) { groups.push_back(std::move(g)); }
         }
 
         return groups;
+    }
+
+    std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data)
+    {
+        return CollectMeshGroups(data, BuildSceneGraph(data));
     }
 
     std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data)
