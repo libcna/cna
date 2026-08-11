@@ -67,7 +67,7 @@ staleness problem: it still uses the pre-2026-08-10 `CNA_GRAPHICS_BACKEND` / `EA
 so **it cannot currently configure against the baseline at all**.
 
 The plan defines two milestones — **GLTF CORE 2.0 CORRECT** and **GLTF ROBUST** — a seven-layer
-numerical oracle hierarchy, a 136-asset conformance corpus, a 24-phase dependency-ordered backlog of
+numerical oracle hierarchy, a 135-asset conformance corpus, a 24-phase dependency-ordered backlog of
 **460 tasks** (`GLTF-001` … `GLTF-460`) organised into **two execution tracks**, and a 19-task
 **P0 center-collapse track** that answers the owner's question before any accessor-breadth,
 material, animation or extension work begins.
@@ -1513,11 +1513,19 @@ and fails the release gate if any is found.
   `GLTF-399` asserts in CI that the emitted distinct-asset count equals the number stated here. If
   the corpus grows, the number in this document is updated from the manifest — never the reverse.
 
-### 24.2 Planned corpus — 136 distinct synthetic assets
+### 24.2 Planned corpus — 135 distinct synthetic assets
 
 Counts below are **owning-group** counts per §24.1; no asset is listed twice, so the column sums to
 the distinct-asset total. Each asset additionally ships a `.glb` twin (`GLTF-400`), which is the
 same asset in another container, not another asset.
+
+> **Count correction (`GLTF-011`).** P0-D raised the skinning group from 13 to 14 (and the total
+> from 135 to 136) when it *generated* `skin-mesh-node-transform`. That asset was new to the
+> corpus but **not** to this plan — §15.4's ladder already listed it among its 13. All five
+> cross-referenced ladders were re-counted and the counts here now match them exactly: transforms
+> 17 (§11.4), skinning 13 (§15.4), morph 13 (§16.3), animation 10 (§17.2, excluding the
+> morph-owned `anim-weights-*`), and the remaining groups enumerated in full below. The generated
+> corpus stands at **16** assets today; `GLTF-399` completes it.
 
 | Group | Count | Assets |
 |---|---|---|
@@ -1529,14 +1537,14 @@ same asset in another container, not another asset.
 | Normals / tangents | 6 | `tangent-authored`, `tangent-handedness`, `tangent-absent-generated`, `normal-absent`, `normal-nonuniform-scale`, `tangent-mirrored` |
 | UV / textures / samplers | 10 | `uv0-checker`, `uv1-material`, `uv-out-of-range-clamp`, `uv-out-of-range-wrap`, `uv-out-of-range-mirror`, `sampler-nearest`, `sampler-trilinear`, `texture-transform-basecolor`, `texture-transform-per-map`, `texture-shared-two-samplers` |
 | Materials / PBR | 12 | `mat-default` (no material), `mat-factor-only-gold`, `mat-basecolor-factor-times-texture`, `mat-metallic-roughness-channels`, `mat-normal-scale`, `mat-occlusion-strength`, `mat-emissive-factor`, `mat-emissive-strength`, `alpha-opaque`, `alpha-mask`, `alpha-blend`, `double-sided` |
-| Skinning | 14 | the `skin-*` ladder in §15.4 |
+| Skinning | 13 | the `skin-*` ladder in §15.4 |
 | Morph | 13 | the `morph-*` ladder in §16.3, which **owns** `morph-weights-animated-linear/step/cubic` and `morph-plus-skin` |
 | Animation | 10 | the `anim-*` ladder in §17.2, excluding the `anim-weights-*` fixtures owned by the morph group |
 | Scenes / cameras / lights | 7 | `scene-default-selection`, `scene-two-roots`, `scene-no-scenes`, `camera-perspective`, `camera-perspective-infinite`, `camera-orthographic`, `lights-punctual-three` |
 | Draco parity | 4 | `draco-triangle`, `draco-vs-uncompressed-pair`, `draco-skinned`, `draco-morph` |
 | Robustness / malformed | 6 | `bad-accessor-out-of-bounds`, `bad-index-out-of-range`, `bad-buffer-truncated`, `bad-glb-chunk-length`, `bad-matrix-and-trs`, `bad-version-1.0` |
 
-**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 14 + 13 + 10 + 7 + 4 + 6 = 136 distinct assets.**
+**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 13 + 13 + 10 + 7 + 4 + 6 = 135 distinct assets.**
 
 Reuse happens along two axes and neither changes that total. An asset is reused **across oracle
 layers** — the same `alpha-mask` file is an L3, L6 and L7 fixture — and **across phases**, where a
@@ -1775,8 +1783,10 @@ Status legend — `⬜ TODO` (new work) · `🐛 CONFIRMED` (defect proven durin
 `✔ DONE` (implemented and verified against the task's own acceptance criteria; the row names the
 closing commit).
 
-**Implementation progress.** Two batches are complete, both on branch
-`claude/gltf-correctness-audit-plan-rxfs1l` (2026-08-11). See `docs/gltf-conformance.md`.
+**Implementation progress.** **The P0 center-collapse track (§28) is complete** — five batches,
+`GLTF-001` … `GLTF-011`, closed by the verdict report in
+**`docs/gltf-center-collapse-verdict.md`**, which is the document to read first. See also
+`docs/gltf-conformance.md` for the harness itself.
 
 **P0-A — oracle foundation**: `GLTF-001` … `GLTF-006` and `GLTF-041`. It established the
 specification pin, the permanent fixture generator, the promoted `f1`…`f14` corpus, the L2/L3/L4
@@ -1801,8 +1811,29 @@ The defect ledger gained a three-state lifecycle (`known-failing` → `partially
 `fixed`) with per-layer divergent fields, and a defect record is now never deleted: a remediated one
 stays as the regression witness with its original measurement under `priorActual`.
 
-**D1, D2, D3, D6, D7 and D8 are untouched by P0-B** and remain reproducible exactly as the audit
-recorded them. No renderer, no `cna-gltf-viewer` and no node-transform work was started.
+**P0-C — the node hierarchy**: `GLTF-103`, `GLTF-113`, `GLTF-114`, `GLTF-115`, `GLTF-129`,
+`GLTF-130`, `GLTF-252` (`d344718`, `e063864`). Option A adopted with no blocker found:
+`BuildSceneGraph` flattens the default scene parent-before-child with composed world transforms and
+both loaders mirror it as real `ModelBone`s. **D1, D2 and D3 are fixed.** Vertex positions stay
+mesh-local, so instancing survives — `xf-shared-mesh`'s two placements share one mesh.
+
+**P0-D — the skin coordinate spaces**: `GLTF-245`, `GLTF-247`, `GLTF-248`, `GLTF-260` (`e9336a1`).
+**D8 is fixed.** `BuildSkeleton` walks the full scene ancestry (`skin.skeleton` is a hint, never a
+traversal stop) and the `inverse(globalTransform(meshNode))` term cancels the skinned mesh node's
+placement — both carried on a per-root prefix rather than baked into the bind pose, so an animated
+root joint cannot undo them. `skin-armature-ancestor`'s joint matrix went from `translate(0,−100,0)`
+to exactly identity; the new `skin-mesh-node-transform` proves the cancellation happens **exactly
+once** (`T(0,0,−50)`, distinguishable from both `0` and `−100`).
+
+**P0-E — the verdict**: `GLTF-011`. `docs/gltf-center-collapse-verdict.md`. Names both collapse
+mechanisms, their first divergent layer, their before/after numbers and their locking fixtures; and
+records that P0-D corrected the **L4 oracle itself** — both oracles placed a skinned mesh by its own
+node, which §3.7.3 says the joints do — against the specification rather than the implementation, so
+the expectation never became a golden bug.
+
+**D6 and D7 remain open** and reproducible exactly as the audit recorded them; neither is a
+center-collapse mechanism (`docs/gltf-center-collapse-verdict.md` §6). `GLTF-072` still owns the
+remaining half of D5. No renderer and no `cna-gltf-viewer` work has been started.
 
 Every phase declares its **primary owner** from §6; a task whose owner differs names it inline.
 Dependencies are the *minimum* set — a task also inherits its phase's entry condition, **except for
@@ -1832,7 +1863,7 @@ column of these tables.
 | GLTF-008 | `GpuDrawParams` capture harness on `HEADLESS`/`STUB` (L6) | ⬜ | GLTF-005 | Record every effect parameter actually bound for each draw. **Accept:** a `PbrEffect` draw yields all 12 §21.1 quantities. |
 | GLTF-009 | L7 image-oracle harness for the corpus | ⬜ | GLTF-008 | Reuse `examples/golden/` + xvfb; fixed camera/light rig per fixture; per-renderer tolerance. **Accept:** deterministic PNGs across two runs on `OPENGLES3`. |
 | GLTF-010 | Wire L1–L7 into one `ctest` label `gltf-conformance` | ⬜ | GLTF-009 | **Accept:** `ctest -L gltf-conformance` runs the whole ladder and names the failing layer. |
-| GLTF-011 | **[P0] Write the center-collapse verdict report** | 🔬 | GLTF-007, GLTF-063, GLTF-071, GLTF-115, GLTF-248, GLTF-260 | The Track A terminus (§28.2). For every asset the owner reports as deformed: minimal reproducer, decoded vs expected positions, generated VB bytes, transform chain, **first divergent layer**, owning task ID. Depends on the fixes, **never the other way round** — `GLTF-103` must not depend on this task. **Accept:** `docs/gltf-center-collapse-verdict.md` exists and every listed asset has a named owning task. |
+| GLTF-011 | **[P0] Write the center-collapse verdict report** | ✔ | GLTF-007, GLTF-063, GLTF-071, GLTF-115, GLTF-248, GLTF-260 | The Track A terminus (§28.2). For every asset the owner reports as deformed: minimal reproducer, decoded vs expected positions, generated VB bytes, transform chain, **first divergent layer**, owning task ID. Depends on the fixes, **never the other way round** — `GLTF-103` must not depend on this task. **Accept:** `docs/gltf-center-collapse-verdict.md` exists and every listed asset has a named owning task. **Landed:** `docs/gltf-center-collapse-verdict.md`. Two independent collapse mechanisms named, both first divergent at **L4** and both closed: node transforms discarded (`GLTF-113` under `GLTF-103`, locked by `GLTF-115`) and the skin ancestry/mesh-space asymmetry (`GLTF-245`+`GLTF-247`, closed by `GLTF-260`). D4 fixed at L3; D5 partially remediated with `GLTF-072` still owning conversion; D6 and D7 recorded as open and explicitly **not** collapse mechanisms. Records three things beyond the acceptance criteria: that L5 is byte-identical across the D1–D3 fix (so a byte oracle alone could never have found the collapse), that the **L4 oracle itself was wrong** and was corrected against the specification rather than the implementation (§5 — the golden-bug hazard), and the §24.2 count correction below. |
 | GLTF-012 | Stand up a `known_bugs.md` glTF section | ⬜ | GLTF-004 | `known_bugs.md` currently has **zero** glTF entries. Add D1–D8 with their fixtures. **Accept:** each of D1–D8 has an entry pointing at its fixture and task. |
 | GLTF-013 | Pin `glTF-Sample-Assets` for reference use | ⬜ | GLTF-002 | Commit pin only; no assets committed yet. **Accept:** pin recorded with its licence summary. |
 | GLTF-014 | Pin `glTF-Asset-Generator` and map its manifest to the corpus | ⬜ | GLTF-013 | **Accept:** the permutation manifest is machine-readable by the corpus runner. |
@@ -1956,7 +1987,7 @@ primitive mode is ever silently reinterpreted; indices decode exactly.*
 | GLTF-098 | Deterministic vertex ordering | ✅ | GLTF-083 | `ExtractMesh` emits vertices in accessor order. **Accept:** locked at L5 — required for morph delta indexing. |
 | GLTF-099 | Stride selection decision table as data, not nested ternaries | ⬜ | GLTF-072 | The current one-line ternary chain is unreadable and duplicated implicitly in renderers. **Accept:** a table-driven selector with a unit test per row of §2.3. |
 | GLTF-100 | Reject unrepresentable attribute combinations loudly | ⬜ | GLTF-099 | e.g. `usePbr && colored` is currently impossible and silently downgrades. **Accept:** the combination is either supported or reported. |
-| GLTF-101 | L3 semantic-mesh manifest for every corpus asset | ⬜ | GLTF-005 | **Accept:** `MeshOut` field-by-field comparison for all 136 assets. |
+| GLTF-101 | L3 semantic-mesh manifest for every corpus asset | ⬜ | GLTF-005 | **Accept:** `MeshOut` field-by-field comparison for all 135 assets. |
 | GLTF-102 | Attribute fuzz: random valid permutations | ⬜ | GLTF-040 | **Accept:** no crash, no sanitiser finding, no silent drop without a report entry. |
 
 ---
@@ -2386,7 +2417,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-399 | Complete the 136-asset synthetic corpus | ⬜ | GLTF-003 | §24.2's owning-group inventory (8+14+8+7+17+6+10+12+14+13+10+7+4+6 = **136** distinct assets, each with a `.glb` twin). **Accept:** every owning group's assets exist, are generated and are validated; **CI asserts the generator's manifest reports exactly 136 distinct assets**, so the number in §24.2 and the corpus cannot drift apart. |
+| GLTF-399 | Complete the 135-asset synthetic corpus | ⬜ | GLTF-003 | §24.2's owning-group inventory (8+14+8+7+17+6+10+12+13+13+10+7+4+6 = **135** distinct assets, each with a `.glb` twin). **Accept:** every owning group's assets exist, are generated and are validated; **CI asserts the generator's manifest reports exactly 135 distinct assets**, so the number in §24.2 and the corpus cannot drift apart. |
 | GLTF-400 | `.glb` twin for every synthetic asset | ⬜ | GLTF-399 | **Accept:** twins agree at L3/L4. |
 | GLTF-401 | Manifest completeness audit | ⬜ | GLTF-399 | **Accept:** every asset declares exactly one `owningGroup`, its `referencingGroups[]`, the layers it validates and the expected values for each; the sum of owning-group counts equals the reported distinct-asset total, checked mechanically rather than by reading. |
 | GLTF-402 | Corpus runner reports the first divergent layer | ⬜ | GLTF-010 | **Accept:** a failure names the layer, the fixture, the field and the delta. |
