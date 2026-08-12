@@ -267,6 +267,17 @@ namespace
                         "data (CNA currently samples every PBR map from one shared UV channel).");
                 }
 
+                // plan_gltf.md GLTF-200/GLTF-350: a map whose pixels are in a format CNA has no
+                // decoder for. A build pipeline is exactly where this needs to be loud -- the
+                // conversion succeeds, and the texture is simply not in the output.
+                for (const std::string& unsupported : meshOut.unsupportedTextureSourcesEXT)
+                {
+                    warnings.push_back(
+                        "Primitive '" + partName + "' has a texture CNA cannot read -- " +
+                        unsupported + ". That map is not applied; the primitive is converted as "
+                        "though it had none.");
+                }
+
                 const std::string vertFile = outName + "_mesh" + std::to_string(meshCounter) + "_verts.bin";
                 const std::string idxFile  = outName + "_mesh" + std::to_string(meshCounter) + "_idx.bin";
                 WriteBinaryFile(outputDir / vertFile, meshOut.vertexBytes);

@@ -1217,38 +1217,90 @@ namespace CNA::Internal::GltfImport
         return result;
     }
 
-    const cgltf_image* FindBaseColorImage(const cgltf_primitive& prim)
+    // plan_gltf.md GLTF-200/GLTF-350: the image a texture's pixels actually come from, and -- when
+    // there is none CNA can read -- which extension took it away.
+    //
+    // `KHR_texture_basisu` and `EXT_texture_webp` both attach their own image to the texture and
+    // both are specified so the texture MAY also keep a plain PNG/JPEG `source` as a fallback. That
+    // fallback is exactly `texture->image`, so preferring it is not a compromise: it is what the
+    // extensions tell a reader without a decoder to do. What was silent before is the other case --
+    // no fallback authored -- where this returned nullptr and every downstream check simply read
+    // "no texture on this slot".
+    //
+    // A mime type CNA cannot decode is the same loss wearing different clothes: the image is
+    // present and readable as bytes, and stb_image will refuse it. Caught here, where the map's
+    // name is still known, rather than at a decode failure that cannot say which map it was.
+    const cgltf_image* ImageForTexture(const cgltf_texture* texture, const char* mapName,
+                                       std::vector<std::string>* unsupportedOut)
+    {
+        if (texture == nullptr) { return nullptr; }
+
+        const auto report = [&](const char* reason) {
+            if (unsupportedOut != nullptr)
+            {
+                unsupportedOut->emplace_back(std::string(mapName) + ": " + reason);
+            }
+        };
+
+        if (texture->image != nullptr)
+        {
+            const char* mime = texture->image->mime_type;
+            if (mime != nullptr)
+            {
+                const std::string mimeType = mime;
+                if (mimeType == "image/ktx2" || mimeType == "image/webp" ||
+                    mimeType == "image/basis")
+                {
+                    report(("declares mimeType '" + mimeType + "', which CNA has no decoder for")
+                               .c_str());
+                    return nullptr;
+                }
+            }
+            return texture->image;
+        }
+
+        if (texture->has_basisu != 0) { report("KHR_texture_basisu, with no fallback source"); }
+        else if (texture->has_webp != 0) { report("EXT_texture_webp, with no fallback source"); }
+        return nullptr;
+    }
+
+    const cgltf_image* FindBaseColorImage(const cgltf_primitive& prim,
+                                          std::vector<std::string>* unsupportedOut = nullptr)
     {
         if (!prim.material || !prim.material->has_pbr_metallic_roughness) { return nullptr; }
         const cgltf_texture_view& view = prim.material->pbr_metallic_roughness.base_color_texture;
-        if (!view.texture) { return nullptr; }
-        return view.texture->image;
+        return ImageForTexture(view.texture, "base color", unsupportedOut);
     }
 
-    const cgltf_image* FindOcclusionImage(const cgltf_primitive& prim)
+    const cgltf_image* FindOcclusionImage(const cgltf_primitive& prim,
+                                          std::vector<std::string>* unsupportedOut = nullptr)
     {
-        if (!prim.material || !prim.material->occlusion_texture.texture) { return nullptr; }
-        return prim.material->occlusion_texture.texture->image;
+        if (!prim.material) { return nullptr; }
+        return ImageForTexture(prim.material->occlusion_texture.texture, "occlusion",
+                               unsupportedOut);
     }
 
-    const cgltf_image* FindNormalImage(const cgltf_primitive& prim)
+    const cgltf_image* FindNormalImage(const cgltf_primitive& prim,
+                                       std::vector<std::string>* unsupportedOut = nullptr)
     {
-        if (!prim.material || !prim.material->normal_texture.texture) { return nullptr; }
-        return prim.material->normal_texture.texture->image;
+        if (!prim.material) { return nullptr; }
+        return ImageForTexture(prim.material->normal_texture.texture, "normal", unsupportedOut);
     }
 
-    const cgltf_image* FindMetallicRoughnessImage(const cgltf_primitive& prim)
+    const cgltf_image* FindMetallicRoughnessImage(const cgltf_primitive& prim,
+                                                  std::vector<std::string>* unsupportedOut = nullptr)
     {
         if (!prim.material || !prim.material->has_pbr_metallic_roughness) { return nullptr; }
-        const cgltf_texture_view& view = prim.material->pbr_metallic_roughness.metallic_roughness_texture;
-        if (!view.texture) { return nullptr; }
-        return view.texture->image;
+        const cgltf_texture_view& view =
+            prim.material->pbr_metallic_roughness.metallic_roughness_texture;
+        return ImageForTexture(view.texture, "metallic-roughness", unsupportedOut);
     }
 
-    const cgltf_image* FindEmissiveImage(const cgltf_primitive& prim)
+    const cgltf_image* FindEmissiveImage(const cgltf_primitive& prim,
+                                         std::vector<std::string>* unsupportedOut = nullptr)
     {
-        if (!prim.material || !prim.material->emissive_texture.texture) { return nullptr; }
-        return prim.material->emissive_texture.texture->image;
+        if (!prim.material) { return nullptr; }
+        return ImageForTexture(prim.material->emissive_texture.texture, "emissive", unsupportedOut);
     }
 
     /// GLTF-202: the sampler a texture view's texture declares, mapped to XNA state. A view with no
@@ -1667,7 +1719,7 @@ namespace CNA::Internal::GltfImport
         // with a per-vertex Color appended at the end) and SkinnedEffect's own CNAEXT
         // VertexColorEnabled addition (real XNA's SkinnedEffect has no such property).
         out.colored = (colorAcc != nullptr);
-        out.baseColorImage = FindBaseColorImage(prim);
+        out.baseColorImage = FindBaseColorImage(prim, &out.unsupportedTextureSourcesEXT);
         // An unskinned, uncolored primitive with both a base-color and an occlusion texture is
         // imported through DualTextureEffect (Texture=base color, Texture2=occlusion) instead of
         // BasicEffect -- real XNA's DualTextureEffect always samples both texture slots (no
@@ -1686,9 +1738,9 @@ namespace CNA::Internal::GltfImport
         // useDualTexture below when both would otherwise apply (a material with both an
         // occlusion map AND a normal/metallic-roughness map is unambiguously meant for real PBR
         // rendering, not the DualTextureEffect occlusion-as-lightmap approximation).
-        out.normalImage = FindNormalImage(prim);
-        out.metallicRoughnessImage = FindMetallicRoughnessImage(prim);
-        out.emissiveImage = FindEmissiveImage(prim);
+        out.normalImage = FindNormalImage(prim, &out.unsupportedTextureSourcesEXT);
+        out.metallicRoughnessImage = FindMetallicRoughnessImage(prim, &out.unsupportedTextureSourcesEXT);
+        out.emissiveImage = FindEmissiveImage(prim, &out.unsupportedTextureSourcesEXT);
         // PBR + skinning combo: a skinned primitive with a normal/metallic-roughness map is
         // imported through SkinnedPbrEffect (stride 68) instead of plain SkinnedEffect -- the
         // vertex-color combo (usePbr && colored) is still not attempted, matching PbrEffect's own
@@ -1812,7 +1864,8 @@ namespace CNA::Internal::GltfImport
         // primitives (needed for SkinnedPbrEffect's own OcclusionMap), but useDualTexture stays
         // gated to unskinned primitives -- SkinnedEffect has no Texture2 slot, so a skinned
         // non-PBR mesh with an occlusion+base-color pair simply leaves occlusionImage unused.
-        out.occlusionImage = (!out.colored) ? FindOcclusionImage(prim) : nullptr;
+        out.occlusionImage =
+            (!out.colored) ? FindOcclusionImage(prim, &out.unsupportedTextureSourcesEXT) : nullptr;
         out.useDualTexture = (!out.usePbr) && (!out.skinned) &&
                               (out.occlusionImage != nullptr) && (out.baseColorImage != nullptr);
 

@@ -1,0 +1,283 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plan_gltf.md GLTF-200 / GLTF-350: a texture whose pixels are in a format CNA has no decoder for
+// must be reported, never silently absent.
+//
+// `KHR_texture_basisu` (KTX2/Basis) and `EXT_texture_webp` both attach their own image to a
+// texture, and both are specified so a file MAY additionally keep a plain PNG/JPEG `source` as a
+// fallback for readers without the codec. That gives three distinct outcomes, and all three are
+// asserted here: the fallback is used when present, the loss is named when it is not, and a file
+// that lists either extension as *required* is refused outright by GLTF-023 long before any of
+// this runs.
+//
+// These are scratch-directory documents rather than corpus assets because what varies between the
+// cases is the shape of the `texture` object -- which `source` it has and which it does not -- and
+// none of them needs a single byte of real pixel data to make its point.
+
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <gtest/gtest.h>
+#include <string>
+#include <system_error>
+
+#include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+
+using namespace CNA::Internal::GltfImport;
+
+namespace
+{
+    class ScratchDir
+    {
+    public:
+        ScratchDir()
+            : dir_(std::filesystem::temp_directory_path()
+                   / ("cna_gltf_unsupported_texture_"
+                      + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+        {
+            std::filesystem::create_directories(dir_);
+        }
+        ~ScratchDir()
+        {
+            std::error_code ec;
+            std::filesystem::remove_all(dir_, ec);
+        }
+        ScratchDir(const ScratchDir&) = delete;
+        ScratchDir& operator=(const ScratchDir&) = delete;
+        [[nodiscard]] const std::filesystem::path& path() const { return dir_; }
+
+    private:
+        std::filesystem::path dir_;
+    };
+
+    /// A single triangle with a base-color texture, where @p textureJson is the whole `textures[0]`
+    /// object and @p imagesJson the whole `images` array -- the two things every case here varies.
+    std::string Document(const std::string& extensionsUsed, const std::string& textureJson,
+                         const std::string& imagesJson)
+    {
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "extensionsUsed": [ )GLTF") + extensionsUsed + R"GLTF( ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+      "material": 0
+  } ] } ],
+  "materials": [ { "pbrMetallicRoughness": {
+      "baseColorTexture": { "index": 0 }
+  } } ],
+  "textures": [ )GLTF" + textureJson + R"GLTF( ],
+  "images": )GLTF" + imagesJson + R"GLTF(,
+  "samplers": [ { } ],
+  "buffers": [ { "byteLength": 96, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAA==" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+    }
+
+    struct Loaded
+    {
+        cgltf_data* data = nullptr;
+        ~Loaded() { if (data != nullptr) { cgltf_free(data); } }
+        Loaded() = default;
+        Loaded(const Loaded&) = delete;
+        Loaded& operator=(const Loaded&) = delete;
+    };
+
+    bool Parse(Loaded& out, const ScratchDir& dir, const std::string& json)
+    {
+        const std::filesystem::path gltfPath = dir.path() / "fixture.gltf";
+        std::ofstream(gltfPath, std::ios::binary) << json;
+        cgltf_options options{};
+        if (cgltf_parse_file(&options, gltfPath.string().c_str(), &out.data) !=
+            cgltf_result_success)
+        {
+            return false;
+        }
+        return cgltf_load_buffers(&options, out.data, gltfPath.string().c_str()) ==
+               cgltf_result_success;
+    }
+
+    MeshOut Extract(const std::string& json)
+    {
+        const ScratchDir dir;
+        Loaded loaded;
+        EXPECT_TRUE(Parse(loaded, dir, json)) << "the fixture document did not parse";
+        if (loaded.data == nullptr || loaded.data->meshes_count == 0) { return MeshOut{}; }
+        return ExtractMesh(loaded.data, loaded.data->meshes[0].primitives[0], "primitive0", nullptr,
+                           1.0f);
+    }
+
+    const char* kPngImage = R"([ { "uri": "base.png", "mimeType": "image/png" } ])";
+}
+
+// --- KHR_texture_basisu -----------------------------------------------------------------------
+
+TEST(GltfUnsupportedTexture, BasisuWithNoFallbackSourceIsReportedAndTheMapIsDropped)
+{
+    // The silent case this task exists for: the texture's only source is the KTX2 image, so
+    // `texture->image` is null and every downstream check used to read "no texture on this slot".
+    const MeshOut out = Extract(Document(
+        R"("KHR_texture_basisu")",
+        R"({ "sampler": 0, "extensions": { "KHR_texture_basisu": { "source": 0 } } })",
+        R"([ { "uri": "base.ktx2", "mimeType": "image/ktx2" } ])"));
+
+    EXPECT_EQ(nullptr, out.baseColorImage);
+    ASSERT_EQ(1u, out.unsupportedTextureSourcesEXT.size())
+        << "an unreadable base-colour texture was dropped without a word";
+    EXPECT_NE(out.unsupportedTextureSourcesEXT[0].find("base color"), std::string::npos)
+        << out.unsupportedTextureSourcesEXT[0];
+    EXPECT_NE(out.unsupportedTextureSourcesEXT[0].find("KHR_texture_basisu"), std::string::npos)
+        << out.unsupportedTextureSourcesEXT[0];
+}
+
+TEST(GltfUnsupportedTexture, BasisuWithAPlainFallbackSourceUsesTheFallbackAndReportsNothing)
+{
+    // The extension is specified so a file may keep a PNG/JPEG `source` for readers without the
+    // codec. Using it is not a compromise -- it is what the extension tells such a reader to do --
+    // so nothing has been lost and nothing should be reported.
+    const MeshOut out = Extract(Document(
+        R"("KHR_texture_basisu")",
+        R"({ "sampler": 0, "source": 1, "extensions": { "KHR_texture_basisu": { "source": 0 } } })",
+        R"([ { "uri": "base.ktx2", "mimeType": "image/ktx2" },
+             { "uri": "base.png", "mimeType": "image/png" } ])"));
+
+    ASSERT_NE(nullptr, out.baseColorImage) << "the authored PNG fallback was not used";
+    EXPECT_TRUE(out.unsupportedTextureSourcesEXT.empty())
+        << "nothing was lost, so nothing should have been reported: "
+        << (out.unsupportedTextureSourcesEXT.empty() ? "" : out.unsupportedTextureSourcesEXT[0]);
+}
+
+// --- EXT_texture_webp -------------------------------------------------------------------------
+
+TEST(GltfUnsupportedTexture, WebpWithNoFallbackSourceIsReportedByName)
+{
+    const MeshOut out = Extract(Document(
+        R"("EXT_texture_webp")",
+        R"({ "sampler": 0, "extensions": { "EXT_texture_webp": { "source": 0 } } })",
+        R"([ { "uri": "base.webp", "mimeType": "image/webp" } ])"));
+
+    EXPECT_EQ(nullptr, out.baseColorImage);
+    ASSERT_EQ(1u, out.unsupportedTextureSourcesEXT.size());
+    EXPECT_NE(out.unsupportedTextureSourcesEXT[0].find("EXT_texture_webp"), std::string::npos)
+        << "the report has to name the extension, or it says nothing a user can act on: "
+        << out.unsupportedTextureSourcesEXT[0];
+}
+
+// --- An undecodable mime type on a plain source ------------------------------------------------
+
+TEST(GltfUnsupportedTexture, APlainSourceWithAnUndecodableMimeTypeIsReportedAtImportNotAtDecode)
+{
+    // The same loss wearing different clothes: the image is present and readable as bytes, and
+    // stb_image will refuse it. Caught here, where the map's name is still known, rather than at a
+    // decode failure that cannot say which map it was.
+    const MeshOut out = Extract(Document(
+        R"("EXT_texture_webp")",
+        R"({ "sampler": 0, "source": 0 })",
+        R"([ { "uri": "base.webp", "mimeType": "image/webp" } ])"));
+
+    EXPECT_EQ(nullptr, out.baseColorImage);
+    ASSERT_EQ(1u, out.unsupportedTextureSourcesEXT.size());
+    EXPECT_NE(out.unsupportedTextureSourcesEXT[0].find("image/webp"), std::string::npos)
+        << out.unsupportedTextureSourcesEXT[0];
+}
+
+// --- Every map slot, not just base colour ------------------------------------------------------
+
+TEST(GltfUnsupportedTexture, EveryMaterialMapSlotReportsItsOwnLossByName)
+{
+    // A report that only covered base colour would leave the four other slots exactly as silent as
+    // they were. Each entry names its own map so a user reading the log knows which one vanished.
+    const ScratchDir dir;
+    Loaded loaded;
+    ASSERT_TRUE(Parse(loaded, dir, std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "extensionsUsed": [ "KHR_texture_basisu" ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+      "material": 0
+  } ] } ],
+  "materials": [ {
+      "pbrMetallicRoughness": {
+          "baseColorTexture": { "index": 0 },
+          "metallicRoughnessTexture": { "index": 0 }
+      },
+      "normalTexture": { "index": 0 },
+      "occlusionTexture": { "index": 0 },
+      "emissiveTexture": { "index": 0 }
+  } ],
+  "textures": [ { "sampler": 0, "extensions": { "KHR_texture_basisu": { "source": 0 } } } ],
+  "images": [ { "uri": "base.ktx2", "mimeType": "image/ktx2" } ],
+  "samplers": [ { } ],
+  "buffers": [ { "byteLength": 96, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAA==" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF")));
+
+    const MeshOut out = ExtractMesh(loaded.data, loaded.data->meshes[0].primitives[0], "primitive0",
+                                    nullptr, 1.0f);
+
+    const std::string joined = [&] {
+        std::string all;
+        for (const std::string& entry : out.unsupportedTextureSourcesEXT) { all += entry + " | "; }
+        return all;
+    }();
+    for (const char* map : {"base color", "metallic-roughness", "normal", "emissive", "occlusion"})
+    {
+        EXPECT_NE(joined.find(map), std::string::npos)
+            << "no report entry for the " << map << " map: " << joined;
+    }
+}
+
+// --- The required-extension case is somebody else's problem, and stays that way ----------------
+
+TEST(GltfUnsupportedTexture, NeitherExtensionIsClaimedAsSupported)
+{
+    // If either were ever listed as supported, a file *requiring* it would load with its textures
+    // quietly missing instead of being refused -- which is a worse outcome than today's, not a
+    // better one. This is the guard on that.
+    EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_texture_basisu"));
+    EXPECT_FALSE(IsGltfExtensionSupportedEXT("EXT_texture_webp"));
+}
+
+TEST(GltfUnsupportedTexture, RequiringEitherExtensionIsRefusedOutrightRatherThanReported)
+{
+    // GLTF-023's rule, exercised through this task's two extensions specifically: `extensionsUsed`
+    // is a report, `extensionsRequired` is a rejection, and the reporting added here must not have
+    // quietly downgraded the second into the first.
+    for (const char* extension : {"KHR_texture_basisu", "EXT_texture_webp"})
+    {
+        SCOPED_TRACE(extension);
+        const ScratchDir dir;
+        Loaded loaded;
+        ASSERT_TRUE(Parse(loaded, dir, std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "extensionsUsed": [ ")GLTF") + extension + R"GLTF(" ],
+  "extensionsRequired": [ ")GLTF" + std::string(extension) + R"GLTF(" ]
+})GLTF"));
+
+        std::vector<std::string> warnings;
+        EXPECT_THROW(ValidateGltfEXT(loaded.data, "fixture.gltf", warnings), std::runtime_error);
+    }
+}

@@ -2243,6 +2243,17 @@ namespace Microsoft::Xna::Framework::Content
                             "imported through BasicEffect with its vertex colours; the material's "
                             "factors and maps are not applied (GLTF-241).");
                     }
+                    // plan_gltf.md GLTF-200/GLTF-350: a map whose pixels are in a format CNA has no
+                    // decoder for. The file said the texture exists; without this the model simply
+                    // drew untextured and nothing anywhere said why.
+                    for (const std::string& unsupported : meshOut.unsupportedTextureSourcesEXT)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' has a texture CNA cannot read -- " + unsupported +
+                            ". That map is not applied; the primitive draws as though it had none "
+                            "(GLTF-200).");
+                    }
                     // plan_gltf.md GLTF-256: joint weights that did not sum to 1 were renormalised.
                     // Never silent -- a sum far from 1 is a broken file, not exporter quantisation,
                     // and the deviation is what tells the two apart.

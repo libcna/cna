@@ -393,6 +393,29 @@ namespace CNA::Internal::GltfImport
          */
         bool droppedTangentForStrideEXT = false;
         /**
+         * @brief One entry per material map whose image CNA could not read, naming the map and why.
+         *
+         * plan_gltf.md `GLTF-200` / `GLTF-350`. A texture can carry its pixels in a format CNA has
+         * no decoder for — `KHR_texture_basisu` (KTX2/Basis) and `EXT_texture_webp` are the two the
+         * ecosystem actually ships. Both are designed so a file may *also* declare a plain PNG/JPEG
+         * `source` as a fallback, in which case CNA uses it and nothing is lost; both are also
+         * routinely authored with **no** fallback, and then the map simply has no image CNA can
+         * read.
+         *
+         * Until this field existed that map vanished without a word: the finder returned `nullptr`,
+         * every downstream check read "no texture on this slot", and the model drew untextured as
+         * though the author had never assigned one. Naming the map and the extension is the whole
+         * difference between an unsupported feature and a bug report.
+         *
+         * Each entry reads like `"base color: KHR_texture_basisu"`. Empty for every primitive whose
+         * maps were all readable.
+         *
+         * @note If the extension is listed in `extensionsRequired`, `ValidateGltfEXT` rejects the
+         * file outright and nothing reaches here — this covers exactly the `extensionsUsed` case,
+         * where the file claims it still loads without the extension.
+         */
+        std::vector<std::string> unsupportedTextureSourcesEXT;
+        /**
          * @brief How many vertices had their joint weights renormalised (plan_gltf.md `GLTF-256`).
          *
          * §3.7.3.3 requires a vertex's weights to sum to 1, but a file is not guaranteed to honour
