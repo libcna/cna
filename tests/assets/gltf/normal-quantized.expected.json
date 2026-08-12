@@ -1,0 +1,356 @@
+{
+  "id": "normal-quantized",
+  "description": "A NORMAL accessor stored as normalized SHORT, the storage form a size-conscious exporter emits and the one no corpus asset used. Read as raw integers it gives a normal of length 32767, which nothing downstream rejects and which lights as pure white.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "meshes-overview",
+    "accessors"
+  ],
+  "inventory": {
+    "id": "normal-quantized",
+    "owningGroup": "normals",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "L5"
+    ],
+    "features": [
+      "NORMAL as normalized SHORT",
+      "\u00a73.6.2.2 normalized decode",
+      "authored normal passed through byte-exact"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 3,
+    "bufferViewCount": 3,
+    "bufferCount": 1,
+    "bufferByteLength": 62,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5122,
+        "componentTypeName": "SHORT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": true,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 56,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "QuantizedNormalTri",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "tangents": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "MeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    },
+    "quantizedNormals": {
+      "componentType": "SHORT",
+      "normalized": true,
+      "rawComponents": [
+        [
+          32767,
+          0,
+          0
+        ],
+        [
+          0,
+          32767,
+          0
+        ],
+        [
+          0,
+          0,
+          32767
+        ]
+      ],
+      "decodedNormals": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "divisor": 32767,
+      "decodeRule": "\u00a73.6.2.2 divides a normalized SHORT by 32767, not 32768. Only 32767 and 0 are used, so every decoded value is exactly 1.0 or 0.0 and the expectation states no rounding -- the assertion is about the importer's decode, not about the generator's arithmetic.",
+      "passthroughRule": "An authored normal is passed through byte-exact: CNA does not renormalise what the file promised to be unit length, so the L5 golden IS the decode and a byte comparison is a decode comparison.",
+      "discriminationRule": "The three normals point along three different axes, so a decoder reading the wrong component, dividing by 32768, or treating the accessor as raw integers is wrong differently on each vertex -- rather than uniformly wrong in a way that reads as a coordinate-system difference."
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "normal-quantized.vb.bin",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "c1e3e9bc7b36d436f1ac7babe92209385d06397d526fdac313522e59cecb7512",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "normal-quantized.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": []
+}

@@ -12,13 +12,13 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 68,
+  "distinctAssetCount": 69,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
     "component-types": 2,
     "topology": 8,
-    "normals": 1,
+    "normals": 2,
     "transforms": 7,
     "materials": 8,
     "textures": 3,
@@ -530,6 +530,24 @@
         "absent NORMAL",
         "computed flat normals",
         "non-planar triangle"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "normal-quantized",
+      "owningGroup": "normals",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "NORMAL as normalized SHORT",
+        "\u00a73.6.2.2 normalized decode",
+        "authored normal passed through byte-exact"
       ],
       "auditFixture": null
     },
@@ -2415,6 +2433,31 @@
       "path": "normal-absent.vb.bin",
       "bytes": 144,
       "sha256": "202793412e9c1e5d70a3f54878468a1e3fa66b079e12a05b82847b4ae3ccc9ef"
+    },
+    {
+      "path": "normal-quantized.expected.json",
+      "bytes": 7961,
+      "sha256": "1791dce8c3b950600daa416fbdc571e179d9522c9ff2fe5cb4ae5034040103ac"
+    },
+    {
+      "path": "normal-quantized.glb",
+      "bytes": 800,
+      "sha256": "640b3130a200bf487ffaf424062a1a5c16918e0bc3d8f1b973a487fea2ea8031"
+    },
+    {
+      "path": "normal-quantized.gltf",
+      "bytes": 1442,
+      "sha256": "b29c938922a14eaa6f0cf38ec9f4744ec5f1b6e45ddf06e679c4c2300c257aa4"
+    },
+    {
+      "path": "normal-quantized.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "normal-quantized.vb.bin",
+      "bytes": 144,
+      "sha256": "c1e3e9bc7b36d436f1ac7babe92209385d06397d526fdac313522e59cecb7512"
     },
     {
       "path": "normalized-u8-color.expected.json",

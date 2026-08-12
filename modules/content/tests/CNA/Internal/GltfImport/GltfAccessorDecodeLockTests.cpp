@@ -26,8 +26,10 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "GltfFixtureCorpus.hpp"
 #include "GltfOracleEXT.hpp"
+#include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 
 using namespace CnaTest::GltfOracle;
 using CNA::Internal::JsonType;
@@ -561,4 +563,129 @@ TEST(GltfAccessorDecodeLock, AnAccessorWhoseTypeHasTheWrongComponentCountThrowsA
     EXPECT_NE(std::string::npos, message.find("POSITION")) << message;
     EXPECT_NE(std::string::npos, message.find("2 components per element")) << message;
     EXPECT_NE(std::string::npos, message.find("expected 3")) << message;
+}
+
+namespace
+{
+    /// The byte offset of a stride's Normal slot, or -1 when it has none.
+    ///
+    /// Queried from the canonical ABI table rather than hardcoded -- GLTF-278's lesson: the table
+    /// is the single source of truth for every renderer's own ApplyLayout, and a test carrying its
+    /// own copy of an offset asserts the copy.
+    int NormalOffsetForStride(int stride)
+    {
+        namespace fidelity = CNA::Internal::Graphics;
+        const fidelity::InferredVertexLayout layout = fidelity::InferredLayoutForStride(
+            stride, fidelity::UnlistedStrideLayout::RendererRefusesIt);
+        if (!layout.known) { return -1; }
+        for (std::size_t i = 0; i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage ==
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal)
+            {
+                return layout.elements[i].offset;
+            }
+        }
+        return -1;
+    }
+}
+
+// --- GLTF-084: NORMAL's storage forms, and the one nothing in the corpus used ------------------
+
+TEST(GltfAccessorDecodeLock, AQuantizedNormalDecodesThroughTheNormalizedDivisorNotAsRawIntegers)
+{
+    // §3.7.2.1 allows NORMAL as float, byte normalized or short normalized, and every other normal
+    // in the corpus is a plain float -- so two of the three legal storage forms had no asset
+    // behind them at all. Not a hypothetical gap: quantized normals are what a size-conscious
+    // exporter emits, and reading one as raw integers gives a normal of length 32767, which no
+    // later layer rejects and which lights as pure white.
+    using namespace CNA::Internal::GltfImport;
+
+    const LoadedFixture fixture("normal-quantized");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& expected = Path(fixture.Expected(), "l4.quantizedNormals");
+
+    const cgltf_data& data = fixture.Data();
+    const MeshOut out = ExtractMesh(&data, data.meshes[0].primitives[0], "probe", nullptr, 1.0f);
+
+    const int normalOffset = NormalOffsetForStride(out.stride);
+    ASSERT_GE(normalOffset, 0) << "stride " << out.stride << " has no Normal slot";
+
+    const std::vector<JsonValue>& decoded = Member(expected, "decodedNormals").arrayValue;
+    ASSERT_EQ(3u, decoded.size());
+    for (std::size_t v = 0; v < decoded.size(); ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<double> n = Numbers(decoded[v]);
+        ASSERT_EQ(3u, n.size());
+
+        float packed[3];
+        std::memcpy(packed,
+                    out.vertexBytes.data() + v * static_cast<std::size_t>(out.stride) +
+                        static_cast<std::size_t>(normalOffset),
+                    sizeof(packed));
+        for (std::size_t c = 0; c < 3; ++c)
+        {
+            // Exact, not near: only 32767 and 0 are authored, and §3.6.2.2 maps them to exactly
+            // 1.0 and 0.0. A divisor of 32768 gives 0.99997, which EXPECT_NEAR would swallow.
+            EXPECT_FLOAT_EQ(static_cast<float>(n[c]), packed[c]) << "component " << c;
+        }
+
+        // The length is the assertion that catches the raw-integer read, which is the failure this
+        // is really about: 32767 is not near 1 by any tolerance, and nothing downstream checks it.
+        const float length = std::sqrt(packed[0] * packed[0] + packed[1] * packed[1] +
+                                        packed[2] * packed[2]);
+        EXPECT_NEAR(1.0f, length, 1e-4f)
+            << "the normal is not unit length -- a raw-integer read gives 32767 here";
+    }
+}
+
+TEST(GltfAccessorDecodeLock, EveryCorpusNormalIsUnitLengthWhateverItsStorageForm)
+{
+    // The sweep that makes the case above a rule rather than one asset's property. Authored
+    // normals are passed through byte-exact -- CNA does not renormalise what the file promised --
+    // so this is simultaneously a check on the decode and on that policy: any storage form that
+    // decoded wrongly would show up as a non-unit normal in the packed bytes.
+    using namespace CNA::Internal::GltfImport;
+
+    std::size_t checked = 0;
+    for (const std::string& id : CorpusFixtureIds())
+    {
+        const LoadedFixture fixture(id);
+        if (!fixture.Ok() || IsRejectionFixture(fixture.Expected())) { continue; }
+        SCOPED_TRACE(id);
+
+        const cgltf_data& data = fixture.Data();
+        for (cgltf_size m = 0; m < data.meshes_count; ++m)
+        {
+            for (cgltf_size p = 0; p < data.meshes[m].primitives_count; ++p)
+            {
+                MeshOut out;
+                try
+                {
+                    out = ExtractMesh(&data, data.meshes[m].primitives[p], "probe", nullptr, 1.0f);
+                }
+                catch (const std::exception&) { continue; } // topologies and shapes owned elsewhere
+                const int normalOffset = NormalOffsetForStride(out.stride);
+                if (normalOffset < 0) { continue; } // strides 20 and 24 carry no normal at all
+
+                const std::size_t stride = static_cast<std::size_t>(out.stride);
+                for (std::size_t v = 0; v * stride < out.vertexBytes.size(); ++v)
+                {
+                    float packed[3];
+                    std::memcpy(packed,
+                                out.vertexBytes.data() + v * stride +
+                                    static_cast<std::size_t>(normalOffset),
+                                sizeof(packed));
+                    const float length = std::sqrt(packed[0] * packed[0] + packed[1] * packed[1] +
+                                                    packed[2] * packed[2]);
+                    EXPECT_NEAR(1.0f, length, 1e-3f)
+                        << id << " mesh " << m << " primitive " << p << " vertex " << v
+                        << ": normal length " << length;
+                    ++checked;
+                }
+            }
+        }
+    }
+    EXPECT_GT(checked, 0u) << "no normals were checked at all -- the sweep proved nothing";
 }
