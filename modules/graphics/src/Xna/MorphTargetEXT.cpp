@@ -179,7 +179,14 @@ namespace Microsoft::Xna::Framework::Graphics
             const double t1 = track.Keys[i + 1].Time.getTotalSecondsProperty();
             if (timeSeconds >= t0 && timeSeconds <= t1)
             {
-                if (track.StepInterpolation) { return track.Keys[i].Weights; }
+                // plan_gltf.md GLTF-301, the same half-open-interval rule as the bone channels'
+                // own StepSampleIndex: §3.6 holds key i's value on [t0, t1), so at exactly t1 the
+                // next key is already in force. Returning key i there makes every interior
+                // keyframe of a STEP weight track play the previous key's value.
+                if (track.StepInterpolation)
+                {
+                    return (timeSeconds >= t1) ? track.Keys[i + 1].Weights : track.Keys[i].Weights;
+                }
 
                 const double span = t1 - t0;
                 const float amount = span > 0.0 ? static_cast<float>((timeSeconds - t0) / span) : 0.0f;

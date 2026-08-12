@@ -489,6 +489,22 @@ namespace CNA::Internal::GltfImport
             return result;
         }
 
+        // plan_gltf.md GLTF-301. STEP holds the sample at the START of the interval it is in, and
+        // §3.6's intervals are half-open: `times[i]`'s value applies on `[times[i], times[i+1])`,
+        // so at exactly `times[i+1]` the NEXT sample is already in force.
+        //
+        // FindBracket reports that moment as `lo = i` with `amount = 1`, which is right for LINEAR
+        // -- `Lerp(a, b, 1)` is `b` -- and was wrong for STEP, whose branch ignored `amount` and
+        // returned sample `i`. That is not an edge case: `ExtractClips` resamples onto the union of
+        // a bone's own channel times, so EVERY interior keyframe of a STEP channel lands exactly on
+        // a sample boundary. A three-sample STEP channel therefore played 0, 0, 20 instead of
+        // 0, 10, 20 -- the last value correct only because the end clamp takes a different path,
+        // which is what made it look plausible.
+        std::size_t StepSampleIndex(std::size_t lo, float amount, std::size_t count)
+        {
+            return (amount >= 1.0f && lo + 1 < count) ? lo + 1 : lo;
+        }
+
         // Finds the bracketing pair [lo, lo+1] in a sorted, ascending time array such that
         // times[lo] <= t <= times[lo+1] (clamped at the ends), returning lo and the interpolation
         // fraction within that bracket.
@@ -556,7 +572,11 @@ namespace CNA::Internal::GltfImport
             if (ch == nullptr) { return fallback; }
             std::size_t lo = 0; float amount = 0.0f;
             FindBracket(ch->times, t, lo, amount);
-            if (amount <= 0.0f || ch->stepInterpolation || lo + 1 >= ch->times.size())
+            if (ch->stepInterpolation)
+            {
+                return ReadVec3Sample(*ch, StepSampleIndex(lo, amount, ch->times.size()));
+            }
+            if (amount <= 0.0f || lo + 1 >= ch->times.size())
             {
                 return ReadVec3Sample(*ch, lo);
             }
@@ -574,7 +594,11 @@ namespace CNA::Internal::GltfImport
             if (ch == nullptr) { return fallback; }
             std::size_t lo = 0; float amount = 0.0f;
             FindBracket(ch->times, t, lo, amount);
-            if (amount <= 0.0f || ch->stepInterpolation || lo + 1 >= ch->times.size())
+            if (ch->stepInterpolation)
+            {
+                return ReadQuatSample(*ch, StepSampleIndex(lo, amount, ch->times.size()));
+            }
+            if (amount <= 0.0f || lo + 1 >= ch->times.size())
             {
                 return ReadQuatSample(*ch, lo);
             }
