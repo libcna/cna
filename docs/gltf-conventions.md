@@ -472,6 +472,28 @@ every clip after it from the application's point of view.
 
 ---
 
+## A shared defect is never fixed inside a renderer (`GLTF-392`)
+
+**The rule.** If a glTF asset is wrong on a renderer, the fix goes where the decision was made. A
+change inside `modules/renderers/` is a legitimate fix only for something that renderer genuinely
+owns — a shader, a state mapping, a vertex-layout binding. Anything about *what the file means*
+belongs to the importer, and a change there is the only kind that fixes every renderer at once.
+
+**Why it needs a rule rather than good sense.** The opposite is cheap in the moment. The wrongness
+is visible on one renderer, the renderer is open in front of you, and a two-line adjustment makes
+the picture right. What has actually happened is worse than the original defect: the importer's
+mistake is now *compensated* on one of N renderers, the other N−1 stay wrong, and the compensation
+is invisible to L1–L6 of the oracle ladder — because none of those layers looks at a renderer at
+all. The next person to fix the importer properly then breaks the renderer that was compensating.
+`GLTF-428` exists precisely to hunt for accumulated compensations of this kind.
+
+**Enforced, not merely asked for.** `GltfSharedDefectPolicy` checks the dependency direction, which
+is the part a compiler can see: **no renderer source may include the glTF importer**, so a renderer
+cannot make an import decision even if someone wants it to; and **the importer may include the
+renderer contract (`Renderers/Common/`) and no renderer implementation**, so "correct" can never
+quietly come to mean "correct on EasyGL". `scripts/gltf-renderer-parity.sh` is the other half: any
+L1–L5 difference between two renderers fails, and its message names this rule.
+
 ## The vendored cgltf: never patched, always worked around (`GLTF-038`)
 
 CNA parses glTF with a vendored copy of `cgltf` (`third_party/cgltf/cgltf.h`, single header, MIT).
