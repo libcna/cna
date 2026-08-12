@@ -1061,3 +1061,58 @@ TEST(GltfConformanceL6, ALitDrawWithNoFileLightsStillReceivesAUsableDefault)
                "file that declares no lights is the common case, not an edge one";
     }
 }
+
+// --- GLTF-208: the file's own sampler reaches the drawn part --------------------------------------
+
+TEST(GltfConformanceL6, ADeclaredSamplerSurvivesImportOntoThePartThatDrawsWithIt)
+{
+    // GLTF-202/GLTF-203 mapped glTF's sampler enums to XNA's, and GltfSamplerMappingTests asserts
+    // that mapping exhaustively over raw enum values. What none of that could show is whether a
+    // real file's sampler arrives on the part -- there was no textured fixture in the corpus until
+    // GLTF-190. This is that assertion, at the layer a draw reads it from.
+    //
+    // `tex-reference-checkerboard` declares NEAREST filtering and CLAMP_TO_EDGE on both axes,
+    // which are three separate departures from the LinearWrap every imported texture used to get
+    // by inheriting whatever the device had.
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("tex-reference-checkerboard");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    ASSERT_FALSE(d.samplers.empty()) << "the part carries no sampler state at all";
+    const int expectedFilter =
+        static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureFilter::Point);
+    const int expectedAddress =
+        static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Clamp);
+    EXPECT_EQ(expectedFilter, d.samplers.front().filter)
+        << "NEAREST did not arrive as Point -- the texture draws smoothed";
+    EXPECT_EQ(expectedAddress, d.samplers.front().addressU)
+        << "CLAMP_TO_EDGE did not arrive on U; UVs outside [0,1] tile instead of clamping";
+    EXPECT_EQ(expectedAddress, d.samplers.front().addressV);
+}
+
+TEST(GltfConformanceL6, APartWithNoDeclaredSamplerKeepsTheDefaultRatherThanTheLastFilesOne)
+{
+    // The control, and the one that catches a sampler leaking between parts: every corpus fixture
+    // without a texture must still report XNA's own LinearWrap. A per-part array that was really
+    // shared state would show the previous fixture's Point/Clamp here.
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("xf-identity");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    ASSERT_FALSE(captured.front().samplers.empty());
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureFilter::Linear),
+              captured.front().samplers.front().filter);
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap),
+              captured.front().samplers.front().addressU);
+}

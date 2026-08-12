@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 
@@ -35,7 +36,8 @@ namespace CnaTest::GltfOracle
     using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
     using Microsoft::Xna::Framework::Graphics::PbrEffect;
     using Microsoft::Xna::Framework::Graphics::PrimitiveType;
-    using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
 using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
 
     namespace
@@ -246,6 +248,17 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                 dump.parentBoneIndex = boneIndex;
                 dump.effectTypeName  = effect->GetTypeName();
 
+                // GLTF-208: the sampler state the part carries, per slot. Read from the part
+                // rather than from the device, because that is where it lives -- and where a
+                // regression would leave it stranded.
+                for (const SamplerState& sampler : part->getSamplerStatesEXTProperty())
+                {
+                    dump.samplers.push_back(DrawParamsDump::SamplerSlotDump{
+                        static_cast<int>(sampler.getFilterProperty()),
+                        static_cast<int>(sampler.getAddressUProperty()),
+                        static_cast<int>(sampler.getAddressVProperty())});
+                }
+
                 dump.world         = ToColumnMajor(meshWorld);
                 dump.view          = ToColumnMajor(view);
                 dump.projection    = ToColumnMajor(projection);
@@ -317,6 +330,15 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
         out += ",\"partIndex\":" + std::to_string(dump.partIndex);
         out += ",\"parentBoneIndex\":" + std::to_string(dump.parentBoneIndex);
         out += ",\"effect\":" + Quote(dump.effectTypeName);
+        out += ",\"samplers\":[";
+        for (std::size_t i = 0; i < dump.samplers.size(); ++i)
+        {
+            if (i != 0) { out += ","; }
+            out += "{\"filter\":" + std::to_string(dump.samplers[i].filter) +
+                   ",\"addressU\":" + std::to_string(dump.samplers[i].addressU) +
+                   ",\"addressV\":" + std::to_string(dump.samplers[i].addressV) + "}";
+        }
+        out += "]";
         out += ",\"world\":" + Flat(dump.world);
         out += ",\"view\":" + Flat(dump.view);
         out += ",\"projection\":" + Flat(dump.projection);

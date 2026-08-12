@@ -71,6 +71,29 @@ namespace CnaTest::GltfOracle
         /** @brief The bound effect's fully-qualified .NET type name, e.g. "…Graphics.PbrEffect". */
         std::string effectTypeName;
 
+        // --- plan_gltf.md GLTF-208: the sampler state each texture slot carries -----------------
+
+        /**
+         * @brief One entry per texture slot, as the part carries it (`GLTF-202`/`GLTF-203`).
+         *
+         * Captured beside the parameter block rather than inside it, for the same reason the alpha
+         * state is: `SamplerState` is per-draw device state an XNA application owns, so it is
+         * *carried* on the part and not bound by `Model::Draw`. Recording it here is what makes
+         * "the file's sampler survived import" checkable, and what will show both sides the day it
+         * starts reaching the GPU.
+         */
+        struct SamplerSlotDump
+        {
+            /** @brief `TextureFilter`, by its enum value. */
+            int filter = 0;
+            /** @brief `TextureAddressMode` on U, by its enum value. */
+            int addressU = 0;
+            /** @brief `TextureAddressMode` on V, by its enum value. */
+            int addressV = 0;
+        };
+        /** @brief Sampler state per slot, in `ModelMeshPart`'s own slot order. */
+        std::vector<SamplerSlotDump> samplers;
+
         // --- §21.1 "World / View / Projection" ------------------------------------------------
 
         /** @brief `IEffectMatrices::World` as `Model::Draw` bound it, column-major. */
