@@ -10,7 +10,7 @@ session needs to start work without re-deriving the state.
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
 - **Working document:** `plan_gltf.md`, 460 numbered rows. **340 closed (`✔` 219, `✅` 121),
-  104 `⬜` remaining**, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+  103 `⬜` remaining**, plus `GLTF-388`'s and `GLTF-449`'s new `✅/⬜` partials, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 3 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-093`, `252`,
   `265`, `289`, `449`; `GLTF-064`/`067`/`068` were completed on 2026-08-12), 2 `🐛` (open: `GLTF-157`, `421`), and 1 `⛔` (`GLTF-009`,
   blocked by this environment).
@@ -172,10 +172,12 @@ Ordered by value, not by number. Each is a coherent unit with its own tests and 
    `MeshOut` carries loose material fields; `CNAEXT.md` sketches a `PbrMaterial` carrier. Gated by
    `GLTF-025`, so it needs a `docs/gltf-api-change-review.md` §1 entry first. `GLTF-244` (material
    L6/L7 regression) and several Phase 18 rows sit behind it.
-2. **`GLTF-034` + `GLTF-035` — the structured import report.** Currently deferred in the review gate
-   §2.3 "for want of a consumer", and five internal reports already exist that it would gather. If
-   the gate's default is revisited, this is a large consolidation; if not, the row should say so
-   explicitly rather than staying `⬜`.
+2. ~~**`GLTF-034` + `GLTF-035` — the structured import report.**~~ **Both rows now state their own
+   deferral** (2026-08-12): every drop `GLTF-035` lists already has its report entry and its
+   fixture; what is missing is one structured object to read them from, and the review gate
+   deferred that surface *for want of a consumer* — which is `GLTF-431`, in the viewer's own
+   repository. Do not implement it here without either a consumer in this repository or an
+   explicit decision to revisit the gate.
 3. **Phase 18 effect-boundary rows** — `GLTF-365`, `367`, `368`, `370`–`372`, `377`, `380`–`383`.
    Most are assertable at L6 through `CaptureDrawParamsEXT` on `STUB`, which is how `GLTF-267` and
    the lighting rows were done. Check each row for whether it truly needs a renderer before
