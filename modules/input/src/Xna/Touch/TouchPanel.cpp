@@ -7,7 +7,8 @@
 
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/GestureDetector.hpp"
-#include "CNA/Internal/Input/SystemDeviceBackend.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
 #include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch
@@ -100,13 +101,15 @@ namespace Microsoft::Xna::Framework::Input::Touch
         // FNA; 0 when no touch device is present.
         constexpr int kXnaReportedMaxTouchCount = 4;
 
-        // INP-AUD-003: query SDL's live device enumeration on every call, matching FNA's
-        // GetTouchCapabilities() (SDL_GetTouchDevices() every query). Neither this call nor the two
+        // INP-AUD-003: query the platform's live device enumeration on every call, matching FNA's
+        // GetTouchCapabilities(), which enumerates on every query. Neither this call nor the two
         // fallbacks below mutate touch state, so a capability query never consumes a frame of input.
         // The sticky touchDeviceExists_ flag and the live HasAnyTouch() peek remain as fallbacks for
         // platforms (FNA notes Windows) that only enumerate a touch device after first interaction.
+        CNA::Platform::IPlatformInputDevices* devices =
+            CNA::Platform::GetCurrentPlatform().GetInputDevices();
         const bool isConnected =
-            !CNA::Internal::Input::system_device_backend().GetTouchDevices().empty() ||
+            (devices != nullptr && devices->HasDevice(CNA::Platform::InputDeviceKind::Touch)) ||
             touchDeviceExists_ ||
             CNA::Internal::Input::InputManager::HasAnyTouch();
         return TouchPanelCapabilities(isConnected, isConnected ? kXnaReportedMaxTouchCount : 0);

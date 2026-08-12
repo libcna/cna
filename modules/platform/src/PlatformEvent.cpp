@@ -126,6 +126,7 @@ namespace CNA::Platform {
         static const std::string mouse = "Mouse";
         static const std::string gamepad = "Gamepad";
         static const std::string joystick = "Joystick";
+        static const std::string touch = "Touch";
         static const std::string haptic = "Haptic";
         static const std::string sensor = "Sensor";
 
@@ -135,6 +136,7 @@ namespace CNA::Platform {
             case InputDeviceKind::Mouse:    return mouse;
             case InputDeviceKind::Gamepad:  return gamepad;
             case InputDeviceKind::Joystick: return joystick;
+            case InputDeviceKind::Touch:    return touch;
             case InputDeviceKind::Haptic:   return haptic;
             case InputDeviceKind::Sensor:   return sensor;
         }

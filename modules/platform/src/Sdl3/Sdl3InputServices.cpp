@@ -391,6 +391,9 @@ namespace CNA::Platform::Sdl3 {
             case InputDeviceKind::Joystick:
                 return EnumerateDevices<SDL_JoystickID>(kind, SDL_GetJoysticks,
                                                         SDL_GetJoystickNameForID);
+            case InputDeviceKind::Touch:
+                return EnumerateDevices<SDL_TouchID>(kind, SDL_GetTouchDevices,
+                                                     SDL_GetTouchDeviceName);
             case InputDeviceKind::Haptic:
                 return EnumerateDevices<SDL_HapticID>(kind, SDL_GetHaptics,
                                                       SDL_GetHapticNameForID);
@@ -408,6 +411,7 @@ namespace CNA::Platform::Sdl3 {
             case InputDeviceKind::Mouse:    return AnyDevice<SDL_MouseID>(SDL_GetMice);
             case InputDeviceKind::Gamepad:  return AnyDevice<SDL_JoystickID>(SDL_GetGamepads);
             case InputDeviceKind::Joystick: return AnyDevice<SDL_JoystickID>(SDL_GetJoysticks);
+            case InputDeviceKind::Touch:    return AnyDevice<SDL_TouchID>(SDL_GetTouchDevices);
             case InputDeviceKind::Haptic:   return AnyDevice<SDL_HapticID>(SDL_GetHaptics);
             case InputDeviceKind::Sensor:   return AnyDevice<SDL_SensorID>(SDL_GetSensors);
         }

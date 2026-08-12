@@ -2,7 +2,8 @@
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
-#include "CNA/Internal/Input/SystemMouseBackend.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
 #include <SDL3/SDL.h>
 
 namespace
@@ -157,22 +158,38 @@ namespace Microsoft::Xna::Framework::Input
 
     bool Mouse::SetCaptureEXT(const bool enabled)
     {
-        return CNA::Internal::Input::system_mouse_backend().CaptureMouse(enabled);
+        CNA::Platform::IPlatformMouse* mouse = CNA::Platform::GetCurrentPlatform().GetMouse();
+        return mouse != nullptr && mouse->SetCapture(enabled);
     }
 
     void Mouse::GetGlobalPositionEXT(int& x, int& y)
     {
+        // Zeroed first, so a platform with no desktop pointer answers (0, 0) rather than
+        // leaving the caller's own values in place -- the previous SDL call always wrote both.
+        x = 0;
+        y = 0;
+
+        CNA::Platform::IPlatformMouse* mouse = CNA::Platform::GetCurrentPlatform().GetMouse();
+        if (mouse == nullptr)
+        {
+            return;
+        }
+
         float fx = 0.0f;
         float fy = 0.0f;
-        CNA::Internal::Input::system_mouse_backend().GetGlobalMouseState(&fx, &fy);
+        if (!mouse->TryGetGlobalPosition(fx, fy))
+        {
+            return;
+        }
         x = static_cast<int>(fx);
         y = static_cast<int>(fy);
     }
 
     bool Mouse::WarpGlobalEXT(const int x, const int y)
     {
-        return CNA::Internal::Input::system_mouse_backend().WarpMouseGlobal(
-            static_cast<float>(x), static_cast<float>(y));
+        CNA::Platform::IPlatformMouse* mouse = CNA::Platform::GetCurrentPlatform().GetMouse();
+        return mouse != nullptr &&
+               mouse->SetGlobalPosition(static_cast<float>(x), static_cast<float>(y));
     }
 
     void Mouse::INTERNAL_onClicked(int button)

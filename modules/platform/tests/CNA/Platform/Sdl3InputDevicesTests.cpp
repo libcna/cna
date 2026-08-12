@@ -41,7 +41,8 @@ protected:
 
 constexpr InputDeviceKind kEveryKind[] = {
     InputDeviceKind::Keyboard, InputDeviceKind::Mouse,   InputDeviceKind::Gamepad,
-    InputDeviceKind::Joystick, InputDeviceKind::Haptic,  InputDeviceKind::Sensor,
+    InputDeviceKind::Joystick, InputDeviceKind::Touch,   InputDeviceKind::Haptic,
+    InputDeviceKind::Sensor,
 };
 
 // --- PLAT-77b: enumeration --------------------------------------------------------------------

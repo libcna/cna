@@ -10,8 +10,15 @@ namespace CNA::Platform {
     /** @brief Identifies a window within one platform instance. Zero means "no window". */
     using WindowId = std::uint32_t;
 
-    /** @brief Identifies a connected input device. Stable while the device stays connected. */
-    using DeviceId = std::uint32_t;
+    /**
+     * @brief Identifies a connected input device. Stable while the device stays connected.
+     *
+     * 64 bits rather than 32 because touch device identifiers genuinely are 64-bit while
+     * keyboard, mouse and joystick ids are 32-bit. One width holds all of them losslessly, which
+     * is what lets `DeviceEvent` and `IPlatformInputDevices` share a single identity vocabulary —
+     * a caller enumerates once and then tracks changes, with nothing to reconcile.
+     */
+    using DeviceId = std::uint64_t;
 
     /** @brief The application is being asked to terminate. */
     struct QuitEvent
@@ -193,6 +200,8 @@ namespace CNA::Platform {
         Gamepad,
         /** @brief A raw joystick. */
         Joystick,
+        /** @brief A touchscreen or trackpad reporting touch points. */
+        Touch,
         /** @brief A haptic device. */
         Haptic,
         /** @brief A motion or orientation sensor. */
