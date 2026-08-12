@@ -43,9 +43,9 @@ Expected as of this writing:
 | Check | Expected |
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
-| full suite | **6 311 passed, 18 failed** |
+| full suite | **6 324 passed, 18 failed** |
 | generator `--check` | **75 assets, 364 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **434 passed, 23 skipped** / **457 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **437 passed, 23 skipped** / **460 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
