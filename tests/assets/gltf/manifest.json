@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 36,
+  "distinctAssetCount": 38,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
@@ -20,7 +20,7 @@
     "topology": 7,
     "transforms": 5,
     "materials": 4,
-    "skinning": 4,
+    "skinning": 6,
     "animation": 3,
     "cameras": 4,
     "scenes": 1,
@@ -699,6 +699,37 @@
         "declared root below a transform-bearing ancestor",
         "declared root above the joints' common ancestor",
         "two joints"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-unnormalized",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "unnormalized WEIGHTS_0",
+        "zero-weight vertex",
+        "renormalisation policy"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-73-joints",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2"
+      ],
+      "features": [
+        "skin.joints beyond MaxBones",
+        "palette limit",
+        "import rejection"
       ],
       "auditFixture": null
     },
@@ -1444,6 +1475,21 @@
       "sha256": "e18e1b490de1b904c1d5c05e4092db07c4493fcd7545d6c16793bf4064efdf62"
     },
     {
+      "path": "skin-73-joints.expected.json",
+      "bytes": 22231,
+      "sha256": "cce6f3a5ccc2f55604c1cd1b169d52b6ce3380920e3b9903d87d91addf23e70e"
+    },
+    {
+      "path": "skin-73-joints.glb",
+      "bytes": 7596,
+      "sha256": "d4daadf0c050f6e32d9d2ec72ad1141ff587c04915d40876b571dccd69419823"
+    },
+    {
+      "path": "skin-73-joints.gltf",
+      "bytes": 12653,
+      "sha256": "f513bcee3697cfc5fefd300d0c8e4eef245b28a54943dd25bbf6a89824de463e"
+    },
+    {
       "path": "skin-armature-ancestor.expected.json",
       "bytes": 12496,
       "sha256": "20ee651ff6c1ec77411b07a44f8bd98b57fd71bc55a5d79a204c6d39f43fe9f4"
@@ -1552,6 +1598,31 @@
       "path": "skin-skeleton-hint.vb.bin",
       "bytes": 204,
       "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
+    },
+    {
+      "path": "skin-unnormalized.expected.json",
+      "bytes": 10116,
+      "sha256": "87a1ef47ac05502e3b4f5d2ff020811c3f2642d81ec2215742f00ee503760368"
+    },
+    {
+      "path": "skin-unnormalized.glb",
+      "bytes": 1296,
+      "sha256": "03232d13377e5db69cbbe4d2e24db8ccca50a4f8d09efdeb3d60c8e4407c926d"
+    },
+    {
+      "path": "skin-unnormalized.gltf",
+      "bytes": 2284,
+      "sha256": "029f024785233d2b1915d64050b8fc6a104d2fdbeef6ce053a44ba8d98f52a96"
+    },
+    {
+      "path": "skin-unnormalized.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-unnormalized.vb.bin",
+      "bytes": 204,
+      "sha256": "42b7dae81a02117e665265a8347a8e19afb11e754f7b0b679039dc431e388f60"
     },
     {
       "path": "sparse-indices.expected.json",

@@ -392,6 +392,36 @@ namespace CNA::Internal::GltfImport
          * file that went to the trouble of authoring tangents did so for a reason.
          */
         bool droppedTangentForStrideEXT = false;
+        /**
+         * @brief How many vertices had their joint weights renormalised (plan_gltf.md `GLTF-256`).
+         *
+         * §3.7.3.3 requires a vertex's weights to sum to 1, but a file is not guaranteed to honour
+         * it. The failure is not cosmetic: the skin equation is a weighted sum of joint matrices,
+         * so weights summing to 0.75 apply 0.75 of the vertex's transform — which for a joint near
+         * the origin drags the vertex three-quarters of the way toward it. That is the audit's
+         * **H12**, an independent collapse mechanism.
+         *
+         * CNA renormalises rather than refusing, because a slightly-off sum is what quantised
+         * exporters routinely emit; this count is what keeps that from being silent. Vertices
+         * within 1e-4 of 1 are not counted — that is float error, not a malformed file.
+         */
+        std::size_t renormalisedWeightVertexCountEXT = 0;
+        /**
+         * @brief How many vertices had joint weights summing to zero, and were left alone.
+         *
+         * plan_gltf.md `GLTF-256`. An all-zero weight set means the vertex is unweighted, and
+         * `0/0` is not a normalisation — so these are counted and reported rather than "fixed" into
+         * an arbitrary joint.
+         */
+        std::size_t zeroWeightVertexCountEXT = 0;
+        /**
+         * @brief The largest `|sum - 1|` seen before renormalisation; 0 when nothing was off.
+         *
+         * plan_gltf.md `GLTF-256`. Carried because the *size* of the deviation is what separates a
+         * quantised exporter (a few 1e-3) from a genuinely broken file, and a count alone cannot
+         * say which one a caller is looking at.
+         */
+        float worstWeightSumDeviationEXT = 0.0f;
         /** @brief True when this mesh should be imported through DualTextureEffect (CNB-72/73). */
         bool useDualTexture = false;
         /** @brief The material's base-color texture image, or nullptr if none. */

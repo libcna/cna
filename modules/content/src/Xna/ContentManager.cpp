@@ -2230,6 +2230,28 @@ namespace Microsoft::Xna::Framework::Content
                             "imported through BasicEffect with its vertex colours; the material's "
                             "factors and maps are not applied (GLTF-241).");
                     }
+                    // plan_gltf.md GLTF-256: joint weights that did not sum to 1 were renormalised.
+                    // Never silent -- a sum far from 1 is a broken file, not exporter quantisation,
+                    // and the deviation is what tells the two apart.
+                    if (meshOut.renormalisedWeightVertexCountEXT > 0)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name + "' had " +
+                            std::to_string(meshOut.renormalisedWeightVertexCountEXT) +
+                            " vertex/vertices whose joint weights did not sum to 1 (worst "
+                            "deviation " + std::to_string(meshOut.worstWeightSumDeviationEXT) +
+                            "); they were renormalised. Left as authored they would have applied a "
+                            "fraction of each vertex's transform, dragging it toward the origin "
+                            "(GLTF-256).");
+                    }
+                    if (meshOut.zeroWeightVertexCountEXT > 0)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name + "' has " +
+                            std::to_string(meshOut.zeroWeightVertexCountEXT) +
+                            " vertex/vertices whose joint weights sum to zero. They are left "
+                            "unweighted rather than assigned to an arbitrary joint (GLTF-256).");
+                    }
                     // plan_gltf.md GLTF-086: an authored tangent basis with nowhere to live.
                     if (meshOut.droppedTangentForStrideEXT)
                     {

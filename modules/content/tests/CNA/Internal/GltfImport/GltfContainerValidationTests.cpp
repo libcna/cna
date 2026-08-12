@@ -42,6 +42,22 @@ namespace
     std::string ExtractionErrorFor(const LoadedFixture& fixture)
     {
         const cgltf_data& data = fixture.Data();
+        // Building each skin is part of extraction: GLTF-261's palette-size refusal lives in
+        // BuildSkeleton, not ExtractMesh, and a probe that only extracted primitives would report
+        // an over-limit rig as importing cleanly.
+        const SceneGraphOut scene = BuildSceneGraph(&data);
+        for (cgltf_size s = 0; s < data.skins_count; ++s)
+        {
+            try
+            {
+                (void)BuildSkeleton(&data.skins[s], scene,
+                                     Microsoft::Xna::Framework::Matrix::getIdentityProperty(), 1.0f);
+            }
+            catch (const std::exception& e)
+            {
+                return e.what();
+            }
+        }
         for (cgltf_size m = 0; m < data.meshes_count; ++m)
         {
             for (cgltf_size p = 0; p < data.meshes[m].primitives_count; ++p)

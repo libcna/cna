@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
+#include <cstring>
 #include <cmath>
 #include <filesystem>
 #include <stdexcept>
@@ -37,6 +38,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "GltfFixtureCorpus.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -1080,4 +1082,134 @@ TEST(GltfMorphWeights, NodeWeightsOverrideTheMeshsOwnRatherThanMergingWithThem)
             << "a weight exceeds 1 -- node.weights was merged with the mesh's instead of "
                "replacing it";
     }
+}
+
+// --- plan_gltf.md GLTF-256: weights that do not sum to 1 (the audit's H12) -------------------------
+
+// The skin equation is a weighted sum of joint matrices, so weights summing to 0.75 apply 0.75 of
+// the vertex's transform -- which for a joint near the origin drags the vertex three-quarters of
+// the way toward it. An independent collapse mechanism wearing D8's clothes, and CNA never checked.
+//
+// The policy is renormalise-and-report, and its two exceptions matter as much as its rule: a sum
+// within float error of 1 must be left untouched (or every quantised exporter's output is reported
+// as broken) and a zero sum must be left alone too (0/0 is not a normalisation).
+TEST(GltfSkinSpaces, UnnormalisedWeightsAreRenormalisedAndReportedButOnlyWhenTheyShouldBe)
+{
+    const LoadedFixture fixture("skin-unnormalized");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& skin = Path(fixture.Expected(), "l4.skin");
+    const CNA::Internal::JsonValue& after = Member(skin, "weightsAfterPolicy");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, after.type);
+    ASSERT_EQ(3u, after.arrayValue.size());
+
+    const CNA::Internal::GltfImport::MeshOut extracted = CNA::Internal::GltfImport::ExtractMesh(
+        &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe",
+        nullptr, 1.0f);
+    // Unskinned extraction (no skeleton) drops the weights entirely, so the real check goes
+    // through the loader, which is also what an application sees.
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skin-unnormalized");
+    ASSERT_GT(model.getMeshesProperty().getCountProperty(), 0);
+    (void)extracted;
+
+    // Counted exactly: one renormalised, one zero-sum, and the near-1 vertex neither.
+    const CNA::Internal::GltfImport::SceneGraphOut scene =
+        CNA::Internal::GltfImport::BuildSceneGraph(&fixture.Data());
+    const CNA::Internal::GltfImport::SkeletonResult skeleton =
+        CNA::Internal::GltfImport::BuildSkeleton(fixture.Data().skins, scene,
+                                                  Matrix::getIdentityProperty(), 1.0f);
+    const CNA::Internal::GltfImport::MeshOut skinned = CNA::Internal::GltfImport::ExtractMesh(
+        &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", &skeleton, 1.0f);
+
+    EXPECT_EQ(static_cast<std::size_t>(NumberOr(skin, "renormalisedVertexCount", -1)),
+              skinned.renormalisedWeightVertexCountEXT)
+        << "the wrong number of vertices was renormalised";
+    EXPECT_EQ(static_cast<std::size_t>(NumberOr(skin, "zeroWeightVertexCount", -1)),
+              skinned.zeroWeightVertexCountEXT);
+    EXPECT_GT(skinned.worstWeightSumDeviationEXT, 0.2f)
+        << "the worst deviation was not recorded -- a caller cannot tell exporter quantisation "
+           "from a broken file without it";
+
+    // And the values themselves, per vertex, against the manifest's stated post-policy answer.
+    // The BlendWeight offset comes from the canonical stride table rather than a literal: hardcoding
+    // a layout is exactly what went stale in GLTF-278, and this fixture's stride depends on which
+    // effect its material selects, which is not this test's subject.
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            skinned.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known) << "stride " << skinned.stride << " is not in the canonical table";
+    int blendWeightOffset = -1;
+    for (std::size_t i = 0; i < layout.count; ++i)
+    {
+        if (layout.elements[i].usage ==
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendWeight)
+        {
+            blendWeightOffset = layout.elements[i].offset;
+            break;
+        }
+    }
+    ASSERT_GE(blendWeightOffset, 0) << "the chosen layout has no BlendWeight slot";
+
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<double> expected = Numbers(after.arrayValue[v]);
+        ASSERT_EQ(4u, expected.size());
+        float actual[4];
+        std::memcpy(actual,
+                    skinned.vertexBytes.data() +
+                        v * static_cast<std::size_t>(skinned.stride) +
+                        static_cast<std::size_t>(blendWeightOffset),
+                    sizeof(actual));
+        for (std::size_t c = 0; c < 4; ++c)
+        {
+            EXPECT_NEAR(static_cast<float>(expected[c]), actual[c], kTolerance)
+                << "component " << c;
+        }
+    }
+}
+
+// --- plan_gltf.md GLTF-261: a rig past the GPU palette (the audit's H6) ----------------------------
+
+// The palette is 72 mat4s -- a real XNA constant every renderer's uniform array is sized by -- so a
+// 73-joint rig is refused rather than truncated. Truncating leaves the joints past the limit at the
+// identity, so every vertex bound to them collapses toward the origin, which is precisely the class
+// of silent wrongness this campaign removes. The fixture sits ONE past the boundary, because an
+// off-by-one in the check is as much a failure as no check at all.
+TEST(GltfSkinSpaces, ARigPastTheBonePaletteIsRefusedRatherThanTruncated)
+{
+    const LoadedFixture fixture("skin-73-joints");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().skins_count));
+    ASSERT_EQ(73u, static_cast<std::size_t>(fixture.Data().skins[0].joints_count))
+        << "the fixture is no longer one past the limit";
+
+    const CNA::Internal::GltfImport::SceneGraphOut scene =
+        CNA::Internal::GltfImport::BuildSceneGraph(&fixture.Data());
+    std::string message;
+    try
+    {
+        (void)CNA::Internal::GltfImport::BuildSkeleton(
+            fixture.Data().skins, scene, Matrix::getIdentityProperty(), 1.0f);
+    }
+    catch (const std::exception& e)
+    {
+        message = e.what();
+    }
+    ASSERT_FALSE(message.empty()) << "a 73-joint rig was accepted -- it cannot fit the palette";
+    EXPECT_NE(std::string::npos, message.find("73")) << message;
+    EXPECT_NE(std::string::npos, message.find("72")) << message;
+    EXPECT_NE(std::string::npos, message.find("BigRig"))
+        << "the diagnostic does not name the skin: " << message;
+
+    // Exactly 72 must still be accepted: the check is a limit, not an off-by-one.
+    EXPECT_NO_THROW({
+        const LoadedFixture ok("skin-armature-ancestor");
+        ASSERT_TRUE(ok.Ok());
+        (void)CNA::Internal::GltfImport::BuildSkeleton(
+            ok.Data().skins, CNA::Internal::GltfImport::BuildSceneGraph(&ok.Data()),
+            Matrix::getIdentityProperty(), 1.0f);
+    });
 }

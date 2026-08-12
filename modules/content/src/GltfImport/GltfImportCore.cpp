@@ -671,6 +671,26 @@ namespace CNA::Internal::GltfImport
         const std::size_t n = skin->joints_count;
         if (n == 0) { return result; }
 
+        // plan_gltf.md GLTF-261. The GPU palette is MaxBones (72) mat4s, a real XNA constant that
+        // every renderer's uniform array is sized by, so raising it is not a local change. A rig
+        // above the limit is therefore refused -- clearly, here, naming the file's own joint count
+        // and the limit -- rather than left to surface later as SetBoneTransforms' generic
+        // "boneTransforms exceeds MaxBones", which says nothing about which asset caused it.
+        //
+        // Refusing rather than truncating is the point: truncating leaves the joints past the limit
+        // with an identity matrix, so every vertex bound to them collapses toward the origin. That
+        // is the audit's H6, and it is exactly the class of silent wrongness this campaign removes.
+        constexpr std::size_t kMaxPaletteBones = 72;
+        if (n > kMaxPaletteBones)
+        {
+            throw std::runtime_error(
+                "Skin '" + std::string(skin->name != nullptr ? skin->name : "<unnamed>") +
+                "' has " + std::to_string(n) + " joints, but the GPU bone palette holds " +
+                std::to_string(kMaxPaletteBones) +
+                ". Truncating would leave every vertex bound to a joint past the limit collapsed "
+                "toward the origin, so the skin is refused instead (plan_gltf.md GLTF-261).");
+        }
+
         std::vector<const cgltf_node*> oldNodes(n);
         for (std::size_t i = 0; i < n; ++i) { oldNodes[i] = skin->joints[i]; }
 
@@ -1894,8 +1914,45 @@ namespace CNA::Internal::GltfImport
                 uvs[i + 1] = sinR * u * sx + cosR * v * sy + oy;
             }
         }
-        const std::vector<float> weights = out.skinned
+        std::vector<float> weights = out.skinned
             ? unpackSemantic(cgltf_attribute_type_weights, 0, weightsAcc, 4, "WEIGHTS_0") : std::vector<float>();
+
+        // plan_gltf.md GLTF-256: RENORMALISE, and report when it was needed.
+        //
+        // §3.7.3.3 requires a vertex's joint weights to sum to 1, but a file is not guaranteed to
+        // honour it and CNA never checked. The failure is not cosmetic: the skin equation is a
+        // weighted sum of joint matrices, so weights summing to 0.75 produce 0.75 of the vertex's
+        // transform -- which for a joint near the origin drags the vertex three-quarters of the way
+        // toward it. That is H12, an independent collapse mechanism, and it looks exactly like the
+        // defects this campaign exists to remove.
+        //
+        // Renormalising rather than refusing, because a slightly-off sum is what quantised
+        // exporters routinely emit and refusing those files would be useless; and reporting,
+        // because a sum that is *far* off is a different thing from float error and the caller
+        // should be able to see the difference. An all-zero weight set is left alone: it means the
+        // vertex is unweighted, and 0/0 is not a normalisation.
+        if (out.skinned && !weights.empty())
+        {
+            constexpr float kTolerance = 1e-4f;
+            for (std::size_t v = 0; v + 3 < weights.size(); v += 4)
+            {
+                const float sum = weights[v] + weights[v + 1] + weights[v + 2] + weights[v + 3];
+                if (sum <= 0.0f)
+                {
+                    ++out.zeroWeightVertexCountEXT;
+                    continue;
+                }
+                if (std::fabs(sum - 1.0f) <= kTolerance) { continue; }
+                ++out.renormalisedWeightVertexCountEXT;
+                out.worstWeightSumDeviationEXT =
+                    std::max(out.worstWeightSumDeviationEXT, std::fabs(sum - 1.0f));
+                const float inv = 1.0f / sum;
+                weights[v] *= inv;
+                weights[v + 1] *= inv;
+                weights[v + 2] *= inv;
+                weights[v + 3] *= inv;
+            }
+        }
         const std::vector<float> joints = out.skinned
             ? unpackSemantic(cgltf_attribute_type_joints, 0, jointsAcc, 4, "JOINTS_0") : std::vector<float>();
         // COLOR_0 may be VEC3 (RGB) or VEC4 (RGBA) per the glTF spec; a missing alpha defaults to

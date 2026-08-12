@@ -538,7 +538,15 @@ namespace CnaTest::GltfOracle
         {
             SkeletonResult skeleton;
             const bool hasSkin = group.skin != nullptr;
-            if (hasSkin) { skeleton = BuildSkeleton(group.skin, 1.0f); }
+            std::string skeletonError;
+            if (hasSkin)
+            {
+                // Total, like every other helper here: a skin CNA refuses -- an over-limit rig
+                // (GLTF-261), say -- is recorded as this group's error rather than thrown through
+                // the sweep, so one malformed fixture cannot take every other one's L3 with it.
+                try { skeleton = BuildSkeleton(group.skin, 1.0f); }
+                catch (const std::exception& e) { skeletonError = e.what(); }
+            }
 
             for (const MeshInstanceOut& placement : group.instances)
             {
@@ -550,6 +558,12 @@ namespace CnaTest::GltfOracle
                     entry.mesh = static_cast<int>(mesh - data.meshes);
                     entry.primitive = static_cast<int>(p);
                     entry.meshName = mesh->name != nullptr ? mesh->name : "";
+                    if (!skeletonError.empty())
+                    {
+                        entry.error = skeletonError;
+                        out.push_back(std::move(entry));
+                        continue;
+                    }
                     try
                     {
                         const MeshOut extracted = ExtractMesh(

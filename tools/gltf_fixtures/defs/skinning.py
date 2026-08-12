@@ -13,6 +13,7 @@ Specification: §3.7.3 ``skins``, §3.7.3.2 ``joint-hierarchy``, §3.7.3.3 ``ski
 from __future__ import annotations
 
 from ..builder import FLOAT, TRIANGLES, UNSIGNED_BYTE, UNSIGNED_SHORT, GltfBuilder, pack
+from ..l5 import unsupported as l5_unsupported
 from ..manifest import (Defect, Fixture, l3_primitive, mat_identity, mat_translation, mat_mul,
                         world_positions)
 from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
@@ -480,5 +481,172 @@ def skin_skeleton_hint() -> Fixture:
     )
 
 
+#: `skin-unnormalized`'s weights. The first vertex sums to 0.75, which is H12's exact shape: the
+#: skin equation applies 0.75 of the transform, dragging the vertex a quarter of the way toward the
+#: joint's origin. The second is within float error of 1 and must NOT be counted as malformed. The
+#: third sums to zero -- an unweighted vertex, where 0/0 is not a normalisation.
+_UNNORMALIZED_WEIGHTS = [
+    (0.5, 0.25, 0.0, 0.0),
+    (0.60001, 0.39999, 0.0, 0.0),
+    (0.0, 0.0, 0.0, 0.0),
+]
+_TWO_JOINT_INDICES = [(0, 1, 0, 0)] * 3
+
+#: The same weights after CNA's documented policy: vertex 0 renormalised, vertex 1 left alone
+#: (within float error of 1), vertex 2 left alone (zero sum -- 0/0 is not a normalisation).
+_RENORMALIZED_WEIGHTS = [
+    (2.0 / 3.0, 1.0 / 3.0, 0.0, 0.0),
+    _UNNORMALIZED_WEIGHTS[1],
+    _UNNORMALIZED_WEIGHTS[2],
+]
+
+
+def skin_unnormalized() -> Fixture:
+    """Joint weights that do not sum to 1. Owns **GLTF-256**, the audit's **H12**.
+
+    §3.7.3.3 requires a vertex's weights to sum to 1, but a file is not guaranteed to honour it and
+    CNA never checked. The failure is not cosmetic: the skin equation is a weighted sum of joint
+    matrices, so weights summing to 0.75 apply 0.75 of the vertex's transform -- which for a joint
+    near the origin drags the vertex three-quarters of the way toward it. An independent collapse
+    mechanism, wearing the same clothes as D8.
+
+    Three vertices, three cases, so the policy can fail in three distinguishable ways: one clearly
+    short (0.75), one within float error of 1 (must be left alone, or every quantised exporter's
+    output is reported as broken), and one summing to zero (unweighted -- ``0/0`` is not a
+    normalisation, so it must be left alone too rather than assigned to an arbitrary joint).
+    """
+    b = GltfBuilder("skin-unnormalized")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    joints = b.add_packed_accessor(usage="JOINTS_0", values=_TWO_JOINT_INDICES,
+                                   accessor_type="VEC4", component_type=UNSIGNED_BYTE)
+    weights = b.add_packed_accessor(usage="WEIGHTS_0", values=_UNNORMALIZED_WEIGHTS,
+                                    accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+
+    inverse_bind = mat_identity()
+    ibm_offset = b.append_bytes(pack(list(inverse_bind) + list(inverse_bind), FLOAT), alignment=4)
+    ibm = b.add_accessor(usage="inverseBindMatrices", component_type=FLOAT, accessor_type="MAT4",
+                         count=2, expected=list(inverse_bind) + list(inverse_bind),
+                         buffer_view=b.add_buffer_view(ibm_offset, 128))
+
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "JOINTS_0": joints, "WEIGHTS_0": weights},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="SkinnedTri")
+
+    joint0 = b.add_node(name="Joint0")
+    joint1 = b.add_node(name="Joint1")
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": [joint0, joint1], "inverseBindMatrices": ibm})
+    b.add_scene([joint0, joint1, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = {
+        "jointCount": 2,
+        "meshNodeWorldColumnMajor": mat_identity(),
+        "policy": "RENORMALISE, and report. A slightly-off sum is what quantised exporters "
+                  "routinely emit, so refusing those files would be useless; but a sum far from 1 "
+                  "is a broken file, and the deviation is what tells the two apart.",
+        "weightsAsAuthored": [list(w) for w in _UNNORMALIZED_WEIGHTS],
+        "weightsAfterPolicy": [list(w) for w in _RENORMALIZED_WEIGHTS],
+        "renormalisedVertexCount": 1,
+        "zeroWeightVertexCount": 1,
+        "toleranceRule": "A sum within 1e-4 of 1 is float error, not a malformed file, and is left "
+                         "untouched and uncounted -- vertex 1 (sum 1.0) is exactly that case.",
+        "zeroWeightRule": "A vertex whose weights sum to zero is unweighted. 0/0 is not a "
+                          "normalisation, so it is counted and left alone rather than assigned to "
+                          "an arbitrary joint.",
+    }
+    return Fixture(
+        id="skin-unnormalized", audit_fixture=None, owning_group="skinning",
+        description="Three vertices with weights summing to 0.75, to 1 within float error, and to "
+                    "zero. The first is H12 -- a weighted sum applying three-quarters of the "
+                    "transform drags the vertex toward the joint's origin -- and the other two are "
+                    "the cases a renormalisation policy must NOT touch.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["unnormalized WEIGHTS_0", "zero-weight vertex", "renormalisation policy"],
+        spec_anchors=["skins", "skinned-mesh-attributes"],
+        # L2 holds the AUTHORED weights (that is what the accessor decodes to); L3 holds the
+        # renormalised ones, because L3 is what the importer understood the mesh to be after its
+        # own documented policy ran. Stating the authored values only here would make the two
+        # layers contradict each other.
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, joints=_TWO_JOINT_INDICES,
+            weights=_RENORMALIZED_WEIGHTS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def skin_73_joints() -> Fixture:
+    """A rig one joint past the 72-entry GPU palette. Owns **GLTF-261**, the audit's **H6**.
+
+    The palette is ``MaxBones`` (72) ``mat4``\ s -- a real XNA constant that every renderer's
+    uniform array is sized by, so raising it is not a local change. The file is therefore refused,
+    and refusing rather than truncating is the whole point: truncating leaves the joints past the
+    limit at the identity, so every vertex bound to them collapses toward the origin.
+
+    Exactly 73 joints, so the fixture sits one past the boundary rather than far beyond it -- an
+    off-by-one in the check is as much a failure as no check at all.
+    """
+    joint_count = 73
+    b = GltfBuilder("skin-73-joints")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    # Every vertex is bound to the LAST joint, the one a truncating reader would drop.
+    joints = b.add_packed_accessor(usage="JOINTS_0",
+                                   values=[(joint_count - 1, 0, 0, 0)] * 3,
+                                   accessor_type="VEC4", component_type=UNSIGNED_BYTE)
+    weights = b.add_packed_accessor(usage="WEIGHTS_0", values=_WEIGHTS, accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+
+    identity = mat_identity()
+    ibm_offset = b.append_bytes(pack(list(identity) * joint_count, FLOAT), alignment=4)
+    ibm = b.add_accessor(usage="inverseBindMatrices", component_type=FLOAT, accessor_type="MAT4",
+                         count=joint_count, expected=list(identity) * joint_count,
+                         buffer_view=b.add_buffer_view(ibm_offset, 64 * joint_count))
+
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "JOINTS_0": joints, "WEIGHTS_0": weights},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="SkinnedTri")
+
+    joint_nodes = [b.add_node(name="Joint" + str(i)) for i in range(joint_count)]
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "BigRig", "joints": joint_nodes, "inverseBindMatrices": ibm})
+    b.add_scene(joint_nodes + [mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    return Fixture(
+        id="skin-73-joints", audit_fixture=None, owning_group="skinning",
+        description="A skin with 73 joints, one past the 72-entry GPU bone palette, with every "
+                    "vertex bound to the last one. Refused rather than truncated: truncating "
+                    "leaves those joints at the identity and collapses their vertices toward the "
+                    "origin.",
+        builder=b, validated_layers=["L1", "L2"],
+        features=["skin.joints beyond MaxBones", "palette limit", "import rejection"],
+        spec_anchors=["skins", "joint-hierarchy"],
+        l3={"primitives": []},
+        l4={},
+        l5=l5_unsupported("The skin is refused at extraction, so no buffers are produced.",
+                          ["GLTF-261"]),
+        rejection={
+            "stage": "extraction",
+            "task": "GLTF-261",
+            "errorContains": ["73 joints", "72"],
+            "note": "Refused at EXTRACTION, not validation: the file is perfectly well-formed "
+                    "glTF and cgltf_validate has nothing to object to. The limit is CNA's own GPU "
+                    "palette size, which is why the diagnostic names both numbers rather than "
+                    "citing the specification.",
+        },
+    )
+
+
 FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform, skin_plus_static_mesh,
-            skin_skeleton_hint]
+            skin_skeleton_hint, skin_unnormalized, skin_73_joints]
