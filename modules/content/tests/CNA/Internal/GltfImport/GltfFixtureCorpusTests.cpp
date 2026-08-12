@@ -1013,3 +1013,62 @@ TEST(GltfFixtureCorpus, TheConformanceDocListsEveryFixtureTheManifestDeclares)
     }
     EXPECT_EQ(CorpusFixtureIds().size(), compared);
 }
+
+// --- plan_gltf.md GLTF-414: inline documents stay a deliberate choice ----------------------------
+
+TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
+{
+    // The suite holds a few hundred glTF documents written as C++ string literals, and
+    // docs/gltf-conformance.md §3.8 records why they are not corpus fixtures: they are negative
+    // one-offs, probes of loader machinery rather than of glTF semantics, or mutations. Each is a
+    // defensible choice, and the risk is that the choice stops being made -- an inline document is
+    // invisible to every corpus sweep, so it asserts only what its own test asserts.
+    //
+    // Hence a ceiling rather than a ban. Adding one is fine; raising this number is the deliberate
+    // act that says so, and the commit that raises it is where the reason goes.
+    constexpr int kCeiling = 258;
+
+    int found = 0;
+    std::map<std::string, int> perFile;
+    const std::filesystem::path tests =
+        CorpusDirectory().parent_path().parent_path().parent_path() / "modules" / "content" / "tests";
+    ASSERT_TRUE(std::filesystem::is_directory(tests)) << "cannot find " << tests;
+
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::recursive_directory_iterator(tests))
+    {
+        if (!entry.is_regular_file() || entry.path().extension() != ".cpp") { continue; }
+        std::ifstream file(entry.path());
+        const std::string source((std::istreambuf_iterator<char>(file)),
+                                  std::istreambuf_iterator<char>());
+        int count = 0;
+        for (std::string::size_type at = source.find("R\"GLTF("); at != std::string::npos;
+             at = source.find("R\"GLTF(", at + 1))
+        {
+            ++count;
+        }
+        if (count == 0) { continue; }
+        found += count;
+        perFile[entry.path().filename().string()] = count;
+    }
+
+    RecordProperty("inlineGltfDocuments", found);
+    RecordProperty("filesWithInlineDocuments", static_cast<int>(perFile.size()));
+
+    // Where they live is part of the rule: an inline glTF document inside a suite that is not a
+    // glTF suite is a test asserting glTF behaviour from outside every glTF gate.
+    for (const auto& [name, count] : perFile)
+    {
+        EXPECT_TRUE(name.find("Gltf") != std::string::npos)
+            << name << " holds " << count << " inline glTF document(s) and is not a glTF suite, so "
+               "they sit outside the conformance label and the sanitizer job's filter";
+    }
+
+    EXPECT_LE(found, kCeiling)
+        << "there are now " << found << " inline glTF documents, over the recorded " << kCeiling
+        << ". That is not a failure of the new test -- it is the decision GLTF-414 asks for. If the "
+           "document is an asset whose correct import is a conformance statement, it belongs in "
+           "tools/gltf_fixtures/ instead (docs/gltf-conformance.md §3.7). If it is a negative "
+           "one-off, a loader-machinery probe or a mutation, raise this ceiling and say which in "
+           "the commit message.";
+}

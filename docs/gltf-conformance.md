@@ -494,6 +494,34 @@ outside the conformance label, which is the quiet failure that check exists to p
 An asset that cannot be kept under 8 KiB needs a `size_exemption` with a reason (`GLTF-419`), and
 an asset that declares an extension needs a registry record (`GLTF-335`). Both are enforced.
 
+### 3.8 Inline documents vs corpus fixtures — which goes where (`GLTF-414`)
+
+The suite also contains **258 glTF documents written inline as C++ string literals**, and they are
+deliberately not in the corpus. The rule, so the choice is made rather than defaulted to:
+
+**Put it in the corpus** when the document is an *asset whose correct import is a conformance
+statement*. Such a fixture earns four things the corpus gives it and nothing else does: spec-derived
+expectations at every layer it declares, a `.glb` twin, byte-exact L5 goldens, and a row in the
+inventory that makes it visible to every corpus-wide sweep. If those would say anything, the
+document belongs there.
+
+**Keep it inline** when it is one of these:
+
+* **A negative one-off** whose entire expectation is "refused, with this message". A corpus asset
+  must be describable at the layers it declares; a document that is refused at parse has nothing to
+  describe, and adding fifty of them would bury the seventy-four assets that do.
+* **A probe of loader machinery rather than of glTF semantics** — `ContentManager`'s extension
+  resolution, the CLI's exit code, an embedded PNG in a `bufferView`, a `.cnj` round-trip. The
+  subject is CNA's plumbing; the glTF document is a means.
+* **A mutation of another document**, which is what the container fuzz produces by the thousand.
+* **A shape the generator cannot express** without growing a feature that exists for one test.
+
+The trade is real and worth naming: an inline document is invisible to every corpus sweep, so it
+only ever asserts what its own test asserts. That is acceptable for the three categories above,
+because in each the test *is* the whole statement. It is not acceptable for anything else, which is
+why `GltfFixtureCorpus.InlineGltfDocumentsDoNotGrowWithoutADecision` puts a ceiling on the count:
+adding one is fine, and raising the number in that test is the deliberate act that says so.
+
 ---
 
 ## 4. The L5 golden buffers (`GLTF-007`)
