@@ -412,6 +412,44 @@ if(CNA_BUILD_TESTS)
     cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
         LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
+    # plan_gltf.md GLTF-010: the glTF conformance ladder as one runnable label.
+    #
+    # `ctest -L gltf-conformance` runs the whole ladder. Each rung is registered as its OWN ctest
+    # entry rather than one filter over all of them, because the ladder's whole point is that a
+    # divergence has a *layer*: CTest's own per-test result then names it -- "GltfConformanceL4
+    # (Failed)" -- without anyone reading a log. The rungs are listed lowest-first, and CTest runs
+    # them in registration order, so the first failing entry is the first divergent layer
+    # (GLTF-402). Higher layers still run, because knowing whether a wrong world matrix also
+    # corrupted the bound effect parameters is worth a few extra milliseconds.
+    #
+    # L0 is not a ladder rung: it is the corpus itself -- generator determinism, manifest/asset
+    # agreement, .glb/.gltf equivalence -- and if it fails, no layer above it means anything.
+    # L7 (rendered image, GLTF-009) is deliberately absent: it needs a renderer with a real 3D
+    # pipeline, so it will register alongside the others only on a renderer that has one.
+    # SINGLE SOURCE OF TRUTH for the ladder's partition. `GltfConformanceLadder` (a gtest case)
+    # parses this exact list out of this file and asserts that every registered Gltf* suite falls
+    # into exactly one rung -- so a new suite that matches no rung fails the run instead of
+    # silently sitting outside `ctest -L gltf-conformance`. Keep the entries here only.
+    set(CNA_GLTF_CONFORMANCE_RUNGS
+        "L0|GltfFixtureCorpus.*:GltfOracleEXT.*:GltfConformanceLadder.*"
+        "L1|GltfConformanceL1.*:GltfContainerValidation.*"
+        "L2|GltfConformanceL2.*:GltfAccessorDecodeLock.*:GltfIndexDecode.*"
+        "L3|GltfConformanceL3.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfDrawTopology.*"
+        "L4|GltfConformanceL4.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfRigidAnimation.*"
+        "L5|GltfConformanceL5.*:GltfBufferOracle.*"
+        "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*"
+        "Ledger|GltfKnownDefect.*"
+        "Tool|GltfToCnjToolTest.*")
+    foreach(_gltf_rung IN LISTS CNA_GLTF_CONFORMANCE_RUNGS)
+        string(FIND "${_gltf_rung}" "|" _gltf_sep)
+        string(SUBSTRING "${_gltf_rung}" 0 ${_gltf_sep} _gltf_layer)
+        math(EXPR _gltf_filter_start "${_gltf_sep} + 1")
+        string(SUBSTRING "${_gltf_rung}" ${_gltf_filter_start} -1 _gltf_filter)
+        cna_register_renderer_test(NAME CnaGltfConformance${_gltf_layer}
+            COMMAND CnaTests --gtest_filter=${_gltf_filter}
+            TIMEOUT 300 LABELS "gltf-conformance" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endforeach()
+
     if(MINGW)
         # Statically link MinGW runtime into the test binary too, so it can
         # run outside CLion without libgcc_s_seh-1.dll / libstdc++-6.dll.

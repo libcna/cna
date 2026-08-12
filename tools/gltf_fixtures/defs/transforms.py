@@ -21,11 +21,11 @@ _SPEC = ["nodes-and-hierarchy", "transformations"]
 _TRANSFORM_TASKS = ["GLTF-103", "GLTF-113", "GLTF-114", "GLTF-115"]
 
 
-def _carrier_triangle(builder: GltfBuilder, mesh_name: str) -> int:
+def _carrier_triangle(builder: GltfBuilder, mesh_name: str, normals=TRIANGLE_NORMALS) -> int:
     """Adds the shared carrier triangle as mesh ``mesh_name`` and returns its mesh index."""
     position = builder.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
                                            accessor_type="VEC3", with_bounds=True)
-    normal = builder.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS,
+    normal = builder.add_packed_accessor(usage="NORMAL", values=normals,
                                          accessor_type="VEC3")
     indices = builder.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
                                           accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
@@ -36,10 +36,16 @@ def _carrier_triangle(builder: GltfBuilder, mesh_name: str) -> int:
     }], name=mesh_name)
 
 
-def _l3(mesh: int, mesh_name: str) -> dict:
+def _l3(mesh: int, mesh_name: str, normals=TRIANGLE_NORMALS) -> dict:
     return {"primitives": [l3_primitive(
         mesh=mesh, mesh_name=mesh_name, primitive=0, mode=TRIANGLES,
-        positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]}
+        positions=TRIANGLE_POSITIONS, normals=normals, indices=TRIANGLE_INDICES)]}
+
+
+#: A unit normal with two non-zero components, so a normal matrix that is merely the world 3x3
+#: gives a visibly different direction from the correct inverse-transpose. An axis-aligned normal
+#: would survive both derivations under an axis-aligned scale and prove nothing.
+SLANTED_NORMALS = [(0.6, 0.8, 0.0), (0.6, 0.8, 0.0), (0.6, 0.8, 0.0)]
 
 
 def xf_identity() -> Fixture:
@@ -201,4 +207,35 @@ def xf_matrix_node() -> Fixture:
     )
 
 
-FIXTURES = [xf_identity, xf_shared_mesh, xf_parent_child, xf_matrix_node]
+def xf_scale_nonuniform() -> Fixture:
+    """§11.4's non-uniform-scale rung -- the case that separates a normal matrix from a world one.
+
+    Positions only ever need the world matrix, so every other transform fixture is satisfied by it.
+    Normals are not: under a non-uniform scale the correct normal transform is
+    ``transpose(inverse(world3x3))`` (§3.7.2.1), and using the world 3x3 directly skews them. The
+    carrier triangle's own normals are axis-aligned and would survive both derivations unchanged
+    under an axis-aligned scale, so this fixture authors ``(0.6,0.8,0)`` instead: with
+    ``scale = [2,3,4]`` the two derivations then disagree far outside any tolerance, and an L6
+    capture can tell them apart by number rather than by inspection.
+    """
+    b = GltfBuilder("xf-scale-nonuniform")
+    mesh = _carrier_triangle(b, "SlantedTri", normals=SLANTED_NORMALS)
+    node = b.add_node(name="ScaledNode", mesh=mesh, scale=[2, 3, 4])
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="xf-scale-nonuniform", audit_fixture=None, owning_group="transforms",
+        description="A single node with the non-uniform scale [2,3,4], carrying a triangle whose "
+                    "normals point along (0.6,0.8,0). Positions scale componentwise; normals must "
+                    "be transformed by the inverse transpose of the world 3x3, which for this "
+                    "scale is diag(0.5, 1/3, 0.25) -- a different direction from the world 3x3's "
+                    "own. The fixture exists so the normal matrix has a case that can fail.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["node.scale non-uniform", "normal matrix", "inverse-transpose normal transform"],
+        spec_anchors=_SPEC + ["meshes-overview"],
+        l3=_l3(mesh, "SlantedTri", normals=SLANTED_NORMALS),
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+FIXTURES = [xf_identity, xf_shared_mesh, xf_parent_child, xf_matrix_node, xf_scale_nonuniform]

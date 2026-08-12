@@ -101,17 +101,6 @@ namespace
         return Path(fixture.Expected(), "l3.primitives");
     }
 
-    /// True for a fixture the importer is required to REFUSE (GLTF-021/GLTF-023).
-    ///
-    /// Such a fixture has no L3 semantic mesh and no L4 world geometry, because a conforming
-    /// reader never gets that far -- the rejection itself is the expectation, and
-    /// `GltfContainerValidation` owns asserting it, including that the diagnostic names the cause.
-    /// Skipping it here is not a suppression: nothing about it is left unchecked.
-    bool IsRejectionFixture(const JsonValue& expected)
-    {
-        return Member(expected, "rejection").type == JsonType::Object;
-    }
-
     /// The extracted primitive matching a (mesh, primitive) pair, or nullptr when the import path
     /// produced none -- which is itself a meaningful answer for an exclusion fixture.
     const ExtractedPrimitive* FindExtracted(const std::vector<ExtractedPrimitive>& extracted,

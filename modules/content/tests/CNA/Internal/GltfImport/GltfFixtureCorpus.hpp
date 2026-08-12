@@ -118,6 +118,19 @@ namespace CnaTest::GltfOracle
                                bool fallback);
 
     /**
+     * @brief True when a fixture's expectation is that the importer refuses the file outright.
+     *
+     * Such a fixture has no L3 semantic mesh and no L4 world geometry, because a conforming reader
+     * never gets that far -- the rejection itself is the expectation, and `GltfContainerValidation`
+     * owns asserting it, including that the diagnostic names the cause. Skipping it in a
+     * later-layer suite is not a suppression: nothing about it is left unchecked.
+     *
+     * @param expected The fixture's parsed expectation manifest.
+     * @return True when the manifest carries a `rejection` block.
+     */
+    [[nodiscard]] bool IsRejectionFixture(const CNA::Internal::JsonValue& expected);
+
+    /**
      * @brief True when a defect record is still open (`known-failing` or `partially-remediated`).
      *
      * A `fixed` record stays in the corpus forever as the regression witness for the task that

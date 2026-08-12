@@ -212,6 +212,11 @@ namespace CnaTest::GltfOracle
         return member.type == CNA::Internal::JsonType::Boolean ? member.boolValue : fallback;
     }
 
+    bool IsRejectionFixture(const CNA::Internal::JsonValue& expected)
+    {
+        return Member(expected, "rejection").type == CNA::Internal::JsonType::Object;
+    }
+
     bool IsOpenDefect(const CNA::Internal::JsonValue& defect)
     {
         const std::string status = StringOr(defect, "status", "");

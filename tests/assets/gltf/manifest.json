@@ -12,13 +12,13 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 23,
+  "distinctAssetCount": 24,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
     "component-types": 2,
     "topology": 7,
-    "transforms": 4,
+    "transforms": 5,
     "materials": 1,
     "skinning": 2,
     "animation": 1,
@@ -522,6 +522,23 @@
         "column-major matrix layout"
       ],
       "auditFixture": "f13"
+    },
+    {
+      "id": "xf-scale-nonuniform",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node.scale non-uniform",
+        "normal matrix",
+        "inverse-transpose normal transform"
+      ],
+      "auditFixture": null
     },
     {
       "id": "mat-factor-only-gold",
@@ -1158,6 +1175,31 @@
       "path": "xf-parent-child.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "xf-scale-nonuniform.expected.json",
+      "bytes": 6590,
+      "sha256": "d06e983935b290f625b2fd92a7442bf07469ffbcb67d71daf99293dcbaa67856"
+    },
+    {
+      "path": "xf-scale-nonuniform.glb",
+      "bytes": 808,
+      "sha256": "9702e55bcaf0a5c2859393dd9cd18c5c57c29c4df50ca06f14d3ae1b2e829a61"
+    },
+    {
+      "path": "xf-scale-nonuniform.gltf",
+      "bytes": 1488,
+      "sha256": "94892357d19373d037578ce0f6aa520b1415c8f5f7906d90e6ddc2525f0d7be6"
+    },
+    {
+      "path": "xf-scale-nonuniform.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-scale-nonuniform.vb.bin",
+      "bytes": 144,
+      "sha256": "188749347a148d3d53d4e2b7d26661d101d1623dc25e1d2e6855a1c6d7a1bbff"
     },
     {
       "path": "xf-shared-mesh.expected.json",

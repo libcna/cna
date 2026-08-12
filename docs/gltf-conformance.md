@@ -195,8 +195,8 @@ pass for its fixture. Implemented so far:
 | **L3** | semantic mesh streams in mesh-local space (`MeshOut`, field by field) | implemented — `DumpMeshOutEXT` | `GLTF-005` |
 | **L4** | world-space vertex positions after node composition | implemented — `EvaluateWorldPositionsEXT` | `GLTF-006` |
 | **L5** | byte-exact generated vertex/index buffers | implemented — `CompareVertexBytesEXT` / `CompareIndexBytesEXT` | `GLTF-007` |
-| **L6** | effect parameters actually bound for a draw | not implemented | `GLTF-008` |
-| **L7** | rendered pixels vs a golden PNG | not implemented | `GLTF-009` |
+| **L6** | effect parameters actually bound for a draw | implemented — `CaptureDrawParamsEXT` | `GLTF-008` |
+| **L7** | rendered pixels vs a golden PNG | not implemented — needs a 3D-capable renderer | `GLTF-009` |
 
 The helpers are **test scope only** — they live under `modules/content/tests/CNA/Internal/GltfImport/`
 in namespace `CnaTest::GltfOracle`, are compiled only into `CnaTests`, and are not part of the CNA
@@ -376,8 +376,36 @@ working directory, which is what CTest is configured to use. The suites are:
 | `GltfMaterialState` | every authored material property reaching the effect, and glTF's defaults when none is declared (`GLTF-215` … `GLTF-231`) |
 | `GltfDrawTopology` | each primitive mode reaching its `ModelMeshPart` as a real `PrimitiveType` with a §12.3 count (`GLTF-073`/`GLTF-078`) |
 | `GltfLightingPolicy` | the default-lighting fallback for a file that declares no light (`GLTF-215`) |
+| `GltfConformanceL6` / `GltfDrawParamsOracleL6` | the parameter block a draw binds: world/view/projection, the normal matrix, the material factors, the bone palette and influence count, and the alpha state's carried-vs-applied boundary (`GLTF-008`) |
+| `GltfConformanceLadder` | that every `Gltf*` suite belongs to exactly one rung of the `gltf-conformance` label (`GLTF-010`) |
 
-`GLTF-010` will collapse these into a single `ctest -L gltf-conformance` label once L6–L7 exist.
+#### The `gltf-conformance` CTest label (`GLTF-010`)
+
+```bash
+ctest -L gltf-conformance          # the whole ladder
+ctest -L gltf-conformance -R L4    # one rung
+```
+
+Each rung is its **own** CTest entry, registered lowest-first, so CTest's own result line names the
+divergent layer — `CnaGltfConformanceL4 ... Failed` — without anyone reading a log. Higher rungs
+still run after a failure, because whether a wrong world matrix also corrupted the bound effect
+parameters is worth knowing in the same run.
+
+| Entry | Covers |
+|---|---|
+| `CnaGltfConformanceL0` | the corpus and the oracle helpers themselves — if this fails nothing above it means anything |
+| `CnaGltfConformanceL1` … `L6` | the six implemented ladder rungs |
+| `CnaGltfConformanceLedger` | the defect ledger: every measured defect is either still declared open or closed by a named task |
+| `CnaGltfConformanceTool` | the offline `.cnj` converter, the second of the two loaders |
+
+The rung list lives once, in `cmake/UnitTests.cmake` (`CNA_GLTF_CONFORMANCE_RUNGS`).
+`GltfConformanceLadder` parses that exact list and asserts the partition is total in both
+directions: a new `Gltf*` suite matching no rung fails the run rather than quietly sitting outside
+the label, and a rung naming a suite that no longer exists fails rather than quietly running zero
+tests.
+
+There is no `L7` entry. It appears when a renderer with a real 3D pipeline is configured; see
+§5.3.
 
 ---
 
@@ -447,3 +475,72 @@ no corpus fixture carries a texture at all. The `primitiveCount` assertion cover
 since that is the only topology that reaches L5 — a strip or fan is already converted to one by then
 (`GLTF-072`); `GLTF-078` replaces the loaders' hardcoded `numIndices / 3` with a topology-aware
 helper and this is where that replacement is held to the same answer.
+
+---
+
+## 5. The L6 draw-parameter capture (`GLTF-008`)
+
+### 5.1 What L6 measures
+
+L3 says what the importer understood the file to mean. L5 says which bytes it packed. Neither says
+whether those facts reach a shader — and that gap is where **D7** lived for the whole of the audit:
+`mat-factor-only-gold` decoded perfectly at L3 and still rendered opaque white, because nothing
+assigned its factors to an effect.
+
+`CaptureDrawParamsEXT` (`GltfDrawParamsOracleEXT.{hpp,cpp}`, test scope only) closes it. Per drawn
+`ModelMeshPart` it records the `GpuDrawParams` block a renderer would receive, having first bound
+`absoluteBoneTransform * world`, the view and the projection exactly as `Model::Draw` binds them. It
+calls the same virtual `Effect::FillGpuDrawParams()` that `GraphicsDevice::DrawIndexedPrimitives`
+calls, on the same effect instance — no renderer, no device draw, no reimplementation of an effect.
+
+What it deliberately does **not** capture is `GraphicsDevice`'s own additions to the block *after*
+that call: vertex stream bindings, `vertexStart`, `startIndex`. Those describe the buffers, not the
+material, and none of them is a `plan_gltf.md` §21.1 quantity. L5 already owns the buffers, byte for
+byte.
+
+### 5.2 The §21.1 contract at L6
+
+| §21.1 row | Where it is asserted | Against what |
+|---|---|---|
+| World / View / Projection | `BoundWorldMatrixMatchesTheExpectedNodeWorld`, `ViewAndProjectionReachEveryDrawUnaltered` | the manifest's **L4** `worldMatrixColumnMajor`, times the application world |
+| Normal matrix | `NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3`, `NonUniformScaleSeparatesTheNormalMatrixFromTheWorldMatrix` | XNA's own `Matrix::Invert` + `Transpose` |
+| Base colour factor | `MaterialFactorsReachTheBoundEffect` | the manifest's **L3** `material.baseColorFactor` |
+| Metallic / roughness | `MaterialFactorsReachTheBoundEffect` | L3 `material.metallicFactor` / `roughnessFactor` |
+| Emissive | `MaterialFactorsReachTheBoundEffect` | L3 `material.emissiveFactor` |
+| MR / occlusion / normal / emissive maps | `APbrDrawYieldsEverySection211QuantityItCanCarry` | *binding only* — which slot is filled. Channel semantics stay L3/L7 |
+| Tangent handedness | — | **L5**, in the vertex bytes; not an effect parameter |
+| Bone palette | `SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex` | `AnimationPlayer::GetSkinTransforms()`, entry for entry |
+| Influences per vertex | `SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex` | CNA always packs four |
+| Alpha mode / cutoff | `AlphaStateIsCarriedOnTheEffectButNotYetInTheParameterBlock` | L3 `material.alphaMode` / `alphaCutoff` |
+| Double-sided | same | L3 `material.doubleSided` — *carried*, see below |
+
+Every comparison is against a value **another layer already established independently**, never
+against a second walk of the same code. That is what makes a green L6 mean "the value survived the
+whole trip" rather than "two copies of the same mistake agree".
+
+Two entries in the table are honest boundaries rather than coverage:
+
+* **Tangent handedness** is a vertex-stream fact. It has no effect parameter, so it cannot be an L6
+  assertion; L5's byte-exact goldens own it and `GLTF-175` extends it to L7.
+* **Alpha state** is *carried, not applied* — `docs/gltf-api-change-review.md` §1.3/§1.4's own
+  decision. The capture records both halves: what the effect carries (`BLEND`, cutoff `0.5`,
+  double-sided) **and** what the GPU block would apply (`alphaTest` still at its `{0,0,1,1}`
+  never-discard default). `AlphaStateIsCarriedOnTheEffectButNotYetInTheParameterBlock` pins that
+  gap deliberately, so it cannot be crossed silently in either direction: when `GLTF-230` wires the
+  blend and cutoff state, that test fails and has to be updated on purpose.
+
+### 5.3 Why L7 is not implemented
+
+`GLTF-009`'s acceptance is *deterministic PNGs across two runs on `OPENGLES3`*. It is not blocked by
+design work; it is blocked by the renderer the conformance suite runs on. `STUB` has no 3D pipeline
+at all — that is exactly why the repository's `GraphicsDeviceCapability`, `TextureCube` and
+`XnbBuiltInReader` suites already fail there, and why `ModelMesh::Draw`'s own
+`Ensure3DSupported()` gate exists. No image can be produced, so no image can be compared, and a
+"golden" captured from a renderer that draws nothing would be a golden bug of exactly the kind
+`docs/gltf-center-collapse-verdict.md` §5 warns about.
+
+The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
+file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
+directly. When a GL-capable configuration is available, `GLTF-009` adds the L7 rung and
+`cmake/UnitTests.cmake` gains a `CnaGltfConformanceL7` entry beside the others — the label's shape
+already accommodates it.

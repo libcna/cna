@@ -442,8 +442,8 @@ The center-collapse track is closed. It is deliberately narrow, and these remain
 | Serialising and playing a rigid node clip | **`GLTF-294`** | the clip is now imported and reported (`GLTF-293`); the `.cnj` schema cannot yet say which index space a track targets |
 | The alpha and sidedness state of a material | **`GLTF-228`**/**`229`**/**`231`**, behind the `GLTF-025` API gate | shading, not geometry; the factors themselves now survive (`GLTF-215`/`216`) |
 | L6 draw-parameter capture | `GLTF-008` | harness not yet built |
-| L7 image oracle | `GLTF-009` | harness not yet built |
-| `ctest -L gltf-conformance` single label | `GLTF-010` | needs L6/L7 |
+| L7 image oracle | `GLTF-009` | blocked on a 3D-capable renderer, not on design — `docs/gltf-conformance.md` §5.3 |
+| `ctest -L gltf-conformance` single label | `GLTF-010` | landed for L0–L6 plus the ledger and the `.cnj` tool; gains an L7 entry when `GLTF-009` unblocks |
 | `cgltf_validate()` / `extensionsRequired` | `GLTF-021`, `GLTF-023` | Track B Phase 1 |
 
 Per `plan_gltf.md` §28, Track B's Phases 8–23 were gated on this report and are now unblocked.
@@ -454,9 +454,10 @@ Per `plan_gltf.md` §28, Track B's Phases 8–23 were gated on this report and a
 
 | Quantity | Value |
 |---|---|
-| Generated fixtures today | **21** distinct assets (`manifest.json` → `distinctAssetCount`), each with a `.glb` twin |
+| Generated fixtures **when this report was written** | **21** distinct assets (`manifest.json` → `distinctAssetCount`), each with a `.glb` twin |
+| Generated fixtures today | **24** — `GLTF-021`/`GLTF-023` added the first container and robustness fixtures, and `GLTF-267` added §11.4's `xf-scale-nonuniform` |
 | Planned corpus (`plan_gltf.md` §24.2) | **135** distinct assets — completed by `GLTF-399` |
-| L5 goldens | 17 of 21 (the four point/line topologies record `l5.supported = false` with the tasks that would produce one) |
+| L5 goldens | 17 of 21 at the time of writing; **22 of 24 today** — the four point/line topologies gained theirs with `GLTF-073`/`GLTF-078`, and the two remaining assets are the rejection fixtures, which have no L5 by construction |
 
 `skin-mesh-node-transform` was the corpus's 16th asset, added by `GLTF-260`; `GLTF-072` then
 completed the topology group's seven, taking the generated corpus to 21. It was **new to the
