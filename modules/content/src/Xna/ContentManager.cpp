@@ -2310,6 +2310,23 @@ namespace Microsoft::Xna::Framework::Content
                             ". That map is not applied; the primitive draws as though it had none "
                             "(GLTF-200).");
                     }
+                    // plan_gltf.md GLTF-184/GLTF-336: one UV channel means one bakeable
+                    // transform, so every other map's is silently the base colour's.
+                    if (!meshOut.unbakedTextureTransformsEXT.empty())
+                    {
+                        std::string maps;
+                        for (const std::string& map : meshOut.unbakedTextureTransformsEXT)
+                        {
+                            if (!maps.empty()) { maps += ", "; }
+                            maps += map;
+                        }
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' declares a KHR_texture_transform on " + maps +
+                            " that differs from the base colour's. CNA bakes exactly one transform "
+                            "into its single UV channel, so those maps are sampled with the base "
+                            "colour's coordinates instead of their own (GLTF-184).");
+                    }
                     // plan_gltf.md GLTF-173: normals CNA derived rather than the file authoring
                     // them. Only reported when the derivation had to approximate -- a faceted mesh
                     // whose author already split its edges gets exact flat normals, and saying so

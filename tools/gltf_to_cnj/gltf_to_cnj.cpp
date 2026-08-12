@@ -267,6 +267,22 @@ namespace
                         "data (CNA currently samples every PBR map from one shared UV channel).");
                 }
 
+                // plan_gltf.md GLTF-184/GLTF-336: one UV channel means one bakeable transform.
+                if (!meshOut.unbakedTextureTransformsEXT.empty())
+                {
+                    std::string maps;
+                    for (const std::string& map : meshOut.unbakedTextureTransformsEXT)
+                    {
+                        if (!maps.empty()) { maps += ", "; }
+                        maps += map;
+                    }
+                    warnings.push_back(
+                        "Primitive '" + partName + "' declares a KHR_texture_transform on " + maps +
+                        " that differs from the base colour's; CNA bakes exactly one transform into "
+                        "its single UV channel, so those maps are sampled with the base colour's "
+                        "coordinates instead of their own.");
+                }
+
                 // plan_gltf.md GLTF-173: computed normals that had to be averaged rather than
                 // truly flat, because a vertex is shared between faces of different orientation.
                 if (meshOut.smoothedNormalVertexCountEXT > 0)

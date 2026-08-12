@@ -281,3 +281,87 @@ TEST(GltfUnsupportedTexture, RequiringEitherExtensionIsRefusedOutrightRatherThan
         EXPECT_THROW(ValidateGltfEXT(loaded.data, "fixture.gltf", warnings), std::runtime_error);
     }
 }
+
+// --- plan_gltf.md GLTF-184/GLTF-336: one UV channel, one bakeable transform --------------------
+//
+// KHR_texture_transform is applied by BAKING it into the UV data at import, and there is exactly
+// one UV channel to bake into -- so exactly one transform can be honoured. CNA honours the base
+// colour's, and every other map declaring a different one is sampled with the base colour's
+// coordinates instead of its own. For a tiled normal map or a rotated emissive mask that is a
+// visible mis-registration, and it happened without a word.
+
+namespace
+{
+    /// A material whose base colour and normal map each carry their own texture transform.
+    std::string TransformDocument(const std::string& baseColorTransform,
+                                  const std::string& normalTransform)
+    {
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "extensionsUsed": [ "KHR_texture_transform" ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+      "material": 0
+  } ] } ],
+  "materials": [ {
+      "pbrMetallicRoughness": {
+          "baseColorTexture": { "index": 0)GLTF") + baseColorTransform + R"GLTF( }
+      },
+      "normalTexture": { "index": 0)GLTF" + normalTransform + R"GLTF( }
+  } ],
+  "textures": [ { "sampler": 0, "source": 0 } ],
+  "images": [ { "uri": "base.png", "mimeType": "image/png" } ],
+  "samplers": [ { } ],
+  "buffers": [ { "byteLength": 96, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAA==" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+    }
+
+    const char* kScaledTwice = R"(, "extensions": { "KHR_texture_transform": { "scale": [2, 2] } })";
+    const char* kScaledFour  = R"(, "extensions": { "KHR_texture_transform": { "scale": [4, 4] } })";
+}
+
+TEST(GltfUnsupportedTexture, AMapWhoseTextureTransformDiffersFromTheBaseColoursIsReported)
+{
+    const MeshOut out = Extract(TransformDocument(kScaledTwice, kScaledFour));
+    ASSERT_EQ(1u, out.unbakedTextureTransformsEXT.size())
+        << "the normal map's own transform was dropped without a word";
+    EXPECT_EQ("normal", out.unbakedTextureTransformsEXT[0]);
+}
+
+TEST(GltfUnsupportedTexture, AMapSharingTheBaseColoursTransformIsNotReported)
+{
+    // The control that keeps the check from degrading into "any transform warns". Sharing one
+    // transform is the common authoring pattern and is honoured exactly, so it must be silent.
+    const MeshOut out = Extract(TransformDocument(kScaledTwice, kScaledTwice));
+    EXPECT_TRUE(out.unbakedTextureTransformsEXT.empty())
+        << "an identical transform was reported as unbakeable: "
+        << (out.unbakedTextureTransformsEXT.empty() ? "" : out.unbakedTextureTransformsEXT[0]);
+}
+
+TEST(GltfUnsupportedTexture, AMapWithATransformWhenTheBaseColourHasNoneIsReported)
+{
+    // The asymmetric case: nothing was baked at all, so the normal map's transform is not merely
+    // overridden -- it is entirely absent from the UV data.
+    const MeshOut out = Extract(TransformDocument("", kScaledFour));
+    ASSERT_EQ(1u, out.unbakedTextureTransformsEXT.size());
+    EXPECT_EQ("normal", out.unbakedTextureTransformsEXT[0]);
+}
+
+TEST(GltfUnsupportedTexture, AMaterialWithNoTextureTransformAtAllReportsNothing)
+{
+    const MeshOut out = Extract(TransformDocument("", ""));
+    EXPECT_TRUE(out.unbakedTextureTransformsEXT.empty());
+}

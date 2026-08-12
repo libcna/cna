@@ -2118,6 +2118,44 @@ namespace CNA::Internal::GltfImport
         }
         std::vector<float> uvs = uvAcc
             ? unpackSemantic(cgltf_attribute_type_texcoord, texcoordIndex, uvAcc, 2, "TEXCOORD") : std::vector<float>();
+        // plan_gltf.md GLTF-184/GLTF-336. Exactly ONE transform can be baked, because there is
+        // exactly one UV channel to bake it into -- so every map whose transform differs from the
+        // base colour's is sampled with the wrong texture coordinates, and said nothing about it.
+        //
+        // Reported rather than fixed, and the reason is worth separating from GLTF-181's. That one
+        // (a real second UV *channel*) needs a vertex attribute, which means a new stride, and the
+        // stride it needs is already taken. This one needs only a per-map uniform in the PBR
+        // programs: the shared UV is transformed in the shader before each sample. That is a
+        // strictly smaller change -- no ABI, no VertexDeclaration -- but it is still a shader and
+        // uniform change in every renderer that has a PBR program, which is not something this
+        // task can land and verify. Naming the maps is what makes it a known limit rather than a
+        // mystery in someone's render comparison.
+        {
+            const auto sameTransform = [](const cgltf_texture_transform& a,
+                                          const cgltf_texture_transform* b) {
+                if (b == nullptr) { return false; }
+                return a.offset[0] == b->offset[0] && a.offset[1] == b->offset[1] &&
+                       a.scale[0] == b->scale[0] && a.scale[1] == b->scale[1] &&
+                       a.rotation == b->rotation;
+            };
+            const auto checkView = [&](const cgltf_texture_view& view, const char* mapName) {
+                if (view.texture == nullptr || view.has_transform == 0) { return; }
+                if (sameTransform(view.transform, baseColorTransform)) { return; }
+                out.unbakedTextureTransformsEXT.emplace_back(mapName);
+            };
+            if (prim.material != nullptr)
+            {
+                if (prim.material->has_pbr_metallic_roughness)
+                {
+                    checkView(prim.material->pbr_metallic_roughness.metallic_roughness_texture,
+                              "metallic-roughness");
+                }
+                checkView(prim.material->normal_texture, "normal");
+                checkView(prim.material->occlusion_texture, "occlusion");
+                checkView(prim.material->emissive_texture, "emissive");
+            }
+        }
+
         // CNB-97 (Phase 14H): KHR_texture_transform, applied to the shared UV channel baked into
         // TextureCoordinate (matching PbrEffect's own single-shared-UV-channel limitation --
         // see MeshOut::pbrUv2Mismatch's own doc comment) -- the glTF spec's own reference formula
