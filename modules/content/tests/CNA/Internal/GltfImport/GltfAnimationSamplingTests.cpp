@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-298 / GLTF-300 / GLTF-301 / GLTF-302 / GLTF-304 / GLTF-309 / GLTF-311:
-// how a channel's samples become keyframes.
+// plan_gltf.md GLTF-298 / GLTF-300 / GLTF-301 / GLTF-302 / GLTF-303 / GLTF-304 / GLTF-306 /
+// GLTF-309 / GLTF-311: how a channel's samples become keyframes.
 //
 // glTF gives an animation sampler three interpolation modes and lets each of a node's three
 // components be driven independently. `ExtractClips` resamples every channel onto the union of one
@@ -330,4 +330,162 @@ TEST(GltfAnimationSampling, CubicSplineReadsTheValueOfEachTripletNotTheInTangent
     EXPECT_NEAR(1.0f, start->translation.X, kTolerance)
         << "100 here would mean the in-tangent was read as the value";
     EXPECT_NEAR(2.0f, end->translation.X, kTolerance);
+}
+
+// --- GLTF-303: two channels on one node, with disjoint key times ----------------------------------
+
+namespace
+{
+    /// One joint driven by TWO channels whose key times do not coincide: translation at 0 and 2,
+    /// rotation at 1 and 3. Resampling has to produce keyframes at the UNION -- 0, 1, 2, 3 -- and
+    /// give each one a full TRS, which means every keyframe carries at least one value neither
+    /// channel authored there.
+    std::string TwoChannelDisjointDocument()
+    {
+        std::vector<std::uint8_t> buffer;
+        AppendFloats(buffer, {0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f});
+        const std::size_t jointsOffset = buffer.size();
+        for (int v = 0; v < 3; ++v) { buffer.insert(buffer.end(), {0, 0, 0, 0}); }
+        const std::size_t weightsOffset = buffer.size();
+        AppendFloats(buffer, {1, 0, 0, 0,  1, 0, 0, 0,  1, 0, 0, 0});
+        const std::size_t ibmOffset = buffer.size();
+        AppendFloats(buffer, {1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1});
+        // Translation channel: t = 0 and 2, X going 0 -> 20.
+        const std::size_t tTimesOffset = buffer.size();
+        AppendFloats(buffer, {0.0f, 2.0f});
+        const std::size_t tOutOffset = buffer.size();
+        AppendFloats(buffer, {0.0f, 0.0f, 0.0f, 20.0f, 0.0f, 0.0f});
+        // Rotation channel: t = 1 and 3, identity to a half turn about Z.
+        const std::size_t rTimesOffset = buffer.size();
+        AppendFloats(buffer, {1.0f, 3.0f});
+        const std::size_t rOutOffset = buffer.size();
+        AppendFloats(buffer, {0.0f, 0.0f, 0.0f, 1.0f,  0.0f, 0.0f, 1.0f, 0.0f});
+
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "Joint0" },
+    { "name": "SkinnedMeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "skins": [ { "name": "Skin", "joints": [0], "inverseBindMatrices": 3 } ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "JOINTS_0": 1, "WEIGHTS_0": 2 }, "mode": 4 } ] } ],
+  "animations": [ {
+      "name": "Disjoint",
+      "samplers": [
+        { "input": 4, "output": 5, "interpolation": "LINEAR" },
+        { "input": 6, "output": 7, "interpolation": "LINEAR" }
+      ],
+      "channels": [
+        { "sampler": 0, "target": { "node": 0, "path": "translation" } },
+        { "sampler": 1, "target": { "node": 0, "path": "rotation" } }
+      ]
+  } ],
+  "buffers": [ { "byteLength": )GLTF") + std::to_string(buffer.size()) +
+               R"GLTF(, "uri": "data:application/octet-stream;base64,)GLTF" + Base64(buffer) +
+               R"GLTF(" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(jointsOffset) + R"GLTF(, "byteLength": 12 },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(weightsOffset) + R"GLTF(, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(ibmOffset) + R"GLTF(, "byteLength": 64 },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(tTimesOffset) + R"GLTF(, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(tOutOffset) + R"GLTF(, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(rTimesOffset) + R"GLTF(, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(rOutOffset) + R"GLTF(, "byteLength": 32 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5121, "count": 3, "type": "VEC4" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5126, "count": 1, "type": "MAT4" },
+    { "bufferView": 4, "componentType": 5126, "count": 2, "type": "SCALAR" },
+    { "bufferView": 5, "componentType": 5126, "count": 2, "type": "VEC3" },
+    { "bufferView": 6, "componentType": 5126, "count": 2, "type": "SCALAR" },
+    { "bufferView": 7, "componentType": 5126, "count": 2, "type": "VEC4" }
+  ]
+})GLTF";
+    }
+}
+
+TEST(GltfAnimationSampling, DisjointChannelTimesResampleOntoTheirUnionWithEveryComponentFilled)
+{
+    // Translation is authored at t = 0 and 2; rotation at t = 1 and 3. A keyframe carries a full
+    // TRS, so the track has to exist at all four times -- and at each one, the component the file
+    // did NOT author there has to be the interpolated value of its own channel, not a default and
+    // not the nearest authored sample.
+    //
+    // t = 1 is the case that separates the three: translation there is 10 (halfway from 0 to 20),
+    // which is neither 0 (nearest earlier sample) nor 20 (nearest later) nor 0 (a default).
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, TwoChannelDisjointDocument()));
+    const std::vector<ClipOut> clips = ClipsOf(doc);
+    ASSERT_EQ(1u, clips.size());
+    ASSERT_EQ(1u, clips[0].tracks.size());
+    const TrackOut& track = clips[0].tracks[0];
+
+    for (const double t : {0.0, 1.0, 2.0, 3.0})
+    {
+        SCOPED_TRACE("t = " + std::to_string(t));
+        EXPECT_NE(nullptr, KeyAt(track, t)) << "the union of both channels' times is missing a key";
+    }
+
+    const KeyframeOut* atOne = KeyAt(track, 1.0);
+    ASSERT_NE(nullptr, atOne);
+    EXPECT_NEAR(10.0f, atOne->translation.X, kTolerance)
+        << "translation at t=1 is neither held from t=0 nor taken from t=2 -- it is interpolated";
+
+    // And the rotation at t = 2, where only translation is authored, is halfway through the
+    // rotation channel's own interval: a half turn about Z reached at t=3, so a quarter turn here.
+    const KeyframeOut* atTwo = KeyAt(track, 2.0);
+    ASSERT_NE(nullptr, atTwo);
+    const Vector3 rotated =
+        Vector3::Transform(Vector3(1.0f, 0.0f, 0.0f), Matrix::CreateFromQuaternion(atTwo->rotation));
+    EXPECT_NEAR(0.0f, rotated.X, 1e-3f)
+        << "the rotation at t=2 was not interpolated from its own channel";
+    EXPECT_NEAR(1.0f, rotated.Y, 1e-3f);
+
+    // The clip's duration is the union's own end, not either channel's.
+    EXPECT_NEAR(3.0, clips[0].duration, 1e-6);
+}
+
+// --- GLTF-306: clip naming --------------------------------------------------------------------
+
+TEST(GltfAnimationSampling, AnUnnamedAnimationGetsAStableGeneratedName)
+{
+    // `AnimationPlayer` and every `.cnj` consumer look a clip up by name, so an unnamed animation
+    // needs one -- and the same one on every run, or a saved game referencing "Clip1" finds a
+    // different animation after a reload. The generated name is its own index, which is the only
+    // identifier the file itself provides.
+    std::string json = AnimatedJointDocument("LINEAR", {0.0f, 1.0f},
+                                              {0.0f, 0.0f, 0.0f, 5.0f, 0.0f, 0.0f});
+    const std::string named = R"("name": "Clip",)";
+    const std::size_t at = json.find(named);
+    ASSERT_NE(std::string::npos, at);
+    json.erase(at, named.size());
+
+    Parsed first;
+    ASSERT_TRUE(Parse(first, json));
+    Parsed second;
+    ASSERT_TRUE(Parse(second, json));
+
+    const std::vector<ClipOut> a = ClipsOf(first);
+    const std::vector<ClipOut> b = ClipsOf(second);
+    ASSERT_EQ(1u, a.size());
+    ASSERT_EQ(1u, b.size());
+    EXPECT_EQ("Clip0", a[0].name) << "an unnamed animation must take its own index";
+    EXPECT_EQ(a[0].name, b[0].name) << "the generated name changed between two runs";
+}
+
+TEST(GltfAnimationSampling, AnAuthoredClipNameIsUsedVerbatim)
+{
+    // The control: a generator that renamed everything uniformly would pass the test above.
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, AnimatedJointDocument("LINEAR", {0.0f, 1.0f},
+                                                  {0.0f, 0.0f, 0.0f, 5.0f, 0.0f, 0.0f})));
+    const std::vector<ClipOut> clips = ClipsOf(doc);
+    ASSERT_EQ(1u, clips.size());
+    EXPECT_EQ("Clip", clips[0].name);
 }

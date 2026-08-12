@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-307: how `AnimationPlayer` treats a time outside the clip.
+// plan_gltf.md GLTF-307 / GLTF-308: how `AnimationPlayer` treats a time outside the clip, and
+// what a looping clip does at its own boundary.
 //
 // Every frame of every animated model goes through this, and both branches have a failure mode that
 // is easy to miss and unpleasant when it lands. Clamping that lets the position run past the
@@ -134,4 +135,59 @@ TEST(AnimationPlayerClampAndLoop, AZeroDurationClipHoldsAtZeroRatherThanDividing
     EXPECT_EQ(0LL, player.getCurrentPositionProperty().getTicksProperty());
     EXPECT_NO_THROW(player.Update(System::TimeSpan::FromTicks(500), false, false));
     EXPECT_EQ(0LL, player.getCurrentPositionProperty().getTicksProperty());
+}
+
+// --- GLTF-308: the loop boundary ------------------------------------------------------------------
+
+TEST(AnimationPlayerClampAndLoop, ALoopingClipShowsTheSamePoseAtItsEndAsAtItsStart)
+{
+    // A clip authored to loop repeats its first pose at `Duration`, and the player has to agree:
+    // the frame at t = Duration and the frame at t = 0 must produce the *same* bone transform, or
+    // the animation visibly jumps once per cycle. That jump is the classic symptom of a wrap
+    // implemented as `position > duration` rather than `>=` -- one frame of the clip's end pose
+    // leaks through before the wrap, and at 60 Hz it reads as a twitch rather than as an off-by-one.
+    //
+    // The track below travels X from 0 to 10 and back to 0, so the endpoints agree by authoring
+    // while the middle does not: a player that returned a constant pose would pass the boundary
+    // check and fail the midpoint one.
+    SkinningData data = MakeSkinningData();
+
+    AnimationClip clip;
+    clip.Duration = System::TimeSpan::FromTicks(kDurationTicks);
+    BoneTrackEXT track;
+    track.BoneIndex = 0;
+    KeyframeEXT start;
+    start.Time = System::TimeSpan::Zero;
+    start.Translation = Microsoft::Xna::Framework::Vector3(0.0f, 0.0f, 0.0f);
+    KeyframeEXT middle;
+    middle.Time = System::TimeSpan::FromTicks(kDurationTicks / 2);
+    middle.Translation = Microsoft::Xna::Framework::Vector3(10.0f, 0.0f, 0.0f);
+    KeyframeEXT end;
+    end.Time = System::TimeSpan::FromTicks(kDurationTicks);
+    end.Translation = start.Translation;
+    track.Keys = {start, middle, end};
+    clip.Tracks = {track};
+
+    AnimationPlayer player(data);
+    player.StartClip(clip);
+
+    player.Update(System::TimeSpan::Zero, false, false);
+    const Microsoft::Xna::Framework::Matrix atStart = player.GetBoneTransforms()[0];
+
+    player.Update(System::TimeSpan::FromTicks(kDurationTicks / 2), false, false);
+    const Microsoft::Xna::Framework::Matrix atMiddle = player.GetBoneTransforms()[0];
+
+    // Absolute, and looping, so the boundary is reached through the wrap rather than by clamping.
+    player.Update(System::TimeSpan::FromTicks(kDurationTicks), false, true);
+    const Microsoft::Xna::Framework::Matrix atEnd = player.GetBoneTransforms()[0];
+
+    EXPECT_NEAR(atStart.M41, atEnd.M41, 1e-5f)
+        << "the pose at the loop boundary differs from the pose at the start -- the animation "
+           "jumps once per cycle";
+    EXPECT_NEAR(atStart.M42, atEnd.M42, 1e-5f);
+    EXPECT_NEAR(atStart.M43, atEnd.M43, 1e-5f);
+
+    // And the clip really does move in between, so the agreement above is not the agreement of a
+    // player that returns one pose for every time.
+    EXPECT_NEAR(10.0f, atMiddle.M41, 1e-5f) << "the fixture no longer animates at all";
 }
