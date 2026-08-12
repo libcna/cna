@@ -102,6 +102,19 @@ namespace
         return Path(fixture.Expected(), "l3.primitives");
     }
 
+    /// True when the manifest's import policy names @p field as a stream CNA's chosen vertex
+    /// layout has no slot for.
+    bool IsDroppedAttribute(const JsonValue& expectedPrimitive, const std::string& field)
+    {
+        const JsonValue& dropped = Path(expectedPrimitive, "importPolicy.droppedAttributes");
+        if (dropped.type != JsonType::Array) { return false; }
+        for (const JsonValue& entry : dropped.arrayValue)
+        {
+            if (entry.type == JsonType::String && entry.stringValue == field) { return true; }
+        }
+        return false;
+    }
+
     /// The extracted primitive matching a (mesh, primitive) pair, or nullptr when the import path
     /// produced none -- which is itself a meaningful answer for an exclusion fixture.
     const ExtractedPrimitive* FindExtracted(const std::vector<ExtractedPrimitive>& extracted,
@@ -580,6 +593,17 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
                 // constrained by the specification, so nothing is asserted about it.
                 if (expectedField.arrayValue.empty()) { continue; }
                 if (IsKnownDefectField(fixture.Expected(), "L3", field)) { continue; }
+                // A stream the file authors and CNA's chosen vertex layout has no slot for. The
+                // manifest states it at full value -- that is what the file means -- and names it
+                // here as dropped, with the reason. What is asserted is that it really is DROPPED:
+                // "documented limitation" must not become cover for "present and wrong".
+                if (IsDroppedAttribute(expected, field))
+                {
+                    EXPECT_TRUE(actualValues.empty())
+                        << field << " is declared dropped for this primitive's layout, but the "
+                           "importer produced values for it";
+                    continue;
+                }
                 const std::vector<double> expectedValues = Numbers(expectedField);
                 ASSERT_FALSE(expectedValues.empty()) << field << ": manifest values are not numeric";
                 ExpectComponents(expectedValues, actualValues, field);

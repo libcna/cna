@@ -369,12 +369,20 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
                  joints: Sequence[Sequence[float]] | None = None,
                  weights: Sequence[Sequence[float]] | None = None,
                  indices: Sequence[int] | None = None,
-                 material: dict[str, Any] | None = None) -> dict[str, Any]:
+                 material: dict[str, Any] | None = None,
+                 dropped_attributes: Sequence[str] | None = None,
+                 dropped_reason: str | None = None) -> dict[str, Any]:
     """One primitive's spec-correct semantic mesh record -- the L3 expectation.
 
     ``indices`` is the resolved index list a conforming reader must produce (``None`` for a
     non-indexed primitive, whose implicit indices are ``[0, count)``). ``triangles`` is derived
     from ``mode`` per §3.7.2.1 and is empty for the point and line modes.
+
+    ``dropped_attributes`` names streams a conforming reader decodes and CNA's chosen vertex
+    layout has no slot for -- a documented limitation (``GLTF-086``/``GLTF-241``), not a defect and
+    not a licence to ignore them. They stay stated at full value here, because that is what the
+    file means; the conformance comparison skips exactly those fields and asserts they came back
+    EMPTY, so "dropped" cannot quietly become "present and wrong".
 
     ``importPolicy`` is the one part of this record that is **not** spec-derived: it states what
     CNA's own documented per-mode policy (plan_gltf.md §10.1, ``GLTF-072``) must turn the primitive
@@ -411,6 +419,9 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
         # well as in l5 so an L3 comparison can catch a count that no longer follows the topology.
         "primitiveCount": primitive_count_for_mode(imported_mode, len(imported_indices)),
     }
+    if dropped_attributes:
+        import_policy["droppedAttributes"] = list(dropped_attributes)
+        import_policy["droppedReason"] = dropped_reason or ""
     return {
         "mesh": mesh,
         "meshName": mesh_name,

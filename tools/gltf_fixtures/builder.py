@@ -126,8 +126,8 @@ _GLB_CHUNK_BIN = 0x004E4942
 # its dictionaries in. A generated asset is a committed artefact whose diff must mean something.
 
 _TOP_LEVEL_ORDER = ["asset", "extensionsUsed", "extensionsRequired", "scene", "scenes", "nodes",
-                    "cameras", "meshes", "materials", "skins", "animations", "accessors",
-                    "bufferViews", "buffers"]
+                    "cameras", "meshes", "materials", "textures", "images", "samplers", "skins",
+                    "animations", "accessors", "bufferViews", "buffers"]
 _NODE_ORDER = ["name", "mesh", "camera", "skin", "children", "translation", "rotation", "scale",
                "matrix", "weights"]
 _ACCESSOR_ORDER = ["bufferView", "byteOffset", "componentType", "normalized", "count", "type",
@@ -260,6 +260,9 @@ class GltfBuilder:
         self._nodes: list[dict[str, Any]] = []
         self._meshes: list[dict[str, Any]] = []
         self._materials: list[dict[str, Any]] = []
+        self._images: list[dict[str, Any]] = []
+        self._samplers: list[dict[str, Any]] = []
+        self._textures: list[dict[str, Any]] = []
         self._skins: list[dict[str, Any]] = []
         self._cameras: list[dict[str, Any]] = []
         self._animations: list[dict[str, Any]] = []
@@ -565,6 +568,54 @@ class GltfBuilder:
         self._materials.append(dict(material))
         return len(self._materials) - 1
 
+    def add_image(self, png_bytes: bytes, *, name: str | None = None) -> int:
+        """Adds an image, carried as a base64 ``data:`` URI (plan_gltf.md ``GLTF-190``).
+
+        A `data:` URI rather than a bufferView so the *same* image object works unchanged in both
+        containers, and so a reader of the committed `.gltf` can see that the fixture has a texture
+        without opening a second file. `GLTF-196`'s other two source shapes -- a bufferView and an
+        external file -- are covered by their own scratch-document tests, which can vary one thing
+        at a time; a corpus asset cannot.
+
+        :param png_bytes: the encoded PNG.
+        :param name: optional image name.
+        :return: the new image's index.
+        """
+        image: dict[str, Any] = {}
+        if name is not None:
+            image["name"] = name
+        image["uri"] = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+        image["mimeType"] = "image/png"
+        self._images.append(image)
+        return len(self._images) - 1
+
+    def add_sampler(self, sampler: dict[str, Any]) -> int:
+        """Adds a sampler, authored as a glTF sampler object.
+
+        :param sampler: the sampler object (``magFilter``, ``minFilter``, ``wrapS``, ``wrapT``).
+        :return: the new sampler's index.
+        """
+        self._samplers.append(dict(sampler))
+        return len(self._samplers) - 1
+
+    def add_texture(self, *, source: int, sampler: int | None = None,
+                    name: str | None = None) -> int:
+        """Adds a texture pairing an image with an optional sampler.
+
+        :param source: index of the image.
+        :param sampler: index of the sampler, or ``None`` for glTF's own defaults (§5.29).
+        :param name: optional texture name.
+        :return: the new texture's index.
+        """
+        texture: dict[str, Any] = {}
+        if name is not None:
+            texture["name"] = name
+        if sampler is not None:
+            texture["sampler"] = sampler
+        texture["source"] = source
+        self._textures.append(texture)
+        return len(self._textures) - 1
+
     def add_animation(self, animation: dict[str, Any]) -> int:
         """Adds an animation, authored as a glTF animation object.
 
@@ -598,6 +649,12 @@ class GltfBuilder:
         doc["meshes"] = self._meshes
         if self._materials:
             doc["materials"] = self._materials
+        if self._textures:
+            doc["textures"] = self._textures
+        if self._images:
+            doc["images"] = self._images
+        if self._samplers:
+            doc["samplers"] = self._samplers
         if self._skins:
             doc["skins"] = self._skins
         if self._animations:
@@ -624,6 +681,9 @@ class GltfBuilder:
             "nodeCount": len(self._nodes),
             "meshCount": len(self._meshes),
             "materialCount": len(self._materials),
+            "textureCount": len(self._textures),
+            "imageCount": len(self._images),
+            "samplerCount": len(self._samplers),
             "skinCount": len(self._skins),
             "animationCount": len(self._animations),
             "accessorCount": len(self._accessors),

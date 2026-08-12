@@ -1,6 +1,6 @@
 {
-  "id": "mode-triangles",
-  "description": "An explicit TRIANGLES quad whose index list is exactly what the strip and fan fixtures must convert to. It is the control for GLTF-072: a conversion that produced this list by accident, from the wrong rule, would still have to agree with a file that authored it directly.",
+  "id": "tex-reference-checkerboard",
+  "description": "A quad carrying the asymmetric reference texture as its base colour, with a NEAREST/CLAMP_TO_EDGE sampler. The four quadrants differ in both colour and numeral, so a V flip, a UV-set swap and a 180-degree rotation are each individually visible rather than producing a plausible image.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -14,11 +14,14 @@
     "document": "docs/gltf-conformance.md"
   },
   "specAnchors": [
-    "meshes-overview"
+    "materials",
+    "texture",
+    "sampler",
+    "image"
   ],
   "inventory": {
-    "id": "mode-triangles",
-    "owningGroup": "topology",
+    "id": "tex-reference-checkerboard",
+    "owningGroup": "textures",
     "referencingGroups": [],
     "validatedLayers": [
       "L1",
@@ -28,8 +31,10 @@
       "L5"
     ],
     "features": [
-      "primitive.mode = TRIANGLES",
-      "explicit mode key"
+      "base-colour texture",
+      "image data: URI",
+      "sampler NEAREST",
+      "CLAMP_TO_EDGE"
     ],
     "auditFixture": null
   },
@@ -39,16 +44,16 @@
     "sceneCount": 1,
     "nodeCount": 1,
     "meshCount": 1,
-    "materialCount": 0,
-    "textureCount": 0,
-    "imageCount": 0,
-    "samplerCount": 0,
+    "materialCount": 1,
+    "textureCount": 1,
+    "imageCount": 1,
+    "samplerCount": 1,
     "skinCount": 0,
     "animationCount": 0,
-    "accessorCount": 2,
-    "bufferViewCount": 2,
+    "accessorCount": 5,
+    "bufferViewCount": 5,
     "bufferCount": 1,
-    "bufferByteLength": 60,
+    "bufferByteLength": 204,
     "extensionsUsed": [],
     "extensionsRequired": []
   },
@@ -85,6 +90,93 @@
       },
       {
         "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 48,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "TANGENT",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 96,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "TEXCOORD_0",
+        "type": "VEC2",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 2,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 160,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "index": 4,
         "usage": "indices",
         "type": "SCALAR",
         "componentType": 5123,
@@ -93,9 +185,9 @@
         "componentsPerElement": 1,
         "normalized": false,
         "sparse": false,
-        "bufferView": 1,
+        "bufferView": 4,
         "byteOffset": 0,
-        "bufferViewByteOffset": 48,
+        "bufferViewByteOffset": 192,
         "bufferViewByteStride": null,
         "values": [
           0,
@@ -112,7 +204,7 @@
     "primitives": [
       {
         "mesh": 0,
-        "meshName": "ListQuad",
+        "meshName": "TexturedQuad",
         "primitive": 0,
         "mode": 4,
         "modeName": "TRIANGLES",
@@ -140,9 +232,72 @@
             0.0
           ]
         ],
-        "normals": [],
-        "tangents": [],
-        "texcoords": [],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "tangents": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "texcoords": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ],
         "colors": [],
         "joints": [],
         "weights": [],
@@ -181,7 +336,31 @@
           "converted": false,
           "primitiveCount": 2
         },
-        "material": null
+        "material": {
+          "index": 0,
+          "name": "Textured",
+          "baseColorFactor": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "metallicFactor": 1.0,
+          "roughnessFactor": 1.0,
+          "emissiveFactor": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "alphaMode": "OPAQUE",
+          "alphaCutoff": 0.5,
+          "doubleSided": false,
+          "hasBaseColorTexture": true,
+          "hasNormalTexture": false,
+          "hasMetallicRoughnessTexture": false,
+          "hasOcclusionTexture": false,
+          "hasEmissiveTexture": false
+        }
       }
     ]
   },
@@ -277,12 +456,12 @@
             "size": 8
           }
         ],
-        "vertexBufferFile": "mode-triangles.vb.bin",
+        "vertexBufferFile": "tex-reference-checkerboard.vb.bin",
         "vertexBufferBytes": 192,
-        "vertexBufferSha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43",
+        "vertexBufferSha256": "7f3db77e1a5e5e23bac03018d9e5397b8e7378f31026d1e317a92b9f39f756c7",
         "indexElementSize": 2,
         "indexCount": 6,
-        "indexBufferFile": "mode-triangles.ib.bin",
+        "indexBufferFile": "tex-reference-checkerboard.ib.bin",
         "indexBufferBytes": 12,
         "indexBufferSha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b",
         "sourceTopology": "TRIANGLES",

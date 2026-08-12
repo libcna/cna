@@ -89,8 +89,9 @@ def select_stride(primitive: dict[str, Any]) -> int:
     only exclusions are a material declaring a different model, and a vertex-coloured primitive,
     whose stride-24 layout no PBR shader reads.
 
-    Still deliberately partial in one place: the dual-texture stride (20) needs a base-colour and
-    an occlusion map, and no corpus fixture carries a texture at all.
+    Textures change the stride in exactly one combination -- a non-PBR material carrying both a
+    base-colour and an occlusion map, which selects DualTextureEffect's stride-20 layout. Every
+    other map is sampled by whatever effect the material model already chose.
     """
     material = primitive.get("material") or {}
     # A material declaring a model CNA's PBR shaders do not implement -- KHR_materials_unlit or
@@ -99,14 +100,14 @@ def select_stride(primitive: dict[str, Any]) -> int:
     # layouts most non-PBR content lands on, so leaving them without a golden left the widest
     # part of the ABI unasserted.
     non_pbr_model = material.get("model") in ("specular-glossiness", "unlit")
-    if any(material.get(key) for key in ("hasBaseColorTexture", "hasNormalTexture",
-                                          "hasMetallicRoughnessTexture", "hasOcclusionTexture",
-                                          "hasEmissiveTexture")):
-        raise NotImplementedError(
-            f"{primitive.get('meshName')!r}: the L5 golden packer does not yet cover a textured "
-            "material -- the dual-texture stride (20) and the base-colour/occlusion selection "
-            "both depend on which maps are present. Extend tools/gltf_fixtures/l5.py together "
-            "with the fixture that needs them.")
+    # A textured material only changes the stride in one combination: a NON-PBR material carrying
+    # both a base-colour and an occlusion map selects DualTextureEffect's stride-20 layout. Every
+    # other map is sampled by whatever effect the material model already chose, so the stride is
+    # the untextured one. The refusal is therefore narrowed to that one case rather than to
+    # "textured", which used to exclude the whole corpus from having a texture at all.
+    if (non_pbr_model and material.get("hasBaseColorTexture")
+            and material.get("hasOcclusionTexture")):
+        return 20
     skinned = bool(primitive.get("joints")) and bool(primitive.get("weights"))
     colored = bool(primitive.get("colors"))
     use_pbr = (not colored) and (not non_pbr_model)

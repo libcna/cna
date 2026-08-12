@@ -106,12 +106,14 @@ selection rule and **raises** rather than guessing when it meets a shape it does
 new fixture that would need an unmodelled rule fails generation instead of emitting a golden nobody
 verified.
 
-Six of the seven strides the glTF importer can emit have goldens: 24, 32 (`mat-unlit`), 48,
-52 (`skin-unlit`), 56 (`skin-vertex-color`) and 68. **Stride 20 does not**, and the reason is
-recorded rather than left to be discovered: it is `DualTextureEffect`'s layout, reached only by a
-non-PBR material carrying *both* a base-colour and an occlusion texture, and no corpus fixture
-carries a texture at all — the packer refuses a textured material outright rather than guessing
-which map wins. A stride-20 golden therefore needs a textured fixture first.
+All seven strides the glTF importer can emit have goldens: 20 (`tex-dual-texture-stride`), 24,
+32 (`mat-unlit`), 48, 52 (`skin-unlit`), 56 (`skin-vertex-color`) and 68.
+
+A stride-20 golden needed a *textured* fixture, and the corpus had no image support at all until
+`png.py` (`GLTF-190`) — a PNG encoder written against `zlib` and `struct`, because the generator
+may not take a dependency. Stride 20 is the only stride a texture combination decides: a non-PBR
+material carrying both a base-colour and an occlusion map selects `DualTextureEffect`'s layout,
+and every other map is sampled by whatever effect the material model already chose.
 
 When a golden legitimately changes — a fixed packing defect, a deliberate layout change — the diff
 to review is the `.expected.json` block, which states the stride, the field offsets and the vertex

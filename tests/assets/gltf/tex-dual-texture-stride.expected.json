@@ -1,6 +1,6 @@
 {
-  "id": "skin-unlit",
-  "description": "A skinned triangle whose material declares KHR_materials_unlit, so it imports through SkinnedEffect on the stride-52 layout (Position+Normal+TextureCoordinate+BlendWeight+BlendIndices) rather than the skinned PBR one.",
+  "id": "tex-dual-texture-stride",
+  "description": "A non-PBR material with both a base-colour and an occlusion texture, which selects DualTextureEffect's stride-20 layout -- the only stride a texture combination decides, and the last of the seven with no golden bytes.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -14,12 +14,14 @@
     "document": "docs/gltf-conformance.md"
   },
   "specAnchors": [
-    "skins",
-    "skinned-mesh-attributes"
+    "materials",
+    "texture",
+    "sampler",
+    "image"
   ],
   "inventory": {
-    "id": "skin-unlit",
-    "owningGroup": "skinning",
+    "id": "tex-dual-texture-stride",
+    "owningGroup": "textures",
     "referencingGroups": [],
     "validatedLayers": [
       "L1",
@@ -29,9 +31,10 @@
       "L5"
     ],
     "features": [
+      "base-colour texture",
+      "occlusion texture",
       "KHR_materials_unlit",
-      "JOINTS_0 / WEIGHTS_0",
-      "vertex stride 52"
+      "vertex stride 20"
     ],
     "auditFixture": null
   },
@@ -39,18 +42,18 @@
     "assetVersion": "2.0",
     "defaultScene": 0,
     "sceneCount": 1,
-    "nodeCount": 2,
+    "nodeCount": 1,
     "meshCount": 1,
     "materialCount": 1,
-    "textureCount": 0,
-    "imageCount": 0,
+    "textureCount": 2,
+    "imageCount": 2,
     "samplerCount": 0,
-    "skinCount": 1,
+    "skinCount": 0,
     "animationCount": 0,
-    "accessorCount": 7,
-    "bufferViewCount": 7,
+    "accessorCount": 5,
+    "bufferViewCount": 5,
     "bufferCount": 1,
-    "bufferByteLength": 228,
+    "bufferByteLength": 204,
     "extensionsUsed": [
       "KHR_materials_unlit"
     ],
@@ -64,7 +67,7 @@
         "type": "VEC3",
         "componentType": 5126,
         "componentTypeName": "FLOAT",
-        "count": 3,
+        "count": 4,
         "componentsPerElement": 3,
         "normalized": false,
         "sparse": false,
@@ -81,6 +84,9 @@
           0.0,
           0.0,
           1.0,
+          0.0,
+          1.0,
+          1.0,
           0.0
         ]
       },
@@ -90,15 +96,18 @@
         "type": "VEC3",
         "componentType": 5126,
         "componentTypeName": "FLOAT",
-        "count": 3,
+        "count": 4,
         "componentsPerElement": 3,
         "normalized": false,
         "sparse": false,
         "bufferView": 1,
         "byteOffset": 0,
-        "bufferViewByteOffset": 36,
+        "bufferViewByteOffset": 48,
         "bufferViewByteStride": null,
         "values": [
+          0.0,
+          0.0,
+          1.0,
           0.0,
           0.0,
           1.0,
@@ -112,136 +121,83 @@
       },
       {
         "index": 2,
-        "usage": "TEXCOORD_0",
-        "type": "VEC2",
+        "usage": "TANGENT",
+        "type": "VEC4",
         "componentType": 5126,
         "componentTypeName": "FLOAT",
-        "count": 3,
-        "componentsPerElement": 2,
+        "count": 4,
+        "componentsPerElement": 4,
         "normalized": false,
         "sparse": false,
         "bufferView": 2,
         "byteOffset": 0,
-        "bufferViewByteOffset": 72,
+        "bufferViewByteOffset": 96,
         "bufferViewByteStride": null,
         "values": [
+          1.0,
           0.0,
           0.0,
-          0.75,
-          0.125,
-          0.25,
-          0.875
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
         ]
       },
       {
         "index": 3,
-        "usage": "JOINTS_0",
-        "type": "VEC4",
-        "componentType": 5121,
-        "componentTypeName": "UNSIGNED_BYTE",
-        "count": 3,
-        "componentsPerElement": 4,
+        "usage": "TEXCOORD_0",
+        "type": "VEC2",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 4,
+        "componentsPerElement": 2,
         "normalized": false,
         "sparse": false,
         "bufferView": 3,
         "byteOffset": 0,
-        "bufferViewByteOffset": 96,
+        "bufferViewByteOffset": 160,
         "bufferViewByteStride": null,
         "values": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          1.0
         ]
       },
       {
         "index": 4,
-        "usage": "WEIGHTS_0",
-        "type": "VEC4",
-        "componentType": 5126,
-        "componentTypeName": "FLOAT",
-        "count": 3,
-        "componentsPerElement": 4,
-        "normalized": false,
-        "sparse": false,
-        "bufferView": 4,
-        "byteOffset": 0,
-        "bufferViewByteOffset": 108,
-        "bufferViewByteStride": null,
-        "values": [
-          1.0,
-          0.0,
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          0.0,
-          0.0
-        ]
-      },
-      {
-        "index": 5,
         "usage": "indices",
         "type": "SCALAR",
         "componentType": 5123,
         "componentTypeName": "UNSIGNED_SHORT",
-        "count": 3,
+        "count": 6,
         "componentsPerElement": 1,
         "normalized": false,
         "sparse": false,
-        "bufferView": 5,
+        "bufferView": 4,
         "byteOffset": 0,
-        "bufferViewByteOffset": 156,
+        "bufferViewByteOffset": 192,
         "bufferViewByteStride": null,
         "values": [
           0,
           1,
-          2
-        ]
-      },
-      {
-        "index": 6,
-        "usage": "inverseBindMatrices",
-        "type": "MAT4",
-        "componentType": 5126,
-        "componentTypeName": "FLOAT",
-        "count": 1,
-        "componentsPerElement": 16,
-        "normalized": false,
-        "sparse": false,
-        "bufferView": 6,
-        "byteOffset": 0,
-        "bufferViewByteOffset": 164,
-        "bufferViewByteStride": null,
-        "values": [
-          1.0,
-          0.0,
-          0.0,
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          0.0,
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          0.0,
-          0.0,
-          0.0,
-          1.0
+          2,
+          2,
+          1,
+          3
         ]
       }
     ]
@@ -250,12 +206,12 @@
     "primitives": [
       {
         "mesh": 0,
-        "meshName": "UnlitSkinnedTri",
+        "meshName": "DualTexturedQuad",
         "primitive": 0,
         "mode": 4,
         "modeName": "TRIANGLES",
         "indexed": true,
-        "vertexCount": 3,
+        "vertexCount": 4,
         "positions": [
           [
             0.0,
@@ -269,6 +225,11 @@
           ],
           [
             0.0,
+            1.0,
+            0.0
+          ],
+          [
+            1.0,
             1.0,
             0.0
           ]
@@ -288,74 +249,78 @@
             0.0,
             0.0,
             1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
           ]
         ],
-        "tangents": [],
+        "tangents": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
         "texcoords": [
           [
             0.0,
             0.0
           ],
           [
-            0.75,
-            0.125
+            1.0,
+            0.0
           ],
           [
-            0.25,
-            0.875
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
           ]
         ],
         "colors": [],
-        "joints": [
-          [
-            0,
-            0,
-            0,
-            0
-          ],
-          [
-            0,
-            0,
-            0,
-            0
-          ],
-          [
-            0,
-            0,
-            0,
-            0
-          ]
-        ],
-        "weights": [
-          [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ]
-        ],
+        "joints": [],
+        "weights": [],
         "indices": [
           0,
           1,
-          2
+          2,
+          2,
+          1,
+          3
         ],
         "triangles": [
           [
             0,
             1,
             2
+          ],
+          [
+            2,
+            1,
+            3
           ]
         ],
         "importPolicy": {
@@ -365,19 +330,26 @@
           "indices": [
             0,
             1,
-            2
+            2,
+            2,
+            1,
+            3
           ],
           "converted": false,
-          "primitiveCount": 1
+          "primitiveCount": 2,
+          "droppedAttributes": [
+            "normals",
+            "tangents"
+          ],
+          "droppedReason": "DualTextureEffect's stride-20 layout is Position + TextureCoordinate and has no normal or tangent slot at all, so both authored streams are discarded at import and the primitive cannot be lit (GLTF-086/GLTF-241, documented limits reported by both loaders)."
         },
         "material": {
           "index": 0,
-          "name": "UnlitSkin",
-          "model": "unlit",
+          "name": "UnlitDual",
           "baseColorFactor": [
-            0.9,
-            0.4,
-            0.1,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
           "metallicFactor": 1.0,
@@ -390,11 +362,12 @@
           "alphaMode": "OPAQUE",
           "alphaCutoff": 0.5,
           "doubleSided": false,
-          "hasBaseColorTexture": false,
+          "hasBaseColorTexture": true,
           "hasNormalTexture": false,
           "hasMetallicRoughnessTexture": false,
-          "hasOcclusionTexture": false,
-          "hasEmissiveTexture": false
+          "hasOcclusionTexture": true,
+          "hasEmissiveTexture": false,
+          "model": "unlit"
         }
       }
     ]
@@ -402,8 +375,8 @@
   "l4": {
     "instances": [
       {
-        "node": 1,
-        "nodeName": "SkinnedMeshNode",
+        "node": 0,
+        "nodeName": "MeshNode",
         "mesh": 0,
         "parentNodePath": [],
         "worldMatrixColumnMajor": [
@@ -439,6 +412,11 @@
             0.0,
             1.0,
             0.0
+          ],
+          [
+            1.0,
+            1.0,
+            0.0
           ]
         ]
       }
@@ -462,8 +440,8 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 52,
-        "vertexCount": 3,
+        "stride": 20,
+        "vertexCount": 4,
         "fields": [
           {
             "name": "Position",
@@ -471,37 +449,22 @@
             "size": 12
           },
           {
-            "name": "Normal",
-            "offset": 12,
-            "size": 12
-          },
-          {
             "name": "TextureCoordinate",
-            "offset": 24,
+            "offset": 12,
             "size": 8
-          },
-          {
-            "name": "BlendWeight",
-            "offset": 32,
-            "size": 16
-          },
-          {
-            "name": "BlendIndices",
-            "offset": 48,
-            "size": 4
           }
         ],
-        "vertexBufferFile": "skin-unlit.vb.bin",
-        "vertexBufferBytes": 156,
-        "vertexBufferSha256": "8f8ba06744d128960470e4b86dad1e20dd0e413973f65d8432cb6616c702ecdf",
+        "vertexBufferFile": "tex-dual-texture-stride.vb.bin",
+        "vertexBufferBytes": 80,
+        "vertexBufferSha256": "fc9e3bae5aef7c98e933ab380544127daffb0a106142ce20a8296ab91c39584d",
         "indexElementSize": 2,
-        "indexCount": 3,
-        "indexBufferFile": "skin-unlit.ib.bin",
-        "indexBufferBytes": 6,
-        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "indexCount": 6,
+        "indexBufferFile": "tex-dual-texture-stride.ib.bin",
+        "indexBufferBytes": 12,
+        "indexBufferSha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b",
         "sourceTopology": "TRIANGLES",
         "topology": "TRIANGLES",
-        "primitiveCount": 1
+        "primitiveCount": 2
       }
     ]
   },
