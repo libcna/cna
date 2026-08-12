@@ -341,16 +341,20 @@ TEST(GltfKnownDefect, D6_RigidNodeAnimationIsImportedButNotYetSerialised)
 
 // --- D7: factor-only PBR material ------------------------------------------------------------------
 
-TEST(GltfKnownDefect, D7_FactorOnlyPbrMaterialIsDowngradedAndItsStateLost)
+TEST(GltfKnownDefect, D7_FactorOnlyPbrMaterialKeepsItsFactorsButNotItsAlphaState)
 {
-    // Owned by GLTF-217 / GLTF-228 / GLTF-229.
+    // Owned by GLTF-215/216/217/219/221 (landed) and GLTF-228/229/231 (outstanding).
+    //
+    // The claim has moved on with the code. The material is no longer downgraded and its factors
+    // are no longer lost; what is still lost is the alpha and sidedness state, which has nowhere
+    // to go -- MeshOut has no field for it and PbrEffect has no parameter for it.
     const LoadedFixture fixture("mat-factor-only-gold");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const JsonValue& defect = DefectRecord(fixture, "D7");
     ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D7"));
     const JsonValue& actualRecord = CurrentActual(defect);
 
-    // The file authors a real, non-default material.
+    // The file authors a real, non-default material with no texture map of any kind.
     ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().materials_count));
     const cgltf_material& material = fixture.Data().materials[0];
     ASSERT_NE(0, material.has_pbr_metallic_roughness);
@@ -361,51 +365,59 @@ TEST(GltfKnownDefect, D7_FactorOnlyPbrMaterialIsDowngradedAndItsStateLost)
     ASSERT_EQ(1u, extracted.size());
     ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
     const MeshOutDump& dump = extracted[0].dump;
-
-    // With no normal map and no metallic-roughness map, the PBR path can never be selected, so the
-    // surface falls all the way back to BasicEffect's stride-32 layout.
-    EXPECT_EQ(BoolOr(actualRecord, "usePbr", true), dump.usePbr);
-    EXPECT_FALSE(dump.usePbr)
-        << "a factor-only material now selects the PBR path -- if GLTF-217 landed, mark D7 fixed "
-           "in tools/gltf_fixtures and delete this test";
-    EXPECT_EQ(static_cast<int>(NumberOr(actualRecord, "stride", -1)), dump.stride);
-
-    // Not one material property survives. MeshOut has no field at all for baseColorFactor,
-    // alphaMode, alphaCutoff or doubleSided; and the three factor fields it does have are
-    // assigned only inside ExtractMesh's `if (usePbr)` guard, so they are left at MeshOut's own
-    // defaults rather than the file's values. This is plan_gltf.md §1.1's "zero material fields
-    // emitted", confirmed field by field.
     const JsonValue& expectedMaterial =
         Member(Path(fixture.Expected(), "l3.primitives").arrayValue.at(0), "material");
     ASSERT_EQ(JsonType::Object, expectedMaterial.type);
 
-    EXPECT_NEAR(NumberOr(actualRecord, "metallicFactor", -1),
-                static_cast<double>(dump.metallicFactor), kTolerance);
-    EXPECT_NEAR(NumberOr(actualRecord, "roughnessFactor", -1),
-                static_cast<double>(dump.roughnessFactor), kTolerance);
-    EXPECT_GT(std::fabs(NumberOr(expectedMaterial, "metallicFactor", -1) -
-                        static_cast<double>(dump.metallicFactor)), kTolerance)
-        << "metallicFactor now reaches MeshOut for a factor-only material -- if GLTF-217 landed, "
-           "mark D7 fixed in tools/gltf_fixtures and delete this test";
-    EXPECT_GT(std::fabs(NumberOr(expectedMaterial, "roughnessFactor", -1) -
-                        static_cast<double>(dump.roughnessFactor)), kTolerance)
-        << "roughnessFactor now reaches MeshOut for a factor-only material";
+    // GLTF-215: the material MODEL now selects the effect, so a factor-only metallic-roughness
+    // material reaches PbrEffect -- with no map of any kind, which is exactly what it could never
+    // do before. GLTF-216's stride follows from that.
+    EXPECT_TRUE(dump.usePbr)
+        << "a factor-only material is downgraded again -- GLTF-215's rule was reverted";
+    EXPECT_EQ(BoolOr(actualRecord, "usePbr", false), dump.usePbr);
+    EXPECT_EQ(static_cast<int>(NumberOr(actualRecord, "stride", -1)), dump.stride);
+    EXPECT_FALSE(dump.hasBaseColorImage) << "the fixture authors no texture at all";
 
+    // Every authored FACTOR now survives, compared against the fixture's own spec-derived
+    // expectation rather than against a number re-typed here.
+    const std::vector<double> expectedBaseColor = Numbers(Member(expectedMaterial, "baseColorFactor"));
+    ASSERT_EQ(4u, expectedBaseColor.size());
+    for (std::size_t c = 0; c < 4; ++c)
+    {
+        EXPECT_NEAR(expectedBaseColor[c], static_cast<double>(dump.baseColorFactor[c]), kTolerance)
+            << "baseColorFactor[" << c << "] -- GLTF-216";
+    }
+    EXPECT_NEAR(NumberOr(expectedMaterial, "metallicFactor", -1),
+                static_cast<double>(dump.metallicFactor), kTolerance) << "GLTF-219";
+    EXPECT_NEAR(NumberOr(expectedMaterial, "roughnessFactor", -1),
+                static_cast<double>(dump.roughnessFactor), kTolerance) << "GLTF-219";
     const std::vector<double> expectedEmissive = Numbers(Member(expectedMaterial, "emissiveFactor"));
-    const std::vector<double> actualEmissive = Numbers(Member(actualRecord, "emissiveFactor"));
     ASSERT_EQ(3u, expectedEmissive.size());
-    ASSERT_EQ(3u, actualEmissive.size());
-    double emissiveDelta = 0.0;
     for (std::size_t c = 0; c < 3; ++c)
     {
-        EXPECT_NEAR(actualEmissive[c], static_cast<double>(dump.emissiveFactor[c]), kTolerance);
-        emissiveDelta += std::fabs(expectedEmissive[c] - static_cast<double>(dump.emissiveFactor[c]));
+        EXPECT_NEAR(expectedEmissive[c], static_cast<double>(dump.emissiveFactor[c]), kTolerance)
+            << "emissiveFactor[" << c << "] -- GLTF-221";
     }
-    EXPECT_GT(emissiveDelta, kTolerance) << "emissiveFactor now reaches MeshOut";
 
-    EXPECT_TRUE(Strings(Member(actualRecord, "carriedFields")).empty())
-        << "the ledger claims a material field survives; none does";
-    EXPECT_FALSE(dump.hasBaseColorImage);
+    // ...and the ledger agrees with the code about which fields those are, in both directions, so
+    // the record cannot drift away from what the test actually measured.
+    const std::vector<std::string> carried = Strings(Member(actualRecord, "carriedFields"));
+    EXPECT_NE(carried.end(), std::find(carried.begin(), carried.end(), "baseColorFactor"));
+    const std::vector<std::string> lost = Strings(Member(actualRecord, "lostFields"));
+    EXPECT_EQ(lost.end(), std::find(lost.begin(), lost.end(), "baseColorFactor"));
+
+    // What remains: MeshOut has no field for the alpha and sidedness state at all, so there is
+    // nothing to read back here -- its absence IS the defect, and it stays named until
+    // GLTF-228/229/231 give it somewhere to live.
+    for (const char* field : {"alphaMode", "alphaCutoff", "doubleSided"})
+    {
+        EXPECT_NE(lost.end(), std::find(lost.begin(), lost.end(), field))
+            << field << " is no longer recorded as lost -- if it now survives, update D7's record";
+    }
+    const std::vector<std::string> remaining = Strings(Member(defect, "remainingTasks"));
+    EXPECT_NE(remaining.end(), std::find(remaining.begin(), remaining.end(), "GLTF-228"))
+        << "D7 no longer names GLTF-228 as outstanding; if alphaMode landed, mark the defect fixed "
+           "in tools/gltf_fixtures and delete this test";
 }
 
 // --- D8: the skin ancestor chain ---------------------------------------------------------------------

@@ -263,7 +263,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 32,
+        "stride": 48,
         "vertexCount": 3,
         "fields": [
           {
@@ -277,14 +277,19 @@
             "size": 12
           },
           {
-            "name": "TextureCoordinate",
+            "name": "Tangent",
             "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
             "size": 8
           }
         ],
         "vertexBufferFile": "xf-identity.vb.bin",
-        "vertexBufferBytes": 96,
-        "vertexBufferSha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "xf-identity.ib.bin",

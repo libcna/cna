@@ -427,9 +427,17 @@ property that justifies converting at all: `mode-triangle-strip` and `mode-trian
 same quad by different routes and must produce byte-identical index buffers, while
 `mode-triangle-fan` — the same four indices under the other rule — must not.
 
-Deliberately not covered yet: the PBR and dual-texture strides (20/48/68), whose selection and
-tangent generation both depend on which texture maps a material carries. The packer raises an
-explicit "not implemented" for them rather than emitting a golden nobody has checked. `GLTF-149`+
-extends it. The `primitiveCount` assertion likewise covers only `TRIANGLES`, since that is the only
-topology that currently reaches L5; `GLTF-078` replaces the loaders' hardcoded `numIndices / 3`
-with a topology-aware helper and this is where that replacement is held to the same answer.
+The PBR strides (48/68) arrived with `GLTF-215`, and their tangent stream is byte-exact for a
+reason worth stating: no corpus fixture authors UVs, and `ComputeTangentsEXT` reads a missing UV as
+`(0,0)`, so every triangle's UV determinant is zero, the `|denom| < 1e-12` guard skips it, and every
+accumulator stays exactly zero. The orthogonalised tangent therefore falls to its own `(1,0,0)`
+fallback, with handedness `+1`. That is arithmetic rather than an approximation, so the golden needs
+no reimplementation of the angle-weighted algorithm.
+
+Deliberately still not covered: a primitive that **does** author UVs without a `TANGENT`, where real
+angle-weighted generation runs — the packer refuses rather than guessing, and `GLTF-149`+ extends it
+together with the fixture that needs it. The dual-texture stride (20) is likewise uncovered, since
+no corpus fixture carries a texture at all. The `primitiveCount` assertion covers only `TRIANGLES`,
+since that is the only topology that reaches L5 — a strip or fan is already converted to one by then
+(`GLTF-072`); `GLTF-078` replaces the loaders' hardcoded `numIndices / 3` with a topology-aware
+helper and this is where that replacement is held to the same answer.

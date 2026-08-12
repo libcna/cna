@@ -2193,6 +2193,12 @@ namespace Microsoft::Xna::Framework::Content
                             pbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
                             pbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
                             pbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
+                            // plan_gltf.md GLTF-216: baseColorFactor multiplies the base-colour
+                            // texture, or stands alone when there is none. Never read before.
+                            pbrFx->setDiffuseColorProperty(Vector3(meshOut.baseColorFactor.X,
+                                                                    meshOut.baseColorFactor.Y,
+                                                                    meshOut.baseColorFactor.Z));
+                            pbrFx->setAlphaProperty(meshOut.baseColorFactor.W);
                         }
                         else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get()))
                         {
@@ -2207,6 +2213,12 @@ namespace Microsoft::Xna::Framework::Content
                             skinnedPbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
                             skinnedPbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
                             skinnedPbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
+                            // GLTF-216, on the skinned twin: the same base colour, so a skinned
+                            // and an unskinned primitive of one material shade alike.
+                            skinnedPbrFx->setDiffuseColorProperty(Vector3(meshOut.baseColorFactor.X,
+                                                                          meshOut.baseColorFactor.Y,
+                                                                          meshOut.baseColorFactor.Z));
+                            skinnedPbrFx->setAlphaProperty(meshOut.baseColorFactor.W);
                         }
                     }
 

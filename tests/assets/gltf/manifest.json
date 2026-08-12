@@ -181,17 +181,32 @@
     },
     {
       "id": "D7",
-      "summary": "A factor-only metallic-roughness material is downgraded to BasicEffect and NOT ONE material property survives. MeshOut has no field at all for baseColorFactor, alphaMode, alphaCutoff or doubleSided, and the three fields it does have -- metallicFactor, roughnessFactor, emissiveFactor -- are only assigned inside an `if (usePbr)` guard, so a factor-only material leaves them at their MeshOut defaults.",
+      "summary": "A factor-only metallic-roughness material was downgraded to BasicEffect and NOT ONE material property survived. The selection rule asked which texture MAPS were present (`normalImage || metallicRoughnessImage`), so a material with every PBR factor and no map could never select PbrEffect -- and because the factor assignments sat behind that same guard, even the fields MeshOut could carry were left at their defaults. GLTF-215 replaced the rule with the material MODEL the file declares, GLTF-217 gave a primitive with no material glTF's own default (which IS metallic-roughness), GLTF-216 added baseColorFactor and carried it to PbrEffect's DiffuseColor/Alpha, and GLTF-219/GLTF-221 ungated the scalar factors. The alpha and sidedness state -- alphaMode, alphaCutoff, doubleSided -- has no MeshOut field or effect parameter yet and is owned by GLTF-228/GLTF-229/GLTF-231.",
       "owner": "GLTF-MATERIAL",
       "owningTasks": [
+        "GLTF-215",
+        "GLTF-216",
         "GLTF-217",
+        "GLTF-219",
+        "GLTF-221",
         "GLTF-228",
-        "GLTF-229"
+        "GLTF-229",
+        "GLTF-231"
       ],
-      "closedTasks": [],
-      "remainingTasks": [],
+      "closedTasks": [
+        "GLTF-215",
+        "GLTF-216",
+        "GLTF-217",
+        "GLTF-219",
+        "GLTF-221"
+      ],
+      "remainingTasks": [
+        "GLTF-228",
+        "GLTF-229",
+        "GLTF-231"
+      ],
       "firstDivergentLayer": "L3",
-      "status": "known-failing",
+      "status": "partially-remediated",
       "fixtures": [
         "mat-factor-only-gold"
       ]
@@ -581,8 +596,8 @@
   "files": [
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 12496,
-      "sha256": "ca8ae839221a4238674e1fac146f48903ec6ebd6ab242e98bb383057807e43f2"
+      "bytes": 12602,
+      "sha256": "a9ac6558230a9d5f7fe6727047d65cae7f7ab18314f6dff1f0595ae8e1f267ed"
     },
     {
       "path": "anim-rigid-node.glb",
@@ -601,13 +616,13 @@
     },
     {
       "path": "anim-rigid-node.vb.bin",
-      "bytes": 96,
-      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "interleaved-position-normal.expected.json",
-      "bytes": 6287,
-      "sha256": "5c16f4c27760d0eda82e9da606c8ebf6bb52f48d5bd2a5fe39f9fde59e713bcd"
+      "bytes": 6393,
+      "sha256": "7f49c6f2827e6c28696eace54b1554705d0277c1022b630f3841b248e4f5222e"
     },
     {
       "path": "interleaved-position-normal.glb",
@@ -626,13 +641,13 @@
     },
     {
       "path": "interleaved-position-normal.vb.bin",
-      "bytes": 96,
-      "sha256": "1867d16f24e644ed1348c0f15264de12581a1a1e16d37832df78517a495c0c90"
+      "bytes": 144,
+      "sha256": "f9de2f9261a351eea66984930c69ac5a51a1dbdd2260b6c567163e535defb82d"
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 8919,
-      "sha256": "44838f36aa56de901c3da1b3fc5084611f2cd360420bc1fb9ababf786de1d0f1"
+      "bytes": 11037,
+      "sha256": "82f982711a6a775167baf1cc7f906a949a99cdb476df1938333c4071f917927d"
     },
     {
       "path": "mat-factor-only-gold.glb",
@@ -651,8 +666,8 @@
     },
     {
       "path": "mat-factor-only-gold.vb.bin",
-      "bytes": 96,
-      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "mode-line-loop.expected.json",
@@ -716,8 +731,8 @@
     },
     {
       "path": "mode-triangle-fan.expected.json",
-      "bytes": 5759,
-      "sha256": "e4e628b4256084d829e6251a040b6db1b7a118f50623cdf3cded0662a548629b"
+      "bytes": 5864,
+      "sha256": "b2fdff900a527f4d4a54c1e2fc3726a29beec4647b6af707606205cd75295133"
     },
     {
       "path": "mode-triangle-fan.glb",
@@ -736,13 +751,13 @@
     },
     {
       "path": "mode-triangle-fan.vb.bin",
-      "bytes": 128,
-      "sha256": "442269e699a11f1506533dffb1337bf68b4df12de71b7ead6e7b52c508ce748b"
+      "bytes": 192,
+      "sha256": "5ccd0044c315c3e47e8436a68058677dd5c2775b0e6a5aaa43c66bbe779a43c6"
     },
     {
       "path": "mode-triangle-strip.expected.json",
-      "bytes": 8084,
-      "sha256": "0f2eb73475691fcfc52366df1028bb5429f6840f6f662fd601406479e685399b"
+      "bytes": 8189,
+      "sha256": "d0a05b8064c861a5699b2e15de0439688733bcbf6cfaa88940544f4e684fae35"
     },
     {
       "path": "mode-triangle-strip.glb",
@@ -761,13 +776,13 @@
     },
     {
       "path": "mode-triangle-strip.vb.bin",
-      "bytes": 128,
-      "sha256": "4543950acd77b876f0b8dcb8bb6644feeb0a4978246c3d31edff04691e909272"
+      "bytes": 192,
+      "sha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43"
     },
     {
       "path": "mode-triangles.expected.json",
-      "bytes": 5833,
-      "sha256": "470896e39bad8d0e4469647d19a81615f47c086b1f1842bc22b07af7f1303183"
+      "bytes": 5938,
+      "sha256": "424e3f84d29aa9fedfe49f3077237cba9681d1981da7799ce17dc49fe2a88987"
     },
     {
       "path": "mode-triangles.glb",
@@ -786,8 +801,8 @@
     },
     {
       "path": "mode-triangles.vb.bin",
-      "bytes": 128,
-      "sha256": "4543950acd77b876f0b8dcb8bb6644feeb0a4978246c3d31edff04691e909272"
+      "bytes": 192,
+      "sha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43"
     },
     {
       "path": "normalized-u8-color.expected.json",
@@ -816,8 +831,8 @@
     },
     {
       "path": "scene-default-selection.expected.json",
-      "bytes": 7839,
-      "sha256": "310c370e5b6e57a9f30727deeeb7b4061437f07585792c9db4b50723ceaabd76"
+      "bytes": 7945,
+      "sha256": "5cf83c616be6cc76ebf3ec8c04f13a379ac76eb6d1179087b8a66578f8700e98"
     },
     {
       "path": "scene-default-selection.glb",
@@ -836,13 +851,13 @@
     },
     {
       "path": "scene-default-selection.vb.bin",
-      "bytes": 96,
-      "sha256": "dd4f3226fd167fe18f1885b24b67df1350c23d331b60c2bab067eda8a092de02"
+      "bytes": 144,
+      "sha256": "e18e1b490de1b904c1d5c05e4092db07c4493fcd7545d6c16793bf4064efdf62"
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 12339,
-      "sha256": "c821de81764f470018a79f1a1a91c037e6661ab159e09f5abda8c89be96c376b"
+      "bytes": 12444,
+      "sha256": "7e94e5ab3c1aa78e86fa9beefe22c5d79369f0ed4d7d114c79e77ff6446eb1e8"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -861,13 +876,13 @@
     },
     {
       "path": "skin-armature-ancestor.vb.bin",
-      "bytes": 156,
-      "sha256": "25fbc45fe26066e3d7e194f6c1c7be32817e2182fdda49a750a69ace04e343f9"
+      "bytes": 204,
+      "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
-      "bytes": 10248,
-      "sha256": "1968a1398914c56482e5cd240abc5f38041d0209103d2fc5a3f78da614d3058f"
+      "bytes": 10353,
+      "sha256": "f93c0df1c36375c812c290bb22ec288135ef9d417a59ce267ce6233ca154bf83"
     },
     {
       "path": "skin-mesh-node-transform.glb",
@@ -886,13 +901,13 @@
     },
     {
       "path": "skin-mesh-node-transform.vb.bin",
-      "bytes": 156,
-      "sha256": "25fbc45fe26066e3d7e194f6c1c7be32817e2182fdda49a750a69ace04e343f9"
+      "bytes": 204,
+      "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
     },
     {
       "path": "sparse-indices.expected.json",
-      "bytes": 7433,
-      "sha256": "8b87986486a8affa78fe64eba7563667fa723f2e5651aaf6b64c10a12239b84f"
+      "bytes": 7538,
+      "sha256": "67ee2d2a1e603a1ad9a3c3a5784a500fad784b80508430ce78385083ba267f69"
     },
     {
       "path": "sparse-indices.glb",
@@ -911,13 +926,13 @@
     },
     {
       "path": "sparse-indices.vb.bin",
-      "bytes": 128,
-      "sha256": "442269e699a11f1506533dffb1337bf68b4df12de71b7ead6e7b52c508ce748b"
+      "bytes": 192,
+      "sha256": "5ccd0044c315c3e47e8436a68058677dd5c2775b0e6a5aaa43c66bbe779a43c6"
     },
     {
       "path": "sparse-position.expected.json",
-      "bytes": 5491,
-      "sha256": "f95a702c922d9c2a7de481d892880a3ee0902cc61484d96e2f0417f2530d5fb8"
+      "bytes": 5597,
+      "sha256": "5c250c738f5a94fc8f11a301acc2472bf96f1137e49100e35fc278bdf8db9366"
     },
     {
       "path": "sparse-position.glb",
@@ -936,13 +951,13 @@
     },
     {
       "path": "sparse-position.vb.bin",
-      "bytes": 96,
-      "sha256": "1b178445447902ef2987d3c49d9a94da26532595fc9832d499551155b5686694"
+      "bytes": 144,
+      "sha256": "f31bfd60f9003ff800cc162a6f1702d02a0461fad2513ed714943d5fc6ba05cd"
     },
     {
       "path": "u8-idx.expected.json",
-      "bytes": 6135,
-      "sha256": "b32487c1d46b25bc7f450e029f8a003ad0d52cf76e5c50c14a2828a4e8ce4d92"
+      "bytes": 6241,
+      "sha256": "0d6e311b24ba8a74399e6751c4291a95e627ee9dba51392de6fbd9ef11171050"
     },
     {
       "path": "u8-idx.glb",
@@ -961,13 +976,13 @@
     },
     {
       "path": "u8-idx.vb.bin",
-      "bytes": 96,
-      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "xf-identity.expected.json",
-      "bytes": 6095,
-      "sha256": "998102ef0acd7bd49c4925c0e8a372a4a0559c56d359649cf7c20a8b8cdcb2b5"
+      "bytes": 6201,
+      "sha256": "41128c45ce33aedb7c9fd3d0b774ce527f148b93302371546ad3631436a28e14"
     },
     {
       "path": "xf-identity.glb",
@@ -986,13 +1001,13 @@
     },
     {
       "path": "xf-identity.vb.bin",
-      "bytes": 96,
-      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "xf-matrix-node.expected.json",
-      "bytes": 7725,
-      "sha256": "7af878bfaa0c40d2b291097debde12ad81fb4c6a22aeaa510a753141e6cb1031"
+      "bytes": 7831,
+      "sha256": "d07c111f22aa0be093989f9d733dc782149f7a5712876b95c6e478d80076a5b5"
     },
     {
       "path": "xf-matrix-node.glb",
@@ -1011,13 +1026,13 @@
     },
     {
       "path": "xf-matrix-node.vb.bin",
-      "bytes": 96,
-      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "xf-parent-child.expected.json",
-      "bytes": 7814,
-      "sha256": "679cf3333476ae577fa41ee376d4bde1c720a385981a724464e46d3cd0d26fe7"
+      "bytes": 7920,
+      "sha256": "26b2115e35532aa5c6d2f3ae3399b24b18a7a9dcaeaf7ae83b0c2cbe3407f002"
     },
     {
       "path": "xf-parent-child.glb",
@@ -1036,13 +1051,13 @@
     },
     {
       "path": "xf-parent-child.vb.bin",
-      "bytes": 96,
-      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "xf-shared-mesh.expected.json",
-      "bytes": 9044,
-      "sha256": "70b94ce8d3147a0518360b75c1bb675e7971eb8f2a8d51dddf06370051a29536"
+      "bytes": 9150,
+      "sha256": "5aa2c73ea75126b96fddc4ce9da3e074a3e49758f00cdf1102f9279eb15e8e9d"
     },
     {
       "path": "xf-shared-mesh.glb",
@@ -1061,8 +1076,8 @@
     },
     {
       "path": "xf-shared-mesh.vb.bin",
-      "bytes": 96,
-      "sha256": "0bf2d7345e853cc2a0d95efbd090e7d6da38cdc1e83660b3ce95842179ea5288"
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     }
   ]
 }

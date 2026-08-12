@@ -51,6 +51,7 @@
 
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
 using namespace CNA::Internal::GltfImport;
 
 namespace
@@ -203,6 +204,9 @@ namespace
             std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile, pbrOcclusionMapFile;
             float metallicFactor = 1.0f, roughnessFactor = 1.0f;
             Vector3 emissiveFactor;
+            // plan_gltf.md GLTF-216: baseColorFactor, carried as PbrEffect's own DiffuseColor
+            // (RGB) and Alpha (A), which the .cnj reader already consumes for every effect.
+            Vector4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
             // Morph target CLI/.cnj serialization: morphFile is the binary sidecar path (empty =
             // no morph targets on this primitive), morphWeights are the default blend weights, and
             // morphWeightTrack (optional) is the "weights" animation channel, if any.
@@ -377,6 +381,7 @@ namespace
                 entry.metallicFactor = meshOut.metallicFactor;
                 entry.roughnessFactor = meshOut.roughnessFactor;
                 entry.emissiveFactor = meshOut.emissiveFactor;
+                entry.baseColorFactor = meshOut.baseColorFactor;
                 entry.vertexColorEnabled = meshOut.colored;
                 entry.morphFile = morphFile;
                 entry.morphWeights = morphWeights;
@@ -539,7 +544,12 @@ namespace
                 if (!e.pbrOcclusionMapFile.empty()) { json << ", \"occlusionMap\": \"" << JsonEscape(e.pbrOcclusionMapFile) << "\""; }
                 json << ", \"metallicFactor\": " << e.metallicFactor
                      << ", \"roughnessFactor\": " << e.roughnessFactor
-                     << ", \"emissiveFactor\": [" << e.emissiveFactor.X << ", " << e.emissiveFactor.Y << ", " << e.emissiveFactor.Z << "]";
+                     << ", \"emissiveFactor\": [" << e.emissiveFactor.X << ", " << e.emissiveFactor.Y << ", " << e.emissiveFactor.Z << "]"
+                     // GLTF-216: the base colour reaches the shader through the fields the reader
+                     // already understands, so no .cnj schema addition is needed for it.
+                     << ", \"diffuseColor\": [" << e.baseColorFactor.X << ", " << e.baseColorFactor.Y
+                     << ", " << e.baseColorFactor.Z << "]"
+                     << ", \"alpha\": " << e.baseColorFactor.W;
             }
             if (!e.morphFile.empty())
             {

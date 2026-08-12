@@ -50,6 +50,19 @@ STRIDE_LAYOUTS: dict[int, list[tuple[str, int, int]]] = {
 DEFAULT_NORMAL = (0.0, 0.0, 1.0)
 DEFAULT_TEXCOORD = (0.0, 0.0)
 
+#: The tangent every vertex of a primitive with **no UV channel** receives, exactly.
+#:
+#: This is not an approximation, it is the arithmetic falling out. ComputeTangentsEXT reads a
+#: missing UV as (0,0), so every triangle has du1=dv1=du2=dv2=0, its determinant is 0, and the
+#: `|denom| < 1e-12` guard skips it -- no triangle contributes anything. Every accumulator is
+#: therefore exactly zero, the orthogonalised tangent falls to its own `len > 1e-8` fallback
+#: (1,0,0), and the handedness test `dot(cross(n,t), 0) < 0` is false, giving +1.
+#:
+#: That makes a stride-48 golden byte-exact for such a primitive without reproducing the
+#: angle-weighted algorithm at all. A primitive that DOES author UVs needs the real thing, and
+#: this packer refuses rather than guessing -- see `_tangents_for`.
+UNTEXTURED_TANGENT = (1.0, 0.0, 0.0, 1.0)
+
 
 def _f32(values: Sequence[float]) -> bytes:
     return b"".join(struct.pack("<f", float(v)) for v in values)
@@ -63,24 +76,55 @@ def _color_byte(value: float) -> int:
 def select_stride(primitive: dict[str, Any]) -> int:
     """The stride ExtractMesh selects for a primitive, for the cases the corpus can express.
 
-    Deliberately partial: the PBR and dual-texture branches depend on which texture *maps* a
-    material carries, and no corpus fixture carries any, so encoding a guess for them here would be
-    a golden nobody had checked. A fixture that grows a map must extend this and say so.
+    Mirrors `GLTF-215`'s selection rule: what decides PBR is the material *model*, not which
+    texture maps happen to be present. Metallic-roughness is glTF's default in two ways -- a
+    primitive with no material at all gets the default material, and a material that omits the
+    optional ``pbrMetallicRoughness`` object still uses that model with default factors -- so the
+    only exclusions are a material declaring a different model, and a vertex-coloured primitive,
+    whose stride-24 layout no PBR shader reads.
+
+    Still deliberately partial in one place: the dual-texture stride (20) needs a base-colour and
+    an occlusion map, and no corpus fixture carries a texture at all.
     """
     material = primitive.get("material") or {}
+    if material.get("model") in ("specular-glossiness", "unlit"):
+        raise NotImplementedError(
+            f"{primitive.get('meshName')!r}: this material declares the "
+            f"{material['model']!r} model, which CNA imports through BasicEffect. Extend "
+            "tools/gltf_fixtures/l5.py together with the fixture that needs it.")
     if any(material.get(key) for key in ("hasBaseColorTexture", "hasNormalTexture",
                                           "hasMetallicRoughnessTexture", "hasOcclusionTexture",
                                           "hasEmissiveTexture")):
         raise NotImplementedError(
-            f"{primitive.get('meshName')!r}: the L5 golden packer does not yet cover the PBR / "
-            "dual-texture stride branches (48/20/68), whose selection and tangent generation both "
-            "depend on which texture maps a material carries. Extend tools/gltf_fixtures/l5.py "
-            "together with the fixture that needs them.")
+            f"{primitive.get('meshName')!r}: the L5 golden packer does not yet cover a textured "
+            "material -- the dual-texture stride (20) and the base-colour/occlusion selection "
+            "both depend on which maps are present. Extend tools/gltf_fixtures/l5.py together "
+            "with the fixture that needs them.")
     skinned = bool(primitive.get("joints")) and bool(primitive.get("weights"))
     colored = bool(primitive.get("colors"))
+    use_pbr = not colored
     if skinned:
-        return 56 if colored else 52
-    return 24 if colored else 32
+        return 56 if colored else (68 if use_pbr else 52)
+    return 24 if colored else (48 if use_pbr else 32)
+
+
+def _tangents_for(primitive: dict[str, Any], count: int) -> list[tuple[float, float, float, float]]:
+    """The Tangent stream ExtractMesh produces for a primitive, or a refusal to guess it.
+
+    An authored TANGENT is used as-is. Otherwise CNA generates one, and this reproduces exactly the
+    one case where generation has a closed form: a primitive with no UV channel, whose every
+    tangent is `UNTEXTURED_TANGENT` for the reasons recorded there.
+    """
+    authored = primitive.get("tangents") or []
+    if authored:
+        return [tuple(t) for t in authored]
+    if primitive.get("texcoords"):
+        raise NotImplementedError(
+            f"{primitive.get('meshName')!r} authors UVs but no TANGENT, so CNA generates one with "
+            "the angle-weighted algorithm. Reproducing that here is GLTF-149's, together with the "
+            "fixture that needs it -- emitting a golden nobody has checked would be worse than "
+            "having none.")
+    return [UNTEXTURED_TANGENT] * count
 
 
 def pack_vertex_buffer(primitive: dict[str, Any], stride: int) -> bytes:
@@ -98,6 +142,9 @@ def pack_vertex_buffer(primitive: dict[str, Any], stride: int) -> bytes:
     joints = primitive.get("joints") or []
     if len(positions) != count:
         raise ValueError("the L3 position count disagrees with vertexCount")
+
+    tangents = (_tangents_for(primitive, count)
+                if any(name == "Tangent" for name, _o, _s in layout) else [])
 
     out = bytearray()
     for v in range(count):
@@ -120,9 +167,7 @@ def pack_vertex_buffer(primitive: dict[str, Any], stride: int) -> bytes:
             elif name == "BlendIndices":
                 field = bytes(int(j) & 0xFF for j in (joints[v] if v < len(joints) else (0, 0, 0, 0)))
             elif name == "Tangent":
-                raise NotImplementedError(
-                    "tangent generation is not reproduced by the L5 golden packer; see "
-                    "select_stride's own note")
+                field = _f32(tangents[v])
             else:  # pragma: no cover - a typo in STRIDE_LAYOUTS
                 raise ValueError(f"unknown vertex field {name!r}")
             if len(field) != size:

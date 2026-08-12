@@ -91,31 +91,61 @@ def mat_factor_only_gold() -> Fixture:
         l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
         defects=[Defect(
             id="D7", owner="GLTF-MATERIAL", first_divergent_layer="L3",
-            summary="A factor-only metallic-roughness material is downgraded to BasicEffect and "
-                    "NOT ONE material property survives. MeshOut has no field at all for "
-                    "baseColorFactor, alphaMode, alphaCutoff or doubleSided, and the three fields "
-                    "it does have -- metallicFactor, roughnessFactor, emissiveFactor -- are only "
-                    "assigned inside an `if (usePbr)` guard, so a factor-only material leaves them "
-                    "at their MeshOut defaults.",
-            owning_tasks=["GLTF-217", "GLTF-228", "GLTF-229"],
+            summary="A factor-only metallic-roughness material was downgraded to BasicEffect and "
+                    "NOT ONE material property survived. The selection rule asked which texture "
+                    "MAPS were present (`normalImage || metallicRoughnessImage`), so a material "
+                    "with every PBR factor and no map could never select PbrEffect -- and because "
+                    "the factor assignments sat behind that same guard, even the fields MeshOut "
+                    "could carry were left at their defaults. GLTF-215 replaced the rule with the "
+                    "material MODEL the file declares, GLTF-217 gave a primitive with no material "
+                    "glTF's own default (which IS metallic-roughness), GLTF-216 added "
+                    "baseColorFactor and carried it to PbrEffect's DiffuseColor/Alpha, and "
+                    "GLTF-219/GLTF-221 ungated the scalar factors. The alpha and sidedness state "
+                    "-- alphaMode, alphaCutoff, doubleSided -- has no MeshOut field or effect "
+                    "parameter yet and is owned by GLTF-228/GLTF-229/GLTF-231.",
+            owning_tasks=["GLTF-215", "GLTF-216", "GLTF-217", "GLTF-219", "GLTF-221",
+                          "GLTF-228", "GLTF-229", "GLTF-231"],
+            closed_tasks=["GLTF-215", "GLTF-216", "GLTF-217", "GLTF-219", "GLTF-221"],
+            remaining_tasks=["GLTF-228", "GLTF-229", "GLTF-231"],
+            status="partially-remediated",
             divergent_fields=["material"],
             current_actual={
+                "usePbr": True,
+                "stride": 48,
+                "effect": "PbrEffect",
+                "carriedFields": ["baseColorFactor", "metallicFactor", "roughnessFactor",
+                                  "emissiveFactor"],
+                "lostFields": ["alphaMode", "alphaCutoff", "doubleSided"],
+                "baseColorFactor": list(_BASE_COLOR_FACTOR),
+                "metallicFactor": _METALLIC_FACTOR,
+                "roughnessFactor": _ROUGHNESS_FACTOR,
+                "emissiveFactor": list(_EMISSIVE_FACTOR),
+                "note": "The material now selects PbrEffect and every authored FACTOR survives: "
+                        "the gold base colour reaches DiffuseColor with its 0.5 alpha, and the "
+                        "metallic/roughness/emissive factors are read for any metallic-roughness "
+                        "material rather than only one that also carried a map. The L5 golden is "
+                        "byte-exact at stride 48, which is what proves the switch rather than "
+                        "merely asserting it. What is still lost is the alpha and sidedness "
+                        "state: MeshOut has no field for alphaMode, alphaCutoff or doubleSided, "
+                        "and PbrEffect has no parameter to put them in -- GLTF-228/229/231 add "
+                        "both, behind the GLTF-025 API-change gate.",
+            },
+            prior_actual={
                 "usePbr": False,
                 "stride": 32,
                 "effect": "BasicEffect",
                 "carriedFields": [],
                 "lostFields": ["baseColorFactor", "metallicFactor", "roughnessFactor",
                                "emissiveFactor", "alphaMode", "alphaCutoff", "doubleSided"],
-                # The values MeshOut reports are its own field defaults, unrelated to the file.
                 "metallicFactor": 1.0,
                 "roughnessFactor": 1.0,
                 "emissiveFactor": [0.0, 0.0, 0.0],
-                "note": "usePbr requires a normal map or a metallic-roughness map, so a "
-                        "factor-only material can never select PbrEffect -- and because the factor "
-                        "assignments sit behind that same usePbr guard, even the fields MeshOut "
-                        "could carry are left at their defaults. The surface renders opaque white "
-                        "with default lighting. This confirms plan_gltf.md §1.1's 'zero material "
-                        "fields emitted' precisely.",
+                "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
+                "note": "What the forensic audit measured: usePbr required a normal map or a "
+                        "metallic-roughness map, so a factor-only material could never select "
+                        "PbrEffect, and because the factor assignments sat behind that same guard "
+                        "even the three fields MeshOut could carry were left at their defaults. "
+                        "The surface rendered opaque white under default lighting.",
             },
         )],
     )

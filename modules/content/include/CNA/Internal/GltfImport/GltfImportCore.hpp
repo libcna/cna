@@ -243,6 +243,15 @@ namespace CNA::Internal::GltfImport
         const cgltf_image* metallicRoughnessImage = nullptr;
         /** @brief The material's emissive map image, or nullptr if none. */
         const cgltf_image* emissiveImage = nullptr;
+        /**
+         * @brief The material's base colour factor, RGBA (glTF default `(1,1,1,1)`).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Multiplies the base-colour texture when
+         * there is one, and stands alone when there is not (`GLTF-216`/`GLTF-218`). Never read at
+         * all before `GLTF-216`: a gold factor-only material rendered as opaque white, which was
+         * half of defect D7.
+         */
+        Microsoft::Xna::Framework::Vector4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
         /** @brief The material's metallic factor [0,1] (glTF default 1.0). */
         float metallicFactor = 1.0f;
         /** @brief The material's roughness factor [0,1] (glTF default 1.0). */

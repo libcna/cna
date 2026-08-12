@@ -36,9 +36,15 @@ using CNA::Internal::JsonValue;
 
 namespace
 {
-    /// A fixture whose golden is a stride-32 vertex buffer, used by the self-proving half below.
-    /// Any importable fixture would do; naming one keeps the offsets in those tests concrete.
-    constexpr const char* kStride32Fixture = "u8-idx";
+    /// A fixture with a Position+Normal layout, used by the self-proving half below. Any
+    /// importable fixture would do; naming one keeps the offsets in those tests concrete.
+    ///
+    /// Its stride is 48, not 32: GLTF-215 made metallic-roughness the selection rule, and a
+    /// primitive with no material at all still gets glTF's default material, which is
+    /// metallic-roughness. Stride 32 no longer occurs anywhere in the corpus.
+    constexpr const char* kPositionNormalFixture = "u8-idx";
+    /// Position(12) + Normal(12) + Tangent(16) + TextureCoordinate(8).
+    constexpr int kPositionNormalStride = 48;
 
     const GoldenBufferPart* FirstPart(const GoldenBuffers& golden)
     {
@@ -95,7 +101,7 @@ namespace
 
 TEST(GltfBufferOracle, IdenticalBuffersCompareEqual)
 {
-    const LoadedFixture fixture(kStride32Fixture);
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;
@@ -116,18 +122,18 @@ TEST(GltfBufferOracle, IdenticalBuffersCompareEqual)
 TEST(GltfBufferOracle, AOneByteVertexPerturbationIsReportedAtTheRightOffsetFieldAndVertex)
 {
     // The acceptance criterion of GLTF-007, stated directly. Vertex 1's Normal begins at byte
-    // 32 + 12 = 44 in a stride-32 layout, so perturbing byte 45 must be reported as vertex 1,
-    // Normal, one byte in.
-    const LoadedFixture fixture(kStride32Fixture);
+    // 48 + 12 = 60 in this layout, so perturbing byte 61 must be reported as vertex 1, Normal,
+    // one byte in.
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;
     const GoldenBufferPart* part = FirstPart(golden);
     ASSERT_NE(nullptr, part);
-    ASSERT_EQ(32, part->stride);
-    ASSERT_GE(part->vertexBytes.size(), 46u);
+    ASSERT_EQ(kPositionNormalStride, part->stride);
+    ASSERT_GE(part->vertexBytes.size(), 62u);
 
-    constexpr std::size_t kPerturbed = 45;
+    constexpr std::size_t kPerturbed = 61;
     std::vector<std::uint8_t> mutated = part->vertexBytes;
     mutated[kPerturbed] = static_cast<std::uint8_t>(mutated[kPerturbed] ^ 0xFF);
 
@@ -149,14 +155,14 @@ TEST(GltfBufferOracle, AOneByteVertexPerturbationIsReportedAtTheRightOffsetField
     EXPECT_NE(std::string::npos, diff.report.find("VB"));
     EXPECT_NE(std::string::npos, diff.report.find("vertex 1"));
     EXPECT_NE(std::string::npos, diff.report.find("Normal"));
-    EXPECT_NE(std::string::npos, diff.report.find("45"));
+    EXPECT_NE(std::string::npos, diff.report.find(std::to_string(kPerturbed)));
 }
 
 TEST(GltfBufferOracle, EveryByteOfAVertexIsAttributedToTheFieldThatOwnsIt)
 {
     // Sweeping every offset of one vertex proves the attribution is a real mapping rather than a
     // lucky case: each byte must name the field whose span contains it, and no other.
-    const LoadedFixture fixture(kStride32Fixture);
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;
@@ -189,7 +195,7 @@ TEST(GltfBufferOracle, EveryByteOfAVertexIsAttributedToTheFieldThatOwnsIt)
 
 TEST(GltfBufferOracle, AOneByteIndexPerturbationNamesTheIndexItBelongsTo)
 {
-    const LoadedFixture fixture(kStride32Fixture);
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;
@@ -215,7 +221,7 @@ TEST(GltfBufferOracle, AOneByteIndexPerturbationNamesTheIndexItBelongsTo)
 
 TEST(GltfBufferOracle, ATruncatedBufferIsReportedAsASizeDifferenceAtTheFirstMissingByte)
 {
-    const LoadedFixture fixture(kStride32Fixture);
+    const LoadedFixture fixture(kPositionNormalFixture);
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
     ASSERT_TRUE(golden.ok) << golden.error;

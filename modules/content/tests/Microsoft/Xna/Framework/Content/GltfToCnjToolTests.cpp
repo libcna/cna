@@ -1002,11 +1002,14 @@ TEST(GltfToCnjToolTest, ResolvesSparseAccessorOverride)
 
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 32u); // stride 32, unskinned
+    // Stride 48, not 32: GLTF-215 selects PBR for any metallic-roughness material, and a
+    // primitive with no material declared gets glTF's default material, which is exactly that.
+    // Position still begins each vertex, which is all this test is about.
+    ASSERT_EQ(bytes.size(), 3u * 48u); // stride 48, unskinned PBR
 
     auto readVec3 = [&](std::size_t vertexIndex) {
         float v[3];
-        std::memcpy(v, bytes.data() + vertexIndex * 32, sizeof(v));
+        std::memcpy(v, bytes.data() + vertexIndex * 48, sizeof(v));
         return Vector3(v[0], v[1], v[2]);
     };
 
@@ -1163,16 +1166,16 @@ TEST(GltfToCnjToolTest, UsesTexcoordSetSelectedByMaterial)
     ASSERT_TRUE(std::filesystem::exists(vertsPath));
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 32u); // stride 32, unskinned, untextured-color
+    ASSERT_EQ(bytes.size(), 3u * 48u); // stride 48, unskinned PBR (GLTF-215)
 
-    // UV lives at byte offset 24 within each stride-32 vertex (pos12+normal12+uv8). TEXCOORD_0
-    // was deliberately filled with (9,9) sentinels the tool must never emit; the real values,
-    // from TEXCOORD_1 (the set the material's baseColorTexture actually selects), are (0,0),
-    // (1,0), (0,1).
+    // UV lives at byte offset 40 within each stride-48 vertex
+    // (pos12 + normal12 + tangent16 + uv8). TEXCOORD_0 was deliberately filled with (9,9)
+    // sentinels the tool must never emit; the real values, from TEXCOORD_1 (the set the
+    // material's baseColorTexture actually selects), are (0,0), (1,0), (0,1).
     float uv0[2], uv1[2], uv2[2];
-    std::memcpy(uv0, bytes.data() + 0 * 32 + 24, sizeof(uv0));
-    std::memcpy(uv1, bytes.data() + 1 * 32 + 24, sizeof(uv1));
-    std::memcpy(uv2, bytes.data() + 2 * 32 + 24, sizeof(uv2));
+    std::memcpy(uv0, bytes.data() + 0 * 48 + 40, sizeof(uv0));
+    std::memcpy(uv1, bytes.data() + 1 * 48 + 40, sizeof(uv1));
+    std::memcpy(uv2, bytes.data() + 2 * 48 + 40, sizeof(uv2));
     EXPECT_FLOAT_EQ(uv0[0], 0.0f); EXPECT_FLOAT_EQ(uv0[1], 0.0f);
     EXPECT_FLOAT_EQ(uv1[0], 1.0f); EXPECT_FLOAT_EQ(uv1[1], 0.0f);
     EXPECT_FLOAT_EQ(uv2[0], 0.0f); EXPECT_FLOAT_EQ(uv2[1], 1.0f);
@@ -1307,12 +1310,14 @@ TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
     const std::filesystem::path vertsPath = contentRoot.path() / "scaletest_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 52u); // stride 52, skinned
+    // Stride 68, not 52: this primitive declares no material, so GLTF-215 selects the skinned
+    // PBR layout. Position still begins each vertex, which is what this test measures.
+    ASSERT_EQ(bytes.size(), 3u * 68u); // stride 68, skinned PBR
 
     // Authored positions were (0,0,0)/(100,0,0)/(0,100,0) (centimeters); with unitScale=0.01,
     // vertex 1's X must come out as 1.0, not 100.0.
     float pos1[3];
-    std::memcpy(pos1, bytes.data() + 1 * 52, sizeof(pos1));
+    std::memcpy(pos1, bytes.data() + 1 * 68, sizeof(pos1));
     EXPECT_NEAR(pos1[0], 1.0f, 1e-4f);
 
     GraphicsDevice gd;
@@ -1333,10 +1338,20 @@ TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
     EXPECT_NEAR(skinningData->BindPose[0].getTranslationProperty().X, 0.5f, 1e-4f);
 }
 
-// CNB-72/73: a material with both a base-color and an occlusion texture must be imported through
-// DualTextureEffect (Texture=base color, Texture2=occlusion), with the mesh's vertex buffer using
-// the stride-20 VertexPositionTexture layout DualTextureEffect's shader actually expects.
-TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffect)
+// CNB-72/73 + plan_gltf.md GLTF-215: a material with both a base-color and an occlusion texture.
+//
+// This case used to import through DualTextureEffect (Texture=base colour, Texture2=an occlusion
+// image halved by RemapOcclusionImageForDualTextureEXT so its own always-multiply blend
+// approximated a lightmap), on the stride-20 VertexPositionTexture layout. That whole arrangement
+// existed only because the old selection rule asked which texture MAPS were present, and a
+// base-colour + occlusion pair matched no PBR map, so PBR was unavailable to it.
+//
+// GLTF-215 replaced that rule with the material MODEL the file declares. This material is
+// metallic-roughness, so it now imports through PbrEffect, which has a real OcclusionMap and needs
+// no brightness fake at all. The DualTextureEffect glTF path is therefore superseded rather than
+// broken -- the effect itself is untouched and still reachable through every other content path.
+// This test now pins the replacement, so the change cannot be undone silently.
+TEST(GltfToCnjToolTest, BaseColorAndOcclusionTexturesImportThroughPbrEffectWithARealOcclusionMap)
 {
     ScratchDir gltfDir;
     ScratchDir contentRoot;
@@ -1346,17 +1361,21 @@ TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffe
 
     const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "dualtex");
     ASSERT_EQ(exitCode, 0);
+
+    // Both images are written, and the occlusion one is now carried UNMODIFIED under the ordinary
+    // "_tex" sequence rather than halved into its own "_texocc" file: PbrEffect samples occlusion
+    // properly, so the CNB-88 brightness compensation would now be a distortion rather than a fix.
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_tex0.png"));
-    // CNB-88 (Phase 14E): the occlusion texture is now written through
-    // RemapOcclusionImageForDualTextureEXT into its own "_texocc"-prefixed file (a separate
-    // cache/naming sequence from writtenTextures' own "_tex"+N -- see ConvertGroup's own doc
-    // comment for why), not "dualtex_tex1.png" the way an unmodified passthrough would have been.
-    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_texocc0.png"));
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_tex1.png"));
+    EXPECT_FALSE(std::filesystem::exists(contentRoot.path() / "dualtex_texocc0.png"))
+        << "the DualTextureEffect occlusion remap ran, so the old selection rule is back";
 
     const std::filesystem::path vertsPath = contentRoot.path() / "dualtex_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 20u); // stride 20, VertexPositionTexture (no Normal)
+    // Stride 48 (Position+Normal+Tangent+TextureCoordinate), not the stride-20
+    // VertexPositionTexture layout DualTextureEffect required.
+    ASSERT_EQ(bytes.size(), 3u * 48u);
 
     GraphicsDevice gd;
     // glTF->Model loading builds a real VertexBuffer -- a renderer with no 3D pipeline
@@ -1371,24 +1390,27 @@ TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffe
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* dualFx = dynamic_cast<DualTextureEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(dualFx, nullptr);
-    Texture2D* tex1 = dualFx->getTextureProperty();
-    Texture2D* tex2 = dualFx->getTexture2Property();
-    ASSERT_NE(tex1, nullptr);
-    ASSERT_NE(tex2, nullptr);
-    EXPECT_EQ(tex1->getWidthProperty(), 1);
-    EXPECT_EQ(tex2->getWidthProperty(), 1);
+    EXPECT_EQ(nullptr, dynamic_cast<DualTextureEffect*>(
+                           mesh->getMeshPartsProperty()[0]->getEffectProperty()))
+        << "the material still selects DualTextureEffect -- GLTF-215's rule did not apply";
+    auto* pbr = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, pbr);
 
-    // The fixture's occlusion image is a solid (255,0,0) 1x1 PNG -- after the CNB-88 brightness
-    // fix, the loaded Texture2 pixel's RGB must be halved (~127,0,0), not the raw (255,0,0) a
-    // byte-for-byte passthrough would have produced.
+    Texture2D* baseColor = pbr->getTextureProperty();
+    ASSERT_NE(nullptr, baseColor);
+    EXPECT_EQ(1, baseColor->getWidthProperty());
+
+    // The fixture's occlusion image is a solid (255,0,0) 1x1 PNG. It must arrive intact: the
+    // halving existed only to compensate DualTextureEffect's multiply blend.
+    Texture2D* occlusion = pbr->getOcclusionMapProperty();
+    ASSERT_NE(nullptr, occlusion) << "the occlusion map was dropped rather than carried to PBR";
     Color occlusionPixel(0, 0, 0, 0);
-    tex2->GetData(&occlusionPixel, 1);
-    EXPECT_NEAR(occlusionPixel.getRProperty(), 127, 2);
-    EXPECT_EQ(occlusionPixel.getGProperty(), 0);
-    EXPECT_EQ(occlusionPixel.getBProperty(), 0);
-    EXPECT_EQ(occlusionPixel.getAProperty(), 255);
+    occlusion->GetData(&occlusionPixel, 1);
+    EXPECT_EQ(255, occlusionPixel.getRProperty())
+        << "the occlusion texel was halved -- that compensation belongs to DualTextureEffect only";
+    EXPECT_EQ(0, occlusionPixel.getGProperty());
+    EXPECT_EQ(0, occlusionPixel.getBProperty());
+    EXPECT_EQ(255, occlusionPixel.getAProperty());
 }
 
 // CNB-66/67/68: a skinned mesh with a COLOR_0 attribute must import through the new stride-56

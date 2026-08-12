@@ -32,7 +32,7 @@ decoding to all zeros (**D4**, fixed), non-`TRIANGLES` topology silently reinter
 fixed for the triangle topologies; the point and line modes are now an explicit refusal to import,
 pending a draw path), and rigid node animation being dropped (**D6**, now imported and reported —
 serialisation pending). One more (**D7**, factor-only PBR material) is a shading defect, not a
-geometric one.
+geometric one; its factors now survive and only the alpha and sidedness state is still lost.
 
 **Both collapse mechanisms are closed.** Neither is suppressed by a known-defect test any more:
 each is asserted by an ordinary green test through the real loader, so a regression fails as a
@@ -314,9 +314,10 @@ clip by name and track count rather than dropping it, which is the property D6 w
 
 **Not a collapse mechanism** — the asset imports in the right place, it just does not move yet.
 
-### 3.9 D7 — factor-only PBR material lost · `mat-factor-only-gold` · first divergent layer **L3** · **OPEN**
+### 3.9 D7 — factor-only PBR material lost · `mat-factor-only-gold` · first divergent layer **L3** · **PARTLY OPEN**
 
-**Owning tasks:** `GLTF-217` / `GLTF-228` / `GLTF-229` (see also `GLTF-215`).
+**Owning tasks:** `GLTF-215`/`GLTF-216`/`GLTF-217`/`GLTF-219`/`GLTF-221` (landed) +
+**`GLTF-228`/`GLTF-229`/`GLTF-231` (open)**.
 
 A metallic-roughness material with **no texture maps**: gold `baseColorFactor [1,0.72,0.315,0.5]`,
 non-default metallic/roughness/emissive factors, `alphaMode BLEND`, `doubleSided`.
@@ -324,15 +325,42 @@ non-default metallic/roughness/emissive factors, `alphaMode BLEND`, `doubleSided
 | | Value |
 |---|---|
 | Expected | a PBR material carrying every authored factor and alpha state |
-| Today | `usePbr = false` → **`BasicEffect`**, stride 32, **zero** material fields emitted; renders opaque white |
-| Lost fields | `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`, `alphaMode`, `alphaCutoff`, `doubleSided` |
+| Before | `usePbr = false` → **`BasicEffect`**, stride 32, **zero** material fields emitted; rendered opaque white |
+| After | `usePbr = true` → **`PbrEffect`**, stride 48; `baseColorFactor` reaches `DiffuseColor` `(1, 0.72, 0.315)` with `Alpha` `0.5`, and metallic `0.9` / roughness `0.35` / emissive `(0.25, 0.1, 0)` all survive |
+| Still lost | `alphaMode`, `alphaCutoff`, `doubleSided` |
 
-The selection rule is `usePbr = !colored && (normalImage || metallicRoughnessImage)` — presence of a
-*map*, not presence of a *material*. glTF's default material **is** metallic-roughness, so a
-factor-only material can never select `PbrEffect`; and because the factor assignments sit behind
-that same `usePbr` guard, even the three fields `MeshOut` could carry are left at their defaults.
+The old rule was `usePbr = !colored && (normalImage || metallicRoughnessImage)` — presence of a
+*map*, not of a *material model*. Because the factor assignments sat behind that same guard, even
+the three fields `MeshOut` could already carry were left at their defaults, which is why the audit
+recorded "zero material fields emitted".
 
-**Not a collapse mechanism** — geometry is correct, shading is wrong.
+`GLTF-215` replaced the rule with the model the file declares. Metallic-roughness is glTF's default
+in two distinct ways and both now hold: a primitive with **no material at all** gets the default
+material (`GLTF-217`), and a material that merely omits the optional `pbrMetallicRoughness` object
+still uses that model with default factors. Only `KHR_materials_pbrSpecularGlossiness` and
+`KHR_materials_unlit` are excluded, alongside the pre-existing `!colored` limit — no PBR shader
+reads a vertex Color stream.
+
+**Two consequences worth knowing.** Stride 32 no longer occurs anywhere in the corpus: an unskinned
+uncoloured primitive is 48 and a skinned one 68. And the `DualTextureEffect` glTF path is
+**superseded** — a base-colour + occlusion material now reaches `PbrEffect`'s real `OcclusionMap`
+instead of the halved occlusion-as-lightmap approximation, which existed only because the old rule
+left PBR unavailable to it. `DualTextureEffect` itself is untouched and still reachable through
+every other content path.
+
+**Why it is not yet `fixed`.** `MeshOut` has no field for `alphaMode`, `alphaCutoff` or
+`doubleSided`, and `PbrEffect` has no parameter to put them in. Adding both is
+`GLTF-228`/`GLTF-229`/`GLTF-231`, which sit behind `GLTF-025` — the API-change gate whose own
+acceptance requires the design recorded *before* implementation.
+
+**An open risk this change introduces, stated rather than asserted.** Every untextured primitive now
+goes through `PbrEffect`, whose `AmbientLightColor` defaults to `(0,0,0)`. A light-less scene that
+previously rendered lit-white through `BasicEffect` will render dark. That is spec-correct *import*
+behaviour, and it is invisible at L3 and L5 — the only layers that exist today — so no test here can
+catch it. `GLTF-009`'s image oracle is what would, and a default-lighting policy for a light-less PBR
+scene is worth deciding alongside it.
+
+**Not a collapse mechanism** — geometry was always correct; shading was wrong.
 
 ---
 
@@ -409,7 +437,7 @@ The center-collapse track is closed. It is deliberately narrow, and these remain
 |---|---|---|
 | A draw path for the point and line topologies | **`GLTF-073`**, **`GLTF-076`**, **`GLTF-077`**, **`GLTF-078`** | a named rejection, not a wrong import; the decoding is correct and the gap is at the draw layer |
 | Serialising and playing a rigid node clip | **`GLTF-294`** | the clip is now imported and reported (`GLTF-293`); the `.cnj` schema cannot yet say which index space a track targets |
-| Factor-only PBR materials | **`GLTF-217`/`228`/`229`** (+`GLTF-215`) | shading, not geometry |
+| The alpha and sidedness state of a material | **`GLTF-228`**/**`229`**/**`231`**, behind the `GLTF-025` API gate | shading, not geometry; the factors themselves now survive (`GLTF-215`/`216`) |
 | L6 draw-parameter capture | `GLTF-008` | harness not yet built |
 | L7 image oracle | `GLTF-009` | harness not yet built |
 | `ctest -L gltf-conformance` single label | `GLTF-010` | needs L6/L7 |
@@ -485,7 +513,8 @@ For the assets the owner reported as deformed:
 * if the asset is **in the right place but does not move** — **D6**, owned by `GLTF-293` (landed:
   the clip is imported onto the node's own bone) and **`GLTF-294` (open:** carrying it through the
   `.cnj` and playing it).
-* if the asset is **in the right place but renders white** — **D7**, owned by
-  `GLTF-217`/`228`/`229`. **Open.**
+* if the asset is **in the right place but renders white** — **D7**, owned by `GLTF-215` (landed:
+  the material model selects the effect, and every authored factor survives to `PbrEffect`) and
+  **`GLTF-228`/`229`/`231` (open:** `alphaMode`, `alphaCutoff`, `doubleSided`).
 
 The P0 center-collapse track (`plan_gltf.md` §28) is **complete**.

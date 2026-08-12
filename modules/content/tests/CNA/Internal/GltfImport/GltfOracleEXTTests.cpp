@@ -160,16 +160,19 @@ TEST(GltfOracleEXT, DumpMeshOutEXTExposesEverySemanticStreamOfTheSelectedLayout)
     ASSERT_EQ(1u, extracted.size());
     const MeshOutDump& dump = extracted[0].dump;
 
-    EXPECT_EQ(52, dump.stride);
+    // Stride 68, not 52: GLTF-215 made metallic-roughness the selection rule, and this fixture's
+    // primitive has no material at all -- which in glTF means the default material, which IS
+    // metallic-roughness. A skinned PBR primitive is the stride-68 layout.
+    EXPECT_EQ(68, dump.stride);
     EXPECT_TRUE(dump.skinned);
     EXPECT_EQ(3u, dump.vertexCount);
     EXPECT_EQ(3u, dump.positions.size());
-    EXPECT_EQ(3u, dump.normals.size()) << "stride 52 has a normal slot";
-    EXPECT_EQ(3u, dump.texcoords.size()) << "stride 52 has a UV slot";
+    EXPECT_EQ(3u, dump.normals.size()) << "stride 68 has a normal slot";
+    EXPECT_EQ(3u, dump.texcoords.size()) << "stride 68 has a UV slot";
     EXPECT_EQ(3u, dump.weights.size());
     EXPECT_EQ(3u, dump.joints.size());
-    EXPECT_TRUE(dump.tangents.empty()) << "stride 52 has no tangent slot";
-    EXPECT_TRUE(dump.colors.empty()) << "stride 52 has no colour slot";
+    EXPECT_EQ(3u, dump.tangents.size()) << "stride 68 has a tangent slot";
+    EXPECT_TRUE(dump.colors.empty()) << "stride 68 has no colour slot";
     EXPECT_EQ(3u, dump.indices.size());
 
     // Every vertex is bound entirely to joint 0 in this fixture.

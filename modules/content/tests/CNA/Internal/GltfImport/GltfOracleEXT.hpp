@@ -141,6 +141,8 @@ namespace CnaTest::GltfOracle
         bool usePbr = false;
         /** @brief `MeshOut::useDualTexture`. */
         bool useDualTexture = false;
+        /** @brief The material's base colour factor (RGBA) as it reached `MeshOut` (`GLTF-216`). */
+        std::array<float, 4> baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
         /** @brief `MeshOut::metallicFactor`. */
         float metallicFactor = 0.0f;
         /** @brief `MeshOut::roughnessFactor`. */

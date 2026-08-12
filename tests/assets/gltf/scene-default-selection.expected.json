@@ -340,7 +340,7 @@
       {
         "mesh": 1,
         "primitive": 0,
-        "stride": 32,
+        "stride": 48,
         "vertexCount": 3,
         "fields": [
           {
@@ -354,14 +354,19 @@
             "size": 12
           },
           {
-            "name": "TextureCoordinate",
+            "name": "Tangent",
             "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
             "size": 8
           }
         ],
         "vertexBufferFile": "scene-default-selection.vb.bin",
-        "vertexBufferBytes": 96,
-        "vertexBufferSha256": "dd4f3226fd167fe18f1885b24b67df1350c23d331b60c2bab067eda8a092de02",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "e18e1b490de1b904c1d5c05e4092db07c4493fcd7545d6c16793bf4064efdf62",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "scene-default-selection.ib.bin",

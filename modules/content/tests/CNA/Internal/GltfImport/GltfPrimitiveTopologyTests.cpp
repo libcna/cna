@@ -249,8 +249,10 @@ TEST(GltfPrimitiveTopology, TrianglesImportUnchangedAndCarryTheirTopology)
 
     EXPECT_EQ(PrimitiveTopology::Triangles, mesh.topology);
     EXPECT_EQ(PrimitiveTopology::Triangles, mesh.sourceTopology);
-    EXPECT_EQ(32, mesh.stride);
-    EXPECT_EQ(4u * 32u, mesh.vertexBytes.size());
+    // Stride 48: this quad declares no material, and glTF's default material is
+    // metallic-roughness, so GLTF-215 selects the PBR layout.
+    EXPECT_EQ(48, mesh.stride);
+    EXPECT_EQ(4u * 48u, mesh.vertexBytes.size());
     EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 0, 2, 3}), DecodedIndices(mesh));
 
     // The same asset with no "mode" key at all must produce byte-identical output: the default is
@@ -372,7 +374,7 @@ TEST(GltfPrimitiveTopology, StripAndFanImportThroughExtractMeshAsTriangleLists)
 
         // The vertex buffer is untouched by a topology conversion -- only the index list is
         // rewritten, which is precisely why no renderer needs to change.
-        EXPECT_EQ(4u * 32u, mesh.vertexBytes.size());
+        EXPECT_EQ(4u * 48u, mesh.vertexBytes.size());
     }
 }
 

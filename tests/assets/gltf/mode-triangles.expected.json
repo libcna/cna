@@ -248,7 +248,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 32,
+        "stride": 48,
         "vertexCount": 4,
         "fields": [
           {
@@ -262,14 +262,19 @@
             "size": 12
           },
           {
-            "name": "TextureCoordinate",
+            "name": "Tangent",
             "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
             "size": 8
           }
         ],
         "vertexBufferFile": "mode-triangles.vb.bin",
-        "vertexBufferBytes": 128,
-        "vertexBufferSha256": "4543950acd77b876f0b8dcb8bb6644feeb0a4978246c3d31edff04691e909272",
+        "vertexBufferBytes": 192,
+        "vertexBufferSha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43",
         "indexElementSize": 2,
         "indexCount": 6,
         "indexBufferFile": "mode-triangles.ib.bin",

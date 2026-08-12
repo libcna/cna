@@ -249,7 +249,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 32,
+        "stride": 48,
         "vertexCount": 4,
         "fields": [
           {
@@ -263,14 +263,19 @@
             "size": 12
           },
           {
-            "name": "TextureCoordinate",
+            "name": "Tangent",
             "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
             "size": 8
           }
         ],
         "vertexBufferFile": "sparse-indices.vb.bin",
-        "vertexBufferBytes": 128,
-        "vertexBufferSha256": "442269e699a11f1506533dffb1337bf68b4df12de71b7ead6e7b52c508ce748b",
+        "vertexBufferBytes": 192,
+        "vertexBufferSha256": "5ccd0044c315c3e47e8436a68058677dd5c2775b0e6a5aaa43c66bbe779a43c6",
         "indexElementSize": 2,
         "indexCount": 6,
         "indexBufferFile": "sparse-indices.ib.bin",

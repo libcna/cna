@@ -378,6 +378,8 @@ namespace CnaTest::GltfOracle
         dump.hasMetallicRoughnessImage = mesh.metallicRoughnessImage != nullptr;
         dump.hasEmissiveImage = mesh.emissiveImage != nullptr;
         dump.morphTargetCount = mesh.morphPositionDeltas.size();
+        dump.baseColorFactor = {mesh.baseColorFactor.X, mesh.baseColorFactor.Y,
+                                mesh.baseColorFactor.Z, mesh.baseColorFactor.W};
         // GLTF-071 gave MeshOut a real topology member, so the source primitive's mode now reaches
         // L3 instead of being assumed. Reading it back here is what lets an L3 comparison assert
         // the topology rather than infer it from an index count.

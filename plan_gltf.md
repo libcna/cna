@@ -1859,9 +1859,25 @@ the animated node's own bone. Both mechanisms that dropped it are gone; what rem
 serialisation, which `GLTF-294` owns, so **D6 is `partially-remediated`** rather than fixed and the
 converter reports the clip instead of discarding it.
 
-**D7 remains open** and reproducible exactly as the audit recorded it; like D6 it is not a
-center-collapse mechanism (`docs/gltf-center-collapse-verdict.md` §6). No renderer and no
-`cna-gltf-viewer` work has been started.
+**P0-H — the PBR selection rule**: `GLTF-215`, `GLTF-216`, `GLTF-217`, `GLTF-219`, `GLTF-221`.
+What selects PBR is now the material **model** the file declares, not which texture maps it
+happens to carry, so a factor-only metallic-roughness material reaches `PbrEffect` and every
+authored factor — base colour, metallic, roughness, emissive — survives to the effect. Stride 32
+no longer occurs in the corpus, and the `DualTextureEffect` glTF path is superseded by `PbrEffect`'s
+real occlusion map. **D7 is `partially-remediated`**: the alpha and sidedness state (`alphaMode`,
+`alphaCutoff`, `doubleSided`) still has no `MeshOut` field and no effect parameter, and is owned by
+`GLTF-228`/`GLTF-229`/`GLTF-231` behind the `GLTF-025` API-change gate.
+
+**Every defect from the original audit is now at least partially remediated.** D1–D4 and D8 are
+`fixed`; D5, D6 and D7 are `partially-remediated` with their remaining tasks named. No renderer and
+no `cna-gltf-viewer` work has been started.
+
+> **Open risk, recorded rather than resolved.** `GLTF-215` sends every untextured primitive through
+> `PbrEffect`, whose `AmbientLightColor` defaults to `(0,0,0)`. A scene with no punctual lights that
+> previously rendered lit-white through `BasicEffect` will now render dark. That is spec-correct
+> import behaviour and is *not* visible at L3 or L5, which are the only layers that currently
+> exist — so it is stated here rather than asserted. `GLTF-009`'s image oracle is what would catch
+> it, and a default-lighting policy for a light-less PBR scene is worth deciding alongside it.
 
 Every phase declares its **primary owner** from §6; a task whose owner differs names it inline.
 Dependencies are the *minimum* set — a task also inherits its phase's entry condition, **except for
@@ -2187,13 +2203,13 @@ numerically at L4.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-215 | **Replace the map-presence PBR-selection rule** | 🐛 | GLTF-011 | `usePbr = !colored && (normalImage \|\| metallicRoughnessImage)`; `f8` proved a gold factor-only material becomes a white `BasicEffect`. glTF's default material *is* metallic-roughness. **Accept:** a primitive whose material has `pbrMetallicRoughness`, or has no material, imports as PBR. |
-| GLTF-216 | **Carry `baseColorFactor` end-to-end** | 🐛 | GLTF-215 | Not read anywhere; `MeshOut` has no field. `PbrEffect::DiffuseColor` + `Alpha` already exist and reach the shader. **Accept:** `mat-factor-only-gold` shows `(1,0.72,0.315)` and alpha `0.5` at L6. |
-| GLTF-217 | Primitive with no material at all | 🐛 | GLTF-215 | Falls to white `BasicEffect`. **Accept:** `mat-default` imports as the glTF default metallic-roughness material. |
+| GLTF-215 | **Replace the map-presence PBR-selection rule** | ✔ | GLTF-011 | `usePbr = !colored && (normalImage \|\| metallicRoughnessImage)`; `f8` proved a gold factor-only material becomes a white `BasicEffect`. glTF's default material *is* metallic-roughness. **Accept:** a primitive whose material has `pbrMetallicRoughness`, or has no material, imports as PBR. **Landed:** the rule is now the material **model** the file declares, not which maps it carries. Metallic-roughness is glTF's default in two distinct ways, and both are honoured: a primitive with no material at all gets the default material, and a material that merely omits the optional `pbrMetallicRoughness` object still uses that model with default factors. Only `KHR_materials_pbrSpecularGlossiness` and `KHR_materials_unlit` — neither of which CNA's PBR shaders implement — are excluded, alongside the existing `!colored` limit (no PBR shader reads a vertex Color stream). **Consequences, all deliberate:** stride 32 no longer occurs anywhere in the corpus — an unskinned uncoloured primitive is 48 and a skinned one 68 — and the `DualTextureEffect` glTF path is **superseded**: a base-colour + occlusion material now reaches `PbrEffect`'s real `OcclusionMap` instead of CNB-72/73's halved occlusion-as-lightmap approximation, so the CNB-88 brightness compensation is no longer applied to it. `DualTextureEffect` itself is untouched and still reachable through every other content path; a test pins the replacement so it cannot be undone silently. |
+| GLTF-216 | **Carry `baseColorFactor` end-to-end** | ✔ | GLTF-215 | Not read anywhere; `MeshOut` has no field. `PbrEffect::DiffuseColor` + `Alpha` already exist and reach the shader. **Accept:** `mat-factor-only-gold` shows `(1,0.72,0.315)` and alpha `0.5` at L6. **Landed:** `MeshOut::baseColorFactor` (CNAEXT) is read from the material and carried to `PbrEffect`/`SkinnedPbrEffect`'s `DiffuseColor` (RGB) and `Alpha` (A) on **both** loaders. The `.cnj` needed no schema addition — it emits `diffuseColor`/`alpha`, which the reader already consumed for every effect. `mat-factor-only-gold` carries `(1, 0.72, 0.315)` with alpha `0.5` at L3, asserted against the fixture's own spec-derived expectation. The L6 half of the acceptance criterion waits on `GLTF-008`. |
+| GLTF-217 | Primitive with no material at all | ✔ | GLTF-215 | Falls to white `BasicEffect`. **Accept:** `mat-default` imports as the glTF default metallic-roughness material. **Landed with `GLTF-215`:** `prim.material == nullptr` selects PBR, which is what glTF's default material means. Every materialless corpus fixture now imports at stride 48 (or 68 skinned) with the default factors. |
 | GLTF-218 | `baseColorFactor` × `baseColorTexture` | ⬜ | GLTF-216 | The two multiply. **Accept:** `mat-basecolor-factor-times-texture` matches at L7. |
-| GLTF-219 | `metallicFactor` / `roughnessFactor` ungated | 🐛 | GLTF-215 | Read only when `usePbr` today. **Accept:** always read for a metallic-roughness material. |
+| GLTF-219 | `metallicFactor` / `roughnessFactor` ungated | ✔ | GLTF-215 | Read only when `usePbr` today. **Accept:** always read for a metallic-roughness material. **Landed:** both are read for any material carrying `pbrMetallicRoughness`, outside the old `if (usePbr)` guard that was the second half of D7. |
 | GLTF-220 | Factors reach the shader | ⬜ | GLTF-219 | **Accept:** L6 capture matches the file. |
-| GLTF-221 | `emissiveFactor` ungated | 🐛 | GLTF-215 | **Accept:** `mat-emissive-factor` correct at L6. |
+| GLTF-221 | `emissiveFactor` ungated | ✔ | GLTF-215 | **Accept:** `mat-emissive-factor` correct at L6. **Landed:** read for any material, with `KHR_materials_emissive_strength` still applied in the spec's own order. |
 | GLTF-222 | `KHR_materials_emissive_strength` ungated | 🐛 | GLTF-221 | Applied only when `usePbr`. **Accept:** `mat-emissive-strength` correct, HDR values > 1 preserved. |
 | GLTF-223 | Emissive applied after the texture, per spec order | ✅ | GLTF-222 | **Accept:** locked. |
 | GLTF-224 | `normalTexture.scale` | 🐛 | GLTF-025 | Never read; no effect parameter exists. **Accept:** new `PbrEffect::NormalScale`; `mat-normal-scale` correct at L7. |

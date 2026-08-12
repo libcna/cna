@@ -1445,14 +1445,43 @@ namespace CNA::Internal::GltfImport
         // imported through SkinnedPbrEffect (stride 68) instead of plain SkinnedEffect -- the
         // vertex-color combo (usePbr && colored) is still not attempted, matching PbrEffect's own
         // unskinned scope cut (no PBR shader currently reads a vertex Color stream).
-        out.usePbr = (!out.colored) &&
-                     (out.normalImage != nullptr || out.metallicRoughnessImage != nullptr);
-        if (out.usePbr && prim.material && prim.material->has_pbr_metallic_roughness)
+        // plan_gltf.md GLTF-215/GLTF-217: the selection rule is the MATERIAL MODEL the file
+        // declares, not which texture maps it happens to carry. glTF's default material *is*
+        // metallic-roughness (§3.9), so a primitive with no material at all is not "unlit white" --
+        // it is baseColor (1,1,1,1), metallic 1, roughness 1. The old rule
+        // (`normalImage || metallicRoughnessImage`) asked whether a map was present, which is why
+        // f8's gold factor-only material became a white BasicEffect: it had every PBR factor and
+        // not one map.
+        //
+        // `!colored` stays, and is a real implementation limit rather than a spec one: no PBR
+        // shader currently reads a vertex Color stream, so a COLOR_0 primitive keeps the stride-24
+        // layout that does. GLTF-238 owns lifting it.
+        // The test is which material MODEL applies, and metallic-roughness is glTF's default in
+        // two distinct ways: a primitive with no material at all gets the default material, and a
+        // material that simply omits the optional `pbrMetallicRoughness` object still uses that
+        // model with default factors. Only a material that declares a *different* model --
+        // KHR_materials_pbrSpecularGlossiness, or KHR_materials_unlit, neither of which CNA's PBR
+        // shaders implement -- is excluded. Keying off `has_pbr_metallic_roughness` alone would
+        // have missed a material that carries only a normalTexture, which is metallic-roughness
+        // with defaults and is exactly the shape the tangent fixture authors.
+        const bool metallicRoughnessMaterial =
+            (prim.material == nullptr) ||
+            (!prim.material->has_pbr_specular_glossiness && !prim.material->unlit);
+        out.usePbr = (!out.colored) && metallicRoughnessMaterial;
+        // GLTF-219/GLTF-221: the factors are read for ANY metallic-roughness material, not only
+        // one that also selected PBR. They were assigned inside the old `usePbr` guard, so a
+        // factor-only material left them at MeshOut's defaults -- the second half of D7, and the
+        // reason f8 lost its metallic/roughness/emissive as well as its base colour.
+        if (prim.material && prim.material->has_pbr_metallic_roughness)
         {
             out.metallicFactor  = prim.material->pbr_metallic_roughness.metallic_factor;
             out.roughnessFactor = prim.material->pbr_metallic_roughness.roughness_factor;
+            // GLTF-216: baseColorFactor multiplies the base-colour texture (or stands alone when
+            // there is none). Never read anywhere before this.
+            const cgltf_float* base = prim.material->pbr_metallic_roughness.base_color_factor;
+            out.baseColorFactor = Vector4(base[0], base[1], base[2], base[3]);
         }
-        if (out.usePbr && prim.material)
+        if (prim.material)
         {
             // CNB-97 (Phase 14H): KHR_materials_emissive_strength extends EmissiveFactor's own
             // [0,1] range with a multiplier (real HDR-authored content routinely uses > 1), before
