@@ -16,7 +16,7 @@ using CNA::Devices::Detail::IMessageBoxBackend;
 
 namespace
 {
-    // Task DEVICES-CNA-011: the real backend (Detail::SdlMessageBoxBackend) pops a
+    // Task DEVICES-CNA-011: the real backend (Detail::PlatformMessageBoxBackend) pops a
     // genuine, interactive, modal native OS dialog and blocks the calling thread
     // until a human responds -- the same class of incident already hit once during
     // FileDialog's own development (see FileDialogTests.cpp's own doc comment).
@@ -64,7 +64,7 @@ namespace
     };
 
     // RAII: installs the fake in the constructor, restores the real
-    // Detail::SdlMessageBoxBackend in the destructor -- MessageBox's backend is
+    // Detail::PlatformMessageBoxBackend in the destructor -- MessageBox's backend is
     // process-wide static state, so every test must restore it, or a fake would leak
     // into unrelated tests run afterward in the same process.
     class ScopedFakeMessageBoxBackend
@@ -135,7 +135,7 @@ TEST(MessageBoxTests, SetBackendForTestingNullRestoresDefaultBackendBehavior)
         MessageBox::ShowSimple(MessageBoxType::Information, "Title", "Message");
         EXPECT_EQ(fake->ShowSimpleCallCount, 1);
     }
-    // After the scope above, the real Detail::SdlMessageBoxBackend is restored.
+    // After the scope above, the real Detail::PlatformMessageBoxBackend is restored.
     // getIsSupportedProperty() does not depend on the backend, so this only proves
     // SetBackendForTesting(nullptr) does not crash -- the real backend's dialog-
     // showing behavior itself is deliberately never exercised in this test file.
@@ -157,7 +157,7 @@ TEST(MessageBoxTests, ConcurrentSetBackendForTestingDoesNotRaceWithLiveCalls)
     std::atomic<int> callCount{0};
 
     // Install a fake before racing -- the caller thread below must never reach
-    // the real Detail::SdlMessageBoxBackend, which would pop a real, modal,
+    // the real Detail::PlatformMessageBoxBackend, which would pop a real, modal,
     // interactive dialog and block forever (see this file's own top-of-file
     // comment on why).
     MessageBox::SetBackendForTesting(std::make_unique<FakeMessageBoxBackend>());

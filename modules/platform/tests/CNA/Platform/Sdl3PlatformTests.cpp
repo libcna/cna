@@ -150,10 +150,19 @@ TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
     EXPECT_TRUE(capabilities.gamepad);
     EXPECT_TRUE(capabilities.textInput);
 
-    // Still unwired, so still false -- the pairing the conformance suite enforces.
     EXPECT_TRUE(capabilities.sensors);
     EXPECT_TRUE(capabilities.haptics);
-    EXPECT_FALSE(capabilities.messageBox) << "flips true in PLAT-103";
+    EXPECT_TRUE(capabilities.globalPointer);
+    EXPECT_TRUE(capabilities.inputDeviceEnumeration);
+    EXPECT_TRUE(capabilities.messageBox);
+
+    // Still unwired, so still false -- the pairing the conformance suite enforces.
+    EXPECT_FALSE(capabilities.nativeFileDialog)
+        << "flips true in PLAT-104, once the contract's file-dialog signatures stop being "
+           "synchronous; SDL3's are not";
+    EXPECT_FALSE(capabilities.tray) << "flips true in PLAT-105";
+    EXPECT_FALSE(capabilities.camera) << "flips true in PLAT-106";
+    EXPECT_FALSE(capabilities.gamepadSensors) << "flips true in PLAT-82";
 }
 
 TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)

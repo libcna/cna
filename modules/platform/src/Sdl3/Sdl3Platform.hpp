@@ -127,6 +127,7 @@ namespace CNA::Platform::Sdl3 {
         Sdl3Sensors sensors_;
         Sdl3Haptics haptics_;
         Sdl3InputDevices inputDevices_;
+        Sdl3Dialogs dialogs_;
     };
 
 } // namespace CNA::Platform::Sdl3

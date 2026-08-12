@@ -68,6 +68,12 @@ TEST_P(PlatformConformance, EveryServiceIsNullExactlyWhenItsCapabilityIsFalse)
     EXPECT_EQ(platform_->GetDisplays() != nullptr, capabilities_.multipleDisplays) << "displays";
     EXPECT_EQ(platform_->GetGlContext() != nullptr, capabilities_.openGlContext) << "openGlContext";
     EXPECT_EQ(platform_->GetVulkanSurface() != nullptr, capabilities_.vulkanSurface) << "vulkanSurface";
+
+    // Dialogs is the one service backed by two capabilities: a platform with a message box but no
+    // file dialogs (SDL3 today) still has a dialog service, so the rule is "null when neither".
+    EXPECT_EQ(platform_->GetDialogs() != nullptr,
+              capabilities_.messageBox || capabilities_.nativeFileDialog)
+        << "dialogs";
 }
 
 TEST_P(PlatformConformance, ServicesEveryPlatformMustHaveAreNeverNull)

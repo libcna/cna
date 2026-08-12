@@ -83,4 +83,57 @@ namespace CNA::Platform::Sdl3 {
         bool OpenUrl(const std::string& url) override;
     };
 
+    /** @brief SDL3-backed native dialogs. */
+    class Sdl3Dialogs final : public IPlatformDialogs
+    {
+    public:
+        /**
+         * @brief Shows a modal message box.
+         * @param severity How prominently to present it.
+         * @param title The dialog title.
+         * @param message The message body.
+         * @param parent The window to parent the dialog to, or null.
+         */
+        void ShowMessageBox(MessageBoxSeverity severity, const std::string& title,
+                            const std::string& message, IPlatformWindow* parent) override;
+        /**
+         * @brief Shows a modal message box with buttons.
+         * @param severity How prominently to present it.
+         * @param title The dialog title.
+         * @param message The message body.
+         * @param buttons The button labels, in display order.
+         * @param parent The window to parent the dialog to, or null.
+         * @return The chosen button's index, or -1 when dismissed.
+         */
+        [[nodiscard]] int ShowMessageBoxWithButtons(MessageBoxSeverity severity,
+                                                    const std::string& title,
+                                                    const std::string& message,
+                                                    const std::vector<std::string>& buttons,
+                                                    IPlatformWindow* parent) override;
+        /**
+         * @brief Refuses: SDL3's file dialogs are asynchronous. See PLAT-104.
+         * @param filters The file type filters.
+         * @param allowMultiple Whether more than one file may be selected.
+         * @param parent The parent window, or null.
+         * @return Never returns.
+         */
+        [[nodiscard]] std::vector<std::string> ShowOpenFileDialog(
+            const std::vector<FileDialogFilter>& filters, bool allowMultiple,
+            IPlatformWindow* parent) override;
+        /**
+         * @brief Refuses: SDL3's file dialogs are asynchronous. See PLAT-104.
+         * @param filters The file type filters.
+         * @param parent The parent window, or null.
+         * @return Never returns.
+         */
+        [[nodiscard]] std::string ShowSaveFileDialog(const std::vector<FileDialogFilter>& filters,
+                                                     IPlatformWindow* parent) override;
+        /**
+         * @brief Refuses: SDL3's file dialogs are asynchronous. See PLAT-104.
+         * @param parent The parent window, or null.
+         * @return Never returns.
+         */
+        [[nodiscard]] std::string ShowOpenFolderDialog(IPlatformWindow* parent) override;
+    };
+
 } // namespace CNA::Platform::Sdl3

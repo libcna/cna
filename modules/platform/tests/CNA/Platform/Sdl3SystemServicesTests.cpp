@@ -240,4 +240,51 @@ TEST_F(Sdl3DisplayTest, UnknownDisplayIdYieldsNoModesRatherThanThrowing)
     EXPECT_TRUE(platform_->GetDisplays()->GetDisplayModes(0xDEADBEEF).empty());
 }
 
+// --- dialogs (PLAT-103) -----------------------------------------------------------------------
+
+TEST_F(Sdl3ServiceTest, TheDialogServiceIsPresentBecauseMessageBoxIsSupported)
+{
+    EXPECT_NE(platform_->GetDialogs(), nullptr);
+    EXPECT_TRUE(platform_->GetCapabilities().messageBox);
+}
+
+TEST_F(Sdl3ServiceTest, FileDialogsRefuseNamingTheCapabilityTheyLack)
+{
+    // SDL3's file dialogs are asynchronous and the contract's signatures are not, so the
+    // capability is honestly false and every entry point refuses rather than pumping the event
+    // loop from inside a call a game makes during its own frame. A false capability promises a
+    // deterministic refusal, and this is what checks it is actually delivered.
+    IPlatformDialogs* dialogs = platform_->GetDialogs();
+    ASSERT_NE(dialogs, nullptr);
+    ASSERT_FALSE(platform_->GetCapabilities().nativeFileDialog);
+
+    const std::vector<FileDialogFilter> filters{{"Images", "png;jpg"}};
+
+    try
+    {
+        (void)dialogs->ShowOpenFileDialog(filters, false, nullptr);
+        FAIL() << "an unsupported file dialog must refuse";
+    }
+    catch (const PlatformNotSupportedException& exception)
+    {
+        EXPECT_EQ(exception.GetCapability(), PlatformCapability::NativeFileDialog);
+    }
+
+    EXPECT_THROW((void)dialogs->ShowSaveFileDialog(filters, nullptr), PlatformNotSupportedException);
+    EXPECT_THROW((void)dialogs->ShowOpenFolderDialog(nullptr), PlatformNotSupportedException);
+}
+
+TEST_F(Sdl3ServiceTest, AMessageBoxWithNoButtonsIsRejectedRatherThanShown)
+{
+    // A dialog with nothing to click cannot be dismissed. Rejecting before showing keeps that
+    // from becoming a hung process on a machine nobody is watching.
+    IPlatformDialogs* dialogs = platform_->GetDialogs();
+    ASSERT_NE(dialogs, nullptr);
+
+    EXPECT_THROW(
+        (void)dialogs->ShowMessageBoxWithButtons(MessageBoxSeverity::Information, "t", "m", {},
+                                                 nullptr),
+        PlatformException);
+}
+
 } // namespace

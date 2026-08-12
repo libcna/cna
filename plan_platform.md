@@ -67,9 +67,9 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1123** |
-| Files referencing SDL (all) | **580** |
-| Production files (`src/` + `include/`) referencing SDL | **258** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1124** |
+| Files referencing SDL (all) | **576** |
+| Production files (`src/` + `include/`) referencing SDL | **254** |
 | …of which are renderer production files | **116** |
 | Test/example files referencing SDL | **322** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
@@ -80,7 +80,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | Module | Files | Dominant concern |
 |---|---:|---|
 | `modules/input` | 37 | keyboard, mouse, gamepad, joystick, haptic, sensor, touch, text input |
-| `modules/devices-ext` | 30 | clipboard, message box, file dialog, tray, camera, locale, power, display, URL |
+| `modules/devices-ext` | 26 | clipboard, message box, file dialog, tray, camera, locale, power, display, URL |
 | `modules/platform` | 18 | - |
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
@@ -463,8 +463,8 @@ Separate contract, separate selection variable, per design decision 7.
 | PLAT-100 | Migrate `devices-ext` `Clipboard` | ✅ | On `IPlatformClipboard`. A null service (no clipboard capability) returns `false`/empty rather than throwing — this API answers with a `bool`, the same shape it had when `SDL_SetClipboardText` failed. Original scope: | Shares the PLAT-88 service; the duplicate implementation is removed, not paralleled. |
 | PLAT-101 | Migrate `devices-ext` `PowerInfo` | ✅ | On `IPlatformSystemInfo::GetPowerInfo()`. Required adding **`PowerState::Error`** to the contract: `Devices::PowerState` distinguishes it from `Unknown`, and collapsing the two would have lost the difference between "this device has no answer" and "the query failed" — one is diagnosable, the other is not. Original scope: | `SDL_GetPowerInfo` (8 references); shares PLAT-89's service. |
 | PLAT-102 | Migrate `DisplayInfo` | ⬜ | Via the displays service. |
-| PLAT-103 | Migrate `SdlMessageBoxBackend` | ⬜ | `SDL_ShowMessageBox`/`ShowSimpleMessageBox` → dialogs service; capability-gated. |
-| PLAT-104 | Migrate `SdlFileDialogBackend` | ⬜ | Open/save/folder dialogs; capability-gated (`supportsNativeFileDialog`). |
+| PLAT-103 | Migrate `SdlMessageBoxBackend` | ✅ | `Sdl3Dialogs` implemented and wired; `capabilities.messageBox` honestly true. `SdlMessageBoxBackend` → `PlatformMessageBoxBackend`, forwarding to `IPlatformDialogs`. The contract gained **`ShowMessageBoxWithButtons`**, which it had no way to express — `CNA::Devices::MessageBox::Show` returns the chosen button index and the contract offered only a void single-button form. It is a separate method rather than an optional parameter because the two answer different questions: one informs, the other asks, and a caller that only informs should not receive a return value it must decide to ignore. `MessageBox::getIsSupportedProperty()` was an **unconditional `true`** — only ever right because SDL was the sole platform — and now reports the capability, so a headless or terminal host answers honestly and a caller can fall back. A message box that cannot be shown does **not** take the process down: this is usually the last thing a game does on its way out, and the SDL version discarded the status too. |
+| PLAT-104 | Migrate `SdlFileDialogBackend` | ⛔ **contract change needed first** | **The contract's file-dialog signatures are synchronous and SDL3's file dialogs are not.** `ShowOpenFileDialog` returns the selected paths; `SDL_ShowOpenFileDialog` takes a callback and returns immediately. Making it block would mean pumping the event loop from inside a call a game makes during its own frame — a reentrancy and deadlock hazard, not a style question — and CNA's own `CNA::Devices::FileDialog` is already callback-shaped for exactly this reason. `Sdl3Dialogs` therefore refuses all three entry points and `capabilities.nativeFileDialog` stays honestly false, which is precisely what a false capability promises. This task now begins with changing the contract to an asynchronous shape that both SDL3 and CNA's existing public API can satisfy. Original scope: | Open/save/folder dialogs; capability-gated (`supportsNativeFileDialog`). |
 | PLAT-105 | Migrate `SdlTrayBackend` | ⬜ | Tray + menus; capability-gated. |
 | PLAT-106 | Migrate `SdlCameraBackend` | ⬜ | `SDL_GetCameras`/`SDL_OpenCamera`; capability-gated. |
 | PLAT-107 | Migrate `Locale` / `SystemInfo` / `UrlLauncher` | ✅ | All three on `IPlatformSystemInfo`. Required changing `GetPreferredLocales()` to return a structured **`PlatformLocale{language, country}`** instead of a BCP 47 tag: `Devices::LocaleInfo` needs the parts separately, and re-splitting a formatted tag would be a lossy round-trip through a string for no benefit. Changed now, with one consumer, rather than later with several. Original scope: | `SDL_GetPreferredLocales`, `SDL_GetSystemRAM`, `SDL_GetNumLogicalCPUCores`, `SDL_GetPlatform`, `SDL_OpenURL`. |

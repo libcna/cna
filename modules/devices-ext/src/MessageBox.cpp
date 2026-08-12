@@ -5,7 +5,9 @@
 
 #include <mutex>
 
-#include "CNA/Devices/Detail/SdlMessageBoxBackend.hpp"
+#include "CNA/Devices/Detail/PlatformMessageBoxBackend.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
 
 namespace
 {
@@ -25,7 +27,7 @@ namespace
     std::shared_ptr<CNA::Devices::Detail::IMessageBoxBackend>& BackendStorage()
     {
         static std::shared_ptr<CNA::Devices::Detail::IMessageBoxBackend> backend =
-            std::make_shared<CNA::Devices::Detail::SdlMessageBoxBackend>();
+            std::make_shared<CNA::Devices::Detail::PlatformMessageBoxBackend>();
         return backend;
     }
 
@@ -40,7 +42,10 @@ namespace CNA::Devices
 {
     bool MessageBox::getIsSupportedProperty()
     {
-        return true;
+        // Previously an unconditional true, which was only ever right because SDL was the only
+        // platform. It now reports the capability, so a headless or terminal host answers
+        // honestly and a caller can offer a fallback instead of showing nothing.
+        return Platform::GetCurrentPlatform().GetCapabilities().messageBox;
     }
 
     void MessageBox::ShowSimple(MessageBoxType type, const std::string& title, const std::string& message)
@@ -66,7 +71,7 @@ namespace CNA::Devices
         }
         else
         {
-            BackendStorage() = std::make_shared<Detail::SdlMessageBoxBackend>();
+            BackendStorage() = std::make_shared<Detail::PlatformMessageBoxBackend>();
         }
     }
 } // namespace CNA::Devices

@@ -145,6 +145,26 @@ namespace CNA::Platform {
                                     const std::string& message, IPlatformWindow* parent) = 0;
 
         /**
+         * @brief Shows a modal message box with a choice of buttons and reports which was chosen.
+         *
+         * Separate from the single-button form rather than an optional parameter on it, because
+         * the two answer different questions: one informs, the other asks. A caller that only
+         * informs should not have to deal with a return value it must then decide to ignore.
+         *
+         * @param severity How prominently to present it.
+         * @param title The dialog title.
+         * @param message The message body.
+         * @param buttons The button labels, in display order. Must not be empty.
+         * @param parent The window to parent the dialog to, or null for none.
+         * @return The index of the chosen button, or -1 when the dialog was dismissed without a
+         * choice. Dismissal is an ordinary outcome and does not throw.
+         * @throws PlatformNotSupportedException If the platform reports no `MessageBox` capability.
+         */
+        [[nodiscard]] virtual int ShowMessageBoxWithButtons(
+            MessageBoxSeverity severity, const std::string& title, const std::string& message,
+            const std::vector<std::string>& buttons, IPlatformWindow* parent) = 0;
+
+        /**
          * @brief Shows a modal file-open dialog.
          *
          * @param filters The file type filters to offer.

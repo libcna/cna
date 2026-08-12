@@ -109,11 +109,13 @@ namespace CNA::Platform::Sdl3 {
         capabilities.haptics = true;
         capabilities.globalPointer = true;
         capabilities.inputDeviceEnumeration = true;
+        capabilities.messageBox = true;
 
         // Still unwired. Each flips true in the task that wires its accessor, not before.
         //   capabilities.gamepadSensors      PLAT-82 (gyro/accel on the pad itself)
-        //   capabilities.messageBox          PLAT-103
-        //   capabilities.nativeFileDialog    PLAT-104
+        //   capabilities.nativeFileDialog    PLAT-104 (SDL3's file dialogs are asynchronous;
+        //                                    the contract's signatures are not, so the service
+        //                                    refuses until PLAT-104 changes them)
         //   capabilities.tray                PLAT-105
         //   capabilities.camera              PLAT-106
 
@@ -250,7 +252,7 @@ namespace CNA::Platform::Sdl3 {
     IPlatformInputDevices* Sdl3Platform::GetInputDevices() { return &inputDevices_; }
     IPlatformClipboard* Sdl3Platform::GetClipboard() { return &clipboard_; }
     IPlatformDisplays* Sdl3Platform::GetDisplays() { return &displays_; }
-    IPlatformDialogs* Sdl3Platform::GetDialogs() { return nullptr; }
+    IPlatformDialogs* Sdl3Platform::GetDialogs() { return &dialogs_; }
     IPlatformFileSystem* Sdl3Platform::GetFileSystem() { return &fileSystem_; }
     IPlatformSystemInfo* Sdl3Platform::GetSystemInfo() { return &systemInfo_; }
     IPlatformGlContext* Sdl3Platform::GetGlContext() { return &glContext_; }

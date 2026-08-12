@@ -249,4 +249,105 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3SystemInfo::OpenUrl(const std::string& url) { return SDL_OpenURL(url.c_str()); }
 
+    // --- dialogs (PLAT-103) ---------------------------------------------------------------------
+
+    namespace {
+
+        SDL_MessageBoxFlags ToSdlSeverity(const MessageBoxSeverity severity)
+        {
+            switch (severity)
+            {
+                case MessageBoxSeverity::Error:       return SDL_MESSAGEBOX_ERROR;
+                case MessageBoxSeverity::Warning:     return SDL_MESSAGEBOX_WARNING;
+                case MessageBoxSeverity::Information: return SDL_MESSAGEBOX_INFORMATION;
+            }
+            return SDL_MESSAGEBOX_INFORMATION;
+        }
+
+        /// Resolves the native window to parent a dialog to. A null parent is normal -- a fatal
+        /// error box is often shown after the window is gone, which is exactly when it matters.
+        SDL_Window* ToSdlWindow(IPlatformWindow* parent)
+        {
+            auto* sdlWindow = dynamic_cast<Sdl3Window*>(parent);
+            return sdlWindow != nullptr ? sdlWindow->GetSdlWindow() : nullptr;
+        }
+
+    } // namespace
+
+    void Sdl3Dialogs::ShowMessageBox(const MessageBoxSeverity severity, const std::string& title,
+                                     const std::string& message, IPlatformWindow* parent)
+    {
+        if (!SDL_ShowSimpleMessageBox(ToSdlSeverity(severity), title.c_str(), message.c_str(),
+                                      ToSdlWindow(parent)))
+        {
+            throw PlatformException("ShowMessageBox", SDL_GetError());
+        }
+    }
+
+    int Sdl3Dialogs::ShowMessageBoxWithButtons(const MessageBoxSeverity severity,
+                                               const std::string& title,
+                                               const std::string& message,
+                                               const std::vector<std::string>& buttons,
+                                               IPlatformWindow* parent)
+    {
+        if (buttons.empty())
+        {
+            throw PlatformException("ShowMessageBoxWithButtons", "no buttons were supplied");
+        }
+
+        // The label strings are borrowed by SDL_MessageBoxButtonData, and the vector is the
+        // caller's, so nothing here may copy or reallocate them before the modal call returns.
+        std::vector<SDL_MessageBoxButtonData> sdlButtons;
+        sdlButtons.reserve(buttons.size());
+        for (std::size_t i = 0; i < buttons.size(); ++i)
+        {
+            SDL_MessageBoxButtonData button{};
+            button.flags = 0;
+            button.buttonID = static_cast<int>(i);
+            button.text = buttons[i].c_str();
+            sdlButtons.push_back(button);
+        }
+
+        SDL_MessageBoxData data{};
+        data.flags = ToSdlSeverity(severity);
+        data.window = ToSdlWindow(parent);
+        data.title = title.c_str();
+        data.message = message.c_str();
+        data.numbuttons = static_cast<int>(sdlButtons.size());
+        data.buttons = sdlButtons.data();
+        data.colorScheme = nullptr;
+
+        // Seeded to -1 because SDL leaves it untouched when the dialog is closed without a
+        // choice, which is the contract's "dismissed" answer rather than a failure.
+        int chosen = -1;
+        if (!SDL_ShowMessageBox(&data, &chosen))
+        {
+            throw PlatformException("ShowMessageBoxWithButtons", SDL_GetError());
+        }
+        return chosen;
+    }
+
+    // SDL3's file dialogs are asynchronous -- they take a callback and return immediately -- while
+    // the contract's signatures are synchronous. Making them block would mean pumping the event
+    // loop from inside a call a game makes during its own frame, which deadlocks or reenters.
+    // The capability is therefore false and these refuse, which is exactly what a false capability
+    // promises. PLAT-104 changes the contract to match.
+
+    std::vector<std::string> Sdl3Dialogs::ShowOpenFileDialog(const std::vector<FileDialogFilter>&,
+                                                             bool, IPlatformWindow*)
+    {
+        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "SDL3");
+    }
+
+    std::string Sdl3Dialogs::ShowSaveFileDialog(const std::vector<FileDialogFilter>&,
+                                                IPlatformWindow*)
+    {
+        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "SDL3");
+    }
+
+    std::string Sdl3Dialogs::ShowOpenFolderDialog(IPlatformWindow*)
+    {
+        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "SDL3");
+    }
+
 } // namespace CNA::Platform::Sdl3
