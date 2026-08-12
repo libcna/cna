@@ -5,8 +5,8 @@
 
 #include <mutex>
 
-#include "CNA/Devices/Detail/SdlFileDialogBackend.hpp"
-#include "CNA/Platform.hpp"
+#include "CNA/Devices/Detail/PlatformFileDialogBackend.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 namespace
 {
@@ -26,7 +26,7 @@ namespace
     std::shared_ptr<CNA::Devices::Detail::IFileDialogBackend>& BackendStorage()
     {
         static std::shared_ptr<CNA::Devices::Detail::IFileDialogBackend> backend =
-            std::make_shared<CNA::Devices::Detail::SdlFileDialogBackend>();
+            std::make_shared<CNA::Devices::Detail::PlatformFileDialogBackend>();
         return backend;
     }
 
@@ -43,11 +43,11 @@ namespace CNA::Devices
     {
         switch (CNA::getCurrentPlatform())
         {
-        case CNA::Platform::Web:
-        case CNA::Platform::iOS:
+        case CNA::TargetPlatform::Web:
+        case CNA::TargetPlatform::iOS:
             return false;
-        case CNA::Platform::Desktop:
-        case CNA::Platform::Android:
+        case CNA::TargetPlatform::Desktop:
+        case CNA::TargetPlatform::Android:
         default:
             return true;
         }
@@ -87,7 +87,7 @@ namespace CNA::Devices
         }
         else
         {
-            BackendStorage() = std::make_shared<Detail::SdlFileDialogBackend>();
+            BackendStorage() = std::make_shared<Detail::PlatformFileDialogBackend>();
         }
     }
 } // namespace CNA::Devices

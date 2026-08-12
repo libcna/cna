@@ -111,29 +111,37 @@ namespace CNA::Platform::Sdl3 {
                                                     const std::vector<std::string>& buttons,
                                                     IPlatformWindow* parent) override;
         /**
-         * @brief Refuses: SDL3's file dialogs are asynchronous. See PLAT-104.
+         * @brief Shows a file-open dialog.
+         * @param onResult Called once with the selected paths, or empty on cancel.
          * @param filters The file type filters.
+         * @param defaultLocation The directory to start in, or empty.
          * @param allowMultiple Whether more than one file may be selected.
          * @param parent The parent window, or null.
-         * @return Never returns.
          */
-        [[nodiscard]] std::vector<std::string> ShowOpenFileDialog(
-            const std::vector<FileDialogFilter>& filters, bool allowMultiple,
-            IPlatformWindow* parent) override;
+        void ShowOpenFileDialog(FileDialogCallback onResult,
+                                const std::vector<FileDialogFilter>& filters,
+                                const std::string& defaultLocation, bool allowMultiple,
+                                IPlatformWindow* parent) override;
         /**
-         * @brief Refuses: SDL3's file dialogs are asynchronous. See PLAT-104.
+         * @brief Shows a file-save dialog.
+         * @param onResult Called once with the chosen path, or empty on cancel.
          * @param filters The file type filters.
+         * @param defaultLocation The directory or file name to start with, or empty.
          * @param parent The parent window, or null.
-         * @return Never returns.
          */
-        [[nodiscard]] std::string ShowSaveFileDialog(const std::vector<FileDialogFilter>& filters,
-                                                     IPlatformWindow* parent) override;
+        void ShowSaveFileDialog(FileDialogCallback onResult,
+                                const std::vector<FileDialogFilter>& filters,
+                                const std::string& defaultLocation,
+                                IPlatformWindow* parent) override;
         /**
-         * @brief Refuses: SDL3's file dialogs are asynchronous. See PLAT-104.
+         * @brief Shows a folder-selection dialog.
+         * @param onResult Called once with the chosen folders, or empty on cancel.
+         * @param defaultLocation The directory to start in, or empty.
+         * @param allowMultiple Whether more than one folder may be selected.
          * @param parent The parent window, or null.
-         * @return Never returns.
          */
-        [[nodiscard]] std::string ShowOpenFolderDialog(IPlatformWindow* parent) override;
+        void ShowOpenFolderDialog(FileDialogCallback onResult, const std::string& defaultLocation,
+                                  bool allowMultiple, IPlatformWindow* parent) override;
     };
 
 } // namespace CNA::Platform::Sdl3

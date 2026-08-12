@@ -16,7 +16,7 @@ namespace CNA::Devices
      * @brief Shows native open-file/save-file/open-folder dialogs.
      *
      * CNA extension — no XNA/WP7 equivalent exists. Calls through
-     * `Detail::IFileDialogBackend` (default: `Detail::SdlFileDialogBackend`, backed by
+     * `Detail::IFileDialogBackend` (default: `Detail::PlatformFileDialogBackend`, backed by
      * SDL3's `SDL_ShowOpenFileDialog()`/`SDL_ShowSaveFileDialog()`/
      * `SDL_ShowOpenFolderDialog()`, `third_party/SDL/include/SDL3/SDL_dialog.h`) rather
      * than calling SDL3 directly, specifically so tests can inject a fake backend —
@@ -106,7 +106,7 @@ namespace CNA::Devices
          * @brief Test-only hook: replaces the real, platform-default backend with a
          * caller-supplied one (typically a test fake).
          *
-         * The real backend (`Detail::SdlFileDialogBackend`) launches a genuine,
+         * The real backend (`Detail::PlatformFileDialogBackend`) launches a genuine,
          * interactive native OS dialog — unlike most other `CNA::Devices` classes'
          * backends, this one has a side effect an automated test cannot safely
          * trigger (a real dialog left open forever, waiting for a human, e.g. a real
@@ -114,7 +114,7 @@ namespace CNA::Devices
          * call the real backend at all.
          *
          * @param backend Replacement backend; pass nullptr to restore the
-         * platform-default (`Detail::SdlFileDialogBackend`) behavior.
+         * platform-default (`Detail::PlatformFileDialogBackend`) behavior.
          */
         static void SetBackendForTesting(std::unique_ptr<Detail::IFileDialogBackend> backend);
 

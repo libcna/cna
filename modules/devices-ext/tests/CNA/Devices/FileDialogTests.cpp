@@ -17,7 +17,7 @@ using CNA::Devices::Detail::IFileDialogBackend;
 
 namespace
 {
-    // Task DEVICES-CNA-008: the real backend (Detail::SdlFileDialogBackend) launches
+    // Task DEVICES-CNA-008: the real backend (Detail::PlatformFileDialogBackend) launches
     // a genuine, interactive native OS dialog -- calling it from an automated test was
     // tried during this class's own development and left orphaned `zenity` processes
     // running on the development machine's real desktop session, waiting forever for
@@ -91,7 +91,7 @@ namespace
     };
 
     // RAII: installs the fake in the constructor, restores the real
-    // Detail::SdlFileDialogBackend in the destructor -- FileDialog's backend is
+    // Detail::PlatformFileDialogBackend in the destructor -- FileDialog's backend is
     // process-wide static state, so every test must restore it, or a fake would leak
     // into unrelated tests run afterward in the same process.
     class ScopedFakeFileDialogBackend
@@ -220,7 +220,7 @@ TEST(FileDialogTests, SetBackendForTestingNullRestoresDefaultBackendBehavior)
         FileDialog::ShowOpenFile([](const std::vector<std::string>&) {});
         EXPECT_EQ(fake->ShowOpenFileCallCount, 1);
     }
-    // After the scope above, the real Detail::SdlFileDialogBackend is restored.
+    // After the scope above, the real Detail::PlatformFileDialogBackend is restored.
     // getIsSupportedProperty() does not depend on the backend, so this only proves
     // SetBackendForTesting(nullptr) does not crash -- the real backend's dialog-
     // launching behavior itself is deliberately never exercised in this test file.
@@ -247,7 +247,7 @@ TEST(FileDialogTests, ConcurrentSetBackendForTestingDoesNotRaceWithLiveCalls)
     std::atomic<int> callCount{0};
 
     // Install a fake before racing -- the caller thread below must never reach
-    // the real Detail::SdlFileDialogBackend, which would launch a real
+    // the real Detail::PlatformFileDialogBackend, which would launch a real
     // interactive dialog (see this file's own top-of-file comment on why).
     FileDialog::SetBackendForTesting(std::make_unique<FakeFileDialogBackend>());
 

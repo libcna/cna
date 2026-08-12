@@ -248,30 +248,21 @@ TEST_F(Sdl3ServiceTest, TheDialogServiceIsPresentBecauseMessageBoxIsSupported)
     EXPECT_TRUE(platform_->GetCapabilities().messageBox);
 }
 
-TEST_F(Sdl3ServiceTest, FileDialogsRefuseNamingTheCapabilityTheyLack)
+TEST_F(Sdl3ServiceTest, FileDialogsAreSupportedAndRejectAMissingCallback)
 {
-    // SDL3's file dialogs are asynchronous and the contract's signatures are not, so the
-    // capability is honestly false and every entry point refuses rather than pumping the event
-    // loop from inside a call a game makes during its own frame. A false capability promises a
-    // deterministic refusal, and this is what checks it is actually delivered.
+    // The dialogs are asynchronous: the call returns immediately and the answer arrives later, so
+    // a call with nowhere to deliver it would show a dialog whose result is discarded. That is
+    // worse than refusing, because by then the user has already been interrupted.
     IPlatformDialogs* dialogs = platform_->GetDialogs();
     ASSERT_NE(dialogs, nullptr);
-    ASSERT_FALSE(platform_->GetCapabilities().nativeFileDialog);
+    ASSERT_TRUE(platform_->GetCapabilities().nativeFileDialog);
 
     const std::vector<FileDialogFilter> filters{{"Images", "png;jpg"}};
 
-    try
-    {
-        (void)dialogs->ShowOpenFileDialog(filters, false, nullptr);
-        FAIL() << "an unsupported file dialog must refuse";
-    }
-    catch (const PlatformNotSupportedException& exception)
-    {
-        EXPECT_EQ(exception.GetCapability(), PlatformCapability::NativeFileDialog);
-    }
-
-    EXPECT_THROW((void)dialogs->ShowSaveFileDialog(filters, nullptr), PlatformNotSupportedException);
-    EXPECT_THROW((void)dialogs->ShowOpenFolderDialog(nullptr), PlatformNotSupportedException);
+    EXPECT_THROW(dialogs->ShowOpenFileDialog(nullptr, filters, "", false, nullptr),
+                 PlatformException);
+    EXPECT_THROW(dialogs->ShowSaveFileDialog(nullptr, filters, "", nullptr), PlatformException);
+    EXPECT_THROW(dialogs->ShowOpenFolderDialog(nullptr, "", false, nullptr), PlatformException);
 }
 
 TEST_F(Sdl3ServiceTest, AMessageBoxWithNoButtonsIsRejectedRatherThanShown)

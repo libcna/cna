@@ -22,7 +22,7 @@ namespace CNA::Devices::Detail
      *
      * `FileDialog` calls through this interface instead of calling SDL3's
      * `SDL_Show*Dialog()` functions directly. This exists specifically because the
-     * real backend (`SdlFileDialogBackend`) has a genuinely uncontainable side
+     * real backend (`PlatformFileDialogBackend`) has a genuinely uncontainable side
      * effect in an automated test: it launches a real, interactive, native OS
      * dialog (e.g. a real `zenity` process on Linux) that will hang indefinitely
      * waiting for a human, since nothing in an automated test run ever interacts

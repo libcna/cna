@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -116,6 +117,14 @@ namespace CNA::Platform {
         Error
     };
 
+    /**
+     * @brief Receives a file dialog's result.
+     *
+     * Called exactly once per dialog, after the `Show*` call has already returned, with the
+     * selected paths — or an empty list when the user cancelled.
+     */
+    using FileDialogCallback = std::function<void(const std::vector<std::string>& paths)>;
+
     /** @brief A filter offered in a file dialog. */
     struct FileDialogFilter
     {
@@ -164,39 +173,64 @@ namespace CNA::Platform {
             MessageBoxSeverity severity, const std::string& title, const std::string& message,
             const std::vector<std::string>& buttons, IPlatformWindow* parent) = 0;
 
+        // --- File dialogs ------------------------------------------------------------------
+        //
+        // Asynchronous, unlike the message box above, and the asymmetry is not a style choice.
+        // A message box genuinely blocks; a file dialog on every platform CNA targets does not.
+        // A synchronous signature could only be honoured by pumping the event loop from inside a
+        // call the game makes during its own frame, which reenters the game loop and deadlocks
+        // as readily as it works. CNA's own `CNA::Devices::FileDialog` is callback-shaped for the
+        // same reason, so this is also what its one consumer already expects.
+        //
+        // The callback fires exactly once per call, on the thread that pumps events, and after
+        // the Show* call has already returned. It receives an empty list when the user cancelled
+        // — cancellation is an ordinary outcome and is not an error.
+
         /**
-         * @brief Shows a modal file-open dialog.
+         * @brief Shows a file-open dialog and reports the result to a callback.
          *
+         * @param onResult Called once with the selected paths, or with an empty list when the
+         * user cancelled. Must not be empty.
          * @param filters The file type filters to offer.
+         * @param defaultLocation The directory to start in, or empty for the platform default.
          * @param allowMultiple Whether more than one file may be selected.
          * @param parent The window to parent the dialog to, or null for none.
-         * @return The selected paths; empty when the user cancelled. Cancellation is an ordinary
-         * outcome and does not throw.
          * @throws PlatformNotSupportedException If the platform reports no `NativeFileDialog` capability.
          */
-        [[nodiscard]] virtual std::vector<std::string> ShowOpenFileDialog(
-            const std::vector<FileDialogFilter>& filters, bool allowMultiple,
-            IPlatformWindow* parent) = 0;
+        virtual void ShowOpenFileDialog(FileDialogCallback onResult,
+                                        const std::vector<FileDialogFilter>& filters,
+                                        const std::string& defaultLocation, bool allowMultiple,
+                                        IPlatformWindow* parent) = 0;
 
         /**
-         * @brief Shows a modal file-save dialog.
+         * @brief Shows a file-save dialog and reports the result to a callback.
          *
+         * @param onResult Called once with the chosen path as a single-element list, or with an
+         * empty list when the user cancelled. Must not be empty.
          * @param filters The file type filters to offer.
+         * @param defaultLocation The directory or file name to start with, or empty for the
+         * platform default.
          * @param parent The window to parent the dialog to, or null for none.
-         * @return The chosen path, or an empty string when the user cancelled.
          * @throws PlatformNotSupportedException If the platform reports no `NativeFileDialog` capability.
          */
-        [[nodiscard]] virtual std::string ShowSaveFileDialog(
-            const std::vector<FileDialogFilter>& filters, IPlatformWindow* parent) = 0;
+        virtual void ShowSaveFileDialog(FileDialogCallback onResult,
+                                        const std::vector<FileDialogFilter>& filters,
+                                        const std::string& defaultLocation,
+                                        IPlatformWindow* parent) = 0;
 
         /**
-         * @brief Shows a modal folder-selection dialog.
+         * @brief Shows a folder-selection dialog and reports the result to a callback.
          *
+         * @param onResult Called once with the chosen folders, or with an empty list when the
+         * user cancelled. Must not be empty.
+         * @param defaultLocation The directory to start in, or empty for the platform default.
+         * @param allowMultiple Whether more than one folder may be selected.
          * @param parent The window to parent the dialog to, or null for none.
-         * @return The chosen folder, or an empty string when the user cancelled.
          * @throws PlatformNotSupportedException If the platform reports no `NativeFileDialog` capability.
          */
-        [[nodiscard]] virtual std::string ShowOpenFolderDialog(IPlatformWindow* parent) = 0;
+        virtual void ShowOpenFolderDialog(FileDialogCallback onResult,
+                                          const std::string& defaultLocation, bool allowMultiple,
+                                          IPlatformWindow* parent) = 0;
     };
 
     // --- Filesystem ----------------------------------------------------------------------------

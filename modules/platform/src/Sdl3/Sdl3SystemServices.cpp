@@ -5,6 +5,8 @@
 #include "CNA/Platform/PlatformException.hpp"
 #include "Sdl3Window.hpp"
 
+#include <memory>
+
 #include <SDL3/SDL.h>
 
 namespace CNA::Platform::Sdl3 {
@@ -327,27 +329,131 @@ namespace CNA::Platform::Sdl3 {
         return chosen;
     }
 
-    // SDL3's file dialogs are asynchronous -- they take a callback and return immediately -- while
-    // the contract's signatures are synchronous. Making them block would mean pumping the event
-    // loop from inside a call a game makes during its own frame, which deadlocks or reenters.
-    // The capability is therefore false and these refuse, which is exactly what a false capability
-    // promises. PLAT-104 changes the contract to match.
+    // --- file dialogs (PLAT-104) ----------------------------------------------------------------
 
-    std::vector<std::string> Sdl3Dialogs::ShowOpenFileDialog(const std::vector<FileDialogFilter>&,
-                                                             bool, IPlatformWindow*)
+    namespace {
+
+        /// Everything one dialog's callback needs to stay alive until it fires.
+        ///
+        /// SDL is explicit that the filter array must remain valid until the callback runs, which
+        /// is *after* the Show* call returns. The name and pattern strings are therefore owned
+        /// here and reserved to their final size before any pointer into them is taken, so
+        /// std::string's storage never moves out from under the SDL_DialogFileFilter array.
+        struct DialogContext
+        {
+            FileDialogCallback callback;
+            std::string defaultLocation;
+            std::vector<std::string> filterNames;
+            std::vector<std::string> filterPatterns;
+            std::vector<SDL_DialogFileFilter> sdlFilters;
+        };
+
+        std::unique_ptr<DialogContext> MakeContext(FileDialogCallback callback,
+                                                   const std::vector<FileDialogFilter>& filters,
+                                                   const std::string& defaultLocation)
+        {
+            auto context = std::make_unique<DialogContext>();
+            context->callback = std::move(callback);
+            context->defaultLocation = defaultLocation;
+
+            context->filterNames.reserve(filters.size());
+            context->filterPatterns.reserve(filters.size());
+            for (const FileDialogFilter& filter : filters)
+            {
+                context->filterNames.push_back(filter.name);
+                context->filterPatterns.push_back(filter.patterns);
+            }
+
+            context->sdlFilters.reserve(filters.size());
+            for (std::size_t i = 0; i < filters.size(); ++i)
+            {
+                context->sdlFilters.push_back(SDL_DialogFileFilter{
+                    context->filterNames[i].c_str(), context->filterPatterns[i].c_str()});
+            }
+            return context;
+        }
+
+        /// Reclaims the context and delivers the result. SDL fires each dialog callback exactly
+        /// once, so taking ownership back here is the whole lifetime, not a leak or a double free.
+        void ResultTrampoline(void* userdata, const char* const* filelist, int /*filter*/)
+        {
+            const std::unique_ptr<DialogContext> context(static_cast<DialogContext*>(userdata));
+
+            std::vector<std::string> paths;
+            if (filelist != nullptr)
+            {
+                for (const char* const* entry = filelist; *entry != nullptr; ++entry)
+                {
+                    paths.emplace_back(*entry);
+                }
+            }
+
+            // A null filelist means SDL failed rather than the user cancelling, and an empty one
+            // means cancelled. Both are reported to the caller the same way -- there is no path
+            // to open either way -- but only cancellation is ordinary, which is why the
+            // distinction is noted here rather than silently collapsed.
+            if (context->callback)
+            {
+                context->callback(paths);
+            }
+        }
+
+        /// The location SDL should start in, or null for its own default.
+        const char* LocationOrNull(const DialogContext& context)
+        {
+            return context.defaultLocation.empty() ? nullptr : context.defaultLocation.c_str();
+        }
+
+        void RequireCallback(const FileDialogCallback& callback, const char* operation)
+        {
+            if (!callback)
+            {
+                // Without a callback the dialog's result has nowhere to go, so the call would
+                // show a dialog whose answer is discarded -- worse than refusing, because the
+                // user has already been interrupted by then.
+                throw PlatformException(operation, "no result callback was supplied");
+            }
+        }
+
+    } // namespace
+
+    void Sdl3Dialogs::ShowOpenFileDialog(FileDialogCallback onResult,
+                                         const std::vector<FileDialogFilter>& filters,
+                                         const std::string& defaultLocation,
+                                         const bool allowMultiple, IPlatformWindow* parent)
     {
-        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "SDL3");
+        RequireCallback(onResult, "ShowOpenFileDialog");
+
+        DialogContext* context = MakeContext(std::move(onResult), filters, defaultLocation).release();
+        SDL_ShowOpenFileDialog(ResultTrampoline, context, ToSdlWindow(parent),
+                               context->sdlFilters.empty() ? nullptr : context->sdlFilters.data(),
+                               static_cast<int>(context->sdlFilters.size()),
+                               LocationOrNull(*context), allowMultiple);
     }
 
-    std::string Sdl3Dialogs::ShowSaveFileDialog(const std::vector<FileDialogFilter>&,
-                                                IPlatformWindow*)
+    void Sdl3Dialogs::ShowSaveFileDialog(FileDialogCallback onResult,
+                                         const std::vector<FileDialogFilter>& filters,
+                                         const std::string& defaultLocation,
+                                         IPlatformWindow* parent)
     {
-        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "SDL3");
+        RequireCallback(onResult, "ShowSaveFileDialog");
+
+        DialogContext* context = MakeContext(std::move(onResult), filters, defaultLocation).release();
+        SDL_ShowSaveFileDialog(ResultTrampoline, context, ToSdlWindow(parent),
+                               context->sdlFilters.empty() ? nullptr : context->sdlFilters.data(),
+                               static_cast<int>(context->sdlFilters.size()),
+                               LocationOrNull(*context));
     }
 
-    std::string Sdl3Dialogs::ShowOpenFolderDialog(IPlatformWindow*)
+    void Sdl3Dialogs::ShowOpenFolderDialog(FileDialogCallback onResult,
+                                           const std::string& defaultLocation,
+                                           const bool allowMultiple, IPlatformWindow* parent)
     {
-        throw PlatformNotSupportedException(PlatformCapability::NativeFileDialog, "SDL3");
+        RequireCallback(onResult, "ShowOpenFolderDialog");
+
+        DialogContext* context = MakeContext(std::move(onResult), {}, defaultLocation).release();
+        SDL_ShowOpenFolderDialog(ResultTrampoline, context, ToSdlWindow(parent),
+                                 LocationOrNull(*context), allowMultiple);
     }
 
 } // namespace CNA::Platform::Sdl3

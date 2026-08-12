@@ -110,12 +110,10 @@ namespace CNA::Platform::Sdl3 {
         capabilities.globalPointer = true;
         capabilities.inputDeviceEnumeration = true;
         capabilities.messageBox = true;
+        capabilities.nativeFileDialog = true;
 
         // Still unwired. Each flips true in the task that wires its accessor, not before.
         //   capabilities.gamepadSensors      PLAT-82 (gyro/accel on the pad itself)
-        //   capabilities.nativeFileDialog    PLAT-104 (SDL3's file dialogs are asynchronous;
-        //                                    the contract's signatures are not, so the service
-        //                                    refuses until PLAT-104 changes them)
         //   capabilities.tray                PLAT-105
         //   capabilities.camera              PLAT-106
 
