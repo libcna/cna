@@ -515,59 +515,81 @@ TEST(GltfConformanceL6, SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex)
     EXPECT_GT(skinnedFixtures, 0u) << "the corpus has no skinned fixture any more";
 }
 
-// The palette test above would be worthless if a model that never received a palette happened to
-// bind the same numbers. It does not: an untouched skinned effect binds XNA's own default, which
-// SkinnedEffect has always been MaxBones identity matrices, not the fixture's joint transforms.
-// Measuring that default is also the honest answer to "what does an application that forgets
-// SetBoneTransforms actually draw?" -- every joint matrix is the identity, so the mesh renders in
-// joint space rather than in its bind pose.
-TEST(GltfConformanceL6, AnUntouchedSkinnedEffectBindsTheIdentityPaletteNotTheFixturesOwn)
+// plan_gltf.md GLTF-262. An identity bone palette is not a neutral value: it means "every joint
+// matrix is the identity", so a mesh drawn that way is posed in joint space and glTF's own
+// inverse(globalTransform(meshNode)) cancellation (section 3.7.3) never applies. A skinned model
+// that had been loaded and not yet animated therefore rendered WRONG, not merely still -- the
+// L6 capture is what made that measurable. Loading now poses the bind pose, and this test holds
+// it: a freshly loaded model's palette is the bind-pose one, and it is demonstrably not the
+// MaxBones identity default it used to be.
+TEST(GltfConformanceL6, AFreshlyLoadedSkinnedModelIsAlreadyPosedInItsBindPose)
 {
     using Microsoft::Xna::Framework::Graphics::AnimationPlayer;
     using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
     using Microsoft::Xna::Framework::Graphics::SkinningData;
 
-    GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
-    cm.setGraphicsDevice(gd);
-    Model model = cm.Load<Model>("skin-mesh-node-transform");
-    auto* skinningData = dynamic_cast<SkinningData*>(model.getTagProperty());
-    ASSERT_NE(nullptr, skinningData);
-
-    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
-        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
-    ASSERT_FALSE(captured.empty());
-    for (const DrawParamsDump& d : captured)
+    std::size_t skinnedFixtures = 0;
+    bool anyFixtureHasANonIdentityBindPose = false;
+    for (const std::string& id : LoadableFixtureIds())
     {
-        SCOPED_TRACE(ToJson(d));
-        EXPECT_TRUE(d.skinned);
-        EXPECT_EQ(SkinnedPbrEffect::MaxBones, d.boneCount);
-        for (const ColumnMajor4x4& bone : d.boneTransforms)
+        SCOPED_TRACE(id);
+        GraphicsDevice gd;
+        ContentManager cm(nullptr, CorpusDirectory().string());
+        cm.setGraphicsDevice(gd);
+        Model model = cm.Load<Model>(id);
+
+        auto* skinningData = dynamic_cast<SkinningData*>(model.getTagProperty());
+        if (skinningData == nullptr) { continue; }
+        ++skinnedFixtures;
+
+        // The bind-pose palette, computed the way an application would: a player with no clip
+        // started leaves every bone at its bind pose.
+        AnimationPlayer player(*skinningData);
+        player.Update(System::TimeSpan::Zero, false, false);
+        const std::vector<Matrix>& bindPose = player.GetSkinTransforms();
+        ASSERT_FALSE(bindPose.empty());
+
+        // Nothing has touched the effects since Load returned.
+        const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+            model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+        ASSERT_FALSE(captured.empty());
+
+        for (const DrawParamsDump& d : captured)
         {
-            float identity[16];
-            Matrix::getIdentityProperty().ToColumnMajor(identity);
-            for (std::size_t i = 0; i < 16; ++i)
+            SCOPED_TRACE(ToJson(d));
+            EXPECT_TRUE(d.skinned);
+            ASSERT_EQ(bindPose.size(), static_cast<std::size_t>(d.boneCount))
+                << "the loaded palette is not the bind-pose one";
+            ASSERT_EQ(bindPose.size(), d.boneTransforms.size());
+            for (std::size_t b = 0; b < bindPose.size(); ++b)
             {
-                EXPECT_NEAR(identity[i], bone[i], kTolerance);
+                float expected[16];
+                bindPose[b].ToColumnMajor(expected);
+                for (std::size_t i = 0; i < 16; ++i)
+                {
+                    EXPECT_NEAR(expected[i], d.boneTransforms[b][i], kTolerance)
+                        << "bone " << b << " element " << i;
+                }
             }
         }
-    }
 
-    // And the fixture's real palette is nothing like that default, so the populated-palette test
-    // above cannot be passing on a coincidence.
-    AnimationPlayer player(*skinningData);
-    player.Update(System::TimeSpan::Zero, false, false);
-    const std::vector<Matrix>& palette = player.GetSkinTransforms();
-    ASSERT_FALSE(palette.empty());
-    bool anyNonIdentity = false;
-    for (const Matrix& m : palette)
-    {
-        if (m != Matrix::getIdentityProperty()) { anyNonIdentity = true; break; }
+        // And it is not the old MaxBones-sized default, on any fixture.
+        EXPECT_NE(static_cast<std::size_t>(SkinnedPbrEffect::MaxBones), bindPose.size());
+        for (const Matrix& m : bindPose)
+        {
+            if (m != Matrix::getIdentityProperty()) { anyFixtureHasANonIdentityBindPose = true; }
+        }
     }
-    EXPECT_TRUE(anyNonIdentity)
-        << "the skin fixture's palette is all-identity, so it cannot distinguish a bound palette "
-           "from an unbound one";
-    EXPECT_NE(static_cast<std::size_t>(SkinnedPbrEffect::MaxBones), palette.size());
+    EXPECT_GT(skinnedFixtures, 0u) << "the corpus has no skinned fixture any more";
+    // At least one corpus fixture must have a bind pose that differs from the identity default,
+    // or the assertion above could pass on a model that was never posed at all. Deliberately a
+    // corpus-wide claim and not a per-fixture one: `skin-armature-ancestor`'s bind pose IS
+    // all-identity, and that is the whole point of GLTF-260 -- the armature ancestor's transform
+    // cancels out of the joint matrix. `skin-mesh-node-transform` is the one that cannot,
+    // because glTF requires the mesh node's own transform to be cancelled (section 3.7.3).
+    EXPECT_TRUE(anyFixtureHasANonIdentityBindPose)
+        << "no skinned fixture has a non-identity bind pose, so this test can no longer tell a "
+           "posed model from an unposed one";
 }
 
 // --- GLTF-230's L6 half: what "carried, not applied" looks like as a number -------------------------

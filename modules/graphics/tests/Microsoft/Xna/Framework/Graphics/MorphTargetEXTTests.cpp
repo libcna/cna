@@ -287,3 +287,105 @@ TEST(EvaluateMorphWeightsEXTTest, FallsBackToLinearWhenTangentsAreMissing)
     ASSERT_EQ(mid.size(), 1u);
     EXPECT_NEAR(mid[0], 0.5f, 1e-6f);
 }
+
+// --- plan_gltf.md GLTF-278: a normal delta must apply on EVERY stride with a Normal slot --------
+//
+// The stride carrying the Normal is not a property of the morph target; it is a property of the
+// vertex layout the importer chose, and GLTF-215 changed that choice. A metallic-roughness
+// material now lands on stride 48 (or 68 skinned) rather than 32, and both carry Normal at the
+// same offset 12 -- so a normal delta must behave identically on all five strides that have the
+// slot, and must be a no-op on the two that do not. Restating the ABI as a literal list is what
+// let the two drift apart; these tests hold every entry of the real table to the same behaviour.
+
+namespace
+{
+    /// The canonical layouts, by stride: byte offset of the Normal, or -1 when the stride has none.
+    struct StrideNormalSlot
+    {
+        int stride;
+        int normalOffset;
+    };
+
+    constexpr StrideNormalSlot kStrideNormalSlots[] = {
+        {20, -1}, {24, -1}, {32, 12}, {48, 12}, {52, 12}, {56, 12}, {68, 12},
+    };
+
+    /// One vertex at the origin with a +Z normal, laid out for @p stride and zero elsewhere.
+    std::vector<std::uint8_t> BuildOneVertexForStride(int stride, int normalOffset)
+    {
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(stride), 0);
+        const float position[3] = {0.0f, 0.0f, 0.0f};
+        std::memcpy(bytes.data(), position, sizeof(position));
+        if (normalOffset >= 0)
+        {
+            const float normal[3] = {0.0f, 0.0f, 1.0f};
+            std::memcpy(bytes.data() + normalOffset, normal, sizeof(normal));
+        }
+        return bytes;
+    }
+
+    /// A single target that rotates the normal a quarter turn toward +X and shifts the position.
+    MorphTargetDataEXT BuildSingleVertexMorphForStride(int stride, int normalOffset)
+    {
+        MorphTargetDataEXT morph;
+        morph.Stride = stride;
+        morph.BaseVertexBytes = BuildOneVertexForStride(stride, normalOffset);
+        morph.PositionDeltas.push_back({Vector3(5, 0, 0)});
+        morph.NormalDeltas.push_back({Vector3(1, 0, -1)});
+        return morph;
+    }
+}
+
+TEST(BlendMorphTargetsEXTTest, NormalDeltaAppliesOnEveryStrideThatHasANormalSlot)
+{
+    for (const StrideNormalSlot& slot : kStrideNormalSlots)
+    {
+        SCOPED_TRACE("stride " + std::to_string(slot.stride));
+        const MorphTargetDataEXT morph =
+            BuildSingleVertexMorphForStride(slot.stride, slot.normalOffset);
+        const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+        ASSERT_EQ(morph.BaseVertexBytes.size(), blended.size());
+
+        // The position delta applies on every stride -- Position is at offset 0 in all of them.
+        float position[3];
+        std::memcpy(position, blended.data(), sizeof(position));
+        EXPECT_FLOAT_EQ(5.0f, position[0]);
+
+        if (slot.normalOffset < 0)
+        {
+            // Strides 20 and 24 have no Normal, so nothing may be written where one would be.
+            // Every byte past the position must still be zero: a blend that "helpfully" wrote a
+            // normal at offset 12 here would land on a TextureCoordinate or a Color.
+            for (std::size_t i = 12; i < blended.size(); ++i)
+            {
+                EXPECT_EQ(0u, blended[i]) << "byte " << i << " was written on a normal-less stride";
+            }
+            continue;
+        }
+
+        // (0,0,1) + (1,0,-1) = (1,0,0), renormalized -- a full quarter turn onto +X.
+        float normal[3];
+        std::memcpy(normal, blended.data() + slot.normalOffset, sizeof(normal));
+        EXPECT_NEAR(1.0f, normal[0], 1e-5f);
+        EXPECT_NEAR(0.0f, normal[1], 1e-5f);
+        EXPECT_NEAR(0.0f, normal[2], 1e-5f);
+    }
+}
+
+// The regression in its own words: stride 48 is what an ordinary glTF metallic-roughness mesh gets
+// after GLTF-215, and it used to be excluded, so the position moved and the normal did not.
+TEST(BlendMorphTargetsEXTTest, ThePbrStridesAreNotExcludedFromNormalBlending)
+{
+    for (const int stride : {48, 68})
+    {
+        SCOPED_TRACE("stride " + std::to_string(stride));
+        const MorphTargetDataEXT morph = BuildSingleVertexMorphForStride(stride, 12);
+        const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+
+        float normal[3];
+        std::memcpy(normal, blended.data() + 12, sizeof(normal));
+        const bool unchanged = normal[0] == 0.0f && normal[1] == 0.0f && normal[2] == 1.0f;
+        EXPECT_FALSE(unchanged)
+            << "the base normal survived a full-weight normal delta -- GLTF-278 has regressed";
+    }
+}

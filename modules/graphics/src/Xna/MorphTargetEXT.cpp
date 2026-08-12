@@ -5,6 +5,7 @@
 #include <cstring>
 #include <stdexcept>
 
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
@@ -26,9 +27,28 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         const int stride = morph.Stride;
-        // Normal deltas only apply to strides with a Normal at a fixed offset 12 (Position is
-        // always at offset 0, for every stride this project uses).
-        const bool hasNormalSlot = (stride == 32 || stride == 52 || stride == 56);
+        // plan_gltf.md GLTF-278. This used to be the literal list {32, 52, 56}, written when those
+        // were the only strides a mesh with normals could have. GLTF-215 changed which effect a
+        // metallic-roughness material selects, and with it the strides an ordinary glTF mesh gets
+        // (48 unskinned, 68 skinned) -- both of which carry Normal at offset 12 and neither of
+        // which was in the list, so every PBR morph target silently kept its base normals while
+        // its positions moved. Restating an ABI is what let that happen, so the predicate is now a
+        // query against the canonical stride table itself and cannot go stale again.
+        const CNA::Internal::Graphics::InferredVertexLayout layout =
+            CNA::Internal::Graphics::InferredLayoutForStride(
+                stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+        int normalOffset = -1;
+        for (std::size_t i = 0; layout.known && i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage == VertexElementUsage::Normal &&
+                layout.elements[i].usageIndex == 0 &&
+                layout.elements[i].format == VertexElementFormat::Vector3)
+            {
+                normalOffset = layout.elements[i].offset;
+                break;
+            }
+        }
+        const bool hasNormalSlot = normalOffset >= 0;
         const int numVertices = stride > 0
             ? static_cast<int>(morph.BaseVertexBytes.size()) / stride : 0;
 
@@ -61,8 +81,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
             if (hasNormalSlot && anyNormalDelta)
             {
+                const std::size_t normOff = off + static_cast<std::size_t>(normalOffset);
                 float baseNorm[3];
-                std::memcpy(baseNorm, blended.data() + off + 12, sizeof(baseNorm));
+                std::memcpy(baseNorm, blended.data() + normOff, sizeof(baseNorm));
                 Vector3 newNorm(baseNorm[0] + normDelta.X, baseNorm[1] + normDelta.Y, baseNorm[2] + normDelta.Z);
                 // A weighted sum of unit normals is not itself unit length in general --
                 // renormalize, the same treatment GltfImportCore's own CUBICSPLINE rotation
@@ -73,7 +94,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     const float invLen = 1.0f / std::sqrt(lenSq);
                     newNorm = Vector3(newNorm.X * invLen, newNorm.Y * invLen, newNorm.Z * invLen);
                 }
-                std::memcpy(blended.data() + off + 12, &newNorm, sizeof(newNorm));
+                std::memcpy(blended.data() + normOff, &newNorm, sizeof(newNorm));
             }
         }
 

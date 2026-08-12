@@ -6,6 +6,12 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "System/ArgumentException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -209,6 +215,43 @@ namespace Microsoft::Xna::Framework::Graphics
             // reset every other bone to a pose it never mentioned.
             bones[track.BoneIndex]->setTransformProperty(SampleTrack(track, time));
         }
+    }
+
+
+    std::size_t ApplyBindPoseBoneTransformsEXT(Model& model, const SkinningData& skinningData)
+    {
+        // No clip started, so RecomputeTransforms() leaves every bone at its bind pose -- which is
+        // exactly the palette an application would push on its first frame.
+        AnimationPlayer player(skinningData);
+        player.Update(System::TimeSpan::Zero, false, false);
+        const std::vector<Matrix>& palette = player.GetSkinTransforms();
+        if (palette.empty()) { return 0; }
+
+        std::size_t posed = 0;
+        const ModelMeshCollection& meshes = model.getMeshesProperty();
+        for (int mi = 0; mi < meshes.getCountProperty(); ++mi)
+        {
+            const ModelMesh* mesh = meshes[mi];
+            if (mesh == nullptr) { continue; }
+            const ModelMeshPartCollection& parts = mesh->getMeshPartsProperty();
+            for (int pi = 0; pi < parts.getCountProperty(); ++pi)
+            {
+                ModelMeshPart* part = parts[pi];
+                if (part == nullptr) { continue; }
+                Effect* effect = part->getEffectProperty();
+                if (auto* skinnedPbr = dynamic_cast<SkinnedPbrEffect*>(effect))
+                {
+                    skinnedPbr->SetBoneTransforms(palette);
+                    ++posed;
+                }
+                else if (auto* skinned = dynamic_cast<SkinnedEffect*>(effect))
+                {
+                    skinned->SetBoneTransforms(palette);
+                    ++posed;
+                }
+            }
+        }
+        return posed;
     }
 
 }

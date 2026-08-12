@@ -2360,6 +2360,16 @@ namespace Microsoft::Xna::Framework::Content
             // plan_gltf.md GLTF-294: an unskinned model's Tag carries its rigid clips instead.
             if (res->skinningData)      { model.setTagProperty(res->skinningData.get()); }
             else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
+            // plan_gltf.md GLTF-262: a skinned effect's palette defaults to identity matrices,
+            // which means "every joint matrix is the identity" -- not "no skinning". Drawn that
+            // way the mesh is posed in joint space and glTF's own inverse(meshNodeWorld)
+            // cancellation never applies, so a model nobody has animated yet renders wrong rather
+            // than merely still. Posing the bind pose here makes a freshly loaded model drawable;
+            // any later SetBoneTransforms simply overwrites it.
+            if (res->skinningData)
+            {
+                Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
+            }
             return model;
         }
 
@@ -2982,6 +2992,12 @@ namespace Microsoft::Xna::Framework::Content
                 // plan_gltf.md GLTF-294: an unskinned model's Tag carries its rigid clips instead.
                 if (res->skinningData)      { model.setTagProperty(res->skinningData.get()); }
                 else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
+                // plan_gltf.md GLTF-262, exactly as on the .gltf path above: an unposed skinned
+                // model is not merely unanimated, it is wrong.
+                if (res->skinningData)
+                {
+                    Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
+                }
                 return model;
             }
         };

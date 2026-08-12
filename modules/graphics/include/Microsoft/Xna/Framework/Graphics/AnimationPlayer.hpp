@@ -210,4 +210,27 @@ namespace Microsoft::Xna::Framework::Graphics
     CNAEXT void ApplyClipToBonesEXT(Model& model, const AnimationClip& clip,
                                     System::TimeSpan time);
 
+    /**
+     * @brief Poses a skinned model in its bind pose, so it is drawable before any clip plays.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-262`). A skinned effect's
+     * bone palette defaults to `MaxBones` identity matrices, which is not a neutral value: it
+     * means "every joint matrix is the identity", so a mesh drawn that way is rendered in joint
+     * space rather than in its bind pose, and glTF's own `inverse(globalTransform(meshNode))`
+     * cancellation term (§3.7.3) never applies. A skinned model that is loaded and drawn without
+     * game code first calling `AnimationPlayer::Update` and `SetBoneTransforms` therefore renders
+     * visibly wrong rather than merely unanimated.
+     *
+     * This computes the palette the same way an application would — an `AnimationPlayer` over
+     * @p skinningData with no clip started, which leaves every bone at its bind pose — and pushes
+     * it onto every skinned effect the model carries. Calling it again, or animating afterwards,
+     * simply overwrites the palette; it holds no state of its own.
+     *
+     * @param model The model whose parts carry `SkinnedEffect` / `SkinnedPbrEffect` instances.
+     * @param skinningData The model's skeleton, normally the object on `Model::Tag`.
+     * @return The number of skinned effects that were posed; 0 for a model with none.
+     */
+    CNAEXT std::size_t ApplyBindPoseBoneTransformsEXT(Model& model,
+                                                       const SkinningData& skinningData);
+
 }

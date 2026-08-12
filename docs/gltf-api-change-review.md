@@ -208,6 +208,54 @@ posing the model at `t = 1` rotates the animated node's bone by the quarter turn
 
 ---
 
+### 1.6 Bind-pose posing for a freshly loaded skinned model — `GLTF-262`
+
+**Problem.** A skinned effect's bone palette defaults to `MaxBones` identity matrices. That is not
+a neutral value and it is not "no skinning": it means *every joint matrix is the identity*, so the
+mesh is posed in joint space and glTF's own `inverse(globalTransform(meshNode))` cancellation
+(§3.7.3, `GLTF-247`) never applies. A skinned model that had been loaded and not yet animated
+therefore rendered **wrong**, not merely still — and nothing in the API said so. The L6 capture
+(`GLTF-008`) is what turned that from a suspicion into a measurement.
+
+**Why not leave it to the application.** Real XNA's Skinned Model Sample does set the palette every
+frame, so "the application always does it" is a defensible reading. It is the wrong one here for a
+concrete reason: in that sample the *bind pose is the identity palette*, because the sample's
+content pipeline bakes the mesh into skeleton space. glTF does not — its mesh node's transform must
+be cancelled by the joint matrix — so CNA's identity default and glTF's bind pose are different
+poses. Requiring game code to fix that would make "load a model and draw it" wrong by default for
+every conforming glTF asset, which is exactly the class of silent-wrongness this campaign exists to
+remove.
+
+**Shape.**
+
+```cpp
+// Microsoft::Xna::Framework::Graphics
+/** @brief Poses a skinned model in its bind pose, so it is drawable before any clip plays. */
+CNAEXT std::size_t ApplyBindPoseBoneTransformsEXT(Model& model, const SkinningData& skinningData);
+```
+
+Both glTF loaders call it once, after the model is built. It computes the palette exactly the way
+an application would — an `AnimationPlayer` over the model's own `SkinningData` with no clip
+started — rather than deriving a second, parallel notion of "bind pose" that could disagree with
+what playback produces at `t = 0`.
+
+**Compatibility.** Additive, and behaviour-changing only where the behaviour was wrong: a model
+with no skin is untouched, and any `SetBoneTransforms` an application already makes simply
+overwrites the palette on its first frame, as it always did. The function holds no state.
+
+**Why a free function and not a `Model` member.** `Model` is XNA 4.0 API and has no skinning
+concept at all; the skeleton lives on `Model::Tag` by the sample's own convention. A free CNAEXT
+function beside `ApplyClipToBonesEXT` keeps the XNA type unchanged and puts the two posing
+operations in one place.
+
+**Test.** `GLTF-262`: `GltfConformanceL6.AFreshlyLoadedSkinnedModelIsAlreadyPosedInItsBindPose`
+asserts the captured palette of an untouched model equals the bind-pose palette, on every skinned
+corpus fixture, and that at least one of them differs from the identity default — so the assertion
+cannot pass on a model that was never posed. It is deliberately a corpus-wide claim: the bind pose
+of `skin-armature-ancestor` **is** all-identity, and that is the point of `GLTF-260`.
+
+---
+
 ## 2. Reviewed and deferred
 
 ### 2.1 `PbrEffect::NormalScale`, `OcclusionStrength` — `GLTF-224`, `GLTF-225`
