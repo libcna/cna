@@ -46,6 +46,12 @@ namespace CNA::Platform::Terminal {
         throw PlatformNotSupportedException(PlatformCapability::CursorShapes, "Terminal");
     }
 
+    void TerminalMouse::SetCursor(const CursorImage& cursor)
+    {
+        (void)cursor;
+        throw PlatformNotSupportedException(PlatformCapability::CursorShapes, "Terminal");
+    }
+
     void TerminalMouse::SetRelativeMode(const WindowId window, const bool enabled)
     {
         (void)window;

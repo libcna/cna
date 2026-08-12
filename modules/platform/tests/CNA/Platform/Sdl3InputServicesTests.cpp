@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -118,6 +119,16 @@ TEST_F(Sdl3InputTest, CursorVisibilityCallsAreSafe)
 {
     EXPECT_NO_THROW(platform_->GetMouse()->SetCursorVisible(false));
     EXPECT_NO_THROW(platform_->GetMouse()->SetCursorVisible(true));
+}
+
+TEST(Sdl3MouseTest, InvalidCustomCursorIsRejectedBeforeAnyNativeCall)
+{
+    CNA::Platform::Sdl3::Sdl3Mouse mouse;
+    const std::array<std::uint32_t, 1> pixel{0xFFFFFFFFu};
+
+    EXPECT_THROW(mouse.SetCursor(CursorImage{0, 1, 0, 0, pixel}), PlatformException);
+    EXPECT_THROW(mouse.SetCursor(CursorImage{1, 1, 1, 0, pixel}), PlatformException);
+    EXPECT_THROW(mouse.SetCursor(CursorImage{2, 1, 0, 0, pixel}), PlatformException);
 }
 
 TEST_F(Sdl3InputTest, RelativeModeRefusesWithNoFocusedWindow)

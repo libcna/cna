@@ -87,6 +87,10 @@ namespace
         {
             if (inner_ != nullptr) inner_->SetCursor(cursor);
         }
+        void SetCursor(const CNA::Platform::CursorImage& cursor) override
+        {
+            if (inner_ != nullptr) inner_->SetCursor(cursor);
+        }
         void SetRelativeMode(const CNA::Platform::WindowId window, const bool enabled) override
         {
             if (inner_ != nullptr) inner_->SetRelativeMode(window, enabled);

@@ -4,6 +4,7 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 
 #include <cstdint>
+#include <span>
 
 namespace CNA::Platform {
 
@@ -54,7 +55,37 @@ namespace CNA::Platform {
         /** @brief A "not allowed" indicator. */
         NotAllowed,
         /** @brief A clickable-element pointer. */
-        Pointer
+        Pointer,
+        /** @brief A busy indicator combined with the default pointer. */
+        Progress,
+        /** @brief A northwest/southeast diagonal resize indicator. */
+        NwseResize,
+        /** @brief A northeast/southwest diagonal resize indicator. */
+        NeswResize,
+        /** @brief A horizontal resize indicator. */
+        EwResize,
+        /** @brief A vertical resize indicator. */
+        NsResize
+    };
+
+    /** @brief A non-owning packed-colour image used to create a custom cursor. */
+    struct CursorImage
+    {
+        /** @brief Image width in pixels. */
+        int width = 0;
+        /** @brief Image height in pixels. */
+        int height = 0;
+        /** @brief Hot-spot x coordinate within the image. */
+        int hotSpotX = 0;
+        /** @brief Hot-spot y coordinate within the image. */
+        int hotSpotY = 0;
+        /**
+         * @brief Packed `0xAABBGGRR` pixels (R in the least-significant byte).
+         *
+         * The view is valid only for the duration of `SetCursor`; implementations must create
+         * their native cursor synchronously and must not retain it.
+         */
+        std::span<const std::uint32_t> rgba;
     };
 
     /**
@@ -119,6 +150,16 @@ namespace CNA::Platform {
          * @throws PlatformNotSupportedException If the platform reports no `CursorShapes` capability.
          */
         virtual void SetCursor(SystemCursor cursor) = 0;
+
+        /**
+         * @brief Sets a custom image cursor.
+         *
+         * @param cursor Packed colour pixels and hot spot. Width/height must be positive, the pixel count
+         * exactly `width * height`, and the hot spot must lie inside the image.
+         * @throws PlatformException If the image is invalid or the native cursor cannot be made.
+         * @throws PlatformNotSupportedException If the platform reports no `CursorShapes` capability.
+         */
+        virtual void SetCursor(const CursorImage& cursor) = 0;
 
         /**
          * @brief Enables or disables relative (pointer-locked) mode.

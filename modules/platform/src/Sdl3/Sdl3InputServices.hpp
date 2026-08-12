@@ -56,6 +56,8 @@ namespace CNA::Platform::Sdl3 {
         void SetCursorVisible(bool visible) override;
         /** @brief Sets the cursor shape. @param cursor The shape to display. */
         void SetCursor(SystemCursor cursor) override;
+        /** @brief Creates and sets an RGBA image cursor. @param cursor Image and hot spot. */
+        void SetCursor(const CursorImage& cursor) override;
         /**
          * @brief Enables or disables pointer lock.
          * @param window The window to capture.
@@ -94,6 +96,8 @@ namespace CNA::Platform::Sdl3 {
         float relativeDeltaY_ = 0.0f;
         void* activeCursor_ = nullptr;
         bool relativeMode_ = false;
+
+        void InstallCursor(void* cursor);
     };
 
     /** @brief SDL3-backed gamepad reading and rumble. */

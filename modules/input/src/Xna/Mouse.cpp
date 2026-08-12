@@ -6,6 +6,8 @@
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include <SDL3/SDL.h>
 
+#include <span>
+
 namespace
 {
     [[nodiscard]] CNA::Platform::WindowId window_id(SDL_Window* window)
@@ -202,17 +204,36 @@ namespace Microsoft::Xna::Framework::Input
 
     void Mouse::SetCursor(MouseCursor& cursor)
     {
-        // Guard against a disposed or empty cursor (GetSDLCursor() == nullptr): SDL_SetCursor(NULL)
-        // does NOT clear the cursor — it forces a redraw of the *current* cursor — so passing a
-        // disposed cursor through would silently keep the old cursor while looking like it changed.
-        // No-op instead, matching MonoGame's guard against an invalid cursor (it throws on a null
-        // MouseCursor; CNA takes a reference so only the disposed-handle case is reachable here).
-        SDL_Cursor* handle = cursor.GetSDLCursor();
-        if (handle == nullptr)
+        CNA::Platform::IPlatformMouse* mouse = CurrentMouse();
+        if (mouse == nullptr || cursor.isDisposed_)
         {
             return;
         }
-        SDL_SetCursor(handle);
+
+        if (cursor.isCustom_)
+        {
+            mouse->SetCursor(CNA::Platform::CursorImage{
+                cursor.width_, cursor.height_, cursor.originX_, cursor.originY_,
+                std::span<const std::uint32_t>(cursor.rgba_)});
+            return;
+        }
+
+        using PlatformCursor = CNA::Platform::SystemCursor;
+        switch (cursor.systemShape_)
+        {
+            case MouseCursor::ShapeArrow:     mouse->SetCursor(PlatformCursor::Arrow); break;
+            case MouseCursor::ShapeCrosshair: mouse->SetCursor(PlatformCursor::Crosshair); break;
+            case MouseCursor::ShapeHand:      mouse->SetCursor(PlatformCursor::Pointer); break;
+            case MouseCursor::ShapeIBeam:     mouse->SetCursor(PlatformCursor::IBeam); break;
+            case MouseCursor::ShapeNo:        mouse->SetCursor(PlatformCursor::NotAllowed); break;
+            case MouseCursor::ShapeSizeAll:   mouse->SetCursor(PlatformCursor::Move); break;
+            case MouseCursor::ShapeSizeNESW:  mouse->SetCursor(PlatformCursor::NeswResize); break;
+            case MouseCursor::ShapeSizeNS:    mouse->SetCursor(PlatformCursor::NsResize); break;
+            case MouseCursor::ShapeSizeNWSE:  mouse->SetCursor(PlatformCursor::NwseResize); break;
+            case MouseCursor::ShapeSizeWE:    mouse->SetCursor(PlatformCursor::EwResize); break;
+            case MouseCursor::ShapeWait:      mouse->SetCursor(PlatformCursor::Wait); break;
+            case MouseCursor::ShapeWaitArrow: mouse->SetCursor(PlatformCursor::Progress); break;
+        }
     }
 
     bool Mouse::getIsRelativeMouseModeEXTProperty()

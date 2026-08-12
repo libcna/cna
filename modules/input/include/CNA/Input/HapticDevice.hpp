@@ -9,9 +9,8 @@
 #include <cstdint>
 
 // Opaque forward declaration of SDL's haptic handle. This public header wraps an SDL haptic device
-// but must not pull <SDL3/SDL.h> into consumers (mirrors MouseCursor's SDL_Cursor* forward decl). A
-// pointer to the incomplete type is all the public API needs; HapticDevice.cpp includes the real
-// SDL header.
+// but must not pull <SDL3/SDL.h> into consumers. A pointer to the incomplete type is all the public
+// API needs; HapticDevice.cpp includes the real SDL header.
 struct SDL_Haptic;
 
 namespace CNA::Input

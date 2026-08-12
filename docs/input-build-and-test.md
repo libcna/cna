@@ -113,25 +113,10 @@ everything the input layer uses.
 
 ### Headless run inventory (INPUT-BUILD-008)
 
-`ctest -L input` must run under a display server (`xvfb-run` + `SDL_VIDEODRIVER=x11` in CI and on
-headless boxes) — a few `MouseCursor`/`SetCursor` cases need real SDL cursors. Behavior of the input
-subset by video driver:
-
-| Video driver | MouseCursor/SetCursor cursor-handle cases | Result |
-|--------------|-------------------------------------------|--------|
-| `x11` (Xvfb or real display) | run | **100% green** |
-| `dummy` (fully headless) | **5 GTEST_SKIP** + **3 fail** | not green — do not gate on `dummy` |
-
-- **Skipped under `dummy`** (need a valid `SDL_Cursor` handle to exercise ownership/disposal):
-  `MouseCursorTest.DisposeReleasesHandleAndIsIdempotent`, `.MoveConstructorTransfersOwnershipAndNullsSource`,
-  `.MoveAssignmentDisposesPreviousHandleAndTransfersOwnership`, `.NonOwningConstructorDoesNotDestroyCursorOnDestruction`,
-  and `MouseTest.SetCursorIsSafeNoOpForDisposedCursor`.
-- **Fail under `dummy`, pass under `x11`** (stock/default cursor creation returns null on the dummy
-  driver): `MouseCursorTest.StockCursorsAreNonNullWhenVideoAvailable`, `.DisposingAStockSingletonIsANoOpAndKeepsItUsable`,
-  `.DefaultConstructorCreatesNonNullOwningCursor`.
-
-So the always-portable input count is stable; only these display-dependent cursor cases vary by driver,
-which is why CI standardizes on `xvfb-run … SDL_VIDEODRIVER=x11`.
+`MouseCursor` and `Mouse::SetCursor` tests are display-independent as of PLAT-81: they verify the
+platform-neutral system/custom cursor descriptions through a canned `IPlatformMouse`. SDL-native
+cursor creation remains covered at the SDL platform edge. Other input tests that create real windows
+still require `xvfb-run` + `SDL_VIDEODRIVER=x11` in CI; the dummy driver may skip those window cases.
 
 ### Fresh-clone reproducibility (INPUT-BUILD-001)
 

@@ -8,6 +8,8 @@
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 
+#include <vector>
+
 namespace CNA::Platform::Testing {
 
     /** @brief A mouse service whose state and relative motion are controlled by a test. */
@@ -69,7 +71,23 @@ namespace CNA::Platform::Testing {
         /** @brief Records cursor visibility. @param visible Requested state. */
         void SetCursorVisible(const bool visible) override { cursorVisible_ = visible; }
         /** @brief Records the cursor shape. @param cursor Requested shape. */
-        void SetCursor(const SystemCursor cursor) override { cursor_ = cursor; }
+        void SetCursor(const SystemCursor cursor) override
+        {
+            cursor_ = cursor;
+            customCursor_ = false;
+            ++cursorCalls_;
+        }
+        /** @brief Copies and records a custom cursor. @param cursor Requested image and hot spot. */
+        void SetCursor(const CursorImage& cursor) override
+        {
+            customCursor_ = true;
+            customCursorWidth_ = cursor.width;
+            customCursorHeight_ = cursor.height;
+            customCursorHotSpotX_ = cursor.hotSpotX;
+            customCursorHotSpotY_ = cursor.hotSpotY;
+            customCursorPixels_.assign(cursor.rgba.begin(), cursor.rgba.end());
+            ++cursorCalls_;
+        }
 
         /** @brief Records relative mode and flushes old displacement. */
         void SetRelativeMode(const WindowId window, const bool enabled) override
@@ -101,6 +119,25 @@ namespace CNA::Platform::Testing {
         [[nodiscard]] int RelativeModeCalls() const { return relativeModeCalls_; }
         /** @brief Gets the most recent relative-mode window. @return Window id. */
         [[nodiscard]] WindowId LastRelativeWindow() const { return lastRelativeWindow_; }
+        /** @brief Gets the SetCursor call count. @return Count. */
+        [[nodiscard]] int CursorCalls() const { return cursorCalls_; }
+        /** @brief Gets the last system cursor. @return Shape. */
+        [[nodiscard]] SystemCursor LastSystemCursor() const { return cursor_; }
+        /** @brief Gets whether the last cursor was custom. @return True for an image cursor. */
+        [[nodiscard]] bool LastCursorWasCustom() const { return customCursor_; }
+        /** @brief Gets the last custom cursor width. @return Width. */
+        [[nodiscard]] int LastCustomCursorWidth() const { return customCursorWidth_; }
+        /** @brief Gets the last custom cursor height. @return Height. */
+        [[nodiscard]] int LastCustomCursorHeight() const { return customCursorHeight_; }
+        /** @brief Gets the last custom cursor hot-spot x. @return X coordinate. */
+        [[nodiscard]] int LastCustomCursorHotSpotX() const { return customCursorHotSpotX_; }
+        /** @brief Gets the last custom cursor hot-spot y. @return Y coordinate. */
+        [[nodiscard]] int LastCustomCursorHotSpotY() const { return customCursorHotSpotY_; }
+        /** @brief Gets an owned copy of the last custom cursor pixels. @return Pixels. */
+        [[nodiscard]] const std::vector<std::uint32_t>& LastCustomCursorPixels() const
+        {
+            return customCursorPixels_;
+        }
 
     private:
         MouseSnapshot pending_;
@@ -112,8 +149,15 @@ namespace CNA::Platform::Testing {
         bool relativeMode_ = false;
         bool cursorVisible_ = true;
         SystemCursor cursor_ = SystemCursor::Arrow;
+        bool customCursor_ = false;
+        int customCursorWidth_ = 0;
+        int customCursorHeight_ = 0;
+        int customCursorHotSpotX_ = 0;
+        int customCursorHotSpotY_ = 0;
+        std::vector<std::uint32_t> customCursorPixels_;
         int updateCount_ = 0;
         int positionCalls_ = 0;
+        int cursorCalls_ = 0;
         WindowId lastPositionWindow_ = 0;
         int relativeModeCalls_ = 0;
         WindowId lastRelativeWindow_ = 0;

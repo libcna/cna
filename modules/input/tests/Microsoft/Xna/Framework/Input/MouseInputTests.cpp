@@ -2,15 +2,13 @@
 //
 // Task 755: unit tests for MouseState, Mouse, and MouseCursor.
 //
-// MouseCursor::FromTexture2D is NOT covered here: building a Texture2D with real CPU-side
-// pixel data (or a non-Color/ColorSrgbEXT SurfaceFormat) requires a GraphicsDevice, and
-// GraphicsDevice's constructor creates a real SDL window and graphics backend — out of scope
-// for this headless unit-test binary, matching the precedent already established in
-// OcclusionQueryDynamicBufferTests.cpp for other GraphicsDevice-dependent classes.
+// MouseCursor uses Texture2D's CPU-only fixture, so its full system/custom mapping is deterministic
+// and does not need an SDL video driver.
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -474,62 +472,21 @@ TEST_F(MousePlatformInputTest, SetPositionIsSafeAndUpdatesSnapshotWithNoWindow)
     EXPECT_EQ(Mouse::GetState().getYProperty(), 1 << 20);
 }
 
-TEST(MouseTest, SetCursorIsSafeNoOpForDisposedCursor)
+TEST_F(MousePlatformInputTest, SetCursorIsSafeNoOpForDisposedCursor)
 {
-    // Task 803: a disposed cursor has a null SDL handle. SetCursor must no-op rather than call
-    // SDL_SetCursor(NULL) (which forces a redraw of the current cursor instead of clearing it).
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
-    if (!raw)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
-    }
-
-    MouseCursor cursor(raw, /*owning=*/true);
+    MouseCursor cursor;
     cursor.Dispose();
-    ASSERT_EQ(cursor.GetSDLCursor(), nullptr);
 
     EXPECT_NO_THROW(Mouse::SetCursor(cursor));
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    EXPECT_EQ(platform.Canned().CursorCalls(), 0);
 }
 
-// P1-016: positive-path counterpart to SetCursorIsSafeNoOpForDisposedCursor above — the disposed
-// case only exercises the early-return guard, never the actual SDL_SetCursor(handle) call
-// (Mouse.cpp). Uses a locally-owned cursor created fresh inside this test (same pattern as the
-// sibling test above), not one of the process-wide stock singletons: the stock singletons are
-// created once on first access and cached for the process lifetime, but their underlying
-// SDL_Cursor* is tied to the SDL video subsystem's lifetime — an earlier test in the (shuffled)
-// run order that calls SDL_QuitSubSystem(SDL_INIT_VIDEO) invalidates that cached handle, which
-// this test's own SDL_InitSubSystem call does not recreate, causing an intermittent, shuffle-order
-// -dependent failure. A cursor created fresh after this test's own SDL_InitSubSystem call cannot
-// be stale from another test's subsystem-quit/reinit cycle.
-TEST(MouseTest, SetCursorAppliesTheGivenCursorToSDL)
+TEST_F(MousePlatformInputTest, SetCursorIsSafeNoOpWithoutMouseService)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR);
-    if (!raw)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
-    }
-
-    MouseCursor cursor(raw, /*owning=*/true);
-    ASSERT_EQ(cursor.GetSDLCursor(), raw);
-
-    Mouse::SetCursor(cursor);
-    EXPECT_EQ(SDL_GetCursor(), raw);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    platform.SetMouseAvailable(false);
+    MouseCursor cursor;
+    EXPECT_NO_THROW(Mouse::SetCursor(cursor));
+    EXPECT_EQ(platform.Canned().CursorCalls(), 0);
 }
 
 TEST(MouseTest, SetPositionConvertsLogicalToWindowForLetterboxedRenderer)
@@ -636,293 +593,152 @@ TEST(MouseTest, SetPositionHandlesLetterboxOffsetNotJustScale)
 // MouseCursor
 // ===========================================================================
 
-TEST(MouseCursorTest, StockCursorsAreNonNullWhenVideoAvailable)
-{
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    EXPECT_NE(MouseCursor::getArrowProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getCrosshairProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getHandProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getIBeamProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getNoProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getSizeAllProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getSizeNESWProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getSizeNSProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getSizeNWSEProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getSizeWEProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getWaitProperty().GetSDLCursor(), nullptr);
-    EXPECT_NE(MouseCursor::getWaitArrowProperty().GetSDLCursor(), nullptr);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
-}
-
 TEST(MouseCursorTest, StockCursorGetterReturnsTheSameInstanceOnRepeatedCalls)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    SDL_Cursor* first  = MouseCursor::getArrowProperty().GetSDLCursor();
-    SDL_Cursor* second = MouseCursor::getArrowProperty().GetSDLCursor();
-    EXPECT_EQ(first, second);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    EXPECT_EQ(&MouseCursor::getArrowProperty(), &MouseCursor::getArrowProperty());
 }
 
-TEST(MouseCursorTest, DisposingAStockSingletonIsANoOpAndKeepsItUsable)
+TEST_F(MousePlatformInputTest, EveryStockCursorMapsToThePlatformContract)
 {
-    // Task 834: the system-cursor singletons are shared for the process lifetime; disposing one
-    // must NOT free the SDL cursor (that would break it for every other holder, and this same
-    // binary's other tests rely on the stock cursors staying valid). Dispose() is a no-op for them.
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    using Getter = MouseCursor& (*)();
+    struct Case
     {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
+        Getter get;
+        CNA::Platform::SystemCursor expected;
+    };
+    const std::array<Case, 12> cases{{
+        {&MouseCursor::getArrowProperty, CNA::Platform::SystemCursor::Arrow},
+        {&MouseCursor::getCrosshairProperty, CNA::Platform::SystemCursor::Crosshair},
+        {&MouseCursor::getHandProperty, CNA::Platform::SystemCursor::Pointer},
+        {&MouseCursor::getIBeamProperty, CNA::Platform::SystemCursor::IBeam},
+        {&MouseCursor::getNoProperty, CNA::Platform::SystemCursor::NotAllowed},
+        {&MouseCursor::getSizeAllProperty, CNA::Platform::SystemCursor::Move},
+        {&MouseCursor::getSizeNESWProperty, CNA::Platform::SystemCursor::NeswResize},
+        {&MouseCursor::getSizeNSProperty, CNA::Platform::SystemCursor::NsResize},
+        {&MouseCursor::getSizeNWSEProperty, CNA::Platform::SystemCursor::NwseResize},
+        {&MouseCursor::getSizeWEProperty, CNA::Platform::SystemCursor::EwResize},
+        {&MouseCursor::getWaitProperty, CNA::Platform::SystemCursor::Wait},
+        {&MouseCursor::getWaitArrowProperty, CNA::Platform::SystemCursor::Progress},
+    }};
 
+    int expectedCalls = 0;
+    for (const auto& item : cases)
+    {
+        Mouse::SetCursor(item.get());
+        EXPECT_EQ(platform.Canned().CursorCalls(), ++expectedCalls);
+        EXPECT_FALSE(platform.Canned().LastCursorWasCustom());
+        EXPECT_EQ(platform.Canned().LastSystemCursor(), item.expected);
+    }
+}
+
+TEST_F(MousePlatformInputTest, DefaultConstructorRepresentsArrow)
+{
+    MouseCursor cursor;
+    Mouse::SetCursor(cursor);
+    EXPECT_EQ(platform.Canned().CursorCalls(), 1);
+    EXPECT_EQ(platform.Canned().LastSystemCursor(), CNA::Platform::SystemCursor::Arrow);
+}
+
+TEST_F(MousePlatformInputTest, DisposingAStockSingletonIsANoOpAndKeepsItUsable)
+{
     MouseCursor& crosshair = MouseCursor::getCrosshairProperty();
-    SDL_Cursor* handle = crosshair.GetSDLCursor();
-    ASSERT_NE(handle, nullptr);
+    crosshair.Dispose();
+    crosshair.Dispose();
+    Mouse::SetCursor(crosshair);
 
-    crosshair.Dispose(); // must be a no-op
-    crosshair.Dispose(); // idempotent
-
-    // The handle is unchanged (not freed/nulled), and a fresh getter returns the same instance.
-    // Without the singleton guard, Dispose() would have nulled sdlCursor_ and this would fail.
-    // (We deliberately don't SDL_SetCursor(handle) here: SDL destroys all cursors on
-    // SDL_QuitSubSystem(VIDEO), so across the shared binary's per-test init/quit cycles the cached
-    // handle may reference a torn-down SDL session — the pointer identity is what task 834 checks.)
-    EXPECT_EQ(crosshair.GetSDLCursor(), handle);
-    EXPECT_EQ(MouseCursor::getCrosshairProperty().GetSDLCursor(), handle);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    EXPECT_EQ(platform.Canned().CursorCalls(), 1);
+    EXPECT_EQ(platform.Canned().LastSystemCursor(), CNA::Platform::SystemCursor::Crosshair);
+    EXPECT_EQ(&crosshair, &MouseCursor::getCrosshairProperty());
 }
 
-TEST(MouseCursorTest, DefaultConstructorCreatesNonNullOwningCursor)
+TEST_F(MousePlatformInputTest, DisposeIsIdempotentAndMakesOwnedCursorUnusable)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    const MouseCursor cursor;
-    EXPECT_NE(cursor.GetSDLCursor(), nullptr);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
-}
-
-TEST(MouseCursorTest, DisposeReleasesHandleAndIsIdempotent)
-{
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
-    if (!raw)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
-    }
-
-    MouseCursor cursor(raw, /*owning=*/true);
-    EXPECT_EQ(cursor.GetSDLCursor(), raw);
-
+    MouseCursor cursor;
     cursor.Dispose();
-    EXPECT_EQ(cursor.GetSDLCursor(), nullptr);
-
     EXPECT_NO_THROW(cursor.Dispose());
-    EXPECT_EQ(cursor.GetSDLCursor(), nullptr);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    Mouse::SetCursor(cursor);
+    EXPECT_EQ(platform.Canned().CursorCalls(), 0);
 }
 
-TEST(MouseCursorTest, NonOwningConstructorDoesNotDestroyCursorOnDestruction)
+TEST_F(MousePlatformInputTest, MoveConstructorTransfersDescriptionAndDisposesSource)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
+    MouseCursor original;
+    MouseCursor moved(std::move(original));
 
-    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
-    if (!raw)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
-    }
-
-    {
-        const MouseCursor cursor(raw, /*owning=*/false);
-        EXPECT_EQ(cursor.GetSDLCursor(), raw);
-    }
-    // cursor's destructor ran Dispose(), but owning_=false means SDL_DestroyCursor was NOT
-    // called on `raw` — the test still owns its cleanup.
-    SDL_DestroyCursor(raw);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    Mouse::SetCursor(original);
+    EXPECT_EQ(platform.Canned().CursorCalls(), 0);
+    Mouse::SetCursor(moved);
+    EXPECT_EQ(platform.Canned().CursorCalls(), 1);
+    EXPECT_EQ(platform.Canned().LastSystemCursor(), CNA::Platform::SystemCursor::Arrow);
 }
 
-TEST(MouseCursorTest, MoveConstructorTransfersOwnershipAndNullsSource)
+TEST_F(MousePlatformInputTest, MoveAssignmentTransfersCustomDescriptionAndDisposesSource)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
+    const std::vector<Color> pixels(4, Color(1, 2, 3, 4));
+    const Texture2D tex = Texture2D::CreateCpuOnlyForTests(2, 2, SurfaceFormat::Color, pixels);
+    MouseCursor target;
+    MouseCursor source = MouseCursor::FromTexture2D(tex, 1, 1);
 
-    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
-    if (!raw)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
-    }
+    target = std::move(source);
 
-    MouseCursor original(raw, /*owning=*/true);
-    const MouseCursor moved(std::move(original));
-
-    // Regression coverage for task 752's fix: the old defaulted move ctor bitwise-copied the
-    // raw pointer without nulling the source, so both objects believed they owned it.
-    EXPECT_EQ(moved.GetSDLCursor(), raw);
-    EXPECT_EQ(original.GetSDLCursor(), nullptr);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    Mouse::SetCursor(source);
+    EXPECT_EQ(platform.Canned().CursorCalls(), 0);
+    Mouse::SetCursor(target);
+    EXPECT_EQ(platform.Canned().CursorCalls(), 1);
+    EXPECT_TRUE(platform.Canned().LastCursorWasCustom());
+    EXPECT_EQ(platform.Canned().LastCustomCursorHotSpotX(), 1);
+    EXPECT_EQ(platform.Canned().LastCustomCursorHotSpotY(), 1);
 }
 
-TEST(MouseCursorTest, MoveAssignmentDisposesPreviousHandleAndTransfersOwnership)
+TEST_F(MousePlatformInputTest, SelfMoveAssignmentLeavesCursorIntact)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    SDL_Cursor* rawA = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
-    SDL_Cursor* rawB = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR);
-    if (!rawA || !rawB)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
-    }
-
-    MouseCursor a(rawA, /*owning=*/true);
-    MouseCursor b(rawB, /*owning=*/true);
-
-    a = std::move(b);
-
-    EXPECT_EQ(a.GetSDLCursor(), rawB);
-    EXPECT_EQ(b.GetSDLCursor(), nullptr);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
-}
-
-TEST(MouseCursorTest, SelfMoveAssignmentLeavesCursorIntact)
-{
-    // Task P1-017: move-assignment guards self-assignment with `if (this != &other)` before
-    // calling Dispose() and reading `other`'s fields. Without that guard, `cursor = std::move(cursor)`
-    // would Dispose() the cursor (freeing/nulling sdlCursor_) and then copy those now-cleared fields
-    // back onto itself, silently destroying the handle. Indirection through a pointer keeps this a
-    // genuine runtime self-move rather than something a compiler could diagnose/elide at compile time.
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
-    if (!raw)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
-    }
-
-    MouseCursor cursor(raw, /*owning=*/true);
+    MouseCursor cursor;
     MouseCursor* self = &cursor;
-    *self             = std::move(*self);
+    *self = std::move(*self);
 
-    EXPECT_EQ(cursor.GetSDLCursor(), raw);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    Mouse::SetCursor(cursor);
+    EXPECT_EQ(platform.Canned().CursorCalls(), 1);
+    EXPECT_EQ(platform.Canned().LastSystemCursor(), CNA::Platform::SystemCursor::Arrow);
 }
 
-TEST(MouseCursorTest, ColorCursorSurvivesSourcePixelBufferDestruction)
+TEST_F(MousePlatformInputTest, FromTexture2DCopiesRgbaPixelsAndHotSpot)
 {
-    // Task 831: exercises the exact SDL lifetime pattern MouseCursor::FromTexture2D relies on,
-    // without needing a GraphicsDevice/Texture2D (which the headless suite excludes). A surface
-    // created via SDL_CreateSurfaceFrom only *references* the pixel buffer; SDL_CreateColorCursor
-    // must copy the pixels (verified against SDL3 source: it converts RGBA32 -> ARGB8888 into an
-    // independent surface and the platform builds its own cursor). So destroying the surface and
-    // the source buffer immediately afterward must leave the cursor valid and usable.
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
+    std::vector<Color> pixels{
+        Color(1, 2, 3, 4), Color(5, 6, 7, 8),
+        Color(9, 10, 11, 12), Color(13, 14, 15, 16)};
+    Texture2D tex = Texture2D::CreateCpuOnlyForTests(2, 2, SurfaceFormat::Color, pixels);
+    MouseCursor cursor = MouseCursor::FromTexture2D(tex, 1, 0);
 
-    constexpr int w = 4;
-    constexpr int h = 4;
-    std::vector<std::uint32_t> rgba(static_cast<std::size_t>(w * h), 0xFF00FF00u); // opaque green
+    const std::vector<std::uint32_t> expected{
+        pixels[0].getPackedValueProperty(), pixels[1].getPackedValueProperty(),
+        pixels[2].getPackedValueProperty(), pixels[3].getPackedValueProperty()};
+    std::fill(pixels.begin(), pixels.end(), Color::Transparent);
+    tex.SetData(pixels.data(), static_cast<int>(pixels.size()));
 
-    SDL_Surface* surface = SDL_CreateSurfaceFrom(
-        w, h, SDL_PIXELFORMAT_RGBA32, rgba.data(), w * static_cast<int>(sizeof(std::uint32_t)));
-    if (!surface)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateSurfaceFrom failed: " << SDL_GetError();
-    }
-
-    SDL_Cursor* cursor = SDL_CreateColorCursor(surface, 0, 0);
-    SDL_DestroySurface(surface);
-
-    // Scribble then release the source buffer: if the cursor still referenced it, later use would
-    // read freed/garbage memory.
-    std::fill(rgba.begin(), rgba.end(), 0xDEADBEEFu);
-    rgba.clear();
-    rgba.shrink_to_fit();
-
-    ASSERT_NE(cursor, nullptr) << "SDL_CreateColorCursor failed: " << SDL_GetError();
-    EXPECT_TRUE(SDL_SetCursor(cursor)); // still usable -> pixels were copied, not referenced
-
-    SDL_DestroyCursor(cursor);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    Mouse::SetCursor(cursor);
+    EXPECT_TRUE(platform.Canned().LastCursorWasCustom());
+    EXPECT_EQ(platform.Canned().LastCustomCursorWidth(), 2);
+    EXPECT_EQ(platform.Canned().LastCustomCursorHeight(), 2);
+    EXPECT_EQ(platform.Canned().LastCustomCursorHotSpotX(), 1);
+    EXPECT_EQ(platform.Canned().LastCustomCursorHotSpotY(), 0);
+    EXPECT_EQ(platform.Canned().LastCustomCursorPixels(), expected);
 }
 
-// Task 832: FromTexture2D via a CPU-only Texture2D fixture (Texture2D::CreateCpuOnlyForTests),
-// which avoids the GraphicsDevice the real construction path needs.
-
-TEST(MouseCursorTest, FromTexture2DCreatesCursorFromColorTexture)
+TEST_F(MousePlatformInputTest, FromTexture2DAcceptsColorSrgbTexture)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    const std::vector<Color> pixels(16, Color::White); // 4x4 opaque white
-    const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::Color, pixels);
-
-    MouseCursor cursor = MouseCursor::FromTexture2D(tex, 0, 0);
-    EXPECT_NE(cursor.GetSDLCursor(), nullptr);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
-}
-
-TEST(MouseCursorTest, FromTexture2DAcceptsColorSrgbTexture)
-{
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
     const std::vector<Color> pixels(16, Color::White);
     const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::ColorSrgbEXT, pixels);
 
     MouseCursor cursor = MouseCursor::FromTexture2D(tex, 1, 2);
-    EXPECT_NE(cursor.GetSDLCursor(), nullptr);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    Mouse::SetCursor(cursor);
+    EXPECT_TRUE(platform.Canned().LastCursorWasCustom());
+    EXPECT_EQ(platform.Canned().LastCustomCursorPixels().size(), 16u);
+    EXPECT_EQ(platform.Canned().LastCustomCursorHotSpotX(), 1);
+    EXPECT_EQ(platform.Canned().LastCustomCursorHotSpotY(), 2);
 }
 
 TEST(MouseCursorTest, FromTexture2DRejectsNonColorSurfaceFormat)
 {
-    // The format check throws std::invalid_argument before any SDL call, so no video is needed.
     const std::vector<Color> pixels(16, Color::White);
     const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::Bgr565, pixels);
 
@@ -931,17 +747,9 @@ TEST(MouseCursorTest, FromTexture2DRejectsNonColorSurfaceFormat)
 
 TEST(MouseCursorTest, FromTexture2DThrowsWhenOriginIsOutsideTheTexture)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
     const std::vector<Color> pixels(16, Color::White);
     const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::Color, pixels);
 
-    // originX/Y = 100 lie outside the 4x4 cursor; SDL_CreateColorCursor rejects the hot spot,
-    // so FromTexture2D surfaces it as std::runtime_error.
     EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, 100, 100), std::runtime_error);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, -1, 0), std::runtime_error);
 }

@@ -252,13 +252,11 @@ override must be added.
 
 ### `MouseCursor` — class (CNA / CNAEXT; entire class is non-XNA)
 - `MouseCursor();` — CNAEXT
-- `explicit MouseCursor(SDL_Cursor*, bool = false);` — CNAEXT (SDL type is opaque/forward-declared)
 - `static MouseCursor FromTexture2D(const Graphics::Texture2D&, int, int);` — CNAEXT
 - `MouseCursor(const MouseCursor&) = delete;` / `operator=(const MouseCursor&) = delete;` — CNAEXT
 - `MouseCursor(MouseCursor&&) noexcept;` / `operator=(MouseCursor&&) noexcept;` — CNAEXT
 - `~MouseCursor() override;` — CNAEXT
 - `void Dispose() override;` — CNAEXT
-- `SDL_Cursor* GetSDLCursor() const;` — CNAEXT
 - Stock-cursor singletons (CNAEXT, each `static MouseCursor& get…Property()`): `Arrow`, `Crosshair`,
   `Hand`, `IBeam`, `No`, `SizeAll`, `SizeNESW`, `SizeNS`, `SizeNWSE`, `SizeWE`, `Wait`, `WaitArrow`
 

@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <string>
 
 namespace CNA::Platform::Sdl3 {
 
@@ -40,6 +41,11 @@ namespace CNA::Platform::Sdl3 {
                 case SystemCursor::Move:       return SDL_SYSTEM_CURSOR_MOVE;
                 case SystemCursor::NotAllowed: return SDL_SYSTEM_CURSOR_NOT_ALLOWED;
                 case SystemCursor::Pointer:    return SDL_SYSTEM_CURSOR_POINTER;
+                case SystemCursor::Progress:   return SDL_SYSTEM_CURSOR_PROGRESS;
+                case SystemCursor::NwseResize: return SDL_SYSTEM_CURSOR_NWSE_RESIZE;
+                case SystemCursor::NeswResize: return SDL_SYSTEM_CURSOR_NESW_RESIZE;
+                case SystemCursor::EwResize:   return SDL_SYSTEM_CURSOR_EW_RESIZE;
+                case SystemCursor::NsResize:   return SDL_SYSTEM_CURSOR_NS_RESIZE;
             }
             return SDL_SYSTEM_CURSOR_DEFAULT;
         }
@@ -219,7 +225,71 @@ namespace CNA::Platform::Sdl3 {
             throw PlatformException("Mouse::SetCursor", SDL_GetError());
         }
 
-        SDL_SetCursor(created);
+        InstallCursor(created);
+    }
+
+    void Sdl3Mouse::SetCursor(const CursorImage& cursor)
+    {
+        if (cursor.width <= 0 || cursor.height <= 0
+            || cursor.width > std::numeric_limits<int>::max() / static_cast<int>(sizeof(std::uint32_t)))
+        {
+            throw PlatformException("Mouse::SetCursor", "custom cursor dimensions are invalid");
+        }
+
+        const auto width = static_cast<std::size_t>(cursor.width);
+        const auto height = static_cast<std::size_t>(cursor.height);
+        if (width > std::numeric_limits<std::size_t>::max() / height
+            || cursor.hotSpotX < 0 || cursor.hotSpotX >= cursor.width
+            || cursor.hotSpotY < 0 || cursor.hotSpotY >= cursor.height)
+        {
+            throw PlatformException("Mouse::SetCursor", "custom cursor pixels or hot spot are invalid");
+        }
+        const std::size_t pixelCount = width * height;
+        if (cursor.rgba.size() != pixelCount
+            || pixelCount > std::numeric_limits<std::size_t>::max() / 4u)
+        {
+            throw PlatformException("Mouse::SetCursor", "custom cursor pixel count is invalid");
+        }
+
+        // SDL_PIXELFORMAT_RGBA32 means the bytes in memory are R,G,B,A on every endian. Expand the
+        // contract's numeric 0xAABBGGRR representation explicitly so that promise does not depend
+        // on host byte order. SDL copies this temporary surface into the native cursor.
+        std::vector<std::uint8_t> rgba(pixelCount * 4u);
+        for (std::size_t i = 0; i < pixelCount; ++i)
+        {
+            const std::uint32_t packed = cursor.rgba[i];
+            rgba[i * 4u] = static_cast<std::uint8_t>(packed);
+            rgba[i * 4u + 1u] = static_cast<std::uint8_t>(packed >> 8u);
+            rgba[i * 4u + 2u] = static_cast<std::uint8_t>(packed >> 16u);
+            rgba[i * 4u + 3u] = static_cast<std::uint8_t>(packed >> 24u);
+        }
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(
+            cursor.width, cursor.height, SDL_PIXELFORMAT_RGBA32, rgba.data(),
+            cursor.width * 4);
+        if (surface == nullptr)
+        {
+            throw PlatformException("Mouse::SetCursor", SDL_GetError());
+        }
+
+        SDL_Cursor* created = SDL_CreateColorCursor(surface, cursor.hotSpotX, cursor.hotSpotY);
+        SDL_DestroySurface(surface);
+        if (created == nullptr)
+        {
+            throw PlatformException("Mouse::SetCursor", SDL_GetError());
+        }
+
+        InstallCursor(created);
+    }
+
+    void Sdl3Mouse::InstallCursor(void* cursor)
+    {
+        auto* created = static_cast<SDL_Cursor*>(cursor);
+        if (!SDL_SetCursor(created))
+        {
+            const std::string error = SDL_GetError();
+            SDL_DestroyCursor(created);
+            throw PlatformException("Mouse::SetCursor", error);
+        }
 
         // Destroy the previous cursor only after the new one is current: freeing a cursor that is
         // still set is a use-after-free inside SDL.

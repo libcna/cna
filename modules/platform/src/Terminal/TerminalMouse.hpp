@@ -50,6 +50,13 @@ namespace CNA::Platform::Terminal {
         void SetCursor(SystemCursor cursor) override;
 
         /**
+         * @brief Refuses a graphical image cursor.
+         * @param cursor The requested image and hot spot.
+         * @throws PlatformNotSupportedException Always; `CursorShapes` is false.
+         */
+        void SetCursor(const CursorImage& cursor) override;
+
+        /**
          * @brief Refuses relative pointer mode.
          * @param window The terminal window id.
          * @param enabled The requested state.

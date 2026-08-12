@@ -9,7 +9,7 @@
 > **`NEXT.md` had no record of this campaign at all** until this file was added and cross-linked.
 
 **Branch:** `feature/platform`
-**Last updated:** 2026-08-12
+**Last updated:** 2026-08-13
 
 ---
 
@@ -58,10 +58,9 @@ python3 tools/platform/hot_path_lint.py       # design decision 4
 python3 tools/platform/sdl_inventory.py --check
 ```
 
-**Do not run the full suite under `SDL_VIDEODRIVER=dummy`.** Five tests need real video and fail
-under it (`MouseCursorTest` ×3, `Sdl3PlatformTest.PollEventsDiscardsStaleBufferContent`,
-`GameWindowTest.MinimizeAndRestoreEXT_UsingSdlWindow`). The registered ctest suites set the dummy
-driver themselves, scoped by `--gtest_filter`, which is why they pass.
+**Do not treat a full suite under `SDL_VIDEODRIVER=dummy` as the display-backed gate.** PLAT-81
+made every `MouseCursor` test display-independent, but genuine SDL window/event tests still need
+real video or their registered, deliberately scoped dummy-driver suites.
 
 ---
 
@@ -100,8 +99,8 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **197 files / 3224 references** of direct SDL coupling outside the PLAT-3 allowlist, down
-from the 253 / 3641 baseline. Contract: 24 headers, 394 documented declarations, all SDL-free.
+Ratchet: **195 files / 3168 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+from the 253 / 3641 baseline. Contract: 24 headers, 406 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
 `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` failure was fixed —
@@ -125,7 +124,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**98 ✅ · 10 🟨 · 44 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **66 %** of the 149
+**99 ✅ · 9 🟨 · 44 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **66 %** of the 149
 actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -137,9 +136,10 @@ actionable rows done, counting partials.
 - **Phase 4** (renderers) — PLAT-57's boundary decision and PLAT-59/60/61's common-interface cleanup
   are complete; implementation continues at PLAT-58/62. 46 identities remain in scope.
   See §6 for why most cannot be built here.
-- **Phase 5** (input) — five redundant backends are deleted; `Keyboard` and `Mouse` now consume
-  typed, once-per-frame platform snapshots (with relative mouse displacement explicitly drained
-  per read). `PlatformInputBridge` consumes the complete event vocabulary in the production path.
+- **Phase 5** (input) — five redundant backends are deleted; `Keyboard`, `Mouse` and `MouseCursor`
+  now consume typed platform services. Cursor creation, including custom RGBA images, is owned by
+  the selected platform and no SDL cursor type remains in the public input API.
+  `PlatformInputBridge` consumes the complete event vocabulary in the production path.
 - **Phase 6** (audio) — not started.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
@@ -292,11 +292,11 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **Phase 5 input continuation.** PLAT-80 is complete: public mouse state, window association,
-   five buttons, both wheel axes and relative-delta drain now use `IPlatformMouse`. Continue with
-   PLAT-81, migrating the public cursor surface and deciding the contract representation for custom
-   image cursors. The raw SDL event adapter remains test-only compatibility until PLAT-90 retires
-   the legacy native doubles; no production caller remains.
+2. **Phase 5 input continuation.** PLAT-81 is complete: all 12 stock cursors and custom RGBA image
+   cursors cross `IPlatformMouse`, with native ownership confined to `Sdl3Mouse`. Continue with
+   PLAT-82: re-point public `GamePad`, its mapping database and mapping tests onto `Sdl3Gamepad`.
+   The raw SDL event adapter remains test-only compatibility until PLAT-90 retires the legacy
+   native doubles; no production caller remains.
 
 ---
 

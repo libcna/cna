@@ -14,6 +14,7 @@
 
 #include <unistd.h>
 
+#include <array>
 #include <memory>
 #include <string>
 #include <variant>
@@ -170,6 +171,16 @@ TEST(TerminalMouseTest, UnsupportedPointerControlsRefuseDeterministically)
     {
         mouse.SetCursor(SystemCursor::Pointer);
         FAIL() << "cursor shapes cannot work through SGR mouse reporting";
+    }
+    catch (const PlatformNotSupportedException& error)
+    {
+        EXPECT_EQ(error.GetCapability(), PlatformCapability::CursorShapes);
+    }
+    const std::array<std::uint32_t, 1> pixel{0xFFFFFFFFu};
+    try
+    {
+        mouse.SetCursor(CursorImage{1, 1, 0, 0, pixel});
+        FAIL() << "image cursors cannot work through SGR mouse reporting";
     }
     catch (const PlatformNotSupportedException& error)
     {
