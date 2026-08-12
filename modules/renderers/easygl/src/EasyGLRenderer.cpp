@@ -6,7 +6,7 @@
 #include <iostream>
 #include <span>
 
-#include "CNA/Platform.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>

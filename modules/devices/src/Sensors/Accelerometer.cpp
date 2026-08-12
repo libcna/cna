@@ -17,7 +17,7 @@
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_sensor.h>
 
-#include "CNA/Platform.hpp"
+#include "CNA/TargetPlatform.hpp"
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp"
 #include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -56,18 +56,18 @@ namespace Microsoft::Devices::Sensors
         // hardware" was chosen over a permanent desktop no-op because it's
         // strictly more useful and costs nothing extra (the real SDL probe
         // below already reports false on desktops with no such hardware).
-        // `Platform::Web` (Emscripten) is excluded even though SDL itself
+        // `TargetPlatform::Web` (Emscripten) is excluded even though SDL itself
         // has a real `SDL_SENSOR_EMSCRIPTEN` backend
         // (third_party/SDL/src/sensor/emscripten/) — this exclusion
         // predates this task and was not re-examined here; a future task
         // wanting to support browser accelerometer access should treat that
         // as its own separate decision, not an implied consequence of this
         // one.
-        const CNA::Platform currentPlatform = CNA::getCurrentPlatform();
+        const CNA::TargetPlatform currentPlatform = CNA::getCurrentPlatform();
 
-        if (!(currentPlatform == CNA::Platform::Android ||
-            currentPlatform == CNA::Platform::iOS ||
-            currentPlatform == CNA::Platform::Desktop))
+        if (!(currentPlatform == CNA::TargetPlatform::Android ||
+            currentPlatform == CNA::TargetPlatform::iOS ||
+            currentPlatform == CNA::TargetPlatform::Desktop))
         {
             return false;
         }

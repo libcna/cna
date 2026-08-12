@@ -14,7 +14,7 @@
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_sensor.h>
 
-#include "CNA/Platform.hpp"
+#include "CNA/TargetPlatform.hpp"
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp"
 #include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -41,11 +41,11 @@ namespace Microsoft::Devices::Sensors
 
     bool Gyroscope::getIsSupportedProperty()
     {
-        const CNA::Platform currentPlatform = CNA::getCurrentPlatform();
+        const CNA::TargetPlatform currentPlatform = CNA::getCurrentPlatform();
 
-        if (!(currentPlatform == CNA::Platform::Android ||
-            currentPlatform == CNA::Platform::iOS ||
-            currentPlatform == CNA::Platform::Desktop))
+        if (!(currentPlatform == CNA::TargetPlatform::Android ||
+            currentPlatform == CNA::TargetPlatform::iOS ||
+            currentPlatform == CNA::TargetPlatform::Desktop))
         {
             return false;
         }

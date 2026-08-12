@@ -9,7 +9,7 @@
 #include <thread>
 #include <vector>
 
-#include "CNA/Platform.hpp"
+#include "CNA/TargetPlatform.hpp"
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
@@ -50,7 +50,7 @@ TEST(AccelerometerTests, GetIsSupportedPropertyDoesNotCrash)
 
 // Task ACCEL-007: pins down the desktop-support policy decision itself,
 // not just its consequence. This test host is a desktop Linux container
-// (CNA::getCurrentPlatform() == Platform::Desktop) with no real
+// (CNA::getCurrentPlatform() == TargetPlatform::Desktop) with no real
 // accelerometer hardware -- getIsSupportedProperty() must reach the real
 // SDL hardware probe (and correctly return false here) rather than being
 // short-circuited to an unconditional false purely because the platform is
@@ -60,7 +60,7 @@ TEST(AccelerometerTests, GetIsSupportedPropertyDoesNotCrash)
 // at all.
 TEST(AccelerometerTests, DesktopPlatformReachesRealHardwareProbeRatherThanBeingHardcodedUnsupported)
 {
-    ASSERT_EQ(CNA::getCurrentPlatform(), CNA::Platform::Desktop);
+    ASSERT_EQ(CNA::getCurrentPlatform(), CNA::TargetPlatform::Desktop);
 
     // Not asserting a specific true/false value -- this container may or
     // may not have real SDL-visible accelerometer hardware -- only that

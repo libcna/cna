@@ -4,7 +4,7 @@
 #ifdef CNA_DEVICES
 
 #include "CNA/Devices/Detail/SdlTrayBackend.hpp"
-#include "CNA/Platform.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 namespace CNA::Devices
 {
@@ -12,11 +12,11 @@ namespace CNA::Devices
     {
         switch (CNA::getCurrentPlatform())
         {
-        case CNA::Platform::Desktop:
+        case CNA::TargetPlatform::Desktop:
             return true;
-        case CNA::Platform::Android:
-        case CNA::Platform::iOS:
-        case CNA::Platform::Web:
+        case CNA::TargetPlatform::Android:
+        case CNA::TargetPlatform::iOS:
+        case CNA::TargetPlatform::Web:
         default:
             return false;
         }
