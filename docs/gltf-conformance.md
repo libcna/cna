@@ -479,11 +479,12 @@ produced them.
 
 ### 4.3 Coverage today
 
-21 of the 23 fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**65 of the 71** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
-width-selection rule. The two without one are the fixtures the importer must **refuse**
-(`GLTF-021`/`GLTF-023`); their manifests record `l5.supported = false` with a reason and the owning
-task, so the layer is visibly absent rather than quietly unasserted.
+width-selection rule. The six without one are the fixtures the importer must **refuse**
+(`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-261`/`GLTF-262`); their manifests record
+`l5.supported = false` with a reason and the owning task, so the layer is visibly absent rather than
+quietly unasserted.
 
 A converted topology's golden holds the **converted** index list, not the authored one — a strip's
 golden is the triangle list `GLTF-072` rewrites it into, and a `LINE_LOOP`'s carries the closing
@@ -624,3 +625,96 @@ Three consequences worth being explicit about:
   generated basis is a valid tangent frame, it is simply not the same one the map was baked
   against. Which of the two a given asset needs is a property of that asset's authoring pipeline.
 
+---
+
+## 7. The corpus, fixture by fixture (`GLTF-416`)
+
+Every asset, its owning group (§24.1: one asset, exactly one owner), the oracle layers it declares,
+and what it exists to prove.
+
+**This table is generated.** `python3 -m gltf_fixtures --fixture-table` emits it, and
+`GltfFixtureCorpus.TheConformanceDocListsEveryFixtureTheManifestDeclares` compares it against the
+manifest row by row, printing the corrected table on failure — so a fixture added without a row
+here fails a test rather than quietly leaving the inventory a coverage claim nobody checked. Do not
+edit the rows by hand.
+
+The "what it proves" column is the fixture's own `features` list from the manifest, not a summary
+written for this document: two descriptions of the same fixture are two things that can disagree.
+
+| Fixture | Group | Layers | What it proves |
+|---|---|---|---|
+| `gltf-required-extension-unsupported` | container | L1, L3 | extensionsRequired; unsupported extension; import rejection |
+| `interleaved-position-normal` | accessors | L1, L2, L3 | bufferView.byteStride; bufferView.byteOffset; accessor.byteOffset; interleaved attributes |
+| `sparse-position` | accessors | L1, L2, L3 | accessor.sparse; absent base bufferView; zero-initialised base array |
+| `sparse-indices` | accessors | L1, L2, L3 | accessor.sparse on indices; UNSIGNED_SHORT indices |
+| `sparse-interleaved-base` | accessors | L1, L2, L3, L4 | accessor.sparse; bufferView.byteStride; interleaved base array; tightly packed sparse values |
+| `u8-idx` | component-types | L1, L2, L3 | UNSIGNED_BYTE indices |
+| `normalized-u8-color` | component-types | L1, L2, L3 | normalized UNSIGNED_BYTE; COLOR_0 VEC4; vertex colour round-trip |
+| `mode-points` | topology | L1, L2, L3, L4, L5 | primitive.mode = POINTS; non-indexed primitive; implicit index range |
+| `mode-lines` | topology | L1, L2, L3, L4, L5 | primitive.mode = LINES; line topology |
+| `mode-line-loop` | topology | L1, L2, L3, L4, L5 | primitive.mode = LINE_LOOP; line topology; implicit closing segment |
+| `mode-line-strip` | topology | L1, L2, L3, L4, L5 | primitive.mode = LINE_STRIP; line topology |
+| `mode-triangles` | topology | L1, L2, L3, L4, L5 | primitive.mode = TRIANGLES; explicit mode key |
+| `mode-triangle-strip` | topology | L1, L2, L3, L4, L5 | primitive.mode = TRIANGLE_STRIP; strip winding; strip -> list conversion |
+| `mode-triangle-strip-morph` | topology | L1, L2, L3, L4, L5 | primitive.mode = TRIANGLE_STRIP; morph target; strip -> list conversion; per-vertex delta addressing |
+| `mode-triangle-fan` | topology | L1, L2, L3, L4, L5 | primitive.mode = TRIANGLE_FAN; fan -> list conversion |
+| `normal-absent` | normals | L1, L2, L3, L4 | absent NORMAL; computed flat normals; non-planar triangle |
+| `normal-quantized` | normals | L1, L2, L3, L4, L5 | NORMAL as normalized SHORT; §3.6.2.2 normalized decode; authored normal passed through byte-exact |
+| `xf-identity` | transforms | L1, L2, L3, L4 | node without transform; single scene root |
+| `xf-shared-mesh` | transforms | L1, L2, L3, L4 | node.translation; mesh instancing; two scene roots |
+| `xf-parent-child` | transforms | L1, L2, L3, L4 | node.scale; node.translation; parent-child composition |
+| `xf-matrix-node` | transforms | L1, L2, L3, L4 | node.matrix; column-major matrix layout |
+| `xf-scale-nonuniform` | transforms | L1, L2, L3, L4 | node.scale non-uniform; normal matrix; inverse-transpose normal transform |
+| `xf-negative-scale` | transforms | L1, L2, L3, L4 | node.scale negative; mirroring; winding order |
+| `xf-mirror-child` | transforms | L1, L2, L3, L4 | mirroring; hierarchical composition; mesh instancing |
+| `mat-factor-only-gold` | materials | L1, L2, L3 | pbrMetallicRoughness factors; baseColorFactor; alphaMode BLEND; doubleSided; no texture maps |
+| `mat-emissive-strength` | materials | L1, L2, L3 | KHR_materials_emissive_strength; emissiveFactor; HDR emissive above 1; no texture maps |
+| `mat-vertex-color-pbr` | materials | L1, L2, L3 | COLOR_0 with a PBR material; unsupported material model; import report |
+| `mat-normal-occlusion-scale` | materials | L1, L2, L3 | normalTexture.scale; occlusionTexture.strength; texture view without a texture |
+| `mat-alpha-mask-cutoff` | materials | L1, L2, L3 | alphaMode MASK; non-default alphaCutoff; alpha test reaches the shader; no texture maps |
+| `mat-unlit` | materials | L1, L2, L3, L4, L5 | KHR_materials_unlit; non-PBR material model; vertex stride 32 |
+| `mat-unlit-vertex-color-alpha` | materials | L1, L2, L3, L4, L5 | KHR_materials_unlit; COLOR_0; translucent baseColorFactor; alphaMode BLEND; non-PBR material model |
+| `mat-specular-glossiness` | materials | L1, L2, L3, L4, L5 | KHR_materials_pbrSpecularGlossiness; archived extension; converted to metallic-roughness; dropped specular tint |
+| `mat-authored-tangent` | materials | L1, L2, L3, L4, L5 | authored TANGENT; tangent handedness; vertex stride 48 |
+| `tex-reference-checkerboard` | textures | L1, L2, L3, L4, L5 | base-colour texture; image data: URI; sampler NEAREST; CLAMP_TO_EDGE |
+| `tex-texture-transform` | textures | L1, L2, L3, L4, L5 | KHR_texture_transform; offset; rotation; non-square scale; transform baked into UVs |
+| `tex-dual-texture-stride` | textures | L1, L2, L3, L4, L5 | base-colour texture; occlusion texture; KHR_materials_unlit; vertex stride 20 |
+| `skin-armature-ancestor` | skinning | L1, L2, L3, L4 | skin.joints; skin.inverseBindMatrices; armature ancestor above the joint set; JOINTS_0 / WEIGHTS_0 |
+| `skin-mesh-node-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh-space cancellation; skin.inverseBindMatrices; JOINTS_0 / WEIGHTS_0 |
+| `skin-plus-static-mesh` | skinning | L1, L2, L3, L4 | two mesh groups; skinned and unskinned mesh in one file; skin.joints; skin.inverseBindMatrices |
+| `skin-unlit` | skinning | L1, L2, L3, L4, L5 | KHR_materials_unlit; JOINTS_0 / WEIGHTS_0; vertex stride 52 |
+| `skin-vertex-color` | skinning | L1, L2, L3, L4, L5 | COLOR_0 on a skinned mesh; JOINTS_0 / WEIGHTS_0; vertex stride 56 |
+| `skin-mesh-node-parent-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh-space cancellation; transformed ancestor above the mesh node; JOINTS_0 / WEIGHTS_0 |
+| `skin-skeleton-hint` | skinning | L1, L2, L3, L4 | skin.skeleton; declared root below a transform-bearing ancestor; declared root above the joints' common ancestor; two joints |
+| `skin-unnormalized` | skinning | L1, L2, L3 | unnormalized WEIGHTS_0; zero-weight vertex; renormalisation policy |
+| `skin-73-joints` | skinning | L1, L2 | skin.joints beyond MaxBones; palette limit; import rejection |
+| `skin-eight-influences` | skinning | L1, L2, L3 | JOINTS_1/WEIGHTS_1; eight influences per vertex; influence-set truncation; renormalisation after truncation |
+| `anim-rigid-node` | animation | L1, L2, L3, L4 | animation.channel targeting a non-joint node; rotation path; LINEAR interpolation; no skin |
+| `anim-nonzero-start` | animation | L1, L2, L3, L4 | animation with a non-zero first key time; clip duration; pre-first-key clamping; rotation path; no skin |
+| `anim-translation-scale` | animation | L1, L2, L3, L4 | translation path; scale path; channels keyed at disjoint times; union resampling; bind-pose fill of an undriven component |
+| `anim-step` | animation | L1, L2, L3, L4 | STEP interpolation; translation path; half-open interval boundary |
+| `anim-cubicspline` | animation | L1, L2, L3, L4 | CUBICSPLINE interpolation; in/out tangent triplets; Hermite basis; interior resampling |
+| `anim-two-clips` | animation | L1, L2, L3, L4 | multiple animations; unnamed animation; generated clip name; per-clip duration |
+| `anim-repeated-time` | animation | L1, L2, L3, L4 | repeated sampler input time; hard cut; input monotonicity policy |
+| `anim-parent-child` | animation | L1, L2, L3, L4 | two channels, two nodes; parent/child composition; animated hierarchy |
+| `anim-weights-path` | animation | L1, L2, L3, L4 | weights animation path; unsupported channel path; morph target; partial channel import |
+| `anim-out-of-scene-target` | animation | L1, L2, L3, L4 | channel targeting a node outside the default scene; two scenes; partial channel import; default scene selection |
+| `morph-node-weights-override` | animation | L1, L2, L3, L4 | mesh.weights; node.weights override; one mesh, two instances; morph target POSITION delta |
+| `camera-perspective` | cameras | L1, L2, L3, L4 | camera.perspective; aspectRatio declared; zfar declared; camera node transform |
+| `camera-perspective-infinite` | cameras | L1, L2, L3, L4 | camera.perspective; zfar absent; infinite far plane |
+| `camera-perspective-no-aspect` | cameras | L1, L2, L3, L4 | camera.perspective; aspectRatio absent; viewport-relative framing; assumed value recorded |
+| `camera-orthographic` | cameras | L1, L2, L3, L4 | camera.orthographic; xmag/ymag half extents |
+| `camera-animated-node` | cameras | L1, L2, L3, L4 | animation targeting a camera node; rotation path; no skin; camera |
+| `lights-kinds-and-reach` | lights | L1, L2, L3, L4 | KHR_lights_punctual; directional light; point light; spot light; light range ignored; cone angles ignored |
+| `lights-over-budget` | lights | L1, L2, L3, L4 | KHR_lights_punctual; more lights than XNA can bind; light ordering; photometric intensity clamped |
+| `scene-default-selection` | scenes | L1, L3, L4 | scene != 0; unreferenced decoy mesh; multiple scenes |
+| `bad-accessor-out-of-bounds` | robustness | L1 | accessor beyond bufferView; structural validation; import rejection |
+| `bad-accessor-count-overflow` | robustness | L1 | accessor count overflow; size_t wrap; structural validation; import rejection |
+| `accessor-count-mismatch` | robustness | L1, L2 | attribute count mismatch; per-primitive attribute agreement; import rejection |
+| `skin-joint-index-out-of-range` | robustness | L1, L2 | out-of-range JOINTS_0 index; weighted stray influence; import rejection |
+| `skin-joint-index-padding` | robustness | L1, L2, L3 | out-of-range JOINTS_0 index; zero-weight padding slot |
+| `bad-animation-input-order` | robustness | L1, L2 | non-monotonic sampler input; animation input ordering; import rejection |
+
+Six fixtures declare no L5 golden because the importer must **refuse** them, and a refusal has no
+buffers; their manifests say so explicitly (`l5.supported = false`) with the reason and the owning
+task, which is what keeps "no golden" distinguishable from "golden forgotten".

@@ -943,3 +943,73 @@ TEST(GltfFixtureCorpus, EveryAssetFitsTheSizeBudgetOrStatesWhyItCannot)
     RecordProperty("largestAssetBytes", static_cast<int>(largestAsset));
     RecordProperty("largestAsset", largestName);
 }
+
+// --- plan_gltf.md GLTF-416: the corpus documentation is generated, not maintained ----------------
+
+TEST(GltfFixtureCorpus, TheConformanceDocListsEveryFixtureTheManifestDeclares)
+{
+    // A corpus inventory written by hand is stale the first time a fixture is added, and a stale
+    // inventory is worse than none: it reads as a coverage claim nobody checked. So
+    // docs/gltf-conformance.md §7 is generated (`--fixture-table`) and compared here, the same rule
+    // §19's extension table lives under -- with the corrected table printed on failure, so fixing
+    // the document is a paste rather than a reading exercise.
+    const std::filesystem::path doc =
+        CorpusDirectory().parent_path().parent_path().parent_path() / "docs" / "gltf-conformance.md";
+    std::ifstream file(doc);
+    ASSERT_TRUE(file.is_open()) << "cannot open " << doc;
+
+    std::map<std::string, std::string> documented;  // fixture id -> owning group
+    std::string line;
+    bool inSection = false;
+    while (std::getline(file, line))
+    {
+        if (line.rfind("## 7. The corpus, fixture by fixture", 0) == 0) { inSection = true; continue; }
+        if (inSection && line.rfind("## ", 0) == 0) { break; }
+        if (!inSection || line.empty() || line.front() != '|') { continue; }
+        if (line.find("---") != std::string::npos) { continue; }
+
+        std::vector<std::string> cells;
+        std::string cell;
+        std::istringstream stream(line);
+        while (std::getline(stream, cell, '|'))
+        {
+            std::string::size_type at;
+            while ((at = cell.find('`')) != std::string::npos) { cell.erase(at, 1); }
+            const auto first = cell.find_first_not_of(" \t");
+            cells.push_back(first == std::string::npos
+                                ? std::string()
+                                : cell.substr(first, cell.find_last_not_of(" \t") - first + 1));
+        }
+        if (!cells.empty() && cells.front().empty()) { cells.erase(cells.begin()); }
+        if (cells.size() < 4 || cells[0] == "Fixture") { continue; }
+        EXPECT_TRUE(documented.emplace(cells[0], cells[1]).second)
+            << "§7 lists " << cells[0] << " twice";
+    }
+    ASSERT_FALSE(documented.empty()) << "§7's table parsed to nothing -- the heading moved?";
+
+    std::ostringstream corrected;
+    corrected << "\n  regenerate with: python3 -m gltf_fixtures --fixture-table\n";
+
+    std::size_t compared = 0;
+    for (const JsonValue& asset : Member(CorpusManifest(), "assets").arrayValue)
+    {
+        const std::string id = StringOr(asset, "id", "");
+        SCOPED_TRACE(id);
+        const auto found = documented.find(id);
+        ASSERT_NE(documented.end(), found)
+            << "the corpus contains " << id << " and docs/gltf-conformance.md §7 does not list it, "
+               "so the inventory claims coverage it does not have." << corrected.str();
+        EXPECT_EQ(StringOr(asset, "owningGroup", ""), found->second)
+            << "§7 and the manifest disagree about which group owns " << id << "."
+            << corrected.str();
+        documented.erase(found);
+        ++compared;
+    }
+    for (const auto& [id, group] : documented)
+    {
+        ADD_FAILURE() << "§7 lists " << id << " (" << group
+                      << "), which is not in the corpus -- a fixture was removed and its row was "
+                         "left behind." << corrected.str();
+    }
+    EXPECT_EQ(CorpusFixtureIds().size(), compared);
+}

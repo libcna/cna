@@ -73,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
                        help="verify DIR is byte-identical to the generator output")
     group.add_argument("--list", action="store_true",
                        help="print the corpus manifest to stdout without writing anything")
+    group.add_argument("--fixture-table", action="store_true",
+                       help="print the corpus inventory as a markdown table (GLTF-416); "
+                            "docs/gltf-conformance.md §6 is this output")
     group.add_argument("--explain", metavar="GOLDEN",
                        help="decode how an L5 golden differs from --against, using the fixture's "
                             "own layout (GLTF-410)")
@@ -92,6 +95,18 @@ def main(argv: list[str] | None = None) -> int:
 
     fixtures = all_fixtures()
     files = emit(fixtures)
+
+    if args.fixture_table:
+        # Generated rather than maintained: a corpus inventory written by hand is stale the first
+        # time a fixture is added, and a stale inventory is worse than none because it reads as a
+        # coverage claim (`GLTF-416`).
+        sys.stdout.write("| Fixture | Group | Layers | What it proves |\n|---|---|---|---|\n")
+        for fixture in fixtures:
+            layers = ", ".join(fixture.validated_layers)
+            proves = "; ".join(fixture.features) if fixture.features else "\u2014"
+            sys.stdout.write(
+                f"| `{fixture.id}` | {fixture.owning_group} | {layers} | {proves} |\n")
+        return 0
 
     if args.list:
         import json
