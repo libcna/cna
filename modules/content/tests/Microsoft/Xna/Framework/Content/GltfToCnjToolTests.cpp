@@ -38,6 +38,7 @@
 
 #include <array>
 #include <cerrno>
+#include <optional>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -1433,10 +1434,18 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalSkinningDataFor
             continue;
         }
 
-        // The tool writes one Model .cnj per skin group, named after the skin (GLTF-138), plus one
-        // per animation clip -- so the Model is found by its own "type" field rather than by a
-        // filename this test would have to predict.
-        std::string modelAsset;
+        // The tool writes one Model .cnj per mesh group, named after the skin (GLTF-137/GLTF-138),
+        // plus one per animation clip -- so the Models are found by their own "type" field rather
+        // than by filenames this test would have to predict.
+        //
+        // ALL of them, sorted, not the first one directory iteration happens to yield.
+        // `skin-plus-static-mesh` produces two -- a skinned character and a static prop -- and
+        // iteration order is a filesystem detail rather than an ordering, so "the first Model"
+        // compared the prop against the runtime path's skinned model on some filesystems and the
+        // right pair on others. Which pair to compare is decided by what the models carry: when
+        // the runtime path produced skinning data, the offline model to compare with is the one
+        // that has skinning data too, and the point of the assertion is that such a model exists.
+        std::vector<std::string> modelAssets;
         for (const std::filesystem::directory_entry& out :
              std::filesystem::directory_iterator(contentRoot.path()))
         {
@@ -1446,20 +1455,35 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalSkinningDataFor
                                     std::istreambuf_iterator<char>());
             if (text.find("\"type\": \"Model\"") != std::string::npos)
             {
-                modelAsset = out.path().stem().string();
-                break;
+                modelAssets.push_back(out.path().stem().string());
             }
         }
-        ASSERT_FALSE(modelAsset.empty()) << "the tool wrote no Model .cnj at all";
+        std::sort(modelAssets.begin(), modelAssets.end());
+        ASSERT_FALSE(modelAssets.empty()) << "the tool wrote no Model .cnj at all";
+
+        auto* runtimeSkin = dynamic_cast<SkinningData*>(runtime->getTagProperty());
 
         ContentManager offlineCm(nullptr, contentRoot.path().string());
         offlineCm.setGraphicsDevice(gd);
-        Model offline = offlineCm.Load<Model>(modelAsset);
-
-        auto* offlineSkin = dynamic_cast<SkinningData*>(offline.getTagProperty());
-        auto* runtimeSkin = dynamic_cast<SkinningData*>(runtime->getTagProperty());
+        std::optional<Model> offline;
+        SkinningData* offlineSkin = nullptr;
+        for (const std::string& asset : modelAssets)
+        {
+            Model candidate = offlineCm.Load<Model>(asset);
+            auto* candidateSkin = dynamic_cast<SkinningData*>(candidate.getTagProperty());
+            const bool wanted = (runtimeSkin != nullptr) ? (candidateSkin != nullptr) : true;
+            if (!offline.has_value() || (wanted && offlineSkin == nullptr))
+            {
+                offline = std::move(candidate);
+                offlineSkin = dynamic_cast<SkinningData*>(offline->getTagProperty());
+            }
+            if (runtimeSkin != nullptr && offlineSkin != nullptr) { break; }
+        }
+        ASSERT_TRUE(offline.has_value());
         if (runtimeSkin == nullptr && offlineSkin == nullptr) { continue; }
-        ASSERT_NE(nullptr, offlineSkin) << "the offline path produced no SkinningData";
+        ASSERT_NE(nullptr, offlineSkin)
+            << "the offline path produced no SkinningData in any of its " << modelAssets.size()
+            << " Model .cnj file(s)";
         ASSERT_NE(nullptr, runtimeSkin) << "the runtime path produced no SkinningData";
         ++compared;
 
