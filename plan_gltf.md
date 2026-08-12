@@ -10,7 +10,7 @@ Oracle repository: `openeggbert/cna-gltf-viewer` @ `aaa008dc62bcb1127901ca23b75b
 > working record.** The banner it opened with ("nothing in it was implemented") described the
 > planning session of 2026-08-11 only, and is preserved below for provenance.
 >
-> Of 460 rows: **312 are closed (`✔` 191, `✅` 121)** and **130 remain `⬜`**. The other 18 carry a
+> Of 460 rows: **313 are closed (`✔` 192, `✅` 121)** and **129 remain `⬜`**. The other 18 carry a
 > deliberate partial marker — 8 `🔬` (investigation, no implementation owed), 5 `✅/⬜` and 2 `✅/🐛`
 > (landed with a named residue), 2 `🐛` (open defect), 1 `⛔` (blocked by this environment,
 > `GLTF-009`). Every closed row carries its own evidence in its Scope cell: what was decided, what
@@ -2667,7 +2667,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | GLTF-449 | Update `FUTURE.md` Phase 5 status | ⬜ | GLTF-448 | It currently says "glTF is **not** corrected." **Accept:** updated only when the milestone is actually met. |
 | GLTF-450 | Retire `gltfissues.md` into the campaign record | ⬜ | GLTF-448 | Keep it as historical evidence; add a pointer to this plan. **Accept:** no contradiction between the two. |
 | GLTF-451 | Reconcile `plan_cnj.md` Phases 12–14 | ⬜ | GLTF-448 | Mark which `CNB-*` claims this campaign superseded or corrected. **Accept:** no stale "complete" claim survives. |
-| GLTF-452 | Update `known_bugs.md` | ⬜ | GLTF-012 | **Accept:** D1–D8 closed with their fixing task and test. |
+| GLTF-452 | Update `known_bugs.md` | ✔ | GLTF-012 | **Accept:** D1–D8 closed with their fixing task and test. **Done.** The table already carried each defect's fixture and owning task; what the acceptance also names — **the test** — was missing, and it is the column a reader needs to check the claim rather than believe it. Every row now names the green suite that asserts the fixed behaviour today, each verified to exist in the binary and to reference the fixture: `GltfConformanceL4` plus `GltfModelShape`/`GltfSceneGraphBones`/`GltfConventions` for D1–D3, `GltfIndexDecode` for D4, `GltfPrimitiveTopology`/`GltfDrawTopology` for D5, `GltfRigidAnimation` for D6, `GltfMaterialState` **and L6** for D7, `GltfSkinSpaces`/`GltfSkinComposition` for D8. The section also now says **why none of them is an inverted known-defect test any more**: such a test asserts the bug, so it must be deleted the day the bug is fixed — the day it stops protecting anything — and the ledger test asserts that bookkeeping in both directions instead. D7 carries the one note worth reading twice: it decoded correctly at L3 for the whole audit and still rendered opaque white, so an L3-only regression test would have passed while the defect was live. |
 | GLTF-453 | Update `AUDIT.md` glTF API coverage | ⬜ | GLTF-415 | Per `CLAUDE.md`, an API is not "complete" until its tests are. **Accept:** accurate. |
 | GLTF-454 | Update `README.md` glTF claims | ⬜ | GLTF-448 | **Accept:** accurate. |
 | GLTF-455 | Migration notes for `.cnj` consumers | ⬜ | GLTF-129 | **Accept:** the `cnjVersion` bump and new fields documented in `cnj.md`. |

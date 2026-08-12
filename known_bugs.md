@@ -60,16 +60,29 @@ rendered**, so none would have arrived as a bug report at all. Each has a corpus
 reproduces it, and each fixture keeps asserting the fixed behaviour so a regression fails a
 green test rather than going quiet again.
 
-| ID | What it did | Fixture | Owning task | Status |
-|---|---|---|---|---|
-| D1 | Every mesh instance was emitted in mesh-local space with an identity bone, so a mesh instanced by two nodes drew twice at the origin | `xf-shared-mesh` | `GLTF-113`/`GLTF-114` | **Fixed** |
-| D2 | A parent node's transform never reached its child, so a scaled parent with a translated child placed the child at its own local offset | `xf-parent-child` | `GLTF-113`/`GLTF-114` | **Fixed** |
-| D3 | `node.matrix` was discarded entirely — the import data model had nowhere to put it | `xf-matrix-node` | `GLTF-107`/`GLTF-113` | **Fixed** |
-| D4 | A sparse **index** accessor decoded to all zeros: `cgltf_accessor_read_index` returns 0 when the accessor is sparse or has no bufferView, with no error channel, and the caller checked neither | `sparse-indices` | `GLTF-063` | **Fixed** |
-| D5 | `primitive.mode` was never read, so every topology was flattened into an index list all three loaders divided by three and drew as a triangle list — a strip lost every triangle after the first, a point cloud became one arbitrary triangle, and neither warned | `mode-triangle-strip`, `mode-lines`, `mode-points` | `GLTF-071`/`GLTF-072`/`GLTF-073`/`GLTF-078` | **Fixed** |
-| D6 | Rigid (non-joint) node animation was dropped: an unskinned model's clips had nowhere to live | `anim-rigid-node` | `GLTF-294` | **Fixed** |
-| D7 | A factor-only metallic-roughness material was downgraded to an untextured white `BasicEffect` — the selection rule asked which texture *maps* were present, so a material with every PBR factor and no map could never select `PbrEffect` | `mat-factor-only-gold` | `GLTF-215`/`GLTF-216` | **Fixed** |
-| D8 | `BuildSkeleton` walked parent links only inside the skin's own joint set, so an armature transform above the joints was dropped from the bind pose while the authored `inverseBindMatrices` still contained it | `skin-armature-ancestor` | `GLTF-245`/`GLTF-247`/`GLTF-249` | **Fixed** |
+**Where the regression test is now, and why it is not here.** None of D1–D8 has an inverted
+"known-defect" test any more, and that is deliberate: an inverted test asserts the *bug*, so it has
+to be deleted the day the bug is fixed, which is the day it stops protecting anything. Each record
+instead stays in the corpus ledger as a witness — with the audit's original measurement preserved
+under `priorActual` — while the fixed behaviour is asserted in full by the ordinary green suites
+named below. `GltfKnownDefect.EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere` asserts that
+bookkeeping in both directions, so a record that reopens without a test fails.
+
+| ID | What it did | Fixture | Owning task | Regression test | Status |
+|---|---|---|---|---|---|
+| D1 | Every mesh instance was emitted in mesh-local space with an identity bone, so a mesh instanced by two nodes drew twice at the origin | `xf-shared-mesh` | `GLTF-113`/`GLTF-114` | `GltfConformanceL4`, `GltfModelShape` | **Fixed** |
+| D2 | A parent node's transform never reached its child, so a scaled parent with a translated child placed the child at its own local offset | `xf-parent-child` | `GLTF-113`/`GLTF-114` | `GltfConformanceL4`, `GltfSceneGraphBones` | **Fixed** |
+| D3 | `node.matrix` was discarded entirely — the import data model had nowhere to put it | `xf-matrix-node` | `GLTF-107`/`GLTF-113` | `GltfConformanceL4`, `GltfConventions` | **Fixed** |
+| D4 | A sparse **index** accessor decoded to all zeros: `cgltf_accessor_read_index` returns 0 when the accessor is sparse or has no bufferView, with no error channel, and the caller checked neither | `sparse-indices` | `GLTF-063` | `GltfConformanceL3`, `GltfIndexDecode` | **Fixed** |
+| D5 | `primitive.mode` was never read, so every topology was flattened into an index list all three loaders divided by three and drew as a triangle list — a strip lost every triangle after the first, a point cloud became one arbitrary triangle, and neither warned | `mode-triangle-strip`, `mode-lines`, `mode-points` | `GLTF-071`/`GLTF-072`/`GLTF-073`/`GLTF-078` | `GltfConformanceL3`, `GltfConformanceL5`, `GltfPrimitiveTopology`, `GltfDrawTopology` | **Fixed** |
+| D6 | Rigid (non-joint) node animation was dropped: an unskinned model's clips had nowhere to live | `anim-rigid-node` | `GLTF-294` | `GltfRigidAnimation` | **Fixed** |
+| D7 | A factor-only metallic-roughness material was downgraded to an untextured white `BasicEffect` — the selection rule asked which texture *maps* were present, so a material with every PBR factor and no map could never select `PbrEffect` | `mat-factor-only-gold` | `GLTF-215`/`GLTF-216` | `GltfConformanceL3`, `GltfMaterialState`, `GltfConformanceL6` (`MaterialFactorsReachTheBoundEffect`) | **Fixed** |
+| D8 | `BuildSkeleton` walked parent links only inside the skin's own joint set, so an armature transform above the joints was dropped from the bind pose while the authored `inverseBindMatrices` still contained it | `skin-armature-ancestor` | `GLTF-245`/`GLTF-247`/`GLTF-249` | `GltfSkinSpaces`, `GltfSkinComposition` | **Fixed** |
+
+D7's L6 entry is the one worth reading twice. D7 decoded correctly at L3 for the whole of the audit
+and still rendered opaque white, because nothing assigned the decoded material to an effect — so an
+L3-only regression test would pass while the defect was live. That is why the material rows are
+asserted at the **effect boundary** as well as at import.
 
 Two further defects were found in the **vendored cgltf** rather than in CNA, and are worked around
 CNA-side with the workaround pinned to the vendored behaviour so an upgrade retires both copies:
