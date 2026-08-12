@@ -11,6 +11,7 @@
 #include <SDL3/SDL.h>
 
 #include "CNA/Internal/PathContainment.hpp"
+#include "CNA/Platform.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 
 namespace Microsoft::Xna::Framework::Storage
@@ -85,6 +86,20 @@ namespace Microsoft::Xna::Framework::Storage
                 storageRoot_.pop_back();
             }
             return storageRoot_;
+        }
+
+        // Fallback for Apple targets: ~/Library/Application Support/<app>, the location
+        // SDL_GetPrefPath itself uses there. The XDG layout below is a Linux convention that
+        // exists on neither macOS nor iOS, and on iOS a dot-directory under $HOME is outside the
+        // app's own container, so a save written there would not survive an app update.
+        if constexpr (CNA::isApplePlatform())
+        {
+            const char* appleHome = SDL_getenv("HOME");
+            if (appleHome && *appleHome)
+            {
+                storageRoot_ = (fs::path(appleHome) / "Library" / "Application Support" / app).string();
+                return storageRoot_;
+            }
         }
 
         // Fallback: XDG_DATA_HOME or HOME/.local/share/<app>

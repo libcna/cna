@@ -23,7 +23,15 @@ if(EMSCRIPTEN)
 else()
     # Keyed by target platform/arch so a cross-build (e.g. Windows via mingw-w64) cannot
     # silently overwrite the native build's cached SDL3 install, and vice versa.
-    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+    set(_cna_sdl_key "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+    # iOS device and iOS simulator are the same (system name, processor) pair on Apple silicon --
+    # both "iOS-arm64" -- yet their binaries are not interchangeable (different platform in the
+    # Mach-O build-version load command; linking one into the other is a hard error). The sysroot
+    # is the only thing that distinguishes them, so it joins the key.
+    if(CNA_APPLE_IOS_SIMULATOR)
+        set(_cna_sdl_key "${_cna_sdl_key}-simulator")
+    endif()
+    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-${_cna_sdl_key}")
 endif()
 set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}"
     CACHE PATH "Persistent SDL3 install root (survives cmake --clean and build-tree deletion)")
@@ -86,6 +94,16 @@ function(cna_configure_vendored_sdl)
         set(_sdl_mixer_implib "${_prefix}/lib/SDL3_mixer.lib")
         set(_sdl_shared ON)
         set(_sdl_static OFF)
+    elseif(CNA_APPLE_IOS)
+        # iOS: static only. A dylib inside an .app has to be embedded in Frameworks/, given an
+        # @rpath install name and codesigned separately -- three things the plain
+        # cmake --install used below does not do, and none of which the simulator forgives.
+        # Linking SDL statically keeps the app a single signed Mach-O executable.
+        set(_sdl3_lib      "${_prefix}/lib/libSDL3.a")
+        set(_sdl_image_lib "${_prefix}/lib/libSDL3_image.a")
+        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.a")
+        set(_sdl_shared OFF)
+        set(_sdl_static  ON)
     elseif(APPLE)
         set(_sdl3_lib      "${_prefix}/lib/libSDL3.dylib")
         set(_sdl_image_lib "${_prefix}/lib/libSDL3_image.dylib")
@@ -198,6 +216,32 @@ function(_cna_build_sdl_dep)
         endif()
         if(ANDROID_STL)
             list(APPEND _base_args "-DANDROID_STL=${ANDROID_STL}")
+        endif()
+    endif()
+    if(APPLE)
+        # Same reasoning as the ANDROID block above: each SDL sub-build is a separate cmake
+        # invocation and inherits none of this configure's cache. Without these, an iOS configure
+        # silently builds SDL for the *host* macOS (the toolchain file sets CMAKE_SYSTEM_NAME but
+        # not the sysroot/architecture cache entries the sub-build needs), and the resulting
+        # archive is rejected at link time as "built for macOS" -- or, worse on an Apple silicon
+        # host targeting the simulator, links and then misbehaves. CMAKE_OSX_DEPLOYMENT_TARGET
+        # also has to match, or SDL's objects carry a different minimum-version load command than
+        # CNA's.
+        foreach(_apple_var IN ITEMS
+                CMAKE_OSX_SYSROOT CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TARGET)
+            # if(${_apple_var}) would test the *value* as a condition -- "iphoneos" is not a
+            # defined variable, so it would evaluate false and silently drop the sysroot.
+            set(_apple_value "${${_apple_var}}")
+            if(NOT _apple_value STREQUAL "")
+                list(APPEND _base_args "-D${_apple_var}=${_apple_value}")
+            endif()
+        endforeach()
+        if(CNA_APPLE_IOS)
+            list(APPEND _base_args "-DCMAKE_SYSTEM_NAME=iOS")
+            list(APPEND _base_args "-DCNA_IOS_SIMULATOR=${CNA_IOS_SIMULATOR}")
+            # SDL3_image/SDL3_mixer resolve SDL3 through find_package(SDL3 CONFIG); the iOS
+            # toolchain's re-rooted find rules would otherwise reject the install prefix.
+            list(APPEND _base_args "-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH")
         endif()
     endif()
 

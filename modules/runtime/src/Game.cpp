@@ -4,6 +4,7 @@
 
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Logger.hpp"
+#include "CNA/Platform.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
@@ -117,6 +118,7 @@ namespace Microsoft::Xna::Framework
           suppressDraw_(false),
           isDisposed_(false),
           forceElapsedTimeToZero_(false),
+          isSuspended_(false),
           gameTime_(),
           previousPerformanceCounter_(0),
           accumulatedElapsedTime_(System::TimeSpan::Zero),
@@ -849,11 +851,31 @@ namespace Microsoft::Xna::Framework
 #else
         while (RunApplication)
         {
+            // plan_apple.md APPLE-7: a backgrounded mobile application keeps its main thread
+            // alive but must neither render nor burn CPU. isMobilePlatform() is a
+            // compile-time constant, so desktop builds keep the plain Tick() loop unchanged.
+            if (CNA::isMobilePlatform() && isSuspended_)
+            {
+                WaitWhileSuspended();
+                continue;
+            }
+
             Tick();
         }
 
         OnExiting(this, System::EventArgs::Empty);
 #endif
+    }
+
+    void Game::WaitWhileSuspended()
+    {
+        // A null event argument makes SDL block until something arrives without consuming it,
+        // so PollEvents() below still sees the whole queue and keeps event handling in one
+        // place. The timeout bounds the wait: SDL delivers the resume event on this same queue,
+        // but a process killed while suspended must not hang here if it never arrives.
+        constexpr std::int32_t suspendedWaitTimeoutMs = 250;
+        SDL_WaitEventTimeout(nullptr, suspendedWaitTimeoutMs);
+        PollEvents();
     }
 
     System::TimeSpan Game::AdvanceElapsedTime()
@@ -936,6 +958,42 @@ namespace Microsoft::Xna::Framework
 
                 case SDL_EVENT_DID_ENTER_FOREGROUND:
                     setIsActiveProperty(true);
+                    break;
+
+                // Mobile lifecycle (plan_apple.md APPLE-7) — deviation from FNA, which
+                // tracks only IsActive on the two events above. iOS terminates an application
+                // that submits GPU work after it has entered the background, and Android
+                // destroys the rendering surface at the same point, so the loop must actually
+                // stop between these two events rather than keep drawing into a dead surface.
+                // Set on every platform, acted upon only where SDL raises the events (mobile).
+                case SDL_EVENT_DID_ENTER_BACKGROUND:
+                    isSuspended_ = true;
+                    setIsActiveProperty(false);
+                    break;
+
+                case SDL_EVENT_WILL_ENTER_FOREGROUND:
+                    isSuspended_ = false;
+                    // The suspension was not gameplay time. Restarting the performance counter
+                    // makes the first frame after the resume measure only itself, instead of
+                    // the whole background period clamped to MaxElapsedTime (which would run a
+                    // burst of catch-up Updates before the first visible frame).
+                    previousPerformanceCounter_ = 0;
+                    accumulatedElapsedTime_ = System::TimeSpan::Zero;
+                    ResetElapsedTime();
+                    break;
+
+                // The operating system is about to kill the process (iOS/Android): this is the
+                // last event the application ever receives, so the loop has to end here for
+                // OnExiting to run at all.
+                case SDL_EVENT_TERMINATING:
+                    Exit();
+                    break;
+
+                // Mobile memory pressure. The game itself decides what to release (there is no
+                // XNA hook for it), but the warning belongs in the log: on iOS the next step
+                // after this event is usually the operating system killing the process.
+                case SDL_EVENT_LOW_MEMORY:
+                    CNA::Logger::Warn("Game: the operating system reported low memory.");
                     break;
 
                 // Desktop focus switch (e.g. Alt-Tab), as opposed to the mobile-style

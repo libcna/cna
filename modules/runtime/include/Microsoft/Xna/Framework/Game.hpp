@@ -352,6 +352,11 @@ namespace Microsoft::Xna::Framework
         bool isDisposed_;
         bool forceElapsedTimeToZero_;
 
+        // Mobile lifecycle (plan_apple.md APPLE-7): true between the operating system's
+        // "did enter background" and "will enter foreground" notifications. Only ever set on
+        // Android and iOS -- SDL raises those events on no other platform.
+        bool isSuspended_;
+
         GameTime gameTime_;
         std::uint64_t previousPerformanceCounter_;
         System::TimeSpan accumulatedElapsedTime_;
@@ -382,6 +387,7 @@ namespace Microsoft::Xna::Framework
         System::TimeSpan AdvanceElapsedTime();
         void UpdateEstimatedSleepPrecision(const System::TimeSpan& timeSpentSleeping);
         void PollEvents();
+        void WaitWhileSuspended();
 
         void OnComponentAdded(System::Object* sender, const GameComponentCollectionEventArgs& args);
         void OnComponentRemoved(System::Object* sender, const GameComponentCollectionEventArgs& args);

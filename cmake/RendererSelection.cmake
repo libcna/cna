@@ -361,11 +361,26 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "GLIDE" AND NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
         "Windows toolchain, for example cmake/toolchains/mingw-w64-i686.cmake.")
 endif()
 
+# plan_apple.md APPLE-4: an iOS configure is rejected here unless CNA actually wires the selected
+# renderer up for iOS. This runs before the individual per-renderer gates below so the failure
+# names the platform rather than a dependency that was never configured for an iOS sysroot.
+# No-op on macOS and on every non-Apple target.
+cna_apple_validate_renderer("${CNA_GRAPHICS_RENDERER}")
+
 # Native Metal is currently available only when targeting macOS. SDL is used only for
 # window/CAMetalLayer integration; all rendering is performed directly through Metal.
+# iOS is Metal's other natural home and the Apple allow-list above already refuses it by default;
+# CNA_APPLE_ALLOW_UNVALIDATED_RENDERER=ON is the single documented escape hatch for experimenting
+# with it there (plan_apple.md APPLE-11), and changes nothing about what is supported.
 if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    message(FATAL_ERROR
-        "CNA: METAL renderer is currently supported only on macOS; iOS and tvOS remain unvalidated.")
+    if(CNA_APPLE_IOS AND CNA_APPLE_ALLOW_UNVALIDATED_RENDERER)
+        message(WARNING
+            "CNA: configuring METAL for iOS. The renderer's supported contract covers macOS only "
+            "(docs/metal-renderer.md); its iOS build has no compile, runtime or pixel evidence.")
+    else()
+        message(FATAL_ERROR
+            "CNA: METAL renderer is currently supported only on macOS; iOS and tvOS remain unvalidated.")
+    endif()
 endif()
 
 # plan_canvas.md design decision 1: HTML Canvas 2D is a browser DOM API and cannot exist outside

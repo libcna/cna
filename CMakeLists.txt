@@ -71,6 +71,11 @@ set_property(CACHE CNA_DIRECT2D_TEST_RUNTIME PROPERTY STRINGS WINE PROTON)
 # suite against a virtual display (Xvfb) instead of the real desktop.
 set(CNA_TEST_DISPLAY ":0" CACHE STRING "DISPLAY value used by GPU/window-creating ctest tests")
 
+# Apple platform resolution (macOS/iOS, plan_apple.md). Must run before the vendored SDL builds
+# below: those are separate cmake invocations that inherit nothing from this cache, so the
+# sysroot/architecture/deployment target this file settles has to exist before they are launched.
+include(cmake/ApplePlatform.cmake)
+
 include(cmake/ThirdPartySDL.cmake)
 cna_configure_vendored_sdl()
 
@@ -154,3 +159,10 @@ include(cmake/UnitTests.cmake)
 
 # Minimal-link module probes + renderer-identity registry gate (MODULARIZATION_PLAN.md §4).
 include(cmake/Tests/ModuleProbes.cmake)
+
+# Apple bundle sweep (plan_apple.md, APPLE-3). Every executable target in the tree -- examples,
+# tools, tests -- is registered by now, so this is the one place that can hand each of them the
+# Info.plist/signing configuration an iOS product cannot launch without, and the only alternative
+# to editing ~200 module-local example registrations that know nothing about Apple. No-op on
+# every non-Apple target, and on macOS unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES is on.
+cna_apple_configure_all_bundles()

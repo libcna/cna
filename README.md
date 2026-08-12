@@ -104,6 +104,10 @@ ctest --test-dir build --output-on-failure
 - **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
   architecturally planned — see section 7 (Networking, Services & Avatar) below for real
   cross-platform `Net` verification on both.
+- **macOS** is a supported desktop target with its own CI gate; **iOS/iPadOS** is a
+  build-configuration target — toolchain, `.app` bundling, application lifecycle and renderer
+  gating exist and cross-compile in CI, but nothing has been run on a device or simulator. The
+  boundary is stated per claim in [`docs/apple-platforms.md`](docs/apple-platforms.md).
 
 ### Performance / C++ Advantages
 
@@ -397,6 +401,37 @@ cmake -S . -B build-windows \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
 cmake --build build-windows --target CNA CnaTests
+```
+
+### Build (macOS)
+
+```bash
+brew install ccache ffmpeg
+git submodule update --init
+
+cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+cmake --build cmake-build-macos --target CNA CnaTests --parallel 4
+```
+
+`METAL` is available here as well (`-DCNA_GRAPHICS_RENDERER=METAL`); its own supported contract is
+narrower than "it builds" — see [`docs/metal-renderer.md`](docs/metal-renderer.md).
+
+### Build (macOS → iOS / iPadOS cross-compilation)
+
+Requires a macOS host with Xcode. This produces `.app` bundles for the device or the simulator;
+it has never been run on either — see [`docs/apple-platforms.md`](docs/apple-platforms.md) for
+exactly what is and is not claimed.
+
+```bash
+cmake -S . -B cmake-build-ios \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+      -DCNA_GRAPHICS_RENDERER=SDL_RENDERER \
+      -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
+cmake --build cmake-build-ios --parallel 4
+
+# Simulator: add -DCNA_IOS_SIMULATOR=ON (use a separate build directory).
+# Device deployment needs the Xcode generator and a team id:
+#   -G Xcode -DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID>
 ```
 
 ### Optional: use system-installed SDL

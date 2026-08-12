@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "CNA/Platform.hpp"
+
 namespace Microsoft::Xna::Framework
 {
     namespace
@@ -19,6 +21,43 @@ namespace Microsoft::Xna::Framework
         bool hasFlag(DisplayOrientation value, DisplayOrientation flag)
         {
             return (static_cast<int>(value) & static_cast<int>(flag)) != 0;
+        }
+
+        // plan_apple.md APPLE-15. On a desktop the supported-orientation set is CNA's own
+        // bookkeeping, but on iOS and Android the operating system decides whether the device may
+        // rotate at all, and SDL_HINT_ORIENTATIONS is the only channel it reads: SDL's UIKit view
+        // controller consults the hint every time UIKit asks which orientations the application
+        // accepts. Without this, XNA's SupportedOrientations would silently mean nothing on the
+        // one platform family it was designed for.
+        //
+        // iOS intersects this with the UISupportedInterfaceOrientations array in the bundle's
+        // Info.plist (cmake/AppleInfo.iOS.plist.in), which is the outer bound; the hint can
+        // narrow that set at run time but never widen it.
+        void applySupportedOrientationsHint(DisplayOrientation orientations)
+        {
+            if (!CNA::isMobilePlatform())
+            {
+                return;
+            }
+
+            std::string hint;
+            if (hasFlag(orientations, DisplayOrientation::LandscapeLeft))
+            {
+                hint += "LandscapeLeft ";
+            }
+            if (hasFlag(orientations, DisplayOrientation::LandscapeRight))
+            {
+                hint += "LandscapeRight ";
+            }
+            if (hasFlag(orientations, DisplayOrientation::Portrait))
+            {
+                hint += "Portrait ";
+            }
+
+            // DisplayOrientation::Default (no flag set) means "the game does not care"; clearing
+            // the hint hands the decision back to the platform rather than pinning it to nothing,
+            // which SDL would read as "no orientation is acceptable".
+            SDL_SetHint(SDL_HINT_ORIENTATIONS, hint.c_str());
         }
     }
 
@@ -248,6 +287,7 @@ namespace Microsoft::Xna::Framework
     void GameWindow::SetSupportedOrientations(DisplayOrientation orientations)
     {
         supportedOrientations_ = orientations;
+        applySupportedOrientationsHint(orientations);
 
         if (!orientationIsSupported(currentOrientation_))
         {

@@ -1,0 +1,198 @@
+name: Apple platforms (macOS + iOS)
+
+# plan_apple.md APPLE-9. Four legs, deliberately unequal in what they claim:
+#
+#   apple-cmake-check — Linux, seconds, no Apple hardware: proves the Apple CMake layer still
+#                   parses and that the iOS allow-list accepts/refuses/overrides as documented.
+#   macos-build   — native macOS build + the portable test suites that do not need a GPU.
+#                   This is a real gate: a green run is evidence that CNA builds and its
+#                   platform/storage contracts hold on macOS.
+#   ios-device    — cross-compile for arm64 iPhone/iPad. Build-only, and that is the entire
+#   ios-simulator   claim: nothing here launches an app, renders a pixel or runs a test. See
+#                   docs/apple-platforms.md for the iOS evidence boundary.
+#
+# The Metal renderer keeps its own dedicated workflow (metal-macos-ci.yml); this one covers the
+# platform layer underneath every renderer.
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apple-ci.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/ApplePlatform.cmake'
+      - 'cmake/AppleInfo.*.plist.in'
+      - 'cmake/toolchains/ios.cmake'
+      - 'cmake/ThirdPartySDL.cmake'
+      - 'cmake/RendererSelection.cmake'
+      - 'cmake/UnitTests.cmake'
+      - 'modules/CMakeLists.txt'
+      - 'modules/core/include/CNA/Platform.hpp'
+      - 'modules/core/include/CNA/Entrypoint.hpp'
+      - 'modules/core/src/DesktopOS.cpp'
+      - 'modules/core/tests/CNA/PlatformTests.cpp'
+      - 'modules/runtime/src/Game.cpp'
+      - 'modules/runtime/src/GameWindow.cpp'
+      - 'modules/runtime/tests/Microsoft/Xna/Framework/GameWindowTests.cpp'
+      - 'modules/storage/src/StorageDevice.cpp'
+      - 'scripts/check-apple-platform-cmake.sh'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Runs on Linux in seconds and needs no Apple hardware at all. The Apple platform layer is the
+  # one part of the build a non-Apple developer can never reach by configuring the project (every
+  # line is behind if(APPLE)), so this is the cheap gate that keeps it from rotting between the
+  # far more expensive macOS runs below.
+  apple-cmake-check:
+    name: Apple CMake layer (host-portable)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+
+      - name: Smoke-check cmake/ApplePlatform.cmake
+        run: ./scripts/check-apple-platform-cmake.sh
+
+  macos-build:
+    name: macOS (SDL_RENDERER, portable suites)
+    runs-on: macos-14
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Checkout sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+
+      - name: Install build dependencies
+        run: brew install ccache ffmpeg
+
+      - name: Configure
+        working-directory: cna
+        run: >
+          cmake -S . -B cmake-build-macos
+          -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+          -DCNA_BUILD_TESTS=ON
+          -DCNA_BUILD_EXAMPLES=OFF
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build test suite
+        working-directory: cna
+        run: cmake --build cmake-build-macos --target CnaTests --parallel 3
+
+      # The CnaTests binary is run directly rather than through ctest: ctest spawns one process
+      # per case, which races the tests that share fixture paths (see CMakePresets.json's "tests"
+      # preset description).
+      #
+      # The video driver is deliberately left alone. A hosted macOS runner has a real window
+      # server (the Metal workflow's GPU tests depend on it), and the window-creating cases here
+      # skip themselves cleanly if SDL video init ever fails. Forcing SDL_VIDEODRIVER=dummy would
+      # be worse than either outcome: the dummy driver accepts window creation but rejects
+      # minimize/restore, turning a skip into a failure that says nothing about macOS.
+      - name: Run platform and storage suites
+        working-directory: cna
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: >
+          ./cmake-build-macos/CnaTests
+          --gtest_filter='PlatformTest.*:GameWindowTest.*:Storage*:*DesktopOS*'
+
+  ios-build:
+    name: iOS ${{ matrix.name }} (build only)
+    runs-on: macos-14
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: device
+            simulator: 'OFF'
+            build_dir: cmake-build-ios
+          - name: simulator
+            simulator: 'ON'
+            build_dir: cmake-build-ios-sim
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Checkout sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+
+      - name: Install build dependencies
+        run: brew install ccache
+
+      # Tests and examples are off: CnaTests is a console gtest binary that an app-sandboxed iOS
+      # process cannot run the way CI would need to, and the examples' fixtures assume a
+      # desktop filesystem layout. What this leg proves is that the library itself cross-compiles.
+      - name: Configure
+        working-directory: cna
+        run: >
+          cmake -S . -B ${{ matrix.build_dir }}
+          -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake
+          -DCNA_IOS_SIMULATOR=${{ matrix.simulator }}
+          -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+          -DCNA_BUILD_TESTS=OFF
+          -DCNA_BUILD_EXAMPLES=OFF
+          -DCNA_ENABLE_NET=OFF
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      # The default target, not `--target CNA`: the CNA umbrella is an INTERFACE library and has
+      # no build rule of its own. With tests and examples off, the default target is exactly the
+      # set of module archives plus the selected renderer.
+      - name: Build CNA
+        working-directory: cna
+        run: cmake --build ${{ matrix.build_dir }} --parallel 3
+
+      # A wrong-platform object file links fine into a static archive and only explodes when an
+      # application is linked, which this leg never does. Reading the Mach-O platform back off
+      # the archive is what actually catches an accidental macOS build wearing an iOS build
+      # directory's name.
+      - name: Verify the archive really targets iOS
+        working-directory: cna
+        run: |
+          set -euo pipefail
+          archive="$(find ${{ matrix.build_dir }} -name 'libcna_core.a' -print -quit)"
+          if [ -z "$archive" ]; then
+            echo "libcna_core.a not found under ${{ matrix.build_dir }}" >&2
+            exit 1
+          fi
+          echo "Inspecting $archive"
+          platform="$(otool -l "$archive" | grep -m1 -A3 LC_BUILD_VERSION | grep platform || true)"
+          echo "$platform"
+          case "${{ matrix.simulator }}" in
+            ON)  expected='platform 7' ;;   # PLATFORM_IOSSIMULATOR
+            OFF) expected='platform 2' ;;   # PLATFORM_IOS
+          esac
+          echo "$platform" | grep -q "$expected" || {
+            echo "expected $expected in the Mach-O build-version load command" >&2
+            exit 1
+          }

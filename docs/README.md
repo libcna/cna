@@ -106,6 +106,10 @@ Kept for their investigation methodology and root-cause detail, not as current s
 
 - `android-graphics-limitations.md`, `web-emscripten-graphics-limitations.md` — per-platform
   Graphics constraints (Emscripten, Android NDK).
+- **[`apple-platforms.md`](apple-platforms.md)** — macOS and iOS: build instructions, the iOS
+  renderer allow-list, bundle/lifecycle/storage behavior, and an explicit per-claim evidence
+  boundary (macOS is a CI-gated desktop target; iOS is a build-configuration target that has
+  never been run on a device or simulator). Task breakdown is in `../plan_apple.md`.
 - `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
 - **[`skia-renderer.md`](skia-renderer.md)** — the experimental Skia CPU-raster 2D renderer; unlike
   an accelerated Skia/GPU path, only its evidence-linked bounded feature table is advertised.

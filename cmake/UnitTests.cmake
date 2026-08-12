@@ -63,7 +63,9 @@ if(CNA_BUILD_TESTS)
     # multi-process spawning exists in a single Node.js/Wasm module. Also excluded on Android: the
     # harness path baked in via CNA_NET_HARNESS_PATH is an absolute path on the build machine, not
     # the on-device filesystem, and CnaTests is run as a bare pushed executable, not a packaged app
-    # with its own bundled assets. Not part of the Task 6.2/6.4 verification filters
+    # with its own bundled assets. iOS (plan_apple.md APPLE-5) is excluded for both of those
+    # reasons at once: an app-sandboxed process may not spawn another executable at all, and the
+    # baked-in build-machine harness path does not exist inside the .app either. Not part of the Task 6.2/6.4 verification filters
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
     # plan_dx1.md DX1-88 regression pass: found and fixed a pre-existing, not-DX1-specific gap --
     # this glob picks up ENet-specific tests unconditionally, but those files include
@@ -92,7 +94,7 @@ if(CNA_BUILD_TESTS)
         unset(_cna_disabled_net_test)
     endif()
 
-    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
         # GamerServicesDispatcherHangRegressionTest.cpp (Task 12.1) uses the same POSIX-only
         # posix_spawn/sys-wait process APIs, for the same reasons — see TwoProcessLoopbackTest's
@@ -106,14 +108,14 @@ if(CNA_BUILD_TESTS)
     # Excluded on the same platforms and for the same reasons (no real process spawning in a
     # single Node.js/Wasm module; CNA_AUDIO_NO_HARDWARE_HARNESS_PATH is a build-machine absolute
     # path, meaningless on-device on Android).
-    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Audio/AudioMixerTests\\.cpp$")
     endif()
 
     # GltfToCnjToolTests.cpp (plan_cnj.md CNB-52) uses the same POSIX-only posix_spawn/sys-wait
     # process APIs to spawn cna_tool_gltf_to_cnj as an independent OS process, for the same
     # reasons as the harness-spawning tests above.
-    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/Content/GltfToCnjToolTests\\.cpp$")
     endif()
 
@@ -121,7 +123,7 @@ if(CNA_BUILD_TESTS)
     # (posix_spawn, poll, sys/wait.h) to spawn tools/devices/shutdown_ordering_harness.cpp as an
     # independent OS process, for the same reason TwoProcessLoopbackTest.cpp needs one above.
     # Excluded on the same platforms and for the same reasons.
-    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 

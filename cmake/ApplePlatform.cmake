@@ -1,0 +1,241 @@
+# --- Apple platform support (macOS + iOS) — plan_apple.md ---
+#
+# This file owns everything that is true for an Apple target *before* a renderer is chosen:
+# which Apple platform the configure is targeting, the deployment-target/architecture defaults,
+# the bundle metadata every iOS product is required to carry, and the renderer allow-list that
+# keeps an impossible iOS configuration from reaching the compiler.
+#
+# It is included from the top-level CMakeLists.txt BEFORE cna_configure_vendored_sdl(), because
+# the vendored SDL sub-builds are separate cmake invocations that must inherit the same
+# sysroot/architecture/deployment target this file settles (see cmake/ThirdPartySDL.cmake).
+#
+# Support boundary (docs/apple-platforms.md): macOS is a first-class desktop target with a
+# GitHub Actions gate. iOS is a *build-configuration* target — the toolchain, bundle layout,
+# vendored SDL sub-builds and renderer gating are wired and CI-compiled, but no CNA runtime,
+# pixel or device evidence exists for it. Nothing here claims iOS runtime support.
+
+include_guard(GLOBAL)
+
+set(CNA_APPLE OFF)
+set(CNA_APPLE_MACOS OFF)
+set(CNA_APPLE_IOS OFF)
+set(CNA_APPLE_IOS_SIMULATOR OFF)
+set(CNA_APPLE_TARGET "NONE")
+
+if(APPLE)
+    set(CNA_APPLE ON)
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        set(CNA_APPLE_MACOS ON)
+        set(CNA_APPLE_TARGET "MACOS")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        set(CNA_APPLE_IOS ON)
+        set(CNA_APPLE_TARGET "IOS")
+    else()
+        # tvOS/watchOS/visionOS share the Darwin toolchain but nothing in this project has ever
+        # been configured, built or reasoned about for them. Fail loudly instead of letting a
+        # macOS-shaped configuration silently pretend to target them.
+        message(FATAL_ERROR
+            "CNA: Apple target '${CMAKE_SYSTEM_NAME}' is not supported. CNA supports macOS "
+            "(CMAKE_SYSTEM_NAME=Darwin) and iOS (CMAKE_SYSTEM_NAME=iOS, normally through "
+            "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake).")
+    endif()
+
+    # The simulator and the device are the same CMAKE_SYSTEM_NAME/architecture pair on Apple
+    # silicon (iOS + arm64) and are distinguishable only by sysroot. Everything downstream that
+    # must not mix the two — most importantly the persistent SDL install root — keys off this.
+    #
+    # CNA_IOS_SIMULATOR (the toolchain file's own option) is the *request*; CNA_APPLE_IOS_SIMULATOR
+    # below is the *observed truth*, derived from the sysroot actually in effect. They differ when
+    # a caller passes -DCMAKE_OSX_SYSROOT directly, and the derived one is the one to trust.
+    if(CNA_APPLE_IOS AND CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+        set(CNA_APPLE_IOS_SIMULATOR ON)
+        set(CNA_APPLE_TARGET "IOS_SIMULATOR")
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# Deployment targets
+# ---------------------------------------------------------------------------
+# CNA is a C++23 codebase, so the floor is set by what Apple's libc++ actually ships. The hard
+# boundary is macOS 10.15 / iOS 13, where the system libc++ gained the C++17 filesystem symbols
+# this project uses unconditionally -- below it, links fail on missing symbols rather than
+# producing a working older binary. macOS 11 is chosen over 10.15 because it is also the first
+# release covering both Intel and Apple silicon. Override with -DCNA_MACOS_DEPLOYMENT_TARGET=… /
+# -DCNA_IOS_DEPLOYMENT_TARGET=…, or bypass both with -DCMAKE_OSX_DEPLOYMENT_TARGET=… .
+set(CNA_MACOS_DEPLOYMENT_TARGET "11.0" CACHE STRING
+    "Minimum macOS version CNA products are built for (CMAKE_OSX_DEPLOYMENT_TARGET default)")
+set(CNA_IOS_DEPLOYMENT_TARGET "13.0" CACHE STRING
+    "Minimum iOS version CNA products are built for (CMAKE_OSX_DEPLOYMENT_TARGET default)")
+
+if(CNA_APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    if(CNA_APPLE_IOS)
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "${CNA_IOS_DEPLOYMENT_TARGET}" CACHE STRING
+            "Minimum Apple OS version" FORCE)
+    else()
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "${CNA_MACOS_DEPLOYMENT_TARGET}" CACHE STRING
+            "Minimum Apple OS version" FORCE)
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# Bundle identity
+# ---------------------------------------------------------------------------
+set(CNA_APPLE_BUNDLE_IDENTIFIER_PREFIX "com.openeggbert.cna" CACHE STRING
+    "Reverse-DNS prefix for generated CFBundleIdentifier values (<prefix>.<target>)")
+set(CNA_APPLE_BUNDLE_VERSION "1.0.0" CACHE STRING
+    "CFBundleShortVersionString/CFBundleVersion written into generated Info.plist files")
+set(CNA_APPLE_DEVELOPMENT_TEAM "" CACHE STRING
+    "Apple Developer Team ID used to codesign iOS products; empty disables signing (simulator, CI)")
+option(CNA_APPLE_BUNDLE_MACOS_EXECUTABLES
+    "Emit macOS executables as .app bundles instead of plain command-line binaries" OFF)
+
+# ---------------------------------------------------------------------------
+# cna_apple_configure_bundle(<target>)
+# ---------------------------------------------------------------------------
+# Gives one executable target the Info.plist and signing configuration its Apple platform
+# requires. On iOS this is mandatory: a bare Mach-O executable is not installable and SDL's
+# UIKit entry point has nowhere to read the bundle metadata from. On macOS it is opt-in
+# (CNA_APPLE_BUNDLE_MACOS_EXECUTABLES) because every example, tool and ctest binary in this
+# repository is invoked by path, which a .app layout would break.
+function(cna_apple_configure_bundle target)
+    if(NOT CNA_APPLE)
+        return()
+    endif()
+    if(NOT TARGET ${target})
+        message(FATAL_ERROR "cna_apple_configure_bundle: no such target '${target}'")
+    endif()
+    get_target_property(_type ${target} TYPE)
+    if(NOT _type STREQUAL "EXECUTABLE")
+        return()
+    endif()
+    if(CNA_APPLE_MACOS AND NOT CNA_APPLE_BUNDLE_MACOS_EXECUTABLES)
+        return()
+    endif()
+
+    # CFBundleIdentifier must be a valid reverse-DNS string: only alphanumerics, '-' and '.'.
+    # CNA target names use underscores (cna_house3d_demo), which Apple rejects.
+    string(REPLACE "_" "-" _bundle_suffix "${target}")
+
+    if(CNA_APPLE_IOS)
+        set(_plist "${CMAKE_SOURCE_DIR}/cmake/AppleInfo.iOS.plist.in")
+    else()
+        set(_plist "${CMAKE_SOURCE_DIR}/cmake/AppleInfo.macOS.plist.in")
+    endif()
+
+    set_target_properties(${target} PROPERTIES
+        MACOSX_BUNDLE                       TRUE
+        MACOSX_BUNDLE_INFO_PLIST            "${_plist}"
+        MACOSX_BUNDLE_BUNDLE_NAME           "${target}"
+        MACOSX_BUNDLE_EXECUTABLE_NAME       "${target}"
+        MACOSX_BUNDLE_GUI_IDENTIFIER        "${CNA_APPLE_BUNDLE_IDENTIFIER_PREFIX}.${_bundle_suffix}"
+        MACOSX_BUNDLE_BUNDLE_VERSION        "${CNA_APPLE_BUNDLE_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING  "${CNA_APPLE_BUNDLE_VERSION}"
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+            "${CNA_APPLE_BUNDLE_IDENTIFIER_PREFIX}.${_bundle_suffix}")
+
+    if(CNA_APPLE_IOS)
+        if(CNA_APPLE_DEVELOPMENT_TEAM)
+            set_target_properties(${target} PROPERTIES
+                XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${CNA_APPLE_DEVELOPMENT_TEAM}")
+        else()
+            # No team ID: the product is still a well-formed .app that runs on the simulator and
+            # builds in CI, it simply cannot be installed on a device until it is signed.
+            set_target_properties(${target} PROPERTIES
+                XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
+                XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED  "NO"
+                XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY    "")
+        endif()
+    endif()
+endfunction()
+
+# ---------------------------------------------------------------------------
+# cna_apple_configure_all_bundles()
+# ---------------------------------------------------------------------------
+# CNA has ~200 executable targets spread over every module's examples/ directory, none of which
+# knows anything about Apple. Rather than editing each one, the top-level CMakeLists sweeps the
+# finished buildsystem once and hands every executable its bundle configuration.
+function(cna_apple_configure_all_bundles)
+    if(NOT CNA_APPLE)
+        return()
+    endif()
+    if(CNA_APPLE_MACOS AND NOT CNA_APPLE_BUNDLE_MACOS_EXECUTABLES)
+        return()
+    endif()
+    _cna_apple_configure_bundles_in_directory("${CMAKE_SOURCE_DIR}")
+endfunction()
+
+function(_cna_apple_configure_bundles_in_directory dir)
+    get_property(_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_target IN LISTS _targets)
+        cna_apple_configure_bundle(${_target})
+    endforeach()
+
+    get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach(_subdir IN LISTS _subdirs)
+        _cna_apple_configure_bundles_in_directory("${_subdir}")
+    endforeach()
+endfunction()
+
+# ---------------------------------------------------------------------------
+# iOS renderer allow-list
+# ---------------------------------------------------------------------------
+# Called from cmake/RendererSelection.cmake once CNA_GRAPHICS_RENDERER is known. Renderers
+# outside this list are not "probably broken" — they need a windowing/GL/native API that does not
+# exist on iOS (desktop OpenGL, Direct3D, GDI, Glide, a browser DOM), or a third-party dependency
+# this project has never configured for an iOS sysroot (Skia, Wicked, Diligent, bgfx, MoltenVK,
+# wgpu-native, LLGL, sokol, Magnum, FNA3D). Configuring them would fail deep inside a dependency
+# build with an unreadable error; this fails immediately with a readable one.
+#
+# Being on the list means CNA wires the renderer up for iOS and CI compiles it. It does not mean
+# the renderer has been observed producing correct pixels on a device or simulator — see
+# docs/apple-platforms.md for the per-renderer evidence boundary.
+set(CNA_APPLE_IOS_RENDERERS
+    "HEADLESS"      # no window, no GPU — portable by construction
+    "SOFTWARE"      # CPU rasterizer into an SDL surface
+    "STUB"          # records calls, draws nothing
+    "SDL_RENDERER"  # SDL3's own 2D renderer; Metal-backed on iOS
+    "SDL_GPU"       # SDL3 GPU API; Metal-backed on iOS
+    "OPENGLES2"     # EasyGL over an SDL GL ES context
+    "OPENGLES3"     # EasyGL over an SDL GL ES context
+    CACHE INTERNAL "Renderers CNA wires up for an iOS build")
+
+option(CNA_APPLE_ALLOW_UNVALIDATED_RENDERER
+    "Allow selecting a renderer outside the iOS allow-list (experimentation only; expect build failures)"
+    OFF)
+
+function(cna_apple_validate_renderer renderer)
+    if(NOT CNA_APPLE_IOS)
+        return()
+    endif()
+
+    # list(FIND) rather than IN_LIST: this file is also parsed in cmake -P script mode by the
+    # Apple smoke check, where policy CMP0057 (the one that turns IN_LIST into an operator) is
+    # unset and the if() would be a hard error.
+    list(FIND CNA_APPLE_IOS_RENDERERS "${renderer}" _renderer_index)
+    if(NOT _renderer_index EQUAL -1)
+        message(STATUS
+            "CNA: iOS build using ${renderer} — build-configuration support only, no device or "
+            "simulator runtime evidence (docs/apple-platforms.md).")
+        return()
+    endif()
+
+    if(CNA_APPLE_ALLOW_UNVALIDATED_RENDERER)
+        message(WARNING
+            "CNA: ${renderer} is outside the iOS allow-list (${CNA_APPLE_IOS_RENDERERS}) and is "
+            "being configured only because CNA_APPLE_ALLOW_UNVALIDATED_RENDERER=ON. The build is "
+            "expected to fail; nothing about this configuration is supported.")
+        return()
+    endif()
+
+    message(FATAL_ERROR
+        "CNA: ${renderer} cannot target iOS. CNA wires up these renderers for iOS: "
+        "${CNA_APPLE_IOS_RENDERERS}. Pass -DCNA_APPLE_ALLOW_UNVALIDATED_RENDERER=ON to attempt "
+        "another one anyway (unsupported, expect build failures) — see docs/apple-platforms.md.")
+endfunction()
+
+if(CNA_APPLE)
+    message(STATUS
+        "CNA: Apple target ${CNA_APPLE_TARGET} "
+        "(deployment target ${CMAKE_OSX_DEPLOYMENT_TARGET}, sysroot '${CMAKE_OSX_SYSROOT}')")
+endif()
