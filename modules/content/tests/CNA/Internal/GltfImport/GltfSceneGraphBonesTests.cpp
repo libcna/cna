@@ -27,6 +27,8 @@
 // asserts CNA does the second. GLTF-260 is what proves the mesh-space cancellation then happens
 // exactly once; until it lands, D8 keeps that half open.
 
+#include <algorithm>
+#include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 #include <cmath>
 #include <filesystem>
 #include <stdexcept>
@@ -1013,4 +1015,69 @@ TEST(GltfSkinSpaces, AnAncestorAboveTheDeclaredRootStillContributesItsTransform)
     EXPECT_NEAR(0.0f, skinned.Y, kTolerance)
         << "the vertex sits " << skinned.Y << " in Y -- an ancestor above the declared root was lost";
     EXPECT_NEAR(0.0f, skinned.Z, kTolerance);
+}
+
+// --- plan_gltf.md GLTF-281 / GLTF-282: node.weights, and two instances that differ -----------------
+
+// §3.7.2.2 gives the instancing node the final say, and OVERRIDE is the operative word: node A
+// declaring [1] and node B declaring [0] for a mesh whose own weights are [0.5] must start at 1 and
+// 0 -- not 1.5 and 0.5, and not both at the mesh's own value. node.weights was read by nobody, so
+// every instance wore the mesh's expression.
+TEST(GltfMorphWeights, NodeWeightsOverrideTheMeshsOwnRatherThanMergingWithThem)
+{
+    using Microsoft::Xna::Framework::Graphics::MorphTargetDataEXT;
+
+    const LoadedFixture fixture("morph-node-weights-override");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& morph = Path(fixture.Expected(), "l4.morph");
+    const std::vector<double> meshWeights = Numbers(Member(morph, "meshWeights"));
+    ASSERT_EQ(1u, meshWeights.size());
+
+    const CNA::Internal::JsonValue& instances = Member(morph, "instances");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, instances.type);
+    ASSERT_EQ(2u, instances.arrayValue.size());
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("morph-node-weights-override");
+
+    // GLTF-282: MorphTargetDataEXT is per PART, so two instances can only differ if the importer
+    // builds a part per instance. Two parts is therefore the precondition for the whole test.
+    std::vector<MorphTargetDataEXT*> morphs;
+    const auto& meshes = model.getMeshesProperty();
+    for (int mi = 0; mi < meshes.getCountProperty(); ++mi)
+    {
+        const auto& parts = meshes[mi]->getMeshPartsProperty();
+        for (int pi = 0; pi < parts.getCountProperty(); ++pi)
+        {
+            if (auto* data = dynamic_cast<MorphTargetDataEXT*>(parts[pi]->getTagProperty()))
+            {
+                morphs.push_back(data);
+            }
+        }
+    }
+    ASSERT_EQ(2u, morphs.size())
+        << "the two instances did not produce two parts, so they cannot hold different weights";
+
+    // Each instance carries its own node's weights, and neither carries the mesh's.
+    std::vector<float> seen;
+    for (const MorphTargetDataEXT* data : morphs)
+    {
+        ASSERT_EQ(1u, data->Weights.size());
+        seen.push_back(data->Weights[0]);
+    }
+    std::sort(seen.begin(), seen.end());
+    EXPECT_NEAR(0.0f, seen[0], kTolerance);
+    EXPECT_NEAR(1.0f, seen[1], kTolerance);
+    // The three ways this could go wrong, each named: merged, mesh-only, or collapsed to one value.
+    EXPECT_NE(seen[0], seen[1]) << "both instances got the same weight -- node.weights was ignored";
+    for (const float w : seen)
+    {
+        EXPECT_NE(static_cast<float>(meshWeights[0]), w)
+            << "an instance kept the MESH's weight -- node.weights did not override it";
+        EXPECT_LE(w, 1.0f)
+            << "a weight exceeds 1 -- node.weights was merged with the mesh's instead of "
+               "replacing it";
+    }
 }

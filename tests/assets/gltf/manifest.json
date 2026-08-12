@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 35,
+  "distinctAssetCount": 36,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
@@ -21,7 +21,7 @@
     "transforms": 5,
     "materials": 4,
     "skinning": 4,
-    "animation": 2,
+    "animation": 3,
     "cameras": 4,
     "scenes": 1,
     "robustness": 2
@@ -740,6 +740,24 @@
       "auditFixture": null
     },
     {
+      "id": "morph-node-weights-override",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "mesh.weights",
+        "node.weights override",
+        "one mesh, two instances",
+        "morph target POSITION delta"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "camera-perspective",
       "owningGroup": "cameras",
       "referencingGroups": [],
@@ -1349,6 +1367,31 @@
       "path": "mode-triangles.vb.bin",
       "bytes": 192,
       "sha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43"
+    },
+    {
+      "path": "morph-node-weights-override.expected.json",
+      "bytes": 8622,
+      "sha256": "14b2b5d94a46855c51623eedb75597630843f310208b67d633c102995140c86c"
+    },
+    {
+      "path": "morph-node-weights-override.glb",
+      "bytes": 1108,
+      "sha256": "2eca33736416db1512603bebba456abca5dba85e2a1bc495a34d02fdb4758c26"
+    },
+    {
+      "path": "morph-node-weights-override.gltf",
+      "bytes": 2138,
+      "sha256": "200a47155018159400717189caa4088538dcaa3d045438b7d3bcd501baeebad3"
+    },
+    {
+      "path": "morph-node-weights-override.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-node-weights-override.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "normalized-u8-color.expected.json",

@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "GltfFixtureCorpus.hpp"
 
 using CNA::Internal::GltfImport::MapGltfSamplerEXT;
 using CNA::Internal::GltfImport::SamplerOut;
@@ -152,4 +153,62 @@ TEST(GltfSamplerMapping, AnUndefinedSamplerIsGltfsOwnDefaultAndSaysSo)
            "tell 'the author chose repeat' from 'the author said nothing'";
     EXPECT_FALSE(mapped.minFilterHasNoMipStage)
         << "the default filter is the auto one, which does mipmap";
+}
+
+// --- plan_gltf.md GLTF-060 / GLTF-097: attribute count agreement, as a shared assertion ------------
+//
+// GLTF-097 asks for the same check GLTF-060 landed, stated once and applied to every stream rather
+// than to the pair someone happened to think of. It is one assertion in ExtractMesh, driven by the
+// primitive's own attribute list, so an attribute CNA does not yet read is still checked -- these
+// tests are what make "every stream" mean every stream rather than the two with fixtures.
+
+TEST(GltfSamplerMapping, AttributeCountAgreementCoversEveryDeclaredStreamNotJustTheReadOnes)
+{
+    // Driven off the corpus rather than a synthetic file, so it exercises the real extraction path.
+    // Every well-formed fixture must pass; the malformed one must not. Asserting both directions is
+    // what stops the check from being satisfied by a version that rejects everything.
+    const CnaTest::GltfOracle::LoadedFixture bad("accessor-count-mismatch");
+    ASSERT_TRUE(bad.Ok()) << bad.Error();
+
+    bool refused = false;
+    std::string message;
+    try
+    {
+        (void)CNA::Internal::GltfImport::ExtractMesh(
+            &bad.Data(), bad.Data().meshes[0].primitives[0], "probe", nullptr, 1.0f);
+    }
+    catch (const std::exception& e)
+    {
+        refused = true;
+        message = e.what();
+    }
+    EXPECT_TRUE(refused) << "a primitive whose attribute counts disagree was extracted anyway";
+    EXPECT_NE(std::string::npos, message.find("same count"))
+        << "the diagnostic does not name the constraint: " << message;
+    EXPECT_NE(std::string::npos, message.find("NORMAL"))
+        << "the diagnostic does not name the offending attribute: " << message;
+
+    // The converse: every other corpus fixture extracts cleanly, so the check is not simply
+    // refusing anything with more than one attribute.
+    std::size_t extracted = 0;
+    for (const std::string& id : CnaTest::GltfOracle::CorpusFixtureIds())
+    {
+        if (id == "accessor-count-mismatch" || id == "bad-accessor-out-of-bounds") { continue; }
+        const CnaTest::GltfOracle::LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const cgltf_data& data = fixture.Data();
+        for (cgltf_size m = 0; m < data.meshes_count; ++m)
+        {
+            for (cgltf_size pi = 0; pi < data.meshes[m].primitives_count; ++pi)
+            {
+                SCOPED_TRACE(id + " mesh " + std::to_string(m) + " primitive " + std::to_string(pi));
+                EXPECT_NO_THROW({
+                    (void)CNA::Internal::GltfImport::ExtractMesh(
+                        &data, data.meshes[m].primitives[pi], "probe", nullptr, 1.0f);
+                });
+                ++extracted;
+            }
+        }
+    }
+    EXPECT_GT(extracted, 0u);
 }

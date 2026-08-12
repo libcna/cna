@@ -129,12 +129,12 @@ _TOP_LEVEL_ORDER = ["asset", "extensionsUsed", "extensionsRequired", "scene", "s
                     "cameras", "meshes", "materials", "skins", "animations", "accessors",
                     "bufferViews", "buffers"]
 _NODE_ORDER = ["name", "mesh", "camera", "skin", "children", "translation", "rotation", "scale",
-               "matrix"]
+               "matrix", "weights"]
 _ACCESSOR_ORDER = ["bufferView", "byteOffset", "componentType", "normalized", "count", "type",
                    "max", "min", "sparse"]
 _BUFFER_VIEW_ORDER = ["buffer", "byteOffset", "byteLength", "byteStride", "target"]
-_PRIMITIVE_ORDER = ["attributes", "indices", "material", "mode"]
-_MESH_ORDER = ["name", "primitives"]
+_PRIMITIVE_ORDER = ["attributes", "indices", "material", "mode", "targets"]
+_MESH_ORDER = ["name", "primitives", "weights"]
 _SCENE_ORDER = ["name", "nodes"]
 
 
@@ -432,21 +432,26 @@ class GltfBuilder:
 
     # --- scene graph ----------------------------------------------------------------------------
 
-    def add_mesh(self, primitives: Sequence[dict[str, Any]], *, name: str) -> int:
+    def add_mesh(self, primitives: Sequence[dict[str, Any]], *, name: str,
+                 weights: Sequence[float] | None = None) -> int:
         """Adds a mesh.
 
         :param primitives: the mesh's primitives, each an authored glTF primitive object.
         :param name: the mesh's name.
+        :param weights: the mesh's own default morph weights (§3.7.2.2), if any.
         :return: the new mesh's index.
         """
-        self._meshes.append(_ordered({
+        mesh: dict[str, Any] = {
             "name": name,
             "primitives": [_ordered(dict(p), _PRIMITIVE_ORDER) for p in primitives],
-        }, _MESH_ORDER))
+        }
+        if weights is not None:
+            mesh["weights"] = list(weights)
+        self._meshes.append(_ordered(mesh, _MESH_ORDER))
         return len(self._meshes) - 1
 
     def add_node(self, *, name: str, mesh: int | None = None, camera: int | None = None,
-                 skin: int | None = None,
+                 skin: int | None = None, weights: Sequence[float] | None = None,
                  children: Sequence[int] | None = None,
                  translation: Sequence[float] | None = None,
                  rotation: Sequence[float] | None = None,
@@ -461,6 +466,7 @@ class GltfBuilder:
         :param mesh: the mesh this node instances, if any.
         :param camera: the camera this node instances, if any.
         :param skin: the skin this node's mesh is deformed by, if any.
+        :param weights: morph weights overriding the mesh's own (§3.7.2.2), if any.
         :param children: child node indices.
         :param translation: the node's translation.
         :param rotation: the node's rotation as an ``(x, y, z, w)`` quaternion.
@@ -478,6 +484,8 @@ class GltfBuilder:
             node["camera"] = camera
         if skin is not None:
             node["skin"] = skin
+        if weights is not None:
+            node["weights"] = list(weights)
         if children:
             node["children"] = list(children)
         # Numeric literals are stored exactly as the fixture authored them. Coercing them to

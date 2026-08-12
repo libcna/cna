@@ -266,4 +266,75 @@ def anim_nonzero_start() -> Fixture:
     )
 
 
-FIXTURES = [anim_rigid_node, anim_nonzero_start]
+def morph_node_weights_override() -> Fixture:
+    """One mesh with a morph target, instanced by two nodes with different ``node.weights``.
+
+    Owns **GLTF-281** and **GLTF-282**. §3.7.2.2 gives the instancing node the final say, and
+    *override* is the operative word: node A declaring ``[1]`` and node B declaring ``[0]`` for a
+    mesh whose own weights are ``[0.5]`` must start at 1 and 0 respectively -- not at 1.5 and 0.5,
+    and not both at the mesh's own value.
+
+    Two nodes rather than one is the second half: ``MorphTargetDataEXT`` is per **part**, so two
+    instances can only differ if the importer builds a part per instance. It does (each mesh
+    instance is extracted separately), which is what makes ``GLTF-282`` supportable at all rather
+    than a limitation to report.
+
+    The target moves the triangle's first vertex 4 units along +X, so the two instances' poses are
+    exactly computable and far apart.
+    """
+    b = GltfBuilder("morph-node-weights-override")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    target_deltas = [(4.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]
+    target_position = b.add_packed_accessor(usage="morph POSITION delta", values=target_deltas,
+                                            accessor_type="VEC3", with_bounds=True)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "targets": [{"POSITION": target_position}],
+        "mode": TRIANGLES,
+    }], name="MorphTri", weights=[0.5])
+
+    node_full = b.add_node(name="FullyMorphed", mesh=mesh, weights=[1.0])
+    node_rest = b.add_node(name="AtRest", mesh=mesh, weights=[0.0],
+                           translation=[0.0, 0.0, -10.0])
+    b.add_scene([node_full, node_rest], name="Scene")
+    b.set_default_scene(0)
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["morph"] = {
+        "targetCount": 1,
+        "meshWeights": [0.5],
+        "instances": [
+            {"node": node_full, "nodeName": "FullyMorphed", "nodeWeights": [1.0],
+             "expectedWeights": [1.0]},
+            {"node": node_rest, "nodeName": "AtRest", "nodeWeights": [0.0],
+             "expectedWeights": [0.0]},
+        ],
+        "rule": "node.weights OVERRIDES mesh.weights (§3.7.2.2) -- it does not merge with it and "
+                "does not fill in only the entries it names. 1 and 0, never 1.5 and 0.5, and never "
+                "both at the mesh's own 0.5.",
+        "perInstanceRule": "MorphTargetDataEXT is per PART, so two instances can only differ if the "
+                           "importer builds a part per instance. It does, which is what makes "
+                           "GLTF-282 supportable rather than a limitation to report.",
+    }
+    return Fixture(
+        id="morph-node-weights-override", audit_fixture=None, owning_group="animation",
+        description="One morph-target mesh instanced by two nodes whose node.weights are 1 and 0, "
+                    "over a mesh.weights of 0.5. Proves the override rule and that two instances "
+                    "of one mesh can hold different weights at all.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["mesh.weights", "node.weights override", "one mesh, two instances",
+                  "morph target POSITION delta"],
+        spec_anchors=["morph-targets", "meshes-overview"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="MorphTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+FIXTURES = [anim_rigid_node, anim_nonzero_start, morph_node_weights_override]
