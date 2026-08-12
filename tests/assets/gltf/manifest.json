@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 51,
+  "distinctAssetCount": 52,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -22,7 +22,7 @@
     "transforms": 7,
     "materials": 6,
     "textures": 2,
-    "skinning": 9,
+    "skinning": 10,
     "animation": 3,
     "cameras": 4,
     "scenes": 1,
@@ -864,6 +864,26 @@
         "COLOR_0 on a skinned mesh",
         "JOINTS_0 / WEIGHTS_0",
         "vertex stride 56"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-mesh-node-parent-transform",
+      "owningGroup": "skinning",
+      "referencingGroups": [
+        "transforms"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "skinned mesh node transform",
+        "mesh-space cancellation",
+        "transformed ancestor above the mesh node",
+        "JOINTS_0 / WEIGHTS_0"
       ],
       "auditFixture": null
     },
@@ -1883,6 +1903,31 @@
       "path": "skin-joint-index-padding.vb.bin",
       "bytes": 204,
       "sha256": "c310aeb5811da8ff1bf92d644512e9fb466887802509ebf73344ec5df70886e4"
+    },
+    {
+      "path": "skin-mesh-node-parent-transform.expected.json",
+      "bytes": 10426,
+      "sha256": "4b19782d491638cd1bf4c4e5eb88e04864b850e323cf0aef63dcd1578196b2c3"
+    },
+    {
+      "path": "skin-mesh-node-parent-transform.glb",
+      "bytes": 1304,
+      "sha256": "8fffe80623bf008a959ae637e94c9b5506510cc682b4ccdf106c4777b23d1bcf"
+    },
+    {
+      "path": "skin-mesh-node-parent-transform.gltf",
+      "bytes": 2358,
+      "sha256": "66cc9f42909be1b9e3066a4234276a61df04ef52c791f7a9f1b4f91aad6b2e16"
+    },
+    {
+      "path": "skin-mesh-node-parent-transform.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-mesh-node-parent-transform.vb.bin",
+      "bytes": 204,
+      "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
