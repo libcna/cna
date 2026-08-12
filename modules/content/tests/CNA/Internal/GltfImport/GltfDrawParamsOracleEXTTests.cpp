@@ -955,3 +955,109 @@ TEST(GltfConformanceL6, AMaterialDeclaringNeitherScalarGetsGltfsOwnDefaultOfOne)
     EXPECT_NEAR(1.0f, captured.front().normalScale, kTolerance);
     EXPECT_NEAR(1.0f, captured.front().occlusionStrength, kTolerance);
 }
+
+// --- plan_gltf.md GLTF-376: the light parameters the shader actually receives -------------------
+//
+// GLTF-325 locks what `ExtractPunctualLightsEXT` produces; this locks what survives all the way to
+// the parameter block a renderer binds. The two are different claims: a light can be extracted
+// correctly and then never applied, or applied to the wrong effect, and nothing on the import side
+// would notice.
+//
+// The shape being pinned is XNA's, not glTF's: three directional lights, and a **disabled** one
+// expressed as a zero diffuse colour rather than by a flag -- the shaders add all three
+// unconditionally, so zero is what makes the addition a no-op. A renderer that instead expected a
+// count, or an enable bit, would read a fully-lit third light out of every model that has one or
+// two.
+
+TEST(GltfConformanceL6, EveryLitDrawCarriesThreeLightsWithDisabledOnesAtZeroColour)
+{
+    for (const std::string& id : LoadableFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        GraphicsDevice gd;
+        ContentManager cm(nullptr, CorpusDirectory().string());
+        cm.setGraphicsDevice(gd);
+        Model model = cm.Load<Model>(id);
+        if (model.getMeshesProperty().getCountProperty() == 0) { continue; }
+
+        const std::vector<DrawParamsDump> draws = CaptureDrawParamsEXT(
+            model, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            Matrix::getIdentityProperty());
+
+        for (const DrawParamsDump& draw : draws)
+        {
+            SCOPED_TRACE("mesh " + std::to_string(draw.meshIndex) + " part " +
+                         std::to_string(draw.partIndex));
+            for (std::size_t l = 0; l < 3; ++l)
+            {
+                SCOPED_TRACE("light " + std::to_string(l));
+                // Every channel is a real number in the unit range. A NaN or a negative colour
+                // here subtracts light, which renders as a surface darker than black wherever the
+                // term lands -- and negative light is not something any later stage checks for.
+                for (std::size_t c = 0; c < 3; ++c)
+                {
+                    EXPECT_TRUE(std::isfinite(draw.lightDiffuseColors[l][c]))
+                        << "diffuse channel " << c << " is not finite";
+                    EXPECT_GE(draw.lightDiffuseColors[l][c], 0.0f)
+                        << "a negative diffuse channel subtracts light";
+                    EXPECT_LE(draw.lightDiffuseColors[l][c], 1.0f)
+                        << "an out-of-gamut diffuse channel -- GLTF-326 clamps at import, so "
+                           "anything above 1 here arrived after that clamp";
+                    EXPECT_TRUE(std::isfinite(draw.lightDirections[l][c]))
+                        << "direction component " << c << " is not finite";
+                }
+
+                // A light's direction is used whether or not the light contributes, so it must be
+                // a usable unit vector in both cases -- a zero-length direction normalises to NaN
+                // in any shader that normalises it defensively.
+                const float length = std::sqrt(
+                    draw.lightDirections[l][0] * draw.lightDirections[l][0] +
+                    draw.lightDirections[l][1] * draw.lightDirections[l][1] +
+                    draw.lightDirections[l][2] * draw.lightDirections[l][2]);
+                EXPECT_NEAR(1.0f, length, 1e-4f)
+                    << "the direction is not unit length (" << length << ")";
+            }
+        }
+    }
+}
+
+TEST(GltfConformanceL6, ALitDrawWithNoFileLightsStillReceivesAUsableDefault)
+{
+    // The property that makes the whole light path safe by construction: a glTF file need not
+    // declare any lights at all -- most do not -- and a lit effect drawn with three zero-coloured
+    // lights renders black. CNA supplies a default rather than leaving the model unlit, and this
+    // asserts the result is a light that actually contributes rather than a filled-in structure
+    // that happens to be present.
+    const std::string id = "mat-factor-only-gold";
+    const LoadedFixture fixture(id);
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ASSERT_EQ(0u, static_cast<std::size_t>(fixture.Data().lights_count))
+        << "this fixture must declare no lights, or it tests the wrong thing";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>(id);
+    if (model.getMeshesProperty().getCountProperty() == 0) { GTEST_SKIP() << "no drawable mesh"; }
+
+    const std::vector<DrawParamsDump> draws = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+        Matrix::getIdentityProperty());
+    ASSERT_FALSE(draws.empty());
+
+    for (const DrawParamsDump& draw : draws)
+    {
+        if (!draw.lightingEnabled) { continue; }
+        float brightest = 0.0f;
+        for (std::size_t l = 0; l < 3; ++l)
+        {
+            for (std::size_t c = 0; c < 3; ++c)
+            {
+                brightest = std::max(brightest, draw.lightDiffuseColors[l][c]);
+            }
+        }
+        EXPECT_GT(brightest, 0.0f)
+            << "a lit draw received three zero-coloured lights, so the model renders black -- a "
+               "file that declares no lights is the common case, not an edge one";
+    }
+}

@@ -174,6 +174,18 @@ namespace CnaTest::GltfOracle
         bool skinned = false;
         /** @brief `GpuDrawParams::lightingEnabled`. */
         bool lightingEnabled = false;
+        /**
+         * @brief The three directional lights the lit shaders read, direction then diffuse colour.
+         *
+         * plan_gltf.md `GLTF-376`. XNA's stock effects light with exactly three directional lights,
+         * and a **disabled** one is expressed as a zero diffuse colour rather than by a flag — the
+         * shader adds all three unconditionally, so zero is what makes the addition a no-op.
+         * Capturing them is what lets `GLTF-325`'s import-side approximation be checked against
+         * what the GPU is actually handed, rather than only against `LightOut`.
+         */
+        std::array<std::array<float, 3>, 3> lightDirections{};
+        /** @brief The three lights' diffuse colours, zero for a light that is disabled. */
+        std::array<std::array<float, 3>, 3> lightDiffuseColors{};
         /** @brief `GpuDrawParams::textureEnabled`. */
         bool textureEnabled = false;
         /** @brief `GpuDrawParams::vertexColorEnabled`. */

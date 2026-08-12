@@ -273,6 +273,19 @@ namespace CnaTest::GltfOracle
                 dump.pbr                = p.pbr;
                 dump.skinned            = p.skinned;
                 dump.lightingEnabled    = p.lightingEnabled;
+                // plan_gltf.md GLTF-376: the three directional lights as the shader receives them.
+                // A disabled light is a zero diffuse colour, not a flag -- the shader adds all
+                // three unconditionally.
+                const float* const dirs[3] = {p.light0Dir, p.light1Dir, p.light2Dir};
+                const float* const diffuse[3] = {p.light0Diffuse, p.light1Diffuse, p.light2Diffuse};
+                for (std::size_t l = 0; l < 3; ++l)
+                {
+                    for (std::size_t c = 0; c < 3; ++c)
+                    {
+                        dump.lightDirections[l][c] = dirs[l][c];
+                        dump.lightDiffuseColors[l][c] = diffuse[l][c];
+                    }
+                }
                 dump.textureEnabled     = p.textureEnabled;
                 dump.vertexColorEnabled = p.vertexColorEnabled;
 
