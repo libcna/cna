@@ -1,5 +1,14 @@
 # NEXT.md
 
+> **Active campaign — SDL3/CNA platform separation:** see **`NEXT_platform.md`** and
+> **`plan_platform.md`**. That work introduces `modules/platform` (`CNA::Platform::IPlatform`) and
+> is on branch `claude/cna-platform-sdl3-separation-pxuc33`; do not reconstruct its state from
+> this file, which predates it.
+>
+> One thing from it belongs here because it affects every subsystem: **`CNA_DEVICES` defaults to
+> OFF**, so `modules/devices-ext` and `modules/devices` compile to nothing and their tests pass
+> vacuously unless you configure a build with `-DCNA_DEVICES=ON`. See `NEXT_platform.md` §1.
+
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
 > Ten frozen feature lanes integrated one at a time into `11branches`, which started at exactly the
