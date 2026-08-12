@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 64,
+  "distinctAssetCount": 65,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -21,7 +21,7 @@
     "normals": 1,
     "transforms": 7,
     "materials": 6,
-    "textures": 2,
+    "textures": 3,
     "skinning": 10,
     "animation": 11,
     "cameras": 5,
@@ -754,6 +754,26 @@
         "image data: URI",
         "sampler NEAREST",
         "CLAMP_TO_EDGE"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "tex-texture-transform",
+      "owningGroup": "textures",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "KHR_texture_transform",
+        "offset",
+        "rotation",
+        "non-square scale",
+        "transform baked into UVs"
       ],
       "auditFixture": null
     },
@@ -2727,6 +2747,31 @@
       "path": "tex-reference-checkerboard.vb.bin",
       "bytes": 192,
       "sha256": "7f3db77e1a5e5e23bac03018d9e5397b8e7378f31026d1e317a92b9f39f756c7"
+    },
+    {
+      "path": "tex-texture-transform.expected.json",
+      "bytes": 11175,
+      "sha256": "45ee0413023d47a990aecfa11e1c8d37ddd6c4e61e6f6cc7d0d6223b5cb67c1a"
+    },
+    {
+      "path": "tex-texture-transform.glb",
+      "bytes": 1768,
+      "sha256": "788e4a7a56c12abcf890b335596ac9468431b2f7b843bf1e0397ade6d5c29fc2"
+    },
+    {
+      "path": "tex-texture-transform.gltf",
+      "bytes": 2996,
+      "sha256": "9b32672d1dc0b3005456aec510b89c27630185827cc477db8a8b39ae119392a9"
+    },
+    {
+      "path": "tex-texture-transform.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "tex-texture-transform.vb.bin",
+      "bytes": 192,
+      "sha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5"
     },
     {
       "path": "u8-idx.expected.json",

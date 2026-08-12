@@ -1518,6 +1518,100 @@ namespace CNA::Internal::GltfImport
         const cgltf_data* data, const SceneGraphOut& scene, float unitScale);
 
     /**
+     * @brief How completely CNA implements one glTF extension (plan_gltf.md `GLTF-334`, §19).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. The enumerators are ordered from most to least
+     * complete, so a comparison expresses "at least as good as".
+     */
+    enum class GltfExtensionSupportEXT
+    {
+        /** @brief Semantics implemented and covered by a corpus fixture. */
+        Implemented,
+        /** @brief Implemented for the cases that can be expressed, with the residue named and reported. */
+        ImplementedWithNamedLimit,
+        /**
+         * @brief Deliberately approximated: the result is documented as not physical, and reported.
+         *
+         * Distinct from @ref ImplementedWithNamedLimit, where the extension *is* implemented for
+         * the cases it covers. Here every case is an approximation.
+         */
+        Approximated,
+        /**
+         * @brief Read by the importer, but only so it cannot cause a wrong decision elsewhere.
+         *
+         * Noticing is not implementing: `KHR_materials_unlit` keeps a material off the
+         * metallic-roughness path, which prevents a mis-shading rather than delivering the
+         * extension.
+         */
+        ParsedButIgnored,
+        /** @brief Not handled at all; a file needing it does not get what it asked for. */
+        Unsupported,
+        /** @brief Deliberately out of scope, with a recorded reason — not merely "not yet". */
+        NotDesired,
+    };
+
+    /** @brief One extension's entry in the registry (plan_gltf.md `GLTF-334`). */
+    struct GltfExtensionRecordEXT
+    {
+        /** @brief The extension's glTF name, e.g. "KHR_texture_transform". */
+        std::string name;
+        /** @brief How completely CNA implements it. */
+        GltfExtensionSupportEXT support = GltfExtensionSupportEXT::Unsupported;
+        /**
+         * @brief Whether CNA **claims** it, i.e. accepts a file that lists it in `extensionsRequired`.
+         *
+         * Deliberately independent of @ref support, because the two answer different questions.
+         * `KHR_materials_transmission` is @ref Approximated and **not** claimed: a file that
+         * *requires* transmission is asking for refraction CNA cannot deliver, so it is refused
+         * rather than loaded with its glass drawn as tinted alpha (`GLTF-339`). Conversely
+         * `KHR_texture_transform` is @ref ImplementedWithNamedLimit and *is* claimed, because the
+         * limit affects a minority of materials and refusing every transformed texture would be
+         * far worse than the residue. Collapsing the two axes into one would force one of those
+         * decisions to be wrong.
+         */
+        bool claimed = false;
+        /** @brief One line on what CNA does with it, and why the classification is what it is. */
+        std::string note;
+        /** @brief The plan row that owns it, e.g. "GLTF-337". */
+        std::string task;
+    };
+
+    /**
+     * @brief The extension registry: every extension CNA has classified, in a stable order.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Single source of truth for plan_gltf.md §19's
+     * table and for @ref IsGltfExtensionSupportedEXT, which is a lookup here rather than a second
+     * hand-maintained list — the arrangement `GLTF-334` exists to create. Two lists would drift,
+     * and a drifted list means a file is refused or accepted for a reason nobody wrote down.
+     *
+     * `KHR_draco_mesh_compression`'s `claimed` depends on `CNA_DRACO_AVAILABLE`, so the registry is
+     * built rather than being a static table.
+     *
+     * @return Every classified extension, ordered by classification and then by name.
+     */
+    const std::vector<GltfExtensionRecordEXT>& GltfExtensionRegistryEXT();
+
+    /**
+     * @brief The registry entry for one extension name, or nullptr when it is unclassified.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param extension The extension's glTF name.
+     * @return The entry, or nullptr.
+     */
+    const GltfExtensionRecordEXT* FindGltfExtensionEXT(const std::string& extension);
+
+    /**
+     * @brief The specification's own spelling of a support classification, for reports and tables.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param support The classification.
+     * @return Its name as plan_gltf.md §19 spells it, e.g. "PARSED_BUT_IGNORED".
+     */
+    std::string GltfExtensionSupportNameEXT(GltfExtensionSupportEXT support);
+
+    /**
      * @brief Whether CNA's importer implements the semantics of a glTF extension by name.
      *
      * "Implements" is stricter than "notices". `KHR_materials_unlit` and

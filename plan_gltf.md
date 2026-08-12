@@ -1366,31 +1366,47 @@ scene" is not fully imported for mixed skinned/static content.
 ## 19. Extensions
 
 Inventory of every extension the vendored cgltf parses, classified against CNA's actual use.
-`extensionsUsed` is advisory; **`extensionsRequired` is normative and CNA never checks it**
-(`GLTF-333`) — a file that *requires* an unsupported extension imports silently and wrongly today.
+`extensionsUsed` is advisory; **`extensionsRequired` is normative**, and `GLTF-333` enforces it —
+a file that *requires* an extension CNA does not claim is refused by name rather than importing
+silently and wrongly.
+
+**This table is generated** (`GLTF-334`). Its single source of truth is
+`GltfExtensionRegistryEXT()` in `modules/content/src/GltfImport/GltfImportCore.cpp`, which the
+`extensionsRequired` gate also reads, so the two cannot drift.
+`GltfExtensionRegistry.Section19AgreesWithTheRegistryOnEveryRow` compares this table against the
+registry row by row and prints the corrected table on failure — do not edit the rows below by hand,
+change the registry and paste what the test emits.
+
+Two independent axes, deliberately separate. **Classification** is how completely CNA implements an
+extension; **claimed** is whether a file listing it in `extensionsRequired` is accepted. They are
+not the same question: `KHR_materials_transmission` is approximated and *not* claimed, because a
+file that requires transmission is asking for refraction CNA cannot deliver, while
+`KHR_lights_punctual` is approximated and *is* claimed, because refusing every lit file would be
+far worse than the approximation. Collapsing the two would force one of those decisions to be
+wrong. The registry carries the claim per record; the classification is what appears here.
 
 | Extension | Classification | Evidence / note | Task |
 |---|---|---|---|
-| `KHR_draco_mesh_compression` | **IMPLEMENTED_UNVERIFIED** | decode path exists behind `CNA_DRACO_AVAILABLE`; one triangle test; **no uncompressed-vs-compressed parity test**; not built in this environment | `GLTF-353`… |
-| `KHR_texture_transform` | **PARTIAL** | base-colour texture only, baked into the single shared UV channel; per-map transforms lost | `GLTF-184` |
-| `KHR_lights_punctual` | **PARTIAL** | ≤3, directional-only approximation | `GLTF-325` |
-| `KHR_materials_emissive_strength` | **PARTIAL** | applied only when `usePbr` | `GLTF-222` |
-| `KHR_materials_unlit` | **PARSED_BUT_IGNORED** | trivially mappable to `BasicEffect` with lighting off — a genuine quick win | `GLTF-337` |
-| `KHR_materials_transmission` | **PARSED_BUT_IGNORED** | causes the `ChronographWatch` opaque-glass defect | `GLTF-339` |
-| `KHR_materials_variants` | **PARSED_BUT_IGNORED** | `ChronographWatch` has 4 variants | `GLTF-341` |
-| `KHR_materials_ior` | **PARSED_BUT_IGNORED** | affects `F0`; small, well-defined shader change | `GLTF-343` |
-| `KHR_materials_specular` | **PARSED_BUT_IGNORED** | | `GLTF-344` |
-| `KHR_materials_clearcoat` | **PARSED_BUT_IGNORED** | second specular lobe; large | `GLTF-345` |
-| `KHR_materials_sheen` | **PARSED_BUT_IGNORED** | | `GLTF-346` |
-| `KHR_materials_volume` | **PARSED_BUT_IGNORED** | depends on transmission | `GLTF-347` |
-| `KHR_materials_iridescence` | **NOT_DESIRED** (for now) | | `GLTF-348` |
-| `KHR_materials_anisotropy` | **NOT_DESIRED** (for now) | | `GLTF-348` |
-| `KHR_materials_dispersion` | **NOT_DESIRED** (for now) | | `GLTF-348` |
-| `KHR_materials_pbrSpecularGlossiness` | **UNSUPPORTED** (archived by Khronos) | detect and convert to metallic-roughness, or reject clearly | `GLTF-349` |
-| `KHR_texture_basisu` | **UNSUPPORTED** | image silently vanishes today | `GLTF-200`, `GLTF-350` |
-| `EXT_texture_webp` | **UNSUPPORTED** | ditto | `GLTF-350` |
-| `EXT_meshopt_compression` | **UNSUPPORTED** | cgltf parses the extension but decoding requires a caller-supplied hook CNA does not provide ⇒ buffer data is absent | `GLTF-351` |
-| `EXT_mesh_gpu_instancing` | **UNSUPPORTED** | CNA *has* `DrawInstancedPrimitives`, so this is a natural later fit | `GLTF-352` |
+| `KHR_texture_transform` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | Offset/rotation/scale applied with the specification's own formula, baked into the single shared UV channel. A second, different transform on another map cannot be baked and is named rather than dropped. | `GLTF-336` |
+| `KHR_materials_emissive_strength` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | Applied on the PBR path. A non-PBR material has no emissive term to scale, so the strength has nowhere to go there. | `GLTF-222` |
+| `KHR_lights_punctual` | **APPROXIMATED_AND_REPORTED** | Up to three directional lights, which is XNA's whole lighting model. Point and spot become directional lights aimed at the origin, ranges and cones are ignored, and an out-of-gamut intensity clamps -- every loss counted. | `GLTF-325` |
+| `KHR_draco_mesh_compression` | **IMPLEMENTED_AND_TESTED** | Decoded when the build has libdraco. Claimed only in such a build: claiming it without the decoder would accept a file whose geometry then arrives empty. | `GLTF-353` |
+| `KHR_materials_transmission` | **APPROXIMATED_AND_REPORTED** | alpha = 1 - transmissionFactor, multiplied into the material's own alpha. Not physical in four named ways, so a file that REQUIRES transmission is refused rather than loaded with its glass drawn as tinted alpha. | `GLTF-339` |
+| `KHR_texture_basisu` | **UNSUPPORTED** | No KTX2 decoder. A texture's plain PNG/JPEG fallback is used when the file provides one, and the loss is named per map when it does not. | `GLTF-350` |
+| `EXT_texture_webp` | **UNSUPPORTED** | No WebP decoder; same three outcomes as KHR_texture_basisu. | `GLTF-350` |
+| `KHR_materials_unlit` | **PARSED_BUT_IGNORED** | Detected only to keep the material off the metallic-roughness path so it cannot be mis-shaded as PBR. The surface still goes through a lit effect. | `GLTF-337` |
+| `KHR_materials_pbrSpecularGlossiness` | **PARSED_BUT_IGNORED** | Detected the same way and for the same reason; its parameters are dropped. Archived by Khronos, but present in older assets. | `GLTF-349` |
+| `KHR_materials_variants` | **PARSED_BUT_IGNORED** | The default material mapping is imported; the variants are not. | `GLTF-341` |
+| `KHR_materials_ior` | **PARSED_BUT_IGNORED** | Affects F0; a small, well-defined shader change not yet made. | `GLTF-343` |
+| `KHR_materials_specular` | **PARSED_BUT_IGNORED** | Depends on the same F0 plumbing as KHR_materials_ior. | `GLTF-344` |
+| `KHR_materials_clearcoat` | **PARSED_BUT_IGNORED** | A second specular lobe -- a large shader change. | `GLTF-345` |
+| `KHR_materials_sheen` | **PARSED_BUT_IGNORED** | A third BRDF lobe, same shape of change as clearcoat. | `GLTF-346` |
+| `KHR_materials_volume` | **PARSED_BUT_IGNORED** | Meaningless without a real transmission pass, which CNA does not have. | `GLTF-347` |
+| `EXT_meshopt_compression` | **UNSUPPORTED** | cgltf parses it but decoding needs a caller-supplied hook CNA does not provide, so the buffer data is simply absent. | `GLTF-351` |
+| `EXT_mesh_gpu_instancing` | **UNSUPPORTED** | Each node's own single placement is imported and the per-instance transforms are not, so the file renders one copy where it describes many. Reported per file. | `GLTF-352` |
+| `KHR_materials_iridescence` | **NOT_DESIRED** | A thin-film interference term with no counterpart in any CNA stock effect. Not planned: the shader cost falls on every PBR material to serve a rare one. | `GLTF-348` |
+| `KHR_materials_anisotropy` | **NOT_DESIRED** | Needs a tangent-aligned specular lobe, and therefore a reliable tangent basis on every affected primitive -- which GLTF-086 shows CNA cannot carry at most strides. | `GLTF-348` |
+| `KHR_materials_dispersion` | **NOT_DESIRED** | Wavelength-dependent refraction, which presupposes the refraction pass KHR_materials_transmission is explicitly approximated instead of implementing. | `GLTF-348` |
 
 **Priority rule:** no extension work begins before **GLTF CORE 2.0 CORRECT**, with two exceptions
 already load-bearing in CNA's advertised support — `KHR_texture_transform` and `KHR_lights_punctual`
@@ -2454,8 +2470,8 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
 | GLTF-333 | Enforce `extensionsRequired` (implementation) | ✔ | GLTF-023 | **Accept:** an unsupported required extension errors with its name. **Landed with `GLTF-023`:** both load paths refuse a file whose `extensionsRequired` names an extension `IsGltfExtensionSupportedEXT` does not implement, and the message names the extension. `gltf-required-extension-unsupported` is the witness. `GLTF-024`'s separate rule holds alongside it: an extension that is merely *used* is ignored with a warning, never an error — the severity difference is the point, and both are asserted by `GltfContainerValidation`. |
-| GLTF-334 | Central extension-support registry | ⬜ | GLTF-333 | One table mapping extension name → classification → handler. **Accept:** §19's table is generated from it, not maintained by hand. |
-| GLTF-335 | Extension conformance test template | ⬜ | GLTF-334 | **Accept:** adding an extension requires a fixture and a classification. |
+| GLTF-334 | Central extension-support registry | ✅ | GLTF-333 | One table mapping extension name → classification → handler. **Accept:** §19's table is generated from it, not maintained by hand. **`GltfExtensionRegistryEXT()`,** which `IsGltfExtensionSupportedEXT` is now a lookup into rather than a second hand-written list. The registry carries **two independent columns**, which is the design decision this row was really about: `support` (how completely CNA implements it) and `claimed` (whether a file listing it in `extensionsRequired` is accepted). They answer different questions and had never been separated — §19 called `KHR_texture_transform` PARTIAL while the gate claimed it, and nothing said why. `KHR_materials_transmission` is approximated and **not** claimed (a file requiring transmission wants refraction CNA cannot deliver) while `KHR_lights_punctual` is approximated and **is** claimed (refusing every lit file would be far worse than the approximation); collapsing the two columns would force one of those to be wrong. §19 is regenerated from the registry, and `Section19AgreesWithTheRegistryOnEveryRow` parses the plan and compares name, classification and owning task row by row, printing the corrected table on failure so fixing a drift is mechanical. |
+| GLTF-335 | Extension conformance test template | ✅ | GLTF-334 | **Accept:** adding an extension requires a fixture and a classification. **Enforced in both directions rather than asked for.** An extension any corpus fixture declares must be in the registry — otherwise the fixture asserts the behaviour of an accident, silently ignored or loudly refused depending on a list its author never saw. And an extension CNA **claims** must have a corpus fixture declaring it, because a claim is a promise to accept files that cannot work without the extension and a promise nothing tests is not one. The rule found a real gap on its first run: `KHR_texture_transform` was claimed and heavily tested, but only ever on scratch documents, so the committed corpus — where such a promise is meant to be kept — had no witness at all. `tex-texture-transform` is that witness, and writing it surfaced a second thing worth recording: **no non-zero rotation has an exactly representable sine and cosine in binary32** (`cosf(π/2)` is about −4.4e-8, not 0), so an oracle computing the baked UVs in doubles and rounding once at the end disagrees with the importer in the last few bits — which the byte-exact L5 comparison reports as a failure of the transform rather than of the oracle. The generator now mirrors the importer's float arithmetic term by term, in its association order. |
 | GLTF-336 | `KHR_texture_transform` completion | ✔ | GLTF-184 | **Accept:** per-map transforms; classification becomes IMPLEMENTED_AND_TESTED. **Classification: IMPLEMENTED_WITH_A_NAMED_LIMIT.** The extension *is* implemented — offset, rotation and scale are applied with the spec's own reference formula, and `has_texcoord` overrides the view's UV set — for the one transform that can be baked into a single UV channel. The residue is `GLTF-184`'s: a second, different transform on another map cannot be baked and is now named rather than dropped. Claiming IMPLEMENTED_AND_TESTED outright would assert per-map transforms work, which they do not; claiming NOT_IMPLEMENTED would be false for every single-transform material, which is nearly all of them. |
 | GLTF-337 | `KHR_materials_unlit` | ⬜ | GLTF-215 | Maps cleanly to `BasicEffect` with lighting off — a genuine quick win. **Accept:** fixture correct at L7. |
 | GLTF-338 | `KHR_materials_unlit` + vertex colour / alpha | ⬜ | GLTF-337 | **Accept:** tested. |
@@ -2468,7 +2484,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | GLTF-345 | `KHR_materials_clearcoat` | ⬜ | GLTF-343 | Second specular lobe; large. **Accept:** implemented or explicitly deferred with a report entry. |
 | GLTF-346 | `KHR_materials_sheen` | ⬜ | GLTF-343 | **Accept:** as above. |
 | GLTF-347 | `KHR_materials_volume` | ⬜ | GLTF-339 | Depends on transmission. **Accept:** as above. |
-| GLTF-348 | Classify iridescence / anisotropy / dispersion as NOT_DESIRED | ⬜ | GLTF-334 | **Accept:** recorded with rationale; required-use is rejected loudly. |
+| GLTF-348 | Classify iridescence / anisotropy / dispersion as NOT_DESIRED | ✅ | GLTF-334 | **Accept:** recorded with rationale; required-use is rejected loudly. **All three in the registry with a per-extension reason**, which is the entire difference between a decision and an omission — a future reader finds why rather than spending a day implementing something the project does not want. Iridescence is a thin-film term whose shader cost falls on **every** PBR material to serve a rare one; anisotropy needs a tangent-aligned specular lobe and therefore a reliable tangent basis on every affected primitive, which `GLTF-086` shows CNA cannot carry at most strides; dispersion presupposes the refraction pass `GLTF-339` explicitly chose to approximate instead of implementing. None is claimed, so `GLTF-333` still refuses a file that *requires* one **by name** — asserted, because "not desired" is not "harmless to pretend". |
 | GLTF-349 | `KHR_materials_pbrSpecularGlossiness` | ⬜ | GLTF-334 | Archived by Khronos but present in older assets. **Accept:** converted to metallic-roughness, or rejected clearly. |
 | GLTF-350 | `KHR_texture_basisu` / `EXT_texture_webp` | ✔ | GLTF-200 | Images silently vanish today. **Accept:** supported or explicitly rejected. **Decided: explicitly reported, and — where the file demands them — rejected.** Both extensions are specified so a texture MAY keep a plain PNG/JPEG `source` as a fallback for readers without the codec, so there are three outcomes and `GLTF-200` implements all three: the fallback is used when present and nothing is reported, the loss is named per map when it is not, and a file listing either in `extensionsRequired` is refused outright by `GLTF-023`. Neither is listed in `IsGltfExtensionSupportedEXT`, and a test guards that — claiming support would turn that refusal into a silent load with the textures missing, which is worse than today, not better. Adding a KTX2 or WebP decoder is a codec dependency, not a glTF conformance question. |
 | GLTF-351 | `EXT_meshopt_compression` | ⬜ | GLTF-334 | cgltf parses it but decoding needs a caller-supplied hook CNA does not provide ⇒ buffer data is absent. **Accept:** supported or explicitly rejected; **never** silently empty geometry. |

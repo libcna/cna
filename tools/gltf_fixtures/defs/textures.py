@@ -16,6 +16,9 @@ Specification: §3.9 ``materials``, §5.28 ``texture``, §5.29 ``sampler``, §5.
 
 from __future__ import annotations
 
+import math
+import struct
+
 from ..builder import TRIANGLES, UNSIGNED_SHORT, GltfBuilder
 from ..manifest import Fixture, l3_primitive, world_positions
 from ..png import reference_texture
@@ -191,4 +194,115 @@ def _flat_png() -> bytes:
     return encode_png(4, 4, [row] * 4)
 
 
-FIXTURES = [tex_reference_checkerboard, tex_dual_texture_stride]
+#: `tex-texture-transform`'s authored transform. Every term is non-neutral and no two are equal, so
+#: a swapped offset pair, a swapped scale pair, or a rotation applied in the wrong order each
+#: produce different UVs. The rotation is a quarter turn, whose sine and cosine are exact.
+_TRANSFORM_OFFSET = (0.125, 0.375)
+_TRANSFORM_SCALE = (2.0, 0.5)
+_TRANSFORM_ROTATION = math.pi / 2.0
+
+
+def _f32(value: float) -> float:
+    """Rounds ``value`` to IEEE-754 binary32, the precision the importer works in."""
+    return struct.unpack("<f", struct.pack("<f", value))[0]
+
+
+def _baked_uv(u: float, v: float) -> tuple[float, float]:
+    """The specification's own KHR_texture_transform composition: scale, then rotate, then offset.
+
+    Stated here from the extension's formula rather than read back from CNA, so a wrong order is a
+    mismatch against the specification rather than against a second reading of the same code. Order
+    is the whole risk: rotate-then-scale is a different matrix, and with a square scale it would be
+    indistinguishable -- which is why the scale here is 2 by 0.5.
+
+    Evaluated in **binary32**, term by term, in the importer's own association order. That is not
+    pedantry: the L5 goldens are byte-exact, and no non-zero rotation has an exactly representable
+    sine and cosine in single precision -- ``cosf(pi/2)`` is about -4.4e-8, not 0. Computing this
+    in Python's doubles and rounding once at the end disagrees with the importer in the last few
+    bits, which a byte comparison reports as a failure of the transform rather than of the oracle.
+    """
+    ox, oy = (_f32(c) for c in _TRANSFORM_OFFSET)
+    sx, sy = (_f32(c) for c in _TRANSFORM_SCALE)
+    cos_r = _f32(math.cos(_f32(_TRANSFORM_ROTATION)))
+    sin_r = _f32(math.sin(_f32(_TRANSFORM_ROTATION)))
+    u, v = _f32(u), _f32(v)
+    # cosR * u * sx - sinR * v * sy + ox, left-associated exactly as the C++ expression is.
+    out_u = _f32(_f32(_f32(_f32(_f32(cos_r * u) * sx) - _f32(_f32(sin_r * v) * sy)) + ox))
+    out_v = _f32(_f32(_f32(_f32(_f32(sin_r * u) * sx) + _f32(_f32(cos_r * v) * sy)) + oy))
+    return (out_u, out_v)
+
+
+def tex_texture_transform() -> Fixture:
+    """A base-colour texture carrying `KHR_texture_transform`. Owns the extension's corpus witness.
+
+    CNA **claims** this extension -- a file listing it in ``extensionsRequired`` loads -- and until
+    this fixture existed every test of it used a scratch document. That is a real gap rather than a
+    bookkeeping one: a claim is a promise to accept files that cannot work without the extension,
+    and the committed corpus is where such a promise is meant to be kept. `GLTF-335`'s rule now
+    fails the build if any claimed extension lacks a fixture, and this is the one that was missing.
+
+    The transform is applied by **baking it into the decoded UVs** at import (`GLTF-336`), because
+    `PbrEffect` has a single shared UV channel and no per-map transform matrix. So the expectation
+    lives at L2/L3 -- the decoded texture coordinates -- rather than in an effect parameter, and
+    the manifest states both the authored UVs and the baked ones so the transform is visible as a
+    difference rather than as a single set of numbers that could be either.
+    """
+    b = GltfBuilder("tex-texture-transform")
+    image = b.add_image(reference_texture(), name="Reference")
+    texture = b.add_texture(source=image, name="TransformedTexture")
+    material = b.add_material({
+        "name": "Transformed",
+        "pbrMetallicRoughness": {"baseColorTexture": {
+            "index": texture,
+            "extensions": {"KHR_texture_transform": {
+                "offset": list(_TRANSFORM_OFFSET),
+                "rotation": _TRANSFORM_ROTATION,
+                "scale": list(_TRANSFORM_SCALE),
+            }},
+        }},
+    })
+    b.declare_extensions(used=["KHR_texture_transform"])
+    mesh = _quad(b, material, "TransformedQuad")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    baked = [_baked_uv(u, v) for u, v in _QUAD_TEXCOORDS]
+    l4 = world_positions(b, {mesh: list(_QUAD_POSITIONS)})
+    l4["textureTransform"] = {
+        "offset": list(_TRANSFORM_OFFSET),
+        "rotation": _TRANSFORM_ROTATION,
+        "scale": list(_TRANSFORM_SCALE),
+        "authoredTexcoords": [list(uv) for uv in _QUAD_TEXCOORDS],
+        "bakedTexcoords": [list(uv) for uv in baked],
+        "compositionRule": "scale, then rotate, then offset -- the extension's own order. "
+                           "Rotate-then-scale is a different matrix, and with a square scale the "
+                           "two would be indistinguishable, which is why the scale is 2 by 0.5.",
+        "bakingRule": "Applied by baking into the decoded UVs at import, because PbrEffect has one "
+                      "shared UV channel and no per-map transform matrix (GLTF-336). The "
+                      "expectation therefore lives in the texture coordinates, not in an effect "
+                      "parameter.",
+        "claimRule": "CNA claims this extension, so a file listing it in extensionsRequired loads. "
+                     "Until this fixture existed the claim was tested only on scratch documents -- "
+                     "GLTF-335's rule now fails if any claimed extension has no corpus witness.",
+    }
+    return Fixture(
+        id="tex-texture-transform", audit_fixture=None, owning_group="textures",
+        description="A quad whose base-colour texture declares KHR_texture_transform with a "
+                    "non-neutral offset, a quarter-turn rotation and a non-square scale. The "
+                    "corpus witness for an extension CNA claims: the transform is baked into the "
+                    "decoded UVs, and the manifest states both the authored and the baked ones.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["KHR_texture_transform", "offset", "rotation", "non-square scale",
+                  "transform baked into UVs"],
+        spec_anchors=_SPEC + ["texture-transform"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="TransformedQuad", primitive=0, mode=TRIANGLES,
+            positions=_QUAD_POSITIONS, normals=_QUAD_NORMALS, tangents=_QUAD_TANGENTS,
+            texcoords=baked, indices=_QUAD_INDICES,
+            material=_expected_material(material, "Transformed", base_color=True))]},
+        l4=l4,
+    )
+
+
+FIXTURES = [tex_reference_checkerboard, tex_texture_transform, tex_dual_texture_stride]

@@ -67,6 +67,16 @@ namespace CNA::Internal::GltfImport
 {
     namespace
     {
+        // Whether this build can actually decode Draco geometry. The extension registry's own
+        // `claimed` column reads this rather than repeating the #ifdef: claiming Draco in a build
+        // without the decoder would accept a file whose geometry then arrives empty, which is the
+        // one failure mode the extensionsRequired gate exists to prevent.
+#ifdef CNA_DRACO_AVAILABLE
+        constexpr bool kDracoAvailable = true;
+#else
+        constexpr bool kDracoAvailable = false;
+#endif
+
         void AppendFloat(std::vector<std::uint8_t>& out, float v)
         {
             std::uint8_t bytes[4];
@@ -3129,21 +3139,143 @@ namespace CNA::Internal::GltfImport
         return report;
     }
 
+    std::string GltfExtensionSupportNameEXT(GltfExtensionSupportEXT support)
+    {
+        switch (support)
+        {
+        case GltfExtensionSupportEXT::Implemented:               return "IMPLEMENTED_AND_TESTED";
+        case GltfExtensionSupportEXT::ImplementedWithNamedLimit: return "IMPLEMENTED_WITH_A_NAMED_LIMIT";
+        case GltfExtensionSupportEXT::Approximated:              return "APPROXIMATED_AND_REPORTED";
+        case GltfExtensionSupportEXT::ParsedButIgnored:          return "PARSED_BUT_IGNORED";
+        case GltfExtensionSupportEXT::Unsupported:               return "UNSUPPORTED";
+        case GltfExtensionSupportEXT::NotDesired:                return "NOT_DESIRED";
+        }
+        return "UNSUPPORTED";
+    }
+
+    // plan_gltf.md GLTF-334. One table, and everything about extensions reads from it: the
+    // extensionsRequired gate (IsGltfExtensionSupportedEXT below), §19's own classification table
+    // (asserted against this by GltfExtensionRegistry), and the fixture-coverage rule of GLTF-335.
+    //
+    // Two hand-maintained lists is the failure this replaces. The support list and §19's table
+    // already disagreed in spirit -- §19 called KHR_texture_transform PARTIAL while the gate
+    // claimed it -- and neither said why. The `claimed` column now carries that decision
+    // explicitly, per record, instead of leaving it implicit in which of two files you read.
+    const std::vector<GltfExtensionRecordEXT>& GltfExtensionRegistryEXT()
+    {
+        static const std::vector<GltfExtensionRecordEXT> registry = [] {
+            std::vector<GltfExtensionRecordEXT> out = {
+                {"KHR_texture_transform", GltfExtensionSupportEXT::ImplementedWithNamedLimit, true,
+                 "Offset/rotation/scale applied with the specification's own formula, baked into "
+                 "the single shared UV channel. A second, different transform on another map "
+                 "cannot be baked and is named rather than dropped.",
+                 "GLTF-336"},
+                {"KHR_materials_emissive_strength", GltfExtensionSupportEXT::ImplementedWithNamedLimit,
+                 true,
+                 "Applied on the PBR path. A non-PBR material has no emissive term to scale, so "
+                 "the strength has nowhere to go there.",
+                 "GLTF-222"},
+                {"KHR_lights_punctual", GltfExtensionSupportEXT::Approximated, true,
+                 "Up to three directional lights, which is XNA's whole lighting model. Point and "
+                 "spot become directional lights aimed at the origin, ranges and cones are "
+                 "ignored, and an out-of-gamut intensity clamps -- every loss counted.",
+                 "GLTF-325"},
+                {"KHR_draco_mesh_compression", GltfExtensionSupportEXT::Implemented,
+                 kDracoAvailable,
+                 "Decoded when the build has libdraco. Claimed only in such a build: claiming it "
+                 "without the decoder would accept a file whose geometry then arrives empty.",
+                 "GLTF-353"},
+                {"KHR_materials_transmission", GltfExtensionSupportEXT::Approximated, false,
+                 "alpha = 1 - transmissionFactor, multiplied into the material's own alpha. Not "
+                 "physical in four named ways, so a file that REQUIRES transmission is refused "
+                 "rather than loaded with its glass drawn as tinted alpha.",
+                 "GLTF-339"},
+                {"KHR_texture_basisu", GltfExtensionSupportEXT::Unsupported, false,
+                 "No KTX2 decoder. A texture's plain PNG/JPEG fallback is used when the file "
+                 "provides one, and the loss is named per map when it does not.",
+                 "GLTF-350"},
+                {"EXT_texture_webp", GltfExtensionSupportEXT::Unsupported, false,
+                 "No WebP decoder; same three outcomes as KHR_texture_basisu.",
+                 "GLTF-350"},
+                {"KHR_materials_unlit", GltfExtensionSupportEXT::ParsedButIgnored, false,
+                 "Detected only to keep the material off the metallic-roughness path so it cannot "
+                 "be mis-shaded as PBR. The surface still goes through a lit effect.",
+                 "GLTF-337"},
+                {"KHR_materials_pbrSpecularGlossiness", GltfExtensionSupportEXT::ParsedButIgnored,
+                 false,
+                 "Detected the same way and for the same reason; its parameters are dropped. "
+                 "Archived by Khronos, but present in older assets.",
+                 "GLTF-349"},
+                {"KHR_materials_variants", GltfExtensionSupportEXT::ParsedButIgnored, false,
+                 "The default material mapping is imported; the variants are not.",
+                 "GLTF-341"},
+                {"KHR_materials_ior", GltfExtensionSupportEXT::ParsedButIgnored, false,
+                 "Affects F0; a small, well-defined shader change not yet made.",
+                 "GLTF-343"},
+                {"KHR_materials_specular", GltfExtensionSupportEXT::ParsedButIgnored, false,
+                 "Depends on the same F0 plumbing as KHR_materials_ior.",
+                 "GLTF-344"},
+                {"KHR_materials_clearcoat", GltfExtensionSupportEXT::ParsedButIgnored, false,
+                 "A second specular lobe -- a large shader change.",
+                 "GLTF-345"},
+                {"KHR_materials_sheen", GltfExtensionSupportEXT::ParsedButIgnored, false,
+                 "A third BRDF lobe, same shape of change as clearcoat.",
+                 "GLTF-346"},
+                {"KHR_materials_volume", GltfExtensionSupportEXT::ParsedButIgnored, false,
+                 "Meaningless without a real transmission pass, which CNA does not have.",
+                 "GLTF-347"},
+                {"EXT_meshopt_compression", GltfExtensionSupportEXT::Unsupported, false,
+                 "cgltf parses it but decoding needs a caller-supplied hook CNA does not provide, "
+                 "so the buffer data is simply absent.",
+                 "GLTF-351"},
+                {"EXT_mesh_gpu_instancing", GltfExtensionSupportEXT::Unsupported, false,
+                 "Each node's own single placement is imported and the per-instance transforms are "
+                 "not, so the file renders one copy where it describes many. Reported per file.",
+                 "GLTF-352"},
+                // GLTF-348. NOT_DESIRED is a decision, not a backlog entry: each of these is a
+                // thin-film or directional-scattering term that needs a BRDF CNA's stock effects
+                // do not have, and adding one would change the shading of every PBR material to
+                // serve an extension almost no asset uses. Recorded so a future reader finds a
+                // reason rather than an omission -- and, because none is claimed, a file that
+                // REQUIRES one is still refused by name rather than loading and looking wrong.
+                {"KHR_materials_iridescence", GltfExtensionSupportEXT::NotDesired, false,
+                 "A thin-film interference term with no counterpart in any CNA stock effect. Not "
+                 "planned: the shader cost falls on every PBR material to serve a rare one.",
+                 "GLTF-348"},
+                {"KHR_materials_anisotropy", GltfExtensionSupportEXT::NotDesired, false,
+                 "Needs a tangent-aligned specular lobe, and therefore a reliable tangent basis on "
+                 "every affected primitive -- which GLTF-086 shows CNA cannot carry at most strides.",
+                 "GLTF-348"},
+                {"KHR_materials_dispersion", GltfExtensionSupportEXT::NotDesired, false,
+                 "Wavelength-dependent refraction, which presupposes the refraction pass "
+                 "KHR_materials_transmission is explicitly approximated instead of implementing.",
+                 "GLTF-348"},
+            };
+            return out;
+        }();
+        return registry;
+    }
+
+    const GltfExtensionRecordEXT* FindGltfExtensionEXT(const std::string& extension)
+    {
+        for (const GltfExtensionRecordEXT& record : GltfExtensionRegistryEXT())
+        {
+            if (record.name == extension) { return &record; }
+        }
+        return nullptr;
+    }
+
     bool IsGltfExtensionSupportedEXT(const std::string& extension)
     {
-        // Only what the importer actually implements the semantics of. Detecting an extension so
-        // it cannot mis-select an effect is NOT implementing it: KHR_materials_unlit and
-        // KHR_materials_pbrSpecularGlossiness are both read by ExtractMesh to keep such a material
-        // off the metallic-roughness path (GLTF-215), yet an unlit surface still goes through a
-        // lit effect and the specular-glossiness parameters are dropped, so a file that *requires*
-        // either is asking for something CNA cannot deliver.
-        if (extension == "KHR_texture_transform") { return true; }
-        if (extension == "KHR_materials_emissive_strength") { return true; }
-        if (extension == "KHR_lights_punctual") { return true; }
-#ifdef CNA_DRACO_AVAILABLE
-        if (extension == "KHR_draco_mesh_compression") { return true; }
-#endif
-        return false;
+        // A lookup, not a second list (GLTF-334). Only what the importer actually implements the
+        // semantics of. Detecting an extension so it cannot mis-select an effect is NOT
+        // implementing it: KHR_materials_unlit and KHR_materials_pbrSpecularGlossiness are both
+        // read by ExtractMesh to keep such a material off the metallic-roughness path (GLTF-215),
+        // yet an unlit surface still goes through a lit effect and the specular-glossiness
+        // parameters are dropped, so a file that *requires* either is asking for something CNA
+        // cannot deliver.
+        const GltfExtensionRecordEXT* record = FindGltfExtensionEXT(extension);
+        return record != nullptr && record->claimed;
     }
 
     void CrossCheckAccessorBoundsEXT(const cgltf_data* data, std::vector<std::string>& warnings)
