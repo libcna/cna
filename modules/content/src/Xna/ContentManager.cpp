@@ -2218,6 +2218,26 @@ namespace Microsoft::Xna::Framework::Content
                         vb.get(), ib.get(), numVertices, primCount, 0, 0);
                     // plan_gltf.md GLTF-073: the topology travels to the draw rather than being
                     // assumed there.
+                    // plan_gltf.md GLTF-241: a vertex-coloured primitive whose material is
+                    // metallic-roughness cannot be imported as PBR, and says so rather than
+                    // arriving quietly as a BasicEffect with its material gone.
+                    if (!meshOut.unsupportedMaterialModelEXT.empty())
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' carries COLOR_0 and a " + meshOut.unsupportedMaterialModelEXT +
+                            " material. CNA has no vertex-coloured PBR vertex layout, so it is "
+                            "imported through BasicEffect with its vertex colours; the material's "
+                            "factors and maps are not applied (GLTF-241).");
+                    }
+                    if (meshOut.droppedNormalForStrideEXT)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' authors NORMAL, but the vertex layout chosen for it (stride " +
+                            std::to_string(meshOut.stride) + ") has no normal slot, so the "
+                            "normals are discarded and the primitive cannot be lit (GLTF-241).");
+                    }
                     part->setPrimitiveTypeEXTProperty(PrimitiveTypeForTopology(meshOut.topology));
                     // plan_gltf.md GLTF-202/GLTF-203: the file's own sampler state, per texture
                     // slot. Without this every imported texture drew with whatever the device

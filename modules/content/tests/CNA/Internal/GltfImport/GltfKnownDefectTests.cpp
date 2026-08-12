@@ -222,10 +222,11 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
     // documented but unproven, which is exactly the failure mode this batch exists to remove. The
     // converse matters just as much: a defect the corpus records as remediated must NOT still have
     // a "still broken" test here, or the file would start lying about the state of the code.
-    // Every audit defect is remediated. The set is deliberately left in place rather than
-    // deleted: it is what makes the "an open defect must have a test here" direction of the
-    // bookkeeping meaningful the moment a new defect is recorded.
-    const std::set<std::string> open = {};
+    // Every audit defect (D1..D8) is remediated. GLTF-241 is a later, non-audit defect recorded
+    // the same way -- the ledger is not reserved for the eight the audit happened to find, and
+    // this is the mechanism doing its job: declaring a divergence in the corpus immediately
+    // demanded an executable test for it.
+    const std::set<std::string> open = {"GLTF-241"};
     // Remediated defects, and the task that closed each. Their records stay in the corpus as
     // regression witnesses and their fixtures are asserted by the ordinary conformance suites.
     const std::map<std::string, std::string> remediated = {
@@ -274,4 +275,51 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
             << id << " was remediated by " << task << " but its record was deleted from the "
             << "corpus ledger -- a remediated defect stays as the regression witness";
     }
+}
+
+// --- plan_gltf.md GLTF-241: vertex-coloured PBR, reported rather than supported -------------------
+
+// The one material combination CNA cannot import as the file asks. `mat-vertex-color-pbr` carries
+// COLOR_0 and a metallic-roughness material; no CNA vertex layout holds a Colour alongside a
+// Tangent, and no PBR shader reads a colour stream, so supporting it means a new stride plus a
+// shader variant on every renderer -- the same blast radius that ruled out colour-space option A.
+//
+// GLTF-241's acceptance allows the other outcome: REPORTED, not silently downgraded. This test is
+// what makes "reported" mean something, and it asserts the loss runs one layer deeper than the
+// material -- the stride a coloured primitive lands on has no Normal slot either, so the authored
+// normals go with it and the primitive cannot be lit at all.
+TEST(GltfKnownDefect, GLTF241_VertexColouredPbrIsReportedByNameRatherThanSilentlyDowngraded)
+{
+    const LoadedFixture fixture("mat-vertex-color-pbr");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    const CNA::Internal::GltfImport::MeshOut extracted = CNA::Internal::GltfImport::ExtractMesh(
+        &fixture.Data(), fixture.Data().meshes[0].primitives[0], "ColoredMetalTri", nullptr, 1.0f);
+
+    // What is preserved: the vertex colours, which is why BasicEffect is the right landing place
+    // rather than an outright refusal.
+    EXPECT_TRUE(extracted.colored);
+    EXPECT_EQ(24, extracted.stride);
+    EXPECT_FALSE(extracted.usePbr);
+
+    // What is lost -- and, crucially, NAMED. Before this the import was silent on both counts.
+    EXPECT_EQ("metallic-roughness", extracted.unsupportedMaterialModelEXT)
+        << "the dropped material model is not reported, so the downgrade is silent again";
+    EXPECT_TRUE(extracted.droppedNormalForStrideEXT)
+        << "the file authors NORMAL and the stride-24 layout has no slot for it, but nothing says so";
+
+    // The second loss, measured rather than asserted from the flag alone: the normals really are
+    // gone, which is what makes the primitive unlightable rather than merely unlit-by-PBR.
+    EXPECT_TRUE(extracted.vertexBytes.size() > 0u);
+    const CNA::Internal::JsonValue& primitives = Path(fixture.Expected(), "l3.primitives");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, primitives.type);
+    ASSERT_FALSE(primitives.arrayValue.empty());
+    EXPECT_FALSE(Member(primitives.arrayValue.front(), "normals").arrayValue.empty())
+        << "the fixture stopped authoring normals, so it can no longer show they are dropped";
+
+    // And the material's own factors survived into MeshOut even though no effect will consume
+    // them (GLTF-219/221 ungated them). That distinction is worth pinning: the importer
+    // understood the material perfectly and the vertex layout is what could not carry it.
+    EXPECT_NEAR(0.85f, extracted.metallicFactor, 1e-5f);
+    EXPECT_NEAR(0.15f, extracted.roughnessFactor, 1e-5f);
 }

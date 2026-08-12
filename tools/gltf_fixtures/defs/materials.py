@@ -12,7 +12,7 @@ Specification: §3.9.2 ``metallic-roughness-material``, §3.9.4 ``alpha-coverage
 
 from __future__ import annotations
 
-from ..builder import TRIANGLES, UNSIGNED_SHORT, GltfBuilder
+from ..builder import TRIANGLES, UNSIGNED_BYTE, UNSIGNED_SHORT, GltfBuilder
 from ..manifest import Defect, Fixture, l3_primitive, world_positions
 from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
 
@@ -107,7 +107,6 @@ def mat_factor_only_gold() -> Fixture:
                           "GLTF-228", "GLTF-229", "GLTF-231"],
             closed_tasks=["GLTF-215", "GLTF-216", "GLTF-217", "GLTF-219", "GLTF-221",
                           "GLTF-228", "GLTF-229", "GLTF-231"],
-            remaining_tasks=[],
             status="fixed",
             divergent_fields=[],
             current_actual={
@@ -245,4 +244,131 @@ def mat_emissive_strength() -> Fixture:
     )
 
 
-FIXTURES = [mat_factor_only_gold, mat_emissive_strength]
+#: Vertex colours for `mat-vertex-color-pbr`. Distinct per vertex so a dropped or reordered stream
+#: is visible, and normalized UNSIGNED_BYTE because that is what real exporters emit.
+_VERTEX_COLORS = [(255, 0, 0, 255), (0, 255, 0, 255), (0, 0, 255, 255)]
+
+
+def mat_vertex_color_pbr() -> Fixture:
+    """``COLOR_0`` on a primitive whose material is metallic-roughness. Owns **GLTF-241**.
+
+    This is the one material combination CNA cannot import as the file asks: no vertex layout
+    carries a Color alongside a Tangent, and no PBR shader reads a colour stream. The primitive is
+    imported through ``BasicEffect`` with its vertex colours intact and the material's factors and
+    maps are *not applied* -- which used to happen in complete silence.
+
+    The material authors every factor away from both glTF's default and CNA's own fallback, so the
+    manifest can state exactly what is lost rather than describing it.
+    """
+    b = GltfBuilder("mat-vertex-color-pbr")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    color = b.add_packed_accessor(usage="COLOR_0", values=_VERTEX_COLORS, accessor_type="VEC4",
+                                  component_type=UNSIGNED_BYTE, normalized=True)
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "ColoredMetal",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": [0.2, 0.4, 0.8, 1.0],
+            "metallicFactor": 0.85,
+            "roughnessFactor": 0.15,
+        },
+        "emissiveFactor": [0.05, 0.0, 0.2],
+    })
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal, "COLOR_0": color},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="ColoredMetalTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    expected_material = {
+        "index": material,
+        "name": "ColoredMetal",
+        "baseColorFactor": [0.2, 0.4, 0.8, 1.0],
+        "metallicFactor": 0.85,
+        "roughnessFactor": 0.15,
+        "emissiveFactor": [0.05, 0.0, 0.2],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+        # GLTF-241: what CNA does with this combination, stated so the limitation is a value a test
+        # asserts rather than a sentence in a comment.
+        "unsupportedMaterialModel": "metallic-roughness",
+        "importedEffect": "BasicEffect",
+        "vertexColorsPreserved": True,
+        "materialPropertiesApplied": False,
+        "note": "No CNA vertex layout carries a Color alongside a Tangent and no PBR shader reads "
+                "a colour stream, so supporting this means a new stride plus a shader variant on "
+                "every renderer. The primitive keeps its vertex colours and the material is "
+                "reported as dropped -- the other outcome GLTF-241's acceptance allows.",
+    }
+    return Fixture(
+        id="mat-vertex-color-pbr", audit_fixture=None, owning_group="materials",
+        description="A primitive with COLOR_0 and a metallic-roughness material -- the one "
+                    "combination CNA cannot import as the file asks. It arrives as a BasicEffect "
+                    "with its vertex colours and without its material, and now says so instead of "
+                    "downgrading in silence.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["COLOR_0 with a PBR material", "unsupported material model", "import report"],
+        spec_anchors=["metallic-roughness-material", "meshes-overview"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="ColoredMetalTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+            colors=[[c / 255.0 for c in v] for v in _VERTEX_COLORS],
+            indices=TRIANGLE_INDICES, material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+        defects=[Defect(
+            id="GLTF-241", owner="GLTF-MATERIAL", first_divergent_layer="L3",
+            summary="A primitive with COLOR_0 and a metallic-roughness material cannot be imported "
+                    "as the file asks, and the loss runs one layer deeper than the material: the "
+                    "stride-24 layout a coloured primitive lands on has no Normal slot either, so "
+                    "an authored NORMAL is discarded and the primitive cannot be lit at all. "
+                    "Supporting the combination means a new stride plus a shader variant on every "
+                    "renderer, the same blast radius that ruled out colour-space option A. "
+                    "GLTF-241's acceptance allows the other outcome -- REPORTED, not silently "
+                    "downgraded -- and that is what landed: MeshOut names both losses and both "
+                    "loaders log them.",
+            owning_tasks=["GLTF-238", "GLTF-241"], closed_tasks=["GLTF-241"],
+            remaining_tasks=["GLTF-238"],
+            status="partially-remediated",
+            divergent_fields=["normals"],
+            current_actual={
+                "usePbr": False,
+                "stride": 24,
+                "effect": "BasicEffect",
+                "vertexColorsPreserved": True,
+                "unsupportedMaterialModel": "metallic-roughness",
+                "droppedNormalForStride": True,
+                "normalsImported": 0,
+                "note": "The primitive keeps its vertex colours and loses both its material and "
+                        "its normals. Both are now named by MeshOut and logged by both loaders, so "
+                        "the downgrade is visible at import rather than only in the rendered "
+                        "result. GLTF-238 owns actually supporting the combination.",
+            },
+            prior_actual={
+                "usePbr": False,
+                "stride": 24,
+                "effect": "BasicEffect",
+                "vertexColorsPreserved": True,
+                "unsupportedMaterialModel": None,
+                "droppedNormalForStride": None,
+                "note": "The same geometry, imported in complete silence: nothing recorded that "
+                        "the material had been dropped, and nothing recorded that the normals had "
+                        "been dropped with it.",
+            },
+        )],
+    )
+
+
+FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr]

@@ -1535,7 +1535,7 @@ same asset in another container, not another asset.
 > cross-referenced ladders were re-counted and the counts here now match them exactly: transforms
 > 17 (§11.4), skinning 13 (§15.4), morph 13 (§16.3), animation 10 (§17.2, excluding the
 > morph-owned `anim-weights-*`), and the remaining groups enumerated in full below. The generated
-> corpus stands at **31** assets today (`GLTF-072` completed the topology group's seven;
+> corpus stands at **32** assets today (`GLTF-072` completed the topology group's seven;
 > `GLTF-021`/`GLTF-023` added the first container and robustness fixtures; `GLTF-267` generated
 > §11.4's `xf-scale-nonuniform`, the corpus's first non-uniform node scale); `GLTF-399` completes
 > the rest.
@@ -1556,7 +1556,7 @@ same asset in another container, not another asset.
 | Transforms | 17 | the `xf-*` ladder in §11.4 |
 | Normals / tangents | 6 | `tangent-authored`, `tangent-handedness`, `tangent-absent-generated`, `normal-absent`, `normal-nonuniform-scale`, `tangent-mirrored` |
 | UV / textures / samplers | 10 | `uv0-checker`, `uv1-material`, `uv-out-of-range-clamp`, `uv-out-of-range-wrap`, `uv-out-of-range-mirror`, `sampler-nearest`, `sampler-trilinear`, `texture-transform-basecolor`, `texture-transform-per-map`, `texture-shared-two-samplers` |
-| Materials / PBR | 12 | `mat-default` (no material), `mat-factor-only-gold`, `mat-basecolor-factor-times-texture`, `mat-metallic-roughness-channels`, `mat-normal-scale`, `mat-occlusion-strength`, `mat-emissive-factor`, `mat-emissive-strength`, `alpha-opaque`, `alpha-mask`, `alpha-blend`, `double-sided` |
+| Materials / PBR | 13 | `mat-default` (no material), `mat-factor-only-gold`, `mat-basecolor-factor-times-texture`, `mat-metallic-roughness-channels`, `mat-normal-scale`, `mat-occlusion-strength`, `mat-emissive-factor`, `mat-emissive-strength`, `mat-vertex-color-pbr`, `alpha-opaque`, `alpha-mask`, `alpha-blend`, `double-sided` |
 | Skinning | 15 | the `skin-*` ladder in §15.4 |
 | Morph | 13 | the `morph-*` ladder in §16.3, which **owns** `morph-weights-animated-linear/step/cubic` and `morph-plus-skin` |
 | Animation | 10 | the `anim-*` ladder in §17.2, excluding the `anim-weights-*` fixtures owned by the morph group |
@@ -1565,7 +1565,7 @@ same asset in another container, not another asset.
 | Draco parity | 4 | `draco-triangle`, `draco-vs-uncompressed-pair`, `draco-skinned`, `draco-morph` |
 | Robustness / malformed | 6 | `bad-accessor-out-of-bounds`, `bad-index-out-of-range`, `bad-buffer-truncated`, `bad-glb-chunk-length`, `bad-matrix-and-trs`, `bad-version-1.0` |
 
-**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 15 + 13 + 10 + 3 + 4 + 4 + 6 = 137 distinct assets.**
+**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 13 + 15 + 13 + 10 + 3 + 4 + 4 + 6 = 138 distinct assets.**
 
 > The former combined "Scenes / cameras / lights" row was split in two by `GLTF-317`, which gave
 > the camera fixtures their own owning group: scene *selection* (§3.5) and cameras (§3.10) are
@@ -2276,7 +2276,7 @@ numerically at L4.*
 | GLTF-238 | Material sharing / de-duplication | ⬜ | GLTF-236 | Two primitives with the same material should share one `Effect`. **Accept:** effect count matches the distinct material count. |
 | GLTF-239 | `DualTextureEffect` occlusion-as-lightmap path | ✅ | GLTF-215 | `RemapOcclusionImageForDualTextureEXT` halves RGB for the `0.5 = neutral` convention. **Accept:** kept and tested, but no longer chosen for a genuine PBR material. |
 | GLTF-240 | `BasicEffect`/`SkinnedEffect` remain reachable | ⬜ | GLTF-215 | For genuinely non-PBR content. **Accept:** selection policy documented and tested. |
-| GLTF-241 | Vertex-coloured PBR | 🐛 | GLTF-215 | `usePbr && colored` is currently impossible. **Accept:** either supported (new stride + shader) or reported — not silently downgraded. |
+| GLTF-241 | Vertex-coloured PBR | ✔ | GLTF-215 | `usePbr && colored` is currently impossible. **Accept:** either supported (new stride + shader) or reported — not silently downgraded. **Landed as the second outcome: reported.** Supporting it needs a vertex layout holding a Colour *alongside* a Tangent, which no CNA stride has — and the obvious packing (12+12+16+8+4) collides with the existing stride 52, exactly the reinterpretation hazard `VertexDeclarationFidelity` exists to stop — plus a shader variant on every renderer. That is the same blast-radius argument that ruled out colour-space option A. **The fixture found the loss runs deeper than the material:** stride 24 has no Normal slot either, so a coloured primitive's authored NORMAL is discarded too and it cannot be lit *at all*, not merely lit without PBR. `MeshOut` now names both losses (`unsupportedMaterialModelEXT`, `droppedNormalForStrideEXT`) and both loaders log them. `mat-vertex-color-pbr` records the divergence in the corpus ledger as `partially-remediated` with `GLTF-238` remaining — which immediately made the ledger demand an executable test for it, the bookkeeping working as designed on the first non-audit defect it was given. The material's factors do still reach `MeshOut` (`GLTF-219`/`GLTF-221`), so the importer understood the material perfectly and the vertex layout is what could not carry it. |
 | GLTF-242 | Lighting-default policy for CNA | ⬜ | GLTF-215 | `PbrEffect` defaults to zero ambient with all lights disabled ⇒ black. Correct XNA behaviour. **Accept:** effect defaults unchanged; the import report states how many lights were contributed. |
 | GLTF-243 | Record the IBL / tone-mapping boundary | ⬜ | GLTF-242 | **Accept:** documented that "not IBL-accurate" is **not** a CORE conformance failure. |
 | GLTF-244 | Full material L6/L7 regression over the corpus | ⬜ | GLTF-237 | **Accept:** all 12 `mat-*`/`alpha-*`/`double-sided` fixtures green on two renderers. |

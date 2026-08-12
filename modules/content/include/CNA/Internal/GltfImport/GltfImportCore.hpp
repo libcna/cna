@@ -358,6 +358,29 @@ namespace CNA::Internal::GltfImport
         bool skinned = false;
         /** @brief True when this mesh has a per-vertex COLOR_0 attribute. */
         bool colored = false;
+        /**
+         * @brief Names the material model this primitive could not be imported with, or empty.
+         *
+         * plan_gltf.md `GLTF-241`. A primitive with `COLOR_0` **and** a metallic-roughness material
+         * cannot be imported as PBR: no CNA vertex layout carries a colour alongside a tangent, and
+         * no PBR shader reads a colour stream. It is imported through `BasicEffect` with its vertex
+         * colours intact, and the material's factors and maps are **not applied**.
+         *
+         * That is a downgrade, and the whole point of this field is that it is no longer a *silent*
+         * one: the loaders log it by name, and a test can assert it happened rather than inferring
+         * it from a stride. Empty for every primitive that was imported as the file asked.
+         */
+        std::string unsupportedMaterialModelEXT;
+        /**
+         * @brief True when the chosen vertex layout has no Normal slot and an authored NORMAL was
+         * therefore discarded.
+         *
+         * plan_gltf.md `GLTF-241`. Strides 24 and 20 carry no normal, so a primitive that lands on
+         * one loses its authored normals entirely and cannot be lit at all -- not merely lit
+         * without a PBR material. It is the same limitation one layer deeper, recorded here rather
+         * than left for a reader to deduce from a stride.
+         */
+        bool droppedNormalForStrideEXT = false;
         /** @brief True when this mesh should be imported through DualTextureEffect (CNB-72/73). */
         bool useDualTexture = false;
         /** @brief The material's base-color texture image, or nullptr if none. */

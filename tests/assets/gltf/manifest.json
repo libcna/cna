@@ -12,14 +12,14 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 31,
+  "distinctAssetCount": 32,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
     "component-types": 2,
     "topology": 7,
     "transforms": 5,
-    "materials": 2,
+    "materials": 3,
     "skinning": 4,
     "animation": 2,
     "cameras": 3,
@@ -231,6 +231,26 @@
       "status": "fixed",
       "fixtures": [
         "skin-armature-ancestor"
+      ]
+    },
+    {
+      "id": "GLTF-241",
+      "summary": "A primitive with COLOR_0 and a metallic-roughness material cannot be imported as the file asks, and the loss runs one layer deeper than the material: the stride-24 layout a coloured primitive lands on has no Normal slot either, so an authored NORMAL is discarded and the primitive cannot be lit at all. Supporting the combination means a new stride plus a shader variant on every renderer, the same blast radius that ruled out colour-space option A. GLTF-241's acceptance allows the other outcome -- REPORTED, not silently downgraded -- and that is what landed: MeshOut names both losses and both loaders log them.",
+      "owner": "GLTF-MATERIAL",
+      "owningTasks": [
+        "GLTF-238",
+        "GLTF-241"
+      ],
+      "closedTasks": [
+        "GLTF-241"
+      ],
+      "remainingTasks": [
+        "GLTF-238"
+      ],
+      "firstDivergentLayer": "L3",
+      "status": "partially-remediated",
+      "fixtures": [
+        "mat-vertex-color-pbr"
       ]
     }
   ],
@@ -573,6 +593,22 @@
         "emissiveFactor",
         "HDR emissive above 1",
         "no texture maps"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mat-vertex-color-pbr",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "COLOR_0 with a PBR material",
+        "unsupported material model",
+        "import report"
       ],
       "auditFixture": null
     },
@@ -999,6 +1035,31 @@
       "path": "mat-factor-only-gold.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "mat-vertex-color-pbr.expected.json",
+      "bytes": 10463,
+      "sha256": "c695605eafae1dcbf5fc0ad33240735b58886ee2080d982f771d4d87637b642e"
+    },
+    {
+      "path": "mat-vertex-color-pbr.glb",
+      "bytes": 1132,
+      "sha256": "09de249f0f902fd79d58298e91818583998d4f3dbeb01a2c8b403d8ef68b3755"
+    },
+    {
+      "path": "mat-vertex-color-pbr.gltf",
+      "bytes": 2050,
+      "sha256": "12ef25a44f62737f758ce2a663d75f14e935a4e35b1a0c91190cb66a9531523a"
+    },
+    {
+      "path": "mat-vertex-color-pbr.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-vertex-color-pbr.vb.bin",
+      "bytes": 72,
+      "sha256": "c6be0730d9234a8b9f6667f93969b2f04aee8a84d35794dc2a2a4c25c15e98d1"
     },
     {
       "path": "mode-line-loop.expected.json",

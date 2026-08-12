@@ -1607,6 +1607,17 @@ namespace CNA::Internal::GltfImport
             (prim.material == nullptr) ||
             (!prim.material->has_pbr_specular_glossiness && !prim.material->unlit);
         out.usePbr = (!out.colored) && metallicRoughnessMaterial;
+        // plan_gltf.md GLTF-241: `colored && metallicRoughnessMaterial` is the one combination the
+        // rule above refuses, and refusing it silently is what the task is about. No CNA vertex
+        // layout carries a Color alongside a Tangent and no PBR shader reads a colour stream, so
+        // supporting it means a new stride plus a shader variant on every renderer -- the same
+        // blast-radius argument that ruled out colour-space option A. The primitive is imported
+        // through BasicEffect with its vertex colours intact and the material is NAMED as dropped,
+        // which is the other outcome the task's acceptance allows.
+        if (out.colored && metallicRoughnessMaterial)
+        {
+            out.unsupportedMaterialModelEXT = "metallic-roughness";
+        }
         // GLTF-219/GLTF-221: the factors are read for ANY metallic-roughness material, not only
         // one that also selected PBR. They were assigned inside the old `usePbr` guard, so a
         // factor-only material left them at MeshOut's defaults -- the second half of D7, and the
@@ -1811,7 +1822,16 @@ namespace CNA::Internal::GltfImport
         const std::vector<float> positions = unpackSemantic(cgltf_attribute_type_position, 0, posAcc, 3, "POSITION");
         // Only the unskinned stride-24 (Position+Color+TextureCoordinate) and stride-20
         // (DualTextureEffect) layouts have no room for a per-vertex Normal.
-        const std::vector<float> normals = (normAcc && out.stride != 24 && out.stride != 20)
+        // plan_gltf.md GLTF-241: strides 24 and 20 have no Normal slot, so a primitive that lands
+        // on one loses its authored NORMAL entirely -- and therefore cannot be lit at all, not
+        // merely lit without a PBR material. That is the same limitation one layer deeper, and it
+        // is recorded rather than left for a reader to deduce from a stride.
+        const bool strideHasNormalSlot = (out.stride != 24 && out.stride != 20);
+        if (normAcc != nullptr && !strideHasNormalSlot)
+        {
+            out.droppedNormalForStrideEXT = true;
+        }
+        const std::vector<float> normals = (normAcc && strideHasNormalSlot)
             ? unpackSemantic(cgltf_attribute_type_normal, 0, normAcc, 3, "NORMAL") : std::vector<float>();
         std::vector<float> uvs = uvAcc
             ? unpackSemantic(cgltf_attribute_type_texcoord, texcoordIndex, uvAcc, 2, "TEXCOORD") : std::vector<float>();
