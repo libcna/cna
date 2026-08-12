@@ -34,13 +34,21 @@ comments and forward declarations:
 Both must reach zero for the plan's definition of done, so both are counted. The trade-off is that
 prose mentions of SDL in an explanatory comment also count; that is the conservative direction.
 
-What deliberately does *not* count: CNA's own identifiers that merely contain "SDL_" as an infix,
-notably the renderer-selection macros `CNA_RENDERER_SDL_RENDERER` and `CNA_RENDERER_SDL_GPU`. The
-leading `\b` in the patterns below excludes them, and that exclusion is load-bearing rather than
-incidental -- those macros name CNA build options, they survive the plan (the SDL_RENDERER and
-SDL_GPU renderers are allowlisted by design), and counting them would make the plan's definition
-of done unreachable by construction. A naive `grep SDL_` over the tree reports four extra files
-for exactly this reason.
+What deliberately does *not* count -- two classes of CNA-owned spelling that merely look like SDL:
+
+  1. Identifiers containing "SDL_" as an infix, notably the renderer-selection macros
+     `CNA_RENDERER_SDL_RENDERER` and `CNA_RENDERER_SDL_GPU`. The leading `\b` in the patterns
+     below excludes them.
+  2. The bare tokens `SDL_GPU` and `SDL_RENDERER` (see EXCLUDED_EXACT below). These are CNA's own
+     `CNA_GRAPHICS_RENDERER` identity names, written in prose and in enum-to-string tables.
+     Neither is an SDL3 API symbol -- the real API spells them `SDL_GPUDevice`, `SDL_GPUTexture`,
+     `SDL_CreateRenderer` and so on, all of which still count.
+
+Both exclusions are load-bearing rather than incidental: those spellings name CNA build options
+and renderer identities, they survive the plan by design (the SDL_RENDERER, SDL_GPU and FNA3D
+renderers are allowlisted), and counting them would make the plan's definition of done unreachable
+by construction. Together they are worth 78 files -- a naive `grep SDL_` over the tree reports
+four extra files for the first class and 74 for the second.
 
 Usage
 -----
@@ -77,6 +85,11 @@ SDL_IDENTIFIER_RE = re.compile(r"\bSDL_[A-Za-z0-9_]+\b")
 SDL_ANY_RE = re.compile(r"\bSDL_[A-Za-z0-9_]+\b|\bSDL3(?:_[A-Za-z0-9_]+)?/")
 WINDOW_PROPERTY_RE = re.compile(r"\bSDL_PROP_WINDOW_[A-Z0-9_]+\b")
 GL_RE = re.compile(r"\bSDL_GL_[A-Za-z0-9_]+\b")
+
+# CNA's own CNA_GRAPHICS_RENDERER identity names, which collide with SDL's namespace but are not
+# SDL API. Exact-token only: SDL_GPUDevice, SDL_GPUTexture, SDL_CreateRenderer and every other
+# real symbol is unaffected, as is the lowercase header name SDL_gpu (from <SDL3/SDL_gpu.h>).
+EXCLUDED_EXACT = frozenset({"SDL_GPU", "SDL_RENDERER"})
 
 PRODUCTION_AREAS = ("src", "include")
 NON_PRODUCTION_AREAS = ("tests", "examples")
@@ -219,9 +232,11 @@ def scan(repo_root: Path) -> Inventory:
         except OSError as exc:  # unreadable file is a scan defect, not something to skip quietly
             raise SystemExit(f"error: cannot read {path}: {exc}") from exc
 
-        matches = SDL_ANY_RE.findall(text)
+        matches = [m for m in SDL_ANY_RE.findall(text) if m not in EXCLUDED_EXACT]
         if not matches:
             continue
+
+        symbols = Counter(s for s in SDL_IDENTIFIER_RE.findall(text) if s not in EXCLUDED_EXACT)
 
         records.append(
             FileRecord(
@@ -230,7 +245,7 @@ def scan(repo_root: Path) -> Inventory:
                 is_renderer=is_renderer,
                 area=area,
                 reference_count=len(matches),
-                symbols=Counter(SDL_IDENTIFIER_RE.findall(text)),
+                symbols=symbols,
             )
         )
 
