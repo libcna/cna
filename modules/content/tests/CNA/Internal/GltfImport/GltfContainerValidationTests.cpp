@@ -262,16 +262,19 @@ TEST(GltfContainerValidation, AnUnsupportedUsedExtensionWarnsInsteadOfRejecting)
 TEST(GltfContainerValidation, SupportedExtensionsAreTheOnesCnaActuallyImplements)
 {
     // "Implements" is stricter than "notices", and the difference is load-bearing: ExtractMesh
-    // reads KHR_materials_unlit and KHR_materials_pbrSpecularGlossiness only to keep such a
-    // material OFF the metallic-roughness path (GLTF-215). Neither is implemented -- an unlit
-    // surface still goes through a lit effect -- so a file requiring either must be rejected.
+    // reads KHR_materials_pbrSpecularGlossiness only to keep such a material OFF the
+    // metallic-roughness path (GLTF-215). It is not implemented -- its parameters are dropped --
+    // so a file requiring it must be rejected.
     EXPECT_TRUE(IsGltfExtensionSupportedEXT("KHR_texture_transform"));
     EXPECT_TRUE(IsGltfExtensionSupportedEXT("KHR_materials_emissive_strength"));
     EXPECT_TRUE(IsGltfExtensionSupportedEXT("KHR_lights_punctual"));
+    // KHR_materials_unlit joined them at GLTF-337: it now maps to LightingEnabled = false with
+    // baseColorFactor as the diffuse colour, rather than merely being detected. It was the
+    // textbook case for "detecting is not implementing" until it stopped being one.
+    EXPECT_TRUE(IsGltfExtensionSupportedEXT("KHR_materials_unlit"));
 
-    EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_unlit"))
+    EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_pbrSpecularGlossiness"))
         << "detecting an extension is not implementing it";
-    EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_pbrSpecularGlossiness"));
     EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_variants"));
     EXPECT_FALSE(IsGltfExtensionSupportedEXT("EXT_mesh_gpu_instancing"));
     EXPECT_FALSE(IsGltfExtensionSupportedEXT(""));

@@ -289,6 +289,33 @@ The last row is a documented downgrade rather than a choice: no CNA vertex layou
 alongside a tangent and no PBR shader reads a colour stream, so a vertex-coloured PBR material
 keeps its colours and loses its material, and both loaders say so by name (`GLTF-241`).
 
+### `KHR_materials_unlit` is a mapping, not an approximation
+
+`GLTF-337`/`GLTF-338`. The extension means "shade this surface with its base colour and nothing
+else", and `BasicEffect::LightingEnabled = false` is exactly that — one of the few glTF extensions
+CNA implements rather than approximates. Three things travel with the flag:
+
+* **`baseColorFactor` becomes the diffuse colour.** On the non-PBR path nothing else reads it, so
+  without this an unlit material would import unlit *and white* — which is the effect's own
+  default, and therefore indistinguishable from the extension having been ignored.
+* **The punctual-light rig is skipped.** Every path through it ends with lighting on: the
+  no-lights fallback calls `EnableDefaultLighting()`, and the normal path enables light slots. So
+  applying it after setting the flag silently undoes it, and the file renders lit by XNA's default
+  three-light rig with nothing to show for it.
+* **The three light slots are parked, not left unset.** Their directions are uploaded whether or
+  not the lights contribute, and the effect's constructed default is the zero vector — which a
+  shader that normalises defensively turns into NaN. Zero colour makes the term a no-op; a unit
+  direction makes it a safe one.
+
+`unlitEXT` is its own flag rather than "not PBR", because the two mean different things: a
+vertex-coloured metallic-roughness primitive is also non-PBR (`GLTF-241`) and must still be **lit**.
+
+The one named limit is skinned: `SkinnedEffect`'s shader is lit by construction and has no
+`LightingEnabled` — real XNA's has none either. The nearest expressible thing is no directional
+light plus a white ambient, so `diffuse × ambient` is `diffuse`. That is unlit apart from any
+specular term the material asks for, which is why the registry classifies the extension
+`IMPLEMENTED_WITH_A_NAMED_LIMIT` rather than outright implemented.
+
 ## Lighting: what an imported model looks like with no lights
 
 `plan_gltf.md` `GLTF-242`/`GLTF-243`. `PbrEffect` defaults to **zero ambient with every light

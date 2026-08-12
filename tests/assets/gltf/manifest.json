@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 65,
+  "distinctAssetCount": 66,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -20,7 +20,7 @@
     "topology": 7,
     "normals": 1,
     "transforms": 7,
-    "materials": 6,
+    "materials": 7,
     "textures": 3,
     "skinning": 10,
     "animation": 11,
@@ -717,6 +717,26 @@
         "KHR_materials_unlit",
         "non-PBR material model",
         "vertex stride 32"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mat-unlit-vertex-color-alpha",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "KHR_materials_unlit",
+        "COLOR_0",
+        "translucent baseColorFactor",
+        "alphaMode BLEND",
+        "non-PBR material model"
       ],
       "auditFixture": null
     },
@@ -2009,9 +2029,34 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "mat-unlit-vertex-color-alpha.expected.json",
+      "bytes": 8396,
+      "sha256": "c4f521d9a66ba3fe1057991862c99737fa960f87b60a2ddd7cc400e6d635de32"
+    },
+    {
+      "path": "mat-unlit-vertex-color-alpha.glb",
+      "bytes": 1016,
+      "sha256": "588cdd1efd64c1db63326d21e6f0d5055dc466cfacc26c3224dae58095fe606f"
+    },
+    {
+      "path": "mat-unlit-vertex-color-alpha.gltf",
+      "bytes": 1819,
+      "sha256": "d2e86e0ecb089bb17cb4e4c552e5a47833e8fae7c928ddf5eefa05d09a503634"
+    },
+    {
+      "path": "mat-unlit-vertex-color-alpha.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-unlit-vertex-color-alpha.vb.bin",
+      "bytes": 72,
+      "sha256": "513478ad55573f6c5736d5b05b1840d4a0b5a07766d29f4df220f1adac8ef788"
+    },
+    {
       "path": "mat-unlit.expected.json",
-      "bytes": 7805,
-      "sha256": "07b9dff99a3e4336c587e386187062fbc0cc2b41e3a128d58a2d73142430ed41"
+      "bytes": 8692,
+      "sha256": "5cd16a69354001bb1cf0dd07702279c1e7c89b8a71d85c9b20aaf7ff2533d74e"
     },
     {
       "path": "mat-unlit.glb",

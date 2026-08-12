@@ -401,6 +401,20 @@ namespace CNA::Internal::GltfImport
          */
         std::string unsupportedMaterialModelEXT;
         /**
+         * @brief True when the material declares `KHR_materials_unlit` (plan_gltf.md `GLTF-337`).
+         *
+         * The extension means "shade this surface with its base colour and nothing else" — no
+         * lighting term at all. XNA expresses exactly that as `LightingEnabled = false` on
+         * `BasicEffect`/`SkinnedEffect`, so this is one of the few extensions that maps rather than
+         * approximates.
+         *
+         * Carried as its own flag rather than inferred from `usePbr` being false, because the two
+         * mean different things: a vertex-coloured metallic-roughness primitive is also non-PBR
+         * (`GLTF-241`) and must still be **lit**. Turning lighting off for it would darken a
+         * surface the file asked to be shaded.
+         */
+        bool unlitEXT = false;
+        /**
          * @brief True when the chosen vertex layout has no Normal slot and an authored NORMAL was
          * therefore discarded.
          *

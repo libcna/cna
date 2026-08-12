@@ -216,7 +216,7 @@ namespace
             // finally writing one instead of leaving every imported mesh called "mesh".
             std::string name;
             std::string vertFile, idxFile, textureFile, texture2File;
-            int stride; std::string effect; bool vertexColorEnabled;
+            int stride; std::string effect; bool vertexColorEnabled; bool unlit = false;
             // plan_gltf.md GLTF-073: the topology the index buffer is in, by its specification
             // name. Absent from a .cnj written before this, which could only ever hold a triangle
             // list -- so the reader's default is TRIANGLES and an older asset is unaffected.
@@ -497,6 +497,10 @@ namespace
                 entry.alphaCutoff = meshOut.alphaCutoff;
                 entry.doubleSided = meshOut.doubleSided;
                 entry.vertexColorEnabled = meshOut.colored;
+                // plan_gltf.md GLTF-337: KHR_materials_unlit. Carried through the .cnj so the two
+                // loaders agree -- the runtime path turns lighting off from MeshOut directly,
+                // and without this field the offline path would silently light the same file.
+                entry.unlit = meshOut.unlitEXT;
                 entry.morphFile = morphFile;
                 entry.morphWeights = morphWeights;
                 entry.morphWeightTrack = morphWeightTrack;
@@ -715,6 +719,17 @@ namespace
             if (!e.textureFile.empty()) { json << ", \"texture\": \"" << JsonEscape(e.textureFile) << "\""; }
             if (!e.texture2File.empty()) { json << ", \"texture2\": \"" << JsonEscape(e.texture2File) << "\""; }
             if (e.vertexColorEnabled) { json << ", \"vertexColorEnabled\": true"; }
+            // GLTF-337. The base colour travels with the flag on the non-PBR path: nothing else
+            // there reads baseColorFactor, so an unlit material would otherwise import unlit AND
+            // the wrong colour. The PBR branch below writes its own diffuseColor/alpha, and an
+            // unlit material never reaches it.
+            if (e.unlit)
+            {
+                json << ", \"unlit\": true"
+                     << ", \"diffuseColor\": [" << e.baseColorFactor.X << ", " << e.baseColorFactor.Y
+                     << ", " << e.baseColorFactor.Z << "]"
+                     << ", \"alpha\": " << e.baseColorFactor.W;
+            }
             // Only written when it is not the default, so an ordinary triangle-list asset's .cnj
             // is byte-identical to what it was before GLTF-073.
             if (e.primitiveTopology != "TRIANGLES")

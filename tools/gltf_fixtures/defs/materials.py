@@ -468,9 +468,11 @@ def mat_unlit() -> Fixture:
     non-PBR content ends up on. Without this fixture the widest stride in the ABI had no golden
     bytes at all.
 
-    The extension is declared as *used* rather than *required*: CNA does not implement unlit
-    shading (`GLTF-215` only keeps such a material off the PBR path), and a file requiring it would
-    be refused at validation before producing any buffer to compare.
+    Since `GLTF-337` the extension is also **implemented**: it maps to ``LightingEnabled = false``
+    on `BasicEffect` with ``baseColorFactor`` as the diffuse colour, which is exactly what "shade
+    this surface with its base colour and nothing else" means. The base colour is authored neither
+    white nor grey precisely so a material that arrived unlit but at the effect's own default white
+    is a different, detectable result from one that arrived correctly.
     """
     b = GltfBuilder("mat-unlit")
     position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
@@ -526,7 +528,25 @@ def mat_unlit() -> Fixture:
             positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
             texcoords=_UNLIT_TEXCOORDS, indices=TRIANGLE_INDICES,
             material=expected_material)]},
-        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+        l4={**world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+            "unlit": {
+                "declared": True,
+                "effect": "BasicEffect",
+                "lightingEnabled": False,
+                "diffuseColor": [0.2, 0.6, 0.9],
+                "alpha": 1.0,
+                "rule": "KHR_materials_unlit means 'shade this surface with its base colour and "
+                        "nothing else', and LightingEnabled = false is precisely that -- one of "
+                        "the few extensions that maps rather than approximates (GLTF-337).",
+                "colourRule": "The base colour must come from baseColorFactor. On the non-PBR "
+                              "path nothing else reads it, so an unlit material would otherwise "
+                              "import unlit AND white -- which is why this one is neither white "
+                              "nor grey.",
+                "lightingRigRule": "The punctual-light rig is SKIPPED for an unlit primitive. "
+                                   "Every path through it ends with lighting on -- the no-lights "
+                                   "fallback calls EnableDefaultLighting() -- so applying it "
+                                   "would immediately undo the flag.",
+            }},
     )
 
 
@@ -603,5 +623,112 @@ def mat_authored_tangent() -> Fixture:
     )
 
 
+#: `mat-unlit-vertex-color-alpha`'s per-vertex colours: three saturated, mutually distinct RGBs at
+#: three distinct alphas, so a dropped colour stream, a swapped channel order and a dropped alpha
+#: are each separately visible rather than collectively "looks wrong".
+_UNLIT_VERTEX_COLORS = [(1.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.0, 0.5), (0.0, 0.0, 1.0, 0.25)]
+
+
+def mat_unlit_vertex_color_alpha() -> Fixture:
+    """`KHR_materials_unlit` with `COLOR_0` and a transparent base colour. Owns **GLTF-338**.
+
+    The two things an unlit material is most often combined with, and the two that most easily get
+    lost when "turn lighting off" is implemented as a special case rather than as a flag:
+
+    * **Vertex colour.** ``COLOR_0`` multiplies the diffuse colour in the shader exactly as it does
+      for a lit `BasicEffect`, so unlit needs no separate path -- but a material selection that
+      treated unlit as its own effect type would have to reimplement it, and would forget the
+      alpha channel first. Both are asserted.
+    * **Alpha.** The extension does not exempt a surface from ``alphaMode``: an unlit material with
+      a transparent base colour is the ordinary way to author a decal or a UI plane, and it is
+      exactly the case where "unlit" is most likely to be read as "no material state at all".
+
+    ``baseColorFactor``'s alpha is 0.5 and the material declares ``BLEND``, so the surface's final
+    alpha is a product of two authored numbers rather than either one -- a reader that dropped
+    one would still produce a translucent surface, at the wrong translucency.
+    """
+    b = GltfBuilder("mat-unlit-vertex-color-alpha")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    # No NORMAL, deliberately. §3.7.2.1 makes it optional, an unlit surface has no lighting term to
+    # use one for, and a coloured primitive lands on the stride-24 Position+Color layout which has
+    # no normal slot anyway -- so authoring one would add an irrelevant loss to a fixture that is
+    # about exactly two things.
+    color = b.add_packed_accessor(usage="COLOR_0", values=_UNLIT_VERTEX_COLORS,
+                                  accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "UnlitDecal",
+        "pbrMetallicRoughness": {"baseColorFactor": [1.0, 0.8, 0.4, 0.5]},
+        "alphaMode": "BLEND",
+        "extensions": {"KHR_materials_unlit": {}},
+    })
+    b.declare_extensions(used=["KHR_materials_unlit"])
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "COLOR_0": color},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="UnlitDecalTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    expected_material = {
+        "index": material,
+        "name": "UnlitDecal",
+        "model": "unlit",
+        "baseColorFactor": [1.0, 0.8, 0.4, 0.5],
+        "metallicFactor": 1.0,
+        "roughnessFactor": 1.0,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "BLEND",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return Fixture(
+        id="mat-unlit-vertex-color-alpha", audit_fixture=None, owning_group="materials",
+        description="An unlit material with a translucent base colour on a primitive carrying "
+                    "COLOR_0. Vertex colour and alpha are the two things an unlit material is most "
+                    "often combined with and the two most easily lost when 'lighting off' is "
+                    "implemented as a special case rather than as a flag.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["KHR_materials_unlit", "COLOR_0", "translucent baseColorFactor", "alphaMode BLEND",
+                  "non-PBR material model"],
+        spec_anchors=["metallic-roughness-material", "alpha-coverage"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="UnlitDecalTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS,
+            colors=_UNLIT_VERTEX_COLORS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4={**world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+            "unlit": {
+                "declared": True,
+                "effect": "BasicEffect",
+                "lightingEnabled": False,
+                "vertexColorEnabled": True,
+                "diffuseColor": [1.0, 0.8, 0.4],
+                "alpha": 0.5,
+                "vertexColors": [list(c) for c in _UNLIT_VERTEX_COLORS],
+                "vertexColorRule": "COLOR_0 multiplies the diffuse colour in the shader exactly as "
+                                   "it does for a lit BasicEffect, so unlit needs no separate path "
+                                   "-- but an implementation that made unlit its own effect type "
+                                   "would have to reimplement it, and would drop the alpha channel "
+                                   "first.",
+                "alphaRule": "The extension does not exempt a surface from alphaMode. The final "
+                             "alpha is baseColorFactor.a TIMES the vertex alpha, so a reader that "
+                             "dropped either still produces a translucent surface -- at the wrong "
+                             "translucency.",
+            }},
+    )
+
+
 FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr,
-            mat_normal_occlusion_scale, mat_unlit, mat_authored_tangent]
+            mat_normal_occlusion_scale, mat_unlit, mat_unlit_vertex_color_alpha,
+            mat_authored_tangent]

@@ -1981,6 +1981,11 @@ namespace CNA::Internal::GltfImport
             (prim.material == nullptr) ||
             (!prim.material->has_pbr_specular_glossiness && !prim.material->unlit);
         out.usePbr = (!out.colored) && metallicRoughnessMaterial;
+        // plan_gltf.md GLTF-337. Its own flag rather than "not usePbr", because the two mean
+        // different things: a vertex-coloured metallic-roughness primitive is also non-PBR
+        // (GLTF-241) and must still be LIT. Conflating them would darken a surface the file asked
+        // to be shaded, which is the same class of silent wrongness as leaving unlit lit.
+        out.unlitEXT = (prim.material != nullptr) && (prim.material->unlit != 0);
         // GLTF-238: the material's identity, for effect sharing in the loaders.
         out.materialEXT = prim.material;
         // plan_gltf.md GLTF-241: `colored && metallicRoughnessMaterial` is the one combination the
@@ -3197,9 +3202,11 @@ namespace CNA::Internal::GltfImport
                 {"EXT_texture_webp", GltfExtensionSupportEXT::Unsupported, false,
                  "No WebP decoder; same three outcomes as KHR_texture_basisu.",
                  "GLTF-350"},
-                {"KHR_materials_unlit", GltfExtensionSupportEXT::ParsedButIgnored, false,
-                 "Detected only to keep the material off the metallic-roughness path so it cannot "
-                 "be mis-shaded as PBR. The surface still goes through a lit effect.",
+                {"KHR_materials_unlit", GltfExtensionSupportEXT::ImplementedWithNamedLimit, true,
+                 "Maps to LightingEnabled = false on BasicEffect, with baseColorFactor as the "
+                 "diffuse colour. SkinnedEffect has no such flag -- real XNA's has none either -- "
+                 "so a skinned unlit material is approximated with an all-white ambient and no "
+                 "directional light, which is unlit apart from any specular term.",
                  "GLTF-337"},
                 {"KHR_materials_pbrSpecularGlossiness", GltfExtensionSupportEXT::ParsedButIgnored,
                  false,

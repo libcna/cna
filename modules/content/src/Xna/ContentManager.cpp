@@ -1921,6 +1921,79 @@ namespace Microsoft::Xna::Framework::Content
             }
         }
 
+        // plan_gltf.md GLTF-337: KHR_materials_unlit -> BasicEffect/SkinnedEffect with lighting off.
+        //
+        // One of the few extensions that MAPS rather than approximates: the extension means "shade
+        // this surface with its base colour and nothing else", and `LightingEnabled = false` is
+        // precisely that. Both stock effects that carry the flag are handled; DualTextureEffect and
+        // AlphaTestEffect have no lighting term at all, so an unlit material on one of them is
+        // already correct and needs no flag -- but it still needs its base colour, which is why the
+        // colour is applied for every effect type and the flag only where it exists.
+        //
+        // GLTF-338: the base colour is `baseColorFactor`, and vertex colour multiplies it in the
+        // shader exactly as it does for a lit BasicEffect, so unlit + COLOR_0 needs no separate
+        // path. Alpha travels with it: the extension does not exempt a surface from `alphaMode`,
+        // and an unlit material with a transparent base colour is an ordinary way to author a decal.
+        //
+        // @return True when the primitive was unlit, so the caller can skip the lighting rig.
+        bool ApplyUnlitMaterialEXT(Graphics::Effect& fx,
+                                    const CNA::Internal::GltfImport::MeshOut& meshOut)
+        {
+            if (!meshOut.unlitEXT) { return false; }
+
+            // Every slot parked at a contributing-nothing but WELL-FORMED state. Skipping the
+            // lighting rig leaves the three slots at the effect's own constructed defaults, whose
+            // direction is the zero vector -- and a direction is uploaded whether or not its light
+            // contributes, so a shader that normalises defensively gets NaN out of a surface that
+            // was only supposed to be unlit. Zero colour makes the term a no-op; a unit direction
+            // makes it a *safe* no-op. (Caught by GltfConformanceL6's own unit-length invariant,
+            // which is exactly the kind of hazard it exists for.)
+            const auto parkLights = [](Graphics::IEffectLights& lit) {
+                Graphics::DirectionalLight* slots[3] = {
+                    &lit.getDirectionalLight0Property(),
+                    &lit.getDirectionalLight1Property(),
+                    &lit.getDirectionalLight2Property(),
+                };
+                for (Graphics::DirectionalLight* slot : slots)
+                {
+                    slot->setEnabledProperty(false);
+                    slot->setDiffuseColorProperty(Vector3::Zero);
+                    slot->setSpecularColorProperty(Vector3::Zero);
+                    slot->setDirectionProperty(Vector3(0.0f, -1.0f, 0.0f));
+                }
+            };
+
+            const Vector3 baseColor(meshOut.baseColorFactor.X, meshOut.baseColorFactor.Y,
+                                     meshOut.baseColorFactor.Z);
+            if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(&fx))
+            {
+                basicFx->setLightingEnabledProperty(false);
+                parkLights(*basicFx);
+                basicFx->setDiffuseColorProperty(baseColor);
+                basicFx->setAlphaProperty(meshOut.baseColorFactor.W);
+            }
+            else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(&fx))
+            {
+                // SkinnedEffect's shader is lit by construction and has no LightingEnabled flag --
+                // real XNA's does not either. The nearest expressible thing is a lighting rig that
+                // contributes nothing but the surface's own colour: no directional light, and an
+                // ambient of white, so diffuse * ambient is diffuse. Approximate rather than exact
+                // (a specular term would still apply if the material asked for one), and named as
+                // such by the caller's report rather than passed off as the mapping BasicEffect gets.
+                parkLights(*skinnedFx);
+                skinnedFx->setAmbientLightColorProperty(Vector3::One);
+                skinnedFx->setDiffuseColorProperty(baseColor);
+                skinnedFx->setAlphaProperty(meshOut.baseColorFactor.W);
+            }
+            else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(&fx))
+            {
+                // No lighting term at all, so it is already unlit; only the colour is missing.
+                dualFx->setDiffuseColorProperty(baseColor);
+                dualFx->setAlphaProperty(meshOut.baseColorFactor.W);
+            }
+            return true;
+        }
+
         // plan_cnj.md CNB-70/71 (Phase 13D): loads a .gltf/.glb file directly into a real Model,
         // with no intermediate .cnj/binary sidecar files -- reuses the same
         // CNA::Internal::GltfImport::GltfImportCore parsing/skeleton/animation/mesh-extraction
@@ -2924,7 +2997,25 @@ namespace Microsoft::Xna::Framework::Content
                         }
                     }
 
-                    ApplyPunctualLightsEXT(*fx, punctualLights);
+                    // plan_gltf.md GLTF-337: KHR_materials_unlit. The extension says "shade this
+                    // surface with its base colour and nothing else", and XNA expresses exactly
+                    // that -- so this maps rather than approximates. The base colour has to be
+                    // applied here as well as the lighting flag: on the non-PBR path nothing else
+                    // reads baseColorFactor, so an unlit material's colour would otherwise be the
+                    // effect's own white and the extension would import as "unlit, and the wrong
+                    // colour".
+                    if (ApplyUnlitMaterialEXT(*fx, meshOut))
+                    {
+                        // Deliberately not ApplyPunctualLightsEXT: every one of its paths ends with
+                        // lighting ON -- the fallback calls EnableDefaultLighting(), and the normal
+                        // path enables light slots -- so calling it here would immediately undo the
+                        // flag just set, leaving an unlit material lit by the scene or by XNA's
+                        // default rig. Skipping it is the point, not an omission.
+                    }
+                    else
+                    {
+                        ApplyPunctualLightsEXT(*fx, punctualLights);
+                    }
 
                     instanceEffects.push_back(fx.get());
                     effectCache.emplace(effectKey, fx.get());
@@ -3307,6 +3398,12 @@ namespace Microsoft::Xna::Framework::Content
                                 ExtractJsonStringField(mg, "alphaMode"));
                             const float alphaCutoff = JsonFloat(mg, "alphaCutoff", 0.5f);
                             const bool doubleSided = JsonBool(mg, "doubleSided", false);
+                            // plan_gltf.md GLTF-337: KHR_materials_unlit, carried so the two
+                            // loaders agree. Absent from a .cnj written before it, whose default is
+                            // "lit" -- which is what such a file could only ever have meant.
+                            const bool unlit = JsonBool(mg, "unlit", false);
+                            const auto unlitDiffuseArr = JsonFloatArray3(mg, FindKeyArray(mg, "diffuseColor"));
+                            const float unlitAlpha = JsonFloat(mg, "alpha", 1.0f);
                             // Morph target CLI/.cnj serialization: "morphTargets" is the binary
                             // sidecar path (BuildMorphBytes' own format, see gltf_to_cnj.cpp),
                             // "morphWeights" the default blend weights, and "morphWeightTrack"
@@ -3665,7 +3762,22 @@ namespace Microsoft::Xna::Framework::Content
                                 }
                             }
 
-                            ApplyPunctualLightsEXT(*fx, punctualLights);
+                            // GLTF-337, the offline twin of the runtime path's own branch: an
+                            // unlit material gets its lighting turned off and the lighting rig
+                            // skipped, because every path through ApplyPunctualLightsEXT ends with
+                            // lighting ON and would undo the flag.
+                            if (unlit)
+                            {
+                                CNA::Internal::GltfImport::MeshOut unlitOut;
+                                unlitOut.unlitEXT = true;
+                                unlitOut.baseColorFactor = Vector4(unlitDiffuseArr[0], unlitDiffuseArr[1],
+                                                                    unlitDiffuseArr[2], unlitAlpha);
+                                ApplyUnlitMaterialEXT(*fx, unlitOut);
+                            }
+                            else
+                            {
+                                ApplyPunctualLightsEXT(*fx, punctualLights);
+                            }
 
                             pendingMeshes.back().effects.push_back(fx.get());
                             res->effectOwners.push_back(std::move(fx));

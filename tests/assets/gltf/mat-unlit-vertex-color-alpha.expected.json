@@ -1,6 +1,6 @@
 {
-  "id": "mat-unlit",
-  "description": "A material declaring KHR_materials_unlit. CNA has no unlit shader, so the primitive imports through BasicEffect on the stride-32 Position+Normal+TextureCoordinate layout -- the one unskinned stride no other fixture reaches, and the one most non-PBR content uses.",
+  "id": "mat-unlit-vertex-color-alpha",
+  "description": "An unlit material with a translucent base colour on a primitive carrying COLOR_0. Vertex colour and alpha are the two things an unlit material is most often combined with and the two most easily lost when 'lighting off' is implemented as a special case rather than as a flag.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -14,10 +14,11 @@
     "document": "docs/gltf-conformance.md"
   },
   "specAnchors": [
-    "metallic-roughness-material"
+    "metallic-roughness-material",
+    "alpha-coverage"
   ],
   "inventory": {
-    "id": "mat-unlit",
+    "id": "mat-unlit-vertex-color-alpha",
     "owningGroup": "materials",
     "referencingGroups": [],
     "validatedLayers": [
@@ -29,8 +30,10 @@
     ],
     "features": [
       "KHR_materials_unlit",
-      "non-PBR material model",
-      "vertex stride 32"
+      "COLOR_0",
+      "translucent baseColorFactor",
+      "alphaMode BLEND",
+      "non-PBR material model"
     ],
     "auditFixture": null
   },
@@ -46,10 +49,10 @@
     "samplerCount": 0,
     "skinCount": 0,
     "animationCount": 0,
-    "accessorCount": 4,
-    "bufferViewCount": 4,
+    "accessorCount": 3,
+    "bufferViewCount": 3,
     "bufferCount": 1,
-    "bufferByteLength": 102,
+    "bufferByteLength": 90,
     "extensionsUsed": [
       "KHR_materials_unlit"
     ],
@@ -86,12 +89,12 @@
       },
       {
         "index": 1,
-        "usage": "NORMAL",
-        "type": "VEC3",
+        "usage": "COLOR_0",
+        "type": "VEC4",
         "componentType": 5126,
         "componentTypeName": "FLOAT",
         "count": 3,
-        "componentsPerElement": 3,
+        "componentsPerElement": 4,
         "normalized": false,
         "sparse": false,
         "bufferView": 1,
@@ -99,42 +102,22 @@
         "bufferViewByteOffset": 36,
         "bufferViewByteStride": null,
         "values": [
-          0.0,
-          0.0,
           1.0,
           0.0,
           0.0,
           1.0,
           0.0,
+          1.0,
           0.0,
-          1.0
+          0.5,
+          0.0,
+          0.0,
+          1.0,
+          0.25
         ]
       },
       {
         "index": 2,
-        "usage": "TEXCOORD_0",
-        "type": "VEC2",
-        "componentType": 5126,
-        "componentTypeName": "FLOAT",
-        "count": 3,
-        "componentsPerElement": 2,
-        "normalized": false,
-        "sparse": false,
-        "bufferView": 2,
-        "byteOffset": 0,
-        "bufferViewByteOffset": 72,
-        "bufferViewByteStride": null,
-        "values": [
-          0.0,
-          0.0,
-          0.75,
-          0.125,
-          0.25,
-          0.875
-        ]
-      },
-      {
-        "index": 3,
         "usage": "indices",
         "type": "SCALAR",
         "componentType": 5123,
@@ -143,9 +126,9 @@
         "componentsPerElement": 1,
         "normalized": false,
         "sparse": false,
-        "bufferView": 3,
+        "bufferView": 2,
         "byteOffset": 0,
-        "bufferViewByteOffset": 96,
+        "bufferViewByteOffset": 84,
         "bufferViewByteStride": null,
         "values": [
           0,
@@ -159,7 +142,7 @@
     "primitives": [
       {
         "mesh": 0,
-        "meshName": "UnlitTri",
+        "meshName": "UnlitDecalTri",
         "primitive": 0,
         "mode": 4,
         "modeName": "TRIANGLES",
@@ -182,39 +165,29 @@
             0.0
           ]
         ],
-        "normals": [
-          [
-            0.0,
-            0.0,
-            1.0
-          ],
-          [
-            0.0,
-            0.0,
-            1.0
-          ],
-          [
-            0.0,
-            0.0,
-            1.0
-          ]
-        ],
+        "normals": [],
         "tangents": [],
-        "texcoords": [
+        "texcoords": [],
+        "colors": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
           [
             0.0,
-            0.0
+            1.0,
+            0.0,
+            0.5
           ],
           [
-            0.75,
-            0.125
-          ],
-          [
-            0.25,
-            0.875
+            0.0,
+            0.0,
+            1.0,
+            0.25
           ]
         ],
-        "colors": [],
         "joints": [],
         "weights": [],
         "indices": [
@@ -243,13 +216,13 @@
         },
         "material": {
           "index": 0,
-          "name": "Unlit",
+          "name": "UnlitDecal",
           "model": "unlit",
           "baseColorFactor": [
-            0.2,
-            0.6,
-            0.9,
-            1.0
+            1.0,
+            0.8,
+            0.4,
+            0.5
           ],
           "metallicFactor": 1.0,
           "roughnessFactor": 1.0,
@@ -258,7 +231,7 @@
             0.0,
             0.0
           ],
-          "alphaMode": "OPAQUE",
+          "alphaMode": "BLEND",
           "alphaCutoff": 0.5,
           "doubleSided": false,
           "hasBaseColorTexture": false,
@@ -330,15 +303,35 @@
       "declared": true,
       "effect": "BasicEffect",
       "lightingEnabled": false,
+      "vertexColorEnabled": true,
       "diffuseColor": [
-        0.2,
-        0.6,
-        0.9
+        1.0,
+        0.8,
+        0.4
       ],
-      "alpha": 1.0,
-      "rule": "KHR_materials_unlit means 'shade this surface with its base colour and nothing else', and LightingEnabled = false is precisely that -- one of the few extensions that maps rather than approximates (GLTF-337).",
-      "colourRule": "The base colour must come from baseColorFactor. On the non-PBR path nothing else reads it, so an unlit material would otherwise import unlit AND white -- which is why this one is neither white nor grey.",
-      "lightingRigRule": "The punctual-light rig is SKIPPED for an unlit primitive. Every path through it ends with lighting on -- the no-lights fallback calls EnableDefaultLighting() -- so applying it would immediately undo the flag."
+      "alpha": 0.5,
+      "vertexColors": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.5
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.25
+        ]
+      ],
+      "vertexColorRule": "COLOR_0 multiplies the diffuse colour in the shader exactly as it does for a lit BasicEffect, so unlit needs no separate path -- but an implementation that made unlit its own effect type would have to reimplement it, and would drop the alpha channel first.",
+      "alphaRule": "The extension does not exempt a surface from alphaMode. The final alpha is baseColorFactor.a TIMES the vertex alpha, so a reader that dropped either still produces a translucent surface -- at the wrong translucency."
     }
   },
   "l5": {
@@ -347,7 +340,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 32,
+        "stride": 24,
         "vertexCount": 3,
         "fields": [
           {
@@ -356,22 +349,22 @@
             "size": 12
           },
           {
-            "name": "Normal",
+            "name": "Color",
             "offset": 12,
-            "size": 12
+            "size": 4
           },
           {
             "name": "TextureCoordinate",
-            "offset": 24,
+            "offset": 16,
             "size": 8
           }
         ],
-        "vertexBufferFile": "mat-unlit.vb.bin",
-        "vertexBufferBytes": 96,
-        "vertexBufferSha256": "67e87664299f96b4aa72ad26b7a9f05fae99cb44539db4dc9cf49b1c0e99321e",
+        "vertexBufferFile": "mat-unlit-vertex-color-alpha.vb.bin",
+        "vertexBufferBytes": 72,
+        "vertexBufferSha256": "513478ad55573f6c5736d5b05b1840d4a0b5a07766d29f4df220f1adac8ef788",
         "indexElementSize": 2,
         "indexCount": 3,
-        "indexBufferFile": "mat-unlit.ib.bin",
+        "indexBufferFile": "mat-unlit-vertex-color-alpha.ib.bin",
         "indexBufferBytes": 6,
         "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
         "sourceTopology": "TRIANGLES",
