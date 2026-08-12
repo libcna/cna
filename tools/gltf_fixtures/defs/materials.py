@@ -157,4 +157,92 @@ def mat_factor_only_gold() -> Fixture:
     )
 
 
-FIXTURES = [mat_factor_only_gold]
+#: The emissive factor and strength of `mat-emissive-strength`. The product deliberately exceeds
+#: 1 in two channels, which is the whole point of the extension: `emissiveFactor` alone is clamped
+#: to [0,1] by the schema, and real HDR-authored content routinely wants more than that.
+_EMISSIVE_STRENGTH_FACTOR = [0.4, 0.2, 0.1]
+_EMISSIVE_STRENGTH = 5.0
+
+
+def mat_emissive_strength() -> Fixture:
+    """``KHR_materials_emissive_strength`` on a factor-only material. Owns **GLTF-222**.
+
+    §3.9.3's ``emissiveFactor`` is a `[0,1]` value; the extension multiplies it, and the product is
+    what a renderer must use. Both numbers are stated separately in the manifest alongside their
+    product, so a reader that applied the factor but dropped the strength -- the exact shape of the
+    defect, which used to sit behind the ``usePbr`` guard -- fails against a value the fixture
+    states rather than one a test computed for itself.
+
+    The material carries no texture map at all, which is deliberate: the strength must survive on a
+    material that has nothing else to select PBR by.
+    """
+    b = GltfBuilder("mat-emissive-strength")
+    b.declare_extensions(used=["KHR_materials_emissive_strength"])
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "Ember",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": [0.1, 0.1, 0.1, 1.0],
+            "metallicFactor": 0.0,
+            "roughnessFactor": 0.8,
+        },
+        "emissiveFactor": _EMISSIVE_STRENGTH_FACTOR,
+        "extensions": {
+            "KHR_materials_emissive_strength": {"emissiveStrength": _EMISSIVE_STRENGTH},
+        },
+    })
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="EmberTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    product = [c * _EMISSIVE_STRENGTH for c in _EMISSIVE_STRENGTH_FACTOR]
+    expected_material = {
+        "index": material,
+        "name": "Ember",
+        "baseColorFactor": [0.1, 0.1, 0.1, 1.0],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.8,
+        # The authored value, the multiplier, and the product a renderer must use -- all three
+        # stated, because a fixture that gave only the product could not tell "strength applied"
+        # from "a factor authored at that value in the first place".
+        "emissiveFactor": _EMISSIVE_STRENGTH_FACTOR,
+        "emissiveStrength": _EMISSIVE_STRENGTH,
+        "emissiveFactorTimesStrength": product,
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return Fixture(
+        id="mat-emissive-strength", audit_fixture=None, owning_group="materials",
+        description="A factor-only metallic-roughness material carrying "
+                    "KHR_materials_emissive_strength. emissiveFactor [0.4,0.2,0.1] times a "
+                    "strength of 5 gives [2.0,1.0,0.5] -- two channels above 1, which is what the "
+                    "extension exists for and what a clamped or dropped strength would destroy.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["KHR_materials_emissive_strength", "emissiveFactor", "HDR emissive above 1",
+                  "no texture maps"],
+        spec_anchors=["additional-textures", "metallic-roughness-material"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="EmberTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+FIXTURES = [mat_factor_only_gold, mat_emissive_strength]

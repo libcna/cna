@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 using CNA::Internal::JsonType;
 using CNA::Internal::JsonValue;
@@ -448,8 +449,15 @@ TEST(GltfConformanceL6, MaterialFactorsReachTheBoundEffect)
                     d.metallicFactor, kTolerance);
         EXPECT_NEAR(static_cast<float>(NumberOr(material, "roughnessFactor", -1.0)),
                     d.roughnessFactor, kTolerance);
-        ExpectFlatNear(Numbers(Member(material, "emissiveFactor")), d.emissiveColor.data(), 3,
-                       "emissiveFactor -> emissiveColor");
+        // KHR_materials_emissive_strength multiplies the [0,1] emissiveFactor, and the PRODUCT is
+        // what a renderer must bind. A fixture that carries the extension states all three numbers
+        // (factor, strength, product) so this comparison reads the spec-derived answer rather than
+        // recomputing one -- and so a strength that was applied twice, or not at all, is a
+        // mismatch against a stated value.
+        const JsonValue& scaledEmissive = Member(material, "emissiveFactorTimesStrength");
+        ExpectFlatNear(Numbers(scaledEmissive.type == JsonType::Array
+                                   ? scaledEmissive : Member(material, "emissiveFactor")),
+                       d.emissiveColor.data(), 3, "emissive -> emissiveColor");
         EXPECT_EQ(StringOr(material, "alphaMode", "OPAQUE"), d.alphaMode);
         ++checked;
     }
@@ -733,4 +741,91 @@ TEST(GltfConformanceL6, EveryMeshGroupOfAMixedFileIsImportedAndDrawable)
         }
     }
     EXPECT_TRUE(checkedStaticPlacement) << "the static instance is not in the L4 manifest";
+}
+
+// --- plan_gltf.md GLTF-222: KHR_materials_emissive_strength ----------------------------------------
+
+// The extension exists because `emissiveFactor` is a [0,1] value and HDR-authored content wants
+// more. A strength that is dropped, or applied and then clamped, destroys exactly that -- so the
+// assertion is not merely "the emissive matches" but "the emissive is above 1 and matches".
+TEST(GltfConformanceL6, EmissiveStrengthMultipliesTheFactorAndSurvivesAboveOne)
+{
+    const LoadedFixture fixture("mat-emissive-strength");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& material = FirstMaterial(fixture);
+    ASSERT_EQ(JsonType::Object, material.type);
+
+    const std::vector<double> authored = Numbers(Member(material, "emissiveFactor"));
+    const std::vector<double> product  = Numbers(Member(material, "emissiveFactorTimesStrength"));
+    const double strength = NumberOr(material, "emissiveStrength", -1.0);
+    ASSERT_EQ(3u, authored.size());
+    ASSERT_EQ(3u, product.size());
+    ASSERT_GT(strength, 1.0) << "the fixture no longer authors a strength that changes anything";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-emissive-strength");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    ASSERT_TRUE(d.pbr) << "a material carrying only factors must still select the PBR path";
+    ExpectFlatNear(product, d.emissiveColor.data(), 3, "emissiveFactor * strength");
+
+    // The two failure shapes named separately, so a failure says which one happened.
+    for (std::size_t i = 0; i < 3; ++i)
+    {
+        EXPECT_GT(std::fabs(d.emissiveColor[i] - static_cast<float>(authored[i])), 1e-4f)
+            << "channel " << i << ": the strength was not applied at all";
+    }
+    EXPECT_GT(d.emissiveColor[0], 1.0f)
+        << "the emissive was clamped to [0,1] -- which is precisely what the extension exists to "
+           "lift, so a clamp makes carrying it pointless";
+}
+
+// --- plan_gltf.md GLTF-152: ModelMeshPart counts and offsets ----------------------------------------
+
+// The count half was replaced by GLTF-078's topology-aware helper and is asserted per topology by
+// `CapturedTopologyAndPrimitiveCountMatchTheImportPolicy` above. The offsets are the other half and
+// had no test at all: the glTF loader gives every part its own vertex and index buffer, so
+// `VertexOffset` and `StartIndex` are 0 by construction. That is a real invariant rather than a
+// coincidence -- the draw reads `[StartIndex, StartIndex + 3*PrimitiveCount)` against a buffer
+// sized exactly for the part -- and a future change that starts packing several parts into one
+// buffer must set them rather than inherit a silent 0.
+TEST(GltfConformanceL6, EveryImportedPartOwnsItsBuffersSoItsOffsetsAreZero)
+{
+    std::size_t checkedParts = 0;
+    for (const std::string& id : LoadableFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        GraphicsDevice gd;
+        ContentManager cm(nullptr, CorpusDirectory().string());
+        cm.setGraphicsDevice(gd);
+        Model model = cm.Load<Model>(id);
+
+        const auto& meshes = model.getMeshesProperty();
+        for (int mi = 0; mi < meshes.getCountProperty(); ++mi)
+        {
+            const auto& parts = meshes[mi]->getMeshPartsProperty();
+            for (int pi = 0; pi < parts.getCountProperty(); ++pi)
+            {
+                const auto* part = parts[pi];
+                ASSERT_NE(nullptr, part);
+                SCOPED_TRACE("mesh " + std::to_string(mi) + " part " + std::to_string(pi));
+                EXPECT_EQ(0, part->getVertexOffsetProperty());
+                EXPECT_EQ(0, part->getStartIndexProperty());
+                // And the buffer really is the part's own: NumVertices must span all of it, which
+                // is what makes a zero VertexOffset correct rather than merely untested.
+                ASSERT_NE(nullptr, part->getVertexBufferProperty());
+                EXPECT_EQ(part->getVertexBufferProperty()->getVertexCountProperty(),
+                          part->getNumVerticesProperty());
+                ++checkedParts;
+            }
+        }
+    }
+    EXPECT_GT(checkedParts, 0u) << "no part was checked";
 }

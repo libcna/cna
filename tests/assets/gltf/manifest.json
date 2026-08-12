@@ -12,14 +12,14 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 25,
+  "distinctAssetCount": 26,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
     "component-types": 2,
     "topology": 7,
     "transforms": 5,
-    "materials": 1,
+    "materials": 2,
     "skinning": 3,
     "animation": 1,
     "scenes": 1,
@@ -559,6 +559,23 @@
       "auditFixture": "f8"
     },
     {
+      "id": "mat-emissive-strength",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "KHR_materials_emissive_strength",
+        "emissiveFactor",
+        "HDR emissive above 1",
+        "no texture maps"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "skin-armature-ancestor",
       "owningGroup": "skinning",
       "referencingGroups": [],
@@ -743,6 +760,31 @@
       "path": "interleaved-position-normal.vb.bin",
       "bytes": 144,
       "sha256": "f9de2f9261a351eea66984930c69ac5a51a1dbdd2260b6c567163e535defb82d"
+    },
+    {
+      "path": "mat-emissive-strength.expected.json",
+      "bytes": 7302,
+      "sha256": "614ecbf9a9b4b42eadfead254a9868a2074cc7d320b9ae93a425b4c3377ceb0e"
+    },
+    {
+      "path": "mat-emissive-strength.glb",
+      "bytes": 1092,
+      "sha256": "795cbd671dfc4e73bc94c4263c890ff74b93ee8b1b64632139f2fc6e3aa7b519"
+    },
+    {
+      "path": "mat-emissive-strength.gltf",
+      "bytes": 1967,
+      "sha256": "54a287a3e077333da4ae1dc950d0ea86374c5453ce79314cefa1e892c62d6300"
+    },
+    {
+      "path": "mat-emissive-strength.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-emissive-strength.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "mat-factor-only-gold.expected.json",
