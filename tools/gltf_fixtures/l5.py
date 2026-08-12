@@ -26,7 +26,7 @@ import hashlib
 import struct
 from typing import Any, Sequence
 
-from .builder import MODE_NAMES, TRIANGLES
+from .builder import MODE_NAMES, TRIANGLES, primitive_count_for_mode
 
 #: The vertex stride ABI (plan_gltf.md §2.3) as a byte layout: stride -> [(field, offset, size)].
 #: Every renderer's own ApplyLayout switch is a re-statement of this table; the C++ side of this
@@ -200,13 +200,9 @@ def primitive_count(mode: int, index_count: int) -> int:
     the right answer for all three triangle modes; the line and point topologies do not reach L5
     at all until they have a draw path (`GLTF-073`/`GLTF-077`/`GLTF-078`).
     """
-    if mode != TRIANGLES:
-        raise NotImplementedError(
-            f"the L5 golden only covers buffers already converted to TRIANGLES; {MODE_NAMES[mode]} "
-            "arrives with its draw path (GLTF-073/GLTF-077/GLTF-078)")
-    if index_count % 3 != 0:
+    if mode == TRIANGLES and index_count % 3 != 0:
         raise ValueError(f"a triangle list needs a multiple of 3 indices, got {index_count}")
-    return index_count // 3
+    return primitive_count_for_mode(mode, index_count)
 
 
 def buffers(fixture_id: str, primitives: Sequence[dict[str, Any]],

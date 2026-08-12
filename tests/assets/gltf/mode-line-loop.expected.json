@@ -1,6 +1,6 @@
 {
   "id": "mode-line-loop",
-  "description": "An indexed LINE_LOOP over three vertices: three segments, the last closing back to vertex 0. XNA has no LineLoop, so GLTF-076 converts it to a LINE_STRIP plus that closing segment -- the one line mode that is a real conversion rather than a direct mapping.",
+  "description": "An indexed LINE_LOOP over three vertices: three segments, the last closing back to vertex 0. XNA has no LineLoop, so GLTF-076 converts it to a LINE_STRIP with that closing index appended -- the one line mode that is a real conversion rather than a direct mapping, and the one where dropping the mode lost a whole segment before it lost the topology.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -23,7 +23,9 @@
     "validatedLayers": [
       "L1",
       "L2",
-      "L3"
+      "L3",
+      "L4",
+      "L5"
     ],
     "features": [
       "primitive.mode = LINE_LOOP",
@@ -137,11 +139,17 @@
         ],
         "triangles": [],
         "importPolicy": {
-          "imported": false,
-          "topologyMode": 4,
-          "topologyName": "TRIANGLES",
-          "indices": [],
-          "converted": true
+          "imported": true,
+          "topologyMode": 3,
+          "topologyName": "LINE_STRIP",
+          "indices": [
+            0,
+            1,
+            2,
+            0
+          ],
+          "converted": true,
+          "primitiveCount": 3
         },
         "material": null
       }
@@ -205,67 +213,49 @@
     }
   },
   "l5": {
-    "supported": false,
-    "reason": "A LINE_LOOP primitive classifies correctly but does not import, so no vertex or index buffer is produced at all. The golden arrives with the draw path.",
-    "blockedBy": [
-      "GLTF-073",
-      "GLTF-076",
-      "GLTF-078"
-    ],
-    "parts": []
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "mode-line-loop.vb.bin",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "5647a5d9de9ac47aa8ff04ac242f9d312a1f64aac4ec7275d270df132a3f1079",
+        "indexElementSize": 2,
+        "indexCount": 4,
+        "indexBufferFile": "mode-line-loop.ib.bin",
+        "indexBufferBytes": 8,
+        "indexBufferSha256": "c5d93c76fd3b1df422591bea39f0f43e5518501780726a069e990879f18eb9a7",
+        "sourceTopology": "LINE_LOOP",
+        "topology": "LINE_STRIP",
+        "primitiveCount": 3
+      }
+    ]
   },
   "rejection": null,
-  "defects": [
-    {
-      "id": "D5",
-      "summary": "primitive.mode was never read, so a LINE_LOOP was drawn as a triangle list. GLTF-071 classifies and rejects it. LINE_LOOP has no XNA equivalent: GLTF-076 converts it to a LINE_STRIP with the closing segment appended, which needs GLTF-073's primitive type on ModelMeshPart to have anywhere to go.",
-      "firstDivergentLayer": "L3",
-      "divergentFields": [
-        "import",
-        "mode",
-        "modeName",
-        "triangles"
-      ],
-      "divergentFieldsByLayer": {
-        "L3": [
-          "import",
-          "mode",
-          "modeName",
-          "triangles"
-        ],
-        "L4": [
-          "worldPositions",
-          "worldBounds"
-        ]
-      },
-      "owner": "GLTF-MESH",
-      "owningTasks": [
-        "GLTF-071",
-        "GLTF-072"
-      ],
-      "closedTasks": [
-        "GLTF-071",
-        "GLTF-072"
-      ],
-      "remainingTasks": [
-        "GLTF-073",
-        "GLTF-077",
-        "GLTF-078"
-      ],
-      "status": "partially-remediated",
-      "currentActual": {
-        "importRejected": true,
-        "topologyCarried": true,
-        "classifiedMode": 2,
-        "classifiedModeName": "LINE_LOOP",
-        "errorContains": [
-          "LINE_LOOP",
-          "mode 2"
-        ],
-        "indices": [],
-        "triangles": [],
-        "note": "ExtractMesh classifies mode 2 and throws with LINE_LOOP named. The closing segment is implicit in the mode itself, so a reader that dropped the mode lost a segment even before it lost the topology."
-      }
-    }
-  ]
+  "defects": []
 }

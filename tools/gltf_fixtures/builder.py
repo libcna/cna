@@ -197,6 +197,32 @@ def expand_to_triangles(indices: Sequence[int], mode: int) -> list[list[int]]:
     return out
 
 
+def produces_triangles(mode: int) -> bool:
+    """Whether a mode describes triangles, and so has a triangle-list equivalent (`GLTF-072`)."""
+    return mode in (TRIANGLES, TRIANGLE_STRIP, TRIANGLE_FAN)
+
+
+def primitive_count_for_mode(mode: int, index_count: int) -> int:
+    """How many primitives an index run of ``mode`` describes (plan_gltf.md §12.3, `GLTF-078`).
+
+    Mirrors ``PrimitiveCountForTopology`` on the C++ side. Both are stated independently on purpose:
+    a count that agreed with itself but not with the specification would pass either alone.
+
+    :param mode: the topology the run is in.
+    :param index_count: the number of indices in the run.
+    :return: the draw-call primitive count, never negative.
+    """
+    if mode == POINTS:
+        return index_count
+    if mode == LINES:
+        return index_count // 2
+    if mode in (LINE_STRIP, LINE_LOOP):
+        return max(index_count - 1, 0)
+    if mode == TRIANGLES:
+        return index_count // 3
+    return max(index_count - 2, 0)  # strip / fan, before conversion
+
+
 def _component(component_type: int) -> tuple[str, int, bool]:
     try:
         return _COMPONENTS[component_type]

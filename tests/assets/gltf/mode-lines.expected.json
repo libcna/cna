@@ -1,6 +1,6 @@
 {
   "id": "mode-lines",
-  "description": "An indexed LINES primitive: two independent segments sharing a vertex. XNA has PrimitiveType::LineList, so this mode needs no conversion at all -- only a ModelMeshPart that can carry a primitive type.",
+  "description": "An indexed LINES primitive: two independent segments sharing a vertex. XNA has PrimitiveType::LineList, so this mode needs no index conversion at all -- only a ModelMeshPart able to carry a primitive type, which GLTF-073 added. Four indices describe two segments; read as a triangle list they described one triangle and vertex 3 was unreachable.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -23,7 +23,9 @@
     "validatedLayers": [
       "L1",
       "L2",
-      "L3"
+      "L3",
+      "L4",
+      "L5"
     ],
     "features": [
       "primitive.mode = LINES",
@@ -138,11 +140,17 @@
         ],
         "triangles": [],
         "importPolicy": {
-          "imported": false,
-          "topologyMode": 4,
-          "topologyName": "TRIANGLES",
-          "indices": [],
-          "converted": true
+          "imported": true,
+          "topologyMode": 1,
+          "topologyName": "LINES",
+          "indices": [
+            0,
+            1,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 2
         },
         "material": null
       }
@@ -206,66 +214,49 @@
     }
   },
   "l5": {
-    "supported": false,
-    "reason": "A LINES primitive classifies correctly but does not import, so no vertex or index buffer is produced at all. The golden arrives with the draw path.",
-    "blockedBy": [
-      "GLTF-073",
-      "GLTF-078"
-    ],
-    "parts": []
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "mode-lines.vb.bin",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "5647a5d9de9ac47aa8ff04ac242f9d312a1f64aac4ec7275d270df132a3f1079",
+        "indexElementSize": 2,
+        "indexCount": 4,
+        "indexBufferFile": "mode-lines.ib.bin",
+        "indexBufferBytes": 8,
+        "indexBufferSha256": "4b419c57c27c31e26f924bb6b5164be50586b6fd36e393f45bb10581ddf1a74d",
+        "sourceTopology": "LINES",
+        "topology": "LINES",
+        "primitiveCount": 2
+      }
+    ]
   },
   "rejection": null,
-  "defects": [
-    {
-      "id": "D5",
-      "summary": "primitive.mode was never read, so a LINES primitive was drawn as a triangle list. GLTF-071 classifies and rejects it. LINES maps directly onto XNA's own PrimitiveType::LineList and needs no index conversion; what it needs is GLTF-073's primitive type on ModelMeshPart and GLTF-078's topology-aware count.",
-      "firstDivergentLayer": "L3",
-      "divergentFields": [
-        "import",
-        "mode",
-        "modeName",
-        "triangles"
-      ],
-      "divergentFieldsByLayer": {
-        "L3": [
-          "import",
-          "mode",
-          "modeName",
-          "triangles"
-        ],
-        "L4": [
-          "worldPositions",
-          "worldBounds"
-        ]
-      },
-      "owner": "GLTF-MESH",
-      "owningTasks": [
-        "GLTF-071",
-        "GLTF-072"
-      ],
-      "closedTasks": [
-        "GLTF-071",
-        "GLTF-072"
-      ],
-      "remainingTasks": [
-        "GLTF-073",
-        "GLTF-077",
-        "GLTF-078"
-      ],
-      "status": "partially-remediated",
-      "currentActual": {
-        "importRejected": true,
-        "topologyCarried": true,
-        "classifiedMode": 1,
-        "classifiedModeName": "LINES",
-        "errorContains": [
-          "LINES",
-          "mode 1"
-        ],
-        "indices": [],
-        "triangles": [],
-        "note": "ExtractMesh classifies mode 1 and throws with LINES named. The index list is already exactly what a LineList draw would consume, which is why this is a draw-path gap and not a decoding one."
-      }
-    }
-  ]
+  "defects": []
 }

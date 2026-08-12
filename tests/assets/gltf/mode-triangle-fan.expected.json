@@ -170,7 +170,8 @@
             2,
             3
           ],
-          "converted": true
+          "converted": true,
+          "primitiveCount": 2
         },
         "material": null
       }

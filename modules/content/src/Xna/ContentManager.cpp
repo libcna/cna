@@ -2096,7 +2096,11 @@ namespace Microsoft::Xna::Framework::Content
                     const int indexSize = meshOut.use32BitIndices
                         ? static_cast<int>(sizeof(std::uint32_t)) : static_cast<int>(sizeof(std::uint16_t));
                     const int numIndices = static_cast<int>(meshOut.indexBytes.size()) / indexSize;
-                    const int primCount = numIndices / 3;
+                    // plan_gltf.md GLTF-078: the count follows the part's own topology. It is
+                    // still numIndices/3 for a triangle list -- which every imported part is
+                    // today, since a strip or fan was already converted to one (GLTF-072).
+                    const int primCount = PrimitiveCountForTopology(meshOut.topology,
+                                                                    static_cast<std::size_t>(numIndices));
 
                     auto ib = std::make_unique<Graphics::IndexBuffer>(
                         device,
@@ -2111,6 +2115,9 @@ namespace Microsoft::Xna::Framework::Content
 
                     auto part = std::make_unique<Graphics::ModelMeshPart>(
                         vb.get(), ib.get(), numVertices, primCount, 0, 0);
+                    // plan_gltf.md GLTF-073: the topology travels to the draw rather than being
+                    // assumed there.
+                    part->setPrimitiveTypeEXTProperty(PrimitiveTypeForTopology(meshOut.topology));
                     Graphics::ModelMeshPart* partPtr = part.get();
 
                     // CNB-64/65 (Phase 13B): morph targets, attached to this part's own real XNA
@@ -2535,7 +2542,15 @@ namespace Microsoft::Xna::Framework::Content
                                                         ? static_cast<int>(sizeof(std::uint32_t))
                                                         : static_cast<int>(sizeof(std::uint16_t));
                             const int numIndices  = static_cast<int>(idxBytes.size()) / indexSize;
-                            const int primCount   = numIndices / 3;
+                            // plan_gltf.md GLTF-073/GLTF-078: the part's own topology, defaulting
+                            // to TRIANGLES for a .cnj written before the field existed -- which
+                            // could only ever have held a triangle list anyway.
+                            const auto topology =
+                                CNA::Internal::GltfImport::PrimitiveTopologyFromName(
+                                    ExtractJsonStringField(mg, "primitiveTopology"));
+                            const int primCount =
+                                CNA::Internal::GltfImport::PrimitiveCountForTopology(
+                                    topology, static_cast<std::size_t>(numIndices));
 
                             auto vb = BuildVertexBufferFromRawBytes(device, stride, numVertices, vertBytes);
 
@@ -2554,6 +2569,8 @@ namespace Microsoft::Xna::Framework::Content
 
                             auto part = std::make_unique<Graphics::ModelMeshPart>(
                                 vb.get(), ib.get(), numVertices, primCount, 0, 0);
+                            part->setPrimitiveTypeEXTProperty(
+                                CNA::Internal::GltfImport::PrimitiveTypeForTopology(topology));
                             Graphics::ModelMeshPart* partPtr = part.get();
 
                             // Morph target CLI/.cnj serialization: read BuildMorphBytes' own

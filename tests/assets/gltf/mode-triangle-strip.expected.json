@@ -171,7 +171,8 @@
             1,
             3
           ],
-          "converted": true
+          "converted": true,
+          "primitiveCount": 2
         },
         "material": null
       }
@@ -287,25 +288,27 @@
   "defects": [
     {
       "id": "D5",
-      "summary": "primitive.mode was never read, so a TRIANGLE_STRIP was silently reinterpreted as a triangle list: four indices yielded one triangle and vertex 3 was unreachable. GLTF-071 reads and classifies the mode; GLTF-072 converts the strip to [0,1,2] and [2,1,3] at import with the odd triangle's winding corrected, so the primitive now imports and its index list is the expansion.",
+      "summary": "primitive.mode was never read, so every topology was decoded into a flat index list that all three loaders divided by three and drew as a triangle list: a TRIANGLE_STRIP lost every triangle after the first, a point cloud became one arbitrary triangle, and neither warned. GLTF-071 reads and classifies the mode; GLTF-072 converts a strip or fan to a triangle list with winding preserved; GLTF-073/GLTF-076/GLTF-078 give the four topologies that describe no triangles a real draw path -- a PrimitiveType on ModelMeshPart, a \u00a712.3 primitive count, and a LINE_LOOP's implicit closing segment.",
       "firstDivergentLayer": "L3",
       "divergentFields": [],
       "divergentFieldsByLayer": {},
       "owner": "GLTF-MESH",
       "owningTasks": [
         "GLTF-071",
-        "GLTF-072"
+        "GLTF-072",
+        "GLTF-073",
+        "GLTF-076",
+        "GLTF-078"
       ],
       "closedTasks": [
         "GLTF-071",
-        "GLTF-072"
-      ],
-      "remainingTasks": [
+        "GLTF-072",
         "GLTF-073",
-        "GLTF-077",
+        "GLTF-076",
         "GLTF-078"
       ],
-      "status": "partially-remediated",
+      "remainingTasks": [],
+      "status": "fixed",
       "currentActual": {
         "importRejected": false,
         "topologyCarried": true,
@@ -333,7 +336,7 @@
             3
           ]
         ],
-        "note": "The strip is converted at import and nothing is suppressed any more: GltfConformanceL3 asserts the converted index list and GltfConformanceL5 the resulting index buffer bytes, so the reinterpretation reappearing fails an ordinary green test. D5 stays partially-remediated because it also owns mode-points, whose topology still has no draw path."
+        "note": "The strip is converted at import and nothing is suppressed any more: GltfConformanceL3 asserts the converted index list and GltfConformanceL5 the resulting index buffer bytes, so the reinterpretation reappearing fails an ordinary green test rather than needing an inverted one. All seven modes now import -- the four that describe no triangles as themselves, with a real PrimitiveType on the part and a \u00a712.3 primitive count (GLTF-073/GLTF-076/GLTF-078) -- so D5 is fixed."
       },
       "priorActual": {
         "indices": [

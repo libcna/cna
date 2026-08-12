@@ -11,11 +11,11 @@ assumed. `GLTF-072` closed the conversion half for the topologies that have an e
 equivalent -- ``TRIANGLE_STRIP`` and ``TRIANGLE_FAN`` are rewritten at import with winding
 preserved, so no renderer needs a new topology and the whole GPU packing layer is unchanged.
 
-The line and point modes decode perfectly well and still do not import: what they lack is a draw
-path, because every loader computes a triangle-list primitive count. `GLTF-073` (a real
-``PrimitiveType`` on ``ModelMeshPart``) and `GLTF-078` (a topology-aware count) give them one, and
-`GLTF-077` decides what a point list becomes. Their fixtures therefore stay open with their
-expectations unchanged: what a conforming importer must eventually produce has not moved.
+`GLTF-073`/`GLTF-076`/`GLTF-078` then gave the remaining four a draw path: the part carries a real
+XNA ``PrimitiveType``, the primitive count follows §12.3's table instead of ``numIndices / 3``, and a
+``LINE_LOOP`` becomes a ``LINE_STRIP`` with the closing segment glTF leaves implicit in the mode.
+All seven modes now import, so **D5 is fixed** and every fixture here is an ordinary conformance
+asset whose expectation is asserted in full.
 
 Specification: §3.7.2.1 ``meshes-overview``.
 """
@@ -24,20 +24,12 @@ from __future__ import annotations
 
 from ..builder import (LINE_LOOP, LINE_STRIP, LINES, MODE_NAMES, POINTS, TRIANGLE_FAN,
                        TRIANGLE_STRIP, TRIANGLES, UNSIGNED_SHORT, GltfBuilder)
-from ..l5 import unsupported as l5_unsupported
 from ..manifest import Defect, Fixture, l3_primitive, world_positions
 from .common import QUAD_STRIP_POSITIONS
 
-#: D5's owning tasks, in the order they land. Both are closed; what remains for the line and point
-#: modes is a draw path, which is a different problem owned by different tasks.
-_TASKS = ["GLTF-071", "GLTF-072"]
-_REMAINING = ["GLTF-073", "GLTF-077", "GLTF-078"]
-
-#: A rejected import produces no semantic mesh at L3 and therefore no world geometry at L4 either.
-#: ``import`` is the field name the conformance suite checks first: it means "this primitive does
-#: not come out of the import path at all", which makes every other field of that layer moot.
-_DIVERGENT_L3 = ["import", "mode", "modeName", "triangles"]
-_DIVERGENT_L4 = ["worldPositions", "worldBounds"]
+#: D5's owning tasks, in the order they landed: read the mode, convert what converts, then give the
+#: rest somewhere to be drawn.
+_TASKS = ["GLTF-071", "GLTF-072", "GLTF-073", "GLTF-076", "GLTF-078"]
 
 #: The fan's own geometry. A fan is authored around vertex 0, so reusing the strip quad would make
 #: the two conversions produce the same triangles and neither fixture would catch the other's rule
@@ -49,37 +41,16 @@ FAN_POSITIONS = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0
 LINE_POSITIONS = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)]
 
 
-def _rejected_actual(mode: int, note: str) -> dict:
-    """What CNA produces for a topology it classifies but has no draw path for."""
-    return {
-        "importRejected": True,
-        "topologyCarried": True,
-        "classifiedMode": mode,
-        "classifiedModeName": MODE_NAMES[mode],
-        "errorContains": [MODE_NAMES[mode], f"mode {mode}"],
-        "indices": [],
-        "triangles": [],
-        "note": note,
-    }
-
-
-def _no_draw_path_defect(mode: int, summary: str, note: str, prior: dict | None = None) -> Defect:
-    """The D5 record for a mode that classifies correctly but cannot yet be drawn."""
-    return Defect(
-        id="D5", owner="GLTF-MESH", first_divergent_layer="L3", summary=summary,
-        owning_tasks=_TASKS, closed_tasks=list(_TASKS), remaining_tasks=_REMAINING,
-        status="partially-remediated",
-        divergent_fields=_DIVERGENT_L3, also_divergent={"L4": _DIVERGENT_L4},
-        current_actual=_rejected_actual(mode, note), prior_actual=prior,
-    )
-
-
 def _line_or_point_fixture(*, fixture_id: str, mode: int, mesh_name: str, node_name: str,
                            positions: list, indices: list[int] | None, description: str,
-                           features: list[str], summary: str, note: str,
-                           audit_fixture: str | None = None, prior: dict | None = None,
-                           blocked_by: list[str]) -> Fixture:
-    """One fixture for a topology that decodes correctly but has no draw path yet."""
+                           features: list[str], defects: list[Defect] | None = None,
+                           audit_fixture: str | None = None) -> Fixture:
+    """One fixture for a topology that describes no triangles.
+
+    All four import as themselves since `GLTF-073`/`GLTF-076`/`GLTF-078`: the part carries a real
+    XNA ``PrimitiveType``, the primitive count follows §12.3 rather than ``numIndices / 3``, and a
+    ``LINE_LOOP`` arrives as a ``LINE_STRIP`` with its closing segment appended.
+    """
     b = GltfBuilder(fixture_id)
     position = b.add_packed_accessor(usage="POSITION", values=positions, accessor_type="VEC3",
                                      with_bounds=True)
@@ -94,17 +65,13 @@ def _line_or_point_fixture(*, fixture_id: str, mode: int, mesh_name: str, node_n
     b.set_default_scene(0)
     return Fixture(
         id=fixture_id, audit_fixture=audit_fixture, owning_group="topology",
-        description=description, builder=b, validated_layers=["L1", "L2", "L3"],
+        description=description, builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
         features=features, spec_anchors=["meshes-overview"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name=mesh_name, primitive=0, mode=mode,
             positions=positions, indices=indices)]},
         l4=world_positions(b, {mesh: list(positions)}),
-        l5=l5_unsupported(
-            f"A {MODE_NAMES[mode]} primitive classifies correctly but does not import, so no "
-            "vertex or index buffer is produced at all. The golden arrives with the draw path.",
-            blocked_by),
-        defects=[_no_draw_path_defect(mode, summary, note, prior)],
+        defects=list(defects or []),
     )
 
 
@@ -174,13 +141,16 @@ def mode_triangle_strip() -> Fixture:
         l4=world_positions(b, {mesh: list(QUAD_STRIP_POSITIONS)}),
         defects=[Defect(
             id="D5", owner="GLTF-MESH", first_divergent_layer="L3",
-            summary="primitive.mode was never read, so a TRIANGLE_STRIP was silently reinterpreted "
-                    "as a triangle list: four indices yielded one triangle and vertex 3 was "
-                    "unreachable. GLTF-071 reads and classifies the mode; GLTF-072 converts the "
-                    "strip to [0,1,2] and [2,1,3] at import with the odd triangle's winding "
-                    "corrected, so the primitive now imports and its index list is the expansion.",
-            owning_tasks=_TASKS, closed_tasks=list(_TASKS), remaining_tasks=_REMAINING,
-            status="partially-remediated", divergent_fields=[],
+            summary="primitive.mode was never read, so every topology was decoded into a flat "
+                    "index list that all three loaders divided by three and drew as a triangle "
+                    "list: a TRIANGLE_STRIP lost every triangle after the first, a point cloud "
+                    "became one arbitrary triangle, and neither warned. GLTF-071 reads and "
+                    "classifies the mode; GLTF-072 converts a strip or fan to a triangle list with "
+                    "winding preserved; GLTF-073/GLTF-076/GLTF-078 give the four topologies that "
+                    "describe no triangles a real draw path -- a PrimitiveType on ModelMeshPart, a "
+                    "§12.3 primitive count, and a LINE_LOOP's implicit closing segment.",
+            owning_tasks=_TASKS, closed_tasks=list(_TASKS), remaining_tasks=[],
+            status="fixed", divergent_fields=[],
             current_actual={
                 "importRejected": False,
                 "topologyCarried": True,
@@ -193,8 +163,10 @@ def mode_triangle_strip() -> Fixture:
                 "note": "The strip is converted at import and nothing is suppressed any more: "
                         "GltfConformanceL3 asserts the converted index list and GltfConformanceL5 "
                         "the resulting index buffer bytes, so the reinterpretation reappearing "
-                        "fails an ordinary green test. D5 stays partially-remediated because it "
-                        "also owns mode-points, whose topology still has no draw path.",
+                        "fails an ordinary green test rather than needing an inverted one. All "
+                        "seven modes now import -- the four that describe no triangles as "
+                        "themselves, with a real PrimitiveType on the part and a §12.3 primitive "
+                        "count (GLTF-073/GLTF-076/GLTF-078) -- so D5 is fixed.",
             },
             prior_actual={
                 "indices": [0, 1, 2, 3],
@@ -244,28 +216,10 @@ def mode_points() -> Fixture:
     return _line_or_point_fixture(
         fixture_id="mode-points", mode=POINTS, mesh_name="PointCloud", node_name="MeshNode",
         positions=list(QUAD_STRIP_POSITIONS), indices=None, audit_fixture="f12",
-        description="A non-indexed POINTS primitive with four vertices. A conforming importer "
-                    "draws four points and no triangles at all.",
-        features=["primitive.mode = POINTS", "non-indexed primitive", "implicit index range"],
-        summary="primitive.mode was never read, so a POINTS primitive became a triangle list "
-                "built from its own implicit index range. GLTF-071 reads and classifies the mode "
-                "and rejects it explicitly rather than reinterpreting it; a point list has no "
-                "triangle-list equivalent, so what remains is a draw path, not a conversion.",
-        note="ExtractMesh classifies mode 0 and throws with POINTS named, before the implicit "
-             "index range is even synthesised. GLTF-077 decides whether a point list becomes a "
-             "CNAEXT point topology or a documented per-renderer rejection; either way the "
-             "expected output stays four points and zero triangles.",
-        prior={
-            "indices": [0, 1, 2, 3],
-            "topologyCarried": False,
-            "triangles": [[0, 1, 2]],
-            "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
-            "note": "What the forensic audit measured before GLTF-071: implicit indices [0,1,2,3] "
-                    "were generated correctly for the non-indexed primitive and then interpreted "
-                    "as TRIANGLES, yielding one triangle where the expected output is four points "
-                    "and zero triangles.",
-        },
-        blocked_by=["GLTF-077", "GLTF-073", "GLTF-078"])
+        description="A non-indexed POINTS primitive with four vertices, whose implicit indices are "
+                    "[0,count). A conforming importer draws four points and no triangles at all; "
+                    "read as a triangle list those four implicit indices became one triangle.",
+        features=["primitive.mode = POINTS", "non-indexed primitive", "implicit index range"])
 
 
 def mode_lines() -> Fixture:
@@ -274,17 +228,11 @@ def mode_lines() -> Fixture:
         fixture_id="mode-lines", mode=LINES, mesh_name="LineList", node_name="MeshNode",
         positions=list(LINE_POSITIONS), indices=[0, 1, 1, 2],
         description="An indexed LINES primitive: two independent segments sharing a vertex. XNA "
-                    "has PrimitiveType::LineList, so this mode needs no conversion at all -- only "
-                    "a ModelMeshPart that can carry a primitive type.",
-        features=["primitive.mode = LINES", "line topology"],
-        summary="primitive.mode was never read, so a LINES primitive was drawn as a triangle "
-                "list. GLTF-071 classifies and rejects it. LINES maps directly onto XNA's own "
-                "PrimitiveType::LineList and needs no index conversion; what it needs is "
-                "GLTF-073's primitive type on ModelMeshPart and GLTF-078's topology-aware count.",
-        note="ExtractMesh classifies mode 1 and throws with LINES named. The index list is "
-             "already exactly what a LineList draw would consume, which is why this is a draw-path "
-             "gap and not a decoding one.",
-        blocked_by=["GLTF-073", "GLTF-078"])
+                    "has PrimitiveType::LineList, so this mode needs no index conversion at all "
+                    "-- only a ModelMeshPart able to carry a primitive type, which GLTF-073 added. "
+                    "Four indices describe two segments; read as a triangle list they described "
+                    "one triangle and vertex 3 was unreachable.",
+        features=["primitive.mode = LINES", "line topology"])
 
 
 def mode_line_strip() -> Fixture:
@@ -296,14 +244,7 @@ def mode_line_strip() -> Fixture:
                     "segments. Its twin mode-line-loop authors the identical index list and "
                     "differs only by the closing segment, so a reader that confused the two would "
                     "produce a visibly different segment count.",
-        features=["primitive.mode = LINE_STRIP", "line topology"],
-        summary="primitive.mode was never read, so a LINE_STRIP was drawn as a triangle list. "
-                "GLTF-071 classifies and rejects it. LINE_STRIP maps directly onto XNA's own "
-                "PrimitiveType::LineStrip and needs no index conversion, only GLTF-073's "
-                "primitive type on ModelMeshPart and GLTF-078's topology-aware count.",
-        note="ExtractMesh classifies mode 3 and throws with LINE_STRIP named. Three indices "
-             "describe two segments; read as a triangle list they described one triangle.",
-        blocked_by=["GLTF-073", "GLTF-078"])
+        features=["primitive.mode = LINE_STRIP", "line topology"])
 
 
 def mode_line_loop() -> Fixture:
@@ -313,17 +254,10 @@ def mode_line_loop() -> Fixture:
         positions=list(LINE_POSITIONS), indices=[0, 1, 2],
         description="An indexed LINE_LOOP over three vertices: three segments, the last closing "
                     "back to vertex 0. XNA has no LineLoop, so GLTF-076 converts it to a "
-                    "LINE_STRIP plus that closing segment -- the one line mode that is a real "
-                    "conversion rather than a direct mapping.",
-        features=["primitive.mode = LINE_LOOP", "line topology", "implicit closing segment"],
-        summary="primitive.mode was never read, so a LINE_LOOP was drawn as a triangle list. "
-                "GLTF-071 classifies and rejects it. LINE_LOOP has no XNA equivalent: GLTF-076 "
-                "converts it to a LINE_STRIP with the closing segment appended, which needs "
-                "GLTF-073's primitive type on ModelMeshPart to have anywhere to go.",
-        note="ExtractMesh classifies mode 2 and throws with LINE_LOOP named. The closing segment "
-             "is implicit in the mode itself, so a reader that dropped the mode lost a segment "
-             "even before it lost the topology.",
-        blocked_by=["GLTF-073", "GLTF-076", "GLTF-078"])
+                    "LINE_STRIP with that closing index appended -- the one line mode that is a "
+                    "real conversion rather than a direct mapping, and the one where dropping the "
+                    "mode lost a whole segment before it lost the topology.",
+        features=["primitive.mode = LINE_LOOP", "line topology", "implicit closing segment"])
 
 
 FIXTURES = [mode_points, mode_lines, mode_line_loop, mode_line_strip, mode_triangles,

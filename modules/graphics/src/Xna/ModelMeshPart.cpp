@@ -19,6 +19,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     int ModelMeshPart::getNumVerticesProperty()  const { return numVertices_; }
     int ModelMeshPart::getPrimitiveCountProperty() const { return primitiveCount_; }
+    PrimitiveType ModelMeshPart::getPrimitiveTypeEXTProperty() const { return primitiveType_; }
+    void ModelMeshPart::setPrimitiveTypeEXTProperty(PrimitiveType value) { primitiveType_ = value; }
     int ModelMeshPart::getStartIndexProperty()   const { return startIndex_; }
     int ModelMeshPart::getVertexOffsetProperty() const { return vertexOffset_; }
 

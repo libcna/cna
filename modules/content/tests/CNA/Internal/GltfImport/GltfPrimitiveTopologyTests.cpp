@@ -16,12 +16,10 @@
 //   2. TRIANGLES imports exactly as it did before, byte for byte, and carries its topology;
 //   3. TRIANGLE_STRIP and TRIANGLE_FAN convert to an equivalent triangle list with winding
 //      preserved, and the source mode survives the conversion so it can still be reported;
-//   4. the four topologies that describe no triangles are rejected with their real mode named,
-//      and no index list survives to reach the numIndices/3 path.
-//
-// Point 4 is a DRAW-PATH gap, not a decoding one: those modes decode fine and are rejected only
-// because every loader still computes a triangle-list primitive count. GLTF-073/GLTF-077/GLTF-078
-// own it, and a case that starts passing because a draw path landed belongs in their tests.
+//   4. the four topologies that describe no triangles import as THEMSELVES -- a LINE_LOOP as a
+//      LINE_STRIP carrying the closing segment glTF leaves implicit in the mode (GLTF-076), the
+//      rest untouched -- each with its own §12.3 primitive count rather than numIndices/3
+//      (GLTF-078) and a real PrimitiveType on the part (GLTF-073).
 
 #include <array>
 #include <cstdint>
@@ -39,6 +37,7 @@
 #include "GltfOracleEXT.hpp"
 
 using namespace CNA::Internal::GltfImport;
+using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using CnaTest::GltfOracle::ExtractedPrimitive;
 using CnaTest::GltfOracle::ExtractSceneMeshesEXT;
 using CnaTest::GltfOracle::LoadedFixture;
@@ -56,10 +55,10 @@ namespace
     };
 
     constexpr std::array<ModeRow, 7> kModeTable = {{
-        {0, "POINTS",         PrimitiveTopology::Points,        false},
-        {1, "LINES",          PrimitiveTopology::Lines,         false},
-        {2, "LINE_LOOP",      PrimitiveTopology::LineLoop,      false},
-        {3, "LINE_STRIP",     PrimitiveTopology::LineStrip,     false},
+        {0, "POINTS",         PrimitiveTopology::Points,        true},
+        {1, "LINES",          PrimitiveTopology::Lines,         true},
+        {2, "LINE_LOOP",      PrimitiveTopology::LineLoop,      true},
+        {3, "LINE_STRIP",     PrimitiveTopology::LineStrip,     true},
         {4, "TRIANGLES",      PrimitiveTopology::Triangles,     true},
         {5, "TRIANGLE_STRIP", PrimitiveTopology::TriangleStrip, true},
         {6, "TRIANGLE_FAN",   PrimitiveTopology::TriangleFan,   true},
@@ -177,28 +176,23 @@ TEST(GltfPrimitiveTopology, EveryGltfModeClassifiesByNumberAndName)
     }
 }
 
-TEST(GltfPrimitiveTopology, OnlyTheTriangleProducingModesAreSupported)
+TEST(GltfPrimitiveTopology, EveryModeImportsAndOnlyTriangleModesConvert)
 {
-    // Stated as its own assertion so widening support cannot happen by accident. The rule is not
-    // "three of seven" but a property: a mode is importable exactly when it has an exact
-    // triangle-list equivalent, because a triangle list is what every renderer already draws.
-    int supported = 0;
-    for (const ModeRow& row : kModeTable)
-    {
-        if (IsPrimitiveTopologySupported(row.topology)) { ++supported; }
-    }
-    EXPECT_EQ(3, supported);
-    EXPECT_TRUE(IsPrimitiveTopologySupported(PrimitiveTopology::Triangles));
-    EXPECT_TRUE(IsPrimitiveTopologySupported(PrimitiveTopology::TriangleStrip));
-    EXPECT_TRUE(IsPrimitiveTopologySupported(PrimitiveTopology::TriangleFan));
-
-    // The converse, as a property rather than a list: a supported mode must convert, and an
-    // unsupported one must refuse to, so the two predicates cannot drift apart.
+    // Two distinct properties, stated separately because conflating them is what GLTF-072's scope
+    // boundary was about. EVERY mode is importable now -- the four that describe no triangles have
+    // a draw path since GLTF-073/GLTF-076/GLTF-078. But only three CONVERT: asking a triangle
+    // converter for a line run is a caller error, and it says so rather than passing the run
+    // through, because a function that quietly returned its input would make its own name a lie.
     for (const ModeRow& row : kModeTable)
     {
         SCOPED_TRACE(std::string(row.name));
+        EXPECT_TRUE(IsPrimitiveTopologySupported(row.topology));
+
         const std::vector<std::uint32_t> quad = {0, 1, 2, 3};
-        if (row.supported)
+        const bool convertible = row.topology == PrimitiveTopology::Triangles
+                              || row.topology == PrimitiveTopology::TriangleStrip
+                              || row.topology == PrimitiveTopology::TriangleFan;
+        if (convertible)
         {
             EXPECT_NO_THROW((void)ConvertToTriangleList(quad, row.topology));
         }
@@ -207,6 +201,44 @@ TEST(GltfPrimitiveTopology, OnlyTheTriangleProducingModesAreSupported)
             EXPECT_THROW((void)ConvertToTriangleList(quad, row.topology), std::runtime_error);
         }
     }
+}
+
+TEST(GltfPrimitiveTopology, ThePrimitiveCountFollowsTheTopologyRatherThanDividingByThree)
+{
+    // plan_gltf.md §12.3, stated as the table it is. All three loaders hardcoded numIndices / 3,
+    // which is right for a triangle list and silently wrong for every other topology -- and was
+    // written out three times, so the three could drift.
+    EXPECT_EQ(2, PrimitiveCountForTopology(PrimitiveTopology::Triangles, 6));
+    EXPECT_EQ(2, PrimitiveCountForTopology(PrimitiveTopology::Lines, 4));
+    EXPECT_EQ(3, PrimitiveCountForTopology(PrimitiveTopology::LineStrip, 4));
+    EXPECT_EQ(4, PrimitiveCountForTopology(PrimitiveTopology::Points, 4));
+
+    // A run too short to describe one primitive is zero, never negative -- the n-1 and n-2
+    // formulas are the two that could underflow.
+    EXPECT_EQ(0, PrimitiveCountForTopology(PrimitiveTopology::LineStrip, 0));
+    EXPECT_EQ(0, PrimitiveCountForTopology(PrimitiveTopology::TriangleStrip, 2));
+    EXPECT_EQ(0, PrimitiveCountForTopology(PrimitiveTopology::Triangles, 2));
+}
+
+TEST(GltfPrimitiveTopology, ALineLoopGainsItsClosingSegmentAndBecomesAStrip)
+{
+    // GLTF-076. XNA has no LineLoop, and the difference between a loop and a strip is exactly one
+    // segment -- the one back to the first vertex, which glTF leaves implicit in the mode. Dropping
+    // the mode therefore lost a whole segment before it lost the topology.
+    ScratchDir dir;
+    const Parsed parsed(QuadWithMode(", \"mode\": 2"), dir.path());
+    ASSERT_NE(nullptr, parsed.data);
+
+    const MeshOut mesh =
+        ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0], "Quad", nullptr, 1.0f);
+
+    EXPECT_EQ(PrimitiveTopology::LineLoop, mesh.sourceTopology);
+    EXPECT_EQ(PrimitiveTopology::LineStrip, mesh.topology)
+        << "a LINE_LOOP must arrive as a LINE_STRIP -- XNA has no loop topology";
+
+    // The authored run is [0,1,2,0,2,3]; closing it appends the first index again.
+    EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 0, 2, 3, 0}), DecodedIndices(mesh));
+    EXPECT_EQ(PrimitiveType::LineStrip, PrimitiveTypeForTopology(mesh.topology));
 }
 
 TEST(GltfPrimitiveTopology, ClassifyReadsTheModeTheFileActuallyDeclares)
@@ -268,7 +300,7 @@ TEST(GltfPrimitiveTopology, TrianglesImportUnchangedAndCarryTheirTopology)
     EXPECT_EQ(mesh.indexBytes, implicit.indexBytes);
 }
 
-TEST(GltfPrimitiveTopology, EveryImportableCorpusFixtureCarriesTrianglesAtLayer3)
+TEST(GltfPrimitiveTopology, EveryImportedCorpusFixtureCarriesADrawableTopologyAtLayer3)
 {
     // The corpus-wide statement of the same thing: no fixture imports without a topology, and the
     // only topology that reaches L3 today is the one the file declares.
@@ -282,15 +314,14 @@ TEST(GltfPrimitiveTopology, EveryImportableCorpusFixtureCarriesTrianglesAtLayer3
         {
             if (!primitive.extracted) { continue; }   // rejected topologies: see the D5 tests
             EXPECT_TRUE(primitive.dump.topologyCarried);
-            // Whatever the file declared, what comes out is always a triangle list -- that is what
-            // makes the conversion policy safe for every renderer downstream.
-            EXPECT_EQ(4, primitive.dump.importedTopologyMode);
-            EXPECT_EQ("TRIANGLES", primitive.dump.importedTopologyName);
-            // ...and the source mode is not overwritten by the conversion, so a strip is still
-            // reportable as a strip (GLTF-082).
-            EXPECT_TRUE(primitive.dump.topologyMode == 4 || primitive.dump.topologyMode == 5 ||
-                        primitive.dump.topologyMode == 6)
-                << "an importable primitive carries source mode " << primitive.dump.topologyMode;
+            // A triangle mode always comes out as a triangle list; a LINE_LOOP comes out as a
+            // LINE_STRIP; everything else comes out as itself. The source mode is never
+            // overwritten by any of that, so a strip is still reportable as a strip (GLTF-082).
+            const int source = primitive.dump.topologyMode;
+            const int imported = primitive.dump.importedTopologyMode;
+            if (source == 4 || source == 5 || source == 6) { EXPECT_EQ(4, imported); }
+            else if (source == 2)                          { EXPECT_EQ(3, imported); }
+            else                                           { EXPECT_EQ(source, imported); }
         }
     }
 }
@@ -380,60 +411,7 @@ TEST(GltfPrimitiveTopology, StripAndFanImportThroughExtractMeshAsTriangleLists)
 
 // --- Everything else is rejected, by name --------------------------------------------------------
 
-TEST(GltfPrimitiveTopology, EveryUnsupportedModeIsRejectedWithItsModeNamed)
-{
-    for (const ModeRow& row : kModeTable)
-    {
-        if (row.supported) { continue; }
-        SCOPED_TRACE(std::string(row.name));
-        ScratchDir dir;
-        const Parsed parsed(QuadWithMode(", \"mode\": " + std::to_string(row.mode)), dir.path());
-        ASSERT_NE(nullptr, parsed.data);
 
-        std::string error;
-        try
-        {
-            (void)ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0], "Quad", nullptr, 1.0f);
-        }
-        catch (const std::exception& e)
-        {
-            error = e.what();
-        }
-
-        ASSERT_FALSE(error.empty())
-            << "mode " << row.mode << " imported silently -- if its draw path landed "
-               "(GLTF-073/GLTF-077/GLTF-078), this case belongs in those tests, not here";
-        // The diagnostic has to be actionable on its own: which primitive, which mode by number,
-        // and which mode by the name the file format uses.
-        EXPECT_NE(std::string::npos, error.find("Quad")) << error;
-        EXPECT_NE(std::string::npos, error.find("mode " + std::to_string(row.mode))) << error;
-        EXPECT_NE(std::string::npos, error.find(row.name)) << error;
-    }
-}
-
-TEST(GltfPrimitiveTopology, ARejectedPrimitiveProducesNoIndexListAtAll)
-{
-    // The precise difference between "explicitly rejected" and "silently corrupted". This quad's
-    // six indices would divide evenly into two triangles under the old path, so a reinterpreting
-    // importer would have produced plausible-looking geometry from a strip, a fan or a point cloud
-    // and said nothing at all.
-    for (const ModeRow& row : kModeTable)
-    {
-        if (row.supported) { continue; }
-        SCOPED_TRACE(std::string(row.name));
-        ScratchDir dir;
-        const Parsed parsed(QuadWithMode(", \"mode\": " + std::to_string(row.mode)), dir.path());
-        ASSERT_NE(nullptr, parsed.data);
-
-        MeshOut mesh;
-        EXPECT_THROW(mesh = ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0], "Quad",
-                                        nullptr, 1.0f),
-                     std::runtime_error);
-        EXPECT_TRUE(mesh.indexBytes.empty());
-        EXPECT_TRUE(mesh.vertexBytes.empty());
-        EXPECT_EQ(0u, DecodedIndices(mesh).size() / 3);
-    }
-}
 
 TEST(GltfPrimitiveTopology, AModeOutsideTheSpecifiedRangeIsRejectedRatherThanAssumedTriangles)
 {

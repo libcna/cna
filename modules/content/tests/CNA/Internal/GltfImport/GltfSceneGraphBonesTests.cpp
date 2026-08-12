@@ -545,3 +545,72 @@ TEST(GltfLightingPolicy, AFileThatDeclaresNoLightGetsTheDefaultLightingRig)
     // renderer with a 3D pipeline and is skipped under STUB. The policy is deliberately one-sided
     // in the code (`if (lights.empty())`), so the authored path is untouched by construction.
 }
+
+// --- GLTF-073 / GLTF-078: the topology reaches the part ----------------------------------------
+
+TEST(GltfDrawTopology, EachModeReachesItsPartAsARealPrimitiveType)
+{
+    // The end of the chain GLTF-071 started. The mode is read from the file, converted where it
+    // converts (GLTF-072/GLTF-076), and arrives on ModelMeshPart as a real XNA PrimitiveType with
+    // a primitive count that follows §12.3 rather than numIndices / 3.
+    //
+    // Before this, every part was drawn as PrimitiveType::TriangleList regardless, which is why
+    // the four non-triangle topologies had to be rejected at import: importing them would have
+    // moved the corruption from the import layer to the draw layer.
+    using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+    const struct { const char* id; PrimitiveType type; int primitiveCount; } kCases[] = {
+        {"mode-triangles",      PrimitiveType::TriangleList, 2},
+        {"mode-triangle-strip", PrimitiveType::TriangleList, 2},  // converted at import
+        {"mode-triangle-fan",   PrimitiveType::TriangleList, 2},  // converted at import
+        {"mode-lines",          PrimitiveType::LineList,     2},
+        {"mode-line-strip",     PrimitiveType::LineStrip,    2},
+        {"mode-line-loop",      PrimitiveType::LineStrip,    3},  // closing segment appended
+        {"mode-points",         PrimitiveType::PointListEXT, 4},
+    };
+
+    for (const auto& testCase : kCases)
+    {
+        SCOPED_TRACE(testCase.id);
+        const LoadedFixture fixture(testCase.id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+        GraphicsDevice gd;
+        ContentManager cm(nullptr, CorpusDirectory().string());
+        cm.setGraphicsDevice(gd);
+        Model model = cm.Load<Model>(testCase.id);
+        ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+        ASSERT_EQ(1, model.getMeshesProperty()[0]->getMeshPartsProperty().getCountProperty());
+
+        const Microsoft::Xna::Framework::Graphics::ModelMeshPart* part =
+            model.getMeshesProperty()[0]->getMeshPartsProperty()[0];
+        EXPECT_EQ(testCase.type, part->getPrimitiveTypeEXTProperty())
+            << "the part would be drawn with the wrong topology";
+        EXPECT_EQ(testCase.primitiveCount, part->getPrimitiveCountProperty())
+            << "the primitive count does not follow this part's topology (§12.3)";
+    }
+}
+
+TEST(GltfDrawTopology, ATriangleListPartIsUnchangedByTheTopologyWork)
+{
+    // The regression half: every part built by any path defaults to TriangleList, and a fixture
+    // that was always a triangle list must be bit-for-bit the same import it always was.
+    const LoadedFixture fixture("xf-identity");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("xf-identity");
+
+    const Microsoft::Xna::Framework::Graphics::ModelMeshPart* part =
+        model.getMeshesProperty()[0]->getMeshPartsProperty()[0];
+    EXPECT_EQ(Microsoft::Xna::Framework::Graphics::PrimitiveType::TriangleList,
+              part->getPrimitiveTypeEXTProperty());
+    EXPECT_EQ(1, part->getPrimitiveCountProperty()) << "one triangle, three indices";
+
+    // A default-constructed part is a triangle list too, so nothing that never sets the property
+    // changes behaviour.
+    const Microsoft::Xna::Framework::Graphics::ModelMeshPart bare;
+    EXPECT_EQ(Microsoft::Xna::Framework::Graphics::PrimitiveType::TriangleList,
+              bare.getPrimitiveTypeEXTProperty());
+}

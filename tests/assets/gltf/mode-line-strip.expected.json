@@ -23,7 +23,9 @@
     "validatedLayers": [
       "L1",
       "L2",
-      "L3"
+      "L3",
+      "L4",
+      "L5"
     ],
     "features": [
       "primitive.mode = LINE_STRIP",
@@ -136,11 +138,16 @@
         ],
         "triangles": [],
         "importPolicy": {
-          "imported": false,
-          "topologyMode": 4,
-          "topologyName": "TRIANGLES",
-          "indices": [],
-          "converted": true
+          "imported": true,
+          "topologyMode": 3,
+          "topologyName": "LINE_STRIP",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 2
         },
         "material": null
       }
@@ -204,66 +211,49 @@
     }
   },
   "l5": {
-    "supported": false,
-    "reason": "A LINE_STRIP primitive classifies correctly but does not import, so no vertex or index buffer is produced at all. The golden arrives with the draw path.",
-    "blockedBy": [
-      "GLTF-073",
-      "GLTF-078"
-    ],
-    "parts": []
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "mode-line-strip.vb.bin",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "5647a5d9de9ac47aa8ff04ac242f9d312a1f64aac4ec7275d270df132a3f1079",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "mode-line-strip.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "LINE_STRIP",
+        "topology": "LINE_STRIP",
+        "primitiveCount": 2
+      }
+    ]
   },
   "rejection": null,
-  "defects": [
-    {
-      "id": "D5",
-      "summary": "primitive.mode was never read, so a LINE_STRIP was drawn as a triangle list. GLTF-071 classifies and rejects it. LINE_STRIP maps directly onto XNA's own PrimitiveType::LineStrip and needs no index conversion, only GLTF-073's primitive type on ModelMeshPart and GLTF-078's topology-aware count.",
-      "firstDivergentLayer": "L3",
-      "divergentFields": [
-        "import",
-        "mode",
-        "modeName",
-        "triangles"
-      ],
-      "divergentFieldsByLayer": {
-        "L3": [
-          "import",
-          "mode",
-          "modeName",
-          "triangles"
-        ],
-        "L4": [
-          "worldPositions",
-          "worldBounds"
-        ]
-      },
-      "owner": "GLTF-MESH",
-      "owningTasks": [
-        "GLTF-071",
-        "GLTF-072"
-      ],
-      "closedTasks": [
-        "GLTF-071",
-        "GLTF-072"
-      ],
-      "remainingTasks": [
-        "GLTF-073",
-        "GLTF-077",
-        "GLTF-078"
-      ],
-      "status": "partially-remediated",
-      "currentActual": {
-        "importRejected": true,
-        "topologyCarried": true,
-        "classifiedMode": 3,
-        "classifiedModeName": "LINE_STRIP",
-        "errorContains": [
-          "LINE_STRIP",
-          "mode 3"
-        ],
-        "indices": [],
-        "triangles": [],
-        "note": "ExtractMesh classifies mode 3 and throws with LINE_STRIP named. Three indices describe two segments; read as a triangle list they described one triangle."
-      }
-    }
-  ]
+  "defects": []
 }

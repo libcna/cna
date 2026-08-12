@@ -130,28 +130,26 @@
     },
     {
       "id": "D5",
-      "summary": "primitive.mode was never read, so a POINTS primitive became a triangle list built from its own implicit index range. GLTF-071 reads and classifies the mode and rejects it explicitly rather than reinterpreting it; a point list has no triangle-list equivalent, so what remains is a draw path, not a conversion.",
+      "summary": "primitive.mode was never read, so every topology was decoded into a flat index list that all three loaders divided by three and drew as a triangle list: a TRIANGLE_STRIP lost every triangle after the first, a point cloud became one arbitrary triangle, and neither warned. GLTF-071 reads and classifies the mode; GLTF-072 converts a strip or fan to a triangle list with winding preserved; GLTF-073/GLTF-076/GLTF-078 give the four topologies that describe no triangles a real draw path -- a PrimitiveType on ModelMeshPart, a \u00a712.3 primitive count, and a LINE_LOOP's implicit closing segment.",
       "owner": "GLTF-MESH",
       "owningTasks": [
         "GLTF-071",
-        "GLTF-072"
+        "GLTF-072",
+        "GLTF-073",
+        "GLTF-076",
+        "GLTF-078"
       ],
       "closedTasks": [
         "GLTF-071",
-        "GLTF-072"
-      ],
-      "remainingTasks": [
+        "GLTF-072",
         "GLTF-073",
-        "GLTF-077",
+        "GLTF-076",
         "GLTF-078"
       ],
+      "remainingTasks": [],
       "firstDivergentLayer": "L3",
-      "status": "partially-remediated",
+      "status": "fixed",
       "fixtures": [
-        "mode-points",
-        "mode-lines",
-        "mode-line-loop",
-        "mode-line-strip",
         "mode-triangle-strip"
       ]
     },
@@ -344,7 +342,9 @@
       "validatedLayers": [
         "L1",
         "L2",
-        "L3"
+        "L3",
+        "L4",
+        "L5"
       ],
       "features": [
         "primitive.mode = POINTS",
@@ -360,7 +360,9 @@
       "validatedLayers": [
         "L1",
         "L2",
-        "L3"
+        "L3",
+        "L4",
+        "L5"
       ],
       "features": [
         "primitive.mode = LINES",
@@ -375,7 +377,9 @@
       "validatedLayers": [
         "L1",
         "L2",
-        "L3"
+        "L3",
+        "L4",
+        "L5"
       ],
       "features": [
         "primitive.mode = LINE_LOOP",
@@ -391,7 +395,9 @@
       "validatedLayers": [
         "L1",
         "L2",
-        "L3"
+        "L3",
+        "L4",
+        "L5"
       ],
       "features": [
         "primitive.mode = LINE_STRIP",
@@ -627,8 +633,8 @@
   "files": [
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 12623,
-      "sha256": "74c98164cbdbc4acf71e8e33da8ac3f98018d5492f6b907c4f379619b6150e5f"
+      "bytes": 12654,
+      "sha256": "7b14724c2c658e267f9b979ce9e999e3637f06ffbc5baad50134446a36d671e8"
     },
     {
       "path": "anim-rigid-node.glb",
@@ -667,8 +673,8 @@
     },
     {
       "path": "gltf-required-extension-unsupported.expected.json",
-      "bytes": 5076,
-      "sha256": "6b6610ce25f40863dce85df942aeca2189c1c8004a6ff200d7b21f58313bc8d4"
+      "bytes": 5107,
+      "sha256": "c3d1d8dd4df82f44104fb9ee7be912d29d5fdbb2e95d00e10e66859a95e88eed"
     },
     {
       "path": "gltf-required-extension-unsupported.glb",
@@ -682,8 +688,8 @@
     },
     {
       "path": "interleaved-position-normal.expected.json",
-      "bytes": 6414,
-      "sha256": "7c69e7cf39bb20d7932e6cb6f6746e031b1997ecd33e395cb3b4f01f6aa9d074"
+      "bytes": 6445,
+      "sha256": "3b1b6bc2f9ff5237fa8fb2e4068cdb635c988682612901c65265ea7196637c5a"
     },
     {
       "path": "interleaved-position-normal.glb",
@@ -707,8 +713,8 @@
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 11058,
-      "sha256": "870ed6a6dca5b9115ef61688cf1b9cb8378d9379d39018b54f6c52eee7474f16"
+      "bytes": 11089,
+      "sha256": "1b186828dbc699896c5087286cd101b70e0371fb01a099c0ccd0568f576be91f"
     },
     {
       "path": "mat-factor-only-gold.glb",
@@ -732,8 +738,8 @@
     },
     {
       "path": "mode-line-loop.expected.json",
-      "bytes": 6130,
-      "sha256": "26869ae4adcedeb8302bacd36a60f7e8011c5d8bf0f3f3d541dab18a7f796b30"
+      "bytes": 5649,
+      "sha256": "c6713d1e3b3f1326bf46961e2a55384dcd3219c82080519c55cba1ca86253fb2"
     },
     {
       "path": "mode-line-loop.glb",
@@ -746,9 +752,19 @@
       "sha256": "37f9caac2c76c0fc7bb70674d47ac643d6208ab87ce401826f9f0c1bf06e956a"
     },
     {
+      "path": "mode-line-loop.ib.bin",
+      "bytes": 8,
+      "sha256": "c5d93c76fd3b1df422591bea39f0f43e5518501780726a069e990879f18eb9a7"
+    },
+    {
+      "path": "mode-line-loop.vb.bin",
+      "bytes": 144,
+      "sha256": "5647a5d9de9ac47aa8ff04ac242f9d312a1f64aac4ec7275d270df132a3f1079"
+    },
+    {
       "path": "mode-line-strip.expected.json",
-      "bytes": 6043,
-      "sha256": "14b8313dead9e3c67b67acd71c33f76ea15e771949124a3e6e7ac77d699da5da"
+      "bytes": 5519,
+      "sha256": "183bf9a2ef9b92dd0b409c750d4b5c17524ef6d670cd351dc9e49e7b68cf0634"
     },
     {
       "path": "mode-line-strip.glb",
@@ -761,9 +777,19 @@
       "sha256": "740c3b963044c72bea2480dbeb6d14db1494b974bc145ead00810e64a7f432c6"
     },
     {
+      "path": "mode-line-strip.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mode-line-strip.vb.bin",
+      "bytes": 144,
+      "sha256": "5647a5d9de9ac47aa8ff04ac242f9d312a1f64aac4ec7275d270df132a3f1079"
+    },
+    {
       "path": "mode-lines.expected.json",
-      "bytes": 6021,
-      "sha256": "d4748769fd6738d02461049879ae3696eff0be5ddc1ae2e36323177019a1625c"
+      "bytes": 5600,
+      "sha256": "a75964f2c73ce1499c6340b97af7b913fd4cc9603a0f1ce1b38dd3d00ac3a6b0"
     },
     {
       "path": "mode-lines.glb",
@@ -776,9 +802,19 @@
       "sha256": "cc3845158ce106073e8c8bb5ac5cbebc701b93c44faf51ed067a34c058bc95b3"
     },
     {
+      "path": "mode-lines.ib.bin",
+      "bytes": 8,
+      "sha256": "4b419c57c27c31e26f924bb6b5164be50586b6fd36e393f45bb10581ddf1a74d"
+    },
+    {
+      "path": "mode-lines.vb.bin",
+      "bytes": 144,
+      "sha256": "5647a5d9de9ac47aa8ff04ac242f9d312a1f64aac4ec7275d270df132a3f1079"
+    },
+    {
       "path": "mode-points.expected.json",
-      "bytes": 6406,
-      "sha256": "695f6a9daa8565b50a53a5cfc3034c4721e6cc79bc4ccfae4876e7f5c6335d08"
+      "bytes": 5244,
+      "sha256": "12bf8dbfe23ba3117919278d655f59b97d5614f01f72d3b628b433963a3e7780"
     },
     {
       "path": "mode-points.glb",
@@ -791,9 +827,19 @@
       "sha256": "711fb757e52d663a5cd0ca8f4d12ce19420f4f59403fd165e1af55f621bcd01a"
     },
     {
+      "path": "mode-points.ib.bin",
+      "bytes": 8,
+      "sha256": "245bbd9d484dcf27c714e2690cd6544973de5d54aa9cd82eab23d6046a65faa8"
+    },
+    {
+      "path": "mode-points.vb.bin",
+      "bytes": 192,
+      "sha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43"
+    },
+    {
       "path": "mode-triangle-fan.expected.json",
-      "bytes": 5885,
-      "sha256": "e4cfa1f8b499ac7f4c38cf48c57b69bde2f25e7de667a2b73c93b3cea35f57ab"
+      "bytes": 5916,
+      "sha256": "25213dd806390add102431ddd66ddc0a0db2cbfa5b0968a67b15268efd3cccc0"
     },
     {
       "path": "mode-triangle-fan.glb",
@@ -817,8 +863,8 @@
     },
     {
       "path": "mode-triangle-strip.expected.json",
-      "bytes": 8210,
-      "sha256": "7648d496db89149c8b74b01f6fd909c1914ea91260d66bdf6b3f4e194b3236a7"
+      "bytes": 8636,
+      "sha256": "2e1a16b1b2c4737822477bed4f421b14366c1ac4ba8d067ff72e4705a667ea7b"
     },
     {
       "path": "mode-triangle-strip.glb",
@@ -842,8 +888,8 @@
     },
     {
       "path": "mode-triangles.expected.json",
-      "bytes": 5959,
-      "sha256": "a0d5903c2823155dd49480a0ce3b77bc0d4652d54920391f0d2e241ec477c2c8"
+      "bytes": 5990,
+      "sha256": "912dde413d0f2586de0ab7cb7f00a5597308c1ba3689799e03eb8f98e7e74fa9"
     },
     {
       "path": "mode-triangles.glb",
@@ -867,8 +913,8 @@
     },
     {
       "path": "normalized-u8-color.expected.json",
-      "bytes": 6424,
-      "sha256": "8a311eb677f8d1e05d8a004cfd2f77d21b74da02d46794296d834b8f6b9e48df"
+      "bytes": 6455,
+      "sha256": "c86eb1175d91a0d6df3265c8143bd079db881f6a7a77895d031e7def8383c105"
     },
     {
       "path": "normalized-u8-color.glb",
@@ -892,8 +938,8 @@
     },
     {
       "path": "scene-default-selection.expected.json",
-      "bytes": 7966,
-      "sha256": "eb3ec68aca80506c4480767fc732f21e2a72fb60e981930e5d557321cea6ec2f"
+      "bytes": 7997,
+      "sha256": "3a14a16d86b491f6ae296ca8c2b650bb4239b4f74a56052e1c98d647724b840c"
     },
     {
       "path": "scene-default-selection.glb",
@@ -917,8 +963,8 @@
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 12465,
-      "sha256": "4c3bb419282e72830b96008227740454717775e3a10b8ee11563604c0ea49248"
+      "bytes": 12496,
+      "sha256": "20ee651ff6c1ec77411b07a44f8bd98b57fd71bc55a5d79a204c6d39f43fe9f4"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -942,8 +988,8 @@
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
-      "bytes": 10374,
-      "sha256": "597de2bf45425aa8bd1af6af8767b54acdcc0394392f85914a6de122459856e1"
+      "bytes": 10405,
+      "sha256": "b4586a31bf712f9443fa813316bec989748261a13973723e1a7152b8e54e500d"
     },
     {
       "path": "skin-mesh-node-transform.glb",
@@ -967,8 +1013,8 @@
     },
     {
       "path": "sparse-indices.expected.json",
-      "bytes": 7559,
-      "sha256": "d7b0279723be841d8aa0f607fbd471f3900e9fa3d32eea411d2a1dc7c9ff2a1e"
+      "bytes": 7590,
+      "sha256": "e9929e442e541def6fb191daf0d8778695a5265ee2abcc663507c822b6f6db37"
     },
     {
       "path": "sparse-indices.glb",
@@ -992,8 +1038,8 @@
     },
     {
       "path": "sparse-position.expected.json",
-      "bytes": 5618,
-      "sha256": "0e08ce50bc0d8b8576de5d30c5a0369492483186d0ea65cec4379f5507278315"
+      "bytes": 5649,
+      "sha256": "c3af870b719f8484a80228bc40aba0e3736583db8e38a676a48974e0613afd37"
     },
     {
       "path": "sparse-position.glb",
@@ -1017,8 +1063,8 @@
     },
     {
       "path": "u8-idx.expected.json",
-      "bytes": 6262,
-      "sha256": "3aa12025627b1baa0c081f08b98228800a8818038059a42acfffa954b3e617b7"
+      "bytes": 6293,
+      "sha256": "532bd7d13484ea4615503be24554e49b8bf410d0fad38c16b27e348ee6f6fd5a"
     },
     {
       "path": "u8-idx.glb",
@@ -1042,8 +1088,8 @@
     },
     {
       "path": "xf-identity.expected.json",
-      "bytes": 6222,
-      "sha256": "74d7acc6b3c69fb1fdb4e63709c7d30f21293b98196117496aa63ab7dd68f00e"
+      "bytes": 6253,
+      "sha256": "98e7edb7c021122e72bb14b1465c147864d9866bb52c6c2d38c515b20833b1f4"
     },
     {
       "path": "xf-identity.glb",
@@ -1067,8 +1113,8 @@
     },
     {
       "path": "xf-matrix-node.expected.json",
-      "bytes": 7852,
-      "sha256": "ae11024e44627719826fe617fdac8053513f6bc8b42e96e988cfc2229d64fea9"
+      "bytes": 7883,
+      "sha256": "eb1529af6bca0e9e2cfe16463f5bf5b2d7e8c294e5d14d6b5a7d44f3e565e103"
     },
     {
       "path": "xf-matrix-node.glb",
@@ -1092,8 +1138,8 @@
     },
     {
       "path": "xf-parent-child.expected.json",
-      "bytes": 7941,
-      "sha256": "abd8017475ec8040f16aefe1e609241c10b6fc219e6df85cd4567fffdc63fbe1"
+      "bytes": 7972,
+      "sha256": "2d335fe8c9d034981364bd4c4e9b6d1d7a3b6f55ac6201395552762f0a32c521"
     },
     {
       "path": "xf-parent-child.glb",
@@ -1117,8 +1163,8 @@
     },
     {
       "path": "xf-shared-mesh.expected.json",
-      "bytes": 9171,
-      "sha256": "900b4dba730aa65584a48afb0a093f72ede377a32ff010f2dae58e7fb6991031"
+      "bytes": 9202,
+      "sha256": "6fe469a6255e2698279eec1a15f4da866f0c58b8225fd4fbb49bee1dfaeaf5b4"
     },
     {
       "path": "xf-shared-mesh.glb",

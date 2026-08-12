@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "System/Object.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -42,9 +43,39 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Gets the number of primitives to render.
+         *
+         * Primitives of **this part's own topology**, not triangles: a `LineList` part of `n`
+         * indices has `n / 2` primitives, a `LineStrip` has `n - 1`, and a `PointListEXT` has `n`
+         * (plan_gltf.md §12.3, `GLTF-078`). For the `TriangleList` default the value is `n / 3`, as
+         * it has always been, so a caller that only ever handles triangle lists is unaffected —
+         * but `primitiveCount * 3 == indexCount` is **not** a safe assumption in general.
+         *
          * @return The primitive count.
          */
         [[nodiscard]] int getPrimitiveCountProperty() const;
+
+        /**
+         * @brief Gets the topology this part's index buffer describes.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Real XNA carries the topology as an argument
+         * to `GraphicsDevice::DrawIndexedPrimitives`, so every XNA `ModelMeshPart` is implicitly a
+         * triangle list. glTF's own primitive modes need somewhere to survive between the importer
+         * and the draw (plan_gltf.md §10.1, `GLTF-073`), and this is that place. Defaults to
+         * `TriangleList`, which is what every part built by any other path already is.
+         *
+         * @return The topology to draw this part with.
+         */
+        CNAEXT [[nodiscard]] PrimitiveType getPrimitiveTypeEXTProperty() const;
+
+        /**
+         * @brief Sets the topology this part's index buffer describes.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Setting this does not reinterpret the index
+         * buffer; it states what the buffer already contains.
+         *
+         * @param value The topology to draw this part with.
+         */
+        CNAEXT void setPrimitiveTypeEXTProperty(PrimitiveType value);
 
         /**
          * @brief Gets the location in the index array at which to start reading vertices.
@@ -143,6 +174,7 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         int numVertices_    = 0;
         int primitiveCount_ = 0;
+        PrimitiveType primitiveType_ = PrimitiveType::TriangleList;
         int startIndex_     = 0;
         int vertexOffset_   = 0;
         Effect* effect_     = nullptr;

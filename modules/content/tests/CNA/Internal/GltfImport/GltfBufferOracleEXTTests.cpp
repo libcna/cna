@@ -342,13 +342,17 @@ TEST(GltfConformanceL5, GeneratedBuffersMatchTheGoldenBytesExactly)
                 CompareIndexBytesEXT(id, part.indexElementSize, part.indexBytes, mesh.indexBytes);
             EXPECT_TRUE(ib.equal) << ib.report;
 
-            // The draw-call count the packing layer derives from this buffer. Every loader
-            // computes numIndices / 3 today, which is only right because the only topology that
-            // reaches L5 is TRIANGLES (GLTF-071); GLTF-078 replaces it with a topology-aware
-            // helper, and this assertion is what will hold that replacement to the same answer.
-            EXPECT_EQ("TRIANGLES", part.topology);
-            EXPECT_EQ(CNA::Internal::GltfImport::PrimitiveTopology::Triangles, mesh.topology);
-            EXPECT_EQ(part.primitiveCount, part.indexCount / 3);
+            // The topology the buffer is actually in, and the draw-call count derived from it
+            // (§12.3, GLTF-078). Both are read from the manifest rather than assumed, which is the
+            // whole point: every loader used to compute numIndices / 3 unconditionally, and that is
+            // right for exactly one of the seven topologies.
+            EXPECT_EQ(part.topology, std::string(CNA::Internal::GltfImport::PrimitiveTopologyName(
+                                          mesh.topology)))
+                << "the buffer is not in the topology the manifest says it is";
+            EXPECT_EQ(part.primitiveCount,
+                      CNA::Internal::GltfImport::PrimitiveCountForTopology(
+                          mesh.topology, static_cast<std::size_t>(part.indexCount)))
+                << "the primitive count no longer follows the part's own topology";
         }
     }
 }
@@ -378,28 +382,35 @@ TEST(GltfConformanceL5, SparseIndicesProducesTheGoldenIndexBuffer)
         << "the index buffer is all zeros again -- D4 has come back at the byte level";
 }
 
-TEST(GltfConformanceL5, ARejectedTopologyHasNoGoldenAndSaysWhichTaskWouldGiveItOne)
+TEST(GltfConformanceL5, EveryTopologyProducesAGoldenAndItsOwnPrimitiveCount)
 {
-    // The four topologies that describe no triangles. GLTF-072 gave the strip and the fan their
-    // goldens by converting them; these have no triangle-list equivalent to convert to, so what
-    // they are waiting for is a draw path, and the manifest has to say which task provides it.
-    for (const std::string& id : {"mode-points", "mode-lines", "mode-line-strip", "mode-line-loop"})
+    // Replaces the "a rejected topology has no golden" case: since GLTF-073/GLTF-076/GLTF-078 all
+    // seven modes import, so all seven have goldens. What is asserted instead is the property that
+    // makes those goldens meaningful -- each carries its own topology and its own §12.3 count,
+    // rather than every buffer being described as a triangle list.
+    const struct { const char* id; const char* topology; int primitiveCount; } kCases[] = {
+        {"mode-triangles",      "TRIANGLES",  2},
+        {"mode-triangle-strip", "TRIANGLES",  2},   // converted (GLTF-072)
+        {"mode-triangle-fan",   "TRIANGLES",  2},   // converted (GLTF-072)
+        {"mode-lines",          "LINES",      2},   // 4 indices -> 2 segments
+        {"mode-line-strip",     "LINE_STRIP", 2},   // 3 indices -> 2 segments
+        {"mode-line-loop",      "LINE_STRIP", 3},   // 3 + closing index -> 3 segments (GLTF-076)
+        {"mode-points",         "POINTS",     4},   // 4 indices -> 4 points
+    };
+
+    for (const auto& testCase : kCases)
     {
-        SCOPED_TRACE(id);
-        const LoadedFixture fixture(id);
+        SCOPED_TRACE(testCase.id);
+        const LoadedFixture fixture(testCase.id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
         const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
         ASSERT_TRUE(golden.declared);
         ASSERT_TRUE(golden.ok) << golden.error;
-        EXPECT_FALSE(golden.supported)
-            << "this fixture now has an L5 golden -- if its draw path landed, that is where it "
-               "belongs";
-        EXPECT_FALSE(golden.blockedBy.empty())
-            << "the missing golden names no task that would produce it";
-        EXPECT_NE(golden.blockedBy.end(),
-                  std::find(golden.blockedBy.begin(), golden.blockedBy.end(), "GLTF-078"))
-            << "the missing golden does not name GLTF-078, whose topology-aware primitive count "
-               "every non-triangle draw needs";
+        ASSERT_TRUE(golden.supported) << "this topology no longer imports";
+        ASSERT_EQ(1u, golden.parts.size());
+
+        EXPECT_EQ(testCase.topology, golden.parts[0].topology);
+        EXPECT_EQ(testCase.primitiveCount, golden.parts[0].primitiveCount);
     }
 }
 

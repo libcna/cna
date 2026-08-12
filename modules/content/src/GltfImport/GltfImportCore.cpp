@@ -1266,13 +1266,14 @@ namespace CNA::Internal::GltfImport
 
     bool IsPrimitiveTopologySupported(PrimitiveTopology topology)
     {
-        // GLTF-072: exactly the topologies that can be expressed as a triangle list, because that
-        // is what every renderer already draws. The line and point topologies decode fine but have
-        // no draw path yet (GLTF-073/GLTF-077/GLTF-078); see the header for why importing them
-        // early would relocate the defect rather than fix it.
-        return topology == PrimitiveTopology::Triangles
-            || topology == PrimitiveTopology::TriangleStrip
-            || topology == PrimitiveTopology::TriangleFan;
+        // GLTF-072 gave the triangle topologies their conversion; GLTF-073/GLTF-076/GLTF-078 gave
+        // the rest a draw path -- a real PrimitiveType on ModelMeshPart, a topology-aware primitive
+        // count, and the closing-segment conversion a LINE_LOOP needs. All seven modes now import.
+        //
+        // Whether a given renderer can actually draw a point list is a separate question, answered
+        // per renderer at draw time (GLTF-077), not by refusing to import the data.
+        (void)topology;
+        return true;
     }
 
     std::vector<std::uint32_t> ConvertToTriangleList(const std::vector<std::uint32_t>& indices,
@@ -1326,11 +1327,89 @@ namespace CNA::Internal::GltfImport
             case PrimitiveTopology::LineStrip:
                 break;
         }
+        // Asked to produce triangles from a topology that describes none. The caller, not this
+        // function, is wrong: a line run is already what its own draw consumes and must not be
+        // passed through here at all. Returning it unchanged would make the function's name a lie
+        // and hide exactly the reinterpretation GLTF-071 removed.
         throw std::runtime_error(
             std::string("glTF primitive mode ") + std::to_string(PrimitiveTopologyMode(topology)) +
             " (" + PrimitiveTopologyName(topology) + ") describes no triangles, so it has no "
-            "triangle-list equivalent. Producing one would be the silent reinterpretation "
-            "GLTF-071 removed.");
+            "triangle-list equivalent.");
+    }
+
+    PrimitiveTopology PrimitiveTopologyFromName(const std::string& name)
+    {
+        for (int mode = 0; mode <= 6; ++mode)
+        {
+            const auto topology = static_cast<PrimitiveTopology>(mode);
+            if (name == PrimitiveTopologyName(topology)) { return topology; }
+        }
+        // An absent or unrecognised name means a .cnj written before GLTF-073, which could only
+        // ever have held a triangle list.
+        return PrimitiveTopology::Triangles;
+    }
+
+    Microsoft::Xna::Framework::Graphics::PrimitiveType PrimitiveTypeForTopology(
+        PrimitiveTopology topology)
+    {
+        using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+        switch (topology)
+        {
+            case PrimitiveTopology::Points:        return PrimitiveType::PointListEXT;
+            case PrimitiveTopology::Lines:         return PrimitiveType::LineList;
+            // Converted to a strip with its closing segment appended (GLTF-076), so by draw time
+            // it IS a strip; naming it here keeps the mapping total rather than leaving a hole.
+            case PrimitiveTopology::LineLoop:
+            case PrimitiveTopology::LineStrip:     return PrimitiveType::LineStrip;
+            case PrimitiveTopology::Triangles:     return PrimitiveType::TriangleList;
+            // Converted to a triangle list at import (GLTF-072); neither reaches a draw as itself.
+            case PrimitiveTopology::TriangleStrip:
+            case PrimitiveTopology::TriangleFan:   return PrimitiveType::TriangleList;
+        }
+        return PrimitiveType::TriangleList;
+    }
+
+    /// Whether a topology describes triangles at all -- and therefore whether it has a
+    /// triangle-list equivalent to be converted into (GLTF-072).
+    bool ProducesTriangles(PrimitiveTopology topology)
+    {
+        return topology == PrimitiveTopology::Triangles
+            || topology == PrimitiveTopology::TriangleStrip
+            || topology == PrimitiveTopology::TriangleFan;
+    }
+
+    std::vector<std::uint32_t> CloseLineLoop(const std::vector<std::uint32_t>& indices,
+                                              PrimitiveTopology topology)
+    {
+        // GLTF-076. XNA has no LineLoop, and the difference between a loop and a strip is exactly
+        // one segment: the one back to the first vertex, which glTF leaves implicit in the mode.
+        // Appending it turns the run into an ordinary LINE_STRIP that every renderer can draw,
+        // without the closing segment being lost -- which is what dropping the mode used to do.
+        if (topology != PrimitiveTopology::LineLoop) { return indices; }
+        if (indices.size() < 2) { return indices; }  // fewer than two vertices closes nothing
+        std::vector<std::uint32_t> out(indices);
+        out.push_back(indices.front());
+        return out;
+    }
+
+    int PrimitiveCountForTopology(PrimitiveTopology topology, std::size_t indexCount)
+    {
+        const auto n = static_cast<long long>(indexCount);
+        switch (topology)
+        {
+            case PrimitiveTopology::Points:        return static_cast<int>(n);
+            case PrimitiveTopology::Lines:         return static_cast<int>(n / 2);
+            // A loop's closing segment is implicit in the mode, so it describes the same count as
+            // a strip over the same indices plus one -- but CNA converts a loop to a strip with the
+            // closing index appended (GLTF-076), and by the time a count is asked for the run
+            // already carries it. Answering n-1 for both keeps the two consistent.
+            case PrimitiveTopology::LineLoop:
+            case PrimitiveTopology::LineStrip:     return static_cast<int>(n > 0 ? n - 1 : 0);
+            case PrimitiveTopology::Triangles:     return static_cast<int>(n / 3);
+            case PrimitiveTopology::TriangleStrip:
+            case PrimitiveTopology::TriangleFan:   return static_cast<int>(n > 2 ? n - 2 : 0);
+        }
+        return 0;
     }
 
     MeshOut ExtractMesh(const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
@@ -1413,7 +1492,12 @@ namespace CNA::Internal::GltfImport
         // fan is converted below; `sourceTopology` keeps what the file declared, so the conversion
         // is visible rather than lossy.
         out.sourceTopology = sourceTopology;
-        out.topology = PrimitiveTopology::Triangles;
+        // What indexBytes ends up in: a triangle list for the three triangle modes (converted where
+        // needed), a line strip for a LINE_LOOP once its closing segment is appended, and the
+        // source topology itself for the rest.
+        out.topology = ProducesTriangles(sourceTopology) ? PrimitiveTopology::Triangles
+                     : (sourceTopology == PrimitiveTopology::LineLoop
+                            ? PrimitiveTopology::LineStrip : sourceTopology);
         out.skinned = (jointsAcc != nullptr) && (weightsAcc != nullptr);
         // A skinned+colored primitive uses a stride-56 layout (the stride-52 GPU-skinned layout
         // with a per-vertex Color appended at the end) and SkinnedEffect's own CNAEXT
@@ -1626,7 +1710,16 @@ namespace CNA::Internal::GltfImport
         // ApplyLayout, and the loaders' primitive count -- keeps working on triangle lists alone.
         // Deliberately after the bounds check, so an out-of-range index is reported against the
         // index the file actually authored rather than against a rewritten position.
-        indices = ConvertToTriangleList(indices, sourceTopology);
+        // GLTF-076: a LINE_LOOP becomes a LINE_STRIP carrying its own closing segment, before any
+        // count is taken from the run.
+        indices = CloseLineLoop(indices, sourceTopology);
+        // GLTF-072: only the triangle topologies convert. A line or point run is already exactly
+        // what its own draw consumes, and handing it to a triangle converter would be the
+        // reinterpretation this whole track removed.
+        if (ProducesTriangles(sourceTopology))
+        {
+            indices = ConvertToTriangleList(indices, sourceTopology);
+        }
 
         const std::vector<float> positions = unpackSemantic(cgltf_attribute_type_position, 0, posAcc, 3, "POSITION");
         // Only the unskinned stride-24 (Position+Color+TextureCoordinate) and stride-20

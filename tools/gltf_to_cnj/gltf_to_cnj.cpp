@@ -200,6 +200,10 @@ namespace
         struct MeshEntry {
             std::string vertFile, idxFile, textureFile, texture2File;
             int stride; std::string effect; bool vertexColorEnabled;
+            // plan_gltf.md GLTF-073: the topology the index buffer is in, by its specification
+            // name. Absent from a .cnj written before this, which could only ever hold a triangle
+            // list -- so the reader's default is TRIANGLES and an older asset is unaffected.
+            std::string primitiveTopology = "TRIANGLES";
             // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
             std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile, pbrOcclusionMapFile;
             float metallicFactor = 1.0f, roughnessFactor = 1.0f;
@@ -382,6 +386,7 @@ namespace
                 entry.roughnessFactor = meshOut.roughnessFactor;
                 entry.emissiveFactor = meshOut.emissiveFactor;
                 entry.baseColorFactor = meshOut.baseColorFactor;
+                entry.primitiveTopology = PrimitiveTopologyName(meshOut.topology);
                 entry.vertexColorEnabled = meshOut.colored;
                 entry.morphFile = morphFile;
                 entry.morphWeights = morphWeights;
@@ -536,6 +541,12 @@ namespace
             if (!e.textureFile.empty()) { json << ", \"texture\": \"" << JsonEscape(e.textureFile) << "\""; }
             if (!e.texture2File.empty()) { json << ", \"texture2\": \"" << JsonEscape(e.texture2File) << "\""; }
             if (e.vertexColorEnabled) { json << ", \"vertexColorEnabled\": true"; }
+            // Only written when it is not the default, so an ordinary triangle-list asset's .cnj
+            // is byte-identical to what it was before GLTF-073.
+            if (e.primitiveTopology != "TRIANGLES")
+            {
+                json << ", \"primitiveTopology\": \"" << JsonEscape(e.primitiveTopology) << "\"";
+            }
             if (e.effect == "PbrEffect" || e.effect == "SkinnedPbrEffect")
             {
                 if (!e.normalMapFile.empty()) { json << ", \"normalMap\": \"" << JsonEscape(e.normalMapFile) << "\""; }

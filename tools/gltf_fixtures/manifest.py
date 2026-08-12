@@ -381,18 +381,34 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
     index list it emits both differ from the authored ones -- and a manifest that stated only the
     authored values could not tell a correct conversion from a missing one.
     """
-    from .builder import MODE_NAMES, TRIANGLES, expand_to_triangles
+    from .builder import (LINE_LOOP, LINE_STRIP, MODE_NAMES, TRIANGLES, expand_to_triangles,
+                          primitive_count_for_mode, produces_triangles)
 
     resolved = list(indices) if indices is not None else list(range(len(positions)))
     triangles = expand_to_triangles(resolved, mode)
-    # The line and point topologies have no triangle-list equivalent and are not imported at all;
-    # stating a converted index list for them would assert the reinterpretation GLTF-071 removed.
+    # What CNA's documented per-mode policy (plan_gltf.md §10.1) turns the primitive into. Three
+    # distinct outcomes, and the manifest states which applies rather than leaving a reader to
+    # infer it: a triangle mode converts to a triangle list (GLTF-072); a LINE_LOOP becomes a
+    # LINE_STRIP carrying the closing segment glTF leaves implicit in the mode (GLTF-076); every
+    # other mode is already exactly what its own draw consumes and passes through untouched.
+    if produces_triangles(mode):
+        imported_mode = TRIANGLES
+        imported_indices = [i for tri in triangles for i in tri]
+    elif mode == LINE_LOOP:
+        imported_mode = LINE_STRIP
+        imported_indices = resolved + resolved[:1] if len(resolved) >= 2 else list(resolved)
+    else:
+        imported_mode = mode
+        imported_indices = list(resolved)
     import_policy: dict[str, Any] = {
-        "imported": bool(triangles),
-        "topologyMode": TRIANGLES,
-        "topologyName": MODE_NAMES[TRIANGLES],
-        "indices": [i for tri in triangles for i in tri],
-        "converted": mode != TRIANGLES,
+        "imported": True,
+        "topologyMode": imported_mode,
+        "topologyName": MODE_NAMES[imported_mode],
+        "indices": imported_indices,
+        "converted": imported_mode != mode or imported_indices != resolved,
+        # §12.3's draw-call count for the topology the buffer ends up in (GLTF-078). Stated here as
+        # well as in l5 so an L3 comparison can catch a count that no longer follows the topology.
+        "primitiveCount": primitive_count_for_mode(imported_mode, len(imported_indices)),
     }
     return {
         "mesh": mesh,

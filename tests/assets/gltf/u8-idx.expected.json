@@ -194,7 +194,8 @@
             1,
             2
           ],
-          "converted": false
+          "converted": false,
+          "primitiveCount": 1
         },
         "material": null
       }

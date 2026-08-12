@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -635,6 +636,58 @@ namespace CNA::Internal::GltfImport
      */
     std::vector<std::uint32_t> ConvertToTriangleList(const std::vector<std::uint32_t>& indices,
                                                      PrimitiveTopology topology);
+
+    /**
+     * @brief How many primitives an index run of a given topology describes (§12.3, `GLTF-078`).
+     *
+     * `TriangleList` → `n / 3`, `LineList` → `n / 2`, `LineStrip` and `LineLoop` → `n - 1`,
+     * `Points` → `n`. `TriangleStrip` and `TriangleFan` are converted to a triangle list at import
+     * (`GLTF-072`), so asking for their count here means the caller is holding an unconverted run
+     * and is answered as the strip/fan formula `n - 2` rather than being silently divided by three.
+     *
+     * An index run too short to describe a single primitive yields `0`, never a negative count —
+     * `n - 1` and `n - 2` are the two formulas where that matters.
+     *
+     * This exists because all three loaders independently hardcoded `numIndices / 3`: right for a
+     * triangle list, silently wrong for everything else, and stated three times so the three could
+     * drift.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param topology The topology the index run is in.
+     * @param indexCount The number of indices in the run.
+     * @return The draw-call primitive count.
+     */
+    int PrimitiveCountForTopology(PrimitiveTopology topology, std::size_t indexCount);
+
+    /**
+     * @brief Parses a topology from its specification name, for reading a serialised `.cnj` part.
+     *
+     * The inverse of `PrimitiveTopologyName`. An unrecognised or empty name yields `Triangles`,
+     * which is what a `.cnj` written before `GLTF-073` means by omitting the field entirely — so an
+     * older asset keeps loading with exactly the topology it always had.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param name The specification name, e.g. "LINE_STRIP".
+     * @return The matching topology, or `Triangles` when the name is unknown.
+     */
+    PrimitiveTopology PrimitiveTopologyFromName(const std::string& name);
+
+    /**
+     * @brief The XNA `PrimitiveType` a decoded glTF topology is drawn with.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Three of the seven glTF modes have no XNA
+     * equivalent: `TriangleStrip` and `TriangleFan` never reach a draw because `GLTF-072` converts
+     * them to a triangle list at import, and `LineLoop` is converted to a line strip with its
+     * closing segment appended (`GLTF-076`). `Points` maps to CNA's own `PointListEXT`, which real
+     * XNA 4.0 removed — whether a renderer honours it is `GLTF-077`'s per-renderer question.
+     *
+     * @param topology The decoded topology.
+     * @return The primitive type to draw it with.
+     */
+    Microsoft::Xna::Framework::Graphics::PrimitiveType PrimitiveTypeForTopology(
+        PrimitiveTopology topology);
 
     /**
      * @brief Extracts one glTF mesh primitive's vertex/index bytes, selecting the vertex stride

@@ -175,7 +175,8 @@
             2,
             3
           ],
-          "converted": false
+          "converted": false,
+          "primitiveCount": 2
         },
         "material": null
       }

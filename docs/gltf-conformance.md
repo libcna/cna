@@ -416,15 +416,16 @@ padding says so rather than naming a field it does not belong to, and an unknown
 
 ### 4.3 Coverage today
 
-17 of the 21 fixtures carry a golden, covering strides 32, 24 and 52, the 16-bit index path and the
-`vertexCount > 65535` width-selection rule. The four without one are the point and line topologies,
-which decode correctly but have no draw path; their manifests record `l5.supported = false` with a
-reason and the tasks that would produce a golden, so the layer is visibly absent rather than quietly
-unasserted.
+21 of the 23 fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
+width-selection rule. The two without one are the fixtures the importer must **refuse**
+(`GLTF-021`/`GLTF-023`); their manifests record `l5.supported = false` with a reason and the owning
+task, so the layer is visibly absent rather than quietly unasserted.
 
 A converted topology's golden holds the **converted** index list, not the authored one — a strip's
-golden is the triangle list `GLTF-072` rewrites it into. The `l5` block records both
-(`sourceTopology` and `topology`) so the two are never confused, and
+golden is the triangle list `GLTF-072` rewrites it into, and a `LINE_LOOP`'s carries the closing
+index `GLTF-076` appends. The `l5` block records both (`sourceTopology` and `topology`) plus the
+resulting `primitiveCount`, so the two are never confused, and
 `GltfConformanceL5.AConvertedTopologyProducesTheSameBufferAsAnExplicitTriangleList` asserts the
 property that justifies converting at all: `mode-triangle-strip` and `mode-triangles` author the
 same quad by different routes and must produce byte-identical index buffers, while

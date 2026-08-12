@@ -152,79 +152,6 @@ namespace
                      "currentActual.worldBounds.max");
     }
 
-    /// Shared body for the two D5 fixtures, as they stand after GLTF-071 and before GLTF-072.
-    ///
-    /// The claim being asserted has moved on with the code: it is no longer "the topology is
-    /// silently reinterpreted" but "the topology is read, classified and explicitly rejected, and
-    /// nothing reaches the triangle-list path". The fixture and its spec-derived expectation are
-    /// untouched -- what a conforming importer must eventually produce has not changed.
-    void ExpectTopologyClassifiedAndRejected(const std::string& fixtureId)
-    {
-        using CNA::Internal::GltfImport::ClassifyPrimitiveTopology;
-        using CNA::Internal::GltfImport::IsPrimitiveTopologySupported;
-        using CNA::Internal::GltfImport::PrimitiveTopologyMode;
-        using CNA::Internal::GltfImport::PrimitiveTopologyName;
-
-        const LoadedFixture fixture(fixtureId);
-        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-        const JsonValue& defect = DefectRecord(fixture, "D5");
-        ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D5"));
-        const JsonValue& actualRecord = CurrentActual(defect);
-
-        // (0) The file really does declare a non-TRIANGLES mode, and GLTF-072 is still what owns
-        // finishing it. If that task closes, this test is what must be revisited.
-        const JsonValue& expectedPrimitive = Path(fixture.Expected(), "l3.primitives").arrayValue.at(0);
-        const int expectedMode = static_cast<int>(NumberOr(expectedPrimitive, "mode", -1));
-        EXPECT_NE(4, expectedMode) << "this fixture is supposed to declare a non-TRIANGLES mode";
-        const std::vector<std::string> remaining = Strings(Member(defect, "remainingTasks"));
-        EXPECT_NE(remaining.end(), std::find(remaining.begin(), remaining.end(), "GLTF-073"))
-            << "D5 no longer names GLTF-073 as outstanding; once ModelMeshPart carries a real "
-               "PrimitiveType these topologies have a draw path, and this test and the fixture's "
-               "defect record both need to move on";
-
-        // (1) prim.type is genuinely read: the classifier returns the file's own mode, by number
-        // and by specification name, and reports it as one CNA cannot yet honour.
-        ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().meshes_count));
-        ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().meshes[0].primitives_count));
-        const auto topology =
-            ClassifyPrimitiveTopology(fixture.Data().meshes[0].primitives[0], fixtureId);
-        EXPECT_EQ(expectedMode, PrimitiveTopologyMode(topology));
-        EXPECT_EQ(static_cast<int>(NumberOr(actualRecord, "classifiedMode", -1)),
-                  PrimitiveTopologyMode(topology));
-        EXPECT_EQ(StringOr(actualRecord, "classifiedModeName", ""),
-                  std::string(PrimitiveTopologyName(topology)));
-        EXPECT_FALSE(IsPrimitiveTopologySupported(topology));
-
-        // (2) The import is rejected, and the mode reaches the diagnostic by name and by number --
-        // a caller reading only the error message can still tell exactly what the file declared.
-        const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
-        ASSERT_EQ(1u, extracted.size());
-        EXPECT_TRUE(BoolOr(actualRecord, "importRejected", false));
-        ASSERT_FALSE(extracted[0].extracted)
-            << "a topology with no draw path imported successfully -- if GLTF-073/GLTF-077 landed, "
-               "update D5's record in tools/gltf_fixtures and delete this case";
-        for (const std::string& fragment : Strings(Member(actualRecord, "errorContains")))
-        {
-            EXPECT_NE(std::string::npos, extracted[0].error.find(fragment))
-                << "the rejection does not name '" << fragment << "': " << extracted[0].error;
-        }
-
-        // (3) Nothing reaches the numIndices/3 triangle-list path. This is the assertion that
-        // distinguishes "explicitly rejected" from "silently corrupted": there is no index list to
-        // divide by three at all, where before there was one that produced a single wrong triangle.
-        const MeshOutDump& dump = extracted[0].dump;
-        EXPECT_TRUE(dump.indices.empty()) << "an index list survived a rejected import";
-        EXPECT_EQ(0u, dump.indices.size() / 3);
-        EXPECT_EQ(Member(actualRecord, "triangles").arrayValue.size(), dump.indices.size() / 3);
-        // ...and what the audit measured before GLTF-071 is still on record, unchanged.
-        const JsonValue& prior = Member(defect, "priorActual");
-        if (prior.type == JsonType::Object)
-        {
-            EXPECT_EQ(1u, Member(prior, "triangles").arrayValue.size())
-                << "the pre-GLTF-071 measurement (one silently reinterpreted triangle) was lost";
-            EXPECT_FALSE(BoolOr(prior, "topologyCarried", true));
-        }
-    }
 }
 
 // --- D1/D2/D3: the node transform pipeline ----------------------------------------------------
@@ -247,31 +174,16 @@ namespace
 
 // --- D5: primitive topology ----------------------------------------------------------------------
 
-// GLTF-071 closed the reading half and GLTF-072 the conversion half, so the triangle topologies
-// are no longer here: mode-triangle-strip and mode-triangle-fan import, and GltfConformanceL3/L5
-// assert their converted index lists in full. What is left is the four topologies that decode
-// correctly and have nowhere to be drawn -- a draw-path gap owned by GLTF-073/GLTF-077/GLTF-078,
-// not a decoding one. Each stays here until it has one.
-
-TEST(GltfKnownDefect, D5_NonIndexedPointsAreClassifiedAndRejectedPendingASupportDecision)
-{
-    ExpectTopologyClassifiedAndRejected("mode-points");
-}
-
-TEST(GltfKnownDefect, D5_LineListIsClassifiedAndRejectedPendingAPrimitiveType)
-{
-    ExpectTopologyClassifiedAndRejected("mode-lines");
-}
-
-TEST(GltfKnownDefect, D5_LineStripIsClassifiedAndRejectedPendingAPrimitiveType)
-{
-    ExpectTopologyClassifiedAndRejected("mode-line-strip");
-}
-
-TEST(GltfKnownDefect, D5_LineLoopIsClassifiedAndRejectedPendingItsClosingSegmentConversion)
-{
-    ExpectTopologyClassifiedAndRejected("mode-line-loop");
-}
+// --- D5: primitive topology ----------------------------------------------------------------------
+//
+// REMEDIATED by GLTF-071 -> GLTF-072 -> GLTF-073/GLTF-076/GLTF-078. There are deliberately no
+// known-defect tests here any more. All seven glTF modes import: the three triangle modes as a
+// triangle list (converted where needed, winding preserved), a LINE_LOOP as a LINE_STRIP carrying
+// the closing segment glTF leaves implicit in the mode, and the rest as themselves with a real
+// PrimitiveType on the part and a §12.3 primitive count. GltfConformanceL3/L5 and
+// GltfPrimitiveTopology assert all seven in full, so any of it regressing fails an ordinary green
+// test. The record stays in the corpus as the regression witness with the audit's original
+// measurement under priorActual.
 
 // --- D6: rigid node animation ---------------------------------------------------------------------
 
@@ -439,12 +351,12 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
     // documented but unproven, which is exactly the failure mode this batch exists to remove. The
     // converse matters just as much: a defect the corpus records as remediated must NOT still have
     // a "still broken" test here, or the file would start lying about the state of the code.
-    const std::set<std::string> open = {"D5", "D6", "D7"};
+    const std::set<std::string> open = {"D6", "D7"};
     // Remediated defects, and the task that closed each. Their records stay in the corpus as
     // regression witnesses and their fixtures are asserted by the ordinary conformance suites.
     const std::map<std::string, std::string> remediated = {
         {"D1", "GLTF-114"}, {"D2", "GLTF-114"}, {"D3", "GLTF-114"}, {"D4", "GLTF-063"},
-        {"D8", "GLTF-247"}};
+        {"D5", "GLTF-073"}, {"D8", "GLTF-247"}};
 
     const JsonValue& ledger = Member(CorpusManifest(), "defectLedger");
     ASSERT_EQ(JsonType::Array, ledger.type);
