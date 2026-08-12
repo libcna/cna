@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf_`, pushed. Never push elsewhere without explicit permission. No pull
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **325 closed (`✔` 204, `✅` 121),
-  116 `⬜` remaining**, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **328 closed (`✔` 207, `✅` 121),
+  113 `⬜` remaining**, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 5 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-064`, `067`,
   `068`, `093`, `252`, `265`, `289`), 2 `🐛` (open: `GLTF-157`, `421`), and 1 `⛔` (`GLTF-009`,
   blocked by this environment).
@@ -50,6 +50,18 @@ capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS 
 `XnbBuiltInReaderRegistrationTest.*`) and `CnjCapabilityMatrixTest.TextureCubeDelegatesViaSourceFile`.
 Do not attempt to "fix" them as part of this campaign, and do not report a run as clean without
 saying they are there.
+
+There is a third tree for the **second renderer**,
+`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless` (`-DCNA_GRAPHICS_RENDERER=HEADLESS`).
+It matters more than it sounds: `HEADLESS` reports `GraphicsCapability::ThreeD`, so the 15
+`GltfToCnjToolTest` cases that **skip on `STUB`** actually run there — and two of them were failing
+on stale pre-`GLTF-215` effect expectations that the skip had hidden. Compare the two renderers with
+
+```bash
+scripts/gltf-renderer-parity.sh "$B" /media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless
+```
+
+which fails on any L1–L5 difference and tolerates only `SKIPPED`-vs-`OK`.
 
 There is a second, **sanitiser** build tree beside it —
 `/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan`, configured with

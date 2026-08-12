@@ -1052,8 +1052,15 @@ TEST(GltfToCnjToolTest, ExtractsEmbeddedBaseColorTextureAndLoadsIt)
     ModelMesh* mesh = model.getMeshesProperty()[0];
     ASSERT_EQ(mesh->getMeshPartsProperty().getCountProperty(), 1);
 
-    auto* skinnedFx = dynamic_cast<SkinnedEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(skinnedFx, nullptr);
+    // SkinnedPbrEffect, not SkinnedEffect: the primitive is skinned AND its material is
+    // metallic-roughness, and GLTF-215 made the effect follow the material MODEL the file declares
+    // rather than which texture maps happen to be present. This assertion said `SkinnedEffect`
+    // until the first run on a renderer that reports ThreeD -- STUB does not, so the whole block
+    // below the skip had never executed since GLTF-215 landed (plan_gltf.md GLTF-383).
+    auto* skinnedFx =
+        dynamic_cast<SkinnedPbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(skinnedFx, nullptr)
+        << "a skinned primitive with a metallic-roughness material must select SkinnedPbrEffect";
     Texture2D* tex = skinnedFx->getTextureProperty();
     ASSERT_NE(tex, nullptr);
     EXPECT_EQ(tex->getWidthProperty(), 1);
@@ -2020,15 +2027,21 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsKhrLightsPunctualThroughTheOfflineCn
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(basicFx, nullptr);
+    // PbrEffect, not BasicEffect, for the same reason as the textured-skinned case above: the
+    // material is metallic-roughness, so GLTF-215 selects the PBR path. What this test is actually
+    // about is the LIGHT, and the light reaches the same three `DirectionalLight` slots either way
+    // -- they are `IEffectLights`, which both effects implement.
+    auto* litFx =
+        dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(litFx, nullptr)
+        << "a metallic-roughness material must select PbrEffect (GLTF-215)";
 
-    EXPECT_TRUE(basicFx->DirectionalLight0.getEnabledProperty());
-    const Vector3 dir = basicFx->DirectionalLight0.getDirectionProperty();
+    EXPECT_TRUE(litFx->DirectionalLight0.getEnabledProperty());
+    const Vector3 dir = litFx->DirectionalLight0.getDirectionProperty();
     EXPECT_NEAR(dir.X, 0.0f, 1e-4f);
     EXPECT_NEAR(dir.Y, 0.0f, 1e-4f);
     EXPECT_NEAR(dir.Z, -1.0f, 1e-4f);
-    const Vector3 color = basicFx->DirectionalLight0.getDiffuseColorProperty();
+    const Vector3 color = litFx->DirectionalLight0.getDiffuseColorProperty();
     EXPECT_NEAR(color.X, 0.25f, 1e-5f);
     EXPECT_NEAR(color.Y, 0.5f, 1e-5f);
     EXPECT_NEAR(color.Z, 0.75f, 1e-5f);
