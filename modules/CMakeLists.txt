@@ -183,9 +183,13 @@ foreach(_cna_tu IN LISTS _cna_all_module_tus)
 endforeach()
 unset(_cna_all_module_tus)
 
-# The legacy global trees must not silently come back.
+# The legacy global trees must not silently come back. Anchored on CNA_SOURCE_DIR (this
+# repository's own root, from project(CNA)) and NOT on CMAKE_SOURCE_DIR: when CNA is consumed
+# via add_subdirectory (mobile-eggbert does exactly that), CMAKE_SOURCE_DIR is the *consumer's*
+# root, and a consumer is perfectly entitled to its own src/ and include/ trees -- keying the
+# gate on it made every such consumer's configure fail with a bogus "legacy tree reappeared".
 foreach(_cna_legacy src include)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/${_cna_legacy}")
+    if(EXISTS "${CNA_SOURCE_DIR}/${_cna_legacy}")
         message(FATAL_ERROR
             "CNA: legacy global '${_cna_legacy}/' tree reappeared at the repository root -- "
             "production files belong to modules/<name>/ (physical module layout).")

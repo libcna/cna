@@ -17,9 +17,11 @@ target_link_libraries(cna_content PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 # ContentManager.cpp's GltfModelTypeReader and tools/gltf_to_cnj) needs cgltf.h.
 # plan_cnj.md CNB-88 (Phase 14E): RemapOcclusionImageForDualTextureEXT needs
 # stb_image.h/stb_image_write.h.
+# CNA_SOURCE_DIR, not CMAKE_SOURCE_DIR: these headers are vendored in *this* repository, and
+# CMAKE_SOURCE_DIR points at the consumer's root whenever CNA is used via add_subdirectory.
 target_include_directories(cna_content PRIVATE
-        ${CMAKE_SOURCE_DIR}/third_party/cgltf
-        ${CMAKE_SOURCE_DIR}/third_party/stb
+        ${CNA_SOURCE_DIR}/third_party/cgltf
+        ${CNA_SOURCE_DIR}/third_party/stb
 )
 if(CNA_DRACO_AVAILABLE)
     target_link_libraries(cna_content PRIVATE draco::draco)
