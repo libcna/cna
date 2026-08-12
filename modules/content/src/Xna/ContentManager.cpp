@@ -2310,6 +2310,26 @@ namespace Microsoft::Xna::Framework::Content
                             ". That map is not applied; the primitive draws as though it had none "
                             "(GLTF-200).");
                     }
+                    // plan_gltf.md GLTF-339: transmission approximated as alpha blending. Always
+                    // reported -- an approximation nobody is told about is indistinguishable from
+                    // a bug, which is exactly how the opaque-glass defect presented.
+                    if (meshOut.transmissionApproximatedEXT)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' declares KHR_materials_transmission (factor " +
+                            std::to_string(meshOut.transmissionFactorEXT) +
+                            "). CNA has no transmission pass, so it is approximated as alpha "
+                            "blending with alpha = 1 - factor. This is NOT physical: no "
+                            "refraction, no roughness blur, tinted glass darkens rather than "
+                            "tints what is behind it, and specular fades with the alpha "
+                            "(GLTF-339)." +
+                            (meshOut.transmissionHasTextureEXT
+                                 ? " The material also declares a transmission texture, which has "
+                                   "nowhere to go in this approximation -- the whole surface uses "
+                                   "the single factor."
+                                 : ""));
+                    }
                     // plan_gltf.md GLTF-184/GLTF-336: one UV channel means one bakeable
                     // transform, so every other map's is silently the base colour's.
                     if (!meshOut.unbakedTextureTransformsEXT.empty())

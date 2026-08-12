@@ -613,6 +613,37 @@ namespace CNA::Internal::GltfImport
         /** @brief Whether the material asks for its back faces to be drawn (`GLTF-231`). */
         bool doubleSided = false;
         /**
+         * @brief The material's `KHR_materials_transmission` factor, or 0 (`GLTF-339`).
+         *
+         * Read for any material. 1 is fully transmissive — clear glass — and 0 is the default,
+         * meaning the extension is absent or explicitly neutral.
+         */
+        float transmissionFactorEXT = 0.0f;
+        /**
+         * @brief True when the transmission was approximated as alpha blending (`GLTF-339`).
+         *
+         * The approximation: `alpha = 1 - transmissionFactor`, multiplied into whatever alpha the
+         * material already asked for, with `alphaMode` forced to `Blend`. Set only when the factor
+         * is above 0, so a material that declares the extension neutrally is untouched.
+         *
+         * **Explicitly not physical**, and the ways it is wrong are worth naming rather than
+         * discovering: there is no refraction, so nothing behind the surface is displaced; the blur
+         * roughness would cause does not happen; alpha blending *darkens* what is behind a tinted
+         * surface where transmission would *tint* it; and specular reflection, which a transmissive
+         * surface keeps at full strength, fades out with the alpha. It is still far closer than the
+         * fully opaque result CNA produced before, and it is reported every time.
+         */
+        bool transmissionApproximatedEXT = false;
+        /**
+         * @brief True when the material also declares a transmission **texture** (`GLTF-339`).
+         *
+         * Only the scalar factor is approximated; a per-texel transmission map has nowhere to go in
+         * an `alphaMode`/`baseColorFactor` approximation, so a material that varies its
+         * transmission across the surface is flattened to one value. Reported separately because
+         * that is a materially worse approximation than the uniform case.
+         */
+        bool transmissionHasTextureEXT = false;
+        /**
          * @brief True when `usePbr` is true and at least one present PBR map (normal,
          * metallic-roughness, emissive, or occlusion) references a different glTF TEXCOORD set
          * than the one actually baked into this primitive's vertex buffer (always the base-color

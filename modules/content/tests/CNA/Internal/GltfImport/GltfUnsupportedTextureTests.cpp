@@ -365,3 +365,140 @@ TEST(GltfUnsupportedTexture, AMaterialWithNoTextureTransformAtAllReportsNothing)
     const MeshOut out = Extract(TransformDocument("", ""));
     EXPECT_TRUE(out.unbakedTextureTransformsEXT.empty());
 }
+
+// --- plan_gltf.md GLTF-339: KHR_materials_transmission -----------------------------------------
+//
+// The extension was read by nobody, so a glass material imported fully opaque -- the
+// ChronographWatch defect, where the crystal hides the dial it exists to reveal. A real
+// transmission pass samples the framebuffer behind the surface and blurs it by roughness, which
+// needs a second pass and a scene-colour target no CNA stock effect has. What CNA does instead is
+// an alpha-blend approximation, and these tests pin both halves of that decision: that it happens
+// at all, and that it is never silent.
+
+namespace
+{
+    /// A material with the given transmission block, over the same triangle as everything else here.
+    std::string TransmissionDocument(const std::string& transmissionJson,
+                                     const std::string& baseColorFactor = "")
+    {
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "extensionsUsed": [ "KHR_materials_transmission" ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+      "material": 0
+  } ] } ],
+  "materials": [ {
+      "pbrMetallicRoughness": { )GLTF") + baseColorFactor + R"GLTF( })GLTF" +
+               transmissionJson + R"GLTF(
+  } ],
+  "buffers": [ { "byteLength": 96, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAA==" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+    }
+}
+
+TEST(GltfUnsupportedTexture, FullTransmissionBecomesAFullyBlendedSurfaceRatherThanAnOpaqueOne)
+{
+    // transmissionFactor 1 is clear glass. Opaque is the one answer that cannot be right, and it is
+    // what CNA produced.
+    const MeshOut out = Extract(TransmissionDocument(
+        R"(, "extensions": { "KHR_materials_transmission": { "transmissionFactor": 1.0 } })"));
+
+    EXPECT_TRUE(out.transmissionApproximatedEXT);
+    EXPECT_NEAR(1.0f, out.transmissionFactorEXT, 1e-6f);
+    EXPECT_EQ(Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Blend, out.alphaMode)
+        << "a transmissive material left on OPAQUE draws as glass that hides what is behind it";
+    EXPECT_NEAR(0.0f, out.baseColorFactor.W, 1e-6f);
+}
+
+TEST(GltfUnsupportedTexture, PartialTransmissionMultipliesIntoTheMaterialsOwnAlpha)
+{
+    // A material that is both partly transparent and partly transmissive should end up more
+    // transparent than either alone -- so the factor multiplies rather than replaces. 0.5 alpha
+    // with 0.5 transmission gives 0.25.
+    const MeshOut out = Extract(TransmissionDocument(
+        R"(, "extensions": { "KHR_materials_transmission": { "transmissionFactor": 0.5 } })",
+        R"("baseColorFactor": [1, 1, 1, 0.5])"));
+
+    EXPECT_TRUE(out.transmissionApproximatedEXT);
+    EXPECT_NEAR(0.25f, out.baseColorFactor.W, 1e-6f)
+        << "the transmission replaced the material's own alpha instead of compounding with it";
+}
+
+TEST(GltfUnsupportedTexture, ATransmissionFactorOfZeroLeavesTheMaterialCompletelyAlone)
+{
+    // The control. A material may declare the extension neutrally, and treating that as "approximate
+    // something" would force every such material to BLEND -- turning a correctness fix into a
+    // regression for the assets that need nothing.
+    const MeshOut out = Extract(TransmissionDocument(
+        R"(, "extensions": { "KHR_materials_transmission": { "transmissionFactor": 0.0 } })"));
+
+    EXPECT_FALSE(out.transmissionApproximatedEXT);
+    EXPECT_EQ(Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Opaque, out.alphaMode);
+    EXPECT_NEAR(1.0f, out.baseColorFactor.W, 1e-6f);
+}
+
+TEST(GltfUnsupportedTexture, ATransmissionTextureIsFlaggedSeparatelyFromTheFactor)
+{
+    // A per-texel transmission map has nowhere to go in an alphaMode/baseColorFactor
+    // approximation, so a surface that varies its transmission is flattened to one value. That is
+    // materially worse than the uniform case and is reported apart from it.
+    const MeshOut out = Extract(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "extensionsUsed": [ "KHR_materials_transmission" ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+      "material": 0
+  } ] } ],
+  "materials": [ {
+      "pbrMetallicRoughness": { },
+      "extensions": { "KHR_materials_transmission": {
+          "transmissionFactor": 0.8,
+          "transmissionTexture": { "index": 0 }
+      } }
+  } ],
+  "textures": [ { "sampler": 0, "source": 0 } ],
+  "images": [ { "uri": "t.png", "mimeType": "image/png" } ],
+  "samplers": [ { } ],
+  "buffers": [ { "byteLength": 96, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAA==" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF");
+
+    EXPECT_TRUE(out.transmissionApproximatedEXT);
+    EXPECT_NEAR(0.8f, out.transmissionFactorEXT, 1e-6f);
+    EXPECT_TRUE(out.transmissionHasTextureEXT)
+        << "a per-texel transmission map was flattened to one factor with nothing recording it";
+}
+
+TEST(GltfUnsupportedTexture, TransmissionIsNotClaimedAsAnImplementedExtension)
+{
+    // An approximation is not an implementation. Claiming it would let a file that REQUIRES
+    // transmission load with its glass drawn as tinted alpha, which is exactly the silent wrongness
+    // GLTF-023 refuses such files to prevent.
+    EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_transmission"));
+}

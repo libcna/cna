@@ -267,6 +267,22 @@ namespace
                         "data (CNA currently samples every PBR map from one shared UV channel).");
                 }
 
+                // plan_gltf.md GLTF-339: transmission approximated as alpha blending.
+                if (meshOut.transmissionApproximatedEXT)
+                {
+                    warnings.push_back(
+                        "Primitive '" + partName + "' declares KHR_materials_transmission (factor " +
+                        std::to_string(meshOut.transmissionFactorEXT) +
+                        "); CNA has no transmission pass, so it is approximated as alpha blending "
+                        "with alpha = 1 - factor. This is NOT physical: no refraction, no "
+                        "roughness blur, tinted glass darkens rather than tints what is behind it, "
+                        "and specular fades with the alpha." +
+                        std::string(meshOut.transmissionHasTextureEXT
+                            ? " The transmission texture has nowhere to go in this approximation -- "
+                              "the whole surface uses the single factor."
+                            : ""));
+                }
+
                 // plan_gltf.md GLTF-184/GLTF-336: one UV channel means one bakeable transform.
                 if (!meshOut.unbakedTextureTransformsEXT.empty())
                 {

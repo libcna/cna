@@ -1807,6 +1807,41 @@ namespace CNA::Internal::GltfImport
             }
             out.alphaCutoff = prim.material->alpha_cutoff;
             out.doubleSided = prim.material->double_sided != 0;
+
+            // plan_gltf.md GLTF-339. KHR_materials_transmission was read by nobody, so a glass
+            // material imported fully opaque -- the ChronographWatch defect, where the crystal
+            // hides the dial it is supposed to reveal.
+            //
+            // A real transmission pass samples the framebuffer behind the surface and blurs it by
+            // roughness; that needs a second pass and a scene-colour target, which no CNA stock
+            // effect has. What is done instead is an ALPHA-BLEND APPROXIMATION, and calling it that
+            // is the point: alpha = 1 - transmissionFactor, with alphaMode forced to BLEND.
+            //
+            // It is explicitly NOT physical, and the ways it is wrong are worth naming rather than
+            // discovering. There is no refraction, so nothing behind the surface is displaced. The
+            // blur roughness would cause does not happen. Alpha blending darkens what is behind a
+            // tinted surface where transmission would tint it, which for coloured glass is a
+            // visibly different result. And specular reflection, which a transmissive surface keeps
+            // at full strength, fades out with the alpha.
+            //
+            // It is still much closer than opaque, and it is reported every time -- an
+            // approximation nobody is told about is indistinguishable from a bug.
+            if (prim.material->has_transmission != 0)
+            {
+                out.transmissionFactorEXT =
+                    std::clamp(prim.material->transmission.transmission_factor, 0.0f, 1.0f);
+                out.transmissionHasTextureEXT =
+                    prim.material->transmission.transmission_texture.texture != nullptr;
+                if (out.transmissionFactorEXT > 0.0f)
+                {
+                    out.transmissionApproximatedEXT = true;
+                    out.alphaMode = AlphaModeEXT::Blend;
+                    // Multiplied into whatever alpha the material already asked for, rather than
+                    // replacing it: a material that is both partly transparent and transmissive
+                    // should end up more transparent than either alone, not lose one of them.
+                    out.baseColorFactor.W *= (1.0f - out.transmissionFactorEXT);
+                }
+            }
             // plan_gltf.md GLTF-224/GLTF-225. Read for ANY material, not only one that selected
             // PBR -- the same ungating GLTF-219/221 applied to the scalar factors, and for the
             // same reason: a value the file states should reach MeshOut whether or not the effect
