@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf_`, pushed. Never push elsewhere without explicit permission. No pull
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **317 closed (`✔` 196, `✅` 121),
-  125 `⬜` remaining.** The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **318 closed (`✔` 197, `✅` 121),
+  123 `⬜` remaining**, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 5 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-064`, `067`,
   `068`, `093`, `252`, `265`, `289`), 2 `🐛` (open: `GLTF-157`, `421`), and 1 `⛔` (`GLTF-009`,
   blocked by this environment).
@@ -50,6 +50,19 @@ capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS 
 `XnbBuiltInReaderRegistrationTest.*`) and `CnjCapabilityMatrixTest.TextureCubeDelegatesViaSourceFile`.
 Do not attempt to "fix" them as part of this campaign, and do not report a run as clean without
 saying they are there.
+
+There is a second, **sanitiser** build tree beside it —
+`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan`, configured with
+`-DCNA_SANITIZE=address,undefined` and otherwise identical. It is what `GLTF-409` was closed with,
+and it is worth re-running after any importer change:
+
+```bash
+A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
+cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
+ASAN_OPTIONS=detect_leaks=1 \
+UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
+  "$A"/CnaTests --gtest_filter='Gltf*'     # 417 passed, 15 skipped, 0 findings
+```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
 repository** on the partition the owner designated for build output:

@@ -10,7 +10,7 @@ Oracle repository: `openeggbert/cna-gltf-viewer` @ `aaa008dc62bcb1127901ca23b75b
 > working record.** The banner it opened with ("nothing in it was implemented") described the
 > planning session of 2026-08-11 only, and is preserved below for provenance.
 >
-> Of 460 rows: **317 are closed (`✔` 196, `✅` 121)** and **124 remain `⬜`**, with `GLTF-449` newly
+> Of 460 rows: **318 are closed (`✔` 197, `✅` 121)** and **123 remain `⬜`**, with `GLTF-449` newly
 > carrying a `✅/⬜` partial marker. The other 18 carry a
 > deliberate partial marker — 8 `🔬` (investigation, no implementation owed), 5 `✅/⬜` and 2 `✅/🐛`
 > (landed with a named residue), 2 `🐛` (open defect), 1 `⛔` (blocked by this environment,
@@ -2601,7 +2601,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | GLTF-406 | Licence review for every committed asset | ⬜ | GLTF-018 | **Accept:** no asset committed without a recorded licence. |
 | GLTF-407 | `ChronographWatch` acceptance criteria | ⬜ | GLTF-405 | §4.4's world-bounds table plus material/animation/transmission criteria. **Accept:** either the asset is licensed and committed, or the criteria are checked against a licence-clean equivalent. |
 | GLTF-408 | Malformed-input group behaviour | ⬜ | GLTF-040 | **Accept:** all 6 `bad-*` fixtures produce deterministic, actionable errors. |
-| GLTF-409 | Sanitiser run over the whole corpus | ⬜ | GLTF-036 | **Accept:** zero unresolved ASan/UBSan findings, or each triaged. |
+| GLTF-409 | Sanitiser run over the whole corpus | ✔ | GLTF-036 | **Accept:** zero unresolved ASan/UBSan findings, or each triaged. **Run, with the numbers.** A dedicated `-DCNA_SANITIZE=address,undefined` STUB build (`cmake-build-gltf-asan`) executed the whole `Gltf*` selection with `ASAN_OPTIONS=detect_leaks=1` and `UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1` — `halt_on_error=0` so one run reports **every** finding rather than stopping at the first, and `exitcode=1` because without it UBSan prints and the process still exits 0. Result: **432 tests, 417 passed, 15 skipped (`STUB` has no 3D pipeline), 0 failed, and zero findings of any kind** — no ASan error, no UBSan report, no leak, on a build that allocates a `cgltf_data` and its decoded buffers for all 71 corpus assets plus every hand-authored document in the suite. `ctest -L gltf-conformance` is **9/9 under the same sanitisers**. The run also included `GLTF-040`'s 3 000-mutant container fuzz, which is the part with the most to say: a mutation that reads out of bounds is reported there rather than only when it happens to segfault. This reproduces locally what `GLTF-036`'s CI job asserts per commit; the job remains the standing guard, and this row is the point-in-time evidence for the corpus as it stands at 71 assets. |
 | GLTF-410 | Golden regeneration is reviewable | ⬜ | GLTF-167 | **Accept:** a golden change shows a readable diff and requires justification. |
 | GLTF-411 | Cross-check a subset against the reference renderer | ⬜ | GLTF-016 | **Accept:** documented capture and comparison for ≥10 assets. |
 | GLTF-412 | Numerical oracles precede screenshots in every gate | ⬜ | GLTF-402 | **Accept:** the CI job fails at the earliest divergent layer, not at L7. |
