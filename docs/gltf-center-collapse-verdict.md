@@ -455,9 +455,9 @@ Per `plan_gltf.md` §28, Track B's Phases 8–23 were gated on this report and a
 | Quantity | Value |
 |---|---|
 | Generated fixtures **when this report was written** | **21** distinct assets (`manifest.json` → `distinctAssetCount`), each with a `.glb` twin |
-| Generated fixtures today | **27** — `GLTF-021`/`GLTF-023` added the first container and robustness fixtures, `GLTF-267` added §11.4's `xf-scale-nonuniform`, `GLTF-137` added `skin-plus-static-mesh`, `GLTF-222` added `mat-emissive-strength`, `GLTF-299` added `anim-nonzero-start`, and `GLTF-249` added `skin-skeleton-hint` |
+| Generated fixtures today | **27** — `GLTF-021`/`GLTF-023` added the first container and robustness fixtures, `GLTF-267` added §11.4's `xf-scale-nonuniform`, `GLTF-137` added `skin-plus-static-mesh`, `GLTF-222` added `mat-emissive-strength`, `GLTF-299` added `anim-nonzero-start`, `GLTF-249` added `skin-skeleton-hint`, and `GLTF-317` added the three `camera-*` fixtures |
 | Planned corpus (`plan_gltf.md` §24.2) | **135** when this report was written; **136** today — `GLTF-137` added a row to §15.4's ladder for a file shape no ladder foresaw, which is a deliberate plan change and not the count error below returning. Completed by `GLTF-399` |
-| L5 goldens | 17 of 21 at the time of writing; **26 of 28 today** — the four point/line topologies gained theirs with `GLTF-073`/`GLTF-078`, and the two remaining assets are the rejection fixtures, which have no L5 by construction |
+| L5 goldens | 17 of 21 at the time of writing; **29 of 31 today** — the four point/line topologies gained theirs with `GLTF-073`/`GLTF-078`, and the two remaining assets are the rejection fixtures, which have no L5 by construction |
 
 `skin-mesh-node-transform` was the corpus's 16th asset, added by `GLTF-260`; `GLTF-072` then
 completed the topology group's seven, taking the generated corpus to 21. It was **new to the

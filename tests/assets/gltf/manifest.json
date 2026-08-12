@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 28,
+  "distinctAssetCount": 31,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
@@ -22,6 +22,7 @@
     "materials": 2,
     "skinning": 4,
     "animation": 2,
+    "cameras": 3,
     "scenes": 1,
     "robustness": 1
   },
@@ -687,6 +688,57 @@
       "auditFixture": null
     },
     {
+      "id": "camera-perspective",
+      "owningGroup": "cameras",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "camera.perspective",
+        "aspectRatio declared",
+        "zfar declared",
+        "camera node transform"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "camera-perspective-infinite",
+      "owningGroup": "cameras",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "camera.perspective",
+        "zfar absent",
+        "infinite far plane"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "camera-orthographic",
+      "owningGroup": "cameras",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "camera.orthographic",
+        "xmag/ymag half extents"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "scene-default-selection",
       "owningGroup": "scenes",
       "referencingGroups": [],
@@ -782,6 +834,81 @@
       "path": "bad-accessor-out-of-bounds.gltf",
       "bytes": 1174,
       "sha256": "f7fef746ceec3f5404a00dc6efd95ae964b88249ba8a9e73f1fe8ece4a6724fc"
+    },
+    {
+      "path": "camera-orthographic.expected.json",
+      "bytes": 7878,
+      "sha256": "6a298949206ab4df6fa32fab06eaaa3543ec85427187ea1baaa0142361be4f6f"
+    },
+    {
+      "path": "camera-orthographic.glb",
+      "bytes": 968,
+      "sha256": "ebce15692e3dcb4e77cbbb81fdf575c028c46f1af7557930a82a8d1e8d7734fa"
+    },
+    {
+      "path": "camera-orthographic.gltf",
+      "bytes": 1771,
+      "sha256": "3efdc51fa39036eb68047224b864ec34075e9b5332429278620dbd0f3675160f"
+    },
+    {
+      "path": "camera-orthographic.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "camera-orthographic.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "camera-perspective-infinite.expected.json",
+      "bytes": 7870,
+      "sha256": "dbedb9b8c02e286a50597ae11a02fd541d8e0d1263e70aeeade151d88bb52e38"
+    },
+    {
+      "path": "camera-perspective-infinite.glb",
+      "bytes": 976,
+      "sha256": "80c909183d8dfb4259aabb7fa2a98c09430a154ca6e4727287536c4f5a079787"
+    },
+    {
+      "path": "camera-perspective-infinite.gltf",
+      "bytes": 1771,
+      "sha256": "35d2aa01eab54a7ce88413ddf0facfa6f8fe3acd6b94dd5589de07a5dae22269"
+    },
+    {
+      "path": "camera-perspective-infinite.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "camera-perspective-infinite.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "camera-perspective.expected.json",
+      "bytes": 7893,
+      "sha256": "0f4e8a774c26baf304a6f5d27d295f80d2ba6fdac32f97a0430de2f4f7057df7"
+    },
+    {
+      "path": "camera-perspective.glb",
+      "bytes": 984,
+      "sha256": "4e4ff730ea8bbe0d38d7d717898cdf287e18f75bb4aad2ed47cd13f0f8fa6a50"
+    },
+    {
+      "path": "camera-perspective.gltf",
+      "bytes": 1790,
+      "sha256": "1861c5c161e77bfbefd21ea87bc2f3b4fc86fa04c6b9919c86550c39157a41ef"
+    },
+    {
+      "path": "camera-perspective.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "camera-perspective.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "gltf-required-extension-unsupported.expected.json",

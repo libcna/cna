@@ -1535,7 +1535,7 @@ same asset in another container, not another asset.
 > cross-referenced ladders were re-counted and the counts here now match them exactly: transforms
 > 17 (§11.4), skinning 13 (§15.4), morph 13 (§16.3), animation 10 (§17.2, excluding the
 > morph-owned `anim-weights-*`), and the remaining groups enumerated in full below. The generated
-> corpus stands at **28** assets today (`GLTF-072` completed the topology group's seven;
+> corpus stands at **31** assets today (`GLTF-072` completed the topology group's seven;
 > `GLTF-021`/`GLTF-023` added the first container and robustness fixtures; `GLTF-267` generated
 > §11.4's `xf-scale-nonuniform`, the corpus's first non-uniform node scale); `GLTF-399` completes
 > the rest.
@@ -1560,11 +1560,17 @@ same asset in another container, not another asset.
 | Skinning | 15 | the `skin-*` ladder in §15.4 |
 | Morph | 13 | the `morph-*` ladder in §16.3, which **owns** `morph-weights-animated-linear/step/cubic` and `morph-plus-skin` |
 | Animation | 10 | the `anim-*` ladder in §17.2, excluding the `anim-weights-*` fixtures owned by the morph group |
-| Scenes / cameras / lights | 7 | `scene-default-selection`, `scene-two-roots`, `scene-no-scenes`, `camera-perspective`, `camera-perspective-infinite`, `camera-orthographic`, `lights-punctual-three` |
+| Scenes | 3 | `scene-default-selection`, `scene-two-roots`, `scene-no-scenes` |
+| Cameras / lights | 4 | `camera-perspective`, `camera-perspective-infinite`, `camera-orthographic`, `lights-punctual-three` |
 | Draco parity | 4 | `draco-triangle`, `draco-vs-uncompressed-pair`, `draco-skinned`, `draco-morph` |
 | Robustness / malformed | 6 | `bad-accessor-out-of-bounds`, `bad-index-out-of-range`, `bad-buffer-truncated`, `bad-glb-chunk-length`, `bad-matrix-and-trs`, `bad-version-1.0` |
 
-**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 15 + 13 + 10 + 7 + 4 + 6 = 137 distinct assets.**
+**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 15 + 13 + 10 + 3 + 4 + 4 + 6 = 137 distinct assets.**
+
+> The former combined "Scenes / cameras / lights" row was split in two by `GLTF-317`, which gave
+> the camera fixtures their own owning group: scene *selection* (§3.5) and cameras (§3.10) are
+> different concerns and the generator groups by concern. **No asset moved and the total is
+> unchanged** — 3 + 4 is the 7 that row carried.
 
 Reuse happens along two axes and neither changes that total. An asset is reused **across oracle
 layers** — the same `alpha-mask` file is an L3, L6 and L7 fixture — and **across phases**, where a
@@ -2380,11 +2386,11 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-317 | **Import glTF cameras** | 🐛 | GLTF-025, GLTF-114 | `cgltf_camera` has **0 occurrences**. **Accept:** camera nodes reach the model. |
-| GLTF-318 | Perspective projection mapping | ⬜ | GLTF-317 | `CreatePerspectiveFieldOfView(yfov, aspectRatio ?: viewportAspect, znear, zfar)`. **Accept:** `camera-perspective` matrix matches the manifest to 1e-6. |
-| GLTF-319 | Infinite perspective (`zfar` absent) | ⬜ | GLTF-318 | XNA has no such overload. **Accept:** a CNAEXT builder; `camera-perspective-infinite` matches. |
-| GLTF-320 | Orthographic projection mapping | ⬜ | GLTF-317 | `CreateOrthographic(2*xmag, 2*ymag, znear, zfar)`. **Accept:** `camera-orthographic` matches. |
-| GLTF-321 | Camera view matrix from the node transform | ⬜ | GLTF-317 | `view = inverse(worldTransform(cameraNode))`; the camera looks down its own −Z. **Accept:** manifest match. |
+| GLTF-317 | **Import glTF cameras** | ✔ | GLTF-025, GLTF-114 | `cgltf_camera` has **0 occurrences**. **Accept:** camera nodes reach the model. **Landed:** `ExtractCamerasEXT` walks the **scene graph**, not `data->cameras` — a camera only counts if a node in the default scene instances it, and one camera instanced by several nodes is several placements, both of which walking the camera array would get wrong. Carried to a new CNAEXT `Model::CamerasEXT` holding `ModelCameraEXT`. **A property, not `Tag`** — the third time that collision has come up: `Tag` holds one object and `SkinningData` and `ModelAnimationsEXT` already contend for it, so a skinned model with cameras would have had to choose. Projection and placement stay **apart**, as §3.10 keeps them, because an application animating the camera node must recompute the view without touching the projection. |
+| GLTF-318 | Perspective projection mapping | ✔ | GLTF-317 | `CreatePerspectiveFieldOfView(yfov, aspectRatio ?: viewportAspect, znear, zfar)`. **Accept:** `camera-perspective` matrix matches the manifest to 1e-6. **Landed**, matching to 1e-6 against a matrix the fixture computes from the specification's own formula rather than from CNA. An absent `aspectRatio` means "the viewport's" (§3.10.3), which the importer cannot know: it uses 1 and carries `yfov`/`znear` recoverably so an application with a real viewport can rebuild the projection without re-reading the file. |
+| GLTF-319 | Infinite perspective (`zfar` absent) | ✔ | GLTF-318 | XNA has no such overload. **Accept:** a CNAEXT builder; `camera-perspective-infinite` matches. **Landed** as `CreateInfinitePerspectiveFieldOfViewEXT`, built from the finite matrix's **limits** as `zfar → ∞` (`M33 → −1`, `M43 → −znear`) rather than from a large finite `zfar` — which is not equivalent, because a large `zfar` perturbs *every* depth value, not only the ones near the horizon, turning an exact depth comparison into an approximate one. It throws `std::invalid_argument` on the same preconditions as `Matrix`'s finite overload and with the same exception type, since a caller switching between the two must not have to catch two different things. The two fixtures share every parameter but `zfar`, so a test isolates exactly the terms that may differ: `M11`/`M22` must be identical and the two `z` terms must not be. |
+| GLTF-320 | Orthographic projection mapping | ✔ | GLTF-317 | `CreateOrthographic(2*xmag, 2*ymag, znear, zfar)`. **Accept:** `camera-orthographic` matches. **Landed.** `xmag`/`ymag` are **half** extents, so the volume is twice each — the classic silent factor of two, which gets its own test rather than only being implied by the matrix comparison. The fixture is deliberately non-square (3 × 1.5) so a swapped axis is caught too. |
+| GLTF-321 | Camera view matrix from the node transform | ✔ | GLTF-317 | `view = inverse(worldTransform(cameraNode))`; the camera looks down its own −Z. **Accept:** manifest match. **Landed.** A glTF camera looks down its own −Z with +Y up, which is **XNA's own convention**, so no basis change is applied — and the manifest states that rule explicitly, so introducing one later fails a test rather than looking subtly wrong on screen. The node's world transform is carried on `ModelCameraEXT` and the view is its inverse, kept as a derivation rather than a stored second matrix that could drift from it. |
 | GLTF-322 | `aspectRatio` absent ⇒ use the viewport | ⬜ | GLTF-318 | **Accept:** documented and tested. |
 | GLTF-323 | The viewer keeps its own camera as default | ⬜ | GLTF-317 | Otherwise a broken imported camera is indistinguishable from broken geometry. **Accept:** imported cameras are an explicit alternative view only. |
 | GLTF-324 | Camera carrier on the model | ⬜ | GLTF-025 | CNAEXT `GltfCameraEXT` list in owned resources. **Accept:** reviewed and tested. |

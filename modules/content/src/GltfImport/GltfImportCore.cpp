@@ -2073,6 +2073,54 @@ namespace CNA::Internal::GltfImport
         return graph;
     }
 
+    std::vector<CameraOut> ExtractCamerasEXT(const cgltf_data* data, const SceneGraphOut& scene,
+                                              float unitScale)
+    {
+        std::vector<CameraOut> out;
+        if (data == nullptr) { return out; }
+
+        // Walk the SCENE graph, not data->cameras: a camera is only in the render if a node in the
+        // default scene instances it, and the same camera may be instanced by several nodes -- each
+        // of which is a distinct camera placement. Walking the camera array instead would both
+        // import cameras nobody placed and collapse the multi-instance case to one.
+        for (std::size_t i = 0; i < scene.nodes.size(); ++i)
+        {
+            const SceneNodeOut& node = scene.nodes[i];
+            if (node.node == nullptr || node.node->camera == nullptr) { continue; }
+            const cgltf_camera& camera = *node.node->camera;
+
+            CameraOut record;
+            record.sceneNodeIndex = static_cast<int>(i);
+            record.name = camera.name != nullptr ? camera.name : node.name;
+            record.worldTransform = ScaleTranslation(node.worldTransform, unitScale);
+
+            if (camera.type == cgltf_camera_type_orthographic)
+            {
+                record.perspective = false;
+                record.xmag  = camera.data.orthographic.xmag;
+                record.ymag  = camera.data.orthographic.ymag;
+                record.znear = camera.data.orthographic.znear;
+                record.zfar  = camera.data.orthographic.zfar;
+            }
+            else
+            {
+                record.perspective = true;
+                record.yfov  = camera.data.perspective.yfov;
+                record.znear = camera.data.perspective.znear;
+                // Both of these are genuinely optional in the file, and both are carried as 0
+                // rather than guessed: an absent aspectRatio means "the viewport's", which the
+                // importer cannot know, and an absent zfar means an INFINITE projection (§3.10.3),
+                // which is a different matrix rather than a large number (GLTF-319).
+                record.aspectRatio = camera.data.perspective.has_aspect_ratio != 0
+                                         ? camera.data.perspective.aspect_ratio : 0.0f;
+                record.zfar = camera.data.perspective.has_zfar != 0
+                                  ? camera.data.perspective.zfar : 0.0f;
+            }
+            out.push_back(std::move(record));
+        }
+        return out;
+    }
+
     SamplerOut MapGltfSamplerEXT(int magFilter, int minFilter, int wrapS, int wrapT)
     {
         using Microsoft::Xna::Framework::Graphics::TextureAddressMode;

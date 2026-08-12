@@ -12,8 +12,8 @@ import hashlib
 from typing import Any, Callable
 
 from . import GENERATOR_VERSION, SPEC_PIN
-from .defs import (accessors, animation, component_types, container, materials, robustness, scenes,
-                   skinning, topology, transforms)
+from .defs import (accessors, animation, cameras, component_types, container, materials,
+                   robustness, scenes, skinning, topology, transforms)
 from .manifest import OPEN_DEFECT_STATUSES, Fixture, dumps
 
 #: Owning groups in a fixed order, so the emitted manifest is deterministic. The order follows
@@ -27,6 +27,7 @@ _GROUP_MODULES: list[tuple[str, Any]] = [
     ("materials", materials),
     ("skinning", skinning),
     ("animation", animation),
+    ("cameras", cameras),
     ("scenes", scenes),
     ("robustness", robustness),
 ]

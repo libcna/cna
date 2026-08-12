@@ -126,9 +126,10 @@ _GLB_CHUNK_BIN = 0x004E4942
 # its dictionaries in. A generated asset is a committed artefact whose diff must mean something.
 
 _TOP_LEVEL_ORDER = ["asset", "extensionsUsed", "extensionsRequired", "scene", "scenes", "nodes",
-                    "meshes", "materials", "skins", "animations", "accessors", "bufferViews",
-                    "buffers"]
-_NODE_ORDER = ["name", "mesh", "skin", "children", "translation", "rotation", "scale", "matrix"]
+                    "cameras", "meshes", "materials", "skins", "animations", "accessors",
+                    "bufferViews", "buffers"]
+_NODE_ORDER = ["name", "mesh", "camera", "skin", "children", "translation", "rotation", "scale",
+               "matrix"]
 _ACCESSOR_ORDER = ["bufferView", "byteOffset", "componentType", "normalized", "count", "type",
                    "max", "min", "sparse"]
 _BUFFER_VIEW_ORDER = ["buffer", "byteOffset", "byteLength", "byteStride", "target"]
@@ -260,6 +261,7 @@ class GltfBuilder:
         self._meshes: list[dict[str, Any]] = []
         self._materials: list[dict[str, Any]] = []
         self._skins: list[dict[str, Any]] = []
+        self._cameras: list[dict[str, Any]] = []
         self._animations: list[dict[str, Any]] = []
         self._accessors: list[dict[str, Any]] = []
         self._buffer_views: list[dict[str, Any]] = []
@@ -443,7 +445,8 @@ class GltfBuilder:
         }, _MESH_ORDER))
         return len(self._meshes) - 1
 
-    def add_node(self, *, name: str, mesh: int | None = None, skin: int | None = None,
+    def add_node(self, *, name: str, mesh: int | None = None, camera: int | None = None,
+                 skin: int | None = None,
                  children: Sequence[int] | None = None,
                  translation: Sequence[float] | None = None,
                  rotation: Sequence[float] | None = None,
@@ -456,6 +459,7 @@ class GltfBuilder:
 
         :param name: the node's name.
         :param mesh: the mesh this node instances, if any.
+        :param camera: the camera this node instances, if any.
         :param skin: the skin this node's mesh is deformed by, if any.
         :param children: child node indices.
         :param translation: the node's translation.
@@ -470,6 +474,8 @@ class GltfBuilder:
         node: dict[str, Any] = {"name": name}
         if mesh is not None:
             node["mesh"] = mesh
+        if camera is not None:
+            node["camera"] = camera
         if skin is not None:
             node["skin"] = skin
         if children:
@@ -524,6 +530,15 @@ class GltfBuilder:
             if name not in self._extensions_used:
                 self._extensions_used.append(name)
 
+    def add_camera(self, camera: dict[str, Any]) -> int:
+        """Adds a camera, authored as a glTF camera object.
+
+        :param camera: the camera object (``type`` plus its ``perspective``/``orthographic`` block).
+        :return: the new camera's index.
+        """
+        self._cameras.append(dict(camera))
+        return len(self._cameras) - 1
+
     def add_skin(self, skin: dict[str, Any]) -> int:
         """Adds a skin, authored as a glTF skin object.
 
@@ -570,6 +585,8 @@ class GltfBuilder:
             doc["scene"] = self._default_scene
         doc["scenes"] = self._scenes
         doc["nodes"] = self._nodes
+        if self._cameras:
+            doc["cameras"] = self._cameras
         doc["meshes"] = self._meshes
         if self._materials:
             doc["materials"] = self._materials

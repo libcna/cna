@@ -13,6 +13,74 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
+    /**
+     * @brief One camera imported from a source asset, with its projection and its placement apart.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-317` … `GLTF-321`). glTF §3.10
+     * puts the projection on the camera and the placement on the node, and the two are kept apart
+     * here for the same reason: an application animating the camera's node needs to recompute the
+     * view without touching the projection.
+     */
+    /**
+     * @brief Builds the projection glTF's infinite perspective camera describes (§3.10.3).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-319`). A glTF perspective
+     * camera may omit `zfar`, which means the far plane is at infinity. XNA has no overload for
+     * that, and substituting a large finite `zfar` is not equivalent: it changes every depth value,
+     * not just the ones near the horizon, so a depth comparison that was exact becomes approximate.
+     *
+     * The matrix is `CreatePerspectiveFieldOfView`'s with the two `z` terms taken to their limits
+     * as `zfar → ∞`: `M33 → −1` and `M43 → −2·znear` (right-handed, as XNA's own perspective
+     * builders are).
+     *
+     * @param fieldOfView Vertical field of view, in radians.
+     * @param aspectRatio Width divided by height.
+     * @param nearPlaneDistance Distance to the near view plane; must be positive.
+     * @return The infinite-far-plane projection matrix.
+     * @throws std::invalid_argument if @p fieldOfView is not in `(0, π)` or @p nearPlaneDistance is
+     * not positive — the same contract, and the same exception type, as `Matrix`'s own finite
+     * `CreatePerspectiveFieldOfView`, since this builder is that one's limit case.
+     */
+    CNAEXT [[nodiscard]] Matrix CreateInfinitePerspectiveFieldOfViewEXT(
+        float fieldOfView, float aspectRatio, float nearPlaneDistance);
+
+    CNAEXT struct ModelCameraEXT
+    {
+        /** @brief The camera's name; may be empty. */
+        std::string Name;
+        /**
+         * @brief The scene-node index this camera is attached to, or -1 when it has no node.
+         *
+         * Indexes `Model::Bones`, like every other scene-node index (plan_gltf.md §15.1.2), so the
+         * camera follows its bone when the model is posed.
+         */
+        int SceneNodeIndex = -1;
+        /**
+         * @brief The camera's projection matrix.
+         *
+         * Already built from the source's own parameters: a perspective camera with no `zfar` gets
+         * the infinite projection (`GLTF-319`), and an orthographic one gets `CreateOrthographic`
+         * over twice its magnifications (`GLTF-320`).
+         */
+        Matrix Projection = Matrix::getIdentityProperty();
+        /**
+         * @brief The camera node's world transform, as imported.
+         *
+         * The **view** matrix is its inverse (`GLTF-321`): a glTF camera looks down its own −Z with
+         * +Y up, which is exactly XNA's own convention, so no basis change is involved.
+         */
+        Matrix WorldTransform = Matrix::getIdentityProperty();
+        /** @brief True for a perspective camera, false for an orthographic one. */
+        bool IsPerspective = true;
+        /**
+         * @brief True when the source declared no `zfar`, so @ref Projection is infinite.
+         *
+         * Recorded because the two projections are genuinely different matrices and a consumer
+         * reasoning about depth precision needs to know which it has.
+         */
+        bool HasInfiniteFarPlane = false;
+    };
+
     class ModelBone;
     class ModelMesh;
 
@@ -92,6 +160,29 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setOwnedResources(std::shared_ptr<void> resources);
 
         /**
+         * @brief Cameras the source asset declared, in scene-node order.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-317`). glTF files ship
+         * their own cameras and CNA dropped every one of them, so an asset that had been framed by
+         * its author arrived with no framing at all and each viewer had to invent one.
+         *
+         * A property rather than a `Tag` payload for the reason `Tag` keeps running into: it holds
+         * one object, and `SkinningData` and `ModelAnimationsEXT` already contend for it. A skinned
+         * model with cameras would otherwise have to choose.
+         *
+         * Empty for every model built by any other content path.
+         *
+         * @return The imported cameras.
+         */
+        CNAEXT [[nodiscard]] const std::vector<ModelCameraEXT>& getCamerasEXTProperty() const;
+
+        /**
+         * @brief Replaces the imported camera list.
+         * @param value The cameras, normally in scene-node order.
+         */
+        CNAEXT void setCamerasEXTProperty(std::vector<ModelCameraEXT> value);
+
+        /**
          * @brief Copies bone transforms relative to all parent bones to a given vector.
          * @param destinationBoneTransforms The vector receiving the absolute bone transforms.
          */
@@ -118,6 +209,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void Draw(const Matrix& world, const Matrix& view, const Matrix& projection);
 
     private:
+        std::vector<ModelCameraEXT> cameras_;
         ModelBoneCollection bones_;
         ModelMeshCollection meshes_;
         ModelBone* root_ = nullptr;

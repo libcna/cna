@@ -2433,6 +2433,43 @@ namespace Microsoft::Xna::Framework::Content
             {
                 Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
             }
+            // plan_gltf.md GLTF-317 … GLTF-321: the file's own cameras. Projection built from the
+            // source's own parameters here rather than at use time, so an application never has to
+            // reimplement glTF's infinite-far-plane case to draw what the author framed.
+            {
+                std::vector<Graphics::ModelCameraEXT> cameras;
+                for (const CameraOut& camera : ExtractCamerasEXT(data, sceneGraph, 1.0f))
+                {
+                    Graphics::ModelCameraEXT out;
+                    out.Name = camera.name;
+                    out.SceneNodeIndex = camera.sceneNodeIndex;
+                    out.WorldTransform = camera.worldTransform;
+                    out.IsPerspective = camera.perspective;
+                    if (camera.perspective)
+                    {
+                        // §3.10.3: an absent aspectRatio means "use the viewport's". The importer
+                        // has no viewport, so 1 is used and the application is expected to rebuild
+                        // the projection if it cares -- which it can, since yfov and znear are
+                        // recoverable from the matrix and the node transform is carried separately.
+                        const float aspect = camera.aspectRatio > 0.0f ? camera.aspectRatio : 1.0f;
+                        out.HasInfiniteFarPlane = (camera.zfar <= 0.0f);
+                        out.Projection = out.HasInfiniteFarPlane
+                            ? Graphics::CreateInfinitePerspectiveFieldOfViewEXT(
+                                  camera.yfov, aspect, camera.znear)
+                            : Matrix::CreatePerspectiveFieldOfView(
+                                  camera.yfov, aspect, camera.znear, camera.zfar);
+                    }
+                    else
+                    {
+                        // §3.10.2: xmag/ymag are HALF extents, so the orthographic volume is twice
+                        // each. Halving them here would be the classic silent factor-of-two.
+                        out.Projection = Matrix::CreateOrthographic(
+                            camera.xmag * 2.0f, camera.ymag * 2.0f, camera.znear, camera.zfar);
+                    }
+                    cameras.push_back(std::move(out));
+                }
+                model.setCamerasEXTProperty(std::move(cameras));
+            }
             return model;
         }
 

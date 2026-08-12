@@ -279,6 +279,51 @@ namespace CNA::Internal::GltfImport
      */
     [[nodiscard]] SamplerOut MapGltfSamplerEXT(int magFilter, int minFilter, int wrapS, int wrapT);
 
+    /**
+     * @brief One glTF camera as instanced by a scene node (plan_gltf.md `GLTF-317`).
+     *
+     * `cgltf_camera` had **zero occurrences** in CNA: a file's cameras were dropped entirely, so an
+     * asset that shipped its own framing had no way to express it and every viewer had to invent
+     * one. glTF §3.10 puts the projection on the camera and the placement on the node, so both are
+     * carried here rather than pre-combined -- an application animating the camera node needs them
+     * apart.
+     */
+    struct CameraOut
+    {
+        /** @brief The camera's name, or the node's when the camera is unnamed; may be empty. */
+        std::string name;
+        /** @brief The instancing node's `sceneNodeIndex` (§15.1.2), so it indexes `Model::Bones`. */
+        int sceneNodeIndex = -1;
+        /** @brief True for a perspective camera, false for an orthographic one. */
+        bool perspective = true;
+        /** @brief Perspective vertical field of view, in radians. */
+        float yfov = 0.0f;
+        /**
+         * @brief Perspective aspect ratio, or 0 when the file declares none.
+         *
+         * §3.10.3 says an undefined `aspectRatio` means "use the viewport's", which is a runtime
+         * value the importer cannot know -- so it is carried as 0 rather than guessed.
+         */
+        float aspectRatio = 0.0f;
+        /** @brief Orthographic half-width (`xmag`); the full width is twice this. */
+        float xmag = 0.0f;
+        /** @brief Orthographic half-height (`ymag`). */
+        float ymag = 0.0f;
+        /** @brief Near clip distance; required for both camera types. */
+        float znear = 0.0f;
+        /**
+         * @brief Far clip distance, or 0 when a perspective camera declares none.
+         *
+         * An absent `zfar` means an **infinite** projection (§3.10.3). XNA has no such overload,
+         * which is `GLTF-319`'s subject; 0 is the sentinel because a real `zfar` must be positive
+         * and greater than `znear`.
+         */
+        float zfar = 0.0f;
+        /** @brief The instancing node's world transform, already unit-scaled. */
+        Microsoft::Xna::Framework::Matrix worldTransform =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+    };
+
     struct MeshOut
     {
         /** @brief The mesh part's name (from the glTF mesh, or a generated placeholder). */
@@ -922,6 +967,20 @@ namespace CNA::Internal::GltfImport
      * @return Up to 3 approximated directional lights, empty if the file has no `KHR_lights_punctual` lights.
      */
     std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data);
+
+    /**
+     * @brief Every camera the default scene instances, in scene-node order (`GLTF-317`).
+     *
+     * A camera on a node outside the default scene is not imported, on the same rule that governs
+     * meshes: §3.5 makes the default scene the thing being rendered.
+     *
+     * @param data The parsed glTF file.
+     * @param scene The flattened scene graph, for node placement and index identity.
+     * @param unitScale Scale applied to the node world transform's translation, as elsewhere.
+     * @return One record per camera-bearing node, in scene-node order.
+     */
+    [[nodiscard]] std::vector<CameraOut> ExtractCamerasEXT(
+        const cgltf_data* data, const SceneGraphOut& scene, float unitScale);
 
     /**
      * @brief Whether CNA's importer implements the semantics of a glTF extension by name.
