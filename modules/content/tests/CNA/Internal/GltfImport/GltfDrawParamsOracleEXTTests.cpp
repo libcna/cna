@@ -494,7 +494,10 @@ TEST(GltfConformanceL6, SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex)
         for (const DrawParamsDump& d : captured)
         {
             SCOPED_TRACE(ToJson(d));
-            EXPECT_TRUE(d.skinned) << "a skinned model bound an unskinned shader variant";
+            // A file may hold a skinned mesh AND a static one (GLTF-137's `skin-plus-static-mesh`).
+            // The palette belongs to the skinned parts; a static prop in the same model is not
+            // skinned and must not be, so it is skipped rather than asserted against a rig.
+            if (!d.skinned) { continue; }
             // GLTF-258: CNA always packs four influences, so four is what the shader must sum.
             EXPECT_EQ(4, d.weightsPerVertex);
             // GLTF-263: the uploaded palette is GetSkinTransforms()'s, entry for entry.
@@ -557,7 +560,7 @@ TEST(GltfConformanceL6, AFreshlyLoadedSkinnedModelIsAlreadyPosedInItsBindPose)
         for (const DrawParamsDump& d : captured)
         {
             SCOPED_TRACE(ToJson(d));
-            EXPECT_TRUE(d.skinned);
+            if (!d.skinned) { continue; }   // a static part of the same model -- see above
             ASSERT_EQ(bindPose.size(), static_cast<std::size_t>(d.boneCount))
                 << "the loaded palette is not the bind-pose one";
             ASSERT_EQ(bindPose.size(), d.boneTransforms.size());
@@ -668,4 +671,66 @@ TEST(GltfConformanceL6, CapturedTopologyAndPrimitiveCountMatchTheImportPolicy)
         EXPECT_EQ(expectedType, d.primitiveType);
         EXPECT_EQ(static_cast<int>(NumberOr(policy, "primitiveCount", -1)), d.primitiveCount);
     }
+}
+
+// --- plan_gltf.md GLTF-137: every mesh group is imported ------------------------------------------
+
+// `CollectMeshGroups` makes one group per distinct skin plus one for the unskinned meshes, and the
+// runtime loader took `groups.front()` -- so a file holding a character and a prop imported
+// whichever owned the first mesh node and dropped the other in silence. `skin-plus-static-mesh`
+// authors the skinned node first, so the static prop is what used to vanish. Asserted through the
+// L6 capture because that is where "was it imported" and "would it actually be drawn" are the same
+// question: a part with no effect, or with no primitives, never reaches the capture at all.
+TEST(GltfConformanceL6, EveryMeshGroupOfAMixedFileIsImportedAndDrawable)
+{
+    const LoadedFixture fixture("skin-plus-static-mesh");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skin-plus-static-mesh");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(2u, captured.size())
+        << "the file has two mesh groups and both must be drawable; a count of 1 is the "
+           "groups.front() drop GLTF-137 removed";
+
+    std::size_t skinnedParts = 0;
+    std::size_t staticParts  = 0;
+    for (const DrawParamsDump& d : captured)
+    {
+        SCOPED_TRACE(ToJson(d));
+        if (d.skinned) { ++skinnedParts; } else { ++staticParts; }
+    }
+    // Both kinds, and each keeps its own nature: importing the prop by quietly giving it the
+    // character's skinned effect would be a different bug wearing this one's clothes.
+    EXPECT_EQ(1u, skinnedParts) << "the skinned mesh is missing or was imported twice";
+    EXPECT_EQ(1u, staticParts)  << "the static mesh is missing, or was imported as skinned";
+
+    // The static prop must arrive at the place its own node puts it. The manifest states that
+    // placement independently at L4, so this compares against the file rather than against a
+    // second reading of the loader.
+    const JsonValue& instances = Path(fixture.Expected(), "l4.instances");
+    ASSERT_EQ(JsonType::Array, instances.type);
+    bool checkedStaticPlacement = false;
+    for (const JsonValue& instance : instances.arrayValue)
+    {
+        if (StringOr(instance, "nodeName", "") != "StaticMeshNode") { continue; }
+        const std::vector<double> nodeWorld = Numbers(Member(instance, "worldMatrixColumnMajor"));
+        ASSERT_EQ(16u, nodeWorld.size());
+        for (const DrawParamsDump& d : captured)
+        {
+            if (d.skinned) { continue; }
+            SCOPED_TRACE(ToJson(d));
+            for (std::size_t i = 0; i < 16; ++i)
+            {
+                EXPECT_NEAR(static_cast<float>(nodeWorld[i]), d.worldColMajor[i], kTolerance)
+                    << "static mesh world element " << i;
+            }
+            checkedStaticPlacement = true;
+        }
+    }
+    EXPECT_TRUE(checkedStaticPlacement) << "the static instance is not in the L4 manifest";
 }

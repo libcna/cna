@@ -15,7 +15,7 @@ from __future__ import annotations
 from ..builder import FLOAT, TRIANGLES, UNSIGNED_BYTE, UNSIGNED_SHORT, GltfBuilder, pack
 from ..manifest import (Defect, Fixture, l3_primitive, mat_identity, mat_translation, mat_mul,
                         world_positions)
-from .common import TRIANGLE_INDICES, TRIANGLE_POSITIONS
+from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
 
 #: The armature's own translation. 100 units so the resulting error is unmistakable at every layer.
 _ARMATURE_TRANSLATION = [0.0, 100.0, 0.0]
@@ -233,4 +233,114 @@ def skin_mesh_node_transform() -> Fixture:
     )
 
 
-FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform]
+#: The static prop's own translation. On -Z so it cannot be confused with either the armature's or
+#: the skinned mesh node's own axis in any other skinning fixture.
+_STATIC_NODE_TRANSLATION = [0.0, 0.0, -20.0]
+
+
+def skin_plus_static_mesh() -> Fixture:
+    """A skinned mesh and an ordinary static mesh in one file. Owns **GLTF-137**.
+
+    ``CollectMeshGroups`` makes one group per distinct skin plus one for the unskinned meshes, and
+    the runtime loader took ``groups.front()`` -- so a file with a character *and* a prop imported
+    whichever of the two happened to own the first mesh node and dropped the other without a word.
+    This is the smallest file that exhibits it: the skinned node comes first, so the static prop is
+    what used to disappear.
+
+    Both meshes are deliberately trivial and exactly placed. The skinned one has a single joint at
+    the scene root with an identity inverse bind matrix, so its joint matrix is the identity and its
+    world positions equal its mesh-local ones -- nothing about skinning is under test here. The
+    static one is translated on -Z, so its presence or absence is unmistakable at L4.
+    """
+    b = GltfBuilder("skin-plus-static-mesh")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    joints = b.add_packed_accessor(usage="JOINTS_0", values=_JOINTS, accessor_type="VEC4",
+                                   component_type=UNSIGNED_BYTE)
+    weights = b.add_packed_accessor(usage="WEIGHTS_0", values=_WEIGHTS, accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+
+    inverse_bind = mat_identity()
+    ibm_offset = b.append_bytes(pack(inverse_bind, FLOAT), alignment=4)
+    ibm = b.add_accessor(usage="inverseBindMatrices", component_type=FLOAT, accessor_type="MAT4",
+                         count=1, expected=list(inverse_bind),
+                         buffer_view=b.add_buffer_view(ibm_offset, 64))
+
+    skinned_mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "JOINTS_0": joints, "WEIGHTS_0": weights},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="SkinnedTri")
+
+    static_position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                            accessor_type="VEC3", with_bounds=True)
+    static_normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS,
+                                          accessor_type="VEC3")
+    static_indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                           accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    static_mesh = b.add_mesh([{
+        "attributes": {"POSITION": static_position, "NORMAL": static_normal},
+        "indices": static_indices,
+        "mode": TRIANGLES,
+    }], name="StaticTri")
+
+    joint_node = b.add_node(name="Joint0")
+    # The skinned node is authored BEFORE the static one, because CollectMeshGroups orders groups by
+    # first-referencing node: that puts the skin's group at index 0, which is exactly the ordering
+    # under which groups.front() lost the prop.
+    skinned_node = b.add_node(name="SkinnedMeshNode", mesh=skinned_mesh, skin=0)
+    static_node = b.add_node(name="StaticMeshNode", mesh=static_mesh,
+                             translation=_STATIC_NODE_TRANSLATION)
+    b.add_skin({"name": "Skin", "joints": [joint_node], "inverseBindMatrices": ibm})
+    b.add_scene([joint_node, skinned_node, static_node], name="Scene")
+    b.set_default_scene(0)
+
+    l4 = world_positions(b, {skinned_mesh: list(TRIANGLE_POSITIONS),
+                             static_mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = {
+        "jointCount": 1,
+        "meshNodeWorldColumnMajor": mat_identity(),
+        "joints": [{
+            "joint": 0,
+            "node": joint_node,
+            "nodeName": "Joint0",
+            "parentJoint": -1,
+            "jointGlobalColumnMajor": mat_identity(),
+            "inverseBindMatrixColumnMajor": inverse_bind,
+            "jointMatrixColumnMajor": mat_identity(),
+        }],
+        "skinnedPositions": [list(p) for p in TRIANGLE_POSITIONS],
+        "note": "Every term of the joint matrix is the identity here on purpose: this fixture is "
+                "about which mesh GROUPS survive import, not about skinning arithmetic, so any "
+                "divergence it reports is attributable to the group selection alone.",
+    }
+    l4["groups"] = {
+        "count": 2,
+        "expectation": "Both groups must be imported. The skin's group owns SkinnedTri and the "
+                       "unskinned group owns StaticTri; a loader that keeps only the first drops "
+                       "StaticTri entirely, including its node placement at Z = -20.",
+    }
+
+    return Fixture(
+        id="skin-plus-static-mesh", audit_fixture=None, owning_group="skinning",
+        description="One skinned mesh and one ordinary static mesh in the same file -- two mesh "
+                    "groups. The runtime loader imported groups.front() and dropped the rest in "
+                    "silence, so the static prop never reached the model at all.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["two mesh groups", "skinned and unskinned mesh in one file",
+                  "skin.joints", "skin.inverseBindMatrices"],
+        spec_anchors=["skins", "nodes-and-hierarchy", "instantiation"],
+        l3={"primitives": [
+            l3_primitive(mesh=skinned_mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+                         positions=TRIANGLE_POSITIONS, joints=_JOINTS, weights=_WEIGHTS,
+                         indices=TRIANGLE_INDICES),
+            l3_primitive(mesh=static_mesh, mesh_name="StaticTri", primitive=0, mode=TRIANGLES,
+                         positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+                         indices=TRIANGLE_INDICES),
+        ]},
+        l4=l4,
+    )
+
+
+FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform, skin_plus_static_mesh]

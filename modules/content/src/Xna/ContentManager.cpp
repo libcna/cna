@@ -1948,17 +1948,33 @@ namespace Microsoft::Xna::Framework::Content
             {
                 throw ContentLoadException("glTF file '" + path + "' contains no mesh instances to import.");
             }
-            const MeshGroup& group = groups.front();
+            // plan_gltf.md GLTF-137. This used to be `groups.front()`, and every other group was
+            // dropped without a word: CollectMeshGroups makes one group per distinct skin (plus one
+            // for the unskinned meshes), so a file with a character AND a prop lost whichever of
+            // the two did not come first in the node array. Every group is imported now.
+            //
+            // One limit survives and is REPORTED rather than hidden: `Model::Tag` holds a single
+            // `SkinningData`, so only one skeleton can reach the application. A second skin's
+            // meshes are therefore not imported -- posing them with another rig's palette would be
+            // a fresh silent corruption in place of the old silent drop, which is the same
+            // reasoning `GLTF-295` records for rigid clips on a skinned model. The unskinned group
+            // is never affected: it has no skeleton to collide with.
+            std::size_t skinnedGroupIndex = groups.size();
+            for (std::size_t i = 0; i < groups.size(); ++i)
+            {
+                if (groups[i].skin != nullptr) { skinnedGroupIndex = i; break; }
+            }
+            const bool hasSkin = skinnedGroupIndex < groups.size();
 
             // CNB-97 (Phase 14H): KHR_lights_punctual, approximated as up to 3 directional lights
             // (see ExtractPunctualLightsEXT's own doc comment) -- applied to every mesh part's
             // effect below via ApplyPunctualLightsEXT, for whichever ones implement IEffectLights.
             const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data);
 
-            const bool hasSkin = group.skin != nullptr;
             SkeletonResult skeleton;
             if (hasSkin)
             {
+                const MeshGroup& group = groups[skinnedGroupIndex];
                 // plan_gltf.md GLTF-245/GLTF-247: the skeleton needs two things the skin alone
                 // cannot supply -- the joints' full scene ancestry, and the world transform of the
                 // node instancing the skinned mesh, which glTF requires to be cancelled. A skin
@@ -2129,16 +2145,46 @@ namespace Microsoft::Xna::Framework::Content
                 return texPtr;
             };
 
-            int meshCounter = 0;
-            for (const MeshInstanceOut& instance : group.instances)
+            // GLTF-137: every group's instances, each paired with the skeleton that poses it --
+            // decided once, here, instead of being re-derived inside the loop. A group whose skin
+            // is not the one on Model::Tag contributes nothing and says so.
+            struct ImportableInstance
             {
+                const MeshInstanceOut* instance;
+                const SkeletonResult* skeleton;
+            };
+            std::vector<ImportableInstance> importable;
+            for (std::size_t gi = 0; gi < groups.size(); ++gi)
+            {
+                const MeshGroup& g = groups[gi];
+                if (g.skin != nullptr && gi != skinnedGroupIndex)
+                {
+                    CNA::Logger::Warn(
+                        "glTF file '" + path + "': skin '" +
+                        std::string(g.skin->name ? g.skin->name : "<unnamed>") + "' drives " +
+                        std::to_string(g.instances.size()) +
+                        " mesh instance(s) that are not imported -- Model::Tag carries one "
+                        "SkinningData and another skin already owns it (GLTF-137).");
+                    continue;
+                }
+                const SkeletonResult* groupSkeleton = (g.skin != nullptr) ? &skeleton : nullptr;
+                for (const MeshInstanceOut& placement : g.instances)
+                {
+                    importable.push_back({&placement, groupSkeleton});
+                }
+            }
+
+            int meshCounter = 0;
+            for (const ImportableInstance& entry : importable)
+            {
+                const MeshInstanceOut& instance = *entry.instance;
                 const cgltf_mesh* mesh = instance.mesh;
                 for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
                 {
                     const std::string partName = mesh->name
                         ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
                         : ("mesh" + std::to_string(meshCounter));
-                    MeshOut meshOut = ExtractMesh(data, mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, 1.0f);
+                    MeshOut meshOut = ExtractMesh(data, mesh->primitives[p], partName, entry.skeleton, 1.0f);
 
                     const int numVertices = meshOut.stride > 0
                         ? static_cast<int>(meshOut.vertexBytes.size()) / meshOut.stride : 0;

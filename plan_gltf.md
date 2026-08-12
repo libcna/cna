@@ -1198,6 +1198,7 @@ why "the character collapses toward the centre" is the expected symptom of D8 on
 | `skin-nonuniform-joint-scale` | joint `S=[1,2,1]` | positions **and** normals asserted |
 | `skin-73-joints` | 73 joints | must not silently truncate |
 | `skin-256-joints` | 256 joints | must not wrap the index byte |
+| `skin-plus-static-mesh` | a skinned mesh **and** an ordinary static mesh, skinned node first | both meshes imported; the prop at its own node's `T=[0,0,−20]` (`GLTF-137`) |
 
 ---
 
@@ -1533,10 +1534,17 @@ same asset in another container, not another asset.
 > cross-referenced ladders were re-counted and the counts here now match them exactly: transforms
 > 17 (§11.4), skinning 13 (§15.4), morph 13 (§16.3), animation 10 (§17.2, excluding the
 > morph-owned `anim-weights-*`), and the remaining groups enumerated in full below. The generated
-> corpus stands at **24** assets today (`GLTF-072` completed the topology group's seven;
+> corpus stands at **25** assets today (`GLTF-072` completed the topology group's seven;
 > `GLTF-021`/`GLTF-023` added the first container and robustness fixtures; `GLTF-267` generated
 > §11.4's `xf-scale-nonuniform`, the corpus's first non-uniform node scale); `GLTF-399` completes
 > the rest.
+>
+> **A later, deliberate count change (`GLTF-137`).** The skinning group is **14** and the total
+> **136** — and that is not the correction above being undone. The correction removed a bump made
+> by *generating* an asset §15.4 had already planned. This one adds a row to §15.4 itself:
+> `skin-plus-static-mesh`, a file with a skinned mesh and a static one, which no ladder foresaw and
+> which `GLTF-137` needs because it is the smallest file whose second mesh group the loader used to
+> drop. The ladder and the column still agree, which is the invariant §24.1 actually asks for.
 
 | Group | Count | Assets |
 |---|---|---|
@@ -1548,14 +1556,14 @@ same asset in another container, not another asset.
 | Normals / tangents | 6 | `tangent-authored`, `tangent-handedness`, `tangent-absent-generated`, `normal-absent`, `normal-nonuniform-scale`, `tangent-mirrored` |
 | UV / textures / samplers | 10 | `uv0-checker`, `uv1-material`, `uv-out-of-range-clamp`, `uv-out-of-range-wrap`, `uv-out-of-range-mirror`, `sampler-nearest`, `sampler-trilinear`, `texture-transform-basecolor`, `texture-transform-per-map`, `texture-shared-two-samplers` |
 | Materials / PBR | 12 | `mat-default` (no material), `mat-factor-only-gold`, `mat-basecolor-factor-times-texture`, `mat-metallic-roughness-channels`, `mat-normal-scale`, `mat-occlusion-strength`, `mat-emissive-factor`, `mat-emissive-strength`, `alpha-opaque`, `alpha-mask`, `alpha-blend`, `double-sided` |
-| Skinning | 13 | the `skin-*` ladder in §15.4 |
+| Skinning | 14 | the `skin-*` ladder in §15.4 |
 | Morph | 13 | the `morph-*` ladder in §16.3, which **owns** `morph-weights-animated-linear/step/cubic` and `morph-plus-skin` |
 | Animation | 10 | the `anim-*` ladder in §17.2, excluding the `anim-weights-*` fixtures owned by the morph group |
 | Scenes / cameras / lights | 7 | `scene-default-selection`, `scene-two-roots`, `scene-no-scenes`, `camera-perspective`, `camera-perspective-infinite`, `camera-orthographic`, `lights-punctual-three` |
 | Draco parity | 4 | `draco-triangle`, `draco-vs-uncompressed-pair`, `draco-skinned`, `draco-morph` |
 | Robustness / malformed | 6 | `bad-accessor-out-of-bounds`, `bad-index-out-of-range`, `bad-buffer-truncated`, `bad-glb-chunk-length`, `bad-matrix-and-trs`, `bad-version-1.0` |
 
-**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 13 + 13 + 10 + 7 + 4 + 6 = 135 distinct assets.**
+**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 14 + 13 + 10 + 7 + 4 + 6 = 136 distinct assets.**
 
 Reuse happens along two axes and neither changes that total. An asset is reused **across oracle
 layers** — the same `alpha-mask` file is an L3, L6 and L7 fixture — and **across phases**, where a
@@ -2117,7 +2125,7 @@ numerically at L4.*
 | GLTF-134 | No `scenes` array at all | ⬜ | GLTF-133 | Falls back to "every mesh in the file". **Accept:** `scene-no-scenes` behaviour documented and tested. |
 | GLTF-135 | Nodes outside any scene are excluded | ✅ | GLTF-133 | `OnlyImportsNodesReachableFromTheDefaultScene` exists. **Accept:** extended to the corpus. |
 | GLTF-136 | Shared mesh instanced by multiple nodes | 🐛 | GLTF-114 | `f1`: today two identity-transform duplicates. **Accept:** `xf-shared-mesh` yields two instances at the right places, ideally sharing one `VertexBuffer`. |
-| GLTF-137 | Runtime path imports **all** mesh groups, not `groups.front()` | 🐛 | GLTF-114 | `ReadGltfModel` documents the single-group limit; a mixed skinned + static file silently loses a group. **Accept:** one `Model` carries every group, or the limitation is removed by the node-hierarchy work. |
+| GLTF-137 | Runtime path imports **all** mesh groups, not `groups.front()` | ✔ | GLTF-114 | `ReadGltfModel` documents the single-group limit; a mixed skinned + static file silently loses a group. **Accept:** one `Model` carries every group, or the limitation is removed by the node-hierarchy work. **Landed:** the loader builds the list of importable instances once — every group's, each paired with the skeleton that poses it — instead of taking `groups.front()`, so a file with a character and a prop keeps both. `skin-plus-static-mesh` is the smallest file that exhibited the drop and is new to §15.4 (see the count note in §24.2); the skinned node is authored first, so the **static** prop is what used to vanish, and the L6 capture asserts both parts are drawable, keep their own skinned/unskinned nature, and that the prop lands at its own node's placement as stated at L4. **One limit survives and is now reported instead of hidden:** `Model::Tag` holds a single `SkinningData`, so a *second* skin's meshes are still not imported — posing them with another rig's palette would be a fresh silent corruption in place of the old silent drop, the same reasoning `GLTF-295` records for rigid clips. The unskinned group is never affected. |
 | GLTF-138 | Grouping by skin becomes a detail, not the model shape | ⬜ | GLTF-137 | With a real node hierarchy, "one `.cnj` per skin" is no longer necessary. **Accept:** decision recorded; the offline tool's output shape is settled. |
 | GLTF-139 | `ModelMesh` ↔ glTF mesh ↔ primitive mapping | ⬜ | GLTF-114 | Today one `ModelMesh` per **primitive**. XNA's shape is one `ModelMesh` per mesh with one `ModelMeshPart` per primitive. **Accept:** the mapping is chosen, documented and tested. |
 | GLTF-140 | Deterministic mesh/part ordering | ⬜ | GLTF-139 | **Accept:** stable across runs; required for golden L5 comparison. |
@@ -2341,7 +2349,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 |---|---|---|---|---|
 | GLTF-293 | **Import animation of non-joint (rigid) nodes** | ✔ | GLTF-114 | `ExtractClips` skips any channel whose target is not in `skel.nodeToNewIndex`, and the offline tool calls it only when `hasSkin`. `f7` produced a `.cnj` with **no** `animations` key and no warning. **Accept:** `anim-rigid-node` produces a playable clip targeting the mesh node's bone. **Landed:** `ExtractSceneNodeClips` resolves channels against `SceneGraphOut` instead of a joint set, so `anim-rigid-node` yields one clip `Spin` with one track on the `SpinningMesh` node's own bone — identity at `t=0`, a quarter turn about +Z at `t=1`, scale filled from the node's bind pose rather than zero. Both original mechanisms are gone: extraction is no longer gated on a skin, and a non-joint target resolves instead of being skipped. `ClipOut` gained `targetSpace` (`ClipTargetSpace::JointPalette` \| `SceneNode`) so §15.1.2's two index spaces can never be silently interchanged; it defaults to `JointPalette`, leaving every existing consumer's meaning unchanged. Channel gathering and keyframe resampling are now one shared code path for both extractors — the two differing only in how a target node resolves — since D6 existed precisely because they were never separated. **Scope boundary:** the clip is **not** serialised to the `.cnj` yet. A scene-node track's `boneIndex` is a `sceneNodeIndex`, and the clip schema has no field distinguishing it from a palette slot; writing one would let a reader apply it as a palette index — a fresh silent corruption in place of the old one. `GLTF-294` adds the field and the unified playback path, so the converter **reports** the clip by name and track count instead of dropping it. **D6 → `partially-remediated`.** Its ledger entry also named the wrong owner (`GLTF-284`, the morph weight-vector validation task); corrected to `GLTF-293`/`GLTF-294`. |
 | GLTF-294 | Unify joint and node animation on the bone hierarchy | ✔ | GLTF-293, GLTF-103 | With a real `ModelBone` tree, both are bone tracks. **Accept:** one code path; `.cnj` carries clips for both. **Half done by `GLTF-293`:** channel gathering and resampling are already one shared path, and `ClipOut::targetSpace` names the space each clip is in. What is left is the serialisation and playback half — a `targetSpace` field in the `.cnj` clip schema, a reader that honours it, and a way to drive `ModelBone` transforms from a `SceneNode` clip. **This is what keeps D6 open.** **Landed:** one writer serialises both clip kinds — they differ only by a `"targetSpace"` field in the file, not by a second serialiser, since keeping two would let them drift. `AnimationClipEXT` gained `TargetSpace`, a rigid clip reaches an unskinned model's `Tag` as `ModelAnimationsEXT`, and `ApplyClipToBonesEXT` poses `Model::Bones` from it — **refusing** a joint-palette clip outright, because applying palette indices to bones would pose the wrong ones with no symptom but wrong motion. **D6 is `fixed`.** **Boundary recorded, not resolved:** `Model::Tag` holds one object and a skinned model already uses it for `SkinningData`, so a file with **both** a skin and rigid node animation has nowhere to put the rigid clips; the importer reports that by name and `GLTF-295` owns it. |
-| GLTF-295 | Call `ExtractClips` unconditionally | 🐛 | GLTF-293 | `gltf_to_cnj` gates it on `hasSkin`. **Accept:** a skinless animated file produces clips. |
+| GLTF-295 | Call `ExtractClips` unconditionally | ✔ | GLTF-293 | `gltf_to_cnj` gates it on `hasSkin`. **Accept:** a skinless animated file produces clips. **Landed with `GLTF-293`/`GLTF-294`:** `ExtractSceneNodeClips` runs unconditionally on both paths and `anim-rigid-node` — a file with no skin at all — produces and round-trips its clip, which is exactly the stated acceptance. The tool's own comment had gone stale in the meantime, still saying the clip was extracted but not serialised; `GLTF-294` added the `targetSpace` field that made serialising it safe, and the comment now says so. The **separate** collision this task's own body describes — a file with *both* a skin and rigid node animation, where `Model::Tag` has room for only one object — is unchanged and still reported by name rather than dropped; it is tracked as a named limitation in `docs/gltf-api-change-review.md` §1.5, not as part of this acceptance. |
 | GLTF-296 | Animation of camera and light nodes | 🐛 | GLTF-294 | Same non-joint drop. **Accept:** imported or reported. |
 | GLTF-297 | Quantify the union-time resampling error | 🔬 | GLTF-294 | Bone channels are resampled onto the union of their own three channels' times, baking a piecewise-linear approximation of CUBICSPLINE between keys. **Accept:** the error is measured on a fixture and either accepted with numbers or replaced by lazy evaluation (as the morph path already does). |
 | GLTF-298 | Rotation interpolation | ✅ | GLTF-294 | `Slerp` for LINEAR; component-wise Hermite + renormalisation for CUBICSPLINE. **Accept:** `anim-rotation-slerp` exact at the midpoint, and a negated-quaternion twin yields the same pose (shortest path). |

@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 24,
+  "distinctAssetCount": 25,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
@@ -20,7 +20,7 @@
     "topology": 7,
     "transforms": 5,
     "materials": 1,
-    "skinning": 2,
+    "skinning": 3,
     "animation": 1,
     "scenes": 1,
     "robustness": 1
@@ -597,6 +597,24 @@
       "auditFixture": null
     },
     {
+      "id": "skin-plus-static-mesh",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "two mesh groups",
+        "skinned and unskinned mesh in one file",
+        "skin.joints",
+        "skin.inverseBindMatrices"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "anim-rigid-node",
       "owningGroup": "animation",
       "referencingGroups": [],
@@ -1023,6 +1041,41 @@
     },
     {
       "path": "skin-mesh-node-transform.vb.bin",
+      "bytes": 204,
+      "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
+    },
+    {
+      "path": "skin-plus-static-mesh.expected.json",
+      "bytes": 15095,
+      "sha256": "062739561bce677fe0757a7bd3015bb5170c5b8738c37d138e28927e7c96a639"
+    },
+    {
+      "path": "skin-plus-static-mesh.glb",
+      "bytes": 1816,
+      "sha256": "ac415a3b25554c0ec830b913788c4c5f4cf809e06a450bfa74f22bddd91646d5"
+    },
+    {
+      "path": "skin-plus-static-mesh.gltf",
+      "bytes": 3286,
+      "sha256": "082e14b492f70d6f6d8d94357b8505ce6714907e040cbc829666aa3ec7cfd02f"
+    },
+    {
+      "path": "skin-plus-static-mesh.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-plus-static-mesh.p1.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-plus-static-mesh.p1.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "skin-plus-static-mesh.vb.bin",
       "bytes": 204,
       "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
     },

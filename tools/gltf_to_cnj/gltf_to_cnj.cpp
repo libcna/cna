@@ -478,12 +478,14 @@ namespace
         // silence -- and for an unskinned file ExtractClips was never called at all, so the .cnj
         // simply had no "animations" key and said nothing about why (defect D6).
         //
-        // The clip is extracted here and REPORTED. It is deliberately not serialised yet: a
-        // scene-node clip's boneIndex is a sceneNodeIndex, and the .cnj clip schema has no field
-        // saying which of the two index spaces (§15.1.2) a track is in. Writing one anyway would
-        // let a reader apply a scene-node index as a joint-palette slot -- a fresh silent
-        // corruption in place of the old one. GLTF-294 adds that field and the unified playback
-        // path; until then this is an explicit, named limitation rather than a disappearance.
+        // GLTF-294 added the .cnj clip schema's "targetSpace" field, so the clip is now SERIALISED
+        // rather than only reported. That field is what makes it safe: a scene-node clip's
+        // boneIndex is a sceneNodeIndex, and without a field naming which of the two index spaces
+        // (§15.1.2) a track is in, a reader could apply a scene-node index as a joint-palette slot
+        // -- a fresh silent corruption in place of the old one.
+        //
+        // GLTF-295: extraction is unconditional. A file with no skin at all still reaches this
+        // loop, which is what the task's own acceptance asks for.
         for (const ClipOut& clip : ExtractSceneNodeClips(data, sceneGraph, unitScale, warnings))
         {
             // Model::Tag holds one object, and a skinned model already uses it for SkinningData.
