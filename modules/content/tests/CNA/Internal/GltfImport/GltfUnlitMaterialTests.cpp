@@ -242,3 +242,78 @@ TEST(GltfUnlitMaterial, EveryUnlitFixtureCarriesTheFlagThroughTheImporterItself)
         }
     }
 }
+
+// --- GLTF-349: an archived material model, converted rather than refused -------------------------
+
+TEST(GltfUnlitMaterial, ASpecularGlossinessMaterialIsConvertedToMetallicRoughness)
+{
+    // Khronos archived the extension, but it is what a decade of older assets are authored in, so
+    // refusing it would reject content that is otherwise perfectly importable. Converted with the
+    // standard mapping -- and every term asserted, because a conversion that dropped or inverted
+    // one produces a plausible material rather than an obviously wrong one.
+    using namespace CNA::Internal::GltfImport;
+
+    const LoadedFixture fixture("mat-specular-glossiness");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& expected = Path(fixture.Expected(), "l4.specularGlossiness");
+
+    const cgltf_data& data = fixture.Data();
+    const MeshOut out = ExtractMesh(&data, data.meshes[0].primitives[0], "probe", nullptr, 1.0f);
+
+    EXPECT_TRUE(out.convertedFromSpecularGlossinessEXT);
+    EXPECT_TRUE(out.usePbr)
+        << "the point of converting is that the material reaches the PBR path; leaving it on the "
+           "non-PBR one, as before, silently drops every factor it carries";
+
+    const std::vector<double> base = Numbers(Member(expected, "convertedBaseColorFactor"));
+    ASSERT_EQ(4u, base.size());
+    EXPECT_NEAR(static_cast<float>(base[0]), out.baseColorFactor.X, kTolerance);
+    EXPECT_NEAR(static_cast<float>(base[1]), out.baseColorFactor.Y, kTolerance);
+    EXPECT_NEAR(static_cast<float>(base[2]), out.baseColorFactor.Z, kTolerance);
+    EXPECT_NEAR(static_cast<float>(base[3]), out.baseColorFactor.W, kTolerance);
+
+    EXPECT_NEAR(static_cast<float>(NumberOr(expected, "convertedMetallicFactor", -1.0)),
+                out.metallicFactor, kTolerance);
+    // Glossiness 0.8 gives roughness 0.2 -- neither the glTF default (1.0) nor the un-inverted
+    // 0.8, so "forgot to invert" and "forgot entirely" are both separable from correct.
+    EXPECT_NEAR(static_cast<float>(NumberOr(expected, "convertedRoughnessFactor", -1.0)),
+                out.roughnessFactor, kTolerance);
+
+    // The loss, with its size: near 0 means the material was effectively dielectric and the
+    // conversion is close to exact; near 1 means a strongly coloured specular went missing.
+    EXPECT_NEAR(static_cast<float>(NumberOr(expected, "droppedSpecularStrength", -1.0)),
+                out.droppedSpecularStrengthEXT, 1e-3f);
+}
+
+TEST(GltfUnlitMaterial, ConvertingSpecularGlossinessDoesNotAmountToClaimingIt)
+{
+    // An approximation is not an implementation. A file that *requires* the extension is asking
+    // for the very term the conversion discards, so it must still be refused -- otherwise
+    // converting it would have quietly widened the extensionsRequired gate.
+    using namespace CNA::Internal::GltfImport;
+    EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_pbrSpecularGlossiness"));
+
+    const GltfExtensionRecordEXT* record =
+        FindGltfExtensionEXT("KHR_materials_pbrSpecularGlossiness");
+    ASSERT_NE(nullptr, record);
+    EXPECT_EQ(GltfExtensionSupportEXT::Approximated, record->support);
+    EXPECT_FALSE(record->claimed);
+}
+
+TEST(GltfUnlitMaterial, AnOrdinaryMetallicRoughnessMaterialIsNotReportedAsConverted)
+{
+    // The control. Without it, a flag hardwired true would satisfy every assertion above, and
+    // every import would carry a warning about an extension the file never mentioned.
+    using namespace CNA::Internal::GltfImport;
+
+    for (const std::string& id : {"mat-factor-only-gold", "mat-unlit"})
+    {
+        SCOPED_TRACE(id);
+        const LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const cgltf_data& data = fixture.Data();
+        const MeshOut out = ExtractMesh(&data, data.meshes[0].primitives[0], "probe", nullptr, 1.0f);
+        EXPECT_FALSE(out.convertedFromSpecularGlossinessEXT);
+        EXPECT_FLOAT_EQ(0.0f, out.droppedSpecularStrengthEXT);
+    }
+}

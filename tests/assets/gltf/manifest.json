@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 66,
+  "distinctAssetCount": 67,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -20,7 +20,7 @@
     "topology": 7,
     "normals": 1,
     "transforms": 7,
-    "materials": 7,
+    "materials": 8,
     "textures": 3,
     "skinning": 10,
     "animation": 11,
@@ -737,6 +737,25 @@
         "translucent baseColorFactor",
         "alphaMode BLEND",
         "non-PBR material model"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mat-specular-glossiness",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "KHR_materials_pbrSpecularGlossiness",
+        "archived extension",
+        "converted to metallic-roughness",
+        "dropped specular tint"
       ],
       "auditFixture": null
     },
@@ -2025,6 +2044,31 @@
     },
     {
       "path": "mat-normal-occlusion-scale.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "mat-specular-glossiness.expected.json",
+      "bytes": 8715,
+      "sha256": "ee52bf39c35108bac6371a77f71f98a4b4d23683c984a78a4875e7a353185105"
+    },
+    {
+      "path": "mat-specular-glossiness.glb",
+      "bytes": 1044,
+      "sha256": "40e7519b33853c2b779b51373717d276d50867d408e513e3889fdaf8507c6cda"
+    },
+    {
+      "path": "mat-specular-glossiness.gltf",
+      "bytes": 1914,
+      "sha256": "3837a028b46e04bb60319673e8bdf72e2c5ae0000f64c8ce01f83feeadc8785c"
+    },
+    {
+      "path": "mat-specular-glossiness.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-specular-glossiness.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },

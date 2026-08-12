@@ -94,12 +94,17 @@ def select_stride(primitive: dict[str, Any]) -> int:
     other map is sampled by whatever effect the material model already chose.
     """
     material = primitive.get("material") or {}
-    # A material declaring a model CNA's PBR shaders do not implement -- KHR_materials_unlit or
-    # KHR_materials_pbrSpecularGlossiness -- imports through BasicEffect instead, which is what
-    # reaches the two strides with no tangent slot (32 unskinned, 52 skinned). Those are the
-    # layouts most non-PBR content lands on, so leaving them without a golden left the widest
-    # part of the ABI unasserted.
-    non_pbr_model = material.get("model") in ("specular-glossiness", "unlit")
+    # A material declaring a model CNA's PBR shaders do not implement imports through BasicEffect
+    # instead, which is what reaches the two strides with no tangent slot (32 unskinned, 52
+    # skinned). Those are the layouts most non-PBR content lands on, so leaving them without a
+    # golden left the widest part of the ABI unasserted.
+    #
+    # `unlit` alone since GLTF-349: a specular-glossiness material is CONVERTED to
+    # metallic-roughness rather than excluded from it, so it takes the PBR stride like any other
+    # metallic-roughness material. Listing it here was correct only while the conversion did not
+    # exist -- and it is exactly the kind of second copy of a rule that goes stale silently, which
+    # is why the L5 goldens are byte-compared rather than derived from the same code.
+    non_pbr_model = material.get("model") == "unlit"
     # A textured material only changes the stride in one combination: a NON-PBR material carrying
     # both a base-colour and an occlusion map selects DualTextureEffect's stride-20 layout. Every
     # other map is sampled by whatever effect the material model already chose, so the stride is

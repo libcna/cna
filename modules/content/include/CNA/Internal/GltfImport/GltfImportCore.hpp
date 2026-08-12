@@ -415,6 +415,31 @@ namespace CNA::Internal::GltfImport
          */
         bool unlitEXT = false;
         /**
+         * @brief True when the material declared `KHR_materials_pbrSpecularGlossiness` and was
+         * converted to metallic-roughness (plan_gltf.md `GLTF-349`).
+         *
+         * The extension is **archived** by Khronos but present in older assets, so refusing it
+         * outright would reject content that is otherwise perfectly importable. It is converted
+         * instead — `diffuseFactor` becomes the base colour, `metallic` becomes 0 and `roughness`
+         * becomes `1 − glossinessFactor` — which is the standard mapping and a genuine
+         * approximation: specular-glossiness can express a **coloured** specular reflection that
+         * metallic-roughness cannot without also making the surface metal, so `specularFactor` is
+         * dropped.
+         *
+         * A dielectric surface converts almost exactly; a coloured-specular one loses its tint.
+         * The flag exists so the loaders can say which happened rather than leaving an author to
+         * wonder why their brass went grey.
+         */
+        bool convertedFromSpecularGlossinessEXT = false;
+        /**
+         * @brief The largest `specularFactor` channel dropped by that conversion, or 0.
+         *
+         * How much the approximation cost, in the one term it discards. Near 0 means the material
+         * was effectively dielectric and the conversion is close to exact; near 1 means a strongly
+         * coloured or metallic specular went missing.
+         */
+        float droppedSpecularStrengthEXT = 0.0f;
+        /**
          * @brief True when the chosen vertex layout has no Normal slot and an authored NORMAL was
          * therefore discarded.
          *

@@ -729,6 +729,122 @@ def mat_unlit_vertex_color_alpha() -> Fixture:
     )
 
 
+#: `mat-specular-glossiness`'s authored values. The diffuse is strongly coloured so its survival is
+#: visible; the glossiness is 0.8, giving a roughness of exactly 0.2 -- a number no default is; and
+#: the specular is a saturated gold, the one term the conversion cannot carry, so what is lost is
+#: as visible as what survives.
+_SG_DIFFUSE = [0.1, 0.35, 0.7, 1.0]
+_SG_SPECULAR = [1.0, 0.766, 0.336]
+_SG_GLOSSINESS = 0.8
+
+
+def mat_specular_glossiness() -> Fixture:
+    """An archived `KHR_materials_pbrSpecularGlossiness` material. Owns **GLTF-349**.
+
+    Khronos archived the extension, but it is what a decade of older assets are authored in, so
+    refusing it would reject content that is otherwise perfectly importable. CNA **converts** it to
+    metallic-roughness with the standard mapping -- diffuse becomes the base colour, the surface
+    becomes a dielectric, and roughness is glossiness inverted -- and the fixture states all three
+    so a conversion that dropped or inverted one is a numeric mismatch rather than a plausible
+    material.
+
+    The conversion is a genuine approximation and the fixture is built to show its edge:
+    ``specularFactor`` is authored as a saturated gold, which metallic-roughness cannot express at
+    all. A coloured specular reflection is only reachable there by making the surface metal, which
+    would also tint the diffuse -- a different material, not a closer one. So the specular is
+    dropped, and both the fact and its magnitude are reported.
+
+    Glossiness 0.8 gives roughness exactly 0.2, which is neither the glTF default (1.0) nor
+    ``MeshOut``'s own: a conversion that forgot to invert would produce 0.8, and one that forgot
+    entirely would produce 1.0, and the three are separable.
+    """
+    b = GltfBuilder("mat-specular-glossiness")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "LegacyBrass",
+        "extensions": {"KHR_materials_pbrSpecularGlossiness": {
+            "diffuseFactor": list(_SG_DIFFUSE),
+            "specularFactor": list(_SG_SPECULAR),
+            "glossinessFactor": _SG_GLOSSINESS,
+        }},
+    })
+    b.declare_extensions(used=["KHR_materials_pbrSpecularGlossiness"])
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="LegacyTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    converted_roughness = round(1.0 - _SG_GLOSSINESS, 6)
+    expected_material = {
+        "index": material,
+        "name": "LegacyBrass",
+        "model": "specular-glossiness",
+        # The CONVERTED values, which is what the importer's own material record holds: L3 is what
+        # the importer understood the material to be, not what the file spelled.
+        "baseColorFactor": list(_SG_DIFFUSE),
+        "metallicFactor": 0.0,
+        "roughnessFactor": converted_roughness,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return Fixture(
+        id="mat-specular-glossiness", audit_fixture=None, owning_group="materials",
+        description="An archived KHR_materials_pbrSpecularGlossiness material, converted to "
+                    "metallic-roughness rather than refused. Diffuse survives, metallic becomes 0, "
+                    "roughness is glossiness inverted, and the saturated gold specularFactor is "
+                    "dropped -- the one term the target model cannot express.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["KHR_materials_pbrSpecularGlossiness", "archived extension",
+                  "converted to metallic-roughness", "dropped specular tint"],
+        spec_anchors=["metallic-roughness-material"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="LegacyTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4={**world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+            "specularGlossiness": {
+                "authoredDiffuseFactor": list(_SG_DIFFUSE),
+                "authoredSpecularFactor": list(_SG_SPECULAR),
+                "authoredGlossinessFactor": _SG_GLOSSINESS,
+                "convertedBaseColorFactor": list(_SG_DIFFUSE),
+                "convertedMetallicFactor": 0.0,
+                "convertedRoughnessFactor": converted_roughness,
+                "droppedSpecularStrength": max(_SG_SPECULAR),
+                "converted": True,
+                "usesPbrPath": True,
+                "conversionRule": "diffuse -> base colour, metallic -> 0, roughness -> "
+                                  "1 - glossiness. Glossiness 0.8 gives roughness 0.2, which is "
+                                  "neither the glTF default (1.0) nor the un-inverted 0.8, so a "
+                                  "conversion that forgot to invert and one that forgot entirely "
+                                  "are separable from a correct one.",
+                "lossRule": "specularFactor has no metallic-roughness equivalent: a coloured "
+                            "specular reflection is only reachable by making the surface metal, "
+                            "which would also tint the diffuse -- a different material, not a "
+                            "closer one. Dropped, with its magnitude reported.",
+                "claimRule": "Converted but NOT claimed, so a file listing the extension in "
+                             "extensionsRequired is still refused. An approximation is not an "
+                             "implementation, and a file that requires specular-glossiness is "
+                             "asking for the very term the conversion discards.",
+            }},
+    )
+
+
 FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr,
             mat_normal_occlusion_scale, mat_unlit, mat_unlit_vertex_color_alpha,
-            mat_authored_tangent]
+            mat_specular_glossiness, mat_authored_tangent]

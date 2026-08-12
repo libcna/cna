@@ -1462,7 +1462,18 @@ namespace CNA::Internal::GltfImport
     const cgltf_image* FindBaseColorImage(const cgltf_primitive& prim,
                                           std::vector<std::string>* unsupportedOut = nullptr)
     {
-        if (!prim.material || !prim.material->has_pbr_metallic_roughness) { return nullptr; }
+        if (!prim.material) { return nullptr; }
+        // plan_gltf.md GLTF-349: a specular-glossiness material's `diffuseTexture` is its base
+        // colour under a different name, and it is the only texture such a material carries that
+        // survives the conversion -- so reading only `pbrMetallicRoughness` would leave an
+        // archived-but-valid asset untextured on top of losing its specular tint.
+        if (prim.material->has_pbr_specular_glossiness)
+        {
+            return ImageForTexture(prim.material->pbr_specular_glossiness.diffuse_texture.texture,
+                                    "base color (from specular-glossiness diffuse)",
+                                    unsupportedOut);
+        }
+        if (!prim.material->has_pbr_metallic_roughness) { return nullptr; }
         const cgltf_texture_view& view = prim.material->pbr_metallic_roughness.base_color_texture;
         return ImageForTexture(view.texture, "base color", unsupportedOut);
     }
@@ -1977,9 +1988,14 @@ namespace CNA::Internal::GltfImport
         // shaders implement -- is excluded. Keying off `has_pbr_metallic_roughness` alone would
         // have missed a material that carries only a normalTexture, which is metallic-roughness
         // with defaults and is exactly the shape the tangent fixture authors.
+        //
+        // plan_gltf.md GLTF-349: a specular-glossiness material now counts as metallic-roughness
+        // too, because it is CONVERTED to one below rather than excluded. The extension is
+        // archived by Khronos but present in older assets, so refusing it would reject content
+        // that is otherwise perfectly importable -- and leaving it on the non-PBR path, as it was,
+        // silently dropped every factor it carries.
         const bool metallicRoughnessMaterial =
-            (prim.material == nullptr) ||
-            (!prim.material->has_pbr_specular_glossiness && !prim.material->unlit);
+            (prim.material == nullptr) || !prim.material->unlit;
         out.usePbr = (!out.colored) && metallicRoughnessMaterial;
         // plan_gltf.md GLTF-337. Its own flag rather than "not usePbr", because the two mean
         // different things: a vertex-coloured metallic-roughness primitive is also non-PBR
@@ -2011,6 +2027,31 @@ namespace CNA::Internal::GltfImport
             // there is none). Never read anywhere before this.
             const cgltf_float* base = prim.material->pbr_metallic_roughness.base_color_factor;
             out.baseColorFactor = Vector4(base[0], base[1], base[2], base[3]);
+        }
+        // plan_gltf.md GLTF-349: KHR_materials_pbrSpecularGlossiness, converted rather than
+        // refused. Khronos archived it, but it is what a decade of older assets are authored in,
+        // and rejecting them would be a worse answer than an approximation with a name.
+        //
+        // The standard mapping: diffuse becomes the base colour, the surface becomes a dielectric
+        // (metallic 0), and roughness is glossiness inverted. What it cannot carry is
+        // `specularFactor` -- specular-glossiness expresses a COLOURED specular reflection, which
+        // metallic-roughness can only approach by making the surface metal, which would also
+        // tint the diffuse. A dielectric material converts almost exactly; a brass one goes grey.
+        // Both the fact and the size of the loss are recorded so a loader can say which happened.
+        //
+        // Placed after the metallic-roughness block on purpose: a material declaring both is
+        // malformed, and preferring the newer model is the reading that loses less.
+        if (prim.material && prim.material->has_pbr_specular_glossiness &&
+            !prim.material->has_pbr_metallic_roughness)
+        {
+            const cgltf_pbr_specular_glossiness& sg = prim.material->pbr_specular_glossiness;
+            out.baseColorFactor = Vector4(sg.diffuse_factor[0], sg.diffuse_factor[1],
+                                           sg.diffuse_factor[2], sg.diffuse_factor[3]);
+            out.metallicFactor = 0.0f;
+            out.roughnessFactor = std::clamp(1.0f - sg.glossiness_factor, 0.0f, 1.0f);
+            out.convertedFromSpecularGlossinessEXT = true;
+            out.droppedSpecularStrengthEXT = std::max(
+                sg.specular_factor[0], std::max(sg.specular_factor[1], sg.specular_factor[2]));
         }
         if (prim.material)
         {
@@ -3208,10 +3249,13 @@ namespace CNA::Internal::GltfImport
                  "so a skinned unlit material is approximated with an all-white ambient and no "
                  "directional light, which is unlit apart from any specular term.",
                  "GLTF-337"},
-                {"KHR_materials_pbrSpecularGlossiness", GltfExtensionSupportEXT::ParsedButIgnored,
+                {"KHR_materials_pbrSpecularGlossiness", GltfExtensionSupportEXT::Approximated,
                  false,
-                 "Detected the same way and for the same reason; its parameters are dropped. "
-                 "Archived by Khronos, but present in older assets.",
+                 "Archived by Khronos but present in older assets, so converted rather than "
+                 "refused: diffuse becomes the base colour, metallic 0, roughness 1 - glossiness. "
+                 "Not claimed, because specularFactor -- a coloured specular reflection -- has no "
+                 "metallic-roughness equivalent, so a file REQUIRING the extension is asking for "
+                 "something the conversion cannot deliver.",
                  "GLTF-349"},
                 {"KHR_materials_variants", GltfExtensionSupportEXT::ParsedButIgnored, false,
                  "The default material mapping is imported; the variants are not.",
@@ -3232,8 +3276,9 @@ namespace CNA::Internal::GltfImport
                  "Meaningless without a real transmission pass, which CNA does not have.",
                  "GLTF-347"},
                 {"EXT_meshopt_compression", GltfExtensionSupportEXT::Unsupported, false,
-                 "cgltf parses it but decoding needs a caller-supplied hook CNA does not provide, "
-                 "so the buffer data is simply absent.",
+                 "cgltf validates the compression metadata but decoding needs a caller-supplied "
+                 "hook CNA does not provide, and without one an accessor over a compressed view "
+                 "reads undefined bytes rather than failing. Refused at validation instead.",
                  "GLTF-351"},
                 {"EXT_mesh_gpu_instancing", GltfExtensionSupportEXT::Unsupported, false,
                  "Each node's own single placement is imported and the per-instance transforms are "
@@ -3570,6 +3615,32 @@ namespace CNA::Internal::GltfImport
         // success. A warning rather than a rejection: stale bounds are common and harmless, while
         // the values themselves may still be exactly what the file contains.
         CrossCheckAccessorBoundsEXT(data, warnings);
+
+        // (1d) GLTF-351. EXT_meshopt_compression, refused here rather than left to produce
+        // whatever bytes happen to lie at the view's offset.
+        //
+        // cgltf *parses* the extension -- it validates the compression metadata thoroughly, which
+        // is what makes this so easy to mistake for support -- but decoding needs
+        // `meshopt_decodeVertexBuffer` and friends, supplied by the caller, which CNA does not
+        // provide. Without a decoder `cgltf_buffer_view_data` falls through to
+        // `buffer->data + view->offset`, so every accessor over such a view reads the wrong bytes:
+        // not an error, not empty, just undefined geometry that renders as a mangled or invisible
+        // mesh. That is the single failure mode this row's acceptance names -- "never silently
+        // empty geometry" -- and the only way to honour it without a decoder is to refuse.
+        //
+        // Refused even when the extension is merely *used* rather than *required*, which is the
+        // one place the GLTF-024 severity rule does not apply: an ignorable extension is one whose
+        // absence leaves the file readable, and this one rewrites where the geometry lives.
+        for (cgltf_size i = 0; i < data->buffer_views_count; ++i)
+        {
+            if (data->buffer_views[i].has_meshopt_compression == 0) { continue; }
+            throw std::runtime_error(
+                "'" + sourceName + "' uses EXT_meshopt_compression (bufferView " +
+                std::to_string(i) + "). CNA has no meshopt decoder, and reading such a view "
+                "without one yields undefined bytes rather than an error -- geometry that renders "
+                "mangled or invisible with nothing to indicate why. The file is refused instead "
+                "(GLTF-351).");
+        }
 
         // (2) GLTF-023. The author declared the file cannot be interpreted correctly without these.
         for (cgltf_size i = 0; i < data->extensions_required_count; ++i)

@@ -2573,6 +2573,24 @@ namespace Microsoft::Xna::Framework::Content
                             ") with its vertex colours; the material's factors and maps are not "
                             "applied (GLTF-241).");
                     }
+                    // plan_gltf.md GLTF-349: an archived specular-glossiness material, converted
+                    // to metallic-roughness rather than refused. Reported at a severity that
+                    // tracks the size of the loss: dropping a near-zero specular is bookkeeping,
+                    // dropping a strong coloured one visibly changes the surface.
+                    if (meshOut.convertedFromSpecularGlossinessEXT)
+                    {
+                        const std::string detail =
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' uses KHR_materials_pbrSpecularGlossiness, which Khronos archived. "
+                            "It is converted to metallic-roughness (diffuse -> base colour, "
+                            "metallic 0, roughness = 1 - glossiness); specularFactor " +
+                            std::to_string(meshOut.droppedSpecularStrengthEXT) +
+                            " is dropped, because a coloured specular reflection is the one thing "
+                            "metallic-roughness cannot express without also making the surface "
+                            "metal (GLTF-349).";
+                        if (meshOut.droppedSpecularStrengthEXT > 0.1f) { CNA::Logger::Warn(detail); }
+                        else { CNA::Logger::Debug(detail); }
+                    }
                     // plan_gltf.md GLTF-200/GLTF-350: a map whose pixels are in a format CNA has no
                     // decoder for. The file said the texture exists; without this the model simply
                     // drew untextured and nothing anywhere said why.

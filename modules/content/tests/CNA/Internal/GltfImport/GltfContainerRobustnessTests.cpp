@@ -291,3 +291,89 @@ TEST(GltfContainerRobustness, TwoPrimitivesReadingOneBufferViewEachGetTheirOwnDa
         << "the second primitive got the first one's vertices -- something is keyed on the "
            "bufferView rather than the accessor";
 }
+
+// --- GLTF-351: EXT_meshopt_compression, refused rather than read as undefined bytes -------------
+
+TEST(GltfContainerRobustness, AMeshoptCompressedBufferViewIsRefusedRatherThanReadUndecoded)
+{
+    // The trap this closes is that cgltf makes the extension look supported. It parses the
+    // compression block and validates its metadata thoroughly -- stride, count, mode, filter, and
+    // that the compressed range fits its buffer -- so `cgltf_parse` and `cgltf_validate` both
+    // succeed. What it does not do is DECODE: that needs meshopt_decodeVertexBuffer and friends,
+    // supplied by the caller, which CNA does not provide.
+    //
+    // Without a decoder `cgltf_buffer_view_data` falls through to `buffer->data + view->offset`,
+    // so every accessor over such a view reads whatever bytes happen to be there. Not an error,
+    // not empty -- undefined geometry that renders mangled or invisible with nothing to say why,
+    // which is exactly the outcome this row's acceptance forbids.
+    //
+    // Declared as *used* rather than *required* on purpose: this is the one place the GLTF-024
+    // "an ignorable extension is a warning" rule does not apply, because an ignorable extension is
+    // one whose absence leaves the file readable, and this one relocates the geometry.
+    static const char* kMeshoptGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "extensionsUsed": [ "EXT_meshopt_compression" ],
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "name": "CompressedTri", "primitives": [
+      { "attributes": { "POSITION": 0 }, "mode": 4 } ] } ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0, 0, 0], "max": [1, 1, 0] }
+  ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 36, "byteStride": 12,
+      "extensions": { "EXT_meshopt_compression": {
+          "buffer": 0, "byteOffset": 0, "byteLength": 36,
+          "byteStride": 12, "count": 3, "mode": "ATTRIBUTES" } } }
+  ],
+  "buffers": [ { "byteLength": 36, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==" } ]
+})GLTF";
+
+    Parsed parsed;
+    ASSERT_TRUE(ParseText(parsed, kMeshoptGltf))
+        << "the file must PARSE -- if it did not, the refusal below would prove nothing about "
+           "meshopt and everything about a malformed document";
+
+    std::vector<std::string> warnings;
+    try
+    {
+        CNA::Internal::GltfImport::ValidateGltfEXT(parsed.data, "meshopt-probe", warnings);
+        FAIL() << "a meshopt-compressed bufferView was accepted; every accessor over it would read "
+                  "undefined bytes";
+    }
+    catch (const std::runtime_error& e)
+    {
+        const std::string what = e.what();
+        EXPECT_NE(std::string::npos, what.find("EXT_meshopt_compression")) << what;
+        // Actionable: which bufferView, and why refusing beats importing.
+        EXPECT_NE(std::string::npos, what.find("bufferView")) << what;
+        EXPECT_NE(std::string::npos, what.find("undefined bytes")) << what;
+    }
+}
+
+TEST(GltfContainerRobustness, AnOrdinaryBufferViewIsNotMistakenForACompressedOne)
+{
+    // The control, and not a formality: the check walks every bufferView in the file, so a
+    // predicate reading the wrong field would refuse the entire corpus. Asserted over the whole
+    // corpus rather than one document, since that is the blast radius.
+    std::size_t validated = 0;
+    for (const std::string& id : CorpusFixtureIds())
+    {
+        const CnaTest::GltfOracle::LoadedFixture fixture(id);
+        if (!fixture.Ok()) { continue; }
+        std::vector<std::string> warnings;
+        try
+        {
+            CNA::Internal::GltfImport::ValidateGltfEXT(&fixture.Data(), id, warnings);
+            ++validated;
+        }
+        catch (const std::runtime_error& e)
+        {
+            EXPECT_EQ(std::string::npos, std::string(e.what()).find("meshopt"))
+                << id << " was refused as meshopt-compressed: " << e.what();
+        }
+    }
+    EXPECT_GT(validated, 0u) << "no fixture validated at all -- the control proved nothing";
+}

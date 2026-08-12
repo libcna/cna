@@ -273,9 +273,9 @@ factor-only metallic-roughness material to an untextured white `BasicEffect`.
 
 | The file says | Effect | Stride |
 |---|---|---|
-| metallic-roughness (including *no material at all*, and a material omitting `pbrMetallicRoughness`) | `PbrEffect` | 48 |
+| metallic-roughness (including *no material at all*, a material omitting `pbrMetallicRoughness`, and a converted `KHR_materials_pbrSpecularGlossiness`) | `PbrEffect` | 48 |
 | …and the primitive is skinned | `SkinnedPbrEffect` | 68 |
-| `KHR_materials_unlit` or `KHR_materials_pbrSpecularGlossiness` | `BasicEffect` | 32 |
+| `KHR_materials_unlit` | `BasicEffect`, lighting off | 32 |
 | …and the primitive is skinned | `SkinnedEffect` | 52 |
 | a non-PBR model with **both** a base-colour and an occlusion map | `DualTextureEffect` | 20 |
 | any material, when the primitive carries `COLOR_0` | `BasicEffect`/`SkinnedEffect` | 24 / 56 |
@@ -315,6 +315,44 @@ The one named limit is skinned: `SkinnedEffect`'s shader is lit by construction 
 light plus a white ambient, so `diffuse × ambient` is `diffuse`. That is unlit apart from any
 specular term the material asks for, which is why the registry classifies the extension
 `IMPLEMENTED_WITH_A_NAMED_LIMIT` rather than outright implemented.
+
+### `KHR_materials_pbrSpecularGlossiness` is converted, not refused
+
+`GLTF-349`. Khronos archived the extension, but it is what a decade of older assets are authored
+in, so refusing it would reject content that is otherwise perfectly importable. It is converted to
+metallic-roughness with the standard mapping:
+
+| specular-glossiness | metallic-roughness |
+|---|---|
+| `diffuseFactor` | `baseColorFactor` |
+| `diffuseTexture` | the base-colour map |
+| — | `metallicFactor` = 0 (the surface becomes a dielectric) |
+| `glossinessFactor` | `roughnessFactor` = `1 − glossiness` |
+| `specularFactor` | **dropped** |
+
+The dropped row is the whole approximation. Specular-glossiness can express a **coloured** specular
+reflection; metallic-roughness can only approach that by making the surface metal, which also tints
+the diffuse — a *different* material, not a closer one. A dielectric material therefore converts
+almost exactly, and a brass one goes grey. Both the fact and the magnitude of the loss are
+reported, at a severity that tracks the magnitude.
+
+Converting is not claiming: the extension stays unclaimed in the registry, so a file listing it in
+`extensionsRequired` is still refused. It is asking for the one term the conversion discards.
+
+### `EXT_meshopt_compression` is refused
+
+`GLTF-351`. cgltf makes this extension look supported — it parses the compression block and
+validates its metadata thoroughly, so both `cgltf_parse` and `cgltf_validate` succeed. What it does
+not do is *decode*: that needs `meshopt_decodeVertexBuffer` and friends, supplied by the caller,
+which CNA does not provide.
+
+Without a decoder, `cgltf_buffer_view_data` falls through to `buffer->data + view->offset`, so
+every accessor over a compressed view reads whatever bytes happen to be there. Not an error, not
+empty — undefined geometry that renders mangled or invisible with nothing to say why. So the file
+is refused at validation, and refused even when the extension is only *used* rather than
+*required*: that is the one place the "an ignorable extension is a warning" rule does not apply,
+because an ignorable extension is one whose absence leaves the file readable, and this one
+relocates the geometry.
 
 ## Lighting: what an imported model looks like with no lights
 
