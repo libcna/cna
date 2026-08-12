@@ -140,6 +140,10 @@ namespace Microsoft::Xna::Framework::Graphics
         return blended;
     }
 
+    // The morph equation itself -- base + sum(weight_i * delta_i), applied on the CPU and
+    // re-uploaded -- is stated in docs/gltf-conventions.md ("Morphing happens on the CPU"), along
+    // with what that costs (docs/gltf-performance.md, GLTF-441/GLTF-442: the vertex data is held
+    // twice) and why a GPU path is scoped rather than built.
     void SetMorphWeightsEXT(ModelMeshPart& part, const std::vector<float>& weights)
     {
         auto* morph = dynamic_cast<MorphTargetDataEXT*>(part.getTagProperty());

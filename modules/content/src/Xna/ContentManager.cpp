@@ -2942,6 +2942,10 @@ namespace Microsoft::Xna::Framework::Content
                     // PBR + skinning combo: SkinnedPbrEffect is a separate class from both
                     // SkinnedEffect and PbrEffect (see that header's own doc comment), so it must
                     // be checked before either single-flag branch below.
+                    // Which effect a primitive gets is a decision with a written rationale --
+                    // docs/gltf-conventions.md ("Which effect a primitive gets"): it follows the
+                    // material MODEL the file declares, never which texture maps happen to be
+                    // present, which is the rule defect D7 broke.
                     if (meshOut.skinned && meshOut.usePbr) { fx = std::make_shared<Graphics::SkinnedPbrEffect>(device); }
                     else if (meshOut.skinned) { fx = std::make_shared<Graphics::SkinnedEffect>(device); }
                     else if (meshOut.usePbr) { fx = std::make_shared<Graphics::PbrEffect>(device); }

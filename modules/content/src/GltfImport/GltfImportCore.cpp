@@ -1034,6 +1034,10 @@ namespace CNA::Internal::GltfImport
         }
 
         const std::vector<float> ibm = skin->inverse_bind_matrices
+            // The joint matrix this feeds -- and the two conventions it has to reconcile, glTF's
+            // column-vector one and XNA's row-vector one -- is stated once in
+            // docs/gltf-conventions.md ("The joint matrix, in both conventions"). Read it before
+            // changing any multiplication order here: every term is individually plausible.
             ? UnpackAccessor(skin->inverse_bind_matrices, 16, "inverseBindMatrices")
             : std::vector<float>();
 
@@ -2724,6 +2728,9 @@ namespace CNA::Internal::GltfImport
                     continue;
                 }
                 if (std::fabs(sum - 1.0f) <= kTolerance) { continue; }
+                // docs/gltf-conventions.md ("Where normals and tangents are renormalised")
+                // records why this happens at import rather than in a shader: every renderer would
+                // otherwise need the same correction, and one of them would eventually not have it.
                 ++out.renormalisedWeightVertexCountEXT;
                 out.worstWeightSumDeviationEXT =
                     std::max(out.worstWeightSumDeviationEXT, std::fabs(sum - 1.0f));
