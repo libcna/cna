@@ -773,6 +773,50 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
+     * @brief What one file's node graph turned into (plan_gltf.md `GLTF-145`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API, and deliberately **internal**: `GLTF-034`'s
+     * programmatically reachable import report is deferred by the `GLTF-025` gate
+     * (`docs/gltf-api-change-review.md` §2.3) for want of a consumer, so this is the same
+     * information collected where it is computed and logged, rather than a second public surface
+     * invented ahead of a caller for it.
+     *
+     * Every field answers a question that is otherwise only answerable by re-reading the file: how
+     * much of it arrived, how deep it was, and whether its meshes are shared.
+     */
+    struct NodeGraphReportEXT
+    {
+        /** @brief Nodes imported from the default scene, excluding the synthetic root. */
+        int nodeCount = 0;
+        /** @brief Mesh placements produced — one per (node, mesh) pair, so instancing counts twice. */
+        int meshInstanceCount = 0;
+        /** @brief Distinct glTF meshes referenced by those placements. */
+        int distinctMeshCount = 0;
+        /** @brief Meshes placed by more than one node, i.e. genuinely instanced. */
+        int sharedMeshCount = 0;
+        /** @brief Longest root-to-leaf chain, counting the synthetic root as depth 0. */
+        int maxDepth = 0;
+        /** @brief Nodes that instance a camera. */
+        int cameraNodeCount = 0;
+        /** @brief Nodes that instance a `KHR_lights_punctual` light. */
+        int lightNodeCount = 0;
+        /** @brief Nodes carrying `EXT_mesh_gpu_instancing`, whose extra instances are not imported. */
+        int gpuInstancedNodeCount = 0;
+    };
+
+    /**
+     * @brief Summarises an already-built scene graph and its mesh placements.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param scene The graph `BuildSceneGraph` produced.
+     * @param groups The placements `CollectMeshGroups` produced from the same graph.
+     * @return The counts described by @ref NodeGraphReportEXT.
+     */
+    NodeGraphReportEXT BuildNodeGraphReportEXT(const SceneGraphOut& scene,
+                                               const std::vector<MeshGroup>& groups);
+
+    /**
      * @brief A `KHR_lights_punctual` light, already approximated down to CNA's own
      * `DirectionalLight`-only shape (see `ExtractPunctualLightsEXT`'s own doc comment).
      *

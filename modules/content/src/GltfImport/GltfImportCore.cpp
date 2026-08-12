@@ -2885,6 +2885,49 @@ namespace CNA::Internal::GltfImport
         return CollectMeshGroups(data, BuildSceneGraph(data));
     }
 
+    NodeGraphReportEXT BuildNodeGraphReportEXT(const SceneGraphOut& scene,
+                                               const std::vector<MeshGroup>& groups)
+    {
+        NodeGraphReportEXT report;
+
+        // Index 0 is the synthetic identity root, which is CNA's own invention rather than
+        // anything the file authored -- counting it would make an empty scene report one node.
+        report.nodeCount = scene.nodes.empty() ? 0 : static_cast<int>(scene.nodes.size()) - 1;
+
+        // Depth is computed by walking each node's parent chain rather than during the traversal,
+        // because the traversal is iterative and its stack depth is not the graph's depth.
+        std::vector<int> depth(scene.nodes.size(), 0);
+        for (std::size_t i = 1; i < scene.nodes.size(); ++i)
+        {
+            const int parent = scene.nodes[i].parentIndex;
+            depth[i] = (parent >= 0 ? depth[static_cast<std::size_t>(parent)] : 0) + 1;
+            report.maxDepth = std::max(report.maxDepth, depth[i]);
+
+            const cgltf_node* node = scene.nodes[i].node;
+            if (node == nullptr) { continue; }
+            if (node->camera != nullptr) { ++report.cameraNodeCount; }
+            if (node->light != nullptr) { ++report.lightNodeCount; }
+            if (node->has_mesh_gpu_instancing) { ++report.gpuInstancedNodeCount; }
+        }
+
+        std::unordered_map<const cgltf_mesh*, int> placementsOfMesh;
+        for (const MeshGroup& group : groups)
+        {
+            for (const MeshInstanceOut& instance : group.instances)
+            {
+                ++report.meshInstanceCount;
+                if (instance.mesh != nullptr) { ++placementsOfMesh[instance.mesh]; }
+            }
+        }
+        report.distinctMeshCount = static_cast<int>(placementsOfMesh.size());
+        for (const auto& [mesh, count] : placementsOfMesh)
+        {
+            (void)mesh;
+            if (count > 1) { ++report.sharedMeshCount; }
+        }
+        return report;
+    }
+
     bool IsGltfExtensionSupportedEXT(const std::string& extension)
     {
         // Only what the importer actually implements the semantics of. Detecting an extension so

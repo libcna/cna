@@ -2008,6 +2008,37 @@ namespace Microsoft::Xna::Framework::Content
             {
                 throw ContentLoadException("glTF file '" + path + "' contains no mesh instances to import.");
             }
+
+            // plan_gltf.md GLTF-145: what the node graph turned into, at a glance. Logged rather
+            // than exposed, because GLTF-034's programmatically reachable report is deferred by
+            // the GLTF-025 gate for want of a consumer -- but "how much of this file arrived"
+            // should not require re-reading the file with a second tool.
+            const NodeGraphReportEXT graphReport = BuildNodeGraphReportEXT(sceneGraph, groups);
+            CNA::Logger::Debug(
+                "glTF file '" + path + "': " + std::to_string(graphReport.nodeCount) +
+                " node(s), depth " + std::to_string(graphReport.maxDepth) + ", " +
+                std::to_string(graphReport.meshInstanceCount) + " mesh placement(s) of " +
+                std::to_string(graphReport.distinctMeshCount) + " mesh(es) (" +
+                std::to_string(graphReport.sharedMeshCount) + " instanced), " +
+                std::to_string(graphReport.cameraNodeCount) + " camera node(s), " +
+                std::to_string(graphReport.lightNodeCount) + " light node(s).");
+
+            // plan_gltf.md GLTF-146/GLTF-352: EXT_mesh_gpu_instancing. CNA has
+            // DrawInstancedPrimitives, so this is implementable -- but it is not implemented, and
+            // the failure mode without a word is a forest that renders as a single tree at the
+            // node's own transform, which reads as missing content rather than as an unsupported
+            // extension. Reported per file, with the count, so the size of what is missing is
+            // visible too.
+            if (graphReport.gpuInstancedNodeCount > 0)
+            {
+                CNA::Logger::Warn(
+                    "glTF file '" + path + "': " +
+                    std::to_string(graphReport.gpuInstancedNodeCount) +
+                    " node(s) declare EXT_mesh_gpu_instancing. CNA imports each such node's own "
+                    "single placement and NOT the per-instance transforms the extension carries, "
+                    "so the file renders one copy where it describes many (GLTF-146, a documented "
+                    "limit).");
+            }
             // plan_gltf.md GLTF-137. This used to be `groups.front()`, and every other group was
             // dropped without a word: CollectMeshGroups makes one group per distinct skin (plus one
             // for the unskinned meshes), so a file with a character AND a prop lost whichever of

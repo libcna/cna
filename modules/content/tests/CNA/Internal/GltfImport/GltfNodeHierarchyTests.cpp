@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-111 / GLTF-112 / GLTF-120 / GLTF-122 / GLTF-124 / GLTF-125 / GLTF-126.
+// plan_gltf.md GLTF-111 / GLTF-112 / GLTF-120 / GLTF-122 / GLTF-124 / GLTF-125 / GLTF-126 /
+// GLTF-145 / GLTF-146 / GLTF-147.
 //
 // The node hierarchy is where a transform bug becomes a *placement* bug: nothing crashes, nothing
 // is rejected, the model just stands somewhere else. Each row here pins one property of the walk
@@ -14,11 +15,15 @@
 //   * a malformed cyclic hierarchy terminates instead of hanging a game at load;
 //   * a pathologically deep chain does not blow the stack;
 //   * unnamed nodes get stable, distinct names, because the bone index space is addressed by name
-//     in `.cnj` and by index everywhere else.
+//     in `.cnj` and by index everywhere else;
+//   * the import report counts what actually arrived, so "how much of this file made it" does not
+//     require re-reading the file with a second tool;
+//   * a scene 10 000 nodes WIDE stays linear, the other axis of the same question as the depth row.
 
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
+#include <chrono>
 #include <set>
 #include <string>
 #include <vector>
@@ -386,4 +391,133 @@ TEST(GltfNodeHierarchy, UnnamedNodesGetStableDistinctGeneratedNames)
     // The authored name survives untouched -- a generator that renamed everything uniformly would
     // pass every assertion above.
     EXPECT_EQ("Named", a.nodes[2].name);
+}
+
+// --- GLTF-145: the node-graph report ---------------------------------------------------------------
+
+TEST(GltfNodeHierarchy, TheNodeGraphReportCountsWhatTheFileActuallyContains)
+{
+    // Six answers that are otherwise only obtainable by re-reading the file: how many nodes
+    // arrived, how deep they went, how many placements they produced, how many meshes those
+    // placements share, and how many nodes carry a camera or a light. Authored so that no two
+    // counts are equal -- a report whose fields were wired to each other's values would otherwise
+    // pass.
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 4] } ],
+  "cameras": [ { "type": "perspective",
+                 "perspective": { "yfov": 1.0, "znear": 0.1 } } ],
+  "nodes": [
+    { "name": "Root",       "children": [1] },
+    { "name": "Mid",        "children": [2, 3] },
+    { "name": "LeafA",      "mesh": 0 },
+    { "name": "LeafB",      "mesh": 0, "translation": [2, 0, 0] },
+    { "name": "CameraNode", "camera": 0 }
+  ])GLTF") + TriangleTail()));
+
+    const SceneGraphOut scene = BuildSceneGraph(doc.data);
+    const std::vector<MeshGroup> groups = CollectMeshGroups(doc.data, scene);
+    const NodeGraphReportEXT report = BuildNodeGraphReportEXT(scene, groups);
+
+    EXPECT_EQ(5, report.nodeCount) << "the synthetic root is CNA's own and must not be counted";
+    EXPECT_EQ(3, report.maxDepth) << "Root -> Mid -> LeafA is three levels below the scene root";
+    EXPECT_EQ(2, report.meshInstanceCount) << "two nodes place the mesh, so there are two of them";
+    EXPECT_EQ(1, report.distinctMeshCount);
+    EXPECT_EQ(1, report.sharedMeshCount) << "one mesh placed twice is one shared mesh";
+    EXPECT_EQ(1, report.cameraNodeCount);
+    EXPECT_EQ(0, report.lightNodeCount);
+    EXPECT_EQ(0, report.gpuInstancedNodeCount);
+}
+
+TEST(GltfNodeHierarchy, TheReportOfAnEmptySceneIsZeroRatherThanOne)
+{
+    // The synthetic root exists in every graph, so the obvious implementation -- reporting
+    // `nodes.size()` -- says a file with no scene content contains one node. It contains none.
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [] } ]
+})GLTF"));
+
+    const SceneGraphOut scene = BuildSceneGraph(doc.data);
+    const NodeGraphReportEXT report = BuildNodeGraphReportEXT(scene, CollectMeshGroups(doc.data, scene));
+    EXPECT_EQ(0, report.nodeCount);
+    EXPECT_EQ(0, report.maxDepth);
+    EXPECT_EQ(0, report.meshInstanceCount);
+}
+
+// --- GLTF-146: EXT_mesh_gpu_instancing is noticed rather than ignored ------------------------------
+
+TEST(GltfNodeHierarchy, GpuInstancingNodesAreCountedSoTheyCanBeReported)
+{
+    // CNA has DrawInstancedPrimitives, so this extension is implementable and simply is not
+    // implemented (GLTF-352). What must not happen is silence: a forest authored as one mesh with
+    // a hundred instance transforms renders as a single tree, and "one tree" reads as missing
+    // content rather than as an unsupported extension. The count is what lets the loader say how
+    // much is missing.
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "extensionsUsed": [ "EXT_mesh_gpu_instancing" ],
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "Forest", "mesh": 0,
+               "extensions": { "EXT_mesh_gpu_instancing": {
+                 "attributes": { "TRANSLATION": 0 } } } } ])GLTF") + TriangleTail()));
+
+    const SceneGraphOut scene = BuildSceneGraph(doc.data);
+    const NodeGraphReportEXT report =
+        BuildNodeGraphReportEXT(scene, CollectMeshGroups(doc.data, scene));
+    EXPECT_EQ(1, report.gpuInstancedNodeCount)
+        << "the extension went unnoticed, so nothing can report what it dropped";
+
+    // And the extension is not claimed as supported anywhere -- a file that REQUIRES it must be
+    // refused up front rather than importing one copy of a hundred.
+    EXPECT_FALSE(IsGltfExtensionSupportedEXT("EXT_mesh_gpu_instancing"));
+}
+
+// --- GLTF-147: a very large scene, within a stated budget -------------------------------------------
+
+TEST(GltfNodeHierarchy, TenThousandNodesImportWithinTheStatedBudget)
+{
+    // GLTF-125 proved depth does not overflow; this is the other axis -- breadth. The budget is
+    // deliberately generous (two seconds for the graph walk and the placement collection of 10 000
+    // nodes) because the point is to catch an accidental quadratic, not to police milliseconds. A
+    // per-node linear scan of the node array would put this test at minutes rather than
+    // milliseconds, and that is the regression worth having a number for.
+    const int count = 10000;
+    std::string nodes;
+    std::string roots;
+    for (int i = 0; i < count; ++i)
+    {
+        if (i > 0) { nodes += ", "; roots += ", "; }
+        nodes += R"({ "translation": [)" + std::to_string(i) + ", 0, 0] }";
+        roots += std::to_string(i);
+    }
+
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [)GLTF") + roots + R"GLTF(] } ],
+  "nodes": [)GLTF" + nodes + "]\n}"));
+
+    const auto started = std::chrono::steady_clock::now();
+    const SceneGraphOut scene = BuildSceneGraph(doc.data);
+    const std::vector<MeshGroup> groups = CollectMeshGroups(doc.data, scene);
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started);
+
+    ASSERT_EQ(static_cast<std::size_t>(count) + 1u, scene.nodes.size());
+    EXPECT_TRUE(groups.empty()) << "no node in this scene has a mesh";
+    EXPECT_LT(elapsed.count(), 2000)
+        << "10 000 nodes took " << elapsed.count() << " ms -- the budget is 2000, and overshooting "
+           "it by this much means the walk stopped being linear";
+
+    const NodeGraphReportEXT report = BuildNodeGraphReportEXT(scene, groups);
+    EXPECT_EQ(count, report.nodeCount);
+    EXPECT_EQ(1, report.maxDepth) << "every node is a scene root, so the graph is one level deep";
 }
