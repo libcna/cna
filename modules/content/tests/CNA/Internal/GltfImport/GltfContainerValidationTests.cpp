@@ -177,8 +177,13 @@ TEST(GltfContainerValidation, EveryFixtureDeclaringARejectionIsRejectedAndSaysWh
 TEST(GltfContainerValidation, EveryOtherCorpusFixturePassesValidationCleanly)
 {
     // The converse, and the one that stops validation being over-eager: every fixture that is NOT
-    // declared as a rejection must pass, with no ignored-extension warning either, because none of
-    // them uses an extension at all.
+    // declared as a rejection must pass.
+    //
+    // A warning is allowed only where the fixture asked for one. A fixture declaring no extension
+    // at all must produce none -- that is the over-eagerness this guards against -- and a fixture
+    // that does declare one may be warned about it, but only by name: GLTF-024 makes an
+    // unimplemented `extensionsUsed` entry a warning rather than a rejection, and `mat-unlit` and
+    // `skin-unlit` exist precisely to reach the non-PBR strides through such a material.
     for (const std::string& id : CorpusFixtureIds())
     {
         const LoadedFixture fixture(id);
@@ -189,8 +194,27 @@ TEST(GltfContainerValidation, EveryOtherCorpusFixturePassesValidationCleanly)
         std::vector<std::string> warnings;
         EXPECT_EQ("", ValidationErrorFor(fixture, warnings))
             << "a valid fixture was rejected -- validation is too strict";
-        EXPECT_TRUE(warnings.empty())
-            << "unexpected warning: " << (warnings.empty() ? std::string() : warnings.front());
+
+        if (fixture.Data().extensions_used_count == 0)
+        {
+            EXPECT_TRUE(warnings.empty())
+                << "unexpected warning: " << (warnings.empty() ? std::string() : warnings.front());
+            continue;
+        }
+        for (const std::string& warning : warnings)
+        {
+            bool namesADeclaredExtension = false;
+            for (cgltf_size e = 0; e < fixture.Data().extensions_used_count; ++e)
+            {
+                const char* name = fixture.Data().extensions_used[e];
+                if (name != nullptr && warning.find(name) != std::string::npos)
+                {
+                    namesADeclaredExtension = true;
+                }
+            }
+            EXPECT_TRUE(namesADeclaredExtension)
+                << "a warning about something the fixture never declared: " << warning;
+        }
     }
 }
 

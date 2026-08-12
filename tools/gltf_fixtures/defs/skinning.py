@@ -758,5 +758,150 @@ def skin_eight_influences() -> Fixture:
     )
 
 
+#: A UV set and a vertex colour for the two stride fixtures below, chosen so every component is
+#: distinct: a mis-offset TextureCoordinate or Color slot then produces visibly wrong bytes rather
+#: than three copies of the same default.
+_STRIDE_TEXCOORDS = [(0.0, 0.0), (0.75, 0.125), (0.25, 0.875)]
+_STRIDE_COLORS = [(1.0, 0.0, 0.25, 1.0), (0.0, 0.5, 1.0, 0.75), (0.25, 0.75, 0.0, 0.5)]
+
+
+def _single_joint_skin(builder: GltfBuilder) -> tuple[int, int]:
+    """One identity-bound joint plus its inverse-bind accessor -- the minimum a skin needs.
+
+    The stride fixtures below are about the vertex LAYOUT, not about skinning arithmetic, so their
+    skin is deliberately the simplest one that makes `ExtractMesh` take the skinned branch.
+
+    :param builder: the fixture's builder.
+    :return: the joint node index and the inverseBindMatrices accessor index.
+    """
+    inverse_bind = mat_identity()
+    ibm_offset = builder.append_bytes(pack(list(inverse_bind), FLOAT), alignment=4)
+    ibm = builder.add_accessor(usage="inverseBindMatrices", component_type=FLOAT,
+                               accessor_type="MAT4", count=1, expected=list(inverse_bind),
+                               buffer_view=builder.add_buffer_view(ibm_offset, 64))
+    return builder.add_node(name="Joint0"), ibm
+
+
+def skin_unlit() -> Fixture:
+    """A skinned primitive with a non-PBR material -- the fixture that reaches vertex stride 52.
+
+    plan_gltf.md `GLTF-149`. A skinned primitive lands on stride 68 (the skinned PBR layout)
+    whenever its material uses the metallic-roughness model, which is glTF's default in two
+    separate ways -- so stride 52, the skinned layout with no tangent slot, was unreachable by
+    every fixture in the corpus and had no golden bytes at all.
+    """
+    b = GltfBuilder("skin-unlit")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    texcoord = b.add_packed_accessor(usage="TEXCOORD_0", values=_STRIDE_TEXCOORDS,
+                                     accessor_type="VEC2")
+    joints = b.add_packed_accessor(usage="JOINTS_0", values=_JOINTS, accessor_type="VEC4",
+                                   component_type=UNSIGNED_BYTE)
+    weights = b.add_packed_accessor(usage="WEIGHTS_0", values=_WEIGHTS, accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    joint0, ibm = _single_joint_skin(b)
+    material = b.add_material({
+        "name": "UnlitSkin",
+        "pbrMetallicRoughness": {"baseColorFactor": [0.9, 0.4, 0.1, 1.0]},
+        "extensions": {"KHR_materials_unlit": {}},
+    })
+    b.declare_extensions(used=["KHR_materials_unlit"])
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal, "TEXCOORD_0": texcoord,
+                       "JOINTS_0": joints, "WEIGHTS_0": weights},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="UnlitSkinnedTri")
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": [joint0], "inverseBindMatrices": ibm})
+    b.add_scene([joint0, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    expected_material = {
+        "index": material,
+        "name": "UnlitSkin",
+        "model": "unlit",
+        "baseColorFactor": [0.9, 0.4, 0.1, 1.0],
+        "metallicFactor": 1.0,
+        "roughnessFactor": 1.0,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return Fixture(
+        id="skin-unlit", audit_fixture=None, owning_group="skinning",
+        description="A skinned triangle whose material declares KHR_materials_unlit, so it imports "
+                    "through SkinnedEffect on the stride-52 layout (Position+Normal+"
+                    "TextureCoordinate+BlendWeight+BlendIndices) rather than the skinned PBR one.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["KHR_materials_unlit", "JOINTS_0 / WEIGHTS_0", "vertex stride 52"],
+        spec_anchors=["skins", "skinned-mesh-attributes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="UnlitSkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, texcoords=_STRIDE_TEXCOORDS,
+            joints=_JOINTS, weights=_WEIGHTS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+def skin_vertex_color() -> Fixture:
+    """A skinned, vertex-coloured primitive -- the fixture that reaches vertex stride 56.
+
+    plan_gltf.md `GLTF-149`. Stride 56 is the skinned layout with a packed Color appended, and it
+    is the one stride with no C++ stream struct behind it (`GLTF-156`): the importer writes those
+    bytes itself. That makes a golden more valuable here than anywhere else, not less -- there is
+    no `offsetof` to catch a mistake in it.
+    """
+    b = GltfBuilder("skin-vertex-color")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    texcoord = b.add_packed_accessor(usage="TEXCOORD_0", values=_STRIDE_TEXCOORDS,
+                                     accessor_type="VEC2")
+    color = b.add_packed_accessor(usage="COLOR_0", values=_STRIDE_COLORS, accessor_type="VEC4")
+    joints = b.add_packed_accessor(usage="JOINTS_0", values=_JOINTS, accessor_type="VEC4",
+                                   component_type=UNSIGNED_BYTE)
+    weights = b.add_packed_accessor(usage="WEIGHTS_0", values=_WEIGHTS, accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    joint0, ibm = _single_joint_skin(b)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal, "TEXCOORD_0": texcoord,
+                       "COLOR_0": color, "JOINTS_0": joints, "WEIGHTS_0": weights},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="ColoredSkinnedTri")
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": [joint0], "inverseBindMatrices": ibm})
+    b.add_scene([joint0, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    return Fixture(
+        id="skin-vertex-color", audit_fixture=None, owning_group="skinning",
+        description="A skinned triangle carrying COLOR_0, which selects the stride-56 layout: the "
+                    "skinned stride-52 record with a packed Color appended. Every colour component "
+                    "is distinct so a mis-offset Color slot cannot pass.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["COLOR_0 on a skinned mesh", "JOINTS_0 / WEIGHTS_0", "vertex stride 56"],
+        spec_anchors=["skins", "skinned-mesh-attributes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="ColoredSkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, texcoords=_STRIDE_TEXCOORDS,
+            colors=_STRIDE_COLORS, joints=_JOINTS, weights=_WEIGHTS, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
 FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform, skin_plus_static_mesh,
+            skin_unlit, skin_vertex_color,
             skin_skeleton_hint, skin_unnormalized, skin_73_joints, skin_eight_influences]

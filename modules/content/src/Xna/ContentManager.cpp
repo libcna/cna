@@ -2393,8 +2393,11 @@ namespace Microsoft::Xna::Framework::Content
                             "glTF file '" + path + "': primitive '" + meshOut.name +
                             "' carries COLOR_0 and a " + meshOut.unsupportedMaterialModelEXT +
                             " material. CNA has no vertex-coloured PBR vertex layout, so it is "
-                            "imported through BasicEffect with its vertex colours; the material's "
-                            "factors and maps are not applied (GLTF-241).");
+                            "imported through the non-PBR path (" +
+                            (meshOut.skinned ? std::string("SkinnedEffect")
+                                             : std::string("BasicEffect")) +
+                            ") with its vertex colours; the material's factors and maps are not "
+                            "applied (GLTF-241).");
                     }
                     // plan_gltf.md GLTF-200/GLTF-350: a map whose pixels are in a format CNA has no
                     // decoder for. The file said the texture exists; without this the model simply

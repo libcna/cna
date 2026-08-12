@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 45,
+  "distinctAssetCount": 48,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -20,8 +20,8 @@
     "topology": 7,
     "normals": 1,
     "transforms": 7,
-    "materials": 4,
-    "skinning": 7,
+    "materials": 5,
+    "skinning": 9,
     "animation": 3,
     "cameras": 4,
     "scenes": 1,
@@ -701,6 +701,24 @@
       "auditFixture": null
     },
     {
+      "id": "mat-unlit",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "KHR_materials_unlit",
+        "non-PBR material model",
+        "vertex stride 32"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "skin-armature-ancestor",
       "owningGroup": "skinning",
       "referencingGroups": [],
@@ -753,6 +771,42 @@
         "skinned and unskinned mesh in one file",
         "skin.joints",
         "skin.inverseBindMatrices"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-unlit",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "KHR_materials_unlit",
+        "JOINTS_0 / WEIGHTS_0",
+        "vertex stride 52"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-vertex-color",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "COLOR_0 on a skinned mesh",
+        "JOINTS_0 / WEIGHTS_0",
+        "vertex stride 56"
       ],
       "auditFixture": null
     },
@@ -1319,6 +1373,31 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "mat-unlit.expected.json",
+      "bytes": 7685,
+      "sha256": "779fac611a4ee17d3f4b66303a7649388793bc10659f7c62d2c79f522bb1ddaa"
+    },
+    {
+      "path": "mat-unlit.glb",
+      "bytes": 1120,
+      "sha256": "884c81b2f0d35d4ab94e1209faeda962c5bfa69360a7a0605b883ea1f055672f"
+    },
+    {
+      "path": "mat-unlit.gltf",
+      "bytes": 2009,
+      "sha256": "9ff62f69098e2807c5624d1aa312dfcc1926d44beec6feefab6706a594a16387"
+    },
+    {
+      "path": "mat-unlit.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-unlit.vb.bin",
+      "bytes": 96,
+      "sha256": "67e87664299f96b4aa72ad26b7a9f05fae99cb44539db4dc9cf49b1c0e99321e"
+    },
+    {
       "path": "mat-vertex-color-pbr.expected.json",
       "bytes": 10463,
       "sha256": "c695605eafae1dcbf5fc0ad33240735b58886ee2080d982f771d4d87637b642e"
@@ -1809,6 +1888,31 @@
       "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
     },
     {
+      "path": "skin-unlit.expected.json",
+      "bytes": 10294,
+      "sha256": "3d7d7242e5bc88c303f10841fafb0ae8e891e6f57a77bea38ca699f253878c35"
+    },
+    {
+      "path": "skin-unlit.glb",
+      "bytes": 1704,
+      "sha256": "fd3a258b9901052199ee341d28032110542424e0e39bc31f69b21912a855b41f"
+    },
+    {
+      "path": "skin-unlit.gltf",
+      "bytes": 2986,
+      "sha256": "6359f81c461540abba4df56edad0f402dd8955ea54ea43d74ce986fc6b079151"
+    },
+    {
+      "path": "skin-unlit.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-unlit.vb.bin",
+      "bytes": 156,
+      "sha256": "8f8ba06744d128960470e4b86dad1e20dd0e413973f65d8432cb6616c702ecdf"
+    },
+    {
       "path": "skin-unnormalized.expected.json",
       "bytes": 10116,
       "sha256": "87a1ef47ac05502e3b4f5d2ff020811c3f2642d81ec2215742f00ee503760368"
@@ -1832,6 +1936,31 @@
       "path": "skin-unnormalized.vb.bin",
       "bytes": 204,
       "sha256": "42b7dae81a02117e665265a8347a8e19afb11e754f7b0b679039dc431e388f60"
+    },
+    {
+      "path": "skin-vertex-color.expected.json",
+      "bytes": 10624,
+      "sha256": "357b1b8a1d25ae6dd01614efa358dbb482882ec1be28a55149b4e0a49dc16742"
+    },
+    {
+      "path": "skin-vertex-color.glb",
+      "bytes": 1684,
+      "sha256": "05d7d8859f3a680927d0ae321a1f90e6dae52c085e78272d32ea330ba37175c4"
+    },
+    {
+      "path": "skin-vertex-color.gltf",
+      "bytes": 2920,
+      "sha256": "ff20b76a3f6b49acc5edae79c4c3f90c35bbc9ebce90f4f552163303faf55fb0"
+    },
+    {
+      "path": "skin-vertex-color.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-vertex-color.vb.bin",
+      "bytes": 168,
+      "sha256": "e6a7ded9deb4ccd0f9a6b6068b016af6ba03d846091c5f2443693bca745cac7b"
     },
     {
       "path": "sparse-indices.expected.json",

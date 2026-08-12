@@ -453,5 +453,82 @@ def mat_normal_occlusion_scale() -> Fixture:
     )
 
 
+#: A UV set with three distinct, non-degenerate coordinates, so a stride whose TextureCoordinate
+#: slot were mis-offset produces visibly wrong bytes rather than three copies of (0,0).
+_UNLIT_TEXCOORDS = [(0.0, 0.0), (0.75, 0.125), (0.25, 0.875)]
+
+
+def mat_unlit() -> Fixture:
+    """A `KHR_materials_unlit` material -- the fixture that reaches vertex stride 32.
+
+    plan_gltf.md `GLTF-149`. Every other unskinned material fixture lands on the PBR stride (48),
+    because metallic-roughness is glTF's default in two separate ways. Stride 32 --
+    Position+Normal+TextureCoordinate, the plain `BasicEffect` layout -- is reached only by a
+    material declaring a model CNA's PBR shaders do not implement, and it is the layout most
+    non-PBR content ends up on. Without this fixture the widest stride in the ABI had no golden
+    bytes at all.
+
+    The extension is declared as *used* rather than *required*: CNA does not implement unlit
+    shading (`GLTF-215` only keeps such a material off the PBR path), and a file requiring it would
+    be refused at validation before producing any buffer to compare.
+    """
+    b = GltfBuilder("mat-unlit")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    texcoord = b.add_packed_accessor(usage="TEXCOORD_0", values=_UNLIT_TEXCOORDS,
+                                     accessor_type="VEC2")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "Unlit",
+        "pbrMetallicRoughness": {"baseColorFactor": [0.2, 0.6, 0.9, 1.0]},
+        "extensions": {"KHR_materials_unlit": {}},
+    })
+    b.declare_extensions(used=["KHR_materials_unlit"])
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal, "TEXCOORD_0": texcoord},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="UnlitTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    expected_material = {
+        "index": material,
+        "name": "Unlit",
+        "model": "unlit",
+        "baseColorFactor": [0.2, 0.6, 0.9, 1.0],
+        "metallicFactor": 1.0,
+        "roughnessFactor": 1.0,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return Fixture(
+        id="mat-unlit", audit_fixture=None, owning_group="materials",
+        description="A material declaring KHR_materials_unlit. CNA has no unlit shader, so the "
+                    "primitive imports through BasicEffect on the stride-32 "
+                    "Position+Normal+TextureCoordinate layout -- the one unskinned stride no other "
+                    "fixture reaches, and the one most non-PBR content uses.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["KHR_materials_unlit", "non-PBR material model", "vertex stride 32"],
+        spec_anchors=["metallic-roughness-material"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="UnlitTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+            texcoords=_UNLIT_TEXCOORDS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
 FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr,
-            mat_normal_occlusion_scale]
+            mat_normal_occlusion_scale, mat_unlit]

@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 
 namespace CnaTest::GltfOracle
@@ -34,7 +35,8 @@ namespace CnaTest::GltfOracle
     using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
     using Microsoft::Xna::Framework::Graphics::PbrEffect;
     using Microsoft::Xna::Framework::Graphics::PrimitiveType;
-    using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
+    using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
+using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
 
     namespace
     {
@@ -167,7 +169,16 @@ namespace CnaTest::GltfOracle
             {
                 ModelMeshPart* part = parts[pi];
                 if (part == nullptr) { continue; }
-                if (auto* skinned = dynamic_cast<SkinnedPbrEffect*>(part->getEffectProperty()))
+                if (auto* skinnedPbr = dynamic_cast<SkinnedPbrEffect*>(part->getEffectProperty()))
+                {
+                    skinnedPbr->SetBoneTransforms(skinTransforms);
+                    ++applied;
+                }
+                // A skinned primitive whose material is not metallic-roughness -- or which carries
+                // COLOR_0 -- lands on SkinnedEffect rather than SkinnedPbrEffect (strides 52 and
+                // 56). It takes the same palette through the same call, and omitting it here made
+                // this helper report "no skinned effect" for a perfectly ordinary skinned model.
+                else if (auto* skinned = dynamic_cast<SkinnedEffect*>(part->getEffectProperty()))
                 {
                     skinned->SetBoneTransforms(skinTransforms);
                     ++applied;

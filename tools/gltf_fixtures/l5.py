@@ -93,11 +93,12 @@ def select_stride(primitive: dict[str, Any]) -> int:
     an occlusion map, and no corpus fixture carries a texture at all.
     """
     material = primitive.get("material") or {}
-    if material.get("model") in ("specular-glossiness", "unlit"):
-        raise NotImplementedError(
-            f"{primitive.get('meshName')!r}: this material declares the "
-            f"{material['model']!r} model, which CNA imports through BasicEffect. Extend "
-            "tools/gltf_fixtures/l5.py together with the fixture that needs it.")
+    # A material declaring a model CNA's PBR shaders do not implement -- KHR_materials_unlit or
+    # KHR_materials_pbrSpecularGlossiness -- imports through BasicEffect instead, which is what
+    # reaches the two strides with no tangent slot (32 unskinned, 52 skinned). Those are the
+    # layouts most non-PBR content lands on, so leaving them without a golden left the widest
+    # part of the ABI unasserted.
+    non_pbr_model = material.get("model") in ("specular-glossiness", "unlit")
     if any(material.get(key) for key in ("hasBaseColorTexture", "hasNormalTexture",
                                           "hasMetallicRoughnessTexture", "hasOcclusionTexture",
                                           "hasEmissiveTexture")):
@@ -108,7 +109,7 @@ def select_stride(primitive: dict[str, Any]) -> int:
             "with the fixture that needs them.")
     skinned = bool(primitive.get("joints")) and bool(primitive.get("weights"))
     colored = bool(primitive.get("colors"))
-    use_pbr = not colored
+    use_pbr = (not colored) and (not non_pbr_model)
     if skinned:
         return 56 if colored else (68 if use_pbr else 52)
     return 24 if colored else (48 if use_pbr else 32)
