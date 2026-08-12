@@ -382,6 +382,19 @@ namespace CNA::Internal::GltfImport
          */
         bool droppedNormalForStrideEXT = false;
         /**
+         * @brief Number of trailing indices dropped because they did not complete a primitive.
+         *
+         * plan_gltf.md `GLTF-079`. §3.7.2.1 requires the index count to be a whole number of
+         * primitives for the declared `mode` — a multiple of 3 for `TRIANGLES`, of 2 for `LINES`,
+         * and at least 3 (respectively 2) for a strip, fan or loop. `cgltf_validate` does not
+         * check it, and neither reading the remainder as a further primitive (which runs off the
+         * end of the index run) nor dropping it silently is acceptable: the first is wrong, the
+         * second is undiagnosable. The incomplete tail is dropped and counted here, so the import
+         * is deterministic and the loaders can say what was discarded. Zero for a well-formed
+         * primitive.
+         */
+        std::size_t droppedIncompleteIndicesEXT = 0;
+        /**
          * @brief True when the file authors `TANGENT` but the chosen vertex layout has no tangent
          * slot, so it was discarded.
          *

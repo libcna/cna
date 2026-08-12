@@ -2446,6 +2446,18 @@ namespace Microsoft::Xna::Framework::Content
                             "every map from one shared UV channel, so the maps that disagree are "
                             "sampled from the wrong set (GLTF-181, a documented limit).");
                     }
+                    // plan_gltf.md GLTF-079: an index count that is not a whole number of
+                    // primitives. The tail was dropped rather than drawn past the end of the run,
+                    // and saying so is the difference between a diagnosable export bug and a model
+                    // that is quietly missing a face.
+                    if (meshOut.droppedIncompleteIndicesEXT != 0)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name + "' declares " +
+                            std::to_string(meshOut.droppedIncompleteIndicesEXT) +
+                            " index/indices more than form a whole primitive for its mode, so that "
+                            "incomplete tail was dropped (GLTF-079).");
+                    }
                     if (meshOut.droppedNormalForStrideEXT)
                     {
                         CNA::Logger::Warn(

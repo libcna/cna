@@ -1511,9 +1511,9 @@ namespace CNA::Internal::GltfImport
     {
         switch (topology)
         {
-            // Already a triangle list: returned verbatim, including a trailing partial triple.
-            // Deciding what a malformed index count becomes is GLTF-079's, and silently trimming
-            // it here would pre-empt that decision on every file CNA already imports.
+            // Already a triangle list: returned verbatim. A trailing partial triple has been
+            // trimmed and counted by the caller (GLTF-079) before this point, so there is nothing
+            // left here to decide.
             case PrimitiveTopology::Triangles: return indices;
             case PrimitiveTopology::TriangleStrip:
             {
@@ -2092,6 +2092,39 @@ namespace CNA::Internal::GltfImport
                     std::to_string(static_cast<std::size_t>(vertexCount)) +
                     " vertices (its POSITION accessor's count).");
             }
+        }
+
+        // GLTF-079: an index count that is not a whole number of primitives for the declared mode.
+        // The remainder cannot be drawn -- a fourth index is not a triangle -- and the two ways of
+        // pretending otherwise are both worse than dropping it: reading it as a further primitive
+        // walks past the end of the run, and dropping it without a word leaves an author's model
+        // missing geometry with nothing to point at. So the incomplete tail goes, and it is
+        // counted; the loaders report the count.
+        {
+            const std::size_t before = indices.size();
+            switch (sourceTopology)
+            {
+                case PrimitiveTopology::Triangles:
+                    indices.resize(indices.size() - (indices.size() % 3));
+                    break;
+                case PrimitiveTopology::Lines:
+                    indices.resize(indices.size() - (indices.size() % 2));
+                    break;
+                // A strip, fan or loop is a single run rather than a sequence of independent
+                // primitives, so there is no remainder to trim -- only a run too short to describe
+                // one primitive at all, which draws nothing and is reported the same way.
+                case PrimitiveTopology::TriangleStrip:
+                case PrimitiveTopology::TriangleFan:
+                    if (indices.size() < 3) { indices.clear(); }
+                    break;
+                case PrimitiveTopology::LineStrip:
+                case PrimitiveTopology::LineLoop:
+                    if (indices.size() < 2) { indices.clear(); }
+                    break;
+                case PrimitiveTopology::Points:
+                    break;
+            }
+            out.droppedIncompleteIndicesEXT = before - indices.size();
         }
 
         // GLTF-072: a strip or fan becomes an equivalent triangle list here, winding preserved, so
