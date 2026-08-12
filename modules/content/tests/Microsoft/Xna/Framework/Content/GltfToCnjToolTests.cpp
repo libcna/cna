@@ -1357,6 +1357,135 @@ TEST(GltfToCnjToolTest, AMultiPrimitiveMeshRoundTripsAsOneModelMeshWithTwoParts)
         << "the two materials collapsed, or an effect never registered on its owning mesh";
 }
 
+// plan_gltf.md GLTF-272: the two loaders must produce the SAME SkinningData.
+//
+// The runtime path builds a skeleton from the glTF directly; the offline path builds the same one,
+// writes it to a .skeleton.bin sidecar, and the .cnj reader reads it back. Those are two
+// independent serialisations of one computation, and GLTF-130 already requires the two paths to
+// place geometry identically -- a skeleton that differed between them would pose that geometry
+// differently while every position assertion still passed.
+//
+// Compared field for field rather than by a digest, so a divergence names the bone and the matrix
+// element rather than "the skeletons differ".
+TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalSkinningDataForEverySkinFixture)
+{
+    // Swept over every `skin-*` fixture in the corpus rather than one, because the ways the two
+    // paths can diverge are per-shape: an armature above the joints, a transformed mesh node, a
+    // declared skeleton root, 73 joints, unnormalised weights, eight influences. One fixture would
+    // prove the serialisation round-trips for one shape.
+    //
+    // The two paths must also agree on REFUSAL: a fixture the runtime path rejects and the offline
+    // path accepts would be a file that imports or not depending on which loader you used.
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    if (!std::filesystem::exists(corpus)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    const auto expectMatrixEqual = [](const Matrix& expected, const Matrix& actual,
+                                       const std::string& what)
+    {
+        const float* e = &expected.M11;
+        const float* a = &actual.M11;
+        for (int i = 0; i < 16; ++i)
+        {
+            EXPECT_NEAR(e[i], a[i], 1e-5f) << what << ", element " << i;
+        }
+    };
+
+    std::vector<std::string> ids;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(corpus))
+    {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("skin-", 0) == 0 && entry.path().extension() == ".gltf")
+        {
+            ids.push_back(entry.path().stem().string());
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+    ASSERT_FALSE(ids.empty()) << "no skin fixtures found -- the sweep proved nothing";
+
+    std::size_t compared = 0;
+    for (const std::string& id : ids)
+    {
+        SCOPED_TRACE(id);
+        ScratchDir contentRoot;
+        const int toolExit = RunGltfToCnjTool((corpus / (id + ".gltf")).string(),
+                                               contentRoot.path().string(), "skin");
+
+        GraphicsDevice gd;
+        ContentManager runtimeCm(nullptr, corpus.string());
+        runtimeCm.setGraphicsDevice(gd);
+
+        bool runtimeRefused = false;
+        std::unique_ptr<Model> runtime;
+        try
+        {
+            runtime = std::make_unique<Model>(runtimeCm.Load<Model>(id));
+        }
+        catch (const std::exception&)
+        {
+            runtimeRefused = true;
+        }
+
+        if (toolExit != 0 || runtimeRefused)
+        {
+            EXPECT_EQ(toolExit != 0, runtimeRefused)
+                << "one loader refused this file and the other imported it";
+            continue;
+        }
+
+        // The tool writes one Model .cnj per skin group, named after the skin (GLTF-138), plus one
+        // per animation clip -- so the Model is found by its own "type" field rather than by a
+        // filename this test would have to predict.
+        std::string modelAsset;
+        for (const std::filesystem::directory_entry& out :
+             std::filesystem::directory_iterator(contentRoot.path()))
+        {
+            if (out.path().extension() != ".cnj") { continue; }
+            std::ifstream cnj(out.path());
+            const std::string text((std::istreambuf_iterator<char>(cnj)),
+                                    std::istreambuf_iterator<char>());
+            if (text.find("\"type\": \"Model\"") != std::string::npos)
+            {
+                modelAsset = out.path().stem().string();
+                break;
+            }
+        }
+        ASSERT_FALSE(modelAsset.empty()) << "the tool wrote no Model .cnj at all";
+
+        ContentManager offlineCm(nullptr, contentRoot.path().string());
+        offlineCm.setGraphicsDevice(gd);
+        Model offline = offlineCm.Load<Model>(modelAsset);
+
+        auto* offlineSkin = dynamic_cast<SkinningData*>(offline.getTagProperty());
+        auto* runtimeSkin = dynamic_cast<SkinningData*>(runtime->getTagProperty());
+        if (runtimeSkin == nullptr && offlineSkin == nullptr) { continue; }
+        ASSERT_NE(nullptr, offlineSkin) << "the offline path produced no SkinningData";
+        ASSERT_NE(nullptr, runtimeSkin) << "the runtime path produced no SkinningData";
+        ++compared;
+
+        ASSERT_EQ(runtimeSkin->BoneCount, offlineSkin->BoneCount);
+        ASSERT_EQ(runtimeSkin->SkeletonHierarchy, offlineSkin->SkeletonHierarchy)
+            << "the two paths disagree about the bone tree itself";
+        ASSERT_EQ(runtimeSkin->BindPose.size(), offlineSkin->BindPose.size());
+        ASSERT_EQ(runtimeSkin->InverseBindPose.size(), offlineSkin->InverseBindPose.size());
+        for (std::size_t b = 0; b < runtimeSkin->BindPose.size(); ++b)
+        {
+            expectMatrixEqual(runtimeSkin->BindPose[b], offlineSkin->BindPose[b],
+                              "bone " + std::to_string(b) + " bind pose");
+            expectMatrixEqual(runtimeSkin->InverseBindPose[b], offlineSkin->InverseBindPose[b],
+                              "bone " + std::to_string(b) + " inverse bind pose");
+        }
+        ASSERT_EQ(runtimeSkin->SkeletonRootPrefix.size(), offlineSkin->SkeletonRootPrefix.size())
+            << "the root-bone prefix -- where GLTF-245/247's own terms live -- differs in size";
+        for (std::size_t b = 0; b < runtimeSkin->SkeletonRootPrefix.size(); ++b)
+        {
+            expectMatrixEqual(runtimeSkin->SkeletonRootPrefix[b], offlineSkin->SkeletonRootPrefix[b],
+                              "bone " + std::to_string(b) + " skeleton root prefix");
+        }
+    }
+    EXPECT_GT(compared, 0u) << "every skin fixture was skipped -- the sweep proved nothing";
+}
+
 // plan_gltf.md GLTF-121: the node-hierarchy half of the same conversion.
 //
 // Before GLTF-114 the node translations were discarded outright, so there was nothing for
