@@ -45,18 +45,27 @@ The design rule from `cnaplatform.md` is binding on every task here:
 
 ---
 
-## 2. Measured baseline (inventory, 2026-08-12)
+## 2. Measured baseline (inventory)
 
-These numbers are the starting point PLAT-1 must reproduce mechanically and PLAT-120 must drive
-to the target. They were measured on the branch this plan lands on.
+This section is **generated** — regenerate with `python3 tools/platform/sdl_inventory.py --update`
+and verify with `--check` (PLAT-1). It is the starting point every migration task drives down and
+PLAT-120/PLAT-121 drive to the allowlist floor. Do not hand-edit the block below.
+
+Counting rule: a textual occurrence of an SDL identifier or an `SDL3/`-rooted include path,
+including forward declarations (`struct SDL_Window;`) and doc comments phrased in SDL's
+vocabulary — both are coupling this plan removes. CNA's own `CNA_RENDERER_SDL_RENDERER` /
+`CNA_RENDERER_SDL_GPU` build macros are excluded: they name CNA build options and survive the
+plan by design.
+
+<!-- BEGIN GENERATED: tools/platform/sdl_inventory.py -->
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1101** |
-| Files referencing SDL (all) | **655** |
-| Production files (`src/` + `include/`) referencing SDL | **269** |
-| …of which are renderer production files | **121** |
-| Test/example files referencing SDL | **386** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1102** |
+| Files referencing SDL (all) | **652** |
+| Production files (`src/` + `include/`) referencing SDL | **270** |
+| …of which are renderer production files | **122** |
+| Test/example files referencing SDL | **382** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
 | Renderer families reaching for `SDL_GL_*` directly | **11** |
 
@@ -69,27 +78,35 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
 | `modules/graphics` | 13 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
-| `modules/runtime` | 7 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
-| `modules/core` | 3 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
+| `modules/runtime` | 7 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
 | `modules/content` | 3 | `SDL_IOStream`-based readers, glTF import |
+| `modules/core` | 3 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
 | `modules/gamer-services` | 3 | `Guide` overlay, local store |
-| `modules/storage` | 1 | `SDL_GetPrefPath` |
 | `modules/graphics-ext` | 1 | ASCII post-process effect |
-| `modules/renderers/*` | 121 | native window handle, GL context, Vulkan surface, SDL renderer/GPU |
+| `modules/storage` | 1 | `SDL_GetPrefPath` |
+| `modules/renderers/*` | 122 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (42 families) |
 
-The 7 native-window properties actually consumed today — these define the minimum
+The native-window properties actually consumed today — these define the minimum
 `NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:
 
 ```text
-SDL_PROP_WINDOW_WIN32_HWND_POINTER          → Win32
-SDL_PROP_WINDOW_X11_DISPLAY_POINTER         → X11
-SDL_PROP_WINDOW_X11_WINDOW_NUMBER           → X11
-SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER     → Wayland
-SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER     → Wayland
-SDL_PROP_WINDOW_COCOA_WINDOW_POINTER        → Cocoa
-SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER      → Android
+SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER
+SDL_PROP_WINDOW_COCOA_WINDOW_POINTER
+SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER
+SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER
+SDL_PROP_WINDOW_WIN32_HWND_POINTER
+SDL_PROP_WINDOW_X11_DISPLAY_POINTER
+SDL_PROP_WINDOW_X11_WINDOW_NUMBER
 ```
+
+Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatformGlContext`:
+
+```text
+diligent easygl magnum metal opengl1 opengl2 opengl4 opengles1 openvg skia sokol
+```
+
+<!-- END GENERATED: tools/platform/sdl_inventory.py -->
 
 ---
 
@@ -250,14 +267,14 @@ prove it made progress.
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| PLAT-1 | Machine-readable SDL inventory tool | ⬜ | A script (`tools/sdl_inventory.py` or equivalent) that emits per-module, per-file, per-symbol counts of SDL usage and reproduces §2's table exactly. Checked in; §2 becomes generated, not hand-maintained. |
-| PLAT-2 | Classify all 1101 SDL identifiers into contract areas | ⬜ | Every identifier assigned to exactly one of: window, event, input, audio, timing, filesystem, display, dialog/system-service, native-handle, GL/Vulkan interop, SDL-renderer-specific, or *no contract needed* (e.g. `SDL_free` on an SDL-owned pointer inside an allowlisted file). Output is a checked-in CSV; drives Phase 1's interface shape. |
+| PLAT-1 | Machine-readable SDL inventory tool | ✅ | `tools/platform/sdl_inventory.py`. Emits per-module/per-file/per-symbol counts as markdown, CSV or JSON; `--update` regenerates §2 in place, `--check` fails when it is stale. §2 is now generated. Two corrections to the hand-counted baseline it replaced: `.mm` sources were missed (`MetalRenderer.mm`), and CNA's own `CNA_RENDERER_SDL_*` build macros were being counted as SDL usage in four test files. |
+| PLAT-2 | Classify all 1102 SDL identifiers into contract areas | ⬜ | Every identifier assigned to exactly one of: window, event, input, audio, timing, filesystem, display, dialog/system-service, native-handle, GL/Vulkan interop, SDL-renderer-specific, or *no contract needed* (e.g. `SDL_free` on an SDL-owned pointer inside an allowlisted file). Output is a checked-in CSV; drives Phase 1's interface shape. |
 | PLAT-3 | Identify the SDL-specific renderer allowlist | ⬜ | Confirm `SDL_RENDERER`, `SDL_GPU`, `FNA3D` are the complete set of renderers that legitimately require SDL3, by auditing all 46 identities. Any additional candidate must be justified in this row or migrated in Phase 4. |
 | PLAT-4 | Audit the `SDL_INIT_*` subsystem lifecycle | ⬜ | Document every `SDL_Init`/`SDL_InitSubSystem`/`SDL_QuitSubSystem` call site (126 + 123 references) and the current refcounting (`SdlSubsystemMutex.hpp`, `SdlSensorSubsystem.hpp`, `DevicesShutdownCoordinator.hpp`). This ordering is subtle and already has dedicated tests — the platform lifecycle must preserve it exactly. |
 | PLAT-5 | Audit `SDL_main` / entrypoint handling | ⬜ | `modules/core/include/CNA/Entrypoint.hpp` and `SDL3::SDL3main` linkage in `cmake/Harnesses.cmake`. Determine what the platform contract must own vs. what stays a build-system concern (Windows/Android entrypoints in particular). |
 | PLAT-6 | Baseline behavioral capture: event semantics | ⬜ | Record current observable event ordering/coalescing for resize, focus, quit, minimize/restore and DPI change, as a checked-in golden file. This is the oracle Phase 3 must match; capturing it *before* any change is the point. |
 | PLAT-7 | Baseline performance measurement | ⬜ | Frame-time distribution for a fixed scene on at least two renderers (one GPU, one CPU-raster), recorded with enough samples to give a meaningful confidence interval. PLAT-120 re-runs it. The target is "no measurable regression", so the baseline must include its own noise floor. |
-| PLAT-8 | SDL-reference ratchet gate (warning mode) | ⬜ | Build-time check: count SDL references in production sources outside `modules/platform` and the PLAT-3 allowlist; compare against a recorded maximum in a checked-in file; warn (not fail) if exceeded. Initial maximum = 269 minus allowlisted files. |
+| PLAT-8 | SDL-reference ratchet gate (warning mode) | ⬜ | Build-time check: count SDL references in production sources outside `modules/platform` and the PLAT-3 allowlist; compare against a recorded maximum in a checked-in file; warn (not fail) if exceeded. Initial maximum = 270 minus allowlisted files. |
 | PLAT-9 | Hot-path lint for platform calls | ⬜ | A check that rejects platform-interface calls syntactically inside per-pixel/per-vertex/per-sample/per-event loops, encoding design decision 4. Heuristic is acceptable; false positives suppressible with a documented annotation. |
 
 ---
@@ -341,7 +358,7 @@ guarded by PLAT-6's golden capture.
 
 ## Phase 4 — Graphics and renderer decoupling
 
-The largest phase: 121 production renderer files and the three `// TODO: SDL dependency should be
+The largest phase: 122 production renderer files and the three `// TODO: SDL dependency should be
 abstracted later` markers in `IGraphicsRenderer.hpp`. Renderers are migrated in families so each
 task builds and verifies a coherent group.
 
@@ -460,7 +477,7 @@ every capability-refusal path that a limited platform would.
 | PLAT-120 | Performance verification against PLAT-7 | ⬜ | Re-run the baseline. Target: no regression outside the measured noise floor, consistent with `cnaplatform.md`'s "typically under 0.5 %". A regression above the floor is investigated and fixed, not accepted with a shrug — and if the abstraction turns out to *help* (centralized events, input snapshots), that is reported too. |
 | PLAT-121 | Flip the SDL ratchet to hard-error | ⬜ | PLAT-8's warning becomes a configure/build failure. Allowlist: `modules/platform/src/Sdl3/`, `modules/audio`'s SDL3 audio implementation, and the three renderers from PLAT-76. Nothing else may include an SDL header. |
 | PLAT-122 | Remove SDL from module link lines | ⬜ | `SDL3::SDL3` disappears from `modules/{core,input,runtime,graphics,devices,devices-ext,storage,content,media,gamer-services}/CMakeLists.txt`. Mechanical, but it is the check that PLAT-121's gate is not passing on a technicality. |
-| PLAT-123 | Migrate remaining test/example SDL usage | ⬜ | 386 test/example files reference SDL. Most are incidental; each is either migrated or justified. Tests that legitimately test the SDL3 implementation stay, in `modules/platform/tests/`. |
+| PLAT-123 | Migrate remaining test/example SDL usage | ⬜ | 382 test/example files reference SDL. Most are incidental; each is either migrated or justified. Tests that legitimately test the SDL3 implementation stay, in `modules/platform/tests/`. |
 | PLAT-124 | `docs/platform-abstraction.md` | ⬜ | The capability boundary, the native-handle contract per window system, the performance contract, and how to add an implementation. This document, not this plan, is what a future implementer reads first. |
 | PLAT-125 | Update `CLAUDE.md` and `NEXT.md` | ⬜ | Record `CNA_PLATFORM` alongside `CNA_GRAPHICS_RENDERER`, and the rule that new code must not include SDL headers outside the allowlist. Without this the next contributor re-introduces the coupling in good faith. |
 | PLAT-126 | CI matrix for `CNA_PLATFORM` | ⬜ | At minimum `SDL3`×(one GPU renderer, one CPU renderer) and `HEADLESS`×`HEADLESS`. Keeps both implementations honest; `cnaplatform.md` names CI-combination growth as one of the real costs, so the matrix is chosen deliberately rather than exhaustively. |
