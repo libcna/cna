@@ -65,11 +65,11 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1100** |
-| Files referencing SDL (all) | **578** |
-| Production files (`src/` + `include/`) referencing SDL | **262** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1104** |
+| Files referencing SDL (all) | **587** |
+| Production files (`src/` + `include/`) referencing SDL | **268** |
 | …of which are renderer production files | **116** |
-| Test/example files referencing SDL | **316** |
+| Test/example files referencing SDL | **319** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
 | Renderer families reaching for `SDL_GL_*` directly | **11** |
 
@@ -84,6 +84,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
 | `modules/runtime` | 7 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
+| `modules/platform` | 6 | - |
 | `modules/content` | 3 | `SDL_IOStream`-based readers, glTF import |
 | `modules/core` | 3 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
 | `modules/gamer-services` | 3 | `Guide` overlay, local store |
