@@ -6,9 +6,24 @@ Baseline: `origin/develop` @ **`fb3728267e8f2179d43b96357ff372ae712b7e7f`**
 Planning branch: `claude/gltf-correctness-audit-plan-rxfs1l`
 Oracle repository: `openeggbert/cna-gltf-viewer` @ `aaa008dc62bcb1127901ca23b75b4bf356c0ba66` (`develop`), inspected read-only.
 
-> **THIS DOCUMENT IS A PLAN. NOTHING IN IT WAS IMPLEMENTED.**
-> No production source, test, asset, shader, CMake, CNAEXT.md, FUTURE.md or sharp-runtime file was
-> modified by the session that produced it. The only tracked change is this file.
+> **STATUS (2026-08-12): this is no longer a plan-only document — it is the campaign's live
+> working record.** The banner it opened with ("nothing in it was implemented") described the
+> planning session of 2026-08-11 only, and is preserved below for provenance.
+>
+> Of 460 rows: **301 are closed (`✔` 180, `✅` 121)** and **141 remain `⬜`**. The other 18 carry a
+> deliberate partial marker — 8 `🔬` (investigation, no implementation owed), 5 `✅/⬜` and 2 `✅/🐛`
+> (landed with a named residue), 2 `🐛` (open defect), 1 `⛔` (blocked by this environment,
+> `GLTF-009`). Every closed row carries its own evidence in its Scope cell: what was decided, what
+> it cost, and which fixture or test proves it. All eight audited defects (D1–D8) are `fixed` in
+> the corpus defect ledger. Read **`NEXT_gltf.md`** first for the continuity brief: current branch,
+> verification commands, which remaining rows are environment-blocked here, and the conventions a
+> new session must follow.
+>
+> *Original planning-session banner, 2026-08-11:* "THIS DOCUMENT IS A PLAN. NOTHING IN IT WAS
+> IMPLEMENTED. No production source, test, asset, shader, CMake, CNAEXT.md, FUTURE.md or
+> sharp-runtime file was modified by the session that produced it. The only tracked change is this
+> file."
+>
 > It realises `FUTURE.md` **Phase 5 — glTF correctness campaign**, and supersedes the analysis-only
 > `gltfissues.md` (2026-07-28) as the campaign's working document. `gltfissues.md` remains valid
 > historical evidence and is **not** rewritten.
