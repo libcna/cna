@@ -336,13 +336,14 @@ namespace Microsoft::Xna::Framework
 
         IsMouseVisible_ = value;
 
+        // Still gated on there being a window: cursor visibility is meaningless without one, and
+        // the platform's mouse service is null when the platform has no pointer at all (headless,
+        // and eventually terminal), which is a second reason the same call can be a no-op.
         if (GraphicsDevice_.GetWindowInternal() != nullptr)
         {
-            if (value) {
-                SDL_ShowCursor();
-            } else
+            if (CNA::Platform::IPlatformMouse* mouse = platform_->GetMouse())
             {
-                SDL_HideCursor();
+                mouse->SetCursorVisible(value);
             }
         }
     }
@@ -416,7 +417,7 @@ namespace Microsoft::Xna::Framework
         if (!hasInitialized_)
         {
             DoInitialize();
-            previousPerformanceCounter_ = SDL_GetPerformanceCounter();
+            previousPerformanceCounter_ = platform_->GetPerformanceCounter();
             hasInitialized_ = true;
         }
 
@@ -436,7 +437,7 @@ namespace Microsoft::Xna::Framework
         BeginRun();
         BeforeLoop();
 
-        previousPerformanceCounter_ = SDL_GetPerformanceCounter();
+        previousPerformanceCounter_ = platform_->GetPerformanceCounter();
         RunLoop();
 
         EndRun();
@@ -451,7 +452,7 @@ namespace Microsoft::Xna::Framework
         {
             while (TimeSpanLess(accumulatedElapsedTime_ + worstCaseSleepPrecision_, TargetElapsedTime_))
             {
-                SDL_Delay(1);
+                platform_->Delay(1);
                 const System::TimeSpan timeAdvancedSinceSleeping = AdvanceElapsedTime();
                 UpdateEstimatedSleepPrecision(timeAdvancedSinceSleeping);
             }
@@ -875,7 +876,9 @@ namespace Microsoft::Xna::Framework
 
         state.game->PollEvents();
 
-        const std::uint64_t nowMs = SDL_GetTicks();
+        // The platform's epoch is its own creation rather than library init, which changes
+        // nothing here: only deltas are used, and the first callback seeds lastTickMs either way.
+        const std::uint64_t nowMs = state.game->GetPlatformEXT().GetTicksMilliseconds();
         if (state.lastTickMs == 0)
         {
             state.lastTickMs = nowMs;
@@ -947,8 +950,9 @@ namespace Microsoft::Xna::Framework
 
     System::TimeSpan Game::AdvanceElapsedTime()
     {
-        // FNA uses System.Diagnostics.Stopwatch; CNA uses SDL_GetPerformanceCounter for equivalent high-resolution timing.
-        const std::uint64_t currentCounter = SDL_GetPerformanceCounter();
+        // FNA uses System.Diagnostics.Stopwatch; CNA uses the platform's high-resolution
+        // monotonic counter for the equivalent.
+        const std::uint64_t currentCounter = platform_->GetPerformanceCounter();
 
         if (previousPerformanceCounter_ == 0)
         {
@@ -956,7 +960,7 @@ namespace Microsoft::Xna::Framework
             return System::TimeSpan::Zero;
         }
 
-        const std::uint64_t frequency = SDL_GetPerformanceFrequency();
+        const std::uint64_t frequency = platform_->GetPerformanceFrequency();
         const double elapsedMilliseconds =
             (static_cast<double>(currentCounter - previousPerformanceCounter_) * 1000.0) /
             static_cast<double>(frequency);

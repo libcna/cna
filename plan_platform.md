@@ -65,11 +65,11 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1116** |
-| Files referencing SDL (all) | **590** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1121** |
+| Files referencing SDL (all) | **592** |
 | Production files (`src/` + `include/`) referencing SDL | **270** |
 | …of which are renderer production files | **116** |
-| Test/example files referencing SDL | **320** |
+| Test/example files referencing SDL | **322** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
 | Renderer families reaching for `SDL_GL_*` directly | **11** |
 
@@ -361,8 +361,8 @@ guarded by PLAT-6's golden capture.
 |---|---|---|---|
 | PLAT-46 | Own the platform instance in `Game` | ✅ | `Game` holds `std::unique_ptr<IPlatform> platform_` **declared before every other member**, so it is constructed first and destroyed last — the graphics device, window and content manager may all reach the platform during their own construction or teardown, and member order is the only thing that makes the containment real. Created *and installed* from a single member initialiser (`CreateAndInstallPlatform()`), not from the constructor body, so a member constructed later finds the game's instance rather than lazily creating a second. Exposed as `CNAEXT GetPlatformEXT()`; `IPlatform` is **forward-declared** in `Game.hpp` rather than included, keeping the platform contract out of every game's include graph. **The obvious implementation is wrong and the tests say why**: a per-game "the platform I displaced" pointer dangles when games are destroyed out of construction order, so install order is kept in one place and a game removes *itself* from the middle. `OutOfOrderDestructionLeavesNoDanglingInstallation` is the regression that found it. 10 tests. |
 | PLAT-47 | Migrate `Game`'s event loop | ⬜ | `SDL_PollEvent` → `platform->PollEvents(batch)`; the `SDL_EVENT_*` switch becomes a `PlatformEvent` switch. Behavior must match PLAT-6 exactly, including the currently-inline quit, focus, resize and gamepad-added handling. |
-| PLAT-48 | Migrate `Game`'s timing | ⬜ | Fixed-timestep loop uses the platform timer. `GameTests` pass unchanged. |
-| PLAT-49 | Migrate `Game`'s cursor handling | ⬜ | `SDL_ShowCursor`/`SDL_HideCursor` → mouse service. |
+| PLAT-48 | Migrate `Game`'s timing | ✅ | Every clock read in the loop goes through the platform: `GetPerformanceCounter()` seeds and advances `AdvanceElapsedTime()`, `GetPerformanceFrequency()` is its divisor, `Delay()` replaces the sleep-to-target spin, and the Emscripten main-loop callback drives its accumulator from `GetTicksMilliseconds()`. The platform's tick epoch is its own creation rather than library init, which changes nothing: only deltas are used and the first callback seeds its own baseline either way. `GameTests` unchanged. Nine new tests assert the properties the loop silently depends on and that no compile error would catch — a monotonic counter (an unsigned difference turns any step backwards into a frame that appears to have taken years, then gets hidden by the `MaxElapsedTime` clamp), a non-zero **and stable** frequency, and a counter that actually advances rather than merely never decreasing. |
+| PLAT-49 | Migrate `Game`'s cursor handling | ✅ | `SDL_ShowCursor`/`SDL_HideCursor` → `IPlatformMouse::SetCursorVisible`. Now **null-guarded**, which the SDL calls had no way to be: the mouse service is null exactly when the platform reports no pointer, so `IsMouseVisible` becomes a determinate no-op under HEADLESS (and later TERMINAL) instead of calling into a windowing system that is not there. The existing window guard is kept — cursor visibility is meaningless without a window. |
 | PLAT-50 | Migrate `GameWindow` to `IPlatformWindow` | ⬜ | Remove `struct SDL_Window;` from `GameWindow.hpp`; `window_`, `updateFromSDL()`, `refreshCachedSDLState()`, `queryClientBoundsFromSDL()`, `queryScreenDeviceNameFromSDL()` all re-point at the platform window. |
 | PLAT-51 | Replace `GameWindow::GetNativeSdlWindowEXT()` | ⬜ | The public `CNAEXT` accessor returning `SDL_Window*` is replaced by one returning `NativeWindowHandle`. This is a deliberate breaking change to a CNAEXT extension; per `CLAUDE.md`'s "no backward compatibility hacks", no alias is kept. Every in-repo caller is updated in the same task and the change is called out in the commit body. |
 | PLAT-52 | Migrate `GraphicsDeviceManager` | ⬜ | Remove `struct SDL_Window;` and `tryGetSDLWindow()` from the header; `SDL_GetPlatform`/`SDL_GetWindowSize` go through the platform. |
