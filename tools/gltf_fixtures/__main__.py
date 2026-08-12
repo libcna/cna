@@ -73,7 +73,22 @@ def main(argv: list[str] | None = None) -> int:
                        help="verify DIR is byte-identical to the generator output")
     group.add_argument("--list", action="store_true",
                        help="print the corpus manifest to stdout without writing anything")
+    group.add_argument("--explain", metavar="GOLDEN",
+                       help="decode how an L5 golden differs from --against, using the fixture's "
+                            "own layout (GLTF-410)")
+    parser.add_argument("--against", metavar="FILE",
+                        help="the bytes --explain compares GOLDEN with (usually the committed "
+                             "version, extracted with 'git show HEAD:<path>')")
     args = parser.parse_args(argv)
+
+    if args.explain:
+        if not args.against:
+            sys.stderr.write("gltf_fixtures: --explain also needs --against FILE\n")
+            return 2
+        from .explain import explain
+        for line in explain(Path(args.explain), Path(args.against).read_bytes()):
+            sys.stdout.write(line + "\n")
+        return 0
 
     fixtures = all_fixtures()
     files = emit(fixtures)

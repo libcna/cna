@@ -444,6 +444,39 @@ A size difference is reported at the first byte past the shorter buffer. A byte 
 padding says so rather than naming a field it does not belong to, and an unknown stride says
 `<unknown stride layout>` rather than guessing.
 
+### 4.2.1 Reviewing a golden that changed (`GLTF-410`)
+
+A test failure names the byte and the field. A **commit** that changes a golden does not: `git diff`
+reports `Binary files differ` and stops, which leaves a reviewer choosing between taking it on trust
+and decoding 144 bytes by hand. Taking it on trust is what makes a golden stop being evidence, so
+the decode is automated:
+
+```bash
+scripts/regenerate-gltf-goldens.sh          # regenerate, verify, and explain what moved
+```
+
+For every modified `.vb.bin`/`.ib.bin` it prints the fixture's own stride and field layout, then the
+differences as decoded values:
+
+```text
+xf-identity.vb.bin: 144 bytes -> 144 bytes
+  stride 48 -- Position@0+12, Normal@12+12, Tangent@24+16, TextureCoordinate@40+8
+  vertex 0 TextureCoordinate.x: 0 -> 0.5
+  vertex 2 TextureCoordinate.y: 0 -> 0.25
+```
+
+The layout comes from the fixture's **own** `.expected.json`, not from a general binary differ, so a
+buffer that is no longer a whole number of vertices at its stated stride says outright that the
+**stride itself** changed — a different review, and a much larger one, because every renderer's
+`ApplyLayout` is a restatement of that table. `python3 -m gltf_fixtures --explain <golden>
+--against <file>` is the same decode for any two versions.
+
+**The review rule.** A golden changes for exactly two reasons: the vertex ABI changed, or a
+fixture's own authored values changed. Both are deliberate decisions, so a commit touching a golden
+must say **which of the two, and why**. A golden change with no stated reason is the one case where
+"the tests still pass" means nothing at all — the goldens were regenerated from the same code that
+produced them.
+
 ### 4.3 Coverage today
 
 21 of the 23 fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies

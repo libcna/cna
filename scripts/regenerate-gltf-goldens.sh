@@ -61,5 +61,28 @@ if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     else
         echo "regenerate-gltf-goldens: the corpus CHANGED. Review the diff and say why in the commit:"
         git -C "$REPO_ROOT" status --short -- "$CORPUS"
+
+        # GLTF-410: a binary golden's diff is "Binary files differ", which leaves a reviewer
+        # choosing between taking it on trust and decoding 144 bytes by hand -- and the first of
+        # those is what makes a golden stop being evidence. Every modified .vb.bin/.ib.bin is
+        # decoded here against its committed version, using the fixture's own L5 layout, so the
+        # change reads as `vertex 2 TextureCoordinate.y: 0.25 -> 0.75`.
+        changed_goldens="$(git -C "$REPO_ROOT" diff --name-only -- "$CORPUS" \
+                           | grep -E '\.(vb|ib)\.bin$' || true)"
+        if [ -n "$changed_goldens" ]; then
+            echo
+            echo "regenerate-gltf-goldens: what changed inside the binary goldens ---------------"
+            tmp="$(mktemp)"
+            trap 'rm -f "$tmp"' EXIT
+            while IFS= read -r golden; do
+                [ -n "$golden" ] || continue
+                if git -C "$REPO_ROOT" show "HEAD:$golden" > "$tmp" 2>/dev/null; then
+                    python3 -m gltf_fixtures --explain "$REPO_ROOT/$golden" --against "$tmp" || true
+                fi
+            done <<< "$changed_goldens"
+            echo "-------------------------------------------------------------------------------"
+            echo "A golden changes only when the vertex ABI or a fixture's own values change."
+            echo "Both are deliberate: say which one, and why, in the commit message."
+        fi
     fi
 fi
