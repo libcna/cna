@@ -125,7 +125,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**84 ✅ · 12 🟨 · 53 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **56 %** of the 149
+**85 ✅ · 12 🟨 · 52 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **57 %** of the 149
 actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -133,8 +133,8 @@ actionable rows done, counting partials.
 - **Phase 2** (SDL3 implementation) — largely done.
 - **Phase 3** (runtime) — `Game` owns the platform, timing and cursor migrated,
   `GraphicsDeviceManager` SDL-free. PLAT-47/50/51 blocked, see §5.
-- **Phase 4** (renderers) — not started. 20 tasks, 46 identities. See §6 for why most cannot be
-  built here.
+- **Phase 4** (renderers) — PLAT-57's boundary decision is complete; implementation starts at
+  PLAT-59/60/61. 46 identities remain in scope. See §6 for why most cannot be built here.
 - **Phase 5** (input) — four backends deleted, the scancode and keycode vocabularies defined.
   PLAT-78 blocked on four contract gaps, see §5.
 - **Phase 6** (audio) — not started.
@@ -264,10 +264,10 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Phase 4, narrow slice.** PLAT-57's written decision, then PLAT-59/60/61 — the
-   `IGraphicsRenderer` interface changes that the PLAT-3 audit says free STUB/HEADLESS/SOFTWARE/
-   PORTABLEGL with no per-renderer work. Anything needing an absent dependency is marked
-   blocked-on-toolchain with the missing library named.
+1. **Phase 4, narrow slice.** PLAT-59/60/61 — the `IGraphicsRenderer` interface changes that the
+   PLAT-3 audit says free STUB/HEADLESS/SOFTWARE/PORTABLEGL with no per-renderer work. PLAT-57's
+   completed boundary decision is `docs/platform-renderer-boundary.md`. Anything needing an absent
+   dependency is marked blocked-on-toolchain with the missing library named.
 
    **Completed Phase 10 reference.** Everything is under
    `modules/platform/src/Terminal/`:
