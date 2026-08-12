@@ -180,7 +180,6 @@ namespace CNA::Internal::Renderers::Vulkan
 
         int GetWidth()  const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         VkDescriptorSet GetDescriptorSet()       const { return descriptorSet_; }
         VkImageView     GetImageView()           const { return imageView_; }
@@ -236,7 +235,6 @@ namespace CNA::Internal::Renderers::Vulkan
 
         int GetWidth()  const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;

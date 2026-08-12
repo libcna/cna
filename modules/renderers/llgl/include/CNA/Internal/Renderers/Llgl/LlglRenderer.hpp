@@ -66,16 +66,6 @@ namespace CNA::Internal::Renderers::Llgl
         [[nodiscard]] int GetHeight() const override { return height_; }
 
         /**
-         * @brief Returns null: this renderer owns no SDL texture.
-         *
-         * `ITextureRenderer::GetNativeTexture` exists for the SDL_Renderer renderer's benefit; every
-         * GPU-API renderer in this project answers null.
-         *
-         * @return Always null.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
-        /**
          * @brief Replaces the whole of mip level 0.
          *
          * @param rgba   Source pixels, RGBA8.
@@ -524,9 +514,6 @@ namespace CNA::Internal::Renderers::Llgl
 
         /** @brief Returns the height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-
-        /** @brief Returns null: this renderer owns no SDL texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         /**
          * @brief Reads pixels back from the colour attachment.

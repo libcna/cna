@@ -23,9 +23,8 @@ namespace CNA::Internal::Renderers::OpenGLES1
     /**
      * @brief CNAEXT. Real OpenGL ES 1.1 (fixed-function, no shaders) texture handle.
      *
-     * Always stores a level-0 RGBA8 image. There is no SDL_Renderer involved (GetNativeTexture()
-     * always returns nullptr, matching every other raw-GL renderer), and no programmable shader
-     * involvement -- texture combining is done entirely via glTexEnv*.
+     * Always stores a level-0 RGBA8 image. There is no SDL_Renderer involved and no programmable
+     * shader involvement -- texture combining is done entirely via glTexEnv*.
      */
     class OpenGLES1TextureRenderer : public ITextureRenderer
     {
@@ -38,7 +37,6 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
@@ -345,7 +343,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int /*unit*/) const override;
 
         void BindAsRenderTarget() override;

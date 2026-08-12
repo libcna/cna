@@ -78,11 +78,6 @@ namespace CNA::Internal::Renderers::Sokol
          */
         [[nodiscard]] int GetHeight() const override;
 
-        /**
-         * @brief Returns null; this renderer renders through sokol_gfx, not SDL_Renderer.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override;
 
         /**
          * @brief Replaces mip level 0 in place.
@@ -215,11 +210,6 @@ namespace CNA::Internal::Renderers::Sokol
          */
         [[nodiscard]] int GetHeight() const override;
 
-        /**
-         * @brief Returns null; this renderer renders through sokol_gfx, not SDL_Renderer.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override;
 
         /** @brief Bind is driven entirely by SokolRenderer's own bound-target tracking;
          *         this override exists only to satisfy the pure-virtual interface. */

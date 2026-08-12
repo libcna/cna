@@ -483,7 +483,6 @@ namespace CNA::Internal::Renderers::DirectX8
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override
         {
@@ -570,7 +569,7 @@ namespace CNA::Internal::Renderers::DirectX8
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t*, int) override {}
         void UpdatePixelsLevel(int level, const uint8_t*, int, int) override
         {

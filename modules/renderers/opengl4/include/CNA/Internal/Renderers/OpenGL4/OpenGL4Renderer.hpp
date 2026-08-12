@@ -68,7 +68,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /// plan_opengl4.md GL4-18: uploads mip level @p level (allocating its storage via
         /// glTexImage2D, since only level 0 is allocated at construction -- matches
@@ -114,7 +114,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int /*unit*/) const override;
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 

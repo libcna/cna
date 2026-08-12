@@ -255,8 +255,6 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] int GetWidth() const override;
         /** @brief Height of mip level 0, in texels. */
         [[nodiscard]] int GetHeight() const override;
-        /** @brief Always null — this renderer never creates an SDL_Renderer texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         /** @brief Replaces every texel of mip level 0 with tightly packed RGBA8 rows. */
         void UpdatePixels(const std::uint8_t* rgba, int stride) override;
         /** @brief Replaces every texel of mip level @p level. */
@@ -447,8 +445,6 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Target height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-        /** @brief Always null — this renderer never creates an SDL_Renderer texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         /** @brief Makes this target the destination of subsequent draws. */
         void BindAsRenderTarget() override;
         /** @brief Restores the back buffer as the destination of subsequent draws. */

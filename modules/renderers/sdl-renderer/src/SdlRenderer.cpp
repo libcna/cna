@@ -17,6 +17,15 @@ namespace CNA::Internal::Renderers::SdlRenderer
     using namespace Microsoft::Xna::Framework::Graphics;
     using namespace CNA::Internal::Renderers;
 
+    namespace
+    {
+        [[nodiscard]] SDL_Texture* GetNativeSdlTexture(const ITextureRenderer& texture)
+        {
+            const auto* sdlTexture = dynamic_cast<const ISdlTextureRenderer*>(&texture);
+            return sdlTexture != nullptr ? sdlTexture->GetNativeSdlTexture() : nullptr;
+        }
+    }
+
     // --- SdlTextureRenderer ---
 
     SdlTextureRenderer::SdlTextureRenderer(SDL_Renderer* renderer, const ImageData& data)
@@ -131,9 +140,9 @@ namespace CNA::Internal::Renderers::SdlRenderer
         // Task 705 finding: texture may be an SdlRenderTargetRenderer (a RenderTarget2D sampled as
         // a Texture2D after unbinding) -- a sibling class of SdlTextureRenderer, NOT a subclass, so
         // an unchecked static_cast<const SdlTextureRenderer&> here would be undefined behavior.
-        // GetNativeTexture()/GetWidth()/GetHeight() are virtual on ITextureRenderer and safe for
-        // either concrete renderer.
-        SDL_Texture* nativeTex = texture.GetNativeTexture();
+        // The SDL-specific sibling interface is implemented by both concrete texture kinds; a
+        // foreign renderer texture keeps the established harmless no-draw behaviour.
+        SDL_Texture* nativeTex = GetNativeSdlTexture(texture);
         if (!nativeTex) return;
         SDL_SetTextureScaleMode(nativeTex, scaleMode);
 
@@ -153,7 +162,7 @@ namespace CNA::Internal::Renderers::SdlRenderer
         // Task 705 finding: see the (x,y) Draw overload above -- texture may be an
         // SdlRenderTargetRenderer, a sibling class of SdlTextureRenderer, so an unchecked
         // static_cast<const SdlTextureRenderer&> here would be undefined behavior.
-        SDL_Texture* nativeTex = texture.GetNativeTexture();
+        SDL_Texture* nativeTex = GetNativeSdlTexture(texture);
         if (!nativeTex) return;
         SDL_SetTextureScaleMode(nativeTex, scaleMode);
 
@@ -200,7 +209,7 @@ namespace CNA::Internal::Renderers::SdlRenderer
         // Task 705 finding: see the (x,y) Draw overload above -- texture may be an
         // SdlRenderTargetRenderer, a sibling class of SdlTextureRenderer, so an unchecked
         // static_cast<const SdlTextureRenderer&> here would be undefined behavior.
-        SDL_Texture* nativeTex = texture.GetNativeTexture();
+        SDL_Texture* nativeTex = GetNativeSdlTexture(texture);
         if (!nativeTex) return;
         SDL_SetTextureScaleMode(nativeTex, scaleMode);
 

@@ -115,9 +115,8 @@ namespace CNA::Internal::Renderers::PortableGL
 
     /**
      * Renderer handle for a texture, backed by a real PortableGL texture object created through
-     * `glGenTextures`/`glTexImage2D`. There is no native SDL texture behind this handle -- this
-     * renderer is CPU-only, so `GetNativeTexture()` always returns null, matching the Software
-     * renderer's own texture handle shape.
+     * `glGenTextures`/`glTexImage2D`. There is no native SDL texture behind this handle; the
+     * renderer is CPU-only and keeps its PortableGL object private.
      */
     class PortableGLTextureRenderer final : public ITextureRenderer
     {
@@ -135,9 +134,6 @@ namespace CNA::Internal::Renderers::PortableGL
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Texture height in texels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-        /** @brief Always null: this renderer owns no SDL texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /**
          * @brief Replaces the whole level-0 image in place.
          * @param rgba   Source pixels, tightly packed RGBA8 rows, top row first.

@@ -170,7 +170,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /// REMED-GFX-176: uploads exactly @p level, sized by that level's own dimensions. An
         /// out-of-range level or a null source is ignored, matching VulkanTextureRenderer's
@@ -327,7 +327,6 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         [[nodiscard]] int GetWidth() const override { return state_->width; }
         [[nodiscard]] int GetHeight() const override { return state_->height; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;

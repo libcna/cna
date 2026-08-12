@@ -30,7 +30,6 @@
 
 struct SDL_Window;
 struct SDL_Renderer;
-struct SDL_Texture;
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
 
@@ -369,8 +368,6 @@ namespace CNA::Internal::Renderers
         virtual ~ITextureRenderer() = default;
         virtual int GetWidth() const = 0;
         virtual int GetHeight() const = 0;
-        // TODO: SDL dependency should be abstracted later
-        virtual SDL_Texture* GetNativeTexture() const = 0;
         /// Replaces full level-0 texture pixels in-place. stride = row bytes (width * 4 for RGBA).
         virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
         /// Uploads a specific mip level. levelW/levelH are the dimensions at that level.

@@ -2635,15 +2635,6 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_DestroySurface(surface);
     }
 
-    // -----------------------------------------------------------------------
-    // CNAEXT helpers
-    // -----------------------------------------------------------------------
-
-    SDL_Texture* Texture2D::GetNativeTextureInternal() const
-    {
-        return renderer_ ? renderer_->GetNativeTexture() : nullptr;
-    }
-
     Texture2D Texture2D::CreateFromPixels(GraphicsDevice& device,
                                           int w, int h,
                                           const std::vector<std::uint8_t>& rgba)

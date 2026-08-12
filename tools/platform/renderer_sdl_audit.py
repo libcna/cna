@@ -23,10 +23,10 @@ Every renderer family is placed in exactly one bucket, from measured usage:
   cpu-presentation  Rasterises on the CPU and uses SDL_Renderer purely to get finished pixels onto
                     the window. NOT an SDL renderer by identity. Needs a platform presentation
                     service; see the note this tool prints.
-  interface-leak    Names SDL_Renderer/SDL_Texture only to satisfy IGraphicsRenderer's
-                    GetRendererInternal()/GetNativeTexture(), which are themselves marked
-                    "TODO: SDL dependency should be abstracted later". Freed by PLAT-59/PLAT-60
-                    alone, with no per-renderer work.
+  interface-leak    Names SDL_Renderer/SDL_Window only to satisfy IGraphicsRenderer's
+                    GetRendererInternal()/GetWindowInternal(), which are themselves marked
+                    "TODO: SDL dependency should be abstracted later". Freed by PLAT-59 alone,
+                    with no per-renderer work. PLAT-60 already removed the texture leak.
   migratable        Uses only platform services (native handle, GL context, Vulkan surface,
                     window, events). Freed by its Phase 4 task.
 
@@ -99,6 +99,7 @@ PRESENTATION_CALLS = frozenset(
 INTERFACE_LEAK_TYPES = frozenset({"SDL_Renderer", "SDL_Texture", "SDL_Window"})
 
 VERDICT_ORDER = ["sdl-native", "sdl-upstream", "cpu-presentation", "interface-leak", "migratable", "sdl-free"]
+
 
 _COMMENT_OR_STRING = re.compile(
     r'"(?:\\.|[^"\\])*"'  # string literal
@@ -228,7 +229,6 @@ def audit(repo_root: Path) -> tuple[list[dict[str, object]], dict[str, str]]:
     rows.sort(key=lambda r: (VERDICT_ORDER.index(str(r["verdict"])), -int(r["sdl_refs"]), r["family"]))
     return rows, identities
 
-
 def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -> str:
     out = io.StringIO()
     by_verdict: Counter = Counter(str(r["verdict"]) for r in rows)
@@ -291,15 +291,15 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
     out.write(
         f"3. **{len(leaks)} renderers are coupled only by the interface itself:** "
         + ", ".join(f"`{f}`" for f in leaks)
-        + ".\n   Their entire SDL surface is naming `SDL_Renderer`/`SDL_Texture`/`SDL_Window` to satisfy\n"
-        "   `IGraphicsRenderer::GetRendererInternal()`/`GetNativeTexture()`/`GetWindowInternal()` —\n"
-        "   the three methods already marked *\"TODO: SDL dependency should be abstracted later\"*.\n"
+        + ".\n   Their entire remaining SDL surface is naming `SDL_Renderer`/`SDL_Window` to satisfy\n"
+        "   `IGraphicsRenderer::GetRendererInternal()`/`GetWindowInternal()` — the two common\n"
+        "   methods still marked *\"TODO: SDL dependency should be abstracted later\"*.\n"
         "   `STUB` and `HEADLESS` do no rendering at all and still appear SDL-coupled. They need no\n"
-        "   per-renderer migration work: PLAT-59 and PLAT-60 free all four at once.\n"
+        "   per-renderer migration work: PLAT-59 frees all four at once; PLAT-60 removed the\n"
+        "   already-unused `SDL_Texture*` method.\n"
     )
 
     return out.getvalue()
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -347,7 +347,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         sys.stdout.write(text)
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

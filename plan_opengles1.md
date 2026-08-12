@@ -228,7 +228,7 @@
 | OPENGLES1-11 | `DebugSimulateContextLoss`/`DebugRestoreContext` (destroy + recreate context, reload extension entry points) | ✅ | |
 | OPENGLES1-12 | `ReadBackbuffer` (`glReadPixels` + row flip) | ✅ | Y-flip matches every other GL-based backend's top-left-origin convention. |
 | OPENGLES1-13 | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` | ✅ | |
-| OPENGLES1-14 | `CreateTexture`/`OpenGLES1TextureBackend` (level-0 RGBA8 upload, default linear filter/repeat wrap) | ✅ | `GetNativeTexture()` returns `nullptr` (no `SDL_Renderer` involved), matching `EasyGL`'s identical convention for GL-based backends. |
+| OPENGLES1-14 | `CreateTexture`/`OpenGLES1TextureBackend` (level-0 RGBA8 upload, default linear filter/repeat wrap) | ✅ | No `SDL_Renderer` is involved; the raw GL texture stays private to the backend. |
 | OPENGLES1-15 | `CreateVertexBuffer`/`OpenGLES1VertexBufferBackend` (real GPU `GL_ARRAY_BUFFER` object, `SetData`) | ✅ | See design decision 3 (revised 2026-07-21 — real VBO, not client-side array, once `glGenBuffers`/`glBufferData` were confirmed core ES 1.1). |
 | OPENGLES1-16 | `CreateIndexBuffer16`/`OpenGLES1IndexBufferBackend` (real GPU `GL_ELEMENT_ARRAY_BUFFER` object + a small CPU-side shadow for wireframe emulation, `SetData16`) | ✅ | 32-bit indices fall back to the base class's `CreateIndexBuffer16` delegation (unimplemented on this backend, matches several other backends' current state). |
 | OPENGLES1-17 | `CreateSpriteBatch`/`OpenGLES1SpriteBatchBackend`: quad batching, texture/rotation/origin/flip/layer math (ported from the same well-established formula every CNA backend's `SpriteBatch` uses) | ✅ | `glOrthof` top-left-origin projection, `GL_MODULATE` texture environment, per-vertex color. |

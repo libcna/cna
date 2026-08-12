@@ -969,7 +969,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         ~MetalTexture() override { [texture_ release]; [queue_ release]; [dev_ release]; }
         int GetWidth() const override { return w_; }
         int GetHeight() const override { return h_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         // plan_metal.md METAL-256: real bug found (Phase 18's own resource-lifetime audit, METAL-175)
         // and fixed here -- the original implementation mutated `texture_` in place via
         // `replaceRegion:`, which Apple's own Metal synchronization guidance is explicit is NOT
@@ -2561,7 +2561,7 @@ public:
     }
     int GetWidth() const override { return w_; }
     int GetHeight() const override { return h_; }
-    SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
     // Public count zero is the deterministic unsupported/no-MSAA value.
     int GetMultiSampleCount() const override { return appliedSampleCount_; }
     int GetAppliedDepthStencilFormatEXT(int /*requestedDepthStencilFormat*/) const override

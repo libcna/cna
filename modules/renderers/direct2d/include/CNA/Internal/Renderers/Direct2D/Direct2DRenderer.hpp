@@ -303,7 +303,7 @@ namespace CNA::Internal::Renderers::Direct2D
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
@@ -396,7 +396,7 @@ namespace CNA::Internal::Renderers::Direct2D
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;

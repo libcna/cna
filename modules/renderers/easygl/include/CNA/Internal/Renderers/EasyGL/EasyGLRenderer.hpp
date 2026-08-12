@@ -88,7 +88,7 @@ namespace CNA::Internal::Renderers::EasyGL
         ~EasyGLTextureRenderer() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int unit) const override;
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
@@ -144,7 +144,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         int GetWidth()  const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int unit) const override;
 
         void BindAsRenderTarget()   override;

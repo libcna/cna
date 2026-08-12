@@ -36,10 +36,10 @@ that has leaked into essentially every subsystem, which costs the project three 
    several test suites already carry hand-rolled `FakeSdl*Backend` doubles
    (`modules/input/tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp` and siblings). Those fakes
    are evidence that the seam is needed and is being invented ad hoc, per subsystem.
-3. **Contract clarity.** `IGraphicsRenderer.hpp` already carries three `// TODO: SDL dependency
-   should be abstracted later` markers on its *public internal contract* — `GetNativeTexture()`,
-   `GetWindowInternal()`, `GetRendererInternal()` and the `SDL_Window* window` field of the
-   creation parameters. This plan is the discharge of those TODOs.
+3. **Contract clarity.** `IGraphicsRenderer.hpp` originally carried three `// TODO: SDL dependency
+   should be abstracted later` methods on its *public internal contract*, plus an `SDL_Window*`
+   creation field. PLAT-60 removed `GetNativeTexture()`; `GetWindowInternal()`,
+   `GetRendererInternal()` and the creation field remain for their Phase 4 tasks.
 
 The design rule from `cnaplatform.md` is binding on every task here:
 
@@ -68,10 +68,10 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1126** |
-| Files referencing SDL (all) | **577** |
-| Production files (`src/` + `include/`) referencing SDL | **253** |
-| …of which are renderer production files | **116** |
-| Test/example files referencing SDL | **324** |
+| Files referencing SDL (all) | **557** |
+| Production files (`src/` + `include/`) referencing SDL | **236** |
+| …of which are renderer production files | **100** |
+| Test/example files referencing SDL | **321** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
 | Renderer families reaching for `SDL_GL_*` directly | **11** |
 
@@ -84,14 +84,14 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/platform` | 21 | - |
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
-| `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
+| `modules/graphics` | 10 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
 | `modules/content` | 3 | `SDL_IOStream`-based readers, glTF import |
 | `modules/gamer-services` | 3 | `Guide` overlay, local store |
 | `modules/runtime` | 3 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
 | `modules/core` | 1 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
 | `modules/graphics-ext` | 1 | ASCII post-process effect |
-| `modules/renderers/*` | 116 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (42 families) |
+| `modules/renderers/*` | 100 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (42 families) |
 
 The native-window properties actually consumed today — these define the minimum
 `NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:
@@ -386,7 +386,7 @@ task builds and verifies a coherent group.
 | PLAT-57 | Design the renderer-facing platform surface | ✅ | [`docs/platform-renderer-boundary.md`](docs/platform-renderer-boundary.md). The common creation boundary is a value snapshot: stable `WindowId`, non-owning `NativeWindowHandle`, physical drawable size and display scale. Renderers never receive `IPlatform*` or `IPlatformWindow*`; that prevents title/focus/input/window-management APIs becoming an accidental backdoor. `GraphicsDevice` owns the window, destroys the renderer first, filters platform events by `WindowId`, refreshes the snapshot and delivers only drawable-size, scale, suspend and resume notifications synchronously. The only additional edges are the three already-defined narrow graphics services (`IPlatformGlContext`, `IPlatformVulkanSurface`, `IPlatformSurfacePresenter`), supplied only when applicable; they manage context/surface/present lifecycle and never route drawing through the platform. The document fixes ownership, external-window handling, native-handle replacement, notification threading, the distinction from driver-originated `RendererDeviceEvent`, and the exact consequences/tests for PLAT-58…66 before code changes begin. |
 | PLAT-58 | Replace `SDL_Window*` in renderer creation params | ⬜ | The `SDL_Window* window` field of `IGraphicsRenderer`'s creation parameters becomes `NativeWindowHandle` + size/DPI. Touches every renderer's `Initialize`, so it lands as a mechanical change with no behavior change. |
 | PLAT-59 | Remove `GetWindowInternal()`/`GetRendererInternal()` | ⬜ | Discharges two of the three TODOs. `GetRendererInternal()` (an `SDL_Renderer*`) survives only behind the SDL-specific renderer allowlist, not on the common interface. |
-| PLAT-60 | Remove `SDL_Texture*` from `GetNativeTexture()` | ⬜ | The third TODO. Either an opaque handle on the common interface, or the method moves to the SDL-specific renderer interface. Decide based on PLAT-2's classification of who actually calls it. |
+| PLAT-60 | Remove `SDL_Texture*` from `GetNativeTexture()` | ✅ | Removed rather than replaced by a generic opaque handle. The complete call-site audit found only two consumers: `SdlSpriteBatchRenderer` (a legitimate SDL-specific user) and `Texture2D::GetNativeTextureInternal()` (private, with zero callers). The unused `Texture2D` helper was deleted. SDL texture access now lives on `ISdlTextureRenderer` inside the allowlisted `sdl-renderer` module; both its plain-texture and render-target sibling classes implement it, and the sprite batch uses a checked cast so their existing shared draw path stays defined. `ITextureRenderer` and every other renderer no longer name `SDL_Texture` or implement a meaningless always-null override. No generic `void*` was introduced: other APIs' texture handles have incompatible type, width, ownership and lifetime, and no common caller needs one. The generated renderer audit was updated to describe the two remaining window/renderer leaks. All three existing configurations rebuild; the focused SDL3 run passes **144 / 147** with three environment-only video skips, HEADLESS and TERMINAL each pass **58 / 58**, and the otherwise-unconfigured real `SdlRenderer.cpp` passes a direct C++23 syntax compilation. The measured SDL ratchet drops from 223 files / 3417 references to **206 / 3329**. |
 | PLAT-61 | Re-key the window registry | ⬜ | `IGraphicsRenderer`'s `std::unordered_map<SDL_Window*, IGraphicsRenderer*>` becomes keyed by `WindowId`. Static-registry lifetime semantics preserved exactly. |
 | PLAT-62 | Migrate `GraphicsDevice` | ⬜ | `modules/graphics/src/Xna/GraphicsDevice.cpp`. |
 | PLAT-63 | Migrate `GraphicsAdapter` | ⬜ | Display enumeration and modes via the displays service. |

@@ -326,7 +326,6 @@ namespace CNA::Internal::Renderers::DirectX10
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override
         {
@@ -432,7 +431,7 @@ namespace CNA::Internal::Renderers::DirectX10
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t*, int) override {}
 
         [[nodiscard]] bool GetData(int /*level*/, int x, int y, int w, int h, void* data, int /*dataLength*/) const override

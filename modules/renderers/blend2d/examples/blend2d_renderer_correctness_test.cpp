@@ -1130,7 +1130,7 @@ namespace
     public:
         int GetWidth() const override { return 1; }
         int GetHeight() const override { return 1; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
     };
 
     void TestCrossRendererSafety()

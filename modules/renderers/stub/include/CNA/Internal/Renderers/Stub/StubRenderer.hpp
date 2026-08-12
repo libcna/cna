@@ -66,7 +66,6 @@ namespace CNA::Internal::Renderers::Stub
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
     private:
         int width_;

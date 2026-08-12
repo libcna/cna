@@ -6,7 +6,21 @@
 
 namespace CNA::Internal::Renderers::SdlRenderer
 {
-    class SdlTextureRenderer : public ITextureRenderer
+    /** @brief SDL-only texture access used inside the SDL_Renderer backend. */
+    class ISdlTextureRenderer
+    {
+    public:
+        /** @brief Destroys the SDL texture view. */
+        virtual ~ISdlTextureRenderer() = default;
+
+        /**
+         * @brief Gets the SDL texture owned by this backend resource.
+         * @return The non-owning SDL texture pointer used by the SDL sprite batch.
+         */
+        [[nodiscard]] virtual SDL_Texture* GetNativeSdlTexture() const = 0;
+    };
+
+    class SdlTextureRenderer : public ITextureRenderer, public ISdlTextureRenderer
     {
     public:
         SDL_Texture* texture = nullptr;
@@ -17,13 +31,13 @@ namespace CNA::Internal::Renderers::SdlRenderer
         ~SdlTextureRenderer() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
-        SDL_Texture* GetNativeTexture() const override { return texture; }
+        SDL_Texture* GetNativeSdlTexture() const override { return texture; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
     };
 
     /// SDL_TEXTUREACCESS_TARGET-based off-screen render target.
-    class SdlRenderTargetRenderer : public IRenderTargetRenderer
+    class SdlRenderTargetRenderer : public IRenderTargetRenderer, public ISdlTextureRenderer
     {
     public:
         SDL_Texture* texture = nullptr;
@@ -36,7 +50,7 @@ namespace CNA::Internal::Renderers::SdlRenderer
 
         int GetWidth()  const override { return width; }
         int GetHeight() const override { return height; }
-        SDL_Texture* GetNativeTexture() const override { return texture; }
+        SDL_Texture* GetNativeSdlTexture() const override { return texture; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void BindGL(int /*unit*/) const override {}
 

@@ -61,7 +61,7 @@ private:bool i32_=false;int count_=0;std::vector<std::uint8_t> data_;
 // is only ever requested against a texture that genuinely has more than one level.
 class OpenGL1TextureRenderer final : public ITextureRenderer, public IOpenGL1Recoverable {
 public: OpenGL1TextureRenderer(const ImageData&,OpenGL1ResourceRegistry*,bool generateMipmapCap); ~OpenGL1TextureRenderer() override;
- int GetWidth()const override{return width_;} int GetHeight()const override{return height_;} SDL_Texture* GetNativeTexture()const override{return nullptr;}
+ int GetWidth()const override{return width_;} int GetHeight()const override{return height_;}
  void UpdatePixels(const uint8_t*,int) override; void UpdatePixelsLevel(int,const uint8_t*,int,int) override; void BindGL(int /*unit*/)const override;
  void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override{cpuPixels_=std::move(pixels);}
  void ReleaseGLHandleOnly() override{id_=0;}

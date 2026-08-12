@@ -938,7 +938,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
             int GetWidth() const override { return w; }
             int GetHeight() const override { return h; }
-            SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
             void BindGL(int /*unit*/) const override { glBindTexture(GL_TEXTURE_2D, id); }
 
             void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override
@@ -1135,7 +1135,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
             int GetWidth() const override { return w; }
             int GetHeight() const override { return h; }
-            SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
             void BindGL(int /*unit*/) const override { glBindTexture(GL_TEXTURE_2D, colorTex); }
             unsigned int GetColorGLHandle() const override { return colorTex; }
             int GetMultiSampleCount() const override { return multiSampleCount; }

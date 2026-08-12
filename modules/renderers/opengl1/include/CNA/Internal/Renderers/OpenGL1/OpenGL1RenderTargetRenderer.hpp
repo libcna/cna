@@ -75,7 +75,7 @@ namespace CNA::Internal::Renderers::OpenGL1
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int /*unit*/) const override;
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 

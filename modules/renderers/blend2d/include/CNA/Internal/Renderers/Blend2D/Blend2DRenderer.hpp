@@ -74,8 +74,7 @@ namespace CNA::Internal::Renderers::Blend2D
      * turns into a deliberate std::invalid_argument with an actionable message, thrown before any
      * native BLImage memory is touched -- not an accidental, undiagnosable std::bad_cast (the same
      * UB concern SdlRenderer.cpp's Draw() overloads document for their own sibling-class
-     * RenderTarget/Texture handles, resolved here through a real virtual interface instead of
-     * relying on GetNativeTexture() alone).
+     * RenderTarget/Texture handles, resolved there through an SDL-only sibling interface too).
      */
     class Blend2DNativeImageSourceEXT
     {
@@ -116,7 +115,7 @@ namespace CNA::Internal::Renderers::Blend2D
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const std::uint8_t* rgba, int stride) override;
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data,
                                    int dataLength) const override;
@@ -158,7 +157,7 @@ namespace CNA::Internal::Renderers::Blend2D
 
         [[nodiscard]] int GetWidth() const override { return surface_.Width(); }
         [[nodiscard]] int GetHeight() const override { return surface_.Height(); }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data,
                                    int dataLength) const override;
         [[nodiscard]] const BLImage& NativeImageEXT() const override { return surface_.Image(); }

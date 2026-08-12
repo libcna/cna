@@ -209,10 +209,9 @@ namespace CNA::Internal::Renderers::Canvas
         // Sibling concrete classes (not a subclass relationship -- IRenderTargetRenderer :
         // ITextureRenderer and CanvasTextureRenderer : ITextureRenderer are two separate branches),
         // same underlying problem SDL_RENDERER's Task 705 comment documents for its own two sibling
-        // texture-renderer classes. SDL_Renderer unifies via a shared virtual already on
-        // ITextureRenderer (GetNativeTexture()); Canvas2D's "native handle" is a JS-side integer id
-        // with no such shared accessor, so a contained dynamic_cast against the two known concrete
-        // Canvas types is the safe equivalent here.
+        // texture-renderer classes. SDL_Renderer now unifies them through an SDL-only sibling
+        // interface; Canvas2D's "native handle" is a JS-side integer id, so a contained
+        // dynamic_cast against the two known concrete Canvas types is the safe equivalent here.
         int CanvasIdOf(const ITextureRenderer& texture)
         {
             if (const auto* t = dynamic_cast<const CanvasTextureRenderer*>(&texture)) return t->GetCanvasId();

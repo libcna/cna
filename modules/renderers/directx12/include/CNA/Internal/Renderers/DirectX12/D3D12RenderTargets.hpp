@@ -72,7 +72,6 @@ namespace CNA::Internal::Renderers::DirectX12
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;

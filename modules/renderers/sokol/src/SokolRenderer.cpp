@@ -759,8 +759,6 @@ namespace CNA::Internal::Renderers::Sokol
 
     int SokolTextureRenderer::GetHeight() const { return height_; }
 
-    SDL_Texture* SokolTextureRenderer::GetNativeTexture() const { return nullptr; }
-
     void SokolTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
         if (rgba == nullptr) return;
@@ -1305,8 +1303,6 @@ namespace CNA::Internal::Renderers::Sokol
     int SokolRenderTargetRenderer::GetWidth() const { return width_; }
 
     int SokolRenderTargetRenderer::GetHeight() const { return height_; }
-
-    SDL_Texture* SokolRenderTargetRenderer::GetNativeTexture() const { return nullptr; }
 
     void SokolRenderTargetRenderer::BindAsRenderTarget() {}
 

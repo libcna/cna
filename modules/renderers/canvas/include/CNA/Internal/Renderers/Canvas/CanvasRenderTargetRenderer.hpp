@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::Canvas
 
         [[nodiscard]] int GetWidth() const override { return texture_.GetWidth(); }
         [[nodiscard]] int GetHeight() const override { return texture_.GetHeight(); }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override { texture_.UpdatePixels(rgba, stride); }
 
         void BindAsRenderTarget() override;

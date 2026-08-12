@@ -140,7 +140,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         /// WEBGPU-51: real CPU readback of an arbitrary Texture2D renderer, via the same staged
@@ -215,7 +215,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         /// REMED-GFX-127: returns true only once the whole requested rectangle has been written;
         /// false for an empty request, a torn-down owner or a destination too small for it. The
         /// former behaviour -- memset the destination to zero and return -- reported a fabricated

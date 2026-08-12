@@ -54,9 +54,6 @@ namespace CNA::Internal::Renderers::HtmlDom
         /** @brief Returns the texture height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
 
-        /** @brief Always null -- this renderer has no `SDL_Texture` anywhere in it. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /**
          * @brief Replaces the whole level-0 image and invalidates every cached variant URL.
          *

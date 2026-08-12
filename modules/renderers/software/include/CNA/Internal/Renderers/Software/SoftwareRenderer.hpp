@@ -236,7 +236,7 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
@@ -293,7 +293,7 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int GetWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int GetHeight() const override { return framebuffer_.height; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /**
          * @brief Copies a sub-rectangle of the rendered colour attachment into @p data as RGBA8.

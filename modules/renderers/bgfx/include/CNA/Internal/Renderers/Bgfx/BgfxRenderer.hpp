@@ -273,7 +273,7 @@ namespace CNA::Internal::Renderers::Bgfx
         ~BgfxTextureRenderer() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         bgfx::TextureHandle GetBgfxTextureHandle() const override { return textureHandle; }
         uint64_t GetBgfxCreationFlagsEXT() const override { return creationFlags_; }
         // Task 926 (split from Task 867): real GPU upload for level 0 and level>0, mirroring
@@ -364,7 +364,7 @@ namespace CNA::Internal::Renderers::Bgfx
 
         int GetWidth()  const override { return width; }
         int GetHeight() const override { return height; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override {}
         void BindGL(int /*unit*/) const override {}
         int GetMultiSampleCount() const override { return multiSampleCount; }

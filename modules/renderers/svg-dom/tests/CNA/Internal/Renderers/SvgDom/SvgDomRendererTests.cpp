@@ -370,7 +370,6 @@ TEST(SvgDomTextureRendererTest, ConstructsFromImageDataAndReportsSize)
     SvgDomTextureRenderer tex(MakeImage(2, 2, Sample2x2()));
     EXPECT_EQ(tex.GetWidth(), 2);
     EXPECT_EQ(tex.GetHeight(), 2);
-    EXPECT_EQ(tex.GetNativeTexture(), nullptr);
     EXPECT_GT(tex.GetCanvasIdEXT(), 0);
 }
 

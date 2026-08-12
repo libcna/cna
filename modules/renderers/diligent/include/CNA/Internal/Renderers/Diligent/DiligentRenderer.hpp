@@ -115,12 +115,6 @@ namespace CNA::Internal::Renderers::Diligent
         [[nodiscard]] int GetHeight() const override { return height_; }
 
         /**
-         * @brief Returns nothing: this renderer has no SDL_Texture behind its textures.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
-        /**
          * @brief Replaces the whole level-0 image.
          *
          * @param rgba   Source pixels, RGBA8.
@@ -346,12 +340,6 @@ namespace CNA::Internal::Renderers::Diligent
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Returns the target height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-
-        /**
-         * @brief Returns nothing: this renderer has no SDL_Texture behind its render targets.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         /**
          * @brief Replaces the whole level-0 image of the target's colour texture.
