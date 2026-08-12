@@ -468,10 +468,14 @@ TEST(RuntimeGltfModelTest, LoadsUnskinnedTexturedModelDirectlyFromGltf)
     ModelMesh* mesh = model.getMeshesProperty()[0];
     ASSERT_EQ(mesh->getMeshPartsProperty().getCountProperty(), 1);
 
-    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(basicFx, nullptr);
-    EXPECT_TRUE(basicFx->getTextureEnabledProperty());
-    Texture2D* tex = basicFx->getTextureProperty();
+    // PbrEffect, not BasicEffect: the material is metallic-roughness, and GLTF-215 made effect
+    // selection follow the material MODEL the file declares rather than which maps are present.
+    // This assertion said BasicEffect until the first run on a renderer that reports ThreeD --
+    // STUB does not, so nothing below the skip above had executed since GLTF-215 landed
+    // (plan_gltf.md GLTF-383).
+    auto* pbrFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(pbrFx, nullptr) << "a metallic-roughness material must select PbrEffect";
+    Texture2D* tex = pbrFx->getTextureProperty();
     ASSERT_NE(tex, nullptr);
     EXPECT_EQ(tex->getWidthProperty(), 1);
     EXPECT_EQ(tex->getHeightProperty(), 1);
@@ -497,8 +501,13 @@ TEST(RuntimeGltfModelTest, LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversed
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* skinnedFx = dynamic_cast<SkinnedEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(skinnedFx, nullptr);
+    // SkinnedPbrEffect for the same reason as the unskinned case above: skinned AND
+    // metallic-roughness. The bone palette below is what this test is really about, and it is
+    // identical on either effect -- both carry SkinnedEffect's own MaxBones/SetBoneTransforms API.
+    auto* skinnedFx =
+        dynamic_cast<SkinnedPbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(skinnedFx, nullptr)
+        << "a skinned primitive with a metallic-roughness material must select SkinnedPbrEffect";
     Texture2D* tex = skinnedFx->getTextureProperty();
     ASSERT_NE(tex, nullptr);
     EXPECT_EQ(tex->getWidthProperty(), 1);
@@ -699,6 +708,23 @@ TEST(RuntimeGltfModelTest, RemapsOcclusionTextureBrightnessForDualTextureEffectF
 {
     ScratchDir contentRoot;
     WriteFile(contentRoot.path() / "dualtex.gltf", kDualTextureGltf);
+    // The same document with KHR_materials_unlit declared, which is what routes it to the
+    // dual-texture lightmap path (GLTF-215/GLTF-337). Built by substitution rather than as a
+    // second literal, so the two cannot drift apart in any way except the extension.
+    {
+        std::string unlit = kDualTextureGltf;
+        const std::string material = R"("materials": [ { "pbrMetallicRoughness")";
+        const auto at = unlit.find(material);
+        ASSERT_NE(std::string::npos, at) << "the dual-texture fixture's material moved";
+        unlit.insert(at, R"("extensionsUsed": [ "KHR_materials_unlit" ],
+  )");
+        const std::string closeMaterial = R"("occlusionTexture": { "index": 1 } } ],)";
+        const auto occlusionAt = unlit.find(closeMaterial);
+        ASSERT_NE(std::string::npos, occlusionAt) << "the occlusion texture reference moved";
+        unlit.replace(occlusionAt, closeMaterial.size(),
+                      R"("occlusionTexture": { "index": 1 }, "extensions": { "KHR_materials_unlit": {} } } ],)");
+        WriteFile(contentRoot.path() / "dualtex-unlit.gltf", unlit);
+    }
 
     GraphicsDevice gd;
     // Runtime glTF Model loading builds a real VertexBuffer -- a renderer with no 3D
@@ -708,12 +734,20 @@ TEST(RuntimeGltfModelTest, RemapsOcclusionTextureBrightnessForDualTextureEffectF
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
-    Model model = cm.Load<Model>("dualtex");
+    // The occlusion-as-lightmap approximation is a NON-PBR path, and since GLTF-215 the only way
+    // a base-colour-plus-occlusion material reaches it is by declaring KHR_materials_unlit -- an
+    // ordinary metallic-roughness material now goes to PbrEffect, which has a real occlusion map
+    // and needs no approximation. The corpus fixture `tex-dual-texture-stride` is authored exactly
+    // that way; this one was not, and had been asserting DualTextureEffect against a model that
+    // stopped being one. Both branches are pinned here, because which branch a material takes is
+    // the actual contract.
+    Model model = cm.Load<Model>("dualtex-unlit");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
     auto* dualFx = dynamic_cast<DualTextureEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(dualFx, nullptr);
+    ASSERT_NE(dualFx, nullptr)
+        << "an unlit base-colour + occlusion material must take the dual-texture lightmap path";
     Texture2D* tex2 = dualFx->getTexture2Property();
     ASSERT_NE(tex2, nullptr);
     EXPECT_EQ(tex2->getWidthProperty(), 1);
@@ -726,6 +760,22 @@ TEST(RuntimeGltfModelTest, RemapsOcclusionTextureBrightnessForDualTextureEffectF
     EXPECT_EQ(occlusionPixel.getGProperty(), 0);
     EXPECT_EQ(occlusionPixel.getBProperty(), 0);
     EXPECT_EQ(occlusionPixel.getAProperty(), 255);
+
+    // The other branch: the same material without the extension is metallic-roughness, so it
+    // selects PbrEffect and its occlusion map is bound as authored -- the shader applies
+    // §3.9.3's own `1 + strength * (sampled - 1)`, so halving it here would darken it twice.
+    Model lit = cm.Load<Model>("dualtex");
+    auto* pbrFx = dynamic_cast<PbrEffect*>(
+        lit.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(pbrFx, nullptr)
+        << "the same material without KHR_materials_unlit must select PbrEffect";
+    Texture2D* occlusion = pbrFx->getOcclusionMapProperty();
+    ASSERT_NE(occlusion, nullptr) << "the occlusion texture must reach PbrEffect's own map slot";
+    Color rawPixel(0, 0, 0, 0);
+    occlusion->GetData(&rawPixel, 1);
+    EXPECT_EQ(rawPixel.getRProperty(), 255)
+        << "the PBR path must bind the occlusion map unremapped -- the shader applies the strength "
+           "formula itself, so halving it at import would apply the approximation twice";
 }
 
 #ifdef CNA_DRACO_AVAILABLE
@@ -777,20 +827,23 @@ TEST(RuntimeGltfModelTest, AppliesKhrLightsPunctualToBasicEffectFromGltf)
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(basicFx, nullptr);
+    // PbrEffect: metallic-roughness again. The light is what this test is about, and it reaches
+    // the same three DirectionalLight slots on either effect -- they are IEffectLights, which both
+    // implement.
+    auto* litFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(litFx, nullptr) << "a metallic-roughness material must select PbrEffect (GLTF-215)";
 
-    EXPECT_TRUE(basicFx->DirectionalLight0.getEnabledProperty());
-    const Vector3 dir = basicFx->DirectionalLight0.getDirectionProperty();
+    EXPECT_TRUE(litFx->DirectionalLight0.getEnabledProperty());
+    const Vector3 dir = litFx->DirectionalLight0.getDirectionProperty();
     EXPECT_NEAR(dir.X, 0.0f, 1e-4f);
     EXPECT_NEAR(dir.Y, 0.0f, 1e-4f);
     EXPECT_NEAR(dir.Z, -1.0f, 1e-4f);
-    const Vector3 color = basicFx->DirectionalLight0.getDiffuseColorProperty();
+    const Vector3 color = litFx->DirectionalLight0.getDiffuseColorProperty();
     EXPECT_NEAR(color.X, 0.25f, 1e-5f);
     EXPECT_NEAR(color.Y, 0.5f, 1e-5f);
     EXPECT_NEAR(color.Z, 0.75f, 1e-5f);
 
     // Unused slots stay at BasicEffect's own default (disabled).
-    EXPECT_FALSE(basicFx->DirectionalLight1.getEnabledProperty());
-    EXPECT_FALSE(basicFx->DirectionalLight2.getEnabledProperty());
+    EXPECT_FALSE(litFx->DirectionalLight1.getEnabledProperty());
+    EXPECT_FALSE(litFx->DirectionalLight2.getEnabledProperty());
 }

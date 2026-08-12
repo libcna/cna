@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf_`, pushed. Never push elsewhere without explicit permission. No pull
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **335 closed (`✔` 214, `✅` 121),
-  109 `⬜` remaining**, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **336 closed (`✔` 215, `✅` 121),
+  108 `⬜` remaining**, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 3 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-093`, `252`,
   `265`, `289`, `449`; `GLTF-064`/`067`/`068` were completed on 2026-08-12), 2 `🐛` (open: `GLTF-157`, `421`), and 1 `⛔` (`GLTF-009`,
   blocked by this environment).
@@ -41,8 +41,9 @@ Expected as of this writing:
 | Check | Expected |
 |---|---|
 | `ctest -L gltf-conformance` | **9/9 passed** |
-| full suite | **6 301 passed, 18 failed** |
+| full suite | **6 311 passed, 18 failed** |
 | generator `--check` | **74 assets, 359 files — byte-identical** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **424 passed, 23 skipped** / **447 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures

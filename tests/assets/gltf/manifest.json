@@ -1829,8 +1829,8 @@
     },
     {
       "path": "bad-accessor-out-of-bounds.expected.json",
-      "bytes": 3163,
-      "sha256": "1888594abecf75215d6fbd624f6cd5b50f63ad5f3fe08802a1668415a6271da7"
+      "bytes": 3546,
+      "sha256": "92a057114c07d9ade85473a58b819c58a75a947844fcd6ab46e7491fd8bfcdec"
     },
     {
       "path": "bad-accessor-out-of-bounds.glb",

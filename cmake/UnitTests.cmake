@@ -439,7 +439,7 @@ if(CNA_BUILD_TESTS)
         "L5|GltfConformanceL5.*:GltfStrideAndBuffer.*:GltfBufferOracle.*:GltfVertexBufferInvariants.*:GltfVertexLayoutTable.*"
         "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*:GltfLightBudget.*"
         "Ledger|GltfKnownDefect.*"
-        "Tool|GltfToCnjToolTest.*")
+        "Tool|GltfToCnjToolTest.*:RuntimeGltfModelTest.*")
     foreach(_gltf_rung IN LISTS CNA_GLTF_CONFORMANCE_RUNGS)
         string(FIND "${_gltf_rung}" "|" _gltf_sep)
         string(SUBSTRING "${_gltf_rung}" 0 ${_gltf_sep} _gltf_layer)

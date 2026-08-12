@@ -52,6 +52,52 @@ The sweep now counts how many worlds it saw that are actually asymmetric and fai
 zero, so it cannot go back to agreeing with itself under either convention.
 
 
+## glTF validation ran cgltf's validator before its own alignment check — FIXED 2026-08-12
+
+**Found by the container fuzz (`plan_gltf.md` `GLTF-040`) on its first run under UBSan**, not by
+inspection, and it is the same class as `REMED-NA-016` one call earlier.
+
+`ValidateGltfEXT` ran `cgltf_validate` first and CNA's own §3.6.2.4 alignment refusal after it. That
+is one call too late: `cgltf_validate` does not merely inspect metadata — for every indexed
+primitive it walks the index accessor's **actual bytes** through `cgltf_calc_index_bound`, with a
+raw `*(const uint16_t*)` cast. A file whose index `bufferView` is oddly offset therefore performed a
+misaligned 16-bit load *inside the validator that exists to protect the reader*, before the check
+that would have refused the file ever ran.
+
+```text
+third_party/cgltf/cgltf.h:1566:44: runtime error: load of misaligned address …
+  #0 cgltf_calc_index_bound  cgltf.h:1566
+  #1 cgltf_validate          cgltf.h:1714
+  #2 CNA::Internal::GltfImport::ValidateGltfEXT
+```
+
+**Fixed by ordering, not by patching cgltf** (`GLTF-038`'s rule): the two metadata-only checks —
+§3.6.2.4 alignment, then `GLTF-039`'s span arithmetic — now run **before** `cgltf_validate`. Both
+read offsets and sizes and never buffer contents, so they are safe on an unvalidated document, and
+after them cgltf only ever walks bytes a check has already vouched for.
+
+One visible consequence, recorded because it looks like a regression and is not:
+`bad-accessor-out-of-bounds` is now refused by CNA's span check rather than by cgltf's, so its
+diagnostic changed — from "a range extends past the data backing it" to "reads 36 bytes from a
+bufferView of 24 bytes", which is the better message and is what its fixture now asserts.
+
+## glTF suites outside the `Gltf*` filter were neither sanitised nor rung-checked — FIXED 2026-08-12
+
+`RuntimeGltfModelTest` loads `.gltf` through `ContentManager` end to end, and its name does not
+begin with `Gltf`. Three things keyed off that prefix: the conformance ladder's "every glTF suite
+belongs to exactly one rung" check, the ladder's own CTest registration, and the sanitizer CI job's
+`--gtest_filter='Gltf*'`. The suite was therefore invisible to all three.
+
+It was not idle in the meantime: **four of its cases had been failing since `GLTF-215`** changed
+effect selection, on every renderer that reports `GraphicsCapability::ThreeD` — they assert
+`BasicEffect`/`SkinnedEffect`/`DualTextureEffect` for materials that now select the PBR path. The
+`STUB` renderer skips them, so a green run said nothing about them at all. They surfaced the moment
+a second renderer (`HEADLESS`) ran the corpus (`plan_gltf.md` `GLTF-383`).
+
+Fixed in three places: the ladder now matches a suite whose name **contains** `Gltf`, the rung list
+carries `RuntimeGltfModelTest.*`, and the CI job filters on `*Gltf*`. The four cases now assert the
+effect the material model selects, and say why in a comment.
+
 ## glTF import: the eight defects the forensic audit found (`plan_gltf.md` D1–D8)
 
 `plan_gltf.md` `GLTF-012`. Every one was found by the conformance campaign's own oracle ladder

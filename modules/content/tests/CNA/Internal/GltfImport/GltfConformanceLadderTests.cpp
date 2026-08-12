@@ -125,7 +125,14 @@ namespace
         return rungs;
     }
 
-    /// Every gtest suite in this binary whose name begins with "Gltf".
+    /// Every gtest suite in this binary whose name CONTAINS "Gltf".
+    ///
+    /// Contains, not begins-with, and the difference was a real hole: `RuntimeGltfModelTest` is a
+    /// glTF suite by any reading -- it loads `.gltf` through `ContentManager` end to end -- and a
+    /// prefix match left it outside the ladder entirely *and* outside the `--gtest_filter='Gltf*'`
+    /// the sanitizer CI job runs. It was therefore neither rung-checked nor sanitised, and four of
+    /// its cases had been failing on any renderer with a 3D pipeline since `GLTF-215` changed
+    /// effect selection (`GLTF-383`).
     std::vector<std::string> RegisteredGltfSuites()
     {
         std::vector<std::string> names;
@@ -133,7 +140,7 @@ namespace
         for (int i = 0; i < unitTest.total_test_suite_count(); ++i)
         {
             const std::string name = unitTest.GetTestSuite(i)->name();
-            if (name.rfind("Gltf", 0) == 0) { names.push_back(name); }
+            if (name.find("Gltf") != std::string::npos) { names.push_back(name); }
         }
         std::sort(names.begin(), names.end());
         return names;

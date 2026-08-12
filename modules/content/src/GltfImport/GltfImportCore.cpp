@@ -3711,26 +3711,85 @@ namespace CNA::Internal::GltfImport
     {
         if (data == nullptr) { throw std::runtime_error("'" + sourceName + "' produced no glTF data."); }
 
-        // (1) GLTF-021/GLTF-022. Every constraint cgltf_validate checks is one whose violation
-        // makes decoding unsafe or meaningless -- an accessor reaching past its bufferView, a
-        // bufferView past its buffer, a sparse index outside the accessor's own range, attribute
-        // counts disagreeing within a primitive, an undefined component or primitive type. It
-        // checks nothing outside that class, so there is no "cosmetic" violation to downgrade to a
-        // warning and the severity policy is simply: failure rejects.
-        const cgltf_result validation = cgltf_validate(const_cast<cgltf_data*>(data));
-        if (validation != cgltf_result_success)
+        // (1) GLTF-036 / §3.6.2.4 data alignment. Checked FIRST, before cgltf_validate, and the
+        // order is not cosmetic -- see the note at the end of this block. cgltf_validate does NOT
+        // check alignment itself, and the
+        // omission is not cosmetic: cgltf reads a component with a raw `*(const float*)` cast, so
+        // a bufferView whose effective offset is not a multiple of the component size makes the
+        // parser perform a misaligned load. That is undefined behaviour by the standard and a
+        // genuine fault on targets without unaligned access -- UBSan reports it as
+        // `load of misaligned address ... which requires 4 byte alignment`, which is how this was
+        // found: a hand-authored fixture in this repository put a sparse VEC3<float> values
+        // bufferView at byteOffset 62.
+        //
+        // Rejection rather than a warning: CNA cannot make the vendored parser safe on such a
+        // file, and a warning would leave the undefined behaviour in place while claiming the file
+        // loaded. The alternative considered -- read misaligned data through memcpy and carry on --
+        // would mean replacing cgltf's whole element reader, which GLTF-041 exists to prevent.
+        //
+        // WHY THIS RUNS BEFORE cgltf_validate (plan_gltf.md GLTF-040's second finding). It used to
+        // run after, which is one call too late: `cgltf_validate` walks an index accessor's actual
+        // BYTES through `cgltf_calc_index_bound` to bound its maximum index, and does so with a
+        // raw `*(const uint16_t*)` cast. A file whose index bufferView is oddly offset therefore
+        // performed a misaligned 16-bit load *inside the validator that was supposed to protect
+        // us*, before this block ever ran. The container fuzz found it -- UBSan, cgltf.h:1566,
+        // reached from cgltf_validate -- which is exactly the class REMED-NA-016 established and
+        // exactly what a fuzz under sanitizers is for. Metadata-only checks (this one and the span
+        // check below) read offsets and sizes, never buffer contents, so they are safe to run on
+        // an unvalidated document and must.
         {
-            const char* reason = validation == cgltf_result_data_too_short
-                ? "a buffer, bufferView or accessor range extends past the data backing it"
-                : "a structural constraint of the glTF object model is violated";
-            throw std::runtime_error(
-                "'" + sourceName + "' fails glTF structural validation: " + std::string(reason) +
-                " (cgltf_validate code " + std::to_string(static_cast<int>(validation)) +
-                "). Decoding it could read outside the file's own buffers, so it is rejected "
-                "rather than imported.");
+            const auto componentSize = [](cgltf_component_type type) -> cgltf_size {
+                return cgltf_component_size(type);
+            };
+            const auto requireAligned = [&](cgltf_size offset, cgltf_size size, const char* what,
+                                            cgltf_size index) {
+                if (size == 0 || offset % size == 0) { return; }
+                throw std::runtime_error(
+                    "'" + sourceName + "' violates glTF §3.6.2.4 data alignment: the " +
+                    std::string(what) + " of accessor " + std::to_string(index) +
+                    " begins at byte offset " + std::to_string(offset) +
+                    ", which is not a multiple of its " + std::to_string(size) +
+                    "-byte component size. Reading it performs a misaligned load, which is "
+                    "undefined behaviour and faults outright on targets without unaligned access, "
+                    "so the file is rejected rather than imported.");
+            };
+
+            for (cgltf_size i = 0; i < data->accessors_count; ++i)
+            {
+                const cgltf_accessor& accessor = data->accessors[i];
+                const cgltf_size size = componentSize(accessor.component_type);
+                if (accessor.buffer_view != nullptr)
+                {
+                    requireAligned(accessor.buffer_view->offset + accessor.offset, size,
+                                   "base bufferView", i);
+                    // §3.6.2.1: a declared byteStride must itself be a multiple of 4, or every
+                    // element after the first inherits the misalignment.
+                    if (accessor.buffer_view->stride != 0 && accessor.buffer_view->stride % 4 != 0)
+                    {
+                        throw std::runtime_error(
+                            "'" + sourceName + "' violates glTF §3.6.2.1: the bufferView backing "
+                            "accessor " + std::to_string(i) + " declares byteStride " +
+                            std::to_string(accessor.buffer_view->stride) +
+                            ", which is not a multiple of 4.");
+                    }
+                }
+                if (accessor.is_sparse == 0) { continue; }
+                const cgltf_accessor_sparse& sparse = accessor.sparse;
+                if (sparse.indices_buffer_view != nullptr)
+                {
+                    requireAligned(sparse.indices_buffer_view->offset + sparse.indices_byte_offset,
+                                   componentSize(sparse.indices_component_type),
+                                   "sparse indices array", i);
+                }
+                if (sparse.values_buffer_view != nullptr)
+                {
+                    requireAligned(sparse.values_buffer_view->offset + sparse.values_byte_offset,
+                                   size, "sparse values array", i);
+                }
+            }
         }
 
-        // (1a) GLTF-039. The same spans cgltf_validate just checked, recomputed so that an
+        // (2) GLTF-039. The spans cgltf_validate is about to check, recomputed so that an
         // *overflow* is an error rather than a smaller number.
         //
         // cgltf computes `offset + stride * (count - 1) + elementSize` in `cgltf_size`, and
@@ -3831,73 +3890,26 @@ namespace CNA::Internal::GltfImport
             }
         }
 
-        // (1b) GLTF-036 / §3.6.2.4 data alignment. cgltf_validate does NOT check this, and the
-        // omission is not cosmetic: cgltf reads a component with a raw `*(const float*)` cast, so
-        // a bufferView whose effective offset is not a multiple of the component size makes the
-        // parser perform a misaligned load. That is undefined behaviour by the standard and a
-        // genuine fault on targets without unaligned access -- UBSan reports it as
-        // `load of misaligned address ... which requires 4 byte alignment`, which is how this was
-        // found: a hand-authored fixture in this repository put a sparse VEC3<float> values
-        // bufferView at byteOffset 62.
-        //
-        // Rejection rather than a warning, for the same reason as (1): CNA cannot make the
-        // vendored parser safe on such a file, and a warning would leave the undefined behaviour
-        // in place while claiming the file loaded. The alternative considered -- read misaligned
-        // data through memcpy and carry on -- would mean replacing cgltf's whole element reader,
-        // which GLTF-041 exists to prevent.
+        // (3) GLTF-021/GLTF-022. Every constraint cgltf_validate checks is one whose violation
+        // makes decoding unsafe or meaningless -- an accessor reaching past its bufferView, a
+        // bufferView past its buffer, a sparse index outside the accessor's own range, attribute
+        // counts disagreeing within a primitive, an undefined component or primitive type. It
+        // checks nothing outside that class, so there is no "cosmetic" violation to downgrade to a
+        // warning and the severity policy is simply: failure rejects.
+        const cgltf_result validation = cgltf_validate(const_cast<cgltf_data*>(data));
+        if (validation != cgltf_result_success)
         {
-            const auto componentSize = [](cgltf_component_type type) -> cgltf_size {
-                return cgltf_component_size(type);
-            };
-            const auto requireAligned = [&](cgltf_size offset, cgltf_size size, const char* what,
-                                            cgltf_size index) {
-                if (size == 0 || offset % size == 0) { return; }
-                throw std::runtime_error(
-                    "'" + sourceName + "' violates glTF §3.6.2.4 data alignment: the " +
-                    std::string(what) + " of accessor " + std::to_string(index) +
-                    " begins at byte offset " + std::to_string(offset) +
-                    ", which is not a multiple of its " + std::to_string(size) +
-                    "-byte component size. Reading it performs a misaligned load, which is "
-                    "undefined behaviour and faults outright on targets without unaligned access, "
-                    "so the file is rejected rather than imported.");
-            };
-
-            for (cgltf_size i = 0; i < data->accessors_count; ++i)
-            {
-                const cgltf_accessor& accessor = data->accessors[i];
-                const cgltf_size size = componentSize(accessor.component_type);
-                if (accessor.buffer_view != nullptr)
-                {
-                    requireAligned(accessor.buffer_view->offset + accessor.offset, size,
-                                   "base bufferView", i);
-                    // §3.6.2.1: a declared byteStride must itself be a multiple of 4, or every
-                    // element after the first inherits the misalignment.
-                    if (accessor.buffer_view->stride != 0 && accessor.buffer_view->stride % 4 != 0)
-                    {
-                        throw std::runtime_error(
-                            "'" + sourceName + "' violates glTF §3.6.2.1: the bufferView backing "
-                            "accessor " + std::to_string(i) + " declares byteStride " +
-                            std::to_string(accessor.buffer_view->stride) +
-                            ", which is not a multiple of 4.");
-                    }
-                }
-                if (accessor.is_sparse == 0) { continue; }
-                const cgltf_accessor_sparse& sparse = accessor.sparse;
-                if (sparse.indices_buffer_view != nullptr)
-                {
-                    requireAligned(sparse.indices_buffer_view->offset + sparse.indices_byte_offset,
-                                   componentSize(sparse.indices_component_type),
-                                   "sparse indices array", i);
-                }
-                if (sparse.values_buffer_view != nullptr)
-                {
-                    requireAligned(sparse.values_buffer_view->offset + sparse.values_byte_offset,
-                                   size, "sparse values array", i);
-                }
-            }
+            const char* reason = validation == cgltf_result_data_too_short
+                ? "a buffer, bufferView or accessor range extends past the data backing it"
+                : "a structural constraint of the glTF object model is violated";
+            throw std::runtime_error(
+                "'" + sourceName + "' fails glTF structural validation: " + std::string(reason) +
+                " (cgltf_validate code " + std::to_string(static_cast<int>(validation)) +
+                "). Decoding it could read outside the file's own buffers, so it is rejected "
+                "rather than imported.");
         }
 
-        // (1c) GLTF-061. The one piece of redundancy glTF gives a reader: the author states each
+        // (4) GLTF-061. The one piece of redundancy glTF gives a reader: the author states each
         // accessor's bounds, and a decoder producing values outside them has decoded something
         // other than what was written. Nothing read them before, which is why D4 -- a sparse index
         // accessor decoding to all zeros -- collapsed a quad to a point with every layer reporting
@@ -3905,7 +3917,7 @@ namespace CNA::Internal::GltfImport
         // the values themselves may still be exactly what the file contains.
         CrossCheckAccessorBoundsEXT(data, warnings);
 
-        // (1d) GLTF-351. EXT_meshopt_compression, refused here rather than left to produce
+        // (5) GLTF-351. EXT_meshopt_compression, refused here rather than left to produce
         // whatever bytes happen to lie at the view's offset.
         //
         // cgltf *parses* the extension -- it validates the compression metadata thoroughly, which
@@ -3931,7 +3943,7 @@ namespace CNA::Internal::GltfImport
                 "(GLTF-351).");
         }
 
-        // (2) GLTF-023. The author declared the file cannot be interpreted correctly without these.
+        // (6) GLTF-023. The author declared the file cannot be interpreted correctly without these.
         for (cgltf_size i = 0; i < data->extensions_required_count; ++i)
         {
             const char* name = data->extensions_required[i];

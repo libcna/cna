@@ -105,7 +105,11 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0:exitcode=1
-        run: ./build-sanitize/CnaTests --gtest_filter='Gltf*'
+        # '*Gltf*' rather than 'Gltf*': RuntimeGltfModelTest is a glTF suite by any reading --
+        # it loads .gltf through ContentManager end to end -- and a prefix filter left it outside
+        # this job entirely. Four of its cases were failing on any renderer with a 3D pipeline
+        # while this job stayed green (plan_gltf.md GLTF-383).
+        run: ./build-sanitize/CnaTests --gtest_filter='*Gltf*'
 
       # The same binary again through the conformance ladder's own label, so a rung that stops being
       # registered fails here as well as in the ordinary build.

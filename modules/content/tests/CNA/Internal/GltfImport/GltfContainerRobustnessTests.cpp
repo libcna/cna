@@ -270,9 +270,14 @@ TEST(GltfContainerRobustness, ValidationRejectsABufferViewWhoseRangeWraps)
     // file.
     ASSERT_NO_THROW(ValidateGltfEXT(doc.data, "wrapping-view.gltf", warnings));
 
-    // 36 bytes starting 8 short of the address space: the sum is 28 in size_t, which is inside a
-    // 36-byte buffer, so every unchecked `offset + size <= buffer.size` test in existence passes.
-    doc.data->buffer_views[0].offset = std::numeric_limits<std::size_t>::max() - 8;
+    // 36 bytes starting 36 short of the address space: the sum is exactly 0 in size_t, so every
+    // unchecked `offset + size <= buffer.size` test in existence passes.
+    //
+    // The offset is chosen 4-ALIGNED as well, and that is not incidental: §3.6.2.4's alignment
+    // check now runs before this one (GLTF-040's second finding), so a misaligned offset would be
+    // refused for the wrong reason and this test would pass without exercising the wrap guard at
+    // all -- which is what it did on the first run after the reorder.
+    doc.data->buffer_views[0].offset = std::numeric_limits<std::size_t>::max() - 35;
     doc.data->buffer_views[0].size = 36;
     try
     {

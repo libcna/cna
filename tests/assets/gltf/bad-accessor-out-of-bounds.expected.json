@@ -117,10 +117,11 @@
     "stage": "validation",
     "task": "GLTF-021",
     "errorContains": [
-      "validation",
-      "bad-accessor-out-of-bounds"
+      "bad-accessor-out-of-bounds",
+      "reads 36 bytes",
+      "bufferView of 24 bytes"
     ],
-    "note": "cgltf_validate's own check set is entirely of this kind, which is what makes 'reject on failure' the whole severity policy rather than one branch of it."
+    "note": "Refused by CNA's own span check rather than by cgltf_validate, and the difference is an ordering decision rather than a coincidence: GLTF-040's fuzz found that cgltf_validate itself walks an index accessor's BYTES, so the metadata-only checks (\u00a73.6.2.4 alignment, then the span arithmetic) were moved in front of it. cgltf catches this file too; CNA simply gets there first, and says how many bytes were asked for and how many exist -- which 'a range extends past the data backing it' does not."
   },
   "defects": []
 }
