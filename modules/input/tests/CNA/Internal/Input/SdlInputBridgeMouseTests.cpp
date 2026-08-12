@@ -317,6 +317,19 @@ TEST(SdlInputBridgeMouseWheelTest, WholeNotchesScaleBy120)
     EXPECT_EQ(wheelDelta(3.0f), 360);
 }
 
+TEST(SdlInputBridgeMouseWheelTest, DirectionMetadataDoesNotApplyTheHostPreferenceTwice)
+{
+    SDL_Event normal = mouseWheelEvent(1.0f);
+    normal.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+    SDL_Event flipped = mouseWheelEvent(1.0f);
+    flipped.wheel.direction = SDL_MOUSEWHEEL_FLIPPED;
+
+    const int before = Mouse::GetState().getScrollWheelValueProperty();
+    SdlInputBridge::ProcessEvent(normal);
+    SdlInputBridge::ProcessEvent(flipped);
+    EXPECT_EQ(Mouse::GetState().getScrollWheelValueProperty() - before, 240);
+}
+
 TEST(SdlInputBridgeMouseWheelTest, ZeroDeltaLeavesValueUnchanged)
 {
     EXPECT_EQ(wheelDelta(0.0f), 0);

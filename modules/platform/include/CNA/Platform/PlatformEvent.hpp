@@ -179,9 +179,9 @@ namespace CNA::Platform {
     {
         /** @brief The window the pointer is over, or zero. */
         WindowId window = 0;
-        /** @brief Horizontal scroll amount; positive is right. */
+        /** @brief Horizontal scroll amount after the host's scrolling-direction preference. */
         float x = 0.0f;
-        /** @brief Vertical scroll amount; positive is away from the user. */
+        /** @brief Vertical scroll amount after the host's scrolling-direction preference. */
         float y = 0.0f;
     };
 

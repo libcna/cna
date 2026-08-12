@@ -161,15 +161,11 @@ namespace CNA::Platform::Sdl3 {
             {
                 MouseWheelEvent wheel;
                 wheel.window = static_cast<WindowId>(source.wheel.windowID);
+                // SDL has already applied the host's natural-scrolling preference to x/y.  The
+                // direction member describes that fact; undoing it here would change the
+                // established FNA/CNA input behaviour when this event replaces SDL_Event.
                 wheel.x = source.wheel.x;
                 wheel.y = source.wheel.y;
-                // SDL can report a flipped wheel; normalising here means every consumer sees one
-                // convention instead of each rediscovering this flag.
-                if (source.wheel.direction == SDL_MOUSEWHEEL_FLIPPED)
-                {
-                    wheel.x = -wheel.x;
-                    wheel.y = -wheel.y;
-                }
                 destination = wheel;
                 return true;
             }

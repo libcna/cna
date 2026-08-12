@@ -232,15 +232,18 @@ TEST(Sdl3EventMapperTests, MouseButtonCarriesButtonPressStateAndClickCount)
     EXPECT_EQ(button.clicks, 2);
 }
 
-TEST(Sdl3EventMapperTests, FlippedWheelIsNormalisedToOneConvention)
+TEST(Sdl3EventMapperTests, WheelKeepsHostConfiguredDirection)
 {
-    // SDL reports the flag and leaves the sign alone. Normalising here means every consumer sees
-    // one convention rather than each rediscovering SDL_MOUSEWHEEL_FLIPPED.
+    // SDL has already applied the host's natural-scrolling preference to x/y. The direction
+    // member only describes that fact; applying it again would reverse established CNA/FNA
+    // behaviour during the PlatformEvent migration.
     SDL_Event normal = MakeEvent(SDL_EVENT_MOUSE_WHEEL);
+    normal.wheel.x = -2.0f;
     normal.wheel.y = 1.0f;
     normal.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
 
     SDL_Event flipped = MakeEvent(SDL_EVENT_MOUSE_WHEEL);
+    flipped.wheel.x = -2.0f;
     flipped.wheel.y = 1.0f;
     flipped.wheel.direction = SDL_MOUSEWHEEL_FLIPPED;
 
@@ -248,8 +251,10 @@ TEST(Sdl3EventMapperTests, FlippedWheelIsNormalisedToOneConvention)
     PlatformEvent b;
     ASSERT_TRUE(MapSdlEvent(normal, a));
     ASSERT_TRUE(MapSdlEvent(flipped, b));
+    EXPECT_FLOAT_EQ(std::get<MouseWheelEvent>(a).x, -2.0f);
     EXPECT_FLOAT_EQ(std::get<MouseWheelEvent>(a).y, 1.0f);
-    EXPECT_FLOAT_EQ(std::get<MouseWheelEvent>(b).y, -1.0f);
+    EXPECT_FLOAT_EQ(std::get<MouseWheelEvent>(b).x, -2.0f);
+    EXPECT_FLOAT_EQ(std::get<MouseWheelEvent>(b).y, 1.0f);
 }
 
 TEST(Sdl3EventMapperTests, TouchEventsMapToTheirKinds)
