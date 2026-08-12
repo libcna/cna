@@ -284,3 +284,26 @@ if(CNA_SKIA_GANESH_BUILD_DIR)
         SDL3::SDL3
     )
 endif()
+
+# --- plan_platform.md PLAT-131: terminal restoration harness ---
+# A tiny standalone (non-GTest) executable that takes the terminal over with a TerminalSession and
+# then dies in a chosen way: normally, by SIGINT/SIGTERM/SIGHUP, by abort(), or by letting an
+# exception escape main. Four of those five destroy the process, so none can be asserted inside
+# the shared CnaTests binary -- the assertion would die with it. TerminalRestorationTests.cpp
+# spawns this under a pseudo-terminal it owns and checks the terminal came back afterwards. Same
+# "needs its own process" precedent as cna_net_two_process_harness and
+# cna_devices_shutdown_ordering_harness above.
+#
+# POSIX-only, for the same reason TerminalSession itself is: it is built on termios.
+if(CNA_BUILD_TESTS AND NOT WIN32)
+    add_executable(cna_platform_terminal_restoration_harness
+        tools/platform/terminal_restoration_harness.cpp
+    )
+    # Links the platform module rather than all of CNA: TerminalSession has no dependency beyond
+    # libc and the platform module's own exception type, and keeping the harness's link closure
+    # small keeps a failure in it attributable to what it is testing.
+    target_link_libraries(cna_platform_terminal_restoration_harness
+        PRIVATE
+        cna_platform
+    )
+endif()

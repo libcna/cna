@@ -125,7 +125,8 @@ for one later:
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
-- **Phase 10** (terminal) — PLAT-129 (spike) and PLAT-130 (skeleton + selection) done. The
+- **Phase 10** (terminal) — PLAT-129 (spike), PLAT-130 (skeleton + selection) and PLAT-131
+  (session lifecycle + restoration) done. The
   conformance suite already runs green against `Terminal` as a third implementation, so PLAT-141's
   claim holds for the surface that exists today; the row stays open until the capabilities it is
   meant to cover are actually turned on.
@@ -159,6 +160,14 @@ inventing numbering. `KeyboardSnapshot::modifiers` had the same defect and is no
 is why `KeyCode` is a separate enum rather than a reference to XNA's `Keys`. Their value-for-value
 correspondence is verified by `KeyCodeMatchesXnaKeysTests` in `modules/input` — the only layer that
 can see both types.
+
+**A test for a crash path has to be able to fail, and proving that takes its own mode.**
+`TerminalRestorationTests` spawns a harness that dies six different ways under a pseudo-terminal
+the test owns. Five ways must leave the terminal restored — but *every* assertion in the file
+would also pass if the pty quietly reset itself between spawns, or if the echo check could never
+read false. So the harness has a sixth mode, `leak`, which takes the terminal over and calls
+`_exit()`: no destructor, no `atexit`, no signal handler, genuinely unrecoverable. Its assertions
+are the inverse of the others'. That mode is what makes the other five mean something.
 
 **Twenty-one conformance tests matched no ctest filter and had never run.** `PlatformWindowConformance`
 — the window half of PLAT-116's suite — was invisible to `CnaPlatformTests`, whose filter token
@@ -226,17 +235,18 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-131** (lifecycle and state
-   restoration): raw mode, alternate screen, hidden cursor and mouse reporting, each restored on
-   normal exit, `SIGINT`/`SIGTERM`/`SIGHUP`, unhandled exception *and* abort. Two constraints
-   PLAT-130 set that PLAT-131 has to respect:
-   - **The session must not start from `AcquireSubsystem(Video)` unconditionally.** The
-     conformance suite acquires video in a real process; if that took the terminal over, running
-     the test binary from a shell would hijack the developer's terminal. Gate it on
-     `stdout` actually being a tty and on the session being explicitly requested.
-   - **Detection is already written and already tested** —
-     `src/Terminal/TerminalCapabilityProbe.*`, driven under a real pseudo-terminal. PLAT-131 calls
-     it; it should not re-derive it.
+1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-132** (`TerminalSurfacePresenter`).
+   Three things are already built and should be *used*, not re-derived:
+   - **`TerminalSession`** (PLAT-131) takes the terminal over and gives it back on every exit
+     path. It is deliberately not wired into `TerminalPlatform` yet: **PLAT-132 is what starts
+     it**, when it creates the presenter. Do not start it from `AcquireSubsystem(Video)` — the
+     conformance suite acquires video in a real process, so that would hijack the terminal of
+     anyone running the test binary from a shell.
+   - **`TerminalCapabilityProbe`** (PLAT-129/130) answers colour depth and the Kitty question,
+     driven under a real pseudo-terminal.
+   - **`QuantizeFrameToGrid()`, `AsciiCell`, `AsciiGrid` and the `" .:-=+*#%@"` ramp**
+     (`modules/graphics-ext/`) are the RGBA→glyph transform, already written and tested. Reusing
+     them is the reason this phase is cheap.
 
    Its value beyond the feature is unchanged: an implementation with a genuinely different output
    model stresses the contract far harder than `HeadlessPlatform`, which implements everything by

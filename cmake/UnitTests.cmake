@@ -306,6 +306,16 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    if(TARGET cna_platform_terminal_restoration_harness)
+        # plan_platform.md PLAT-131: same reasoning as cna_net_two_process_harness above, and more
+        # sharply -- four of the five exit paths TerminalSession must restore on destroy the
+        # process, so they cannot be asserted inside this binary at all.
+        add_dependencies(CnaTests cna_platform_terminal_restoration_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_PLATFORM_TERMINAL_RESTORATION_HARNESS_PATH="$<TARGET_FILE:cna_platform_terminal_restoration_harness>"
+        )
+    endif()
+
     if(TARGET cna_audio_mixer_destroy_active_static_voice_harness)
         # Task AUD-04-008: same reasoning as cna_net_two_process_harness above.
         add_dependencies(CnaTests cna_audio_mixer_destroy_active_static_voice_harness)
@@ -456,7 +466,7 @@ if(CNA_BUILD_TESTS)
     # subsystem refcount is process-global, and an acquire/release imbalance would show up as
     # order dependence rather than as a direct failure.
     cna_register_renderer_test(NAME CnaPlatformTests
-        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:CurrentPlatformTest.*
+        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalSessionTest.*:TerminalRestoration.*:CurrentPlatformTest.*
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
