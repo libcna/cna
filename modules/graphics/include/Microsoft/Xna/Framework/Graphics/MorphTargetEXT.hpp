@@ -81,12 +81,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief The mesh part's base (all weights zero) vertex bytes, exactly as first uploaded. */
         std::vector<std::uint8_t> BaseVertexBytes;
-        /** @brief Byte stride of one vertex in BaseVertexBytes (32, 52, or 56 -- see CLAUDE.md's stride table). */
+        /** @brief Byte stride of one vertex in BaseVertexBytes -- any of CLAUDE.md's stride table. */
         int Stride = 32;
         /** @brief Per-target, per-vertex position deltas: PositionDeltas[target][vertex]. */
         std::vector<std::vector<Vector3>> PositionDeltas;
         /** @brief Per-target, per-vertex normal deltas, or an empty inner vector for a target with no NORMAL delta. */
         std::vector<std::vector<Vector3>> NormalDeltas;
+        /**
+         * @brief Per-target, per-vertex tangent deltas, or an empty inner vector for a target with
+         * no TANGENT delta.
+         *
+         * @note CNAEXT — plan_gltf.md `GLTF-279`. `Vector3`, not `Vector4`: glTF morphs the tangent
+         * **direction** only. The handedness `w` describes the UV winding and cannot be
+         * interpolated — blending `+1` and `−1` passes through `0`, which is not a handedness — so
+         * it stays on the base vertex and the blend never touches it. Only meaningful for strides
+         * with a Tangent slot; a layout without one leaves these unused.
+         */
+        std::vector<std::vector<Vector3>> TangentDeltas;
         /** @brief Current blend weights, one per target (PositionDeltas.size() entries). */
         std::vector<float> Weights;
         /** @brief Optional time-varying weight animation track (glTF "weights" animation channel), or empty if none. */

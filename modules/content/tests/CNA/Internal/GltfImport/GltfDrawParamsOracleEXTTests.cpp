@@ -901,3 +901,57 @@ TEST(GltfConformanceL6, TheThreeColourSpaceDecisionsAreIndependent)
     EXPECT_TRUE(captured.front().emissiveTextureIsSrgb) << "the two decodes are not independent";
     EXPECT_TRUE(captured.front().encodeOutputToSrgb);
 }
+
+// --- plan_gltf.md GLTF-224 / GLTF-225: normalTexture.scale and occlusionTexture.strength ----------
+
+// Neither was ever read, so a material that dialled its normal map down to a subtle 0.35 got the
+// full-strength 1.0 instead -- not a subtle difference. The fixture authors both away from 1 (the
+// value both the spec default and CNA's fallback use) and away from each other, so "dropped" and
+// "swapped" are different failures.
+TEST(GltfConformanceL6, NormalScaleAndOcclusionStrengthReachTheBoundEffect)
+{
+    const LoadedFixture fixture("mat-normal-occlusion-scale");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& material = FirstMaterial(fixture);
+    ASSERT_EQ(JsonType::Object, material.type);
+
+    const double expectedNormalScale = NumberOr(material, "normalScale", -1.0);
+    const double expectedOcclusion   = NumberOr(material, "occlusionStrength", -1.0);
+    ASSERT_GT(expectedNormalScale, 0.0);
+    ASSERT_NE(expectedNormalScale, expectedOcclusion) << "the fixture cannot detect a swap";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-normal-occlusion-scale");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    EXPECT_NEAR(static_cast<float>(expectedNormalScale), d.normalScale, kTolerance);
+    EXPECT_NEAR(static_cast<float>(expectedOcclusion), d.occlusionStrength, kTolerance);
+    // Named separately, because "arrived as 1" is the exact failure both had before and a
+    // near-miss comparison alone would not say which of the two ways it failed.
+    EXPECT_NE(1.0f, d.normalScale) << "normalTexture.scale arrived as the default -- it was dropped";
+    EXPECT_NE(1.0f, d.occlusionStrength)
+        << "occlusionTexture.strength arrived as the default -- it was dropped";
+}
+
+// Every other corpus material declares neither, and glTF's default for both is 1. A capture that
+// invented some other value there would break content that never asked for the feature.
+TEST(GltfConformanceL6, AMaterialDeclaringNeitherScalarGetsGltfsOwnDefaultOfOne)
+{
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-factor-only-gold");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    EXPECT_NEAR(1.0f, captured.front().normalScale, kTolerance);
+    EXPECT_NEAR(1.0f, captured.front().occlusionStrength, kTolerance);
+}

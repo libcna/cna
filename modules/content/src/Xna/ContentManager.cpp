@@ -2266,12 +2266,18 @@ namespace Microsoft::Xna::Framework::Content
                         morph->Stride = meshOut.stride;
                         morph->PositionDeltas.reserve(targetCount);
                         morph->NormalDeltas.reserve(targetCount);
+                        morph->TangentDeltas.reserve(targetCount);
                         for (std::size_t t = 0; t < targetCount; ++t)
                         {
                             morph->PositionDeltas.push_back(meshOut.morphPositionDeltas[t]);
                             morph->NormalDeltas.push_back(meshOut.morphNormalDeltas[t]);
+                            // plan_gltf.md GLTF-279: without these a morphed PBR surface kept its
+                            // rest-pose tangent basis, so normal mapping lit the deformed surface
+                            // with the undeformed basis.
+                            morph->TangentDeltas.push_back(meshOut.morphTangentDeltas[t]);
                         }
-                        morph->Weights = GetMeshDefaultWeights(mesh, targetCount);
+                        // GLTF-281: the instancing node's own weights win over the mesh's.
+                        morph->Weights = GetMeshDefaultWeights(mesh, targetCount, instance.node);
                         if (auto weightTrack = ExtractMorphWeightTrack(data, mesh, targetCount))
                         {
                             morph->WeightTrack.Keys.reserve(weightTrack->keys.size());
@@ -2374,6 +2380,10 @@ namespace Microsoft::Xna::Framework::Content
                             pbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
                             pbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
                             pbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
+                            // plan_gltf.md GLTF-224/GLTF-225: never read before, so a material that
+                            // dialled its normal map down to a subtle 0.2 got the full 1.0 instead.
+                            pbrFx->setNormalScaleEXTProperty(meshOut.normalScale);
+                            pbrFx->setOcclusionStrengthEXTProperty(meshOut.occlusionStrength);
                             // plan_gltf.md GLTF-216: baseColorFactor multiplies the base-colour
                             // texture, or stands alone when there is none. Never read before.
                             pbrFx->setDiffuseColorProperty(Vector3(meshOut.baseColorFactor.X,
@@ -2398,6 +2408,10 @@ namespace Microsoft::Xna::Framework::Content
                             skinnedPbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
                             skinnedPbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
                             skinnedPbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
+                            // plan_gltf.md GLTF-224/GLTF-225: never read before, so a material that
+                            // dialled its normal map down to a subtle 0.2 got the full 1.0 instead.
+                            skinnedPbrFx->setNormalScaleEXTProperty(meshOut.normalScale);
+                            skinnedPbrFx->setOcclusionStrengthEXTProperty(meshOut.occlusionStrength);
                             // GLTF-216, on the skinned twin: the same base colour, so a skinned
                             // and an unskinned primitive of one material shade alike.
                             skinnedPbrFx->setDiffuseColorProperty(Vector3(meshOut.baseColorFactor.X,

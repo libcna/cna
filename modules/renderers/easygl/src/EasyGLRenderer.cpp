@@ -5879,6 +5879,12 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
 "uniform vec3 uSrgb;\n"
+// plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
+// already uses everywhere -- the EasyGL family needs sibling checkouts this tree does not have, so
+// a wider overload could not be verified here.
+"uniform float uNormalScale;\n"
+"uniform float uOcclusionStrength;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -5923,6 +5929,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
 "    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
+// glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
+// merely rescale the whole vector, which normalization then undoes -- the perturbation would not
+// change at all.
+"    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
 "    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
@@ -5934,6 +5944,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
+// §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
+// holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
+// darken everything to black.
+"    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
 "    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
@@ -5975,6 +5989,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
+        p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6056,6 +6072,12 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
 "uniform vec3 uSrgb;\n"
+// plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
+// already uses everywhere -- the EasyGL family needs sibling checkouts this tree does not have, so
+// a wider overload could not be verified here.
+"uniform float uNormalScale;\n"
+"uniform float uOcclusionStrength;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6098,6 +6120,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
 "    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
+// glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
+// merely rescale the whole vector, which normalization then undoes -- the perturbation would not
+// change at all.
+"    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
 "    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
@@ -6109,6 +6135,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
+// §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
+// holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
+// darken everything to black.
+"    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
 "    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
@@ -6152,6 +6182,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
+        p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
+        p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6616,6 +6648,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
         // components: two about what a bound texture contains, one about where the fragment is
         // going. A renderer that ignored this field entirely would keep the pre-GLTF-209
         // behaviour exactly, which is what makes adopting it a per-renderer step.
+        if (p.loc_pbr_normalscale >= 0)
+            p.prog.set_uniform(p.loc_pbr_normalscale, params.pbrNormalScale);
+        if (p.loc_pbr_occlstrength >= 0)
+            p.prog.set_uniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength);
         if (p.loc_pbr_srgb >= 0)
         {
             p.prog.set_uniform(p.loc_pbr_srgb,

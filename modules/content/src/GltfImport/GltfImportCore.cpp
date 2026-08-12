@@ -1646,6 +1646,25 @@ namespace CNA::Internal::GltfImport
             }
             out.alphaCutoff = prim.material->alpha_cutoff;
             out.doubleSided = prim.material->double_sided != 0;
+            // plan_gltf.md GLTF-224/GLTF-225. Read for ANY material, not only one that selected
+            // PBR -- the same ungating GLTF-219/221 applied to the scalar factors, and for the
+            // same reason: a value the file states should reach MeshOut whether or not the effect
+            // chosen for it happens to consume it.
+            //
+            // cgltf sets a texture view's `scale` to 1 only when it PARSES that view; a material
+            // with no `normalTexture` object at all leaves the struct zeroed by calloc. Reading it
+            // straight through therefore yields 0 -- "flatten the normal map completely" -- for
+            // every material that simply does not mention one, which is the opposite of glTF's own
+            // default. So an undeclared view falls back to 1 explicitly. A view is declared when it
+            // names a texture, or when cgltf's own parse left a non-zero scale behind; a view that
+            // authors `scale: 0` *and* names no texture is degenerate either way, since the scalar
+            // only means anything when a map is bound.
+            const auto viewScalar = [](const cgltf_texture_view& view) {
+                const bool declared = (view.texture != nullptr) || (view.scale != 0.0f);
+                return declared ? view.scale : 1.0f;
+            };
+            out.normalScale = viewScalar(prim.material->normal_texture);
+            out.occlusionStrength = viewScalar(prim.material->occlusion_texture);
 
             // plan_gltf.md GLTF-202: one sampler per texture slot, read from the texture each view
             // names. A slot with no texture keeps glTF's default with `declared` false.
@@ -1986,11 +2005,14 @@ namespace CNA::Internal::GltfImport
             else { AppendUint16(out.indexBytes, static_cast<std::uint16_t>(v)); }
         }
 
-        // CNB-64 (Phase 13B): morph target position/normal deltas. TANGENT deltas are not
-        // extracted (CNA's stock effects have no tangent-space normal mapping, matching PBR
-        // normal-map's own documented scope cut).
+        // CNB-64 (Phase 13B): morph target position/normal deltas. plan_gltf.md GLTF-279 adds the
+        // tangent ones: the scope cut that skipped them predated PbrEffect's real tangent-space
+        // normal mapping, so a morphed PBR surface kept its rest-pose tangent basis while its
+        // positions and normals moved -- normal mapping then lit the deformed surface with the
+        // undeformed basis.
         out.morphPositionDeltas.resize(prim.targets_count);
         out.morphNormalDeltas.resize(prim.targets_count);
+        out.morphTangentDeltas.resize(prim.targets_count);
         for (cgltf_size ti = 0; ti < prim.targets_count; ++ti)
         {
             const cgltf_morph_target& target = prim.targets[ti];
@@ -2023,6 +2045,25 @@ namespace CNA::Internal::GltfImport
             }
             // else: leave out.morphNormalDeltas[ti] empty -- signals "no normal delta for this
             // target" to SetMorphWeightsEXT, which then leaves the base normal unchanged.
+
+            // GLTF-279. A morph TANGENT delta is VEC3, never VEC4: §3.7.2.2 morphs the tangent
+            // DIRECTION only, because the handedness `w` describes the UV winding and cannot be
+            // interpolated meaningfully -- blending +1 and -1 would pass through 0, which is not a
+            // handedness at all. Unpacked as 3 components so the base vertex's own `w` survives by
+            // construction rather than by a rule someone has to remember.
+            const cgltf_accessor* tangentDeltaAcc =
+                FindMorphTargetAttribute(target, cgltf_attribute_type_tangent);
+            if (tangentDeltaAcc)
+            {
+                const std::vector<float> deltas =
+                    UnpackAccessor(tangentDeltaAcc, 3, "morph target TANGENT delta");
+                out.morphTangentDeltas[ti].resize(vertexCount);
+                for (cgltf_size v = 0; v < vertexCount; ++v)
+                {
+                    const std::size_t o = static_cast<std::size_t>(v) * 3;
+                    out.morphTangentDeltas[ti][v] = Vector3(deltas[o], deltas[o + 1], deltas[o + 2]);
+                }
+            }
         }
 
         return out;
@@ -2391,11 +2432,30 @@ namespace CNA::Internal::GltfImport
         return result;
     }
 
-    std::vector<float> GetMeshDefaultWeights(const cgltf_mesh* mesh, std::size_t targetCount)
+    std::vector<float> GetMeshDefaultWeights(const cgltf_mesh* mesh, std::size_t targetCount,
+                                              const cgltf_node* instancingNode)
     {
         std::vector<float> weights(targetCount, 0.0f);
-        const std::size_t n = std::min(static_cast<std::size_t>(mesh->weights_count), targetCount);
-        for (std::size_t i = 0; i < n; ++i) { weights[i] = mesh->weights[i]; }
+        if (mesh == nullptr) { return weights; }
+
+        // plan_gltf.md GLTF-281. §3.7.2.2: `node.weights` OVERRIDES `mesh.weights` -- it does not
+        // merge with it and does not fill in only the entries it names. That distinction matters:
+        // a node declaring [1,0] for a mesh whose own weights are [0,1] must produce [1,0], not
+        // [1,1]. So the node's array is used INSTEAD of the mesh's when present, and a node array
+        // shorter than the target count leaves the remainder at zero rather than at the mesh's
+        // value. `node.weights` was read by nobody before this, so an instanced mesh posed for one
+        // node's expression got every node's.
+        const cgltf_float* source = mesh->weights;
+        std::size_t available = static_cast<std::size_t>(mesh->weights_count);
+        if (instancingNode != nullptr && instancingNode->weights_count > 0)
+        {
+            source = instancingNode->weights;
+            available = static_cast<std::size_t>(instancingNode->weights_count);
+        }
+        if (source == nullptr) { return weights; }
+
+        const std::size_t n = std::min(available, targetCount);
+        for (std::size_t i = 0; i < n; ++i) { weights[i] = source[i]; }
         return weights;
     }
 

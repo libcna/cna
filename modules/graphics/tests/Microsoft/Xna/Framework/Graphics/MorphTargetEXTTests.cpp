@@ -389,3 +389,93 @@ TEST(BlendMorphTargetsEXTTest, ThePbrStridesAreNotExcludedFromNormalBlending)
             << "the base normal survived a full-weight normal delta -- GLTF-278 has regressed";
     }
 }
+
+// --- plan_gltf.md GLTF-279: TANGENT deltas, with the handedness left alone ------------------------
+//
+// Morph tangent deltas were never extracted at all, so a morphed PBR surface kept its rest-pose
+// tangent basis while its positions and normals moved -- normal mapping then lit the deformed
+// surface with the undeformed basis. The subtlety is the fourth component: glTF morphs the tangent
+// DIRECTION only, because `w` is the UV winding's handedness and interpolating it would pass
+// through 0, which is not a handedness at all.
+
+namespace
+{
+    /// One stride-48 vertex: Position(0), Normal(12), Tangent(24, vec4), TexCoord(40).
+    std::vector<std::uint8_t> BuildStride48Vertex(float tangentW)
+    {
+        std::vector<std::uint8_t> bytes(48, 0);
+        const float position[3] = {0.0f, 0.0f, 0.0f};
+        const float normal[3]   = {0.0f, 0.0f, 1.0f};
+        const float tangent[4]  = {1.0f, 0.0f, 0.0f, tangentW};
+        std::memcpy(bytes.data(), position, sizeof(position));
+        std::memcpy(bytes.data() + 12, normal, sizeof(normal));
+        std::memcpy(bytes.data() + 24, tangent, sizeof(tangent));
+        return bytes;
+    }
+
+    MorphTargetDataEXT BuildTangentMorph(float tangentW)
+    {
+        MorphTargetDataEXT morph;
+        morph.Stride = 48;
+        morph.BaseVertexBytes = BuildStride48Vertex(tangentW);
+        morph.PositionDeltas.push_back({Vector3(0, 0, 0)});
+        morph.NormalDeltas.emplace_back();
+        // Rotates the tangent a quarter turn from +X toward +Y.
+        morph.TangentDeltas.push_back({Vector3(-1, 1, 0)});
+        return morph;
+    }
+}
+
+TEST(BlendMorphTargetsEXTTest, TangentDeltaRotatesTheTangentDirection)
+{
+    const MorphTargetDataEXT morph = BuildTangentMorph(1.0f);
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+
+    float tangent[4];
+    std::memcpy(tangent, blended.data() + 24, sizeof(tangent));
+    // (1,0,0) + (-1,1,0) = (0,1,0), renormalized.
+    EXPECT_NEAR(0.0f, tangent[0], 1e-5f);
+    EXPECT_NEAR(1.0f, tangent[1], 1e-5f);
+    EXPECT_NEAR(0.0f, tangent[2], 1e-5f);
+}
+
+// The handedness must survive untouched, in BOTH signs -- a blend that wrote a 4-component tangent
+// would flip or zero it, and a mirrored UV island would then light inside out.
+TEST(BlendMorphTargetsEXTTest, TangentHandednessIsNeverBlended)
+{
+    for (const float handedness : {1.0f, -1.0f})
+    {
+        SCOPED_TRACE("w = " + std::to_string(handedness));
+        const MorphTargetDataEXT morph = BuildTangentMorph(handedness);
+        const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+
+        float tangent[4];
+        std::memcpy(tangent, blended.data() + 24, sizeof(tangent));
+        EXPECT_FLOAT_EQ(handedness, tangent[3])
+            << "the tangent's w was modified -- handedness is UV winding, not pose";
+    }
+
+    // And a half weight must not drag it toward zero either, which is what interpolating it would
+    // do and is the reason it is stored as a Vector3 delta in the first place.
+    const MorphTargetDataEXT morph = BuildTangentMorph(-1.0f);
+    const std::vector<std::uint8_t> halfBlended = BlendMorphTargetsEXT(morph, {0.5f});
+    float tangent[4];
+    std::memcpy(tangent, halfBlended.data() + 24, sizeof(tangent));
+    EXPECT_FLOAT_EQ(-1.0f, tangent[3]);
+}
+
+// A layout with no tangent slot must be left entirely alone, the same way the normal-less strides
+// are: writing a tangent at offset 24 of a stride-32 vertex would land on its TextureCoordinate.
+TEST(BlendMorphTargetsEXTTest, AStrideWithNoTangentSlotIsUntouchedByATangentDelta)
+{
+    MorphTargetDataEXT morph;
+    morph.Stride = 32;
+    morph.BaseVertexBytes = BuildBaseTriangleBytes();
+    morph.PositionDeltas.push_back({Vector3(0, 0, 0), Vector3(0, 0, 0), Vector3(0, 0, 0)});
+    morph.NormalDeltas.emplace_back();
+    morph.TangentDeltas.push_back({Vector3(9, 9, 9), Vector3(9, 9, 9), Vector3(9, 9, 9)});
+
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+    EXPECT_EQ(morph.BaseVertexBytes, blended)
+        << "a tangent delta modified a layout that has no tangent";
+}

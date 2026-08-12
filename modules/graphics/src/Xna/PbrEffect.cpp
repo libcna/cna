@@ -53,6 +53,8 @@ namespace Microsoft::Xna::Framework::Graphics
         emissiveFactor_    = src.emissiveFactor_;
         metallicFactor_    = src.metallicFactor_;
         roughnessFactor_   = src.roughnessFactor_;
+        normalScale_       = src.normalScale_;
+        occlusionStrength_ = src.occlusionStrength_;
         baseColorTextureIsSrgb_ = src.baseColorTextureIsSrgb_;
         emissiveTextureIsSrgb_  = src.emissiveTextureIsSrgb_;
         encodeOutputToSrgb_     = src.encodeOutputToSrgb_;
@@ -246,6 +248,10 @@ namespace Microsoft::Xna::Framework::Graphics
     Vector3 PbrEffect::getEmissiveFactorProperty() const { return emissiveFactor_; }
     void    PbrEffect::setEmissiveFactorProperty(const Vector3& v) { emissiveFactor_ = v; }
 
+    float   PbrEffect::getNormalScaleEXTProperty() const { return normalScale_; }
+    void    PbrEffect::setNormalScaleEXTProperty(float v) { normalScale_ = v; }
+    float   PbrEffect::getOcclusionStrengthEXTProperty() const { return occlusionStrength_; }
+    void    PbrEffect::setOcclusionStrengthEXTProperty(float v) { occlusionStrength_ = v; }
     bool    PbrEffect::getBaseColorTextureIsSrgbEXTProperty() const { return baseColorTextureIsSrgb_; }
     void    PbrEffect::setBaseColorTextureIsSrgbEXTProperty(bool v) { baseColorTextureIsSrgb_ = v; }
     bool    PbrEffect::getEmissiveTextureIsSrgbEXTProperty() const { return emissiveTextureIsSrgb_; }
@@ -347,6 +353,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // lit result is encoded back. Carried as three separate facts because they are three
         // separate decisions -- two about what a texture contains, one about where the fragment
         // is going.
+        p.pbrNormalScale       = normalScale_;
+        p.pbrOcclusionStrength = occlusionStrength_;
         p.pbrBaseColorTextureIsSrgb = baseColorTextureIsSrgb_;
         p.pbrEmissiveTextureIsSrgb  = emissiveTextureIsSrgb_;
         p.pbrEncodeOutputToSrgb     = encodeOutputToSrgb_;

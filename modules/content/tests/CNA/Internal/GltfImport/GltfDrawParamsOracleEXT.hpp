@@ -109,6 +109,10 @@ namespace CnaTest::GltfOracle
 
         // --- §21.1 colour space (plan_gltf.md GLTF-210/GLTF-212) ---------------------------------
 
+        /** @brief `GpuDrawParams::pbrNormalScale` (glTF `normalTexture.scale`). */
+        float normalScale = 0.0f;
+        /** @brief `GpuDrawParams::pbrOcclusionStrength` (glTF `occlusionTexture.strength`). */
+        float occlusionStrength = 0.0f;
         /** @brief `GpuDrawParams::pbrBaseColorTextureIsSrgb`. */
         bool baseColorTextureIsSrgb = false;
         /** @brief `GpuDrawParams::pbrEmissiveTextureIsSrgb`. */

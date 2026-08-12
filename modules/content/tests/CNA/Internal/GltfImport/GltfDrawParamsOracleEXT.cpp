@@ -245,6 +245,8 @@ namespace CnaTest::GltfOracle
                                      p.diffuseColor[3]};
                 dump.metallicFactor  = p.pbrMetallicFactor;
                 dump.roughnessFactor = p.pbrRoughnessFactor;
+                dump.normalScale       = p.pbrNormalScale;
+                dump.occlusionStrength = p.pbrOcclusionStrength;
                 dump.baseColorTextureIsSrgb = p.pbrBaseColorTextureIsSrgb;
                 dump.emissiveTextureIsSrgb  = p.pbrEmissiveTextureIsSrgb;
                 dump.encodeOutputToSrgb     = p.pbrEncodeOutputToSrgb;
@@ -299,6 +301,8 @@ namespace CnaTest::GltfOracle
         out += ",\"diffuseColor\":" + Flat(dump.diffuseColor);
         out += ",\"metallicFactor\":" + Num(dump.metallicFactor);
         out += ",\"roughnessFactor\":" + Num(dump.roughnessFactor);
+        out += ",\"normalScale\":" + Num(dump.normalScale);
+        out += ",\"occlusionStrength\":" + Num(dump.occlusionStrength);
         out += ",\"baseColorTextureIsSrgb\":" + Bool(dump.baseColorTextureIsSrgb);
         out += ",\"emissiveTextureIsSrgb\":" + Bool(dump.emissiveTextureIsSrgb);
         out += ",\"encodeOutputToSrgb\":" + Bool(dump.encodeOutputToSrgb);

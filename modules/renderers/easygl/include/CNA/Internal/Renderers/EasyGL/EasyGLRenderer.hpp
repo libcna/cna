@@ -669,6 +669,10 @@ namespace CNA::Internal::Renderers::EasyGL
             /// z = encode the fragment's RGB back to sRGB. Each is 0 or 1 and multiplies a
             /// `mix()` rather than driving a branch, so every fragment costs the same.
             int loc_pbr_srgb        = -1;
+            /// plan_gltf.md GLTF-224: float normalTexture.scale (PbrEffect only).
+            int loc_pbr_normalscale = -1;
+            /// plan_gltf.md GLTF-225: float occlusionTexture.strength (PbrEffect only).
+            int loc_pbr_occlstrength = -1;
             int loc_rt_flip_v       = -1;  ///< REMED-GFX-147: vec4 render-target V-flip flags for texture units 0-3
             int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: vec4 whose x is texture unit 4's flag (PbrEffect only)
             int loc_instanced       = -1;  ///< REMED-GFX-122: stock-program per-instance matrix gate

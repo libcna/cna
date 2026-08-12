@@ -38,6 +38,7 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::Internal::Graphics::InferredLayoutForStride(
                 stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
         int normalOffset = -1;
+        int tangentOffset = -1;
         for (std::size_t i = 0; layout.known && i < layout.count; ++i)
         {
             if (layout.elements[i].usage == VertexElementUsage::Normal &&
@@ -45,10 +46,18 @@ namespace Microsoft::Xna::Framework::Graphics
                 layout.elements[i].format == VertexElementFormat::Vector3)
             {
                 normalOffset = layout.elements[i].offset;
-                break;
+            }
+            // plan_gltf.md GLTF-279. Vector4 in the layout, but only its xyz is morphed: `w` is the
+            // handedness and stays exactly as the base vertex has it.
+            else if (layout.elements[i].usage == VertexElementUsage::Tangent &&
+                     layout.elements[i].usageIndex == 0 &&
+                     layout.elements[i].format == VertexElementFormat::Vector4)
+            {
+                tangentOffset = layout.elements[i].offset;
             }
         }
         const bool hasNormalSlot = normalOffset >= 0;
+        const bool hasTangentSlot = tangentOffset >= 0;
         const int numVertices = stride > 0
             ? static_cast<int>(morph.BaseVertexBytes.size()) / stride : 0;
 
@@ -58,7 +67,9 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             Vector3 posDelta;
             Vector3 normDelta;
+            Vector3 tangentDelta;
             bool anyNormalDelta = false;
+            bool anyTangentDelta = false;
 
             for (std::size_t t = 0; t < weights.size(); ++t)
             {
@@ -69,6 +80,12 @@ namespace Microsoft::Xna::Framework::Graphics
                 {
                     normDelta = normDelta + w * morph.NormalDeltas[t][static_cast<std::size_t>(v)];
                     anyNormalDelta = true;
+                }
+                if (t < morph.TangentDeltas.size() && !morph.TangentDeltas[t].empty())
+                {
+                    tangentDelta =
+                        tangentDelta + w * morph.TangentDeltas[t][static_cast<std::size_t>(v)];
+                    anyTangentDelta = true;
                 }
             }
 
@@ -95,6 +112,28 @@ namespace Microsoft::Xna::Framework::Graphics
                     newNorm = Vector3(newNorm.X * invLen, newNorm.Y * invLen, newNorm.Z * invLen);
                 }
                 std::memcpy(blended.data() + normOff, &newNorm, sizeof(newNorm));
+            }
+
+            if (hasTangentSlot && anyTangentDelta)
+            {
+                const std::size_t tanOff = off + static_cast<std::size_t>(tangentOffset);
+                float baseTangent[4];
+                std::memcpy(baseTangent, blended.data() + tanOff, sizeof(baseTangent));
+                Vector3 newTangent(baseTangent[0] + tangentDelta.X,
+                                   baseTangent[1] + tangentDelta.Y,
+                                   baseTangent[2] + tangentDelta.Z);
+                const float lenSq = newTangent.X * newTangent.X + newTangent.Y * newTangent.Y +
+                                    newTangent.Z * newTangent.Z;
+                if (lenSq > 1e-12f)
+                {
+                    const float invLen = 1.0f / std::sqrt(lenSq);
+                    newTangent = Vector3(newTangent.X * invLen, newTangent.Y * invLen,
+                                         newTangent.Z * invLen);
+                }
+                // Only xyz is written. baseTangent[3] -- the handedness -- is deliberately left
+                // exactly as it was: it is a property of the UV winding, not of the pose, and
+                // interpolating it would pass through 0, which is not a handedness at all.
+                std::memcpy(blended.data() + tanOff, &newTangent, sizeof(newTangent));
             }
         }
 

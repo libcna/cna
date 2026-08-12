@@ -60,6 +60,8 @@ namespace Microsoft::Xna::Framework::Graphics
         emissiveFactor_    = src.emissiveFactor_;
         metallicFactor_    = src.metallicFactor_;
         roughnessFactor_   = src.roughnessFactor_;
+        normalScale_       = src.normalScale_;
+        occlusionStrength_ = src.occlusionStrength_;
         baseColorTextureIsSrgb_ = src.baseColorTextureIsSrgb_;
         emissiveTextureIsSrgb_  = src.emissiveTextureIsSrgb_;
         encodeOutputToSrgb_     = src.encodeOutputToSrgb_;
@@ -260,6 +262,10 @@ namespace Microsoft::Xna::Framework::Graphics
     Vector3 SkinnedPbrEffect::getEmissiveFactorProperty() const { return emissiveFactor_; }
     void    SkinnedPbrEffect::setEmissiveFactorProperty(const Vector3& v) { emissiveFactor_ = v; }
 
+    float   SkinnedPbrEffect::getNormalScaleEXTProperty() const { return normalScale_; }
+    void    SkinnedPbrEffect::setNormalScaleEXTProperty(float v) { normalScale_ = v; }
+    float   SkinnedPbrEffect::getOcclusionStrengthEXTProperty() const { return occlusionStrength_; }
+    void    SkinnedPbrEffect::setOcclusionStrengthEXTProperty(float v) { occlusionStrength_ = v; }
     bool    SkinnedPbrEffect::getBaseColorTextureIsSrgbEXTProperty() const { return baseColorTextureIsSrgb_; }
     void    SkinnedPbrEffect::setBaseColorTextureIsSrgbEXTProperty(bool v) { baseColorTextureIsSrgb_ = v; }
     bool    SkinnedPbrEffect::getEmissiveTextureIsSrgbEXTProperty() const { return emissiveTextureIsSrgb_; }
@@ -391,6 +397,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // lit result is encoded back. Carried as three separate facts because they are three
         // separate decisions -- two about what a texture contains, one about where the fragment
         // is going.
+        p.pbrNormalScale       = normalScale_;
+        p.pbrOcclusionStrength = occlusionStrength_;
         p.pbrBaseColorTextureIsSrgb = baseColorTextureIsSrgb_;
         p.pbrEmissiveTextureIsSrgb  = emissiveTextureIsSrgb_;
         p.pbrEncodeOutputToSrgb     = encodeOutputToSrgb_;

@@ -371,4 +371,87 @@ def mat_vertex_color_pbr() -> Fixture:
     )
 
 
-FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr]
+#: `mat-normal-occlusion-scale`'s two scalars. Both deliberately away from 1 -- the value both the
+#: specification default and CNA's own fallback use -- and away from each other, so a swap is
+#: visible as well as a drop.
+_NORMAL_SCALE = 0.35
+_OCCLUSION_STRENGTH = 0.8
+
+
+def mat_normal_occlusion_scale() -> Fixture:
+    """``normalTexture.scale`` and ``occlusionTexture.strength``. Owns **GLTF-224**/**GLTF-225**.
+
+    Neither was ever read, so a material that dialled its normal map down to a subtle 0.35 got the
+    full-strength 1.0 instead -- not a subtle difference.
+
+    The material declares both texture *views* so the scalars have somewhere to live, and neither
+    view names a texture: the corpus has no image support yet (``GLTF-190``), and the scalars are
+    material state that reaches the effect whether or not a map is bound. That keeps this fixture
+    about the two numbers rather than about texture loading.
+    """
+    b = GltfBuilder("mat-normal-occlusion-scale")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "ScaledMaps",
+        "pbrMetallicRoughness": {"metallicFactor": 0.0, "roughnessFactor": 0.6},
+        "normalTexture": {"scale": _NORMAL_SCALE},
+        "occlusionTexture": {"strength": _OCCLUSION_STRENGTH},
+    })
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="ScaledTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    expected_material = {
+        "index": material,
+        "name": "ScaledMaps",
+        "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.6,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "normalScale": _NORMAL_SCALE,
+        "occlusionStrength": _OCCLUSION_STRENGTH,
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+        "occlusionRule": "1 + strength * (sampled - 1). At strength 0 the result is 1 -- no "
+                         "occlusion at all, whatever the map holds. Multiplying by the strength "
+                         "instead would darken everything to black, which is the plausible wrong "
+                         "formula.",
+        "normalScaleRule": "Scales the sampled tangent-space normal's X and Y only. Scaling Z too "
+                           "would merely rescale the vector, which normalization undoes -- the "
+                           "perturbation would not change at all.",
+    }
+    return Fixture(
+        id="mat-normal-occlusion-scale", audit_fixture=None, owning_group="materials",
+        description="A material declaring normalTexture.scale 0.35 and occlusionTexture.strength "
+                    "0.8. Both were never read, so both arrived as 1. Authored away from 1 and "
+                    "away from each other, so a dropped value and a swapped pair are different "
+                    "failures.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["normalTexture.scale", "occlusionTexture.strength", "texture view without a texture"],
+        spec_anchors=["additional-textures", "metallic-roughness-material"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="ScaledTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr,
+            mat_normal_occlusion_scale]

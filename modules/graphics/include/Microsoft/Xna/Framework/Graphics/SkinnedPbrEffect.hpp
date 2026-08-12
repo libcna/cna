@@ -194,6 +194,41 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return True when the texture is sRGB-encoded and must be decoded before lighting.
          */
+        /**
+         * @brief How far the bound normal map perturbs the surface (glTF `normalTexture.scale`).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-224`). Scales the sampled
+         * tangent-space normal's x and y before the tangent basis is applied: 0 flattens the map to
+         * the geometric normal, 1 is the map as authored, and values above 1 exaggerate it — glTF
+         * puts no upper bound on it, so neither does this.
+         *
+         * @return The normal scale; 1 by default.
+         */
+        CNAEXT [[nodiscard]] float getNormalScaleEXTProperty() const;
+
+        /**
+         * @brief Sets how far the bound normal map perturbs the surface.
+         * @param value The scale; 0 flattens the map, 1 is as authored.
+         */
+        CNAEXT void setNormalScaleEXTProperty(float value);
+
+        /**
+         * @brief How far the bound occlusion map darkens (glTF `occlusionTexture.strength`).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-225`). Applied as
+         * `1 + strength * (sampled - 1)`, the specification's own formula: at 0 the result is 1 —
+         * no occlusion at all, whatever the map holds — and at 1 it is the map unchanged.
+         *
+         * @return The occlusion strength; 1 by default.
+         */
+        CNAEXT [[nodiscard]] float getOcclusionStrengthEXTProperty() const;
+
+        /**
+         * @brief Sets how far the bound occlusion map darkens.
+         * @param value The strength; 0 disables occlusion, 1 applies the map as authored.
+         */
+        CNAEXT void setOcclusionStrengthEXTProperty(float value);
+
         CNAEXT [[nodiscard]] bool getBaseColorTextureIsSrgbEXTProperty() const;
 
         /**
@@ -353,6 +388,8 @@ namespace Microsoft::Xna::Framework::Graphics
         bool fogEnabled_ = false;
         int  weightsPerVertex_ = 4;
 
+        float normalScale_       = 1.0f;
+        float occlusionStrength_ = 1.0f;
         bool baseColorTextureIsSrgb_ = true;
         bool emissiveTextureIsSrgb_  = true;
         bool encodeOutputToSrgb_     = true;

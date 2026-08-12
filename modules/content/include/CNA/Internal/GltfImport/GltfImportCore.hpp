@@ -388,6 +388,24 @@ namespace CNA::Internal::GltfImport
         /** @brief The material's occlusion texture image, or nullptr if none. */
         const cgltf_image* occlusionImage = nullptr;
         /**
+         * @brief `normalTexture.scale` — how far the normal map perturbs the surface (§3.9.3).
+         *
+         * plan_gltf.md `GLTF-224`. Never read before: a material that dialled its normal map down
+         * to a subtle 0.2 got the full-strength 1.0 instead, which is not a subtle difference.
+         * Scales the sampled tangent-space normal's x and y before the basis is applied, so 0
+         * flattens the map to the geometric normal and values above 1 exaggerate it — the
+         * specification puts no upper bound on it.
+         */
+        float normalScale = 1.0f;
+        /**
+         * @brief `occlusionTexture.strength` — how far the occlusion map darkens (§3.9.3).
+         *
+         * plan_gltf.md `GLTF-225`. Never read before. Applied as
+         * `1 + strength * (sampled - 1)`, the specification's own formula: at `strength = 0` the
+         * result is 1 (no occlusion at all) whatever the map says, and at 1 it is the map.
+         */
+        float occlusionStrength = 1.0f;
+        /**
          * @brief The sampler state of each material texture, by slot (plan_gltf.md `GLTF-202`).
          *
          * Indexed by @ref TextureSlotEXT. Per slot rather than per material because glTF attaches a
@@ -409,6 +427,16 @@ namespace CNA::Internal::GltfImport
          * a Normal slot (32/52/56) -- see SetMorphWeightsEXT's own doc comment.
          */
         std::vector<std::vector<Microsoft::Xna::Framework::Vector3>> morphNormalDeltas;
+        /**
+         * @brief Per-target, per-vertex tangent deltas, or an empty inner vector for a target with
+         * no TANGENT delta. Only meaningful for strides with a Tangent slot (48/68).
+         *
+         * plan_gltf.md `GLTF-279`. glTF morph TANGENT deltas are `VEC3`, not `VEC4`: the
+         * handedness `w` is a property of the UV winding and is **not** morphed, so it is carried
+         * on the base vertex and left alone by the blend. Storing these as `Vector3` is what makes
+         * that impossible to get wrong.
+         */
+        std::vector<std::vector<Microsoft::Xna::Framework::Vector3>> morphTangentDeltas;
         /**
          * @brief True when this primitive is imported through PbrEffect (stride 48,
          * VertexPositionNormalTangentTexture, unskinned) or SkinnedPbrEffect (stride 68,
@@ -1062,7 +1090,21 @@ namespace CNA::Internal::GltfImport
      * @param targetCount The primitive's own morph target count (MeshOut::morphPositionDeltas.size()).
      * @return The default weight vector, exactly @p targetCount entries long.
      */
-    std::vector<float> GetMeshDefaultWeights(const cgltf_mesh* mesh, std::size_t targetCount);
+    /**
+     * @brief The morph weights a mesh instance starts at (plan_gltf.md `GLTF-281`).
+     *
+     * §3.7.2.2 gives the instancing **node** the final say: `node.weights` *overrides*
+     * `mesh.weights` rather than merging with it, so a node declaring `[1,0]` for a mesh whose own
+     * weights are `[0,1]` starts at `[1,0]` and not at `[1,1]`. `node.weights` was read by nobody
+     * before this, so a mesh instanced by several nodes wore every node's expression at once.
+     *
+     * @param mesh The mesh whose targets are being weighted.
+     * @param targetCount Number of morph targets; the result always has this length.
+     * @param instancingNode The node instancing @p mesh, or nullptr when the caller has none.
+     * @return One weight per target, zero-filled beyond whichever array supplied them.
+     */
+    std::vector<float> GetMeshDefaultWeights(const cgltf_mesh* mesh, std::size_t targetCount,
+                                              const cgltf_node* instancingNode = nullptr);
 
     /**
      * @brief Extracts a mesh's morph-weight animation track, if one exists.

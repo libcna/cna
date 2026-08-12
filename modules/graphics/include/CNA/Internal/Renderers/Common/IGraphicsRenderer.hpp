@@ -1035,6 +1035,16 @@ namespace CNA::Internal::Renderers
         /// PbrEffect: roughness factor [0,1], multiplied with pbrMetallicRoughnessMap's G channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrRoughnessFactor = 1.0f;
+        /// plan_gltf.md GLTF-224: glTF `normalTexture.scale`. Scales the sampled tangent-space
+        /// normal's x and y before the tangent basis is applied -- 0 flattens the map to the
+        /// geometric normal, 1 is the map as authored, and glTF puts no upper bound on it. Only
+        /// meaningful when `pbrNormalMap` is bound.
+        float pbrNormalScale = 1.0f;
+        /// plan_gltf.md GLTF-225: glTF `occlusionTexture.strength`, applied as the specification's
+        /// own `1 + strength * (sampled - 1)`. At 0 the result is 1 -- no occlusion at all,
+        /// whatever the map holds -- and at 1 it is the map unchanged. Only meaningful when
+        /// `pbrOcclusionMap` is bound.
+        float pbrOcclusionStrength = 1.0f;
         /// plan_gltf.md GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
         /// decoded to linear before lighting (glTF §3.9.2). The `DiffuseColor` FACTOR is already
         /// linear and must NOT be decoded -- the two multiply, and decoding both would apply the
