@@ -544,3 +544,50 @@ file, the importer's output and the effect's own parameter block), which is what
 directly. When a GL-capable configuration is available, `GLTF-009` adds the L7 rung and
 `cmake/UnitTests.cmake` gains a `CnaGltfConformanceL7` entry beside the others — the label's shape
 already accommodates it.
+
+---
+
+## 6. The tangent generation algorithm (`GLTF-180`)
+
+§3.7.2.1 says a client "should" compute tangents when a normal-mapped material needs them and the
+file authors none. It does not say **how**, and the algorithm decides what the surface looks like,
+so CNA's is written down here rather than left to be read out of `ComputeTangentsEXT`.
+
+### What it computes
+
+Per triangle, the tangent is the direction in which **U increases** across the triangle's surface,
+derived from the two edge vectors and their UV deltas:
+
+```
+E1 = P1 − P0                 dUV1 = UV1 − UV0
+E2 = P2 − P0                 dUV2 = UV2 − UV0
+
+r  = 1 / (dUV1.x · dUV2.y − dUV2.x · dUV1.y)
+T  = (E1 · dUV2.y − E2 · dUV1.y) · r
+B  = (E2 · dUV1.x − E1 · dUV2.x) · r
+```
+
+Each triangle's `T` is accumulated onto its three vertices **weighted by the corner's own angle**,
+which is what makes a shared vertex's tangent depend on how much of each face actually meets there
+rather than on how many faces do. The accumulated tangent is then orthonormalised against the
+vertex's normal (Gram-Schmidt) and its handedness taken from the sign of `dot(cross(N, T), B)`.
+
+### Its bound, stated plainly
+
+This is **not MikkTSpace**. MikkTSpace is the de-facto standard most authoring tools bake normal
+maps against, and matching it exactly requires its own vertex-splitting and welding rules, which
+change the vertex count. The difference shows on surfaces where a normal map was baked against a
+tangent basis that splits where CNA's averages — a hard UV seam, most visibly.
+
+Three consequences worth being explicit about:
+
+* **An authored `TANGENT` is always preferred**, and is passed through byte-exact. Generation is
+  the fallback, never an override, so a file exported from a MikkTSpace-based tool is unaffected.
+* **A degenerate UV triangle** (zero-area in UV space, so `r` would be infinite) contributes
+  nothing rather than a NaN, and a vertex left with no usable accumulation falls back to `+X` with
+  a `+1` handedness — a valid frame that is simply arbitrary, which is the only honest answer when
+  the UVs carry no direction to derive one from.
+* **Matching MikkTSpace is `GLTF-179`**, and it is an investigation rather than a defect: the
+  generated basis is a valid tangent frame, it is simply not the same one the map was baked
+  against. Which of the two a given asset needs is a property of that asset's authoring pipeline.
+

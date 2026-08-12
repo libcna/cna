@@ -359,6 +359,25 @@ namespace CNA::Internal::GltfImport
         /** @brief True when this mesh has a per-vertex COLOR_0 attribute. */
         bool colored = false;
         /**
+         * @brief `COLOR_1` and beyond, all of them ignored (plan_gltf.md `GLTF-091`).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. XNA's vertex layouts carry exactly one
+         * colour channel, so a second is not a feature CNA can decline gracefully — it is data the
+         * file authored that nothing downstream can express. Counted so the loaders can say so:
+         * a mesh whose second colour set carries its actual tint imports looking like a mistake.
+         */
+        int extraColorSetsEXT = 0;
+        /**
+         * @brief Application-specific `_*` attributes the importer ignored (§3.7.2.1).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md `GLTF-092`. The specification
+         * reserves the underscore prefix for custom semantics precisely so a reader may ignore
+         * them, and ignoring one is **not** an error. Naming them is still worth it: a file whose
+         * geometry depends on `_BATCHID` or `_FEATURE_ID` imports as ordinary geometry, and the
+         * only sign is this list.
+         */
+        std::vector<std::string> ignoredCustomAttributesEXT;
+        /**
          * @brief The glTF material this primitive uses, or nullptr when it declares none.
          *
          * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md `GLTF-238`: carried so a

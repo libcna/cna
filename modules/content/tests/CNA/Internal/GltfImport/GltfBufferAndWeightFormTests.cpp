@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-029 / GLTF-033 / GLTF-094 / GLTF-255: the two file-level forms every fixture in
-// the corpus depends on, and the two weight encodings none of them uses.
+// plan_gltf.md GLTF-029 / GLTF-033 / GLTF-090 / GLTF-091 / GLTF-092 / GLTF-094 / GLTF-255: the two
+// file-level forms every fixture in the corpus depends on, the two weight encodings none of them
+// uses, and the attributes CNA has nowhere to put.
 //
 // The `data:` buffer and the version check are load-bearing for the whole corpus -- every generated
 // asset is self-contained, so a base64 decoder that mishandled padding would break every fixture at
@@ -358,4 +359,77 @@ TEST(GltfBufferAndWeightForm, AQuantisedWeightSetThatCannotSumToOneIsRenormalise
     {
         EXPECT_NEAR(1.0f / 3.0f, weights[c], 1e-3f) << "component " << c;
     }
+}
+
+// --- GLTF-090 / GLTF-091 / GLTF-092: attributes with nowhere to go --------------------------------
+
+TEST(GltfBufferAndWeightForm, ASecondColourSetAndACustomAttributeAreCountedRatherThanSilentlyLost)
+{
+    // Neither is an error. §3.7.2.1 reserves the `_` prefix for application-specific semantics
+    // precisely so a reader may ignore them, and XNA's vertex layouts carry exactly one colour
+    // channel. But both are data the file authored that nothing downstream can express, and a mesh
+    // whose real tint lives in COLOR_1 imports looking like a mistake nobody can trace -- so each
+    // is counted and named.
+    //
+    // The document below authors COLOR_0 red, COLOR_1 blue and a `_BATCHID` scalar.
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "COLOR_0": 1, "COLOR_1": 2, "_BATCHID": 3 }, "indices": 4 } ] } ],
+  "buffers": [ { "byteLength": 152, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AADgQAAAAEEAABBBAAABAAIAAAA=" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 84,  "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 132, "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 144, "byteLength": 6 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "SCALAR" },
+    { "bufferView": 4, "componentType": 5123, "count": 3, "type": "SCALAR" }
+  ]
+})GLTF"));
+
+    const MeshOut mesh =
+        ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
+
+    EXPECT_TRUE(mesh.colored) << "COLOR_0 itself must still be imported";
+    EXPECT_EQ(1, mesh.extraColorSetsEXT) << "COLOR_1 went unnoticed";
+    ASSERT_EQ(1u, mesh.ignoredCustomAttributesEXT.size());
+    EXPECT_EQ("_BATCHID", mesh.ignoredCustomAttributesEXT.front())
+        << "a custom attribute must be named, not merely counted";
+
+    // GLTF-090: and the colour that IS imported is quantised to a byte. The authored red is exact
+    // at the endpoints -- which is the whole reason the quantisation is documented rather than
+    // asserted only in the middle, where rounding rather than truncation is what distinguishes the
+    // two rules (GLTF-154 owns that half).
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            mesh.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known);
+    int colorOffset = -1;
+    for (std::size_t e = 0; e < layout.count; ++e)
+    {
+        if (layout.elements[e].usage ==
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color)
+        {
+            colorOffset = layout.elements[e].offset;
+        }
+    }
+    ASSERT_GE(colorOffset, 0) << "this stride has no colour slot after all";
+    const std::uint8_t* rgba =
+        mesh.vertexBytes.data() + static_cast<std::size_t>(colorOffset);
+    EXPECT_EQ(255, static_cast<int>(rgba[0])) << "COLOR_0's red endpoint did not survive";
+    EXPECT_EQ(0, static_cast<int>(rgba[1]));
+    EXPECT_EQ(0, static_cast<int>(rgba[2]))
+        << "blue is COLOR_1's colour -- the second set was imported over the first";
+    EXPECT_EQ(255, static_cast<int>(rgba[3]));
 }

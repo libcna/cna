@@ -183,6 +183,40 @@ Two consequences worth stating, because both look like bugs from the outside:
   later reader sees — including a CPU-side bounds computation. Leaving it unnormalised would make
   a heavily morphed surface light darker as its normals shrink.
 
+## Attributes CNA has nowhere to put
+
+`plan_gltf.md` `GLTF-090`/`GLTF-091`/`GLTF-092`. Three places where a file authors more than an XNA
+vertex layout can carry. None is an error, all three are reported, and each is reported at the
+severity it deserves:
+
+| What the file has | What CNA does | Reported as |
+|---|---|---|
+| `COLOR_0` in `FLOAT` or `UNSIGNED_SHORT` | quantised to `Color`'s 8 bits per channel, `round(clamp(f,0,1) × 255)` | nothing — this is the layout working as designed |
+| `COLOR_1` and beyond | ignored; XNA carries one colour channel | a **warning**, with the count |
+| `_ANYTHING` (application-specific) | ignored; §3.7.2.1 reserves the prefix so a reader may | a **debug** line, naming each |
+
+The severities are the point. Quantisation is lossless at the endpoints and within half a
+step everywhere else, and is what every XNA `Color` does — warning about it would be noise on every
+coloured mesh. A second colour set is data that does not arrive: a mesh whose real tint lives in
+`COLOR_1` imports looking like a mistake, and the warning is the only thing that traces it. A
+custom attribute is *expected* to be ignored — a file whose own tooling reads `_BATCHID` still
+imports as ordinary geometry — so it is named at debug level rather than warned about.
+
+## Every primitive gets an index buffer
+
+`plan_gltf.md` `GLTF-070`. §3.7.2 makes `indices` optional: a primitive without it draws its
+vertices in order. CNA **always materialises one** anyway — `0, 1, 2, …` for a non-indexed
+primitive — and that is a decision rather than an oversight.
+
+It keeps one draw path instead of two. Every renderer's draw, every `ModelMeshPart`, the `.cnj`
+format and the L5 goldens would otherwise each need a non-indexed variant, and each of those is a
+place the two paths can drift. The cost is the index buffer's own bytes for a primitive that did
+not need one, which is 2 bytes per vertex against the 32 to 68 the vertex itself takes.
+
+The one thing this must never become is an *empty* index buffer: an empty one draws nothing, so a
+model would vanish rather than error. `GltfIndexForm.AnIndexlessPrimitiveIsMaterialisedAsASequentialIndexBuffer`
+asserts the generated run is `0,1,2`, not absent.
+
 ## The joint matrix, in both conventions
 
 `plan_gltf.md` `GLTF-251`. §3.7.3.2's own equation, written once so no reader has to reconstruct it

@@ -1811,6 +1811,24 @@ namespace CNA::Internal::GltfImport
         // with a per-vertex Color appended at the end) and SkinnedEffect's own CNAEXT
         // VertexColorEnabled addition (real XNA's SkinnedEffect has no such property).
         out.colored = (colorAcc != nullptr);
+
+        // plan_gltf.md GLTF-091/GLTF-092: attributes the file authored and CNA has nowhere to put.
+        // Neither is an error -- §3.7.2.1 reserves the `_` prefix for custom semantics precisely so
+        // a reader may ignore them, and XNA simply has one colour channel -- but both are data
+        // that silently does not arrive, and a mesh whose real tint is in COLOR_1 imports looking
+        // like a mistake nobody can trace.
+        for (cgltf_size a = 0; a < prim.attributes_count; ++a)
+        {
+            const cgltf_attribute& attribute = prim.attributes[a];
+            if (attribute.type == cgltf_attribute_type_color && attribute.index > 0)
+            {
+                ++out.extraColorSetsEXT;
+            }
+            if (attribute.name != nullptr && attribute.name[0] == '_')
+            {
+                out.ignoredCustomAttributesEXT.emplace_back(attribute.name);
+            }
+        }
         out.baseColorImage = FindBaseColorImage(prim, &out.unsupportedTextureSourcesEXT);
         // An unskinned, uncolored primitive with both a base-color and an occlusion texture is
         // imported through DualTextureEffect (Texture=base color, Texture2=occlusion) instead of

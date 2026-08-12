@@ -1,5 +1,49 @@
 # CNA Known Bugs
 
+
+## glTF import: the eight defects the forensic audit found (`plan_gltf.md` D1–D8)
+
+`plan_gltf.md` `GLTF-012`. Every one was found by the conformance campaign's own oracle ladder
+rather than by a bug report, which is the point worth recording: each produced a **model that
+rendered**, so none would have arrived as a bug report at all. Each has a corpus fixture that
+reproduces it, and each fixture keeps asserting the fixed behaviour so a regression fails a
+green test rather than going quiet again.
+
+| ID | What it did | Fixture | Owning task | Status |
+|---|---|---|---|---|
+| D1 | Every mesh instance was emitted in mesh-local space with an identity bone, so a mesh instanced by two nodes drew twice at the origin | `xf-shared-mesh` | `GLTF-113`/`GLTF-114` | **Fixed** |
+| D2 | A parent node's transform never reached its child, so a scaled parent with a translated child placed the child at its own local offset | `xf-parent-child` | `GLTF-113`/`GLTF-114` | **Fixed** |
+| D3 | `node.matrix` was discarded entirely — the import data model had nowhere to put it | `xf-matrix-node` | `GLTF-107`/`GLTF-113` | **Fixed** |
+| D4 | A sparse **index** accessor decoded to all zeros: `cgltf_accessor_read_index` returns 0 when the accessor is sparse or has no bufferView, with no error channel, and the caller checked neither | `sparse-indices` | `GLTF-063` | **Fixed** |
+| D5 | `primitive.mode` was never read, so every topology was flattened into an index list all three loaders divided by three and drew as a triangle list — a strip lost every triangle after the first, a point cloud became one arbitrary triangle, and neither warned | `mode-triangle-strip`, `mode-lines`, `mode-points` | `GLTF-071`/`GLTF-072`/`GLTF-073`/`GLTF-078` | **Fixed** |
+| D6 | Rigid (non-joint) node animation was dropped: an unskinned model's clips had nowhere to live | `anim-rigid-node` | `GLTF-294` | **Fixed** |
+| D7 | A factor-only metallic-roughness material was downgraded to an untextured white `BasicEffect` — the selection rule asked which texture *maps* were present, so a material with every PBR factor and no map could never select `PbrEffect` | `mat-factor-only-gold` | `GLTF-215`/`GLTF-216` | **Fixed** |
+| D8 | `BuildSkeleton` walked parent links only inside the skin's own joint set, so an armature transform above the joints was dropped from the bind pose while the authored `inverseBindMatrices` still contained it | `skin-armature-ancestor` | `GLTF-245`/`GLTF-247`/`GLTF-249` | **Fixed** |
+
+Two further defects were found in the **vendored cgltf** rather than in CNA, and are worked around
+CNA-side with the workaround pinned to the vendored behaviour so an upgrade retires both copies:
+
+| What | Where | Worked around by |
+|---|---|---|
+| Sparse accessor values were read at the base accessor's stride rather than tightly packed, contradicting cgltf's own validator | `third_party/cgltf/cgltf.h` | `ApplySparseOverridesTightly` (`GLTF-062`) |
+| §3.6.2.2's `max(c/N, −1)` clamp was omitted for signed normalized components, so −128 decoded to −1.0079 | `third_party/cgltf/cgltf.h` | `ClampNormalizedSigned` (`GLTF-056`) |
+
+One defect is **partially remediated** rather than fixed, and is recorded as such in the corpus's
+own ledger so the conformance suite keeps asserting the current behaviour:
+
+| ID | What it does | Fixture | Owning task |
+|---|---|---|---|
+| `GLTF-241` | A primitive with `COLOR_0` **and** a metallic-roughness material cannot be imported as the file asks: no CNA vertex layout carries a colour alongside a tangent and no PBR shader reads a colour stream, so it imports through the non-PBR path with its colours and without its material. The stride-24 layout it lands on has no normal slot either, so an authored `NORMAL` is discarded and the primitive cannot be lit at all. Both losses are now reported by name rather than silent. | `mat-vertex-color-pbr` | `GLTF-238`/`GLTF-241` |
+
+Two open glTF-side items remain, both **environment-blocked** rather than undiagnosed:
+
+* `EasyGLRenderer::ApplyLayout`'s silent position-only fallback for an unlisted vertex stride
+  (`GLTF-157`). The importer's half is fixed — an unlisted stride now throws instead of returning
+  an empty buffer — but the renderer file needs sibling `../easy-gl` and `../meta-gl` checkouts to
+  compile, and an unverified renderer change is not a fix.
+* The glTF viewer's own defect list lives in `openeggbert/cna-gltf-viewer` (`GLTF-421`), a separate
+  repository.
+
 ## LLGL post-audit disposition (2026-08-09)
 
 This is the authoritative disposition for LLGL entries later in this historical ledger. It does

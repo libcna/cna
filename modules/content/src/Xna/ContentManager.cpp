@@ -2580,6 +2580,32 @@ namespace Microsoft::Xna::Framework::Content
                             " is sampled with the base colour's coordinates (GLTF-181, a "
                             "documented limit).");
                     }
+                    // plan_gltf.md GLTF-091: XNA carries one colour channel, so a second set is
+                    // not declined gracefully -- it is data that does not arrive.
+                    if (meshOut.extraColorSetsEXT > 0)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name + "' authors " +
+                            std::to_string(meshOut.extraColorSetsEXT) +
+                            " COLOR set(s) beyond COLOR_0. XNA's vertex layouts carry one colour "
+                            "channel, so only COLOR_0 is imported (GLTF-091, a documented limit).");
+                    }
+                    // plan_gltf.md GLTF-092: §3.7.2.1 reserves `_*` for custom semantics and says a
+                    // reader may ignore them -- so this is not an error, only a note that the
+                    // geometry a file's own tooling depends on did not come with it.
+                    if (!meshOut.ignoredCustomAttributesEXT.empty())
+                    {
+                        std::string names;
+                        for (const std::string& attribute : meshOut.ignoredCustomAttributesEXT)
+                        {
+                            if (!names.empty()) { names += ", "; }
+                            names += attribute;
+                        }
+                        CNA::Logger::Debug(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' carries application-specific attribute(s) " + names +
+                            ", which CNA ignores by design (GLTF-092).");
+                    }
                     // plan_gltf.md GLTF-079: an index count that is not a whole number of
                     // primitives. The tail was dropped rather than drawn past the end of the run,
                     // and saying so is the difference between a diagnosable export bug and a model
