@@ -86,6 +86,38 @@ namespace Microsoft::Xna::Framework::Graphics
          * reasoning about depth precision needs to know which it has.
          */
         bool HasInfiniteFarPlane = false;
+        /**
+         * @brief The aspect ratio @ref Projection was built with (perspective cameras only).
+         *
+         * plan_gltf.md `GLTF-322`. Equal to @ref AspectRatio's authored value when the file
+         * declared one, and `1` when it did not.
+         */
+        float AspectRatio = 1.0f;
+        /**
+         * @brief True when the file declared `aspectRatio`; false when @ref AspectRatio was assumed.
+         *
+         * §3.10.3 says an undefined `aspectRatio` means "use the viewport's", which an importer
+         * cannot know — so one is assumed and this flag says so. Without it a consumer cannot tell
+         * an author who framed a square shot from one who left the decision to the runtime, and
+         * would either stretch a deliberate framing or letterbox an intentionally viewport-relative
+         * one. A consumer that wants the viewport's aspect rebuilds @ref Projection from
+         * @ref FieldOfView, @ref NearPlaneDistance and @ref FarPlaneDistance when this is false.
+         */
+        bool HasAuthoredAspectRatio = false;
+        /**
+         * @brief Vertical field of view in radians (perspective cameras only), from `yfov`.
+         *
+         * Carried rather than left to be recovered from @ref Projection: inverting a projection to
+         * get back a parameter the file stated outright is work a consumer should not have to do,
+         * and is not even possible for the infinite variant without knowing which variant it is.
+         */
+        float FieldOfView = 0.0f;
+        /** @brief Distance to the near clip plane, from `znear`. */
+        float NearPlaneDistance = 0.0f;
+        /**
+         * @brief Distance to the far clip plane, from `zfar`; `0` when @ref HasInfiniteFarPlane.
+         */
+        float FarPlaneDistance = 0.0f;
     };
 
     class ModelBone;

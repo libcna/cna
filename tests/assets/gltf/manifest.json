@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 61,
+  "distinctAssetCount": 64,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -24,7 +24,8 @@
     "textures": 2,
     "skinning": 10,
     "animation": 11,
-    "cameras": 4,
+    "cameras": 5,
+    "lights": 2,
     "scenes": 1,
     "robustness": 5
   },
@@ -1186,6 +1187,24 @@
       "auditFixture": null
     },
     {
+      "id": "camera-perspective-no-aspect",
+      "owningGroup": "cameras",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "camera.perspective",
+        "aspectRatio absent",
+        "viewport-relative framing",
+        "assumed value recorded"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "camera-orthographic",
       "owningGroup": "cameras",
       "referencingGroups": [],
@@ -1216,6 +1235,44 @@
         "rotation path",
         "no skin",
         "camera"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "lights-kinds-and-reach",
+      "owningGroup": "lights",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "KHR_lights_punctual",
+        "directional light",
+        "point light",
+        "spot light",
+        "light range ignored",
+        "cone angles ignored"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "lights-over-budget",
+      "owningGroup": "lights",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "KHR_lights_punctual",
+        "more lights than XNA can bind",
+        "light ordering",
+        "photometric intensity clamped"
       ],
       "auditFixture": null
     },
@@ -1313,8 +1370,8 @@
   "files": [
     {
       "path": "accessor-count-mismatch.expected.json",
-      "bytes": 4218,
-      "sha256": "ecfc80bc143cefe446ef292f2d52d4450f07c2c7cfaa04ebf9130e0d89b49397"
+      "bytes": 4247,
+      "sha256": "7126fbb4b3766215ac864711f845430725cc289e30c5c34a354d97cd98cb1b2a"
     },
     {
       "path": "accessor-count-mismatch.glb",
@@ -1328,8 +1385,8 @@
     },
     {
       "path": "anim-cubicspline.expected.json",
-      "bytes": 9886,
-      "sha256": "f3bdafd804c4f9cfc32121bd9d06875aad1e002fdee8c0274d4fd17c406eb3aa"
+      "bytes": 9915,
+      "sha256": "e4cfbb7ceb9757212ee01dccc1f60813951e0b5c62ad5183934ebd5a3f875897"
     },
     {
       "path": "anim-cubicspline.glb",
@@ -1353,8 +1410,8 @@
     },
     {
       "path": "anim-nonzero-start.expected.json",
-      "bytes": 11815,
-      "sha256": "da8dcdba2b49fd6358fea12f26b7ebeac40e73c0d288d50dc83481b822b641b6"
+      "bytes": 11844,
+      "sha256": "e729e1fd3ce0033149f715e73f535f0aabdb2ddb84004e9461d27376f3921b9e"
     },
     {
       "path": "anim-nonzero-start.glb",
@@ -1378,8 +1435,8 @@
     },
     {
       "path": "anim-out-of-scene-target.expected.json",
-      "bytes": 9617,
-      "sha256": "12ead15c6565bf7cadcfce45449d73ad2e4845d55c6bb06d37dff04f047980fb"
+      "bytes": 9646,
+      "sha256": "c439cba509fd94d1f1ecca62419e9d538aa4380dc2c7569bde4b96ef3aba1029"
     },
     {
       "path": "anim-out-of-scene-target.glb",
@@ -1403,8 +1460,8 @@
     },
     {
       "path": "anim-parent-child.expected.json",
-      "bytes": 12042,
-      "sha256": "258af842e8e77f2e865fb8d38e54a17d7cdcb0a5f34a6688800747a576df81c0"
+      "bytes": 12071,
+      "sha256": "a78e33fc59cb8e41fdb75ce8bb28c49829cac718e489be4dc395fb6c50715669"
     },
     {
       "path": "anim-parent-child.glb",
@@ -1428,8 +1485,8 @@
     },
     {
       "path": "anim-repeated-time.expected.json",
-      "bytes": 8887,
-      "sha256": "40a0bfdbd09ccdb25e02341aacccd637c92ed160f8abd9aed9f1ce1f11927c11"
+      "bytes": 8916,
+      "sha256": "94d1b4d5e5ecfda50c33e7a77c1c6acb7681807e9907c25ea79f8b9fef1f8ff8"
     },
     {
       "path": "anim-repeated-time.glb",
@@ -1453,8 +1510,8 @@
     },
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 12775,
-      "sha256": "0c8fd3be8ecf03779c5d7768cd5ac64800b773107ac8c2402a8b9346ba4f6c71"
+      "bytes": 12804,
+      "sha256": "b3c166d1c2815a974c4a2d565890883e635b057f0e464d3d877c9b2c0ea9d4c5"
     },
     {
       "path": "anim-rigid-node.glb",
@@ -1478,8 +1535,8 @@
     },
     {
       "path": "anim-step.expected.json",
-      "bytes": 9659,
-      "sha256": "9281f165dcc14caa9c2fabda26444176b86dfc04fd87ef7e71146adfeb3b9a70"
+      "bytes": 9688,
+      "sha256": "6250074effbbadfd800861f2c6de15d0fdd57f6412154977587922a8df11f8a9"
     },
     {
       "path": "anim-step.glb",
@@ -1503,8 +1560,8 @@
     },
     {
       "path": "anim-translation-scale.expected.json",
-      "bytes": 12589,
-      "sha256": "f6c78ada8ee868841c34e495ec0e8ddec6e3458c9f02ef118dece9050e2a0bef"
+      "bytes": 12618,
+      "sha256": "5101c57393d9ca143c062c4fa297b2be6e5a224f4e0441b14dfe4c79e8d38872"
     },
     {
       "path": "anim-translation-scale.glb",
@@ -1528,8 +1585,8 @@
     },
     {
       "path": "anim-two-clips.expected.json",
-      "bytes": 9179,
-      "sha256": "bf9f906146efe9a7cb59148c6b368fbc1b9811014108d50617587ac3033ab937"
+      "bytes": 9208,
+      "sha256": "2910e68274f4283a6f093da99a7fc9c2ae1d5a60b1971096157b5628ffd23868"
     },
     {
       "path": "anim-two-clips.glb",
@@ -1553,8 +1610,8 @@
     },
     {
       "path": "anim-weights-path.expected.json",
-      "bytes": 9846,
-      "sha256": "c61b6456a303dd553a02a7db9a47ceb16b7858e35a822661079982ba71d65c54"
+      "bytes": 9875,
+      "sha256": "6ba6e460b8aa5b6cbee5f9a3b69c43fad2029ed96256cd5f26b39328d624f945"
     },
     {
       "path": "anim-weights-path.glb",
@@ -1578,8 +1635,8 @@
     },
     {
       "path": "bad-accessor-out-of-bounds.expected.json",
-      "bytes": 3134,
-      "sha256": "def70ccc6da3c43d0d20796b854b28396a5c6980f02f34a01047b5f51f27fc40"
+      "bytes": 3163,
+      "sha256": "1888594abecf75215d6fbd624f6cd5b50f63ad5f3fe08802a1668415a6271da7"
     },
     {
       "path": "bad-accessor-out-of-bounds.glb",
@@ -1593,8 +1650,8 @@
     },
     {
       "path": "bad-animation-input-order.expected.json",
-      "bytes": 8465,
-      "sha256": "c33b6b7d1ce36320eea27a0345c370ea5d740f6eba59247206e3398a4718eeb2"
+      "bytes": 8494,
+      "sha256": "2cdd30443f8c42d6ad8fffd565a61400203f3d220fe0c3fbc17c8554ffb79a6d"
     },
     {
       "path": "bad-animation-input-order.glb",
@@ -1618,8 +1675,8 @@
     },
     {
       "path": "camera-animated-node.expected.json",
-      "bytes": 10356,
-      "sha256": "98f6e761533f6f3177a1d2a117418990f8f03e627a052a9f18d65dadbe4d38d3"
+      "bytes": 10385,
+      "sha256": "9bf2dc9f9f84601eff8c66296e0b77278c5c53df4d7c1bbd019aee559ffea25b"
     },
     {
       "path": "camera-animated-node.glb",
@@ -1643,8 +1700,8 @@
     },
     {
       "path": "camera-orthographic.expected.json",
-      "bytes": 7969,
-      "sha256": "9710701400312dec5694ff01712255a8e7e6688edf9747a1ec1f854e37b3df07"
+      "bytes": 7998,
+      "sha256": "6fc2b999b0a591019fd1b83108739b46df220fb11508e20c7a8e8c9dd8611bc5"
     },
     {
       "path": "camera-orthographic.glb",
@@ -1668,8 +1725,8 @@
     },
     {
       "path": "camera-perspective-infinite.expected.json",
-      "bytes": 7961,
-      "sha256": "5afb4959eaf4459d3a44b99d15ea9db44a1d6c12691bfda75871ecc5a3da9d4c"
+      "bytes": 8763,
+      "sha256": "a1485b6b16ff542e7b3bffc4ee07c981a939bbd42d3c48759c7d093e312626f7"
     },
     {
       "path": "camera-perspective-infinite.glb",
@@ -1692,9 +1749,34 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "camera-perspective-no-aspect.expected.json",
+      "bytes": 8883,
+      "sha256": "cccbc34e9e14ca5a46c13e4034690a4689d4f25a06ea137a5e6c823550ab9b96"
+    },
+    {
+      "path": "camera-perspective-no-aspect.glb",
+      "bytes": 972,
+      "sha256": "b8b31664aeef22ded30e30a963ad3795af8886fa0e5e9ecb45e52fd8de9272b8"
+    },
+    {
+      "path": "camera-perspective-no-aspect.gltf",
+      "bytes": 1766,
+      "sha256": "9b5d57ac63699ce44bf15e595d70bf7b0a9300a79bcfe531ba1b135912080023"
+    },
+    {
+      "path": "camera-perspective-no-aspect.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "camera-perspective-no-aspect.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "camera-perspective.expected.json",
-      "bytes": 7984,
-      "sha256": "e15646324bffb1b81cc13ad10edd89063a567318bb5b410a9fb615faec0bebaf"
+      "bytes": 8788,
+      "sha256": "c2e2e75923fb90092e91c7cc6fc453438db6625838ef6837fbf280e12ff0395d"
     },
     {
       "path": "camera-perspective.glb",
@@ -1718,8 +1800,8 @@
     },
     {
       "path": "gltf-required-extension-unsupported.expected.json",
-      "bytes": 5198,
-      "sha256": "6774ee081157caaa5c38972b0d462d1a7c26e54b4d2e84642f4a9323f7ad2a36"
+      "bytes": 5227,
+      "sha256": "a9c01f831c78483cae3c93c7ab91e38b3670ec6bf073451f5e44f92e00a8174a"
     },
     {
       "path": "gltf-required-extension-unsupported.glb",
@@ -1733,8 +1815,8 @@
     },
     {
       "path": "interleaved-position-normal.expected.json",
-      "bytes": 6536,
-      "sha256": "182fe82d3059197901dd89675fb5d90875fcad7c9a0384fc88a1d32c6a8f569e"
+      "bytes": 6565,
+      "sha256": "21a01f54924a1a4edcba5290ae680ff7f66eecaf3de71161765aa58d22db3b52"
     },
     {
       "path": "interleaved-position-normal.glb",
@@ -1757,9 +1839,59 @@
       "sha256": "f9de2f9261a351eea66984930c69ac5a51a1dbdd2260b6c567163e535defb82d"
     },
     {
+      "path": "lights-kinds-and-reach.expected.json",
+      "bytes": 8387,
+      "sha256": "f0920ee638c3ef9e42be48fbb6d39a21e9b3a18a2acc2d4cbeebb1ae906d0780"
+    },
+    {
+      "path": "lights-kinds-and-reach.glb",
+      "bytes": 1436,
+      "sha256": "93d512a827f9d50d96148093080a6ba212e560a1ed2953edd93ee7bf34abbeb5"
+    },
+    {
+      "path": "lights-kinds-and-reach.gltf",
+      "bytes": 2845,
+      "sha256": "4359bd6f1bbf0b327323fbc16d5f1083b7408ea1344264f6e4d30fb0e5e1c1c4"
+    },
+    {
+      "path": "lights-kinds-and-reach.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "lights-kinds-and-reach.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "lights-over-budget.expected.json",
+      "bytes": 8924,
+      "sha256": "6c9bca84c784ff0ddeb9d5e0dcdbd90c227200a64cf208c7925e1996e6a1db25"
+    },
+    {
+      "path": "lights-over-budget.glb",
+      "bytes": 1612,
+      "sha256": "fba1d962ffa243a45af103044ad46267ee3af3b9094e1d31590d0c093699f71d"
+    },
+    {
+      "path": "lights-over-budget.gltf",
+      "bytes": 3241,
+      "sha256": "198252008c545f7b5c5fd47973593372fa60c7e030be0dbdb98528bc266bbda3"
+    },
+    {
+      "path": "lights-over-budget.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "lights-over-budget.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "mat-authored-tangent.expected.json",
-      "bytes": 8698,
-      "sha256": "f6d064f0d86a02cb3f07683444054b64550fb25d2972c31516625c0cee2a51ba"
+      "bytes": 8727,
+      "sha256": "4ee77efebf530e083ad5e3d76b198db5d69f9a80b4559c0a6c2dede3556a39e8"
     },
     {
       "path": "mat-authored-tangent.glb",
@@ -1783,8 +1915,8 @@
     },
     {
       "path": "mat-emissive-strength.expected.json",
-      "bytes": 7393,
-      "sha256": "7b35d7e6f4ed2995c2dd19811a81172ce2b6dfcf4449859a67278def69b2ab92"
+      "bytes": 7422,
+      "sha256": "f304cfe8c87b306da0b74edf90b5308efddf17a98d6b10e30ab4a5e31da4b275"
     },
     {
       "path": "mat-emissive-strength.glb",
@@ -1808,8 +1940,8 @@
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 11306,
-      "sha256": "647c7982205d71164d5e4b5622f5fbfc07636b7ba1146d6dd1f1005099cf334b"
+      "bytes": 11335,
+      "sha256": "b3cbdc11344edbb75f116e90e4aa7f5d565b6fdbce26adf57c5648c98cbe7489"
     },
     {
       "path": "mat-factor-only-gold.glb",
@@ -1833,8 +1965,8 @@
     },
     {
       "path": "mat-normal-occlusion-scale.expected.json",
-      "bytes": 7698,
-      "sha256": "880ee446261b5b3105fee765932e77f511582c4463852457672436fc654fcb7a"
+      "bytes": 7727,
+      "sha256": "a940c02ccc39f692742bac0bc8cdfb6a699b56a2d684637c30842ea5b0283d9e"
     },
     {
       "path": "mat-normal-occlusion-scale.glb",
@@ -1858,8 +1990,8 @@
     },
     {
       "path": "mat-unlit.expected.json",
-      "bytes": 7776,
-      "sha256": "62294be704caad84841f23690421d0387482c835f1ef838263bb67753de05b6f"
+      "bytes": 7805,
+      "sha256": "07b9dff99a3e4336c587e386187062fbc0cc2b41e3a128d58a2d73142430ed41"
     },
     {
       "path": "mat-unlit.glb",
@@ -1883,8 +2015,8 @@
     },
     {
       "path": "mat-vertex-color-pbr.expected.json",
-      "bytes": 10554,
-      "sha256": "d59046f011f5c7f385636c6d5ee637cb3cb4d943d2fb28e64faf8e2a59518f45"
+      "bytes": 10583,
+      "sha256": "c4a54e907803a813b6824dcc8ff36fec54b8bbeea7f329d3279e179c97f0a91a"
     },
     {
       "path": "mat-vertex-color-pbr.glb",
@@ -1908,8 +2040,8 @@
     },
     {
       "path": "mode-line-loop.expected.json",
-      "bytes": 5740,
-      "sha256": "6780e8ecd6f4210b79b30f5be10243bd7f1be0ad0e27a17b2fc1a99b49517f4d"
+      "bytes": 5769,
+      "sha256": "115c500b9f4599413ba89bb88a58f4cf2bd4701d3fe9d50ccdc00f63c504a206"
     },
     {
       "path": "mode-line-loop.glb",
@@ -1933,8 +2065,8 @@
     },
     {
       "path": "mode-line-strip.expected.json",
-      "bytes": 5610,
-      "sha256": "704e282bb3cb4aa366c713c578e40808f5c458e75fbb84728ff91e4f23970497"
+      "bytes": 5639,
+      "sha256": "5526a87c8a83c07e50fadeff4495e9f147b6a85811cab2b4e04e96f702d69fb0"
     },
     {
       "path": "mode-line-strip.glb",
@@ -1958,8 +2090,8 @@
     },
     {
       "path": "mode-lines.expected.json",
-      "bytes": 5691,
-      "sha256": "0751f8b785d5dfc1f55ccdbd1aa5efb8789524c112edbab23292a506263a8b5a"
+      "bytes": 5720,
+      "sha256": "da8173587d9b6439f5d212fb74100ecfb5a85a7899dcf2b893da0db19a492d7f"
     },
     {
       "path": "mode-lines.glb",
@@ -1983,8 +2115,8 @@
     },
     {
       "path": "mode-points.expected.json",
-      "bytes": 5335,
-      "sha256": "6690963f57ae4683ae89f4d8837af1866c650e978c7783b120993aada7d7c293"
+      "bytes": 5364,
+      "sha256": "9490700bbd3a781fb81a8c3e2023b78b9fb3f2cee1c365220e8fed7b03fe5b0b"
     },
     {
       "path": "mode-points.glb",
@@ -2008,8 +2140,8 @@
     },
     {
       "path": "mode-triangle-fan.expected.json",
-      "bytes": 6007,
-      "sha256": "9b4d50bcadc7d47b42f50855c2d615cd3e0c1d7f898e56d17e433899f843a5c5"
+      "bytes": 6036,
+      "sha256": "eb1ac3cbb11ab02bb203d8313a590001dac3419b207ffe2d2dd4d874c6d876e5"
     },
     {
       "path": "mode-triangle-fan.glb",
@@ -2033,8 +2165,8 @@
     },
     {
       "path": "mode-triangle-strip.expected.json",
-      "bytes": 8727,
-      "sha256": "cd2cf2ea4e65de77203729a9365e238a2804e5fd5b20ca36a78cfc3726573e5b"
+      "bytes": 8756,
+      "sha256": "116c6c5cbe4b99937cdb02c090a811b3512e5d87afa89a3b05d1a668faf9047f"
     },
     {
       "path": "mode-triangle-strip.glb",
@@ -2058,8 +2190,8 @@
     },
     {
       "path": "mode-triangles.expected.json",
-      "bytes": 6081,
-      "sha256": "8ac4fe011dd5926ce5f265ca8663e89537679a58cd93c3eb12fa034a0d22f22a"
+      "bytes": 6110,
+      "sha256": "98199b6d02dcef764b78f0bfe85ba3be6801e8b42afc0e9768b9ae5d53ad6c95"
     },
     {
       "path": "mode-triangles.glb",
@@ -2083,8 +2215,8 @@
     },
     {
       "path": "morph-node-weights-override.expected.json",
-      "bytes": 8713,
-      "sha256": "9ed277af222c32acd803b5c50c0d740cc4ceef70f970fd2243274a4cd2d571a1"
+      "bytes": 8742,
+      "sha256": "a6b37d674993a4a7cdda730f87861a30839acee2c51fcc79c9a013c7b896cfa7"
     },
     {
       "path": "morph-node-weights-override.glb",
@@ -2108,8 +2240,8 @@
     },
     {
       "path": "normal-absent.expected.json",
-      "bytes": 6026,
-      "sha256": "aa0f20e7cfaa347ff5ec78939cab81723875c7e59301f067d6dec59f94c278ff"
+      "bytes": 6055,
+      "sha256": "949944c1707f6c789d97534cf55f9405062c135088e06b1457bc1389494f4fc7"
     },
     {
       "path": "normal-absent.glb",
@@ -2133,8 +2265,8 @@
     },
     {
       "path": "normalized-u8-color.expected.json",
-      "bytes": 6546,
-      "sha256": "039812d135b3b9bcc2ae007bc8ef1168f9bf0b7223d87341f20ae7a9f8aefa0b"
+      "bytes": 6575,
+      "sha256": "955988d7ddb6ef7ea443aa784057e90d0601fbaaf1aaa70d9c597f943a8b9379"
     },
     {
       "path": "normalized-u8-color.glb",
@@ -2158,8 +2290,8 @@
     },
     {
       "path": "scene-default-selection.expected.json",
-      "bytes": 8088,
-      "sha256": "4a9bbfd2d28de5ba28c5a00ba095340d5b1dcb3dcc2b083776df1192336ae2d4"
+      "bytes": 8117,
+      "sha256": "b9176273bd6c64ead1c09cf014097a52f0743a9977b0af02f8d512b3ca6db15a"
     },
     {
       "path": "scene-default-selection.glb",
@@ -2183,8 +2315,8 @@
     },
     {
       "path": "skin-73-joints.expected.json",
-      "bytes": 22298,
-      "sha256": "3e37c138327f0f893ffbec1d368f7701fd7275ba4c002872fe3043e96a444442"
+      "bytes": 22327,
+      "sha256": "1d2ced9ae4329a34957c641082d5ce5810187e79780c24f4c76841caa830a511"
     },
     {
       "path": "skin-73-joints.glb",
@@ -2198,8 +2330,8 @@
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 12587,
-      "sha256": "60e19103f5d813867bd8bd4e087fe1ef4ded5c179ff20f35b67b9d5bb578569d"
+      "bytes": 12616,
+      "sha256": "d9ab969afc76d1e07cd960405d65dd28d2a31793e9ed9d21c2a3dd13b5ace2bd"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -2223,8 +2355,8 @@
     },
     {
       "path": "skin-eight-influences.expected.json",
-      "bytes": 13569,
-      "sha256": "d60a2ca0e072d6edd8b22b5fe41b04da77d89e04d0c700646a13fdc95e28f46e"
+      "bytes": 13598,
+      "sha256": "5f46fdfaacb2bf69dcf67cebc57e1f04cf2b17c18dfd731c7f178f083fc86dbf"
     },
     {
       "path": "skin-eight-influences.glb",
@@ -2248,8 +2380,8 @@
     },
     {
       "path": "skin-joint-index-out-of-range.expected.json",
-      "bytes": 5484,
-      "sha256": "1fc777efaf9da1235f0e7cee5222d29c1013f86b3cde322ebaad3d6a751c9c76"
+      "bytes": 5513,
+      "sha256": "0ff60aa13a63041fd7a3016293f1acc5924abaac905d54bf2d3171fb3493052f"
     },
     {
       "path": "skin-joint-index-out-of-range.glb",
@@ -2263,8 +2395,8 @@
     },
     {
       "path": "skin-joint-index-padding.expected.json",
-      "bytes": 9653,
-      "sha256": "821622129afbc3dc0a11ee815ac5fbff0f48ee5905b5fe140733eaa0ade9ae23"
+      "bytes": 9682,
+      "sha256": "fe0901bf08afd306a8ff2cf10cba0af4b517c356c32720a7c620496410b0947b"
     },
     {
       "path": "skin-joint-index-padding.glb",
@@ -2288,8 +2420,8 @@
     },
     {
       "path": "skin-mesh-node-parent-transform.expected.json",
-      "bytes": 10426,
-      "sha256": "4b19782d491638cd1bf4c4e5eb88e04864b850e323cf0aef63dcd1578196b2c3"
+      "bytes": 10455,
+      "sha256": "d4b089cd296425744c8490ad4a90b55821fde642ab5c3eee44dd6bbc4575a877"
     },
     {
       "path": "skin-mesh-node-parent-transform.glb",
@@ -2313,8 +2445,8 @@
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
-      "bytes": 10496,
-      "sha256": "387e2d83b2e6538ca34ae09382c333cddd554d77eb9051f22676942029755d5e"
+      "bytes": 10525,
+      "sha256": "49acabe3e9d128a34e07aeb8ad1a6a27a503784626ee5b804385d283d92bc51d"
     },
     {
       "path": "skin-mesh-node-transform.glb",
@@ -2338,8 +2470,8 @@
     },
     {
       "path": "skin-plus-static-mesh.expected.json",
-      "bytes": 15210,
-      "sha256": "60c86860c00fe36e4cc146397cc6a2fa3eb442852fb6c08a41f60e98581b7182"
+      "bytes": 15239,
+      "sha256": "542cf1bedbe31816e964258eb19bc3704a4065d77d07acba1a76a177e2d917aa"
     },
     {
       "path": "skin-plus-static-mesh.glb",
@@ -2373,8 +2505,8 @@
     },
     {
       "path": "skin-skeleton-hint.expected.json",
-      "bytes": 13019,
-      "sha256": "3d1aba8524fb610e090173b45abd1027434cf0f4f180676f7400bee881b8f901"
+      "bytes": 13048,
+      "sha256": "b0134f4b18b05ce981242d7957ba65785ca62a4705eb8bef3d2b36f0f75b8b63"
     },
     {
       "path": "skin-skeleton-hint.glb",
@@ -2398,8 +2530,8 @@
     },
     {
       "path": "skin-unlit.expected.json",
-      "bytes": 10385,
-      "sha256": "93dcb795795ee27395543ec4b02090ef80bd2236e5fc72689cecedbd056491a0"
+      "bytes": 10414,
+      "sha256": "66835dc1c05bcec1a94e49a1d25422c84a42c33107b7b631542a839cc5f55718"
     },
     {
       "path": "skin-unlit.glb",
@@ -2423,8 +2555,8 @@
     },
     {
       "path": "skin-unnormalized.expected.json",
-      "bytes": 10207,
-      "sha256": "b81e0e09f12a5fa204b057ecf21c4831c40b3d75cfe396a88eaa90a2273ddf82"
+      "bytes": 10236,
+      "sha256": "b4cc453dd1d05317e21091178833bdb532e3537e1ce1a9850ec578ef87dff38f"
     },
     {
       "path": "skin-unnormalized.glb",
@@ -2448,8 +2580,8 @@
     },
     {
       "path": "skin-vertex-color.expected.json",
-      "bytes": 10715,
-      "sha256": "e75d37ccca79103a55e811106e20b1380d0665a74616c8e450ea37d1738da973"
+      "bytes": 10744,
+      "sha256": "3f23663a9b71d3353e57e63ab4594cde38e0e5d83a34798de34e79fd5ea96c3a"
     },
     {
       "path": "skin-vertex-color.glb",
@@ -2473,8 +2605,8 @@
     },
     {
       "path": "sparse-indices.expected.json",
-      "bytes": 7681,
-      "sha256": "71f6e2e7917cf7b80ea27f99b43fedcfe0bf08d566cb51dccb92a0cdaa36122f"
+      "bytes": 7710,
+      "sha256": "e95e35e86c0a7e62a3c33928e19179edbf1fd14c744440f908225c6654803f84"
     },
     {
       "path": "sparse-indices.glb",
@@ -2498,8 +2630,8 @@
     },
     {
       "path": "sparse-interleaved-base.expected.json",
-      "bytes": 7360,
-      "sha256": "1ecf5d2fb24ca7d1f346c57a3b53d6bc6ebc4aa099febd481a9985c82472f3d7"
+      "bytes": 7389,
+      "sha256": "304d5c8905de749caafc53f63fef97ef7a6a4ae967454cfa2d714f27392f8d16"
     },
     {
       "path": "sparse-interleaved-base.glb",
@@ -2523,8 +2655,8 @@
     },
     {
       "path": "sparse-position.expected.json",
-      "bytes": 5740,
-      "sha256": "0049f76cc55e7ae1799193b9c2f3e0a3e873550e22f0f7832692c325b7a9edbb"
+      "bytes": 5769,
+      "sha256": "880640bddcd5b7f866a5ee363129fa0d1dc32cbfc561c38f1aa6f2e1f947e93b"
     },
     {
       "path": "sparse-position.glb",
@@ -2548,8 +2680,8 @@
     },
     {
       "path": "tex-dual-texture-stride.expected.json",
-      "bytes": 9742,
-      "sha256": "ee0fceb2da8811a9657253767511487e44ca489b90421cc6d6f4abf2b0051466"
+      "bytes": 9771,
+      "sha256": "1ed3a74b32e849222439d34e6f62c76119a922d0bba20d5c874d8cd975702067"
     },
     {
       "path": "tex-dual-texture-stride.glb",
@@ -2573,8 +2705,8 @@
     },
     {
       "path": "tex-reference-checkerboard.expected.json",
-      "bytes": 9578,
-      "sha256": "76e2780f215acc16b84a2c01dbec1b14b9298dc12318d7dd8aa8a270f8023c71"
+      "bytes": 9607,
+      "sha256": "70ac53b06ff4b88c27ede4c5b150cf3ca1d89ddc0ed478b02fff34b70bed1c6e"
     },
     {
       "path": "tex-reference-checkerboard.glb",
@@ -2598,8 +2730,8 @@
     },
     {
       "path": "u8-idx.expected.json",
-      "bytes": 6384,
-      "sha256": "1c2e9af2559ef178a543c23a6b7ebe49ec8a8d9d690a7825e5c8607545b801a4"
+      "bytes": 6413,
+      "sha256": "1ddb1451eda240051d5b784ec6742866cd54849132e7bbe2b0db5aaff544d1f8"
     },
     {
       "path": "u8-idx.glb",
@@ -2623,8 +2755,8 @@
     },
     {
       "path": "xf-identity.expected.json",
-      "bytes": 6344,
-      "sha256": "e435d9cbab49a34ae3a714f935284628c17666fcaa37292e6bb3ccbdafe0b0fc"
+      "bytes": 6373,
+      "sha256": "b28ae7554920985effc1249f9c8291a21b4fbcd655f8c919802a58af12aef60b"
     },
     {
       "path": "xf-identity.glb",
@@ -2648,8 +2780,8 @@
     },
     {
       "path": "xf-matrix-node.expected.json",
-      "bytes": 7974,
-      "sha256": "6fdbaaa90109c0f52719cb2fabd014e034eebb77678e5299ae63315f5cdc18be"
+      "bytes": 8003,
+      "sha256": "e72c03824e7a68fe23ee332f84a45c53c210a24f1f64fc7d108c2a9f98b26795"
     },
     {
       "path": "xf-matrix-node.glb",
@@ -2673,8 +2805,8 @@
     },
     {
       "path": "xf-mirror-child.expected.json",
-      "bytes": 7944,
-      "sha256": "c4e58d273b739e499c9b94c50576e536bccaebf86bb6414c310079d58e4c50df"
+      "bytes": 7973,
+      "sha256": "ac236fa7e15e314fe60497f1391e646fb573eef21a7e28ebc35a94338c1ed2d5"
     },
     {
       "path": "xf-mirror-child.glb",
@@ -2698,8 +2830,8 @@
     },
     {
       "path": "xf-negative-scale.expected.json",
-      "bytes": 6517,
-      "sha256": "6a9ac5f8cddd3b01005e4f6ef6720795efd568a69b0c15fbe5c0e6d2778e19b2"
+      "bytes": 6546,
+      "sha256": "5346db249fce4c5909262f0717a639d24daa369530a7aa0c605e6dd978c7216c"
     },
     {
       "path": "xf-negative-scale.glb",
@@ -2723,8 +2855,8 @@
     },
     {
       "path": "xf-parent-child.expected.json",
-      "bytes": 8063,
-      "sha256": "22995e2c59da5c7976071e4d1056cf4dea5fce1e2f4c05ce7c0afb17dee0235f"
+      "bytes": 8092,
+      "sha256": "1a07447971973bdbf39982db5bbf01406494914f1acc72dc0379c423e7a98bc5"
     },
     {
       "path": "xf-parent-child.glb",
@@ -2748,8 +2880,8 @@
     },
     {
       "path": "xf-scale-nonuniform.expected.json",
-      "bytes": 6681,
-      "sha256": "ddf3b0f95b8086672fcbf7169c3dd703a04585fb88a178b5774a9917104ed561"
+      "bytes": 6710,
+      "sha256": "5cd7083c291dcdf599efeb0b6300af687d9f64b2583518ac919a64e682c834c2"
     },
     {
       "path": "xf-scale-nonuniform.glb",
@@ -2773,8 +2905,8 @@
     },
     {
       "path": "xf-shared-mesh.expected.json",
-      "bytes": 9293,
-      "sha256": "b358624d323b44b7f0bba0bf0dd3e9f2c7372712a3e096f339e6614db241d686"
+      "bytes": 9322,
+      "sha256": "d4715685af04be99ffcb805cb03022f4dc759d3bbda85bb2af7e61baf2f233a2"
     },
     {
       "path": "xf-shared-mesh.glb",

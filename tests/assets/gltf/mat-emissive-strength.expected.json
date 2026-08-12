@@ -53,7 +53,8 @@
     "extensionsUsed": [
       "KHR_materials_emissive_strength"
     ],
-    "extensionsRequired": []
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [

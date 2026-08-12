@@ -974,11 +974,29 @@ namespace CNA::Internal::GltfImport
         std::size_t clampedIntensityLightCount = 0;
         /** @brief The largest pre-clamp channel value seen, or 0 when nothing was clamped. */
         float worstPreClampChannelEXT = 0.0f;
+        /**
+         * @brief Lights declaring a finite `range`, which is ignored (`GLTF-327`).
+         *
+         * `range` is the distance past which a point or spot light contributes nothing. A
+         * directional light has no falloff at all, so the approximation lights the *whole* scene
+         * with a lamp the author scoped to one room — the error grows with distance, which is
+         * exactly where it is least likely to be noticed while authoring.
+         */
+        std::size_t ignoredRangeCount = 0;
+        /**
+         * @brief Spot lights whose cone angles are ignored (`GLTF-327`).
+         *
+         * Counted separately from @ref approximatedSpotLightCount, which records that the spot
+         * became directional at all. `innerConeAngle`/`outerConeAngle` are the shape of the pool
+         * of light, and losing them turns a focused beam into full-scene illumination.
+         */
+        std::size_t ignoredConeAngleCount = 0;
         /** @brief True when any of the above is non-zero. */
         [[nodiscard]] bool AnythingLost() const
         {
             return droppedLightCount > 0 || approximatedPointLightCount > 0 ||
-                   approximatedSpotLightCount > 0 || clampedIntensityLightCount > 0;
+                   approximatedSpotLightCount > 0 || clampedIntensityLightCount > 0 ||
+                   ignoredRangeCount > 0 || ignoredConeAngleCount > 0;
         }
     };
 

@@ -301,7 +301,53 @@ contributed, including when the answer is zero.
 `KHR_lights_punctual` is imported as **up to three directional lights**, because that is XNA's
 whole lighting model. A point or spot light becomes a directional one aimed at the scene origin, a
 spot's cone is lost, a fourth light is dropped, and an out-of-gamut `color × intensity` is clamped.
-Every one of those is counted and reported (`GLTF-326`).
+Every one of those is counted and reported (`GLTF-326`, `GLTF-327`).
+
+### The approximation table
+
+`GLTF-327`, `GLTF-330`. Every row is a property glTF carries and XNA's `DirectionalLight` does not.
+None is an error, none is recoverable inside XNA's lighting model, and each is counted in
+`LightReportEXT` so the size of the loss is visible without re-reading the file.
+
+| glTF property | What CNA does with it | Why it matters |
+|---|---|---|
+| `type: "directional"` | Maps exactly. | The one kind XNA has. |
+| `type: "point"` | Becomes a directional light aimed from the light's world position at the scene origin. | The lit side of an object is right only where the object *is* the origin; everything else is lit from a subtly wrong angle. |
+| `type: "spot"` | Same, and the cone is discarded. | A focused beam becomes full-scene illumination — the largest single approximation here. |
+| `range` | Ignored. | Bounds where a light reaches. A directional light has no falloff, so a lamp scoped to one room lights the whole scene, and the error **grows with distance** — smallest exactly where an author placing it is looking. |
+| `innerConeAngle` / `outerConeAngle` | Ignored. | As above; they are the *shape* of the pool of light. |
+| `intensity` | Multiplied into `color`, then clamped per channel to `[0,1]`. | See below. |
+| 4th and later lights | Dropped, in node order. | `DirectionalLight0..2` is the whole budget. |
+
+**On intensity specifically.** glTF's units are photometric and unbounded — **lux** for a
+directional light, **candela** for point and spot — while `DirectionalLight::DiffuseColor` is a
+colour in `[0,1]`. There is no scale factor that makes those the same quantity: one is a physical
+measurement and the other is a shader input, and the conversion between them is an *exposure*
+decision that belongs to a tone-mapping stage CNA does not have (see the IBL boundary below). So
+`color × intensity` is clamped, and an ordinary authored value clamps: `683` is not an absurd
+number, it is the lumens-per-watt constant, and it imports as plain white. The report carries the
+worst pre-clamp channel, which is what tells an author how far out of gamut they were rather than
+merely that something was clipped.
+
+### If real point and spot lights were wanted
+
+`GLTF-331`, scoped and **not implemented**. No CNA stock effect shader has a point or spot term, so
+supporting them is a shader-and-effect change rather than an importer one, and the importer is not
+where it should be hidden. The shape it would take:
+
+1. A `PointLightEXT` / `SpotLightEXT` uniform block alongside the existing three directional slots,
+   carrying position, colour, range and (for spot) the two cone angles.
+2. The falloff and cone terms from the extension's own specification, in the shader — the
+   inverse-square-with-range-window and the smooth cone interpolation are both stated there, so
+   this is transcription rather than design.
+3. An `EffectLightCollectionEXT`-style API so an application can bind them, since XNA's own
+   `IEffectLights` names exactly three directional lights and cannot express any of this.
+4. Every renderer's uniform layout updated in step, which is what makes this large: the light block
+   is shared shader ABI, not a per-renderer detail.
+
+Until that exists, the approximation above stands and is reported. What must **not** happen in the
+meantime is an importer that quietly picks a "good enough" directional substitute without saying
+so — which is precisely what `GLTF-326`/`GLTF-327` exist to prevent.
 
 ### The IBL boundary, stated once
 

@@ -52,7 +52,8 @@
     ],
     "extensionsRequired": [
       "KHR_materials_variants"
-    ]
+    ],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [

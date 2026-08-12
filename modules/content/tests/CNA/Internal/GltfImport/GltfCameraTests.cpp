@@ -302,3 +302,115 @@ TEST(GltfCameras, AnAnimatedCamerasLivePlacementComesFromItsBoneNotItsStoredTran
     EXPECT_GT(std::fabs(live.M11 - camera.WorldTransform.M11), 1e-3f)
         << "the live and stored transforms agree at t = 1, so this test cannot tell them apart";
 }
+
+// --- GLTF-322: an absent aspectRatio, and the fact that it was absent -------------------------
+
+TEST(GltfCameras, AnAbsentAspectRatioIsAssumedToBeOneAndTheAssumptionIsRecorded)
+{
+    // §3.10.3 makes aspectRatio optional and gives its absence a meaning -- "use the viewport's" --
+    // that an importer has no viewport to satisfy. One is assumed. The task is that the assumption
+    // is RECORDED: without the flag a consumer cannot tell an author who framed a square shot from
+    // one who deliberately left the framing to the runtime, and would either stretch the first or
+    // letterbox the second. Both read as a projection bug rather than as a missing field.
+    const LoadedFixture fixture("camera-perspective-no-aspect");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& row = Path(fixture.Expected(), "l4.cameras").FindMember("entries")
+                               ->arrayValue.front();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("camera-perspective-no-aspect");
+
+    const auto& camera = model.getCamerasEXTProperty().front();
+    EXPECT_FALSE(camera.HasAuthoredAspectRatio) << "the file declares no aspectRatio";
+    EXPECT_NEAR(1.0f, camera.AspectRatio, kTolerance);
+    ExpectColumnMajorNear(Numbers(Member(row, "projectionColumnMajor")), camera.Projection,
+                          "projection built at the assumed aspect");
+}
+
+TEST(GltfCameras, AnAuthoredAspectRatioIsMarkedAsAuthoredAndUsedVerbatim)
+{
+    // The control. Without it, `HasAuthoredAspectRatio` could be hardwired false and the test
+    // above would still pass -- and a consumer would then rebuild every projection, discarding the
+    // framing of every camera whose author did state one.
+    const LoadedFixture fixture("camera-perspective");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& row = Path(fixture.Expected(), "l4.cameras").FindMember("entries")
+                               ->arrayValue.front();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("camera-perspective");
+
+    const auto& camera = model.getCamerasEXTProperty().front();
+    EXPECT_TRUE(camera.HasAuthoredAspectRatio);
+    EXPECT_NEAR(static_cast<float>(CnaTest::GltfOracle::NumberOr(row, "aspectRatio", -1.0)),
+                camera.AspectRatio, kTolerance);
+}
+
+TEST(GltfCameras, EveryPerspectiveCameraCarriesTheParametersNeededToRebuildItsProjection)
+{
+    // The point of GLTF-322 is that a consumer can act on the assumption, not merely detect it.
+    // Acting means rebuilding the projection at the real viewport aspect, which requires yfov,
+    // znear and zfar -- carried rather than left to be recovered by inverting a matrix, which is
+    // work no consumer should do and is impossible for the infinite variant without first knowing
+    // it is the infinite variant.
+    for (const std::string& id : {"camera-perspective", "camera-perspective-infinite",
+                                  "camera-perspective-no-aspect"})
+    {
+        SCOPED_TRACE(id);
+        const LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const JsonValue& row = Path(fixture.Expected(), "l4.cameras").FindMember("entries")
+                                   ->arrayValue.front();
+
+        GraphicsDevice gd;
+        ContentManager cm(nullptr, CorpusDirectory().string());
+        cm.setGraphicsDevice(gd);
+        Model model = cm.Load<Model>(id);
+        const auto& camera = model.getCamerasEXTProperty().front();
+
+        EXPECT_NEAR(static_cast<float>(CnaTest::GltfOracle::NumberOr(row, "fieldOfView", -1.0)),
+                    camera.FieldOfView, kTolerance);
+        EXPECT_NEAR(
+            static_cast<float>(CnaTest::GltfOracle::NumberOr(row, "nearPlaneDistance", -1.0)),
+            camera.NearPlaneDistance, kTolerance);
+        EXPECT_NEAR(
+            static_cast<float>(CnaTest::GltfOracle::NumberOr(row, "farPlaneDistance", -1.0)),
+            camera.FarPlaneDistance, kTolerance);
+
+        // Rebuilding at the carried aspect must reproduce the projection the importer built, or
+        // the parameters describe a different camera from the matrix beside them.
+        const Matrix rebuilt = camera.HasInfiniteFarPlane
+            ? Microsoft::Xna::Framework::Graphics::CreateInfinitePerspectiveFieldOfViewEXT(
+                  camera.FieldOfView, camera.AspectRatio, camera.NearPlaneDistance)
+            : Matrix::CreatePerspectiveFieldOfView(camera.FieldOfView, camera.AspectRatio,
+                                                   camera.NearPlaneDistance,
+                                                   camera.FarPlaneDistance);
+        float built[16];
+        camera.Projection.ToColumnMajor(built);
+        float again[16];
+        rebuilt.ToColumnMajor(again);
+        for (std::size_t i = 0; i < 16; ++i)
+        {
+            EXPECT_NEAR(built[i], again[i], kTolerance) << "rebuilt element " << i;
+        }
+    }
+}
+
+TEST(GltfCameras, AnOrthographicCameraLeavesThePerspectiveOnlyParametersAtTheirDefaults)
+{
+    // xmag/ymag are not a field of view and there is no aspect ratio to assume, so the perspective
+    // fields must not be filled with plausible-looking numbers a consumer might act on.
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("camera-orthographic");
+
+    const auto& camera = model.getCamerasEXTProperty().front();
+    ASSERT_FALSE(camera.IsPerspective);
+    EXPECT_FALSE(camera.HasAuthoredAspectRatio);
+    EXPECT_FLOAT_EQ(0.0f, camera.FieldOfView) << "an orthographic camera has no field of view";
+}

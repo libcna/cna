@@ -3522,6 +3522,13 @@ namespace CNA::Internal::GltfImport
                 // apart: the approximation is materially worse for one than the other.
                 if (src.type == cgltf_light_type_spot) { ++report.approximatedSpotLightCount; }
                 else { ++report.approximatedPointLightCount; }
+                // GLTF-327: range and cone angles, counted where they are lost. Both bound the
+                // light's REACH, and a directional light has no bounds at all, so an unreported
+                // loss here lights the whole scene with a lamp the author scoped to one room --
+                // an error that grows with distance from the light, which is where it is least
+                // likely to be noticed while authoring.
+                if (src.range > 0.0f) { ++report.ignoredRangeCount; }
+                if (src.type == cgltf_light_type_spot) { ++report.ignoredConeAngleCount; }
                 direction = (worldPos.LengthSquared() > 1e-12f)
                     ? Vector3::Normalize(Vector3(-worldPos.X, -worldPos.Y, -worldPos.Z))
                     : Vector3(0.0f, -1.0f, 0.0f);

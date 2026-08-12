@@ -125,17 +125,21 @@ _GLB_CHUNK_BIN = 0x004E4942
 # Emission order is stated once, here, rather than relying on the order a fixture happens to build
 # its dictionaries in. A generated asset is a committed artefact whose diff must mean something.
 
-_TOP_LEVEL_ORDER = ["asset", "extensionsUsed", "extensionsRequired", "scene", "scenes", "nodes",
+_TOP_LEVEL_ORDER = ["asset", "extensionsUsed", "extensionsRequired", "extensions", "scene",
+                    "scenes", "nodes",
                     "cameras", "meshes", "materials", "textures", "images", "samplers", "skins",
                     "animations", "accessors", "bufferViews", "buffers"]
-_NODE_ORDER = ["name", "mesh", "camera", "skin", "children", "translation", "rotation", "scale",
-               "matrix", "weights"]
+_NODE_ORDER = ["name", "mesh", "camera", "skin", "extensions", "children", "translation",
+               "rotation", "scale", "matrix", "weights"]
 _ACCESSOR_ORDER = ["bufferView", "byteOffset", "componentType", "normalized", "count", "type",
                    "max", "min", "sparse"]
 _BUFFER_VIEW_ORDER = ["buffer", "byteOffset", "byteLength", "byteStride", "target"]
 _PRIMITIVE_ORDER = ["attributes", "indices", "material", "mode", "targets"]
 _MESH_ORDER = ["name", "primitives", "weights"]
 _SCENE_ORDER = ["name", "nodes"]
+
+#: The punctual-lighting extension, declared automatically by ``add_light``.
+_KHR_LIGHTS = "KHR_lights_punctual"
 
 
 def _ordered(value: dict[str, Any], order: Sequence[str]) -> dict[str, Any]:
@@ -265,6 +269,7 @@ class GltfBuilder:
         self._textures: list[dict[str, Any]] = []
         self._skins: list[dict[str, Any]] = []
         self._cameras: list[dict[str, Any]] = []
+        self._lights: list[dict[str, Any]] = []
         self._animations: list[dict[str, Any]] = []
         self._accessors: list[dict[str, Any]] = []
         self._buffer_views: list[dict[str, Any]] = []
@@ -454,7 +459,8 @@ class GltfBuilder:
         return len(self._meshes) - 1
 
     def add_node(self, *, name: str, mesh: int | None = None, camera: int | None = None,
-                 skin: int | None = None, weights: Sequence[float] | None = None,
+                 skin: int | None = None, light: int | None = None,
+                 weights: Sequence[float] | None = None,
                  children: Sequence[int] | None = None,
                  translation: Sequence[float] | None = None,
                  rotation: Sequence[float] | None = None,
@@ -487,6 +493,10 @@ class GltfBuilder:
             node["camera"] = camera
         if skin is not None:
             node["skin"] = skin
+        if light is not None:
+            # KHR_lights_punctual attaches a light through the node's own extensions block, not
+            # through a top-level property like mesh/camera/skin -- the extension cannot add one.
+            node["extensions"] = {_KHR_LIGHTS: {"light": light}}
         if weights is not None:
             node["weights"] = list(weights)
         if children:
@@ -549,6 +559,23 @@ class GltfBuilder:
         """
         self._cameras.append(dict(camera))
         return len(self._cameras) - 1
+
+    def add_light(self, light: dict[str, Any]) -> int:
+        """Adds a ``KHR_lights_punctual`` light, and declares the extension as used.
+
+        The extension is declared here rather than left to the caller because a light that no
+        ``extensionsUsed`` entry announces is a malformed file, and a fixture that had to remember
+        to declare it would eventually forget. ``used`` rather than ``required``: a reader that
+        ignores the extension still gets correct — if unlit — geometry, which is exactly the
+        distinction §3.12 draws.
+
+        :param light: the light object (``type``, ``color``, ``intensity``, ``range``, ``spot``).
+        :return: the new light's index within the extension's own ``lights`` array.
+        """
+        if _KHR_LIGHTS not in self._extensions_used:
+            self._extensions_used.append(_KHR_LIGHTS)
+        self._lights.append(dict(light))
+        return len(self._lights) - 1
 
     def add_skin(self, skin: dict[str, Any]) -> int:
         """Adds a skin, authored as a glTF skin object.
@@ -644,6 +671,8 @@ class GltfBuilder:
             doc["scene"] = self._default_scene
         doc["scenes"] = self._scenes
         doc["nodes"] = self._nodes
+        if self._lights:
+            doc["extensions"] = {_KHR_LIGHTS: {"lights": self._lights}}
         if self._cameras:
             doc["cameras"] = self._cameras
         doc["meshes"] = self._meshes
@@ -692,6 +721,7 @@ class GltfBuilder:
             "bufferByteLength": len(self._buffer),
             "extensionsUsed": list(self._extensions_used),
             "extensionsRequired": list(self._extensions_required),
+            "punctualLightCount": len(self._lights),
         }
 
     def to_gltf_text(self) -> str:

@@ -54,7 +54,8 @@
     "extensionsUsed": [
       "KHR_materials_unlit"
     ],
-    "extensionsRequired": []
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [

@@ -53,7 +53,8 @@
     "bufferCount": 1,
     "bufferByteLength": 168,
     "extensionsUsed": [],
-    "extensionsRequired": []
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [

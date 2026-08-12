@@ -1,0 +1,171 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "CNA gltf_fixtures"
+  },
+  "extensionsUsed": [
+    "KHR_lights_punctual"
+  ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [
+        {
+          "name": "Key",
+          "type": "directional",
+          "color": [
+            1.0,
+            0.95,
+            0.9
+          ],
+          "intensity": 1.0
+        },
+        {
+          "name": "Lamp",
+          "type": "point",
+          "color": [
+            0.2,
+            0.4,
+            1.0
+          ],
+          "intensity": 1.0,
+          "range": 12.5
+        },
+        {
+          "name": "Beam",
+          "type": "spot",
+          "color": [
+            1.0,
+            0.5,
+            0.0
+          ],
+          "intensity": 1.0,
+          "range": 30.0,
+          "spot": {
+            "innerConeAngle": 0.4,
+            "outerConeAngle": 0.8
+          }
+        }
+      ]
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1,
+        2,
+        3
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "LitSubject",
+      "mesh": 0
+    },
+    {
+      "name": "KeyNode",
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 0
+        }
+      }
+    },
+    {
+      "name": "LampNode",
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 1
+        }
+      },
+      "translation": [
+        0.0,
+        6.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BeamNode",
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 2
+        }
+      },
+      "translation": [
+        4.0,
+        4.0,
+        4.0
+      ]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "LitTri",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "indices": 2,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5123,
+      "count": 3,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 36
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 36,
+      "byteLength": 36
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 72,
+      "byteLength": 6
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 78,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIA"
+    }
+  ]
+}

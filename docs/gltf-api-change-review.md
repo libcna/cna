@@ -448,6 +448,43 @@ so for a reason, and the reason is usually a normal map the material also declar
 
 **No API change.** A new `MeshOut` field, which is `CNA::Internal` and not public surface.
 
+### 1.11 `Model` imported-camera list — `GLTF-317` … `GLTF-322`, `GLTF-324`
+
+**Problem.** `cgltf_camera` had zero occurrences in CNA: a file's cameras were dropped entirely, so
+an asset framed by its author arrived with no framing and every viewer had to invent one. This entry
+was **deferred** in §2.3 as "additive with no current consumer"; `GLTF-317` overtook that, and the
+shape below is what the gate approved rather than what deferral left unspecified.
+
+**Decision: approved, as `std::vector<ModelCameraEXT>` on `Model`.** The reviewed shape, and why
+each part of it is the way it is:
+
+* **One entry per camera-bearing *node*, not per `cameras[]` entry.** A camera only exists in the
+  render if a node in the default scene instances it, and one camera may be instanced by several
+  nodes — each a distinct placement. Walking the camera array would both import cameras nobody
+  placed and collapse the multi-instance case to one.
+* **`Projection` is built at import, not at use.** An application should not have to reimplement
+  glTF's infinite-far-plane case to draw what the author framed.
+* **`WorldTransform` is a snapshot and says so.** The view matrix is its inverse (`GLTF-321`). A
+  camera node is an ordinary node and can be animated, so the *live* placement is the absolute
+  transform of the bone `SceneNodeIndex` names — the doc comment carries that warning because a
+  consumer reading the stored matrix every frame renders an animated camera as a stationary one.
+* **`HasInfiniteFarPlane`, `HasAuthoredAspectRatio` — the two assumptions, made explicit**
+  (`GLTF-319`, `GLTF-322`). Both record something the *file* did or did not say, not something the
+  importer computed. `aspectRatio`'s absence means "use the viewport's", which an importer has no
+  viewport to satisfy: one is assumed, and without the flag a consumer cannot tell an author who
+  framed a square shot from one who left the decision to the runtime, and would either stretch the
+  first or letterbox the second.
+* **`FieldOfView`, `NearPlaneDistance`, `FarPlaneDistance` carried rather than recoverable.**
+  Acting on `HasAuthoredAspectRatio == false` means rebuilding the projection at the real viewport
+  aspect. Inverting a matrix to get back values the file stated outright is work no consumer should
+  do, and is not possible at all for the infinite variant without first knowing it is the infinite
+  variant.
+
+**API change: additive, CNAEXT, no XNA type altered.** `Model` gains a getter and setter pair for a
+new `CNAEXT` struct. Nothing in the XNA 4.0 surface changes, and a `Model` from any other source
+simply has an empty list — which is also what a glTF file with no camera produces, deliberately, so
+"no camera" and "a default camera" are never confused.
+
 ---
 
 ## 2. Reviewed and deferred
@@ -468,12 +505,17 @@ them.
 Deferred untouched. A CNAEXT `SamplerStateArrayEXT` on the part is a larger surface than anything
 else in this file and has no consumer until texture work begins.
 
-### 2.3 `Model` imported-camera list — `GLTF-320`; import diagnostics — `GLTF-034`
+### 2.3 Import diagnostics — `GLTF-034`
 
-Deferred. Both are additive CNAEXT containers with no current consumer. `GLTF-034` is worth noting
-as *partially pre-empted*: `GLTF-024`'s ignored-extension reporting already emits warnings through
-`CNA::Logger` on the runtime path and the tool's own warning list offline, so the eventual
-`GltfImportReportEXT` should collect what already exists rather than introduce a second channel.
+Deferred. An additive CNAEXT container with no current consumer. Worth noting as *partially
+pre-empted*: `GLTF-024`'s ignored-extension reporting already emits warnings through `CNA::Logger`
+on the runtime path and the tool's own warning list offline, so the eventual `GltfImportReportEXT`
+should collect what already exists rather than introduce a second channel. Every report added since
+— `NodeGraphReportEXT`, `SkinReportEXT`, `MorphReportEXT`, `LightReportEXT`, `AnimationReportEXT` —
+is deliberately **internal** for this reason, and is the material that container would gather.
+
+The imported-**camera** list was deferred here alongside it and has since been approved and landed;
+see §1.11.
 
 ### 2.4 `SkinnedEffect::MaxBones` above 72 — `GLTF-261`
 

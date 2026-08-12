@@ -108,16 +108,43 @@ def _camera_fixture(*, fixture_id: str, camera: dict, projection: list[float],
             0.0, 0.0, 1.0, 0.0,
             -_CAMERA_TRANSLATION[0], -_CAMERA_TRANSLATION[1], -_CAMERA_TRANSLATION[2], 1.0]
 
+    # plan_gltf.md GLTF-322. §3.10.3 makes aspectRatio optional and means "the viewport's" when it
+    # is absent -- something an importer cannot know. The decision is stated here in both forms:
+    # what was authored, and what the importer must therefore assume. A consumer that cannot tell
+    # the two apart either stretches a deliberately framed shot or letterboxes a deliberately
+    # viewport-relative one, and both look like a projection bug rather than a missing field.
+    source = camera.get("perspective", camera.get("orthographic", {}))
+    authored_aspect = "aspectRatio" in source
+    entry = {
+        "camera": camera_index,
+        "node": camera_node,
+        "nodeName": "CameraNode",
+        "isPerspective": is_perspective,
+        "hasInfiniteFarPlane": infinite_far,
+        "projectionColumnMajor": projection,
+    }
+    if is_perspective:
+        entry.update({
+            "hasAuthoredAspectRatio": authored_aspect,
+            "aspectRatio": source["aspectRatio"] if authored_aspect else 1.0,
+            "aspectRatioRule": "An absent aspectRatio means 'use the viewport's' (§3.10.3), which "
+                               "an importer has no viewport to read. 1 is assumed AND the "
+                               "assumption is recorded, so a consumer can rebuild the projection "
+                               "at its own aspect instead of guessing whether it should.",
+            "fieldOfView": source["yfov"],
+            "nearPlaneDistance": source["znear"],
+            "farPlaneDistance": source.get("zfar", 0.0),
+            "rebuildRule": "yfov/znear/zfar are carried rather than left to be recovered from the "
+                           "projection: inverting a matrix to get back a value the file stated "
+                           "outright is work no consumer should do, and is not possible at all "
+                           "for the infinite variant without knowing it is the infinite variant.",
+        })
+
     l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
     l4["cameras"] = {
         "count": 1,
         "entries": [{
-            "camera": camera_index,
-            "node": camera_node,
-            "nodeName": "CameraNode",
-            "isPerspective": is_perspective,
-            "hasInfiniteFarPlane": infinite_far,
-            "projectionColumnMajor": projection,
+            **entry,
             "worldTransformColumnMajor": world,
             "viewMatrixColumnMajor": view,
             "viewRule": "view = inverse(worldTransform(cameraNode)). A glTF camera looks down its "
@@ -299,5 +326,32 @@ def camera_animated_node() -> Fixture:
     )
 
 
-FIXTURES = [camera_perspective, camera_perspective_infinite, camera_orthographic,
-            camera_animated_node]
+def camera_perspective_no_aspect() -> Fixture:
+    """A perspective camera with **no** ``aspectRatio``. Owns **GLTF-322**.
+
+    ``aspectRatio`` is the one camera field whose absence means "ask the runtime", and an importer
+    has no runtime to ask. It assumes 1 -- and the whole task is that it *records* having assumed,
+    because the alternative is a consumer that cannot distinguish an author who framed a square
+    shot from one who deliberately left the framing to the viewport, and would either stretch the
+    first or letterbox the second.
+
+    Every other parameter matches ``camera-perspective`` exactly, so the two differ in precisely
+    one field and the expected projections differ in precisely the terms that depend on it: the
+    ``x`` scale changes and nothing else does.
+    """
+    return _camera_fixture(
+        fixture_id="camera-perspective-no-aspect",
+        camera={"name": "ViewportCam", "type": "perspective",
+                "perspective": {"yfov": _YFOV, "zfar": _ZFAR, "znear": _ZNEAR}},
+        projection=_perspective_matrix(_YFOV, 1.0, _ZNEAR, _ZFAR),
+        is_perspective=True, infinite_far=False,
+        description="A perspective camera omitting aspectRatio, which §3.10.3 makes 'use the "
+                    "viewport's'. The importer assumes 1 and records that it assumed, so a "
+                    "consumer can rebuild the projection at its real aspect. Identical to "
+                    "camera-perspective in every other field.",
+        features=["camera.perspective", "aspectRatio absent", "viewport-relative framing",
+                  "assumed value recorded"])
+
+
+FIXTURES = [camera_perspective, camera_perspective_infinite, camera_perspective_no_aspect,
+            camera_orthographic, camera_animated_node]

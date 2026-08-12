@@ -2146,6 +2146,21 @@ namespace Microsoft::Xna::Framework::Content
                     "). glTF intensity is photometric and unbounded; DiffuseColor is a [0,1] "
                     "colour, so a bright light imports as white (GLTF-326).");
             }
+            if (lightReport.ignoredRangeCount > 0 || lightReport.ignoredConeAngleCount > 0)
+            {
+                // plan_gltf.md GLTF-327. Reported apart from the approximation above because it is
+                // a different loss: that one is about the light's KIND, this one about its REACH.
+                // A directional light has no falloff and no cone, so a lamp the author scoped to
+                // one room lights the whole scene -- and the error grows with distance from the
+                // light, which is where it is least likely to be spotted while authoring.
+                CNA::Logger::Warn(
+                    "glTF file '" + path + "': " + std::to_string(lightReport.ignoredRangeCount) +
+                    " light(s) declare a finite range and " +
+                    std::to_string(lightReport.ignoredConeAngleCount) +
+                    " declare cone angles. Both bound a light's reach, and the directional lights "
+                    "they are approximated by have no bounds at all, so those lights illuminate "
+                    "the whole scene (GLTF-327).");
+            }
 
             SkeletonResult skeleton;
             if (hasSkin)
@@ -3006,17 +3021,26 @@ namespace Microsoft::Xna::Framework::Content
                     out.IsPerspective = camera.perspective;
                     if (camera.perspective)
                     {
-                        // §3.10.3: an absent aspectRatio means "use the viewport's". The importer
-                        // has no viewport, so 1 is used and the application is expected to rebuild
-                        // the projection if it cares -- which it can, since yfov and znear are
-                        // recoverable from the matrix and the node transform is carried separately.
-                        const float aspect = camera.aspectRatio > 0.0f ? camera.aspectRatio : 1.0f;
+                        // plan_gltf.md GLTF-322. §3.10.3: an absent aspectRatio means "use the
+                        // viewport's", which an importer has no way to know. One is assumed --
+                        // and, unlike before, the assumption is RECORDED. Without the flag a
+                        // consumer cannot tell an author who framed a square shot from one who
+                        // deliberately left the decision to the runtime, and would either stretch
+                        // the first or letterbox the second. yfov/znear/zfar are carried alongside
+                        // for the same reason: rebuilding the projection at the real viewport
+                        // aspect should not require inverting a matrix, and cannot be done at all
+                        // for the infinite variant without knowing it is the infinite variant.
+                        out.HasAuthoredAspectRatio = camera.aspectRatio > 0.0f;
+                        out.AspectRatio = out.HasAuthoredAspectRatio ? camera.aspectRatio : 1.0f;
                         out.HasInfiniteFarPlane = (camera.zfar <= 0.0f);
+                        out.FieldOfView = camera.yfov;
+                        out.NearPlaneDistance = camera.znear;
+                        out.FarPlaneDistance = out.HasInfiniteFarPlane ? 0.0f : camera.zfar;
                         out.Projection = out.HasInfiniteFarPlane
                             ? Graphics::CreateInfinitePerspectiveFieldOfViewEXT(
-                                  camera.yfov, aspect, camera.znear)
+                                  camera.yfov, out.AspectRatio, camera.znear)
                             : Matrix::CreatePerspectiveFieldOfView(
-                                  camera.yfov, aspect, camera.znear, camera.zfar);
+                                  camera.yfov, out.AspectRatio, camera.znear, camera.zfar);
                     }
                     else
                     {

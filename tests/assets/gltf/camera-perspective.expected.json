@@ -52,7 +52,8 @@
     "bufferCount": 1,
     "bufferByteLength": 78,
     "extensionsUsed": [],
-    "extensionsRequired": []
+    "extensionsRequired": [],
+    "punctualLightCount": 0
   },
   "l2": {
     "accessors": [
@@ -290,6 +291,13 @@
             -0.25052192066805845,
             0.0
           ],
+          "hasAuthoredAspectRatio": true,
+          "aspectRatio": 1.6,
+          "aspectRatioRule": "An absent aspectRatio means 'use the viewport's' (\u00a73.10.3), which an importer has no viewport to read. 1 is assumed AND the assumption is recorded, so a consumer can rebuild the projection at its own aspect instead of guessing whether it should.",
+          "fieldOfView": 0.7853981633974483,
+          "nearPlaneDistance": 0.25,
+          "farPlaneDistance": 120.0,
+          "rebuildRule": "yfov/znear/zfar are carried rather than left to be recovered from the projection: inverting a matrix to get back a value the file stated outright is work no consumer should do, and is not possible at all for the infinite variant without knowing it is the infinite variant.",
           "worldTransformColumnMajor": [
             1.0,
             0.0,

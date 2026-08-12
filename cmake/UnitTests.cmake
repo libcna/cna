@@ -437,7 +437,7 @@ if(CNA_BUILD_TESTS)
         "L3|GltfConformanceL3.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfDrawTopology.*:GltfSamplerMapping.*:GltfImageSource.*:GltfUvChannel.*:GltfOcclusionRemap.*:GltfUnsupportedTexture.*"
         "L4|GltfConformanceL4.*:GltfConventions.*:GltfNodeTransformOrder.*:GltfNodeHierarchy.*:GltfMirroring.*:GltfModelShape.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfSkinComposition.*:GltfRigidAnimation.*:GltfAnimationSampling.*:GltfAnimationRobustness.*:GltfClipAndLight.*:GltfCameras.*:GltfMorphWeights.*:GltfMorphBlending.*:GltfSceneSelection.*"
         "L5|GltfConformanceL5.*:GltfStrideAndBuffer.*:GltfBufferOracle.*:GltfVertexBufferInvariants.*"
-        "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*"
+        "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*:GltfLightBudget.*"
         "Ledger|GltfKnownDefect.*"
         "Tool|GltfToCnjToolTest.*")
     foreach(_gltf_rung IN LISTS CNA_GLTF_CONFORMANCE_RUNGS)
