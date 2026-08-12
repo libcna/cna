@@ -435,7 +435,7 @@ if(CNA_BUILD_TESTS)
         "L1|GltfConformanceL1.*:GltfContainerValidation.*:GltfUriContainment.*"
         "L2|GltfConformanceL2.*:GltfAccessorDecodeLock.*:GltfIndexDecode.*"
         "L3|GltfConformanceL3.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfDrawTopology.*:GltfSamplerMapping.*:GltfUnsupportedTexture.*"
-        "L4|GltfConformanceL4.*:GltfConventions.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfRigidAnimation.*:GltfAnimationSampling.*:GltfCameras.*:GltfMorphWeights.*:GltfSceneSelection.*"
+        "L4|GltfConformanceL4.*:GltfConventions.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfSkinComposition.*:GltfRigidAnimation.*:GltfAnimationSampling.*:GltfCameras.*:GltfMorphWeights.*:GltfMorphBlending.*:GltfSceneSelection.*"
         "L5|GltfConformanceL5.*:GltfBufferOracle.*:GltfVertexBufferInvariants.*"
         "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*"
         "Ledger|GltfKnownDefect.*"
