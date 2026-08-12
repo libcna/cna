@@ -505,6 +505,145 @@ TEST_F(TerminalPresenter, ANonPositiveTargetSizeIsRefusedBeforeTheTerminalIsTouc
     EXPECT_FALSE(TerminalSession::IsActive()) << "a refused presenter must not hold the terminal";
 }
 
+// --- damage tracking (PLAT-133) ---------------------------------------------------------------------
+
+TEST(TerminalAnsiWriterTest, AnIdenticalGridRedrawsNothingAtAll)
+{
+    // The claim damage tracking rests on. A still picture that still costs a full frame of
+    // bandwidth would make the whole exercise pointless.
+    TerminalGrid grid;
+    grid.Reset(20, 5);
+    for (TerminalCell& cell : grid.cells)
+    {
+        cell = TerminalCell{'#', 90, 90, 90};
+    }
+
+    std::string output;
+    TerminalAnsiWriter writer(TerminalColourDepth::TrueColour);
+    EXPECT_EQ(writer.WriteChangedCells(grid, grid, output), 0);
+    EXPECT_TRUE(output.empty());
+}
+
+TEST(TerminalAnsiWriterTest, OnlyTheChangedCellsAreRedrawn)
+{
+    TerminalGrid before;
+    before.Reset(20, 5);
+    for (TerminalCell& cell : before.cells)
+    {
+        cell = TerminalCell{'.', 10, 10, 10};
+    }
+    TerminalGrid after = before;
+    after.cells[3] = TerminalCell{'@', 200, 200, 200};
+    after.cells[4] = TerminalCell{'@', 200, 200, 200};
+
+    std::string output;
+    TerminalAnsiWriter writer(TerminalColourDepth::TrueColour);
+    EXPECT_EQ(writer.WriteChangedCells(before, after, output), 2);
+    EXPECT_EQ(std::count(output.begin(), output.end(), '@'), 2);
+    EXPECT_EQ(output.find('.'), std::string::npos) << "unchanged cells must not be resent";
+}
+
+TEST(TerminalAnsiWriterTest, ARunOfChangedCellsIsPositionedOnce)
+{
+    // A cursor move costs about as much as six glyphs. Positioning each changed cell separately
+    // would give back most of what the diff saves on any frame with a moving object in it.
+    TerminalGrid before;
+    before.Reset(20, 2);
+    TerminalGrid after = before;
+    for (int column = 5; column < 15; ++column)
+    {
+        after.cells[static_cast<std::size_t>(column)] = TerminalCell{'#', 255, 255, 255};
+    }
+
+    std::string output;
+    TerminalAnsiWriter writer(TerminalColourDepth::TrueColour);
+    EXPECT_EQ(writer.WriteChangedCells(before, after, output), 10);
+
+    int positioningEscapes = 0;
+    for (std::size_t at = output.find("\x1b["); at != std::string::npos;
+         at = output.find("\x1b[", at + 1))
+    {
+        if (output.find('H', at) != std::string::npos &&
+            output.find('H', at) < output.find('m', at))
+        {
+            ++positioningEscapes;
+        }
+    }
+    EXPECT_EQ(positioningEscapes, 1) << "ten adjacent cells are one run, not ten";
+}
+
+TEST(TerminalAnsiWriterTest, ADifferentlySizedGridForcesAFullRedraw)
+{
+    // After a resize nothing on screen corresponds to the new grid's coordinates, so a diff would
+    // be comparing unrelated cells and would leave the screen holding pieces of the old picture.
+    TerminalGrid before;
+    before.Reset(4, 2);
+    TerminalGrid after;
+    after.Reset(8, 3);
+
+    std::string output;
+    TerminalAnsiWriter writer(TerminalColourDepth::Monochrome);
+    EXPECT_EQ(writer.WriteChangedCells(before, after, output), 8 * 3);
+    EXPECT_EQ(output.compare(0, 3, "\x1b[H"), 0) << "a full redraw homes the cursor";
+}
+
+TEST_F(TerminalPresenter, AStillPictureCostsNothingAfterItsFirstFrame)
+{
+    // End to end, and the number that matters: the first frame pays for the whole screen, and an
+    // unchanged second frame pays for nothing.
+    TerminalSurfacePresenter presenter(pty_.Device(), pty_.Device(),
+                                       TerminalColourDepth::TrueColour, 320, 240);
+    presenter.SetScaleMode(PresentScaleMode::Stretch, PresentFilter::Nearest);
+
+    const Frame frame(320, 240, 90, 120, 200);
+    presenter.Present(frame.View());
+    EXPECT_EQ(presenter.GetLastRedrawnCellCount(), 40 * 20);
+
+    presenter.Present(frame.View());
+    EXPECT_EQ(presenter.GetLastRedrawnCellCount(), 0);
+    EXPECT_TRUE(presenter.GetLastFrameBytes().empty());
+}
+
+TEST_F(TerminalPresenter, ASmallChangeCostsASmallFrame)
+{
+    // The 5.8 MB/s figure that makes PLAT-133 mandatory rather than an optimisation is about
+    // *full* frames. What matters is that a partial change stays partial.
+    TerminalSurfacePresenter presenter(pty_.Device(), pty_.Device(),
+                                       TerminalColourDepth::TrueColour, 40, 20);
+    presenter.SetScaleMode(PresentScaleMode::Stretch, PresentFilter::Nearest);
+
+    Frame frame(40, 20, 0, 0, 0);
+    presenter.Present(frame.View());
+    const std::size_t fullFrameBytes = presenter.GetLastFrameBytes().size();
+    ASSERT_GT(fullFrameBytes, 0u);
+
+    // One source pixel maps to exactly one cell at this size.
+    frame.SetPixel(10, 5, 255, 255, 255);
+    presenter.Present(frame.View());
+
+    EXPECT_EQ(presenter.GetLastRedrawnCellCount(), 1);
+    EXPECT_LT(presenter.GetLastFrameBytes().size(), fullFrameBytes / 10)
+        << "one changed cell must not cost a full frame";
+}
+
+TEST_F(TerminalPresenter, ChangingTheScaleModeForcesTheNextFrameToRedrawEverything)
+{
+    // The picture moves within the grid, so cells that were outside it are now inside. A diff
+    // against the old screen would leave them holding whatever they last showed.
+    TerminalSurfacePresenter presenter(pty_.Device(), pty_.Device(),
+                                       TerminalColourDepth::TrueColour, 320, 240);
+    presenter.SetScaleMode(PresentScaleMode::Stretch, PresentFilter::Nearest);
+
+    const Frame frame(320, 240, 90, 120, 200);
+    presenter.Present(frame.View());
+    presenter.Present(frame.View());
+    ASSERT_EQ(presenter.GetLastRedrawnCellCount(), 0);
+
+    presenter.SetScaleMode(PresentScaleMode::Letterbox, PresentFilter::Nearest);
+    presenter.Present(frame.View());
+    EXPECT_EQ(presenter.GetLastRedrawnCellCount(), 40 * 20);
+}
+
 // --- through the platform ---------------------------------------------------------------------------
 
 TEST(TerminalPresenterThroughPlatformTest, PresentationIsRefusedWhenStandardOutputIsNotATerminal)

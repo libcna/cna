@@ -46,6 +46,30 @@ namespace CNA::Platform::Terminal {
         void WriteFullFrame(const TerminalGrid& grid, std::string& output);
 
         /**
+         * @brief Appends only the cells that differ from the previous grid.
+         *
+         * ### Why this is mandatory rather than an optimisation
+         *
+         * A 120×40 truecolor frame is roughly 96 KB. At 60 frames a second that is 5.8 MB/s,
+         * which a local pseudo-terminal absorbs and an ssh link does not: the terminal falls
+         * progressively further behind, and because the writer blocks on a full pipe, the *game*
+         * falls behind with it. Most frames change a small fraction of their cells, so sending
+         * only those is the difference between usable and unusable — not between fast and fast
+         * enough.
+         *
+         * Runs of adjacent changed cells are written as one positioning escape followed by their
+         * glyphs, because a cursor move costs about as much as six glyphs; positioning every cell
+         * individually would give back most of what the diff saves.
+         *
+         * @param previous The grid currently on screen. A size mismatch forces a full redraw.
+         * @param current The grid to bring the screen to.
+         * @param output Receives the bytes; appended to, never cleared.
+         * @return How many cells were redrawn, so a caller can see what the diff actually saved.
+         */
+        int WriteChangedCells(const TerminalGrid& previous, const TerminalGrid& current,
+                              std::string& output);
+
+        /**
          * @brief Forgets what colour the terminal is in.
          *
          * Called whenever something outside this writer may have changed the terminal's state —

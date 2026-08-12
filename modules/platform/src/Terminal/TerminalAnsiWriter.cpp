@@ -164,6 +164,55 @@ namespace CNA::Platform::Terminal {
         currentBlue_ = blue;
     }
 
+    int TerminalAnsiWriter::WriteChangedCells(const TerminalGrid& previous,
+                                              const TerminalGrid& current, std::string& output)
+    {
+        if (previous.columns != current.columns || previous.rows != current.rows)
+        {
+            // Nothing on screen corresponds to the new grid's coordinates, so a diff would be
+            // comparing unrelated cells. A resize is exactly when a full redraw is correct.
+            WriteFullFrame(current, output);
+            return current.columns * current.rows;
+        }
+
+        int redrawn = 0;
+        for (int row = 0; row < current.rows; ++row)
+        {
+            int column = 0;
+            while (column < current.columns)
+            {
+                if (current.At(column, row) == previous.At(column, row))
+                {
+                    ++column;
+                    continue;
+                }
+
+                // Position once for the whole run. A cursor move costs about as much as six
+                // glyphs, so positioning each changed cell separately would give back most of
+                // what the diff saves on a frame with scattered small changes.
+                output += "\x1b[";
+                AppendInt(output, row + 1);
+                output += ';';
+                AppendInt(output, column + 1);
+                output += 'H';
+
+                // The cursor moved, so the colour the terminal is in is still known -- SGR state
+                // survives cursor motion -- but the run starts wherever it starts, so the first
+                // cell may well need a colour change and AppendColour decides that as usual.
+                while (column < current.columns &&
+                       !(current.At(column, row) == previous.At(column, row)))
+                {
+                    const TerminalCell& cell = current.At(column, row);
+                    AppendColour(cell.red, cell.green, cell.blue, output);
+                    output += cell.glyph;
+                    ++redrawn;
+                    ++column;
+                }
+            }
+        }
+        return redrawn;
+    }
+
     void TerminalAnsiWriter::WriteFullFrame(const TerminalGrid& grid, std::string& output)
     {
         if (grid.columns <= 0 || grid.rows <= 0)

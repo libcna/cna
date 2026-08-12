@@ -60,9 +60,10 @@ namespace CNA::Platform::Terminal {
     void TerminalSurfacePresenter::SetScaleMode(const PresentScaleMode mode, PresentFilter)
     {
         scaleMode_ = mode;
-        // The picture's position within the grid changes with the mode, so cells that were
-        // outside it and are now inside would otherwise keep whatever they last held.
-        grid_.Reset(0, 0);
+        // The picture's position within the grid changes with the mode, so a diff against what is
+        // on screen would leave the cells that used to be outside it holding whatever they last
+        // held. Forcing the next frame to redraw everything is the correct answer.
+        haveScreenContents_ = false;
         writer_.ForgetTerminalState();
     }
 
@@ -92,17 +93,14 @@ namespace CNA::Platform::Terminal {
         }
 
         const TerminalSize size = QueryTerminalSize(outputDescriptor_);
-        if (size.columns != grid_.columns || size.rows != grid_.rows)
+        if (size.columns != onScreen_.columns || size.rows != onScreen_.rows)
         {
-            // The terminal was resized. Everything the writer remembers about the terminal's
-            // state refers to a screen that no longer exists.
-            grid_.Reset(size.columns, size.rows);
+            // The terminal was resized, so nothing on screen corresponds to the new grid's
+            // coordinates and everything the writer remembers describes a screen that is gone.
+            haveScreenContents_ = false;
             writer_.ForgetTerminalState();
         }
-        else
-        {
-            grid_.Reset(size.columns, size.rows);
-        }
+        grid_.Reset(size.columns, size.rows);
 
         int sourceX = 0, sourceY = 0;
         int sourceWidth = frame.width, sourceHeight = frame.height;
@@ -161,7 +159,15 @@ namespace CNA::Platform::Terminal {
                      destinationRow, destinationColumns, destinationRows);
 
         lastFrame_.clear();
-        writer_.WriteFullFrame(grid_, lastFrame_);
+        if (haveScreenContents_)
+        {
+            lastRedrawnCells_ = writer_.WriteChangedCells(onScreen_, grid_, lastFrame_);
+        }
+        else
+        {
+            writer_.WriteFullFrame(grid_, lastFrame_);
+            lastRedrawnCells_ = grid_.columns * grid_.rows;
+        }
 
         std::size_t written = 0;
         while (written < lastFrame_.size())
@@ -179,6 +185,13 @@ namespace CNA::Platform::Terminal {
             }
             written += static_cast<std::size_t>(count);
         }
+
+        // Swapped, not copied: the grid just drawn becomes the screen's contents and the old one
+        // becomes next frame's scratch, so a steady-state frame allocates nothing.
+        grid_.cells.swap(onScreen_.cells);
+        onScreen_.columns = grid_.columns;
+        onScreen_.rows = grid_.rows;
+        haveScreenContents_ = true;
     }
 
 } // namespace CNA::Platform::Terminal

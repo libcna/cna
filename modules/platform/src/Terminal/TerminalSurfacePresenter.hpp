@@ -122,6 +122,17 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] TerminalSize GetGridSize() const;
 
         /**
+         * @brief Gets how many cells the most recent present actually redrew.
+         *
+         * The measure PLAT-133 exists to move. A still picture should redraw nothing at all; a
+         * frame that redraws every cell every time is the bandwidth failure the damage tracking
+         * is there to prevent, and it is invisible without a number.
+         *
+         * @return The redrawn cell count for the last frame.
+         */
+        [[nodiscard]] int GetLastRedrawnCellCount() const { return lastRedrawnCells_; }
+
+        /**
          * @brief Gets the bytes the most recent present wrote.
          *
          * Exposed so a test can assert on what actually went to the terminal. Verifying
@@ -139,8 +150,16 @@ namespace CNA::Platform::Terminal {
         int targetWidth_;
         int targetHeight_;
         PresentScaleMode scaleMode_ = PresentScaleMode::Letterbox;
+
+        /// The grid being built this frame, and the one currently on screen. Two buffers rather
+        /// than one because the diff needs both, and they are swapped rather than copied so a
+        /// steady-state frame allocates nothing.
         TerminalGrid grid_;
+        TerminalGrid onScreen_;
+        bool haveScreenContents_ = false;
+
         std::string lastFrame_;
+        int lastRedrawnCells_ = 0;
     };
 
 } // namespace CNA::Platform::Terminal
