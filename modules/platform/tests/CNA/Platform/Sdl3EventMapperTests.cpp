@@ -271,6 +271,8 @@ TEST(Sdl3EventMapperTests, TouchEventsMapToTheirKinds)
         source.tfinger.fingerID = 9;
         source.tfinger.x = 0.25f;
         source.tfinger.y = 0.75f;
+        source.tfinger.dx = -0.125f;
+        source.tfinger.dy = 0.0625f;
         source.tfinger.pressure = 0.5f;
 
         PlatformEvent mapped;
@@ -282,6 +284,10 @@ TEST(Sdl3EventMapperTests, TouchEventsMapToTheirKinds)
         // would double-apply once the consumer scales them too.
         EXPECT_FLOAT_EQ(touch.x, 0.25f);
         EXPECT_FLOAT_EQ(touch.y, 0.75f);
+        const bool isMotion = testCase.expected == TouchEventKind::Motion;
+        EXPECT_FLOAT_EQ(touch.deltaX, isMotion ? -0.125f : 0.0f);
+        EXPECT_FLOAT_EQ(touch.deltaY, isMotion ? 0.0625f : 0.0f);
+        EXPECT_FLOAT_EQ(touch.pressure, 0.5f);
     }
 }
 

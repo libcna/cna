@@ -189,7 +189,11 @@ namespace CNA::Platform::Sdl3 {
                 {
                     case SDL_EVENT_FINGER_DOWN:     touch.kind = TouchEventKind::Down; break;
                     case SDL_EVENT_FINGER_UP:       touch.kind = TouchEventKind::Up; break;
-                    case SDL_EVENT_FINGER_MOTION:   touch.kind = TouchEventKind::Motion; break;
+                    case SDL_EVENT_FINGER_MOTION:
+                        touch.kind = TouchEventKind::Motion;
+                        touch.deltaX = source.tfinger.dx;
+                        touch.deltaY = source.tfinger.dy;
+                        break;
                     default:                        touch.kind = TouchEventKind::Cancelled; break;
                 }
                 destination = touch;

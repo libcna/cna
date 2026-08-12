@@ -211,6 +211,10 @@ namespace CNA::Platform {
         float x = 0.0f;
         /** @brief Normalised y position in [0, 1]. */
         float y = 0.0f;
+        /** @brief Normalised horizontal movement since the previous touch event. */
+        float deltaX = 0.0f;
+        /** @brief Normalised vertical movement since the previous touch event. */
+        float deltaY = 0.0f;
         /** @brief Normalised pressure in [0, 1]. */
         float pressure = 0.0f;
     };

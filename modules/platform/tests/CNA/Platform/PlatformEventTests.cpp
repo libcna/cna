@@ -128,6 +128,8 @@ TEST(PlatformEventTests, TouchCoordinatesAreNormalised)
     EXPECT_LE(touch.x, 1.0f);
     EXPECT_GE(touch.pressure, 0.0f);
     EXPECT_LE(touch.pressure, 1.0f);
+    EXPECT_FLOAT_EQ(touch.deltaX, 0.0f);
+    EXPECT_FLOAT_EQ(touch.deltaY, 0.0f);
 }
 
 TEST(PlatformEventTests, WindowEventKindNamesAreDistinct)
