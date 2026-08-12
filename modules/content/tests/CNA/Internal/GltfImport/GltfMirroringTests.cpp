@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-116 / GLTF-117 / GLTF-119: mirroring.
+// plan_gltf.md GLTF-116 / GLTF-117 / GLTF-119 / GLTF-232: mirroring.
 //
 // A mirroring transform is the one placement that changes something a world matrix multiplication
 // does not express. Positions mirror the way any affine transform moves them -- every L4 assertion
@@ -285,5 +285,65 @@ TEST(GltfMirroring, AnAuthoredTangentHandednessSurvivesImportUnchanged)
         EXPECT_NEAR(-1.0f, tangent[3], kTolerance)
             << "the authored handedness was replaced; a flipped w lights every normal-mapped "
                "surface from the wrong side";
+    }
+}
+
+// --- GLTF-232: doubleSided and mirroring are independent facts ------------------------------------
+
+TEST(GltfMirroring, MirroringAndDoubleSidednessAreCarriedIndependentlyOfEachOther)
+{
+    // The two interact at draw time and must not be conflated at import. A **double-sided**
+    // mirrored primitive is unaffected by the missing winding reversal -- both faces are drawn
+    // either way -- while a **single-sided** mirrored one shows its back face under the default
+    // cull mode. So the pair of flags is exactly what a renderer needs to decide, and collapsing
+    // them (say, marking a mirrored primitive double-sided to hide the problem) would silently
+    // change what the file asked for: a single-sided material is a modelling decision, not a
+    // workaround slot.
+    //
+    // Both fixtures below use the same mesh; only the material's `doubleSided` differs, so the
+    // test cannot pass by coincidence of geometry.
+    const char* singleSided = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MirroredNode", "mesh": 0, "scale": [-1, 1, 1] } ],
+  "materials": [ { "name": "SingleSided", "doubleSided": false } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 }, "material": 0 } ] } ],
+  "buffers": [ { "byteLength": 36, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+                   "min": [0,0,0], "max": [1,1,0] } ]
+})GLTF";
+    const char* doubleSided = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MirroredNode", "mesh": 0, "scale": [-1, 1, 1] } ],
+  "materials": [ { "name": "DoubleSided", "doubleSided": true } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 }, "material": 0 } ] } ],
+  "buffers": [ { "byteLength": 36, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+                   "min": [0,0,0], "max": [1,1,0] } ]
+})GLTF";
+
+    for (const auto& [json, expectDoubleSided] :
+         {std::pair{singleSided, false}, std::pair{doubleSided, true}})
+    {
+        SCOPED_TRACE(expectDoubleSided ? "doubleSided" : "singleSided");
+        Parsed doc;
+        ASSERT_TRUE(Parse(doc, json));
+
+        const SceneGraphOut scene = BuildSceneGraph(doc.data);
+        const std::vector<MeshGroup> groups = CollectMeshGroups(doc.data, scene);
+        ASSERT_EQ(1u, groups.size());
+        ASSERT_EQ(1u, groups[0].instances.size());
+        EXPECT_TRUE(groups[0].instances[0].mirroredEXT)
+            << "the placement is mirrored regardless of what the material says";
+
+        const MeshOut mesh =
+            ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
+        EXPECT_EQ(expectDoubleSided, mesh.doubleSided)
+            << "the material's own sidedness was changed by the placement's mirroring";
     }
 }

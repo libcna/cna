@@ -2498,6 +2498,23 @@ namespace Microsoft::Xna::Framework::Content
                             "importer does not do, so they received the area-weighted average "
                             "instead and that edge will look smooth rather than sharp (GLTF-173).");
                     }
+                    // plan_gltf.md GLTF-273: the skin's own import report. Every quantity in it is
+                    // a place a rig is imported approximately, and each is silent on its own.
+                    if (entry.skeleton != nullptr)
+                    {
+                        const SkinReportEXT skinReport = BuildSkinReportEXT(meshOut, entry.skeleton);
+                        CNA::Logger::Debug(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' is skinned to " + std::to_string(skinReport.jointCount) +
+                            " joint(s); " + std::to_string(skinReport.droppedInfluenceSets) +
+                            " influence set(s) past the first were dropped (worst single influence " +
+                            std::to_string(skinReport.worstDroppedInfluence) + "), " +
+                            std::to_string(skinReport.renormalisedVertexCount) +
+                            " vertex/vertices renormalised (worst deviation " +
+                            std::to_string(skinReport.worstWeightSumDeviation) + "), skeleton root " +
+                            (skinReport.hasDeclaredSkeletonRoot ? "declared." : "not declared."));
+                    }
+
                     // plan_gltf.md GLTF-095/GLTF-257: influence sets past the first. The dropped
                     // share is what says whether it matters -- a fifth influence weighted 0.002 is
                     // exporter noise and one weighted 0.4 is a visibly different pose.

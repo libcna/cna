@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-246 / GLTF-250 / GLTF-253 / GLTF-259: the matrices a skin composes, and when it
-// composes them at all.
+// plan_gltf.md GLTF-246 / GLTF-250 / GLTF-253 / GLTF-259 / GLTF-273: the matrices a skin composes,
+// when it composes them at all, and what the import reports about the approximations it made.
 //
 // Skinning is where this campaign's two collapse mechanisms live (D8 and H12), and both were
 // arithmetic in the same handful of multiplications: the inverse bind matrix, the joint's world
@@ -18,6 +18,7 @@
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "GltfFixtureCorpus.hpp"
 
 using namespace CNA::Internal::GltfImport;
 using namespace Microsoft::Xna::Framework;
@@ -309,4 +310,83 @@ TEST(GltfSkinComposition, AStaticPrimitiveInASkinnedFileGetsNoBlendSlots)
                   layout.elements[i].usage)
             << "the chosen layout carries blend slots for a primitive that has no influences";
     }
+}
+
+// --- GLTF-273: the skinning import report ---------------------------------------------------------
+
+TEST(GltfSkinComposition, TheSkinReportCarriesEveryApproximationTheImportMade)
+{
+    // Four quantities, each a place a rig is imported approximately and each silent on its own.
+    // The corpus has a fixture per approximation, so the report is checked against the file that
+    // isolates it rather than against one document trying to be all four at once.
+    //
+    // `skin-eight-influences` authors two influence sets; XNA carries four influences, so the
+    // second set is dropped -- and *how much* was dropped is the only thing that says whether that
+    // matters. A fifth influence weighted 0.002 is exporter noise; one weighted 0.4 is a visibly
+    // different pose.
+    {
+        const CnaTest::GltfOracle::LoadedFixture fixture("skin-eight-influences");
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
+        const SkeletonResult skeleton = BuildSkeleton(fixture.Data().skins, scene,
+                                                      Matrix::getIdentityProperty(), 1.0f);
+        const MeshOut mesh = ExtractMesh(&fixture.Data(),
+                                          fixture.Data().meshes[0].primitives[0], "probe",
+                                          &skeleton, 1.0f);
+        const SkinReportEXT report = BuildSkinReportEXT(mesh, &skeleton);
+
+        EXPECT_GT(report.jointCount, 0);
+        EXPECT_GT(report.droppedInfluenceSets, 0) << "the fixture no longer authors a second set";
+        EXPECT_GT(report.worstDroppedInfluence, 0.0f)
+            << "the dropped weight is what says whether the drop mattered";
+    }
+
+    // `skin-unnormalized` authors weights summing to 0.75, to 1 within float error, and to zero.
+    // Exactly one of those is renormalised, and the deviation is what separates a quantised
+    // exporter's rounding from a broken file.
+    {
+        const CnaTest::GltfOracle::LoadedFixture fixture("skin-unnormalized");
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
+        const SkeletonResult skeleton = BuildSkeleton(fixture.Data().skins, scene,
+                                                      Matrix::getIdentityProperty(), 1.0f);
+        const MeshOut mesh = ExtractMesh(&fixture.Data(),
+                                          fixture.Data().meshes[0].primitives[0], "probe",
+                                          &skeleton, 1.0f);
+        const SkinReportEXT report = BuildSkinReportEXT(mesh, &skeleton);
+
+        EXPECT_EQ(1u, report.renormalisedVertexCount)
+            << "exactly one vertex is off by more than float error; the other two must be left "
+               "alone";
+        EXPECT_NEAR(0.25f, report.worstWeightSumDeviation, 1e-4f);
+    }
+
+    // And `skin-skeleton-hint` is the one fixture that declares a skeleton root, which the report
+    // records without ever letting it bound the ancestry walk (GLTF-249).
+    {
+        const CnaTest::GltfOracle::LoadedFixture fixture("skin-skeleton-hint");
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
+        const SkeletonResult skeleton = BuildSkeleton(fixture.Data().skins, scene,
+                                                      Matrix::getIdentityProperty(), 1.0f);
+        const MeshOut mesh = ExtractMesh(&fixture.Data(),
+                                          fixture.Data().meshes[0].primitives[0], "probe",
+                                          &skeleton, 1.0f);
+        EXPECT_TRUE(BuildSkinReportEXT(mesh, &skeleton).hasDeclaredSkeletonRoot);
+    }
+}
+
+TEST(GltfSkinComposition, AnUnskinnedPrimitiveReportsNoJointsRatherThanAnEmptySkeletonsWorth)
+{
+    // The control. A report built for an unskinned primitive must say zero joints and zero of
+    // everything else -- not the previous skin's numbers, and not a plausible-looking default.
+    const CnaTest::GltfOracle::LoadedFixture fixture("xf-identity");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const MeshOut mesh = ExtractMesh(&fixture.Data(), fixture.Data().meshes[0].primitives[0],
+                                      "probe", nullptr, 1.0f);
+    const SkinReportEXT report = BuildSkinReportEXT(mesh, nullptr);
+    EXPECT_EQ(0, report.jointCount);
+    EXPECT_EQ(0, report.droppedInfluenceSets);
+    EXPECT_EQ(0u, report.renormalisedVertexCount);
+    EXPECT_FALSE(report.hasDeclaredSkeletonRoot);
 }

@@ -822,6 +822,45 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
+     * @brief What one skinned primitive's joint data turned into (plan_gltf.md `GLTF-273`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API, internal for the same reason
+     * @ref NodeGraphReportEXT is.
+     *
+     * Every field is a place where a skin is imported **approximately**, and each is silent on its
+     * own: XNA carries four influences per vertex, so a fifth is dropped; weights that do not sum
+     * to 1 are renormalised; a joint index past the palette is refused only when it is actually
+     * weighted. A rig that lost a fifth influence weighted 0.002 is fine, one that lost a fifth
+     * weighted 0.4 is a visibly different pose, and nothing but the numbers tells them apart.
+     */
+    struct SkinReportEXT
+    {
+        /** @brief Joints in the imported palette. */
+        int jointCount = 0;
+        /** @brief Influence sets past the first, i.e. `JOINTS_1` and beyond, all of them dropped. */
+        int droppedInfluenceSets = 0;
+        /** @brief The largest single influence dropped, as a weight in [0,1]. */
+        float worstDroppedInfluence = 0.0f;
+        /** @brief Vertices whose weights were renormalised to sum to 1. */
+        std::size_t renormalisedVertexCount = 0;
+        /** @brief The largest `|sum - 1|` seen before renormalisation. */
+        float worstWeightSumDeviation = 0.0f;
+        /** @brief True when the skin declares a `skeleton` root that is inside the default scene. */
+        bool hasDeclaredSkeletonRoot = false;
+    };
+
+    /**
+     * @brief Summarises one skinned primitive's joint data against the skeleton it was built with.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param mesh The extracted primitive.
+     * @param skeleton The skeleton the primitive was extracted against, or nullptr when unskinned.
+     * @return The counts described by @ref SkinReportEXT.
+     */
+    SkinReportEXT BuildSkinReportEXT(const MeshOut& mesh, const SkeletonResult* skeleton);
+
+    /**
      * @brief What one primitive's morph targets turned into (plan_gltf.md `GLTF-291`).
      *
      * @note CNAEXT — not part of the XNA 4.0 API, and internal for the same reason

@@ -2939,6 +2939,19 @@ namespace CNA::Internal::GltfImport
         return CollectMeshGroups(data, BuildSceneGraph(data));
     }
 
+    SkinReportEXT BuildSkinReportEXT(const MeshOut& mesh, const SkeletonResult* skeleton)
+    {
+        SkinReportEXT report;
+        report.jointCount = skeleton != nullptr ? static_cast<int>(skeleton->bones.size()) : 0;
+        report.droppedInfluenceSets = static_cast<int>(mesh.extraInfluenceSetsEXT);
+        report.worstDroppedInfluence = mesh.worstDroppedInfluenceEXT;
+        report.renormalisedVertexCount = mesh.renormalisedWeightVertexCountEXT;
+        report.worstWeightSumDeviation = mesh.worstWeightSumDeviationEXT;
+        report.hasDeclaredSkeletonRoot =
+            skeleton != nullptr && skeleton->declaredSkeletonRootNodeIndex >= 0;
+        return report;
+    }
+
     MorphReportEXT BuildMorphReportEXT(const MeshOut& mesh,
                                         const std::vector<float>& defaultWeights)
     {
