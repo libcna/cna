@@ -104,12 +104,12 @@ namespace CNA::Internal::Renderers::Canvas
         , presentationMode_(mode)
     {
         if (!window_) throw std::runtime_error("CanvasRenderer initialized with null window.");
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
     }
 
     CanvasRenderer::~CanvasRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
     }
 
     void CanvasRenderer::Clear(float r, float g, float b, float a)

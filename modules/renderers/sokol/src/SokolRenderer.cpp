@@ -2509,12 +2509,12 @@ namespace CNA::Internal::Renderers::Sokol
             throw;
         }
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
     }
 
     SokolRenderer::~SokolRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
 
         if (passActive_)
         {

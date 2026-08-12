@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // Task REMED-GFX-001: regression coverage for the EasyGLRenderer constructor's
-// RegisterForWindow ordering fix. Before the fix, RegisterForWindow(window, this) ran before the
+// RegisterForWindow ordering fix. Before the fix, registering the window id ran before the
 // first fallible step (SDL_GL_CreateContext); a subsequent constructor failure left a dangling
 // entry in IGraphicsRenderer's static window registry, because the destructor of a
 // never-fully-constructed object is never invoked. SDL_GL_CreateContext deterministically fails
@@ -46,7 +46,7 @@ TEST(EasyGLRendererConstructor, FailedContextCreationLeavesNoDanglingRegistryEnt
     // Core regression check: a constructor that throws must never have registered (the fix moves
     // RegisterForWindow to the constructor's last statement, after every fallible step), so the
     // registry must have no entry for this window at all -- not a dangling one.
-    EXPECT_EQ(IGraphicsRenderer::GetForWindow(window), nullptr);
+    EXPECT_EQ(IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)), nullptr);
 
     // Dispatch a real public-API mouse event against the same window. Mouse::SetPosition()
     // resolves the window's registered renderer via IGraphicsRenderer::GetForWindow() -- pre-fix,

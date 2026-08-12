@@ -13,6 +13,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/LogCategory.hpp"
 #include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include <array>
 #include <cstddef>
@@ -28,6 +29,8 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/GraphicsCapability.hpp"
 
+// PLAT-58 removes this last renderer-creation dependency. PLAT-61 only re-keys the registry below;
+// keeping the declaration here preserves the independent sequencing of those two changes.
 struct SDL_Window;
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
@@ -1872,20 +1875,21 @@ namespace CNA::Internal::Renderers
         /// On desktop: equivalent to DebugSimulateContextLoss() (destroy + recreate).
         virtual void DebugRestoreContext() {}
 
-        // ---- Window → renderer registry ----
-        // Renderers that implement TransformWindowToLogical register themselves here
-        // so that SdlInputBridge can map physical mouse coordinates to logical ones
-        // even for renderers that have no SDL_Renderer (e.g. EasyGL).
+        // ---- Window id → renderer registry ----
+        // Renderers that implement TransformWindowToLogical register themselves here so input
+        // can map physical coordinates to logical ones even when the renderer has no native
+        // coordinate-conversion API. WindowId keeps this common interface independent of the
+        // selected platform's native window representation.
 
-        static void RegisterForWindow(SDL_Window* window, IGraphicsRenderer* renderer)
+        static void RegisterForWindow(CNA::Platform::WindowId window, IGraphicsRenderer* renderer)
         {
             windowRegistry()[window] = renderer;
         }
-        static void UnregisterForWindow(SDL_Window* window)
+        static void UnregisterForWindow(CNA::Platform::WindowId window)
         {
             windowRegistry().erase(window);
         }
-        static IGraphicsRenderer* GetForWindow(SDL_Window* window)
+        static IGraphicsRenderer* GetForWindow(CNA::Platform::WindowId window)
         {
             auto& reg = windowRegistry();
             auto it = reg.find(window);
@@ -1939,9 +1943,9 @@ namespace CNA::Internal::Renderers
             CNA::Unsupported3DGraphicsCallBehavior::Throw;
         mutable std::unordered_set<std::string> warnedUnsupported3DCalls_;
 
-        static std::unordered_map<SDL_Window*, IGraphicsRenderer*>& windowRegistry()
+        static std::unordered_map<CNA::Platform::WindowId, IGraphicsRenderer*>& windowRegistry()
         {
-            static std::unordered_map<SDL_Window*, IGraphicsRenderer*> reg;
+            static std::unordered_map<CNA::Platform::WindowId, IGraphicsRenderer*> reg;
             return reg;
         }
     };

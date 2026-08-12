@@ -2931,7 +2931,7 @@ void main()
         // WebGPU/Canvas/SdlGpu) -- a constructor that throws never runs its destructor, so
         // registering earlier would leave a dangling entry in IGraphicsRenderer's static window
         // registry, later dereferenced unconditionally by SdlInputBridge.cpp/Mouse.cpp.
-        IGraphicsRenderer::RegisterForWindow(window, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window), this);
     }
 
     void EasyGLRenderer::CreateMsaaBuffers(int w, int h)
@@ -3003,7 +3003,7 @@ void main()
         // detach path. (Neither order is reachable through CNA's own Game harness, where
         // GraphicsDevice_ is a Game base member destroyed after every subclass member; a globally
         // held render target reaches the first one, which is why the ownership is weak at all.)
-        if (window) IGraphicsRenderer::UnregisterForWindow(window);
+        if (window) IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window));
         if (gl_context) SDL_GL_DestroyContext(gl_context);
         // window is NOT owned by the renderer.
         // No SDL_Quit or subsystem shutdown here - managed centrally.

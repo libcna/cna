@@ -306,7 +306,7 @@ namespace CNA::Internal::Renderers::SvgDom
         , presentationMode_(mode)
     {
         if (!window_) throw std::runtime_error("SvgDomRenderer initialized with null window.");
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
         SetBoundRenderTargetIdEXT(0);
         SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
         SetCurrentScissorEnableEXT(false);
@@ -326,7 +326,7 @@ namespace CNA::Internal::Renderers::SvgDom
 
     SvgDomRenderer::~SvgDomRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
 #if defined(__EMSCRIPTEN__)
         CNA_SvgDom_DestroyRoot();
 #endif

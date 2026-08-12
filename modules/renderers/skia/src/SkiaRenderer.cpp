@@ -161,7 +161,7 @@ namespace CNA::Internal::Renderers::Skia
             RecreateBackbuffer(virtualWidth, virtualHeight);
             failAt(SkiaInitializationFailurePointEXT::AfterBackbuffer, "backbuffer creation");
 
-            IGraphicsRenderer::RegisterForWindow(window_, this);
+            IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
             registered = true;
             failAt(SkiaInitializationFailurePointEXT::AfterRegistration, "renderer registration");
             std::cout << kSkiaStartupDiagnostic << std::endl;
@@ -171,7 +171,7 @@ namespace CNA::Internal::Renderers::Skia
             // A throwing constructor never reaches ~SkiaRenderer(). Unwind every acquired
             // SDL/registry resource here so the caller-owned window can host a succeeding renderer.
             if (registered)
-                IGraphicsRenderer::UnregisterForWindow(window_);
+                IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
             DestroyPresentationTexture();
             if (renderer_)
             {
@@ -184,7 +184,7 @@ namespace CNA::Internal::Renderers::Skia
 
     SkiaRenderer::~SkiaRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         DestroyPresentationTexture();
         if (renderer_) SDL_DestroyRenderer(renderer_);
     }

@@ -97,7 +97,7 @@ int main()
         std::printf("       diagnostic: %s\n", diagnostic.c_str());
     Check(failedDestroyCount == 1,
           "exactly one SDL_GL_DestroyContext() call -- the leaked-context bug reports zero");
-    Check(IGraphicsRenderer::GetForWindow(window) == nullptr,
+    Check(IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == nullptr,
           "no renderer is left registered for the window after the failed construction");
 
     int successDestroyCount = 0;
@@ -107,11 +107,11 @@ int main()
         {
             SokolRenderer renderer(args, /*forceMakeCurrentFailureEXT=*/false,
                                           &successDestroyCount);
-            usable = IGraphicsRenderer::GetForWindow(window) == &renderer;
+            usable = IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == &renderer;
             renderer.Clear(0.1f, 0.2f, 0.3f, 1.0f);
             renderer.Present();
         }
-        usable = usable && IGraphicsRenderer::GetForWindow(window) == nullptr;
+        usable = usable && IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == nullptr;
     }
     catch (const std::exception& exception)
     {

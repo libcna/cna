@@ -239,8 +239,8 @@ std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.ve
  <<"; anisotropic filtering: "<<(caps_.anisotropicFiltering?("supported, up to "+std::to_string((int)caps_.maxAnisotropy)+"x"):std::string("not supported"))
  <<"; MSAA: "<<(multiSampleCount_>1?(std::to_string(multiSampleCount_)+"x"):std::string("no"))
  <<std::endl;
-glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);IGraphicsRenderer::RegisterForWindow(window_,this);}
-OpenGL1Renderer::~OpenGL1Renderer(){IGraphicsRenderer::UnregisterForWindow(window_);if(glContext_)SDL_GL_DestroyContext(glContext_);}void OpenGL1Renderer::Clear(float r,float g,float b,float a){glClearColor(r,g,b,a);glClear(GL_COLOR_BUFFER_BIT);}void OpenGL1Renderer::Present(){SDL_GL_SwapWindow(window_);}void OpenGL1Renderer::GetViewportSize(int&w,int&h){SDL_GetWindowSizeInPixels(window_,&w,&h);}void OpenGL1Renderer::SetVirtualResolution(int w,int h){virtualWidth_=w;virtualHeight_=h;}void OpenGL1Renderer::SetPresentationMode(int mode){presentationMode_=mode;}
+glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_),this);}
+OpenGL1Renderer::~OpenGL1Renderer(){IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));if(glContext_)SDL_GL_DestroyContext(glContext_);}void OpenGL1Renderer::Clear(float r,float g,float b,float a){glClearColor(r,g,b,a);glClear(GL_COLOR_BUFFER_BIT);}void OpenGL1Renderer::Present(){SDL_GL_SwapWindow(window_);}void OpenGL1Renderer::GetViewportSize(int&w,int&h){SDL_GetWindowSizeInPixels(window_,&w,&h);}void OpenGL1Renderer::SetVirtualResolution(int w,int h){virtualWidth_=w;virtualHeight_=h;}void OpenGL1Renderer::SetPresentationMode(int mode){presentationMode_=mode;}
 // plan_opengl1.md item 13 (EasyGL parity): see EffectiveWidth()/EffectiveHeight()'s own doc
 // comment in the header for the full rationale of which modes recompute and which don't.
 void OpenGL1Renderer::ComputeLogicalSize(int&outW,int&outH)const{

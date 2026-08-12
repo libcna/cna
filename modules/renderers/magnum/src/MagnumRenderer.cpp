@@ -148,12 +148,12 @@ namespace CNA::Internal::Renderers::Magnum
         // Registered last, after every fallible step above has succeeded: a constructor that throws
         // never runs its destructor, so an earlier registration would leave a dangling entry in the
         // shared window registry.
-        RegisterForWindow(window_, this);
+        RegisterForWindow(SDL_GetWindowID(window_), this);
     }
 
     MagnumRenderer::~MagnumRenderer()
     {
-        UnregisterForWindow(window_);
+        UnregisterForWindow(SDL_GetWindowID(window_));
 
         // Every GL object this renderer owns has to die while the context that created it is still
         // current: Magnum's GL object destructors consult GL::Context::current() and abort outright

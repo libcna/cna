@@ -521,7 +521,8 @@ namespace
                 }
             }
             // Other renderers (e.g. EasyGL): use the renderer's own transform if registered.
-            auto* graphicsRenderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(window);
+            auto* graphicsRenderer =
+                CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window));
             if (graphicsRenderer != nullptr)
             {
                 float logX = windowX, logY = windowY;

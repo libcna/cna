@@ -157,7 +157,7 @@ namespace CNA::Internal::Renderers::OpenVg
             refreshPresentationDerivedStateEXT();
             SetSwapInterval(swapInterval);
 
-            IGraphicsRenderer::RegisterForWindow(window_, this);
+            IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
         }
         catch (...)
         {
@@ -178,7 +178,7 @@ namespace CNA::Internal::Renderers::OpenVg
 
     OpenVgRenderer::~OpenVgRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         // P2-2: re-establish currentness before touching ShivaVG's context -- some other GL
         // consumer in this process may have changed the current context since this renderer's
         // last call (the single-live-OpenVG-renderer rule only guarantees no OTHER OpenVgRenderer

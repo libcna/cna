@@ -330,11 +330,11 @@ namespace CNA::Internal::Renderers::Gdi
             throw std::runtime_error("GDI graphics renderer could not obtain the SDL window ID.");
 
         SynchronizeBackbufferSize();
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
         if (!SDL_AddEventWatch(&GdiRenderer::WindowEventWatch, this))
         {
             const char* error = SDL_GetError();
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
             throw std::runtime_error(
                 std::string("GDI graphics renderer could not watch window repaint events: ") +
                 (error != nullptr ? error : "unknown SDL error"));
@@ -349,7 +349,7 @@ namespace CNA::Internal::Renderers::Gdi
             SDL_RemoveEventWatch(&GdiRenderer::WindowEventWatch, this);
             eventWatchRegistered_ = false;
         }
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
     }
 
     bool SDLCALL GdiRenderer::WindowEventWatch(void* userdata, SDL_Event* event)

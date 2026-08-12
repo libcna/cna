@@ -46,7 +46,8 @@ namespace
             }
         }
 
-        if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(window))
+        if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(
+                SDL_GetWindowID(window)))
         {
             float wx = logX, wy = logY;
             if (renderer->TransformLogicalToWindow(logX, logY, wx, wy))

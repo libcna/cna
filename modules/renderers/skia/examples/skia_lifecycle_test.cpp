@@ -48,11 +48,11 @@ namespace
             renderer.Clear(1.0f, 0.0f, 0.0f, 1.0f);
             renderer.ReadBackbuffer(0, 0, 1, 1, pixel.data());
             renderer.Present();
-            usable = IGraphicsRenderer::GetForWindow(window) == &renderer
+            usable = IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == &renderer
                 && SDL_GetRenderer(window) != nullptr
                 && pixel == std::array<std::uint8_t, 4>{255, 0, 0, 255};
         }
-        return usable && IGraphicsRenderer::GetForWindow(window) == nullptr
+        return usable && IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == nullptr
             && SDL_GetRenderer(window) == nullptr && SDL_GetWindowID(window) != 0;
     }
 }
@@ -107,7 +107,7 @@ int main()
             std::string("Skia injected initialization failure after ") + failure.stage;
         Check(threw && diagnostic.find(expectedDiagnostic) != std::string::npos,
               prefix + " retains its exact stage diagnostic");
-        Check(IGraphicsRenderer::GetForWindow(window) == nullptr && SDL_GetRenderer(window) == nullptr
+        Check(IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == nullptr && SDL_GetRenderer(window) == nullptr
                   && SDL_GetWindowID(window) != 0,
               prefix + " releases renderer/texture/registry and preserves the caller window");
         Check(ConstructUseAndDestroy(window),

@@ -53,13 +53,13 @@ namespace CNA::Internal::Renderers::Blend2D
             SetSwapInterval(swapInterval_);
             RecreateBackbuffer(virtualWidth, virtualHeight);
 
-            IGraphicsRenderer::RegisterForWindow(window_, this);
+            IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
             registered = true;
         }
         catch (...)
         {
             if (registered)
-                IGraphicsRenderer::UnregisterForWindow(window_);
+                IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
             if (presentTexture_)
             {
                 SDL_DestroyTexture(presentTexture_);
@@ -76,7 +76,7 @@ namespace CNA::Internal::Renderers::Blend2D
 
     Blend2DRenderer::~Blend2DRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         if (presentTexture_) SDL_DestroyTexture(presentTexture_);
         if (presentRenderer_) SDL_DestroyRenderer(presentRenderer_);
     }

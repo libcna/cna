@@ -605,7 +605,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         , presentationMode_(mode)
     {
         if (!window_) throw std::runtime_error("HtmlDomRenderer initialized with null window.");
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
         // A renderer can be constructed after a previous one was destroyed (GraphicsDevice::Reset),
         // so the shared draw-path state is rewound rather than assumed pristine.
         SetBoundRenderTargetIdEXT(0);
@@ -618,7 +618,7 @@ namespace CNA::Internal::Renderers::HtmlDom
 
     HtmlDomRenderer::~HtmlDomRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
 #if defined(__EMSCRIPTEN__)
         CNA_HtmlDom_DestroyRoot();
 #endif

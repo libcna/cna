@@ -56,7 +56,7 @@ int main()
     std::unique_ptr<IRenderTargetRenderer> lateTarget;
     {
         SkiaRenderer renderer(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
-        Check(IGraphicsRenderer::GetForWindow(window) == &renderer
+        Check(IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == &renderer
                   && SDL_GetRenderer(window) != nullptr,
               "renderer owns the registered SDL presenter on its construction thread");
 
@@ -114,7 +114,7 @@ int main()
         // weak binding; neither the late SpriteBatch nor late target may retain a raw live route.
     }
 
-    Check(IGraphicsRenderer::GetForWindow(window) == nullptr && SDL_GetRenderer(window) == nullptr,
+    Check(IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == nullptr && SDL_GetRenderer(window) == nullptr,
           "renderer destruction releases presenter/registry with a late active target");
 
     std::string afterRendererDiagnostic;

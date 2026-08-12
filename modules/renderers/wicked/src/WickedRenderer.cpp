@@ -1433,13 +1433,13 @@ namespace CNA::Internal::Renderers::Wicked
         state_.colorDstBlend = 5;  // Blend::InverseSourceAlpha
         state_.alphaDstBlend = 5;
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
     }
 
     WickedRenderer::~WickedRenderer()
     {
         if (window_ != nullptr)
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
 
         if (device_)
         {

@@ -1082,7 +1082,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         ~ConstructionResources()
         {
             if (rendererRegistered)
-                IGraphicsRenderer::UnregisterForWindow(window);
+                IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window));
 
             for (auto it = shaders.rbegin(); it != shaders.rend(); ++it)
             {
@@ -1264,7 +1264,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         resources.FailAt(SdlGpuFailurePointEXT::RendererRegistration);
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
         resources.rendererRegistered = true;
         resources.FailAt(SdlGpuFailurePointEXT::AfterRendererRegistration);
 
@@ -1286,7 +1286,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (registeredForWindow_)
         {
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
             registeredForWindow_ = false;
         }
         // Drops every queued command, and with it every SdlGpuSampledTextureEXT::keepAlive a

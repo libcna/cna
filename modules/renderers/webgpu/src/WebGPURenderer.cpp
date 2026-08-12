@@ -2276,7 +2276,7 @@ namespace CNA::Internal::Renderers::WebGPU
             CreateSurface();
             RequestAdapterAndDevice();
             ConfigureSurface(true);
-            IGraphicsRenderer::RegisterForWindow(window_, this);
+            IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
         }
         catch (...)
         {
@@ -2301,7 +2301,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
     WebGPURenderer::~WebGPURenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         // REMED-GFX-167: FIRST, before any native handle below is released. A queued command holds
         // a reference to the texture it samples, and these vectors are members -- destroyed after
         // this body, i.e. after device_/adapter_/instance_ are gone. A frame abandoned rather than

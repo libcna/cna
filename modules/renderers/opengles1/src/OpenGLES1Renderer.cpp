@@ -586,7 +586,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     {
         if (!window_) throw std::runtime_error("OpenGLES1Renderer initialized with null window.");
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
 
         CreateGLContext();
         LoadExtensionEntryPoints();
@@ -610,7 +610,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
             whiteTexture_ = 0;
         }
 
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         DestroyGLContext();
     }
 

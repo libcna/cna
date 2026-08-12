@@ -1486,7 +1486,7 @@ namespace CNA::Internal::Renderers::Diligent
         state_.stencilMasks = PackBytes(0xFF, 0xFF, 0, 0);
         state_.raster = PackBytes(0, 0, 0, 0);
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
         CNA::Logger::Info(std::string("CNA Diligent: device type ") + GetDeviceTypeName(deviceType_),
                           CNA::LogCategory::GPU);
     }
@@ -1494,7 +1494,7 @@ namespace CNA::Internal::Renderers::Diligent
     DiligentRenderer::~DiligentRenderer()
     {
         if (window_ != nullptr)
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         if (context_)
         {
             context_->Flush();

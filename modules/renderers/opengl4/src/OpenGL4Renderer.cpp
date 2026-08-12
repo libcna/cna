@@ -2402,7 +2402,7 @@ void main()
     {
         if (!window_) throw std::runtime_error("OpenGL4Renderer initialized with null window.");
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
 
         // Real desktop OpenGL 4.1 core profile -- unlike EasyGLRenderer, which requests
         // SDL_GL_CONTEXT_PROFILE_ES (OpenGL ES 3.0 / WebGL2). 4.1 is the highest core version
@@ -2461,7 +2461,7 @@ void main()
 
     OpenGL4Renderer::~OpenGL4Renderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         gl4_glDeleteSamplers(kMaxSamplerSlots, samplers_);
         if (defaultWhiteTexture_) glDeleteTextures(1, &defaultWhiteTexture_);
         if (defaultFlatNormalTexture_) glDeleteTextures(1, &defaultFlatNormalTexture_);

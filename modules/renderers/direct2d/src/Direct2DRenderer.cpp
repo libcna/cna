@@ -1113,12 +1113,12 @@ namespace CNA::Internal::Renderers::Direct2D
                 "Direct2D does not support a multisampled backbuffer; request MultiSampleCount 0 or 1.");
         diagnosticsEnabled_ = EnvironmentFlagEnabled("CNA_DIRECT2D_DIAGNOSTICS");
         CreateDeviceResources();
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
     }
 
     Direct2DRenderer::~Direct2DRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         ReleaseDeviceResourcesNoThrow(true);
     }
 

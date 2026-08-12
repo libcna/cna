@@ -1802,13 +1802,13 @@ namespace CNA::Internal::Renderers::Llgl
         CreateSpritePipelineResources();
         CreatePrimitivePipelineResources();
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
     }
 
     LlglRenderer::~LlglRenderer()
     {
         if (window_ != nullptr)
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
 
         if (!renderer_)
             return;

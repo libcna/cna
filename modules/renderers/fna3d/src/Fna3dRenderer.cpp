@@ -222,7 +222,7 @@ namespace CNA::Internal::Renderers::Fna3d
         QueryDriverLimits();
         ProbeCompressedReadbackSupport();
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
     }
 
     void Fna3dRenderer::QueryDriverLimits()
@@ -401,7 +401,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         if (window_ != nullptr)
         {
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         }
         if (device_ == nullptr)
         {
