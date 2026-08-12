@@ -14,11 +14,11 @@ namespace CNA::Platform {
     {
         /** @brief Whether a device is connected at this index. */
         bool connected = false;
-        /** @brief Bitmask of held buttons, in XNA's `Buttons` ordering. */
+        /** @brief Bitmask of held buttons, using the underlying values of `GamepadButton`. */
         std::uint32_t buttons = 0;
-        /** @brief Axis positions normalised to [-1, 1], in the platform's axis order. */
+        /** @brief Thumbstick positions in `GamepadAxis` order from left X through right Y. */
         std::vector<float> axes;
-        /** @brief Trigger positions normalised to [0, 1]. */
+        /** @brief Trigger positions in left-then-right `GamepadAxis` order, normalised to [0, 1]. */
         std::vector<float> triggers;
     };
 

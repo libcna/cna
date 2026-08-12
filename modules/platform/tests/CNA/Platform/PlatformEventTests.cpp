@@ -186,6 +186,32 @@ TEST(PlatformEventTests, TouchInputDeviceAndLifecycleKindNamesAreDistinct)
     EXPECT_EQ(lifecycleNames.size(), 3u);
 }
 
+TEST(PlatformEventTests, GamepadControlNamesAreDistinct)
+{
+    std::set<std::string> axisNames;
+    for (const GamepadAxis axis : {GamepadAxis::LeftThumbstickX, GamepadAxis::LeftThumbstickY,
+                                   GamepadAxis::RightThumbstickX, GamepadAxis::RightThumbstickY,
+                                   GamepadAxis::LeftTrigger, GamepadAxis::RightTrigger})
+    {
+        axisNames.insert(ToString(axis));
+    }
+    EXPECT_EQ(axisNames.size(), 6u);
+
+    std::set<std::string> buttonNames;
+    for (const GamepadButton button : {
+             GamepadButton::A, GamepadButton::B, GamepadButton::X, GamepadButton::Y,
+             GamepadButton::Back, GamepadButton::Start, GamepadButton::LeftShoulder,
+             GamepadButton::RightShoulder, GamepadButton::LeftStick, GamepadButton::RightStick,
+             GamepadButton::DPadUp, GamepadButton::DPadDown, GamepadButton::DPadLeft,
+             GamepadButton::DPadRight, GamepadButton::BigButton, GamepadButton::Misc1,
+             GamepadButton::Paddle1, GamepadButton::Paddle2, GamepadButton::Paddle3,
+             GamepadButton::Paddle4, GamepadButton::TouchPad})
+    {
+        buttonNames.insert(ToString(button));
+    }
+    EXPECT_EQ(buttonNames.size(), 21u);
+}
+
 TEST(PlatformEventTests, EventsAreCopyableForBatchBuffering)
 {
     // PollEvents fills a caller-owned vector that is reused across frames, so events must be

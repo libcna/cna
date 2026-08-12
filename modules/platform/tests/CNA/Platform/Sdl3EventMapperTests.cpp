@@ -322,42 +322,122 @@ TEST(Sdl3EventMapperTests, DeviceAddAndRemoveMapToTheRightKindAndConnectedFlag)
     }
 }
 
-TEST(Sdl3EventMapperTests, GamepadAxisIsNormalisedWithoutExceedingMinusOne)
+TEST(Sdl3EventMapperTests, GamepadAxesMapToCnaVocabularyAndBridgeNumerics)
 {
-    // SDL's range is [-32768, 32767]. Dividing the whole range by 32767 would make the extreme
-    // negative read as -1.00003, which a clamp-free consumer would carry straight into physics.
-    SDL_Event extremeNegative = MakeEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
-    extremeNegative.gaxis.value = -32768;
+    const struct
+    {
+        SDL_GamepadAxis sdl;
+        GamepadAxis expected;
+        Sint16 raw;
+        float value;
+    } cases[] = {
+        {SDL_GAMEPAD_AXIS_LEFTX, GamepadAxis::LeftThumbstickX, -16384,
+         static_cast<float>(-16384) / 32767.0f},
+        {SDL_GAMEPAD_AXIS_LEFTY, GamepadAxis::LeftThumbstickY, -16384,
+         -static_cast<float>(-16384) / 32767.0f},
+        {SDL_GAMEPAD_AXIS_RIGHTX, GamepadAxis::RightThumbstickX, 16384,
+         static_cast<float>(16384) / 32767.0f},
+        {SDL_GAMEPAD_AXIS_RIGHTY, GamepadAxis::RightThumbstickY, 16384,
+         -static_cast<float>(16384) / 32767.0f},
+        {SDL_GAMEPAD_AXIS_LEFT_TRIGGER, GamepadAxis::LeftTrigger, -16384, 0.0f},
+        {SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, GamepadAxis::RightTrigger, 32767, 1.0f},
+    };
 
-    SDL_Event extremePositive = MakeEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
-    extremePositive.gaxis.value = 32767;
+    for (const auto& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
+        source.gaxis.which = 91;
+        source.gaxis.axis = static_cast<Uint8>(testCase.sdl);
+        source.gaxis.value = testCase.raw;
 
-    SDL_Event centred = MakeEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
-    centred.gaxis.value = 0;
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped)) << ToString(testCase.expected);
+        const auto& axis = std::get<ControllerAxisEvent>(mapped);
+        EXPECT_EQ(axis.device, 91u);
+        EXPECT_EQ(axis.axis, testCase.expected);
+        EXPECT_FLOAT_EQ(axis.value, testCase.value);
+    }
 
-    PlatformEvent a;
-    PlatformEvent b;
-    PlatformEvent c;
-    ASSERT_TRUE(MapSdlEvent(extremeNegative, a));
-    ASSERT_TRUE(MapSdlEvent(extremePositive, b));
-    ASSERT_TRUE(MapSdlEvent(centred, c));
-
-    EXPECT_FLOAT_EQ(std::get<ControllerAxisEvent>(a).value, -1.0f);
-    EXPECT_FLOAT_EQ(std::get<ControllerAxisEvent>(b).value, 1.0f);
-    EXPECT_FLOAT_EQ(std::get<ControllerAxisEvent>(c).value, 0.0f);
+    // This is the non-endpoint sample that distinguishes the existing bridge/FNA divisor from
+    // the mapper's old 32768 negative-half divisor.
+    EXPECT_NE((static_cast<float>(-16384) / 32767.0f), -0.5f);
 }
 
-TEST(Sdl3EventMapperTests, GamepadButtonCarriesPressState)
+TEST(Sdl3EventMapperTests, GamepadStickEndpointsClampAfterYInversion)
 {
-    SDL_Event down = MakeEvent(SDL_EVENT_GAMEPAD_BUTTON_DOWN);
-    down.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
-    down.gbutton.down = true;
+    SDL_Event source = MakeEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
+    source.gaxis.axis = SDL_GAMEPAD_AXIS_LEFTY;
 
-    PlatformEvent mapped;
-    ASSERT_TRUE(MapSdlEvent(down, mapped));
-    const auto& button = std::get<ControllerButtonEvent>(mapped);
-    EXPECT_EQ(button.button, SDL_GAMEPAD_BUTTON_SOUTH);
-    EXPECT_TRUE(button.pressed);
+    source.gaxis.value = -32768;
+    PlatformEvent negative;
+    ASSERT_TRUE(MapSdlEvent(source, negative));
+    EXPECT_FLOAT_EQ(std::get<ControllerAxisEvent>(negative).value, 1.0f);
+
+    source.gaxis.value = 32767;
+    PlatformEvent positive;
+    ASSERT_TRUE(MapSdlEvent(source, positive));
+    EXPECT_FLOAT_EQ(std::get<ControllerAxisEvent>(positive).value, -1.0f);
+}
+
+TEST(Sdl3EventMapperTests, EverySupportedGamepadButtonMapsToCnaVocabulary)
+{
+    const struct
+    {
+        SDL_GamepadButton sdl;
+        GamepadButton expected;
+    } cases[] = {
+        {SDL_GAMEPAD_BUTTON_SOUTH, GamepadButton::A},
+        {SDL_GAMEPAD_BUTTON_EAST, GamepadButton::B},
+        {SDL_GAMEPAD_BUTTON_WEST, GamepadButton::X},
+        {SDL_GAMEPAD_BUTTON_NORTH, GamepadButton::Y},
+        {SDL_GAMEPAD_BUTTON_BACK, GamepadButton::Back},
+        {SDL_GAMEPAD_BUTTON_START, GamepadButton::Start},
+        {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, GamepadButton::LeftShoulder},
+        {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, GamepadButton::RightShoulder},
+        {SDL_GAMEPAD_BUTTON_LEFT_STICK, GamepadButton::LeftStick},
+        {SDL_GAMEPAD_BUTTON_RIGHT_STICK, GamepadButton::RightStick},
+        {SDL_GAMEPAD_BUTTON_DPAD_UP, GamepadButton::DPadUp},
+        {SDL_GAMEPAD_BUTTON_DPAD_DOWN, GamepadButton::DPadDown},
+        {SDL_GAMEPAD_BUTTON_DPAD_LEFT, GamepadButton::DPadLeft},
+        {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, GamepadButton::DPadRight},
+        {SDL_GAMEPAD_BUTTON_GUIDE, GamepadButton::BigButton},
+        {SDL_GAMEPAD_BUTTON_MISC1, GamepadButton::Misc1},
+        {SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1, GamepadButton::Paddle1},
+        {SDL_GAMEPAD_BUTTON_LEFT_PADDLE1, GamepadButton::Paddle2},
+        {SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2, GamepadButton::Paddle3},
+        {SDL_GAMEPAD_BUTTON_LEFT_PADDLE2, GamepadButton::Paddle4},
+        {SDL_GAMEPAD_BUTTON_TOUCHPAD, GamepadButton::TouchPad},
+    };
+
+    for (const auto& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+        source.gbutton.which = 73;
+        source.gbutton.button = static_cast<Uint8>(testCase.sdl);
+        source.gbutton.down = true;
+
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped)) << ToString(testCase.expected);
+        const auto& button = std::get<ControllerButtonEvent>(mapped);
+        EXPECT_EQ(button.device, 73u);
+        EXPECT_EQ(button.button, testCase.expected);
+        EXPECT_TRUE(button.pressed);
+    }
+}
+
+TEST(Sdl3EventMapperTests, UnknownGamepadControlsAreNotLeakedAsRawIndices)
+{
+    PlatformEvent mapped = WindowEvent{.window = 44};
+
+    SDL_Event axis = MakeEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
+    axis.gaxis.axis = static_cast<Uint8>(SDL_GAMEPAD_AXIS_COUNT);
+    EXPECT_FALSE(MapSdlEvent(axis, mapped));
+    EXPECT_EQ(GetEventTypeName(mapped), "WindowEvent");
+
+    SDL_Event button = MakeEvent(SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+    button.gbutton.button = static_cast<Uint8>(SDL_GAMEPAD_BUTTON_COUNT);
+    EXPECT_FALSE(MapSdlEvent(button, mapped));
+    EXPECT_EQ(GetEventTypeName(mapped), "WindowEvent");
 }
 
 // --- lifecycle and quit (PLAT-37) ---------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 #include "Sdl3InputServices.hpp"
 
+#include "Sdl3GamepadControls.hpp"
 #include "Sdl3Modifiers.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
@@ -233,20 +234,25 @@ namespace CNA::Platform::Sdl3 {
             {
                 for (int button = 0; button < SDL_GAMEPAD_BUTTON_COUNT; ++button)
                 {
-                    if (SDL_GetGamepadButton(gamepad, static_cast<SDL_GamepadButton>(button)))
+                    const auto mappedButton = ToGamepadButton(static_cast<SDL_GamepadButton>(button));
+                    if (mappedButton.has_value() &&
+                        SDL_GetGamepadButton(gamepad, static_cast<SDL_GamepadButton>(button)))
                     {
-                        snapshot.buttons |= (1u << button);
+                        snapshot.buttons |= static_cast<std::uint32_t>(mappedButton.value());
                     }
                 }
 
                 for (int axis = 0; axis < SDL_GAMEPAD_AXIS_COUNT; ++axis)
                 {
+                    const auto mappedAxis = ToGamepadAxis(static_cast<SDL_GamepadAxis>(axis));
+                    if (!mappedAxis.has_value())
+                    {
+                        continue;
+                    }
                     const Sint16 raw = SDL_GetGamepadAxis(gamepad, static_cast<SDL_GamepadAxis>(axis));
-                    // Each half scaled by its own magnitude, so the extreme negative is exactly
-                    // -1 rather than -1.00003 -- the same normalisation the event mapper uses.
-                    const float value = raw < 0 ? static_cast<float>(raw) / 32768.0f
-                                                : static_cast<float>(raw) / 32767.0f;
-                    if (axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)
+                    const float value = NormalizeGamepadAxis(mappedAxis.value(), raw);
+                    if (mappedAxis.value() == GamepadAxis::LeftTrigger ||
+                        mappedAxis.value() == GamepadAxis::RightTrigger)
                     {
                         snapshot.triggers.push_back(value);
                     }

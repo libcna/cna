@@ -2,6 +2,7 @@
 
 #include "Sdl3EventMapper.hpp"
 
+#include "Sdl3GamepadControls.hpp"
 #include "Sdl3Modifiers.hpp"
 #include "Sdl3KeyCodes.hpp"
 #include "Sdl3Scancodes.hpp"
@@ -247,14 +248,17 @@ namespace CNA::Platform::Sdl3 {
 
             case SDL_EVENT_GAMEPAD_AXIS_MOTION:
             {
+                const auto mappedAxis = ToGamepadAxis(
+                    static_cast<SDL_GamepadAxis>(source.gaxis.axis));
+                if (!mappedAxis.has_value())
+                {
+                    return false;
+                }
+
                 ControllerAxisEvent axis;
                 axis.device = static_cast<DeviceId>(source.gaxis.which);
-                axis.axis = source.gaxis.axis;
-                // SDL reports a signed 16-bit range; normalising to [-1, 1] here keeps the raw
-                // range out of every consumer. -32768 divided by 32767 would exceed -1, so the
-                // negative half is scaled by its own magnitude.
-                axis.value = source.gaxis.value < 0 ? static_cast<float>(source.gaxis.value) / 32768.0f
-                                                    : static_cast<float>(source.gaxis.value) / 32767.0f;
+                axis.axis = mappedAxis.value();
+                axis.value = NormalizeGamepadAxis(axis.axis, source.gaxis.value);
                 destination = axis;
                 return true;
             }
@@ -262,9 +266,16 @@ namespace CNA::Platform::Sdl3 {
             case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
             case SDL_EVENT_GAMEPAD_BUTTON_UP:
             {
+                const auto mappedButton = ToGamepadButton(
+                    static_cast<SDL_GamepadButton>(source.gbutton.button));
+                if (!mappedButton.has_value())
+                {
+                    return false;
+                }
+
                 ControllerButtonEvent button;
                 button.device = static_cast<DeviceId>(source.gbutton.which);
-                button.button = source.gbutton.button;
+                button.button = mappedButton.value();
                 button.pressed = source.gbutton.down;
                 destination = button;
                 return true;

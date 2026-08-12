@@ -146,6 +146,78 @@ namespace CNA::Platform {
         return gamepad;
     }
 
+    const std::string& ToString(const GamepadAxis axis)
+    {
+        static const std::string leftThumbstickX = "LeftThumbstickX";
+        static const std::string leftThumbstickY = "LeftThumbstickY";
+        static const std::string rightThumbstickX = "RightThumbstickX";
+        static const std::string rightThumbstickY = "RightThumbstickY";
+        static const std::string leftTrigger = "LeftTrigger";
+        static const std::string rightTrigger = "RightTrigger";
+
+        switch (axis)
+        {
+            case GamepadAxis::LeftThumbstickX:  return leftThumbstickX;
+            case GamepadAxis::LeftThumbstickY:  return leftThumbstickY;
+            case GamepadAxis::RightThumbstickX: return rightThumbstickX;
+            case GamepadAxis::RightThumbstickY: return rightThumbstickY;
+            case GamepadAxis::LeftTrigger:      return leftTrigger;
+            case GamepadAxis::RightTrigger:     return rightTrigger;
+        }
+        return leftThumbstickX;
+    }
+
+    const std::string& ToString(const GamepadButton button)
+    {
+        static const std::string a = "A";
+        static const std::string b = "B";
+        static const std::string x = "X";
+        static const std::string y = "Y";
+        static const std::string back = "Back";
+        static const std::string start = "Start";
+        static const std::string leftShoulder = "LeftShoulder";
+        static const std::string rightShoulder = "RightShoulder";
+        static const std::string leftStick = "LeftStick";
+        static const std::string rightStick = "RightStick";
+        static const std::string dPadUp = "DPadUp";
+        static const std::string dPadDown = "DPadDown";
+        static const std::string dPadLeft = "DPadLeft";
+        static const std::string dPadRight = "DPadRight";
+        static const std::string bigButton = "BigButton";
+        static const std::string misc1 = "Misc1";
+        static const std::string paddle1 = "Paddle1";
+        static const std::string paddle2 = "Paddle2";
+        static const std::string paddle3 = "Paddle3";
+        static const std::string paddle4 = "Paddle4";
+        static const std::string touchPad = "TouchPad";
+
+        switch (button)
+        {
+            case GamepadButton::A:             return a;
+            case GamepadButton::B:             return b;
+            case GamepadButton::X:             return x;
+            case GamepadButton::Y:             return y;
+            case GamepadButton::Back:          return back;
+            case GamepadButton::Start:         return start;
+            case GamepadButton::LeftShoulder:  return leftShoulder;
+            case GamepadButton::RightShoulder: return rightShoulder;
+            case GamepadButton::LeftStick:     return leftStick;
+            case GamepadButton::RightStick:    return rightStick;
+            case GamepadButton::DPadUp:        return dPadUp;
+            case GamepadButton::DPadDown:      return dPadDown;
+            case GamepadButton::DPadLeft:      return dPadLeft;
+            case GamepadButton::DPadRight:     return dPadRight;
+            case GamepadButton::BigButton:     return bigButton;
+            case GamepadButton::Misc1:         return misc1;
+            case GamepadButton::Paddle1:       return paddle1;
+            case GamepadButton::Paddle2:       return paddle2;
+            case GamepadButton::Paddle3:       return paddle3;
+            case GamepadButton::Paddle4:       return paddle4;
+            case GamepadButton::TouchPad:      return touchPad;
+        }
+        return a;
+    }
+
     const std::string& ToString(const AppLifecycleKind kind)
     {
         static const std::string willEnterBackground = "WillEnterBackground";

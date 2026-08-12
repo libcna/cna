@@ -249,24 +249,93 @@ namespace CNA::Platform {
         bool connected = false;
     };
 
-    /** @brief A gamepad or joystick axis moved. */
+    /** @brief A gamepad axis in CNA's platform-independent ordering. */
+    enum class GamepadAxis
+    {
+        /** @brief Horizontal axis of the left thumbstick; right is positive. */
+        LeftThumbstickX,
+        /** @brief Vertical axis of the left thumbstick; up is positive. */
+        LeftThumbstickY,
+        /** @brief Horizontal axis of the right thumbstick; right is positive. */
+        RightThumbstickX,
+        /** @brief Vertical axis of the right thumbstick; up is positive. */
+        RightThumbstickY,
+        /** @brief Left trigger, normalised to [0, 1]. */
+        LeftTrigger,
+        /** @brief Right trigger, normalised to [0, 1]. */
+        RightTrigger
+    };
+
+    /**
+     * @brief A gamepad button in CNA's platform-independent vocabulary.
+     *
+     * Values deliberately match XNA's `Buttons` bitmask so `GamepadSnapshot::buttons` can carry
+     * the same state without a second translation table in every consumer.
+     */
+    enum class GamepadButton : std::uint32_t
+    {
+        /** @brief Bottom face button, exposed as XNA's A button. */
+        A = 0x00001000,
+        /** @brief Right face button, exposed as XNA's B button. */
+        B = 0x00002000,
+        /** @brief Left face button, exposed as XNA's X button. */
+        X = 0x00004000,
+        /** @brief Top face button, exposed as XNA's Y button. */
+        Y = 0x00008000,
+        /** @brief Back or view button. */
+        Back = 0x00000020,
+        /** @brief Start or menu button. */
+        Start = 0x00000010,
+        /** @brief Left shoulder button. */
+        LeftShoulder = 0x00000100,
+        /** @brief Right shoulder button. */
+        RightShoulder = 0x00000200,
+        /** @brief Left thumbstick press. */
+        LeftStick = 0x00000040,
+        /** @brief Right thumbstick press. */
+        RightStick = 0x00000080,
+        /** @brief Directional pad up. */
+        DPadUp = 0x00000001,
+        /** @brief Directional pad down. */
+        DPadDown = 0x00000002,
+        /** @brief Directional pad left. */
+        DPadLeft = 0x00000004,
+        /** @brief Directional pad right. */
+        DPadRight = 0x00000008,
+        /** @brief Guide or home button. */
+        BigButton = 0x00000800,
+        /** @brief Additional miscellaneous button. */
+        Misc1 = 0x00000400,
+        /** @brief First rear paddle. */
+        Paddle1 = 0x00010000,
+        /** @brief Second rear paddle. */
+        Paddle2 = 0x00020000,
+        /** @brief Third rear paddle. */
+        Paddle3 = 0x00040000,
+        /** @brief Fourth rear paddle. */
+        Paddle4 = 0x00080000,
+        /** @brief Touchpad press. */
+        TouchPad = 0x00100000
+    };
+
+    /** @brief A mapped gamepad axis moved. */
     struct ControllerAxisEvent
     {
         /** @brief Which device. */
         DeviceId device = 0;
-        /** @brief Axis index. */
-        std::uint8_t axis = 0;
-        /** @brief Axis position, normalised to [-1, 1]. */
+        /** @brief Which logical gamepad axis moved. */
+        GamepadAxis axis = GamepadAxis::LeftThumbstickX;
+        /** @brief Axis position: sticks use [-1, 1], triggers use [0, 1]. */
         float value = 0.0f;
     };
 
-    /** @brief A gamepad or joystick button changed. */
+    /** @brief A mapped gamepad button changed. */
     struct ControllerButtonEvent
     {
         /** @brief Which device. */
         DeviceId device = 0;
-        /** @brief Button index. */
-        std::uint8_t button = 0;
+        /** @brief Which logical gamepad button changed. */
+        GamepadButton button = GamepadButton::A;
         /** @brief True for a press, false for a release. */
         bool pressed = false;
     };
@@ -362,6 +431,22 @@ namespace CNA::Platform {
      * @return A stable name such as `"Gamepad"`.
      */
     [[nodiscard]] const std::string& ToString(InputDeviceKind kind);
+
+    /**
+     * @brief Returns the stable, human-readable name of a gamepad axis.
+     *
+     * @param axis The axis to name.
+     * @return A stable name such as `"LeftThumbstickX"`.
+     */
+    [[nodiscard]] const std::string& ToString(GamepadAxis axis);
+
+    /**
+     * @brief Returns the stable, human-readable name of a gamepad button.
+     *
+     * @param button The button to name.
+     * @return A stable name such as `"LeftShoulder"`.
+     */
+    [[nodiscard]] const std::string& ToString(GamepadButton button);
 
     /**
      * @brief Returns the stable, human-readable name of an application lifecycle transition.
