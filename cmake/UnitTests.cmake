@@ -417,7 +417,7 @@ if(CNA_BUILD_TESTS)
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
     # another suite usually has, so these skip there and would otherwise contribute no coverage
     # at all. Running them as their own ctest, in their own process, is what makes them real.
-    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*
+    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
     # The rest of the platform contract is display-independent by construction, so it runs
@@ -425,7 +425,7 @@ if(CNA_BUILD_TESTS)
     # subsystem refcount is process-global, and an acquire/release imbalance would show up as
     # order dependence rather than as a direct failure.
     cna_register_renderer_test(NAME CnaPlatformTests
-        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*
+        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3ServiceTest.*
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 

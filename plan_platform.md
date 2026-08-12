@@ -65,9 +65,9 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1118** |
-| Files referencing SDL (all) | **592** |
-| Production files (`src/` + `include/`) referencing SDL | **272** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1122** |
+| Files referencing SDL (all) | **593** |
+| Production files (`src/` + `include/`) referencing SDL | **273** |
 | …of which are renderer production files | **116** |
 | Test/example files referencing SDL | **320** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
@@ -82,7 +82,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
 | `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
-| `modules/platform` | 10 | - |
+| `modules/platform` | 11 | - |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
 | `modules/runtime` | 7 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
 | `modules/content` | 3 | `SDL_IOStream`-based readers, glTF import |
@@ -346,8 +346,8 @@ The first and, within this plan, only real implementation. It reproduces today's
 | PLAT-40 | `Sdl3PlatformCapabilities` | ✅ | All 26 capabilities answered explicitly; SDL3 supports every currently-defined one, asserted by enumerating `AllCapabilities()` rather than by spot checks, so a capability added later without being answered here shows up as a count mismatch. `exactKeyboardState` and `pixelAccurateMouse` are `true` — the two that exist precisely because a terminal cannot provide them. |
 | PLAT-41 | GL context service (SDL3) | ⬜ | Implements PLAT-22 over `SDL_GL_*`. Attribute setting must be verified against what the 11 GL renderer families currently request — a dropped attribute here is a silent rendering difference. |
 | PLAT-42 | Vulkan surface service (SDL3) | ⬜ | Implements PLAT-23 over `SDL_Vulkan_GetInstanceExtensions`/`CreateSurface`/`DestroySurface`. |
-| PLAT-43 | Displays service (SDL3) | ⬜ | `SDL_GetDisplays`, bounds, desktop/current display mode, content scale, window display scale. |
-| PLAT-44 | Filesystem service (SDL3) | ⬜ | `SDL_GetBasePath`, `SDL_GetPrefPath`, `SDL_GetUserFolder`, directory enumeration/creation, `SDL_LoadFile`, `SDL_IOStream` wrapping. Consumers: `storage`, `content`, `media`, `TitleContainer`. |
+| PLAT-43 | Displays service (SDL3) | ✅ | `SDL_GetDisplays`, bounds, desktop mode, content scale, per-window display lookup and fullscreen mode enumeration. Content scale substitutes 1:1 when SDL reports `0.0f` — a zero scale divides to infinity in any layout computation. Sibling services reach the `SDL_Window` through an implementation-internal `Sdl3Window::GetSdlWindow()`, which stays inside `CNA::Platform::Sdl3` so the public contract keeps no SDL type. An unknown display id yields no modes rather than throwing. Original scope: | `SDL_GetDisplays`, bounds, desktop/current display mode, content scale, window display scale. |
+| PLAT-44 | Filesystem service (SDL3) | 🟨 | `SDL_GetBasePath`, `SDL_GetPrefPath` (verified to actually create a writable directory, since it backs `StorageDevice`), `SDL_LoadFile` as a **byte** loader with embedded NULs preserved, and idempotent recursive `CreateDirectory`. A missing file returns false with the output untouched, per PLAT-21's throw-vs-status split. Directory enumeration and `SDL_IOStream` wrapping remain, for the content/media readers in Phase 7. Original scope: | `SDL_GetBasePath`, `SDL_GetPrefPath`, `SDL_GetUserFolder`, directory enumeration/creation, `SDL_LoadFile`, `SDL_IOStream` wrapping. Consumers: `storage`, `content`, `media`, `TitleContainer`. |
 | PLAT-128 | Surface presenter (SDL3) | ⬜ | Implements PLAT-127 over `SDL_CreateRenderer`/`SDL_CreateTexture`/`SDL_UpdateTexture`/`SDL_RenderTexture`/`SDL_RenderPresent` plus `SDL_SetRenderLogicalPresentation` and `SDL_SetRenderVSync` — the exact call set PLAT-3 measured in `SKIA` and `BLEND2D`. Note this makes `modules/platform` itself an `SDL_Renderer` user; that is correct, and is why the allowlist is about *renderers*, not about the symbol. |
 | PLAT-45 | ~~Dynamic library service (SDL3)~~ | ❌ | **Cut on PLAT-2's evidence.** CNA never calls `SDL_LoadObject`/`LoadFunction`/`UnloadObject` — the only match in the entire tree is one `SDL_FunctionPointer` in a doc comment quoting `SDL_GL_GetProcAddress`'s signature (`GL4Loader.hpp`), and the two renderers that *do* load libraries at run time (`GDI`, `GLIDE`) call `dlopen`/`LoadLibrary` directly. `IPlatformDynamicLibrary` came from `cnaplatform.md`'s sketched class list, not from measured need; building it would have violated design decision "start from the contract CNA needs". The classifier keeps its rules so a future call site is classified rather than falling through. |
 

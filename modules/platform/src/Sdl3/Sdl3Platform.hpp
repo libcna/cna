@@ -3,6 +3,8 @@
 
 #include "CNA/Platform/IPlatform.hpp"
 
+#include "Sdl3SystemServices.hpp"
+
 #include <cstdint>
 #include <map>
 #include <string>
@@ -74,15 +76,15 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return Null until PLAT-85 lands. */
         [[nodiscard]] IPlatformSensors* GetSensors() override;
-        /** @brief Gets the clipboard service. @return Null until PLAT-88 lands. */
+        /** @brief Gets the clipboard service. @return The SDL3 clipboard; never null. */
         [[nodiscard]] IPlatformClipboard* GetClipboard() override;
-        /** @brief Gets the display service. @return Null until PLAT-43 lands. */
+        /** @brief Gets the display service. @return The SDL3 display enumerator; never null. */
         [[nodiscard]] IPlatformDisplays* GetDisplays() override;
         /** @brief Gets the dialog service. @return Null until PLAT-103 lands. */
         [[nodiscard]] IPlatformDialogs* GetDialogs() override;
-        /** @brief Gets the filesystem service. @return Null until PLAT-44 lands. */
+        /** @brief Gets the filesystem service. @return The SDL3 filesystem; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
-        /** @brief Gets the system information service. @return Null until PLAT-107 lands. */
+        /** @brief Gets the system information service. @return The SDL3 system info; never null. */
         [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override;
         /** @brief Gets the OpenGL context service. @return Null until PLAT-41 lands. */
         [[nodiscard]] IPlatformGlContext* GetGlContext() override;
@@ -102,6 +104,13 @@ namespace CNA::Platform::Sdl3 {
         /// refcount; this one exists so the destructor can release exactly what it acquired and
         /// no more, which matters when the host application holds subsystems of its own.
         std::map<PlatformSubsystem, int> ownedRefCounts_;
+
+        /// Services are owned by the platform and outlive every caller's use of them, which is
+        /// what makes returning a raw pointer safe: a caller never owns what it is handed.
+        Sdl3Clipboard clipboard_;
+        Sdl3Displays displays_;
+        Sdl3FileSystem fileSystem_;
+        Sdl3SystemInfo systemInfo_;
     };
 
 } // namespace CNA::Platform::Sdl3

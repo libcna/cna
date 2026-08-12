@@ -96,6 +96,17 @@ namespace CNA::Platform::Sdl3 {
         /** @brief Gets the current display's name. @return The name, or empty when unavailable. */
         [[nodiscard]] std::string GetDisplayName() const override;
 
+        /**
+         * @brief Gets the underlying SDL window.
+         *
+         * Implementation-internal: it exists so sibling SDL3 services (displays, GL contexts,
+         * the surface presenter) can reach the window without the public contract growing an
+         * SDL type. Never exposed outside `CNA::Platform::Sdl3`.
+         *
+         * @return The owned `SDL_Window`; never null.
+         */
+        [[nodiscard]] SDL_Window* GetSdlWindow() const { return window_; }
+
     private:
         SDL_Window* window_;
     };

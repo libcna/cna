@@ -218,11 +218,11 @@ namespace CNA::Platform::Sdl3 {
     IPlatformGamepad* Sdl3Platform::GetGamepad() { return nullptr; }
     IPlatformTextInput* Sdl3Platform::GetTextInput() { return nullptr; }
     IPlatformSensors* Sdl3Platform::GetSensors() { return nullptr; }
-    IPlatformClipboard* Sdl3Platform::GetClipboard() { return nullptr; }
-    IPlatformDisplays* Sdl3Platform::GetDisplays() { return nullptr; }
+    IPlatformClipboard* Sdl3Platform::GetClipboard() { return &clipboard_; }
+    IPlatformDisplays* Sdl3Platform::GetDisplays() { return &displays_; }
     IPlatformDialogs* Sdl3Platform::GetDialogs() { return nullptr; }
-    IPlatformFileSystem* Sdl3Platform::GetFileSystem() { return nullptr; }
-    IPlatformSystemInfo* Sdl3Platform::GetSystemInfo() { return nullptr; }
+    IPlatformFileSystem* Sdl3Platform::GetFileSystem() { return &fileSystem_; }
+    IPlatformSystemInfo* Sdl3Platform::GetSystemInfo() { return &systemInfo_; }
     IPlatformGlContext* Sdl3Platform::GetGlContext() { return nullptr; }
     IPlatformVulkanSurface* Sdl3Platform::GetVulkanSurface() { return nullptr; }
 
