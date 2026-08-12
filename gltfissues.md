@@ -2,6 +2,27 @@
 
 Analysis date: 2026-07-28
 
+> **HISTORICAL — superseded as a working document by `plan_gltf.md` (`GLTF-450`).**
+>
+> Every finding below was **reproduced, made executable, and fixed** by the glTF correctness
+> campaign, which began from this analysis. The document is kept unrewritten as the evidence of what
+> was measured on 2026-07-28; **do not read its present tense as a description of CNA today.**
+>
+> Where each finding went, so the two records cannot contradict each other:
+>
+> | This document says | Campaign record | State today |
+> |---|---|---|
+> | §1 "CNA discards glTF node transforms" | audit defects **D1/D2/D3**, tasks `GLTF-107`/`GLTF-113`/`GLTF-114` | **Fixed.** The scene graph reaches `Model` as a real bone hierarchy; `GltfConformanceL4` asserts every fixture's world geometry against a spec-derived oracle. |
+> | §2 "does not preserve `baseColorFactor`, downgrades to `BasicEffect`" | audit defect **D7**, tasks `GLTF-215`/`GLTF-216`/`GLTF-217`/`GLTF-219`/`GLTF-221` | **Fixed.** Effect selection follows the material *model* the file declares, not which texture maps happen to be present, and every factor is asserted at the effect boundary (L6), not only at import. |
+> | §3 "PBR parts have no lighting" | `GLTF-242`/`GLTF-325`/`GLTF-424` | **Split, deliberately.** The importer's half is fixed: `KHR_lights_punctual` is imported and a file with no lights is *reported* as such. Calling `EnableDefaultLighting()` when an import contributed no light is the **viewer's** decision and lives in `cna-gltf-viewer` (`GLTF-424`). |
+> | §4 "`KHR_materials_transmission` is ignored" | `GLTF-339` | **Approximated and reported**, not implemented: `alpha = 1 - transmissionFactor`, with the extension deliberately **not claimed**, so a file that *requires* transmission is refused rather than drawn as tinted alpha. `docs/gltf-limitations.md` states the four ways it is not physical. |
+> | §5's further losses — rigid animation, samplers, UV sets, variants, colour space, culling, camera | `GLTF-294`, `GLTF-202`/`GLTF-203`, `GLTF-181`/`GLTF-188`, `GLTF-341`, `GLTF-209`–`GLTF-213`, `GLTF-231`, `GLTF-317`–`GLTF-322` | Mixed by design, and each one is now either fixed or a **named** limitation with the report field that says so. `KHR_materials_variants` remains `PARSED_BUT_IGNORED`; culling is carried and not applied. |
+> | "Missing Regression Tests" | the whole campaign | The corpus is 71 generated assets and a nine-rung oracle ladder (`docs/gltf-conformance.md`). |
+>
+> The current state of any of the above is `plan_gltf.md` (the row), `docs/gltf-limitations.md`
+> (what is still lost, and where it is reported) and `known_bugs.md` (the defect ledger). If this
+> document and one of those ever disagree, those are right and this one is 2026-07-28.
+
 ## Executive Summary
 
 The incorrect rendering of the watch is not primarily a bug in the `easy-gl`

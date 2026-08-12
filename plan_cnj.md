@@ -1,5 +1,28 @@
 # `.cnj` content format — implementation plan for CNA
 
+> **Status update (2026-08-12): `plan_gltf.md` corrected several Phase 12–14 claims below
+> (`GLTF-451`).** The glTF correctness campaign began from a forensic audit that reproduced eight
+> defects — D1–D8 — in exactly the code Phases 12–14 marked ✅, and every one of them produced a
+> **model that rendered**, which is why none arrived as a bug report and why the ✅ marks were
+> written in good faith. The phases below are **not rewritten**; they are the record of what was
+> done and believed on 2026-07-17. This table is what a reader needs so the two documents do not
+> contradict each other.
+>
+> | Claim below | What was actually true | Corrected by |
+> |---|---|---|
+> | `CNB-50`/`CNB-51`/`CNB-52` — the import tool, "verified twice, not just built" | glTF **node transforms never reached the output at all**: every mesh was emitted in mesh-local space with an identity bone, so a mesh instanced by two nodes drew twice at the origin, a parent's transform never reached its child, and `node.matrix` was discarded outright (D1/D2/D3). The `.cnj` had nowhere to put a hierarchy until version 2 added `"bones"`. | `GLTF-107`, `GLTF-113`, `GLTF-114`, `GLTF-129` |
+> | `CNB-50` — "topological bone reorder … independently re-verified working" | Correct **as a palette operation**, and incomplete as a skeleton: `BuildSkeleton` walked parent links only inside the skin's own joint set, so an armature transform above the joints was dropped from the bind pose while the authored `inverseBindMatrices` still contained it (D8). | `GLTF-245`, `GLTF-247`, `GLTF-249` |
+> | `CNB-53` (1) — "every accessor read switched to bulk `cgltf_accessor_unpack_floats` (correctly resolves base values + sparse overrides)" | True for **attribute** accessors and never applied to **index** accessors, which still went through `cgltf_accessor_read_index` — a function that returns 0 for a sparse accessor with no error channel. A sparse index accessor therefore decoded to all zeros and collapsed the primitive to a degenerate point, silently (D4). Two further decode faults were found in the vendored cgltf itself: sparse values read at the base accessor's stride, and §3.6.2.2's `max(c/N, −1)` clamp omitted for signed normalized components. | `GLTF-063`, `GLTF-062`, `GLTF-056` |
+> | Phase 12 as a whole | `primitive.mode` was **never read**. Every topology was flattened into an index list all three loaders divided by three and drew as a triangle list: a strip lost every triangle after the first, a point cloud became one arbitrary triangle, and nothing warned (D5). No `CNB-*` task covers it — it is an omission rather than a stale claim, and is recorded here for that reason. | `GLTF-071`, `GLTF-072`, `GLTF-073`, `GLTF-078` |
+> | Phase 13A `✅ CLOSED` — "PBR material support" | The effect-selection rule asked which texture **maps** were present, so a material with every PBR factor and no map could never select `PbrEffect`: a gold, half-transparent, double-sided material imported as opaque white `BasicEffect`, with not one property surviving (D7). | `GLTF-215`–`GLTF-217`, `GLTF-219`, `GLTF-221`, `GLTF-228`–`GLTF-231` |
+> | `CNB-55` (6) — "`COLOR_0` on a skinned primitive is silently dropped" | Still true, and no longer silent: the loss is reported by name, along with the `NORMAL` the same layout also cannot carry. | `GLTF-241`, `GLTF-091` |
+> | Rigid (non-joint) animation, unmentioned by any phase | Dropped entirely: an unskinned model's clips had nowhere to live (D6). | `GLTF-293`, `GLTF-294` |
+>
+> **No `✅` below should be read as "this is complete today."** For the current state of glTF import
+> use `plan_gltf.md` (the campaign record), `docs/gltf-limitations.md` (what is still lost and where
+> it is reported) and `known_bugs.md` (the D1–D8 ledger, with the test that would catch each one
+> now).
+
 > **Status update (2026-07-17): Phase 14J also closed, and `feature/graphics` merged into
 > `develop`.** WebGPU now has real skinning shaders too — `SkinnedEffect` (both lighting variants,
 > `VertexColorEnabled`) and `SkinnedPbrEffect` — closing the one gap 14I's own backend sweep left
