@@ -36,6 +36,7 @@ namespace CNA::Platform {
      * | `Android`  | —              | `ANativeWindow*`  | —                 | —              |
      * | `Web`      | —              | —                 | —                 | —              |
      * | `Headless` | —              | —                 | —                 | —              |
+     * | `Terminal` | —              | —                 | —                 | —              |
      *
      * ### Why X11's window is an integer and not a pointer
      *
@@ -157,9 +158,9 @@ namespace CNA::Platform {
     /**
      * @brief Reports whether a handle describes a real native window.
      *
-     * False for `Unknown`, `Headless` and `Web`, and for any handle whose required fields are
-     * unset. A renderer that cannot work without a native window should check this and refuse
-     * with a clear message, rather than failing later inside its own graphics API.
+     * False for `Unknown`, `Headless`, `Terminal` and `Web`, and for any handle whose required
+     * fields are unset. A renderer that cannot work without a native window should check this
+     * and refuse with a clear message, rather than failing later inside its own graphics API.
      *
      * @param handle The handle to inspect.
      * @return True if the handle carries a usable native window for its declared system.

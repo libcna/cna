@@ -73,8 +73,9 @@ namespace CNA::Platform {
             case NativeWindowSystem::Unknown:
             case NativeWindowSystem::Web:
             case NativeWindowSystem::Headless:
-                // Web draws to a canvas selected by the host page and Headless has no window at
-                // all; neither exposes a native handle a renderer could consume.
+            case NativeWindowSystem::Terminal:
+                // Web draws to a host-selected canvas; Headless and Terminal have no graphical
+                // window. None exposes a native handle a renderer could consume.
                 return false;
         }
         return false;

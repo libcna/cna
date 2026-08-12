@@ -338,6 +338,21 @@ if(_cna_explicit_renderer_selection)
     list(GET _cna_enabled_renderers 0 CNA_GRAPHICS_RENDERER)
 endif()
 
+# PLAT-140: a terminal consumes finished CPU frames through IPlatformSurfacePresenter; it has no
+# graphical native window that a GPU API could bind. This check deliberately precedes every
+# renderer dependency probe below, so an incompatible pair always fails with this explanation
+# instead of, for example, first asking a TERMINAL+VULKAN build to install a Vulkan SDK. SKIA and
+# BLEND2D are included because their rasterization is CPU-side; Phase 4 moves their presentation
+# edge from SDL to the platform surface presenter.
+set(_cna_terminal_renderers SOFTWARE SKIA BLEND2D PORTABLEGL HEADLESS STUB)
+if(CNA_PLATFORM STREQUAL "TERMINAL" AND NOT CNA_GRAPHICS_RENDERER IN_LIST _cna_terminal_renderers)
+    list(JOIN _cna_terminal_renderers ", " _cna_terminal_renderers_text)
+    message(FATAL_ERROR
+        "CNA: CNA_PLATFORM=TERMINAL has no native graphical window, so renderer "
+        "${CNA_GRAPHICS_RENDERER} cannot be selected.\n"
+        "Choose a CPU renderer: ${_cna_terminal_renderers_text}.")
+endif()
+
 # plan_dx.md design decision 2: DIRECTX11/DIRECTX12 genuinely cannot build anywhere but Windows (native or
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
 # WARNING-only platform check below, this is a hard FATAL_ERROR. plan_dx9.md design decision 1

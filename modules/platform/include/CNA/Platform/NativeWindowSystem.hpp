@@ -36,10 +36,17 @@ namespace CNA::Platform {
         /**
          * @brief A platform that renders without any native window at all.
          *
-         * Used by the headless and terminal platforms. Every pointer is null, and a renderer
-         * that requires a real native handle must refuse rather than dereference one.
+         * Used by the headless platform. Every pointer is null, and a renderer that requires a
+         * real native handle must refuse rather than dereference one.
          */
-        Headless
+        Headless,
+        /**
+         * @brief A character-cell terminal with no native graphical window.
+         *
+         * Every pointer is null. Kept distinct from `Headless` so renderer-selection diagnostics
+         * can explain that CPU pixels may be presented through the terminal surface presenter.
+         */
+        Terminal
     };
 
     /**

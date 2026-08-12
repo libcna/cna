@@ -177,7 +177,23 @@ TEST(TerminalPlatformTest, TheWindowOffersNoNativeHandleForARendererToDereferenc
     description.height = 240;
 
     const std::unique_ptr<IPlatformWindow> window = platform->CreateWindow(description);
-    EXPECT_FALSE(HasNativeWindow(window->GetNativeHandle()));
+    const NativeWindowHandle handle = window->GetNativeHandle();
+    EXPECT_EQ(handle.system, NativeWindowSystem::Terminal);
+    EXPECT_FALSE(HasNativeWindow(handle));
+    EXPECT_EQ(Describe(handle), "Terminal");
+}
+
+TEST(TerminalPlatformTest, HasNoGamepadHapticOrSensorChannel)
+{
+    const std::unique_ptr<IPlatform> platform = MakeTerminal();
+    const PlatformCapabilities capabilities = platform->GetCapabilities();
+
+    EXPECT_FALSE(capabilities.gamepad);
+    EXPECT_FALSE(capabilities.haptics);
+    EXPECT_FALSE(capabilities.sensors);
+    EXPECT_EQ(platform->GetGamepad(), nullptr);
+    EXPECT_EQ(platform->GetHaptics(), nullptr);
+    EXPECT_EQ(platform->GetSensors(), nullptr);
 }
 
 TEST(TerminalPlatformTest, SettingATitleDoesNotWriteToStandardOutput)

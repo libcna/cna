@@ -200,7 +200,8 @@ TEST(NativeWindowHandleTests, HasNativeWindowIsTrueForEveryPopulatedRealSystem)
 TEST(NativeWindowHandleTests, HasNativeWindowIsFalseForWindowlessSystems)
 {
     for (const NativeWindowSystem system :
-         {NativeWindowSystem::Unknown, NativeWindowSystem::Web, NativeWindowSystem::Headless})
+         {NativeWindowSystem::Unknown, NativeWindowSystem::Web, NativeWindowSystem::Headless,
+          NativeWindowSystem::Terminal})
     {
         NativeWindowHandle handle;
         handle.system = system;
@@ -231,8 +232,8 @@ TEST(NativeWindowHandleTests, DescribeNamesTheSystemAndPopulatedFields)
 TEST(NativeWindowHandleTests, DescribeOmitsFieldListWhenNothingIsSet)
 {
     NativeWindowHandle handle;
-    handle.system = NativeWindowSystem::Headless;
-    EXPECT_EQ(Describe(handle), "Headless");
+    handle.system = NativeWindowSystem::Terminal;
+    EXPECT_EQ(Describe(handle), "Terminal");
 }
 
 TEST(NativeWindowHandleTests, DescribeNeverPrintsPointerValues)

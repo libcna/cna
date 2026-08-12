@@ -204,6 +204,7 @@ TEST_F(Sdl3WindowTest, NativeHandleIsSelfConsistentForItsWindowSystem)
         }
         case NativeWindowSystem::Web:
         case NativeWindowSystem::Headless:
+        case NativeWindowSystem::Terminal:
         case NativeWindowSystem::Unknown:
             // The dummy/offscreen drivers land here. Reporting no native window is the correct
             // answer, and it is what makes a GPU renderer refuse instead of dereferencing a null

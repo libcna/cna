@@ -94,6 +94,7 @@ namespace CNA::Platform::Sdl3 {
                 break;
             case NativeWindowSystem::Web:
             case NativeWindowSystem::Headless:
+            case NativeWindowSystem::Terminal:
             case NativeWindowSystem::Unknown:
                 // No native handle by design; every pointer stays null.
                 break;

@@ -65,7 +65,7 @@ namespace CNA::Platform::Terminal {
             // Every pointer null, so a renderer needing a real native window refuses at selection
             // instead of dereferencing something that was never there.
             NativeWindowHandle handle;
-            handle.system = NativeWindowSystem::Headless;
+            handle.system = NativeWindowSystem::Terminal;
             return handle;
         }
 

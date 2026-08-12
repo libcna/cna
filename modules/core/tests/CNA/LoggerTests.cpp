@@ -171,6 +171,22 @@ TEST_F(LoggerTest, ResetSinkRestoresTheDefaultWithoutCrashing)
     EXPECT_TRUE(captured_.empty());
 }
 
+TEST_F(LoggerTest, DefaultSinkWritesToStderrAndNeverStdout)
+{
+    Logger::ResetSink();
+    Logger::SetMinimumLevel(LogLevel::INFO);
+
+    ::testing::internal::CaptureStdout();
+    ::testing::internal::CaptureStderr();
+    Logger::Info("terminal-safe-log-destination");
+    const std::string standardError = ::testing::internal::GetCapturedStderr();
+    const std::string standardOutput = ::testing::internal::GetCapturedStdout();
+
+    EXPECT_TRUE(standardOutput.empty()) << standardOutput;
+    EXPECT_NE(standardError.find("terminal-safe-log-destination"), std::string::npos)
+        << standardError;
+}
+
 TEST_F(LoggerTest, MinimumLevelRoundTrips)
 {
     Logger::SetMinimumLevel(LogLevel::ERROR);

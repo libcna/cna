@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
+#include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
@@ -59,7 +60,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
-#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -2431,8 +2431,10 @@ namespace Microsoft::Xna::Framework::Graphics
 #endif
             if (!rendererStartupNameLogged_)
             {
-                std::cout << "CNA: graphics renderer: "
-                          << CNA::getCurrentGraphicsRendererName() << std::endl;
+                CNA::Logger::Info(
+                    std::string("CNA: graphics renderer: ") +
+                        std::string(CNA::getCurrentGraphicsRendererName()),
+                    CNA::LogCategory::RENDER);
                 rendererStartupNameLogged_ = true;
             }
         }
