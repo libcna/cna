@@ -172,6 +172,33 @@ namespace CNA::Internal::GltfImport
             }
         }
 
+        // plan_gltf.md GLTF-056: the SECOND confirmed defect in the vendored parser, and a smaller
+        // one than GLTF-062 only in blast radius.
+        //
+        // §3.6.2.2 gives the signed normalized conversions as `max(c / 127, -1)` and
+        // `max(c / 32767, -1)`. The clamp is not decoration: the negative range of a two's
+        // complement integer is one wider than the positive one, so -128/127 is -1.0079 and
+        // -32768/32767 is -1.00003 -- outside the unit range the normalization exists to produce.
+        // cgltf's `cgltf_component_read_float` divides and returns, with no clamp for either type.
+        //
+        // Applied here rather than by patching the vendored header, for the same reason as
+        // GLTF-062: the workaround stays visible and a cgltf upgrade that fixes it makes this a
+        // no-op rather than a conflict. Only for a normalized signed accessor -- every other
+        // accessor takes the unchanged path.
+        void ClampNormalizedSigned(const cgltf_accessor* accessor, std::vector<float>& values)
+        {
+            if (accessor->normalized == 0) { return; }
+            if (accessor->component_type != cgltf_component_type_r_8 &&
+                accessor->component_type != cgltf_component_type_r_16)
+            {
+                return;
+            }
+            for (float& value : values)
+            {
+                if (value < -1.0f) { value = -1.0f; }
+            }
+        }
+
         // Unpacks an entire accessor to floats in one call. Unlike per-element
         // cgltf_accessor_read_float, cgltf_accessor_unpack_floats correctly resolves sparse
         // accessors (base values overlaid with sparse overrides) -- read_float rejects sparse
@@ -196,6 +223,7 @@ namespace CNA::Internal::GltfImport
                     "' (malformed data or an unsupported layout).");
             }
             ApplySparseOverridesTightly(accessor, out.data(), expectedComponents, context);
+            ClampNormalizedSigned(accessor, out);
             return out;
         }
 

@@ -173,6 +173,21 @@ namespace CnaTest::GltfOracle
                        std::to_string(values.size()) + " components";
             }
 
+            // plan_gltf.md GLTF-056. §3.6.2.2's signed normalized conversions are
+            // `max(c / 127, -1)` and `max(c / 32767, -1)`; cgltf divides and returns with no clamp,
+            // so -128 decodes to -1.0079. Restated on the oracle side for the same reason as
+            // GLTF-062's sparse addressing: the oracle must apply the specification, not inherit
+            // the defect and certify it as "expected".
+            if (accessor.normalized != 0 &&
+                (accessor.component_type == cgltf_component_type_r_8 ||
+                 accessor.component_type == cgltf_component_type_r_16))
+            {
+                for (float& value : values)
+                {
+                    if (value < -1.0f) { value = -1.0f; }
+                }
+            }
+
             if (accessor.is_sparse == 0) { return ""; }
             const cgltf_accessor_sparse& sparse = accessor.sparse;
             const cgltf_size elementSize = cgltf_calc_size(accessor.type, accessor.component_type);

@@ -20,6 +20,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
@@ -373,4 +375,190 @@ TEST(GltfAccessorDecodeLock, EveryVerifiedFixtureStillCarriesNoKnownAccessorDefe
                    "investigate the contradiction -- do not weaken the expectation.";
         }
     }
+}
+
+// --- GLTF-056: the normalized-integer conversion, at every endpoint of every type ---------------
+//
+// §3.6.2.2 gives four formulas, and only the UNSIGNED_BYTE one had a fixture. The three untested
+// ones are not variations on a theme: the signed pair have a `max(c/N, -1)` clamp with no unsigned
+// counterpart, and the divisor is N = 2^(bits-1) - 1 rather than 2^bits - 1, so the classic error
+// -- dividing by 128 or 32768, or by 256 or 65536 -- is off by less than one percent and invisible
+// on anything but an endpoint. Endpoints are therefore the whole test.
+//
+// These go through UnpackAccessor rather than a hand-written decoder, because what is being locked
+// is what CNA's production path produces. A scratch document is used rather than a corpus fixture:
+// the subject is four component types times three endpoints, which is a table, not a mesh.
+
+namespace
+{
+    /// A COLOR_0 accessor of `componentType`, normalized, over the given raw component values --
+    /// four per vertex, one vertex per row of `rows`.
+    std::string NormalizedColorDocument(int componentType, std::size_t componentBytes,
+                                        bool isSigned, const std::vector<long long>& components)
+    {
+        std::vector<std::uint8_t> buffer;
+        // Three POSITION vertices first, so the primitive is structurally valid.
+        const std::vector<float> positions = {0, 0, 0, 1, 0, 0, 0, 1, 0};
+        for (const float value : positions)
+        {
+            std::uint8_t bytes[4];
+            std::memcpy(bytes, &value, 4);
+            buffer.insert(buffer.end(), bytes, bytes + 4);
+        }
+        const std::size_t colorOffset = buffer.size();
+        for (const long long value : components)
+        {
+            const auto raw = static_cast<unsigned long long>(
+                isSigned ? static_cast<unsigned long long>(value +
+                                (1LL << (componentBytes * 8 - 1)) * 2)
+                         : static_cast<unsigned long long>(value));
+            for (std::size_t b = 0; b < componentBytes; ++b)
+            {
+                buffer.push_back(static_cast<std::uint8_t>((raw >> (8 * b)) & 0xFF));
+            }
+        }
+        while (buffer.size() % 4 != 0) { buffer.push_back(0); }
+
+        static const char* kAlphabet =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string base64;
+        for (std::size_t i = 0; i < buffer.size(); i += 3)
+        {
+            const std::uint32_t chunk =
+                (static_cast<std::uint32_t>(buffer[i]) << 16) |
+                (i + 1 < buffer.size() ? static_cast<std::uint32_t>(buffer[i + 1]) << 8 : 0u) |
+                (i + 2 < buffer.size() ? static_cast<std::uint32_t>(buffer[i + 2]) : 0u);
+            base64 += kAlphabet[(chunk >> 18) & 0x3F];
+            base64 += kAlphabet[(chunk >> 12) & 0x3F];
+            base64 += (i + 1 < buffer.size()) ? kAlphabet[(chunk >> 6) & 0x3F] : '=';
+            base64 += (i + 2 < buffer.size()) ? kAlphabet[chunk & 0x3F] : '=';
+        }
+
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "COLOR_0": 1 }, "mode": 4
+  } ] } ],
+  "buffers": [ { "byteLength": )GLTF") + std::to_string(buffer.size()) +
+               R"GLTF(, "uri": "data:application/octet-stream;base64,)GLTF" + base64 + R"GLTF(" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(colorOffset) +
+               R"GLTF(, "byteLength": )GLTF" +
+               std::to_string(components.size() * componentBytes) + R"GLTF( }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": )GLTF" + std::to_string(componentType) +
+               R"GLTF(, "count": 3, "type": "VEC4", "normalized": true }
+  ]
+})GLTF";
+    }
+
+    /// The decoded COLOR_0 components, straight out of the oracle's own dump.
+    std::vector<float> DecodeNormalizedColors(const std::string& json)
+    {
+        cgltf_options options{};
+        cgltf_data* data = nullptr;
+        EXPECT_EQ(cgltf_result_success, cgltf_parse(&options, json.data(), json.size(), &data));
+        if (data == nullptr) { return {}; }
+        EXPECT_EQ(cgltf_result_success, cgltf_load_buffers(&options, data, "."));
+        const AccessorDump dump = DumpAccessorEXT(*data, 1);
+        EXPECT_TRUE(dump.decoded) << dump.error;
+        std::vector<float> values = dump.values;
+        cgltf_free(data);
+        return values;
+    }
+}
+
+TEST(GltfAccessorDecodeLock, NormalizedUnsignedEndpointsUseTheTwoToTheNMinusOneDivisor)
+{
+    // c / 255 and c / 65535 -- NOT c / 256 or c / 65536, which is the error that leaves the maximum
+    // just short of 1 and is invisible anywhere but here.
+    const std::vector<float> u8 = DecodeNormalizedColors(
+        NormalizedColorDocument(5121, 1, false, {0, 128, 255, 1,   0, 0, 0, 0,   0, 0, 0, 0}));
+    ASSERT_EQ(12u, u8.size());
+    EXPECT_NEAR(0.0, static_cast<double>(u8[0]), 1e-9) << "0 must map exactly to 0";
+    EXPECT_NEAR(128.0 / 255.0, static_cast<double>(u8[1]), kTolerance) << "the mid value";
+    EXPECT_FLOAT_EQ(1.0f, u8[2]) << "the maximum must map EXACTLY to 1, not to 255/256";
+
+    const std::vector<float> u16 = DecodeNormalizedColors(
+        NormalizedColorDocument(5123, 2, false, {0, 32768, 65535, 1,  0, 0, 0, 0,  0, 0, 0, 0}));
+    ASSERT_EQ(12u, u16.size());
+    EXPECT_NEAR(0.0, static_cast<double>(u16[0]), 1e-9);
+    EXPECT_NEAR(32768.0 / 65535.0, static_cast<double>(u16[1]), kTolerance);
+    EXPECT_FLOAT_EQ(1.0f, u16[2]) << "the maximum must map EXACTLY to 1, not to 32768/65536";
+}
+
+TEST(GltfAccessorDecodeLock, NormalizedSignedEndpointsClampAtMinusOneRatherThanReachingBelowIt)
+{
+    // max(c / 127, -1) and max(c / 32767, -1). The clamp has no unsigned counterpart and exists
+    // because the negative range is one wider than the positive one: -128/127 is -1.0079, which is
+    // outside the unit range the whole normalization exists to produce.
+    const std::vector<float> i8 = DecodeNormalizedColors(
+        NormalizedColorDocument(5120, 1, true, {0, 127, -127, -128,  0, 0, 0, 0,  0, 0, 0, 0}));
+    ASSERT_EQ(12u, i8.size());
+    EXPECT_NEAR(0.0, static_cast<double>(i8[0]), 1e-9);
+    EXPECT_FLOAT_EQ(1.0f, i8[1]) << "+127 must map exactly to +1";
+    EXPECT_FLOAT_EQ(-1.0f, i8[2]) << "-127 must map exactly to -1";
+    EXPECT_FLOAT_EQ(-1.0f, i8[3])
+        << "-128 is -1.0079 before the clamp; leaving it unclamped puts a colour outside [-1,1]";
+
+    const std::vector<float> i16 = DecodeNormalizedColors(
+        NormalizedColorDocument(5122, 2, true, {0, 32767, -32767, -32768,
+                                                0, 0, 0, 0,  0, 0, 0, 0}));
+    ASSERT_EQ(12u, i16.size());
+    EXPECT_NEAR(0.0, static_cast<double>(i16[0]), 1e-9);
+    EXPECT_FLOAT_EQ(1.0f, i16[1]);
+    EXPECT_FLOAT_EQ(-1.0f, i16[2]);
+    EXPECT_FLOAT_EQ(-1.0f, i16[3]) << "-32768 is -1.00003 before the clamp";
+}
+
+// --- GLTF-049: a component-count mismatch is an error, not a silent misread ---------------------
+
+TEST(GltfAccessorDecodeLock, AnAccessorWhoseTypeHasTheWrongComponentCountThrowsAndNamesBoth)
+{
+    // POSITION declared VEC2. Without the check, UnpackAccessor would fill a vector sized for three
+    // components from a stream of two and every vertex after the first would read from the wrong
+    // offset -- the same class of silent misread as D4, from the other direction.
+    //
+    // The message is asserted, not just the throw: "invalid accessor" tells an author nothing, and
+    // this path exists to say which accessor and by how much.
+    const std::string json = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 }, "mode": 4 } ] } ],
+  "buffers": [ { "byteLength": 24, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 24 } ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    ASSERT_EQ(cgltf_result_success, cgltf_parse(&options, json.data(), json.size(), &data));
+    ASSERT_EQ(cgltf_result_success, cgltf_load_buffers(&options, data, "."));
+
+    std::string message;
+    try
+    {
+        (void)CNA::Internal::GltfImport::ExtractMesh(data, data->meshes[0].primitives[0], "probe",
+                                                     nullptr, 1.0f);
+    }
+    catch (const std::exception& e)
+    {
+        message = e.what();
+    }
+    cgltf_free(data);
+
+    ASSERT_FALSE(message.empty()) << "a VEC2 POSITION was accepted and read as if it were VEC3";
+    EXPECT_NE(std::string::npos, message.find("POSITION")) << message;
+    EXPECT_NE(std::string::npos, message.find("2 components per element")) << message;
+    EXPECT_NE(std::string::npos, message.find("expected 3")) << message;
 }
