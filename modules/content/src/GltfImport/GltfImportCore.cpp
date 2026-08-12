@@ -1173,6 +1173,30 @@ namespace CNA::Internal::GltfImport
         return clips;
     }
 
+    // plan_gltf.md GLTF-199: what the bytes ARE, not what the file says they are. A `data:` URI's
+    // media type and an `image` object's `mimeType` are both author-supplied strings, and an
+    // exporter that writes `image/png` above JPEG bytes is not hypothetical -- it is what a
+    // "convert to PNG" step that failed silently produces. The extension travels with the bytes
+    // (the offline path writes a file with it, and a `.cnj` then names that file), so a wrong one
+    // hands a consumer a file whose contents do not match its name.
+    //
+    // Signature-based, with the declared type as a hint only: PNG's 8-byte signature and JPEG's
+    // SOI marker are both unambiguous, and anything else falls back to what the file claimed.
+    std::string SniffImageExtension(const std::vector<std::uint8_t>& bytes, const std::string& hint)
+    {
+        static const std::uint8_t kPng[8] = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+        if (bytes.size() >= sizeof(kPng) &&
+            std::equal(std::begin(kPng), std::end(kPng), bytes.begin()))
+        {
+            return "png";
+        }
+        if (bytes.size() >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+        {
+            return "jpg";
+        }
+        return hint.empty() ? "png" : hint;
+    }
+
     std::optional<ExtractedImage> ExtractImage(const cgltf_image* image, const std::filesystem::path& gltfDir)
     {
         if (!image) { return std::nullopt; }
@@ -1191,7 +1215,7 @@ namespace CNA::Internal::GltfImport
             if (!data) { throw std::runtime_error("Failed to read embedded image bufferView."); }
             ExtractedImage result;
             result.bytes.assign(data, data + image->buffer_view->size);
-            result.extension = ext.empty() ? "png" : ext;
+            result.extension = SniffImageExtension(result.bytes, ext);
             return result;
         }
 
@@ -1203,7 +1227,7 @@ namespace CNA::Internal::GltfImport
             {
                 const auto comma = uri.find(',');
                 if (comma == std::string::npos) { throw std::runtime_error("Malformed data: URI for image."); }
-                if (ext.empty()) { ext = (uri.find("image/jpeg") != std::string::npos) ? "jpg" : "png"; }
+                if (ext.empty() && uri.find("image/jpeg") != std::string::npos) { ext = "jpg"; }
 
                 const std::string b64 = uri.substr(comma + 1);
                 std::size_t padding = 0;
@@ -1220,7 +1244,7 @@ namespace CNA::Internal::GltfImport
                 }
                 ExtractedImage result;
                 result.bytes.assign(static_cast<std::uint8_t*>(decoded), static_cast<std::uint8_t*>(decoded) + decodedSize);
-                result.extension = ext;
+                result.extension = SniffImageExtension(result.bytes, ext);
                 std::free(decoded);
                 return result;
             }
@@ -1238,9 +1262,11 @@ namespace CNA::Internal::GltfImport
             {
                 std::string realExt = imgPath.extension().string();
                 if (!realExt.empty() && realExt.front() == '.') { realExt = realExt.substr(1); }
-                ext = realExt.empty() ? "png" : realExt;
+                ext = realExt;
             }
-            result.extension = ext;
+            // The filename's own extension is a hint too, and a weaker one than the bytes: a
+            // texture called `.png` that is really a JPEG is the most common form this takes.
+            result.extension = SniffImageExtension(result.bytes, ext);
             return result;
         }
 

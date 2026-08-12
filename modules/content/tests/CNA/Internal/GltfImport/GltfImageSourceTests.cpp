@@ -216,18 +216,49 @@ TEST(GltfImageSource, AMissingExternalImageFileErrorsNamingThePath)
 
 // --- GLTF-196: the extension a decoder will be handed -------------------------------------------
 
-TEST(GltfImageSource, TheMimeTypeDecidesTheExtensionAndOverridesTheFileName)
+TEST(GltfImageSource, TheBytesDecideTheExtensionAndTheDeclaredTypeIsOnlyAHint)
 {
-    // The extension is what selects a decoder downstream, and §3.9.2 makes `mimeType` authoritative
-    // when present -- a `.png`-named file declared `image/jpeg` is a JPEG. Trusting the name
-    // instead hands the wrong decoder bytes it will refuse, and the texture disappears with the
-    // failure attributed to the image rather than to the naming.
-    Parsed parsed;
-    ASSERT_TRUE(Parse(parsed, ImageDocument(
-        R"({ "bufferView": 0, "mimeType": "image/jpeg" })", true)));
-    const std::optional<ExtractedImage> image = ExtractImage(&parsed.data->images[0], ".");
-    ASSERT_TRUE(image.has_value());
-    EXPECT_EQ("jpg", image->extension);
+    // plan_gltf.md GLTF-199. The extension travels with the bytes -- the offline path writes a
+    // file named with it and a `.cnj` then references that file -- so it has to describe what the
+    // bytes actually are. Both `mimeType` and a URI's media type are author-supplied strings, and
+    // an exporter that writes `image/png` above JPEG bytes is not hypothetical: it is what a
+    // "convert to PNG" step that failed silently produces.
+    //
+    // So the rule is: sniff the signature, and fall back to the declared type only when the bytes
+    // say nothing. Both directions are asserted, because a sniffer that ignored the declaration
+    // entirely would pass the first case alone.
+    {
+        // PNG bytes declared as JPEG. The bytes win.
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ImageDocument(
+            R"({ "bufferView": 0, "mimeType": "image/jpeg" })", true)));
+        const std::optional<ExtractedImage> image = ExtractImage(&parsed.data->images[0], ".");
+        ASSERT_TRUE(image.has_value());
+        EXPECT_EQ("png", image->extension)
+            << "the declared type overrode the actual bytes; the written file would not match its "
+               "own name";
+    }
+    {
+        // JPEG bytes in a `data:` URI declaring `image/png`. Again the bytes win, through the
+        // other source branch -- the two used to guess independently.
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ImageDocument(
+            R"({ "uri": "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAA=" })", false)));
+        const std::optional<ExtractedImage> image = ExtractImage(&parsed.data->images[0], ".");
+        ASSERT_TRUE(image.has_value());
+        EXPECT_EQ("jpg", image->extension);
+    }
+    {
+        // Bytes whose signature matches nothing: the declaration is all there is, so it is used.
+        // Refusing here would reject every format CNA has no signature for rather than every
+        // format it cannot decode, which are different sets.
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ImageDocument(
+            R"({ "uri": "data:image/jpeg;base64,AAECAwQFBgcICQoLDA0ODw==" })", false)));
+        const std::optional<ExtractedImage> image = ExtractImage(&parsed.data->images[0], ".");
+        ASSERT_TRUE(image.has_value());
+        EXPECT_EQ("jpg", image->extension) << "the declared type is the fallback, not nothing";
+    }
 }
 
 TEST(GltfImageSource, AnImageWithNeitherAUriNorABufferViewYieldsNothingRatherThanEmptyBytes)
@@ -240,4 +271,98 @@ TEST(GltfImageSource, AnImageWithNeitherAUriNorABufferViewYieldsNothingRatherTha
     ASSERT_TRUE(Parse(parsed, ImageDocument(R"({ "name": "sourceless" })", false)));
     const std::optional<ExtractedImage> image = ExtractImage(&parsed.data->images[0], ".");
     EXPECT_FALSE(image.has_value());
+}
+
+// --- GLTF-201: bytes that are not an image ---------------------------------------------------------
+
+TEST(GltfImageSource, ZeroLengthAndCorruptImageSourcesAreDeterministicRatherThanUndefined)
+{
+    // An image's bytes come from a file or a URI, so they can be anything -- truncated by a failed
+    // export, empty because a `data:` URI's payload was lost in a text pipeline, or simply not an
+    // image. None of that may reach a decoder as an unbounded read, and none of it may crash: the
+    // whole point of this row is that the outcome is the same every time and is either a named
+    // failure or an empty-but-well-formed result the caller can test.
+    //
+    // ExtractImage does not decode -- it extracts -- so what it owes here is exactly that: bytes
+    // it can vouch for, or nothing.
+    {
+        // A `data:` URI with no payload at all.
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ImageDocument(
+            R"({ "uri": "data:image/png;base64," })", false)));
+        std::optional<ExtractedImage> image;
+        ASSERT_NO_THROW(image = ExtractImage(&parsed.data->images[0], "."));
+        if (image.has_value())
+        {
+            EXPECT_TRUE(image->bytes.empty())
+                << "an empty payload produced bytes from somewhere";
+            EXPECT_FALSE(image->extension.empty())
+                << "an extension is still owed, so a caller can report what it thought it had";
+        }
+    }
+    {
+        // A payload that decodes as base64 but is not an image in any format.
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ImageDocument(
+            R"({ "uri": "data:image/png;base64,AAECAwQFBgcICQoLDA0ODw==" })", false)));
+        std::optional<ExtractedImage> image;
+        ASSERT_NO_THROW(image = ExtractImage(&parsed.data->images[0], "."));
+        ASSERT_TRUE(image.has_value());
+        EXPECT_EQ(16u, image->bytes.size()) << "the bytes must arrive exactly as authored";
+    }
+    {
+        // A `data:` URI with no comma at all -- malformed as a URI, before any base64 question.
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ImageDocument(R"({ "uri": "data:image/png;base64" })", false)));
+        EXPECT_THROW((void)ExtractImage(&parsed.data->images[0], "."), std::runtime_error);
+    }
+    {
+        // An external file that does not exist. Named, not silent: a texture that vanishes with no
+        // message is attributed to the material, the sampler, or the light -- anything but the
+        // missing file.
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ImageDocument(R"({ "uri": "definitely-not-here.png" })", false)));
+        std::string message;
+        try
+        {
+            (void)ExtractImage(&parsed.data->images[0], ".");
+        }
+        catch (const std::exception& e)
+        {
+            message = e.what();
+        }
+        ASSERT_FALSE(message.empty()) << "a missing image file was accepted";
+        EXPECT_NE(std::string::npos, message.find("definitely-not-here.png")) << message;
+    }
+}
+
+// --- GLTF-205: the sampler a texture gets when it declares none ------------------------------------
+
+TEST(GltfImageSource, ATextureWithNoSamplerGetsGltfsOwnDefaultsRatherThanTheDevicesCurrentState)
+{
+    // §5.29: `sampler` is optional, and its absence means repeat wrapping with the client free to
+    // choose filtering -- not "whatever the device happens to have bound". Before GLTF-202/203
+    // every imported texture drew with the device's LinearWrap by coincidence; a default that is
+    // *chosen* rather than inherited is what makes that no longer a coincidence, and what stops a
+    // future default change from silently altering every sampler-less asset.
+    Parsed parsed;
+    ASSERT_TRUE(Parse(parsed, std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "images": [ { "uri": "data:image/png;base64,)GLTF") + kRedGreenPngBase64 + R"GLTF(" } ],
+  "textures": [ { "source": 0 } ],
+  "materials": [ { "pbrMetallicRoughness": {
+      "baseColorTexture": { "index": 0 } } } ]
+})GLTF"));
+
+    ASSERT_EQ(1u, parsed.data->textures_count);
+    EXPECT_EQ(nullptr, parsed.data->textures[0].sampler) << "the fixture must declare no sampler";
+
+    // `SamplerForTextureView` is file-private; the mapping it falls back to for an absent sampler
+    // is glTF's own "0 means unspecified" for all four values, which is what this asserts.
+    const SamplerOut sampler = MapGltfSamplerEXT(0, 0, 0, 0);
+    EXPECT_FALSE(sampler.declared)
+        << "a default sampler must not claim to have been authored";
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureFilter::Linear), static_cast<int>(sampler.filter));
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap), static_cast<int>(sampler.addressU));
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap), static_cast<int>(sampler.addressV));
 }

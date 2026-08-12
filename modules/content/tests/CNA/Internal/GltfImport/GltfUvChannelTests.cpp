@@ -254,3 +254,93 @@ TEST(GltfUvChannel, AnIdentityTextureTransformLeavesTheUvsExactlyAlone)
     EXPECT_NEAR(kUv0[0], uv[0], kTolerance);
     EXPECT_NEAR(kUv0[1], uv[1], kTolerance);
 }
+
+// --- GLTF-174: tangent generation uses the generated normals ---------------------------------------
+
+TEST(GltfUvChannel, TangentGenerationUsesTheGeneratedNormalRatherThanAFabricatedPlusZ)
+{
+    // Two independent fallbacks meet here. §3.7.2.1 says a primitive with no NORMAL gets flat
+    // normals (`GLTF-173`), and a PBR primitive with no TANGENT gets a generated basis
+    // (`ComputeTangentsEXT`). `ComputeTangentsEXT` takes the normals as an argument and falls back
+    // to (0,0,1) when the array is empty -- so if generation ran in the wrong order, the tangent
+    // basis would be built against a fabricated +Z normal while the vertex buffer carried the real
+    // one. The two would then disagree, and a normal-mapped surface would light from a basis that
+    // does not match its own normal: subtly, plausibly wrong.
+    //
+    // The triangle here faces -Z, so a fabricated +Z normal is the exact opposite of the truth and
+    // the two orders cannot be confused.
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "mesh": 0 } ],
+  "materials": [ { "pbrMetallicRoughness": { "metallicFactor": 1.0 } } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "TEXCOORD_0": 1 },
+                                  "indices": 2, "material": 0 } ] } ],
+  "buffers": [ { "byteLength": 68, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIAAAA=" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 60, "byteLength": 6 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0, 0, 0], "max": [0, 1, 1] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 2, "componentType": 5123, "count": 3, "type": "SCALAR" }
+  ]
+})GLTF"));
+
+    const MeshOut mesh = ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe",
+                                      nullptr, 1.0f);
+    ASSERT_EQ(48, mesh.stride) << "this primitive must land on a layout that has a tangent";
+    EXPECT_TRUE(mesh.generatedNormalsEXT) << "the fixture must author no NORMAL";
+
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            mesh.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known);
+    int normalOffset = -1, tangentOffset = -1;
+    for (std::size_t e = 0; e < layout.count; ++e)
+    {
+        if (layout.elements[e].usage == VertexElementUsage::Normal)
+        {
+            normalOffset = layout.elements[e].offset;
+        }
+        if (layout.elements[e].usage == VertexElementUsage::Tangent)
+        {
+            tangentOffset = layout.elements[e].offset;
+        }
+    }
+    ASSERT_GE(normalOffset, 0);
+    ASSERT_GE(tangentOffset, 0);
+
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        float normal[3];
+        float tangent[4];
+        std::memcpy(normal, mesh.vertexBytes.data() + v * 48u +
+                                static_cast<std::size_t>(normalOffset), sizeof(normal));
+        std::memcpy(tangent, mesh.vertexBytes.data() + v * 48u +
+                                 static_cast<std::size_t>(tangentOffset), sizeof(tangent));
+
+        // The generated normal is the triangle's own, which for this winding is -X.
+        EXPECT_NEAR(-1.0f, normal[0], kTolerance)
+            << "the generated normal is not the triangle's own facing";
+
+        // And the tangent is perpendicular to it. Built against a fabricated (0,0,1) instead, the
+        // tangent would lie in the XY plane and this dot product would not vanish.
+        const float dot = normal[0] * tangent[0] + normal[1] * tangent[1] + normal[2] * tangent[2];
+        EXPECT_NEAR(0.0f, dot, 1e-3f)
+            << "the tangent basis was built against a different normal than the one packed";
+
+        // A degenerate tangent would satisfy perpendicularity trivially.
+        const float length = std::sqrt(tangent[0] * tangent[0] + tangent[1] * tangent[1] +
+                                        tangent[2] * tangent[2]);
+        EXPECT_GT(length, 0.5f) << "the generated tangent is degenerate";
+        EXPECT_TRUE(tangent[3] == 1.0f || tangent[3] == -1.0f)
+            << "handedness must be a sign, not a scale: " << tangent[3];
+    }
+}

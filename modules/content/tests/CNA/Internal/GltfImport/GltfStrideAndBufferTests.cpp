@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-151 / GLTF-153 / GLTF-164 / GLTF-165 / GLTF-166.
+// plan_gltf.md GLTF-151 / GLTF-153 / GLTF-162 / GLTF-164 / GLTF-165 / GLTF-166.
 //
 // The vertex/index buffer ABI, asserted at the layer a game actually meets it: the byte offsets a
 // renderer will read from, the index element size the GPU is told about, and what happens at the
@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
 using namespace CNA::Internal::GltfImport;
 using CNA::Internal::Graphics::InferredLayoutForStride;
@@ -408,5 +409,106 @@ TEST(GltfStrideAndBuffer, AZeroIndexPrimitiveDoesNotProduceAZeroSizedIndexBuffer
             << "two indices are not a triangle; the run should have been trimmed to nothing";
         EXPECT_EQ(2u, mesh.droppedIncompleteIndicesEXT) << "and the drop must be reported";
         cgltf_free(data);
+    }
+}
+
+// --- GLTF-162: the SetDataRaw contract ------------------------------------------------------------
+
+namespace
+{
+    using Microsoft::Xna::Framework::Vector2;
+    using Microsoft::Xna::Framework::Vector3;
+    using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
+
+    /// One stride-32 vertex, packed exactly as the GPU stream lays it out.
+    std::vector<std::uint8_t> PackedStride32(float seed)
+    {
+        const float values[8] = {seed, seed + 1, seed + 2,        // position
+                                  0.0f, 0.0f, 1.0f,                // normal
+                                  seed + 3, seed + 4};             // uv
+        std::vector<std::uint8_t> bytes(32);
+        std::memcpy(bytes.data(), values, sizeof(values));
+        return bytes;
+    }
+}
+
+TEST(GltfStrideAndBuffer, SetDataRawUploadsExactlyCountTimesStrideBytes)
+{
+    // `SetDataRaw` is how morph blending re-uploads a deformed vertex buffer (`SetMorphWeightsEXT`)
+    // every time the weights change, and it is the one upload entry point that takes raw bytes with
+    // no vertex type to check them against. Its whole contract is the arithmetic: `count * stride`
+    // bytes from the pointer, laid out exactly as the GPU stream expects, with nothing inferred.
+    GraphicsDevice gd;
+    Microsoft::Xna::Framework::Graphics::VertexBuffer vb(gd, 2);
+
+    std::vector<std::uint8_t> bytes = PackedStride32(10.0f);
+    const std::vector<std::uint8_t> second = PackedStride32(100.0f);
+    bytes.insert(bytes.end(), second.begin(), second.end());
+    vb.SetDataRaw(bytes.data(), 2, 32);
+
+    VertexPositionNormalTexture read[2];
+    vb.GetData(read, 2);
+    EXPECT_FLOAT_EQ(10.0f, read[0].Position.X);
+    EXPECT_FLOAT_EQ(12.0f, read[0].Position.Z);
+    EXPECT_FLOAT_EQ(1.0f, read[0].Normal.Z);
+    EXPECT_FLOAT_EQ(13.0f, read[0].TextureCoordinate.X);
+    EXPECT_FLOAT_EQ(100.0f, read[1].Position.X)
+        << "the second vertex did not land at offset 32 -- the stride was not honoured";
+    EXPECT_FLOAT_EQ(104.0f, read[1].TextureCoordinate.Y);
+}
+
+TEST(GltfStrideAndBuffer, SetDataRawRefusesACountOrStrideItCannotHonour)
+{
+    // The refusals matter more than the happy path: with no element type to validate against, a
+    // caller's arithmetic mistake would otherwise be an out-of-bounds read on the way to the GPU.
+    // Each case below is one a morph re-upload could actually make -- a vertex count left over
+    // from before a resize, a stride taken from the wrong part, a buffer that was never filled.
+    GraphicsDevice gd;
+    Microsoft::Xna::Framework::Graphics::VertexBuffer vb(gd, 2);
+
+    std::vector<std::uint8_t> bytes = PackedStride32(1.0f);
+    const std::vector<std::uint8_t> second = PackedStride32(2.0f);
+    bytes.insert(bytes.end(), second.begin(), second.end());
+    vb.SetDataRaw(bytes.data(), 2, 32);
+
+    VertexPositionNormalTexture before[2];
+    vb.GetData(before, 2);
+
+    // Either outcome is a refusal: throwing (which is what an over-capacity upload does, and what
+    // an XNA caller expects from an out-of-range argument) or returning without writing. What is
+    // asserted after all six is that not one of them changed a byte.
+    const std::vector<std::uint8_t> other = PackedStride32(999.0f);
+    auto refuse = [&](const void* data, int count, int stride, const char* what)
+    {
+        SCOPED_TRACE(what);
+        try
+        {
+            vb.SetDataRaw(data, count, stride);
+        }
+        catch (const std::exception&)
+        {
+            // A named refusal is the better of the two acceptable outcomes.
+        }
+    };
+    refuse(other.data(), 3, 32, "more vertices than the buffer holds");
+    refuse(nullptr, 2, 32, "nothing to read from");
+    refuse(other.data(), 0, 32, "no vertices");
+    refuse(other.data(), -1, 32, "a negative count");
+    refuse(other.data(), 2, 0, "a zero stride");
+    // NOT tested as a refusal, and the reason is the contract itself: a stride wider than the
+    // source is undetectable here. The buffer was created without a VertexDeclaration, so it has
+    // a capacity in VERTICES and none in bytes -- `SetDataRaw(p, 2, 48)` is a legal request to
+    // read 96 bytes, and whether `p` has 96 bytes behind it is the caller's promise. That is what
+    // makes `count * stride` the whole contract, and why the morph re-upload path computes both
+    // from the same MeshOut rather than from two places.
+
+    VertexPositionNormalTexture after[2];
+    vb.GetData(after, 2);
+    for (int i = 0; i < 2; ++i)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(i));
+        EXPECT_FLOAT_EQ(before[i].Position.X, after[i].Position.X)
+            << "a refused upload wrote to the buffer anyway";
+        EXPECT_FLOAT_EQ(before[i].TextureCoordinate.Y, after[i].TextureCoordinate.Y);
     }
 }
