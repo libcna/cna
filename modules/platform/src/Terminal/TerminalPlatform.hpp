@@ -30,9 +30,10 @@ namespace CNA::Platform::Terminal {
      * ### What this task provides
      *
      * Selection, factory registration, timing, the subsystem lifecycle, a window, the services
-     * every platform must have (PLAT-130), surface presentation (PLAT-132), and exact keyboard
-     * state where the terminal answers the Kitty protocol probe (PLAT-137). The synthetic
-     * keyboard fallback (PLAT-138) and mouse (PLAT-139) still refuse until their tasks land.
+     * every platform must have (PLAT-130), surface presentation (PLAT-132), exact keyboard state
+     * where the terminal answers the Kitty protocol probe (PLAT-137), and a timed synthetic
+     * keyboard fallback otherwise (PLAT-138). Mouse input (PLAT-139) still refuses until its task
+     * lands.
      *
      * ### The window is a pixel surface, not the character grid
      *
@@ -129,7 +130,10 @@ namespace CNA::Platform::Terminal {
         /** @brief Sleeps for the requested duration. @param milliseconds How long to sleep. */
         void Delay(std::uint32_t milliseconds) override;
 
-        /** @brief Gets the keyboard service. @return Exact Kitty service, or null until PLAT-138. */
+        /**
+         * @brief Gets the keyboard service.
+         * @return Exact Kitty input, a timed fallback on a queryable TTY, or null without one.
+         */
         [[nodiscard]] IPlatformKeyboard* GetKeyboard() override;
         /** @brief Gets the mouse service. @return Null until PLAT-139 lands. */
         [[nodiscard]] IPlatformMouse* GetMouse() override;

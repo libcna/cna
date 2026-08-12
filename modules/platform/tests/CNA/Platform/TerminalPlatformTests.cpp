@@ -61,10 +61,10 @@ TEST(TerminalPlatformTest, ConstructionTouchesNoTerminalState)
 
 TEST(TerminalPlatformTest, OnlyTheCapabilitiesWhoseTasksHaveLandedAreAdvertised)
 {
-    // Not an aspiration: the synthetic keyboard (PLAT-138) and mouse (PLAT-139) each land in
-    // their own task, and a capability advertised before its implementation exists is the silent
-    // no-op the contract forbids. Exact keyboard state is conditional on a successful Kitty
-    // probe, so its service and flag must agree rather than being hard-coded here.
+    // Not an aspiration: mouse (PLAT-139) lands in its own task, and a capability advertised
+    // before its implementation exists is the silent no-op the contract forbids. Exact keyboard
+    // state is conditional on a successful Kitty probe; the synthetic PLAT-138 service may exist
+    // while that quality flag is false, as IPlatformKeyboard's contract explicitly requires.
     //
     // Surface presentation is the exception, and conditionally: it is implemented (PLAT-132), so
     // it is true exactly when standard output really is a terminal and false otherwise. Asserting
@@ -74,7 +74,10 @@ TEST(TerminalPlatformTest, OnlyTheCapabilitiesWhoseTasksHaveLandedAreAdvertised)
     const PlatformCapabilities capabilities = platform->GetCapabilities();
 
     EXPECT_EQ(capabilities.surfacePresentation, isatty(STDOUT_FILENO) != 0);
-    EXPECT_EQ(capabilities.exactKeyboardState, platform->GetKeyboard() != nullptr);
+    if (capabilities.exactKeyboardState)
+    {
+        EXPECT_NE(platform->GetKeyboard(), nullptr);
+    }
 
     for (const PlatformCapability capability : AllCapabilities())
     {

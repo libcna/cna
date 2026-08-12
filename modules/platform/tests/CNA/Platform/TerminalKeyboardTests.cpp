@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// PLAT-137: the exact terminal-keyboard path. Every interesting test owns a pseudo-terminal, so
-// the protocol is exercised in CI where the test process itself has no tty.
+// PLAT-137/138: exact and timed-fallback terminal keyboard paths. Every interesting test owns a
+// pseudo-terminal, so both protocols are exercised in CI where the test process itself has no tty.
 
 #include "../../../src/Terminal/TerminalKeyboard.hpp"
 #include "../../../src/Terminal/TerminalPlatform.hpp"
@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -80,6 +81,11 @@ TEST(TerminalKeyboardTest, FunctionalAndModifierKeysUseKittysPrivateUseTable)
     ASSERT_TRUE(DecodeKittyKeyEvent("\x1b[57441;2:1u", event));
     EXPECT_EQ(event.keycode, KeyCode::LeftShift);
     EXPECT_EQ(event.scancode, Scancode::LeftShift);
+
+    ASSERT_TRUE(DecodeKittyKeyEvent("\x1b[57376;1:1u", event));
+    EXPECT_EQ(event.keycode, KeyCode::F13);
+    EXPECT_EQ(event.scancode, Scancode::F13)
+        << "HID leaves a gap between F12 and F13";
 }
 
 TEST(TerminalKeyboardTest, KeypadKeysKeepTheirVirtualAndPhysicalIdentities)
@@ -102,6 +108,172 @@ TEST(TerminalKeyboardTest, MalformedInputIsRejectedWithoutTouchingTheOutput)
     EXPECT_EQ(event.keycode, KeyCode::F24);
     EXPECT_FALSE(DecodeKittyKeyEvent("\x1b[119;1:9u", event));
     EXPECT_EQ(event.keycode, KeyCode::F24);
+}
+
+TEST(TerminalKeyboardTest, LegacyInputDecodesAsciiControlNavigationAndFunctionKeys)
+{
+    KeyEvent event;
+    ASSERT_TRUE(DecodeLegacyKeyEvent("w", event));
+    EXPECT_EQ(event.keycode, KeyCode::W);
+    EXPECT_EQ(event.scancode, Scancode::W);
+    EXPECT_EQ(event.modifiers, 0u);
+
+    ASSERT_TRUE(DecodeLegacyKeyEvent("W", event));
+    EXPECT_EQ(event.keycode, KeyCode::W);
+    EXPECT_TRUE(HasModifier(event.modifiers, KeyModifier::Shift));
+
+    ASSERT_TRUE(DecodeLegacyKeyEvent("\x17", event));
+    EXPECT_EQ(event.keycode, KeyCode::W);
+    EXPECT_TRUE(HasModifier(event.modifiers, KeyModifier::Control));
+
+    ASSERT_TRUE(DecodeLegacyKeyEvent("\b", event));
+    EXPECT_EQ(event.keycode, KeyCode::Back);
+    EXPECT_FALSE(HasModifier(event.modifiers, KeyModifier::Control));
+
+    ASSERT_TRUE(DecodeLegacyKeyEvent("\x1b[1;6A", event));
+    EXPECT_EQ(event.keycode, KeyCode::Up);
+    EXPECT_TRUE(HasModifier(event.modifiers, KeyModifier::Shift));
+    EXPECT_TRUE(HasModifier(event.modifiers, KeyModifier::Control));
+
+    ASSERT_TRUE(DecodeLegacyKeyEvent("\x1b[3~", event));
+    EXPECT_EQ(event.keycode, KeyCode::Delete);
+    ASSERT_TRUE(DecodeLegacyKeyEvent("\x1bOS", event));
+    EXPECT_EQ(event.keycode, KeyCode::F4);
+    ASSERT_TRUE(DecodeLegacyKeyEvent("\x1b[25~", event));
+    EXPECT_EQ(event.keycode, KeyCode::F13);
+    EXPECT_EQ(event.scancode, Scancode::F13);
+
+    ASSERT_TRUE(DecodeLegacyKeyEvent("\x1b" "a", event));
+    EXPECT_EQ(event.keycode, KeyCode::A);
+    EXPECT_TRUE(HasModifier(event.modifiers, KeyModifier::Alt));
+    EXPECT_FALSE(event.repeat);
+    EXPECT_TRUE(event.pressed);
+}
+
+TEST(TerminalKeyboardTest, LegacyPressGetsOneTimedSyntheticRelease)
+{
+    using namespace std::chrono_literals;
+    PseudoTerminal pty;
+    ASSERT_TRUE(pty.IsOpen());
+    auto sessions = std::make_shared<TerminalSessionController>(
+        pty.Device(), pty.Device(), /*kittyKeyboardSupported=*/false);
+    auto decoder = std::make_shared<TerminalInputDecoder>(sessions);
+    TerminalKeyboard keyboard(decoder);
+    const auto start = std::chrono::steady_clock::now();
+
+    decoder->PumpAt(start);
+    EXPECT_EQ(pty.DrainOutput().find("\x1b[>15u"), std::string::npos);
+    EXPECT_FALSE(pty.EchoIsOn());
+
+    Send(pty, "W");
+    decoder->PumpAt(start + 1ms);
+    EXPECT_TRUE(HasPressedKey(keyboard.GetSnapshot(), KeyCode::W));
+    EXPECT_TRUE(HasModifier(keyboard.GetSnapshot().modifiers, KeyModifier::Shift));
+
+    std::vector<PlatformEvent> events;
+    decoder->DrainEvents(events, 7);
+    ASSERT_EQ(events.size(), 1u);
+    const KeyEvent press = std::get<KeyEvent>(events.front());
+    EXPECT_TRUE(press.pressed);
+    EXPECT_FALSE(press.repeat);
+    EXPECT_TRUE(HasModifier(press.modifiers, KeyModifier::Shift));
+    EXPECT_EQ(press.window, 7u);
+
+    decoder->PumpAt(start + 50ms);
+    EXPECT_TRUE(HasPressedKey(keyboard.GetSnapshot(), KeyCode::W));
+    decoder->PumpAt(start + 102ms);
+    EXPECT_FALSE(HasPressedKey(keyboard.GetSnapshot(), KeyCode::W));
+    EXPECT_FALSE(HasModifier(keyboard.GetSnapshot().modifiers, KeyModifier::Shift));
+
+    events.clear();
+    decoder->DrainEvents(events, 7);
+    ASSERT_EQ(events.size(), 1u);
+    const KeyEvent release = std::get<KeyEvent>(events.front());
+    EXPECT_FALSE(release.pressed);
+    EXPECT_FALSE(release.repeat);
+    EXPECT_EQ(release.keycode, KeyCode::W);
+}
+
+TEST(TerminalKeyboardTest, LegacyRepeatRefreshesTheReleaseDeadline)
+{
+    using namespace std::chrono_literals;
+    PseudoTerminal pty;
+    ASSERT_TRUE(pty.IsOpen());
+    auto sessions = std::make_shared<TerminalSessionController>(
+        pty.Device(), pty.Device(), /*kittyKeyboardSupported=*/false);
+    auto decoder = std::make_shared<TerminalInputDecoder>(sessions);
+    const auto start = std::chrono::steady_clock::now();
+    decoder->PumpAt(start);
+    (void)pty.DrainOutput();
+
+    Send(pty, "w");
+    decoder->PumpAt(start + 1ms);
+    Send(pty, "w");
+    decoder->PumpAt(start + 80ms);
+
+    std::vector<PlatformEvent> events;
+    decoder->DrainEvents(events, 0);
+    ASSERT_EQ(events.size(), 2u);
+    EXPECT_FALSE(std::get<KeyEvent>(events[0]).repeat);
+    EXPECT_TRUE(std::get<KeyEvent>(events[1]).repeat);
+
+    decoder->PumpAt(start + 150ms);
+    EXPECT_TRUE(HasPressedKey(decoder->GetSnapshot(), KeyCode::W));
+    decoder->PumpAt(start + 181ms);
+    EXPECT_FALSE(HasPressedKey(decoder->GetSnapshot(), KeyCode::W));
+}
+
+TEST(TerminalKeyboardTest, SplitEscapeSequenceWinsOverTheStandaloneEscapeTimeout)
+{
+    using namespace std::chrono_literals;
+    PseudoTerminal pty;
+    ASSERT_TRUE(pty.IsOpen());
+    auto sessions = std::make_shared<TerminalSessionController>(
+        pty.Device(), pty.Device(), /*kittyKeyboardSupported=*/false);
+    auto decoder = std::make_shared<TerminalInputDecoder>(sessions);
+    const auto start = std::chrono::steady_clock::now();
+    decoder->PumpAt(start);
+    (void)pty.DrainOutput();
+
+    Send(pty, "\x1b");
+    decoder->PumpAt(start + 1ms);
+    EXPECT_FALSE(HasPressedKey(decoder->GetSnapshot(), KeyCode::Escape));
+    Send(pty, "[A");
+    decoder->PumpAt(start + 10ms);
+    EXPECT_TRUE(HasPressedKey(decoder->GetSnapshot(), KeyCode::Up));
+
+    std::vector<PlatformEvent> events;
+    decoder->DrainEvents(events, 0);
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_EQ(std::get<KeyEvent>(events.front()).keycode, KeyCode::Up);
+
+    Send(pty, "\x1b");
+    decoder->PumpAt(start + 20ms);
+    decoder->PumpAt(start + 51ms);
+    EXPECT_TRUE(HasPressedKey(decoder->GetSnapshot(), KeyCode::Escape));
+
+    events.clear();
+    decoder->DrainEvents(events, 0);
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_EQ(std::get<KeyEvent>(events.front()).keycode, KeyCode::Escape);
+}
+
+TEST(TerminalKeyboardTest, LegacySessionNeverPushesOrPopsTheKittyStack)
+{
+    PseudoTerminal pty;
+    ASSERT_TRUE(pty.IsOpen());
+    {
+        auto sessions = std::make_shared<TerminalSessionController>(
+            pty.Device(), pty.Device(), /*kittyKeyboardSupported=*/false);
+        auto decoder = std::make_shared<TerminalInputDecoder>(sessions);
+        decoder->Pump();
+        EXPECT_EQ(pty.DrainOutput().find("\x1b[>15u"), std::string::npos);
+        EXPECT_FALSE(pty.EchoIsOn());
+    }
+
+    EXPECT_TRUE(pty.EchoIsOn());
+    const std::string restored = pty.DrainOutput();
+    EXPECT_EQ(restored.find("\x1b[<u"), std::string::npos);
 }
 
 TEST(TerminalKeyboardTest, SnapshotRemainsHeldAcrossRepeatAndClearsOnlyOnRealRelease)
@@ -236,15 +408,15 @@ TEST(TerminalKeyboardTest, KeyboardAndPresenterShareTheOneProcessSession)
 }
 
 /// Answers the three capability queries while ignoring later session-control sequences.
-class KittyTerminalActor
+class KeyboardTerminalActor
 {
 public:
-    explicit KittyTerminalActor(const int controller)
-        : controller_(controller), thread_([this] { Run(); })
+    KeyboardTerminalActor(const int controller, const bool kitty)
+        : controller_(controller), kitty_(kitty), thread_([this] { Run(); })
     {
     }
 
-    ~KittyTerminalActor()
+    ~KeyboardTerminalActor()
     {
         stop_ = true;
         thread_.join();
@@ -270,7 +442,10 @@ private:
                 continue;
             }
             pending.append(bytes, static_cast<std::size_t>(count));
-            Answer(pending, "\x1b[?u", "\x1b[?15u");
+            if (kitty_)
+            {
+                Answer(pending, "\x1b[?u", "\x1b[?15u");
+            }
             Answer(pending, "\x1b[>0q", "\x1bP>|CnaKittyTest\x1b\\");
             Answer(pending, "\x1b[c", "\x1b[?62;c");
         }
@@ -288,6 +463,7 @@ private:
     }
 
     int controller_;
+    bool kitty_;
     std::atomic<bool> stop_{false};
     std::thread thread_;
 };
@@ -296,13 +472,29 @@ TEST(TerminalKeyboardTest, PlatformAdvertisesExactStateOnlyAfterKittyWasDetected
 {
     PseudoTerminal pty;
     ASSERT_TRUE(pty.IsOpen());
-    const KittyTerminalActor actor(pty.Controller());
+    const KeyboardTerminalActor actor(pty.Controller(), /*kitty=*/true);
 
     TerminalPlatform platform(pty.Device(), pty.Device());
     const PlatformCapabilities capabilities = platform.GetCapabilities();
     EXPECT_TRUE(capabilities.exactKeyboardState);
     EXPECT_NE(platform.GetKeyboard(), nullptr);
     EXPECT_TRUE(platform.GetKeyboard()->HasKeyboard());
+}
+
+TEST(TerminalKeyboardTest, PlatformProvidesFallbackWhileReportingStateAsInexact)
+{
+    PseudoTerminal pty;
+    ASSERT_TRUE(pty.IsOpen());
+    const KeyboardTerminalActor actor(pty.Controller(), /*kitty=*/false);
+
+    TerminalPlatform platform(pty.Device(), pty.Device());
+    const PlatformCapabilities capabilities = platform.GetCapabilities();
+    EXPECT_FALSE(capabilities.exactKeyboardState);
+    ASSERT_NE(platform.GetKeyboard(), nullptr);
+    EXPECT_TRUE(platform.GetKeyboard()->HasKeyboard());
+
+    platform.GetKeyboard()->Update();
+    EXPECT_FALSE(pty.EchoIsOn());
 }
 
 } // namespace

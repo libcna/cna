@@ -13,7 +13,7 @@ namespace CNA::Platform::Terminal {
     /** @brief A reason one subsystem currently needs ownership of the terminal. */
     enum class TerminalSessionUse : std::size_t
     {
-        /** @brief Exact keyboard input in raw Kitty-protocol mode. */
+        /** @brief Keyboard input in raw mode, with Kitty reporting when supported. */
         Keyboard,
         /** @brief Frame presentation on the alternate screen with the cursor hidden. */
         Presenter,
@@ -85,6 +85,12 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] int GetInputDescriptor() const { return inputDescriptor_; }
         /** @brief Gets the output descriptor. @return The descriptor frames use. */
         [[nodiscard]] int GetOutputDescriptor() const { return outputDescriptor_; }
+
+        /**
+         * @brief Gets whether keyboard leases enable the exact Kitty protocol.
+         * @return True for exact press/repeat/release input; false for the timed fallback.
+         */
+        [[nodiscard]] bool HasKittyKeyboard() const { return kittyKeyboardSupported_; }
 
         /**
          * @brief Gets a counter changed whenever rebuilding invalidates displayed contents.

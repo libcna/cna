@@ -194,7 +194,7 @@ namespace CNA::Platform::Terminal {
             outputDescriptor_, inputDescriptor_, detected.hasKittyKeyboard);
         std::shared_ptr<TerminalInputDecoder> decoder;
         std::unique_ptr<TerminalKeyboard> keyboard;
-        if (detected.hasKittyKeyboard)
+        if (detected.canQuery)
         {
             decoder = std::make_shared<TerminalInputDecoder>(sessions);
             keyboard = std::make_unique<TerminalKeyboard>(decoder);

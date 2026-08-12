@@ -80,12 +80,6 @@ namespace CNA::Platform::Terminal {
         {
             throw PlatformException("TerminalSessionController", "invalid session use");
         }
-        if (use == TerminalSessionUse::Keyboard && !kittyKeyboardSupported_)
-        {
-            throw PlatformException("TerminalSessionController",
-                                    "Kitty keyboard mode was not detected");
-        }
-
         ++uses_[Index(use)];
         try
         {
@@ -132,7 +126,7 @@ namespace CNA::Platform::Terminal {
         options.alternateScreen = presenter;
         options.hideCursor = presenter;
         options.mouseReporting = mouse;
-        options.kittyKeyboard = keyboard;
+        options.kittyKeyboard = keyboard && kittyKeyboardSupported_;
         return options;
     }
 
