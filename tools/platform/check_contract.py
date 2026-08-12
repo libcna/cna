@@ -39,6 +39,17 @@ from pathlib import Path
 CONTRACT_INCLUDE = Path("modules/platform/include")
 PROBE = Path("modules/platform/tests/CNA/Platform/ContractIsSdlFreeTests.cpp")
 
+# Headers exempt from the SDL-free probe, each for a stated reason. This list must stay tiny: it
+# is the one way a header can legitimately escape the guarantee, so an addition to it is a
+# deliberate decision that shows up in review, not an oversight.
+SDL_FREE_EXEMPT = {
+    # Entrypoint.hpp's entire job is to conditionally include <SDL3/SDL_main.h> on Android under
+    # the SDL3 platform -- that rename is what makes the app start at all. It is included by the
+    # translation unit defining main(), never by the contract's consumers, so it cannot drag SDL
+    # into anything the probe is protecting. See docs/platform-entrypoint-audit.md.
+    "CNA/Platform/Entrypoint.hpp",
+}
+
 # A declaration that needs a Doxygen block: a class/struct/enum, or a member function or field
 # declared at class scope. Deliberately narrow -- this is a lint, not a parser.
 DECLARATION = re.compile(
@@ -73,6 +84,7 @@ def check_headers(repo_root: Path) -> int:
         h.relative_to(repo_root / CONTRACT_INCLUDE).as_posix() for h in contract_headers(repo_root)
     }
     expected = {f"CNA/Platform/{p}" if not p.startswith("CNA/") else p for p in expected}
+    expected -= SDL_FREE_EXEMPT
 
     missing = sorted(expected - included)
     extra = sorted(included - expected)
@@ -88,13 +100,15 @@ def check_headers(repo_root: Path) -> int:
             print(f"  {path}", file=sys.stderr)
         return 1
 
+    extra = [path for path in extra if path not in SDL_FREE_EXEMPT]
     if extra:
         print(f"error: the probe includes {len(extra)} header(s) that no longer exist:", file=sys.stderr)
         for path in extra:
             print(f"  {path}", file=sys.stderr)
         return 1
 
-    print(f"headers: all {len(expected)} contract headers are covered by the SDL-free probe.")
+    print(f"headers: all {len(expected)} contract headers are covered by the SDL-free probe "
+          f"({len(SDL_FREE_EXEMPT)} exempt, see SDL_FREE_EXEMPT).")
     return 0
 
 

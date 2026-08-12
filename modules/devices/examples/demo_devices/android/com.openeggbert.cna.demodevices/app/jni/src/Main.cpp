@@ -1,12 +1,11 @@
-#include <SDL3/SDL_main.h>
+#include "CNA/Platform/Entrypoint.hpp"
 
 #include "DevicesDemo.hpp"
 
-// plan_devices.md Task DEVICES-0125/0126: on Android, SDL's SDLActivity.java
-// looks up a symbol literally named SDL_main via dlsym() -- <SDL3/SDL_main.h>
-// #defines main to SDL_main when SDL_PLATFORM_ANDROID is set (SDL_MAIN_NEEDED),
-// so this plain main() below becomes the exported SDL_main() Android needs.
-// A no-op on desktop platforms, where this redirection doesn't apply.
+// plan_devices.md Task DEVICES-0125/0126 originally included <SDL3/SDL_main.h> directly here.
+// plan_platform.md PLAT-54 replaced that with CNA/Platform/Entrypoint.hpp, which owns the
+// rationale and the platform gating; this file no longer needs to know that Android's entry
+// point works by dlsym-ing a symbol named SDL_main.
 int main(int argc, char* argv[])
 {
     (void)argc;
