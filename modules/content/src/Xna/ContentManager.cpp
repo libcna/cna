@@ -2062,6 +2062,19 @@ namespace Microsoft::Xna::Framework::Content
             // effect below via ApplyPunctualLightsEXT, for whichever ones implement IEffectLights.
             LightReportEXT lightReport;
             const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data, lightReport);
+            // plan_gltf.md GLTF-242: how many lights actually reached the effects, always -- not
+            // only when something was dropped. `PbrEffect` defaults to zero ambient with every
+            // light disabled, which is correct XNA behaviour and renders **black**; a file that
+            // declares no light at all therefore imports perfectly and shows nothing, and "zero
+            // lights contributed" is the one line that distinguishes that from a broken import.
+            CNA::Logger::Debug(
+                "glTF file '" + path + "': " + std::to_string(punctualLights.size()) +
+                " light(s) contributed to the imported effects" +
+                (punctualLights.empty()
+                     ? " -- the file declares none, so the model renders unlit (black under "
+                       "PbrEffect's own defaults) until the application sets its own lighting."
+                     : "."));
+
             // plan_gltf.md GLTF-326: the approximation is documented, but it was not visible.
             if (lightReport.droppedLightCount > 0)
             {

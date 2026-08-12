@@ -183,6 +183,102 @@ Two consequences worth stating, because both look like bugs from the outside:
   later reader sees — including a CPU-side bounds computation. Leaving it unnormalised would make
   a heavily morphed surface light darker as its normals shrink.
 
+## The joint matrix, in both conventions
+
+`plan_gltf.md` `GLTF-251`. §3.7.3.2's own equation, written once so no reader has to reconstruct it
+from three call sites:
+
+```
+glTF (column-vector):  jointMatrix(j) = inverse(globalTransform(meshNode))
+                                      · globalTransform(joint j)
+                                      · inverseBindMatrix(j)
+
+XNA  (row-vector):     jointMatrix(j) = inverseBindMatrix(j)
+                                      * globalTransform(joint j)
+                                      * inverse(globalTransform(meshNode))
+```
+
+The two are the same transform: XNA's row-vector convention applies the *left* operand first, so
+the order is reversed term for term. `BuildSkeleton` produces the second form.
+
+Three properties of that equation are load-bearing, and each was a defect when it was missing:
+
+* **`globalTransform(joint)` is the joint's full scene ancestry**, not its position within the
+  skin's joint list. A transform on an armature node *above* the joints is part of it. Dropping it
+  while keeping the file's own `inverseBindMatrices` — which do include it — leaves every skinned
+  vertex multiplied by the inverse of what was lost (`D8`, `GLTF-245`).
+* **`inverse(globalTransform(meshNode))` cancels the skinned mesh node's own placement.** glTF
+  requires a skinned mesh to be placed by its joints alone, so the term exists precisely to undo
+  the node transform rather than to ignore it (`GLTF-247`).
+* **`skin.skeleton` is a hint, never a traversal stop.** It names a convenient common root for the
+  joints; walking only as far as it drops any ancestor above it (`GLTF-249`).
+
+## Morphing happens on the CPU
+
+`plan_gltf.md` `GLTF-285`. A morph target is a per-vertex delta array, and CNA applies the weighted
+sum **on the CPU**, re-uploading the whole vertex buffer through `SetDataRaw` whenever the weights
+change. The decision and its cost, recorded together:
+
+* **Why.** It works on every renderer, unchanged — including the ones with no compute path and no
+  vertex-texture fetch, which is most of the 46. A GPU implementation would need per-renderer
+  shader work and a delta-texture or storage-buffer path, i.e. one implementation per backend.
+* **What it costs.** One full vertex-buffer upload per weight change, per morphed primitive. For a
+  face rig driven every frame that is the dominant cost of the feature, and it scales with the
+  mesh rather than with the number of targets.
+* **What it buys beyond portability.** The blended buffer is what *everything* sees, not just the
+  draw — a CPU-side bounds computation, a picking ray, a `.cnj` re-export. A GPU blend would leave
+  all of those reading the rest pose.
+* **Status.** GPU morphing is explicitly **GLTF ROBUST**, not a gap in CORE conformance: the
+  rendered result is identical, only the path differs.
+
+## Which effect a primitive gets
+
+`plan_gltf.md` `GLTF-215`/`GLTF-240`. The rule is the **material model the file declares**, never
+which texture maps happen to be present — that earlier rule was `D7`, and it downgraded a
+factor-only metallic-roughness material to an untextured white `BasicEffect`.
+
+| The file says | Effect | Stride |
+|---|---|---|
+| metallic-roughness (including *no material at all*, and a material omitting `pbrMetallicRoughness`) | `PbrEffect` | 48 |
+| …and the primitive is skinned | `SkinnedPbrEffect` | 68 |
+| `KHR_materials_unlit` or `KHR_materials_pbrSpecularGlossiness` | `BasicEffect` | 32 |
+| …and the primitive is skinned | `SkinnedEffect` | 52 |
+| a non-PBR model with **both** a base-colour and an occlusion map | `DualTextureEffect` | 20 |
+| any material, when the primitive carries `COLOR_0` | `BasicEffect`/`SkinnedEffect` | 24 / 56 |
+
+Metallic-roughness is glTF's default in two separate ways, so most files take the first row.
+`BasicEffect` and `SkinnedEffect` stay reachable for the content that genuinely is not PBR, and
+`mat-unlit`/`skin-unlit` in the corpus are exactly that case — with byte-exact vertex goldens, so
+"still reachable" is a tested property rather than an intention.
+
+The last row is a documented downgrade rather than a choice: no CNA vertex layout carries a colour
+alongside a tangent and no PBR shader reads a colour stream, so a vertex-coloured PBR material
+keeps its colours and loses its material, and both loaders say so by name (`GLTF-241`).
+
+## Lighting: what an imported model looks like with no lights
+
+`plan_gltf.md` `GLTF-242`/`GLTF-243`. `PbrEffect` defaults to **zero ambient with every light
+disabled**, which is correct XNA behaviour — XNA's stock effects light nothing until the
+application says so — and it means a glTF file that declares no light imports perfectly and renders
+**black**. That is not a bug and the defaults are deliberately unchanged; what would be a bug is
+being unable to tell it apart from a broken import, so both loaders report how many lights
+contributed, including when the answer is zero.
+
+`KHR_lights_punctual` is imported as **up to three directional lights**, because that is XNA's
+whole lighting model. A point or spot light becomes a directional one aimed at the scene origin, a
+spot's cone is lost, a fourth light is dropped, and an out-of-gamut `color × intensity` is clamped.
+Every one of those is counted and reported (`GLTF-326`).
+
+### The IBL boundary, stated once
+
+CNA has **no image-based lighting and no tone mapping**. glTF's own sample renderings use an
+environment map and an ACES-style tone curve, so a CNA render of the same file will differ from
+them in overall brightness and in every specular highlight — and that difference is **not a
+conformance failure**. What conformance means here is the material's *parameters* reaching the
+shader correctly (asserted at L6) and the BRDF's own terms matching Appendix B (`GLTF-235`); what
+it does not mean is matching a renderer that solves a different lighting integral. A future IBL
+pass would change the picture without changing anything this campaign asserts.
+
 ## Where this leaves `unitScale`
 
 glTF §3.4 says one unit is one metre. XNA says nothing at all, so there is no conversion to apply at
