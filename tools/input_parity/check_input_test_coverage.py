@@ -42,15 +42,10 @@ KNOWN_COVERED_ELSEWHERE = {
     "Keys": "KeyboardInputTests.cpp (exhaustive Keys value table, INPUT-KBD-001)",
     # Internal singletons/seams: verified but with no same-named suite (they are the substrate every
     # bridge/reset test drives, not a value type to test in isolation).
-    "InputManager": "InputResetTests / SdlInputBridge* / SdlGamepadBackendTests (no same-named suite by design)",
-    "ISdlGamepadBackend": "SdlGamepadBackendTests.cpp via the FakeSdlGamepadBackend seam",
-    "GamePadAxis": "SdlInputBridge* / InputManager gamepad tests (internal enum)",
+    "InputManager": "InputResetTests / SdlInputBridge* (no same-named suite by design)",
     "MouseButton": "SdlInputBridgeMouseTests / InputManager (internal enum)",
-    # GetRawGamePadState(...) is asserted in SdlGamepadBackendTests.cpp (leftY etc.); the return value is
-    # bound with `auto`, so the type name never appears literally, but the struct is exercised.
-    "RawGamePadState": "SdlGamepadBackendTests.cpp via InputManager::GetRawGamePadState (bound as auto)",
     # INP-AUD-audit (2026-07-16): these legacy interfaces are exercised through a dedicated
-    # fake-backend-driven suite, same as ISdlGamepadBackend above -- but the suite is named after the
+    # fake-backend-driven suite, but the suite is named after the
     # concrete Fake*/CnaInput* type, not the "I"-prefixed interface, so suite_re's literal
     # `<TypeName>\w*Test` prefix match never fires. Confirmed real coverage exists for every one of
     # these before adding the exemption (not just a name collision at the same file).

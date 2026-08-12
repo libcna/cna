@@ -1,7 +1,7 @@
 # The input backend seam, mapped onto the platform contract
 
-*plan_platform.md Task PLAT-77. Written before any input migration code, so that the two
-abstractions never coexist by accident.*
+*plan_platform.md Task PLAT-77. Written before migration and updated after PLAT-77c/PLAT-82;
+historical snippets below show the seam that was removed.*
 
 `modules/input` already has an abstraction layer. It is not the platform contract, it was not
 built for platform selection, and it is 48 files — the largest remaining block of direct SDL
@@ -14,9 +14,9 @@ why it stops existing entirely.
 
 ---
 
-## 1. What the existing seam actually is
+## 1. What the pre-migration seam actually was
 
-Eight backends under `modules/input/src/Internal/`, every one of them the same shape:
+Eight backends lived under `modules/input/src/Internal/`, every one of them with the same shape:
 
 ```cpp
 class ISdlGamepadBackend
@@ -72,16 +72,16 @@ wearing new names.
 
 `InputManager` remains a pure in-process state store that makes **no SDL calls at all** — the only
 SDL symbol it reaches at runtime is an `SDL_Log` inside an `#ifdef __ANDROID__` diagnostic, and its
-header has zero SDL symbols. The compatibility bridge still writes its keyboard/mouse state there,
-but the public `Keyboard` and `Mouse` surfaces now read whole-device platform snapshots; gamepad and
-touch continue to use the store until their own Phase 5 rows land.
+header has zero SDL symbols. The compatibility bridge still writes keyboard/mouse/touch state there,
+but public `Keyboard`, `Mouse` and `GamePad` now read whole-device platform snapshots. PLAT-82 removed
+the store's mapped-gamepad fields and mutators entirely; touch remains until PLAT-86.
 
 ---
 
 ## 3. Where `IPlatformGamepad` is genuinely short
 
-`SdlGamepadBackend` exposes 33 methods; `IPlatformGamepad` has 5. Most of that difference is real
-capability rather than redundancy, and pretending otherwise would silently drop features:
+`SdlGamepadBackend` exposed 33 methods while the original `IPlatformGamepad` had 5. PLAT-77c carried
+the real capability gap into the contract before PLAT-82 deleted that backend:
 
 - **Identity beyond a name** — path, serial, firmware version, Steam handle, connection state,
   vendor/product IDs. `GamePadCapabilities` and `CNA::Input::Joysticks` surface these to games.
@@ -91,8 +91,8 @@ capability rather than redundancy, and pretending otherwise would silently drop 
 - **Outputs beyond rumble** — trigger rumble and the LED light bar.
 - **Player index** — get and set, which is how slot assignment survives a hotplug.
 
-The contract additions this implies are listed as their own tasks rather than smuggled into the
-migration commit, because each is a capability a second implementation must be able to refuse.
+Those additions are now explicit CNA-owned enums/records and refusable methods on
+`IPlatformGamepad`; no SDL type crosses the contract.
 
 ---
 
@@ -174,7 +174,8 @@ same change as the joystick migration, not after it.
 2. `SdlInputBridge` → `PlatformEvent` (**PLAT-78**, complete), followed by `Game`'s platform-batch
    event loop (**PLAT-47**, complete).
 3. The four deletions (§2), each re-pointing its XNA-side caller at the platform service.
-4. `SdlGamepadBackend` and `SdlJoystickBackend` replacement.
+4. `SdlGamepadBackend` replacement (**complete, PLAT-82**), followed by the distinct
+   `SdlJoystickBackend` replacement (PLAT-83).
 5. `SdlHapticBackend`'s effect model, on its own design decision.
 
 The two renderer examples that call `InputManager::SetKeyState` directly

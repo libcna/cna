@@ -9,9 +9,8 @@
 // Internal (CNA) seam over the SDL3 haptic (force-feedback) C API used by CNA::Input::Haptics /
 // HapticDevice.
 //
-// Unlike ISdlGamepadBackend/ISdlJoystickBackend, this seam has no hot-plug lifecycle owned by
-// SdlInputBridge: a HapticDevice is opened and closed explicitly by the caller (RAII), mirroring
-// MouseCursor rather than the always-open gamepad/joystick registries.
+// Unlike IPlatformGamepad/ISdlJoystickBackend, this seam has no hot-plug lifecycle owned by
+// SdlInputBridge: a HapticDevice is opened and closed explicitly by the caller (RAII).
 //
 // This exists ONLY so haptic runtime behavior (enumeration, capabilities, effect building, rumble)
 // can be unit-tested without real force-feedback hardware: tests inject a fake implementation. It is

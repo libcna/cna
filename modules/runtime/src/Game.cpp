@@ -3,7 +3,6 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
-#include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
@@ -202,6 +201,7 @@ namespace Microsoft::Xna::Framework
           graphicsDeviceManager_(nullptr),
           currentAdapter_(nullptr),
           hasInitialized_(false),
+          gamepadSubsystemAcquired_(false),
           suppressDraw_(false),
           isDisposed_(false),
           forceElapsedTimeToZero_(false),
@@ -740,11 +740,14 @@ namespace Microsoft::Xna::Framework
                 }
             }
 
-            // P8-002: mirrors FNA's ProgramExit, which quits SDL_INIT_VIDEO | SDL_INIT_GAMEPAD
-            // together. GraphicsDevice::Dispose (above) already quit SDL_INIT_VIDEO; this is the
-            // SDL_INIT_GAMEPAD counterpart, since that subsystem is Input's own responsibility
-            // (DoInitialize() below is the matching startup call).
-            CNA::Internal::Input::SdlInputBridge::ShutdownGamepadSubsystem();
+        }
+
+        // This is an unmanaged platform reference owned by Game itself, so the destructor's
+        // Dispose(false) path must release it just as surely as an explicit Dispose().
+        if (gamepadSubsystemAcquired_)
+        {
+            platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Gamepad);
+            gamepadSubsystemAcquired_ = false;
         }
 
         isDisposed_ = true;
@@ -768,13 +771,14 @@ namespace Microsoft::Xna::Framework
             graphicsDeviceManager_->CreateDevice();
         }
 
-        // Startup invariant: initialize the SDL gamepad subsystem here — DoInitialize() runs once,
-        // before the first event pump and before the first Update() (via both Run() and
-        // RunOneFrame()). This makes gamepads that were already connected before the first frame get
-        // enumerated by SDL (which queues SDL_EVENT_GAMEPAD_ADDED for each), so they are visible to
-        // GamePad::GetState from frame one. The SDL-backed input services retain a lazy fallback
-        // for callers that use them without going through Game's loop.
-        CNA::Internal::Input::SdlInputBridge::EnsureGamepadSubsystemInitialized();
+        // The game owns this subsystem reference, but not its implementation. SDL3 maps it to
+        // SDL_INIT_GAMEPAD; a future platform can make it a no-op or provide a different lifetime.
+        // Acquiring before the first event pump makes already-connected pads visible in frame one.
+        if (platform_->GetGamepad() != nullptr)
+        {
+            platform_->AcquireSubsystem(CNA::Platform::PlatformSubsystem::Gamepad);
+            gamepadSubsystemAcquired_ = true;
+        }
 
         Initialize();
 
@@ -1081,6 +1085,10 @@ namespace Microsoft::Xna::Framework
         if (CNA::Platform::IPlatformMouse* mouse = platform_->GetMouse())
         {
             mouse->Update();
+        }
+        if (CNA::Platform::IPlatformGamepad* gamepad = platform_->GetGamepad())
+        {
+            gamepad->Update();
         }
     }
 

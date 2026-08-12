@@ -200,16 +200,15 @@ of the translation logic only, and are otherwise manual/hardware-gated:
 - **Real gamepad *actuation*** — a physical rumble motor spinning, real trigger haptics, a real
   sensor's live values, and genuine OS hot-plug / per-controller GUID. As of **Phase I15** the SDL
   gamepad *translation and bookkeeping* (hot-plug/slot assignment, button/axis mapping, capabilities,
-  rumble/LED/sensor support, GUID formatting) IS headless-tested via an injectable fake SDL backend
-  (`ISdlGamepadBackend` / `FakeSdlGamepadBackend`, `*FakeGamepad*` tests). What the fake cannot prove
-  is that the physical device *acts* — that stays manual/hardware-gated. See `plan_input.md`
+  rumble/LED/sensor support, GUID formatting) is headless-tested at both sides of the platform
+  contract: pure SDL mapping helpers plus a complete canned `IPlatformGamepad` drive public
+  `GamePad` without hardware. What these tests cannot prove is that the physical device *acts* —
+  that stays manual/hardware-gated. See `plan_input.md`
   (Phase I15) and `docs/input-manual-verification-results.md`.
   - **Startup invariant:** the SDL gamepad subsystem is initialized explicitly in
-    `Game::DoInitialize()` — once, before the first event pump and the first `Update()` — via
-    `SdlInputBridge::EnsureGamepadSubsystemInitialized()`, with a defensive lazy call still in
-    `SdlInputBridge::ProcessEvent()`. So gamepads connected before the first frame are enumerated
-    from startup (the fake test `SdlGamepadSubsystemInit.*` checks the idempotent init primitive;
-    the pre-connected-visibility path is covered by `FakeGamepadTest.PadConnectedBeforeFirstFrame*`).
+    `Game::DoInitialize()` — before the first event pump and snapshot update — through
+    `IPlatform::AcquireSubsystem(Gamepad)`. The matching reference is released by explicit disposal
+    or the destructor, and `Sdl3Gamepad::Update()` enumerates pre-connected devices in frame one.
 - **IME / composition** — real `TextEditing` composition, cursor, and selection over a physical IME.
 - **Wayland OS-cursor landing** — `SDL_GetGlobalMouseState` is compositor-restricted, so the absolute
   landing pixel of `Mouse::SetPosition` is only readable under X11.

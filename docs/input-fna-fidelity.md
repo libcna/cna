@@ -161,19 +161,17 @@ self-move-assignment guard now covered by a regression test.
 half of the SDL stick range by **32768** while the positive half used 32767. FNA divides the **whole** range
 by 32767 (`SDL3_FNAPlatform.cs:1814-1822`: `axis / 32767`, `axis / -32767` for Y). The endpoints agreed
 (both give ±1 after clamping) but every non-endpoint negative sample diverged (e.g. `-16384` → `-0.5` in CNA
-vs FNA's `-0.50001`). Now `normalize_stick_axis` = `clamp(value / 32767, -1, 1)` for the full range —
-byte-identical to FNA. Pinned by `StickAxisNormalizationMatchesFnaDivisor`.
+vs FNA's `-0.50001`). `NormalizeGamepadAxis` now applies `clamp(value / 32767, -1, 1)` for the
+full range — byte-identical to FNA and shared by event and snapshot translation. Pinned by
+`Sdl3EventMapperTests.GamepadAxesMapToCnaVocabularyAndBridgeNumerics`.
 
 **Real bugs fixed in Phase I13/I14:**
-- **`SDL_INIT_GAMEPAD` was never initialized** → no gamepad events were ever delivered. The gamepad
-  subsystem is now initialized (idempotently, with the background-events hint) via
-  `SdlInputBridge::EnsureGamepadSubsystemInitialized()`, so hot-plugged **and** already-connected pads
-  become visible (tasks 907/908).
-  - **Startup invariant:** `Game::DoInitialize()` calls it explicitly **once**, right after the
-    graphics device is created and **before the first event pump and the first `Update()`** (both
-    `Game::Run()` and `Game::RunOneFrame()` funnel through `DoInitialize()`). So a pad connected
-    before frame one is enumerated by SDL from the start. The legacy raw-event compatibility adapter
-    also calls it lazily for native-shaped tests; production event delivery uses the platform batch.
+- **`SDL_INIT_GAMEPAD` was never initialized** → no gamepad events were ever delivered. The migration
+  now acquires `PlatformSubsystem::Gamepad` through `IPlatform` with SDL3's background-events hint
+  configured by the platform implementation, so hot-plugged **and** already-connected pads are visible.
+  - **Startup invariant:** `Game::DoInitialize()` acquires the subsystem after graphics-device
+    creation and **before the first event pump/snapshot update**; both run modes funnel through it.
+    Explicit disposal and destructor disposal release the same owned reference.
 - **`GetCapabilities` cancelled active rumble**: it probed rumble support with
   `SDL_RumbleGamepad(0,0,0)` (which *stops* vibration). Now it reads non-mutating capability
   properties (`SDL_PROP_GAMEPAD_CAP_*`), so reading capabilities no longer cancels a game's
@@ -236,15 +234,14 @@ byte-identical to FNA. Pinned by `StickAxisNormalizationMatchesFnaDivisor`.
   trigger path had no independent test — added
   `GamePadTriggersTest.NonNoneDeadZoneModeAppliesIndependentlyToBothTriggers`.
 
-**Fake-SDL unit coverage (Phase I15 — no real hardware):** an internal injectable seam
-(`ISdlGamepadBackend`, production = real SDL) lets a `FakeSdlGamepadBackend` drive the real
-`SdlInputBridge` event path in tests. Now headless-tested: pre-connected visibility, duplicate add
-(no leak/second slot), unknown remove, remove-closes-correct-handle + disconnect, `>4`
-no-free-slot, `FNA_GAMEPAD_NUM_GAMEPADS` parsing + slot limits, **all 21** `SDL_GamepadButton`
-mappings, axis Y-inversion + trigger normalization, connected/disconnected capabilities,
-rumble/trigger/LED support true/false, **reading capabilities not cancelling active rumble**,
-gyro/accel present/absent + read + graceful failure, and GUID formatting (xinput /
-vendor+product little-endian / Valve overrides).
+**Platform-contract unit coverage (Phase I15 + PLAT-82 — no real hardware):** pure SDL-edge tests
+exercise all **21** `SDL_GamepadButton` mappings, all six axes including Y inversion/endpoints and
+trigger normalisation, controller kind/model, connection/power/glyph translation and clamped motor
+conversion. A complete canned `IPlatformGamepad` then drives the real public `GamePad` surface and
+pins four-slot isolation, immutable snapshots, packet numbers, all buttons/axes/dead zones,
+capabilities, ordinary/trigger rumble, LED, gyro/accelerometer, player index, touchpad, power,
+identity and GUID formatting (xinput / vendor+product little-endian / Valve overrides). The former
+`ISdlGamepadBackend` and duplicate `InputManager` mapped-gamepad store were deleted.
 
 **Remaining gaps (real hardware / manual only — NOT a code gap):** the fake proves CNA's
 *translation and bookkeeping* are correct; it cannot prove the *physical device acts* — an actual
@@ -488,15 +485,14 @@ Input is "done" when **all** of these hold — not before:
 
 1. Full configure succeeds in a **complete** checkout (submodules + sibling repos present).
 2. All input unit tests pass.
-3. Fake-SDL / gamepad tests pass (**satisfied — Phase I15**: 20 device-level tests via the injectable
-   `ISdlGamepadBackend`). Real-hardware *actuation* remains manual-only (see above).
+3. Platform-contract gamepad tests pass (**satisfied — PLAT-82**: SDL-edge translation plus canned
+   public-surface tests). Real-hardware *actuation* remains manual-only (see above).
 4. Docs updated (this file + `input-build-and-test.md`).
 5. Intentional FNA deviations listed (this file).
 6. No stale `Status: PARTIAL` comments unless still true.
 
-Coverage is **not** claimed as "100% FNA fidelity". Phase I15 added the fake SDL gamepad layer, so
-the gamepad SDL-bound *translation/bookkeeping* paths are now headless-tested (not just audited); what
-remains is real-hardware *actuation*, which is manual-only. See `plan_input.md` for the per-task status.
+Coverage is **not** claimed as "100% FNA fidelity". Gamepad translation and public contract mapping
+are headless-tested; real-hardware *actuation* remains manual-only. See `plan_input.md` for status.
 
 ---
 

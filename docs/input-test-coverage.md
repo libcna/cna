@@ -49,17 +49,13 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 
 | Type | Header | Dedicated suite | Test files | Note |
 |------|--------|-----------------|-----------|------|
-| `GamePadAxis` | `include/CNA/Internal/Input/InputManager.hpp` | no | 4 | covered via SdlInputBridge* / InputManager gamepad tests (internal enum) |
-| `GamePadButton` | `include/CNA/Internal/Input/InputManager.hpp` | yes | 2 |  |
 | `GestureDetector` | `include/CNA/Internal/Input/GestureDetector.hpp` | yes | 4 |  |
-| `ISdlGamepadBackend` | `include/CNA/Internal/Input/SdlGamepadBackend.hpp` | no | 1 | covered via SdlGamepadBackendTests.cpp via the FakeSdlGamepadBackend seam |
 | `ISdlHapticBackend` | `include/CNA/Internal/Input/SdlHapticBackend.hpp` | no | 0 | covered via SdlHapticBackendTests.cpp (FakeHapticTest) via the FakeSdlHapticBackend seam |
 | `ISdlJoystickBackend` | `include/CNA/Internal/Input/SdlJoystickBackend.hpp` | no | 1 | covered via SdlJoystickBackendTests.cpp (FakeJoystickTest) via the FakeSdlJoystickBackend seam |
 | `ISystemDeviceBackend` | `include/CNA/Internal/Input/SystemDeviceBackend.hpp` | no | 2 | covered via InputDevicesTests.cpp (CnaInputDevicesTest) / TouchEdgeCaseTests.cpp (TouchCapabilitiesEnumerationTest) via FakeSystemDeviceBackend |
 | `ISystemMouseBackend` | `include/CNA/Internal/Input/SystemMouseBackend.hpp` | no | 1 | covered via MouseGlobalTests.cpp (MouseGlobalEXTTest) via a fake system-mouse-backend seam |
 | `ISystemPowerBackend` | `include/CNA/Internal/Input/SystemPowerBackend.hpp` | no | 1 | covered via PowerTests.cpp (CnaInputPowerTest) via a fake system-power-backend seam |
 | `ISystemSensorBackend` | `include/CNA/Internal/Input/SystemSensorBackend.hpp` | no | 1 | covered via SensorsTests.cpp (CnaInputSensorsTest) via a fake system-sensor-backend seam |
-| `InputManager` | `include/CNA/Internal/Input/InputManager.hpp` | no | 18 | covered via InputResetTests / SdlInputBridge* / SdlGamepadBackendTests (no same-named suite by design) |
+| `InputManager` | `include/CNA/Internal/Input/InputManager.hpp` | no | 18 | covered via InputResetTests / SdlInputBridge* (no same-named suite by design) |
 | `MouseButton` | `include/CNA/Internal/Input/InputManager.hpp` | no | 2 | covered via SdlInputBridgeMouseTests / InputManager (internal enum) |
-| `RawGamePadState` | `include/CNA/Internal/Input/InputManager.hpp` | no | 0 | covered via SdlGamepadBackendTests.cpp via InputManager::GetRawGamePadState (bound as auto) |
 | `SdlInputBridge` | `include/CNA/Internal/Input/SdlInputBridge.hpp` | yes | 16 |  |

@@ -7,10 +7,10 @@
 
 // Internal (CNA) seam over the SDL3 raw joystick C API used by SdlInputBridge.
 //
-// Deliberately SEPARATE from ISdlGamepadBackend: a gamepad is a *mapped* view of a joystick device
-// (button/axis semantics assigned by SDL's gamepad database), while this seam is the *raw* device —
-// arbitrary axis/button/hat/trackball counts with no semantic assignment. The same physical device
-// may be opened independently through both seams.
+// Deliberately SEPARATE from IPlatformGamepad: a gamepad is a *mapped* view of a joystick device
+// (button/axis semantics assigned by the platform's mapping database), while this seam is the *raw*
+// device — arbitrary axis/button/hat/trackball counts with no semantic assignment. The same physical
+// device may be opened independently through both views.
 //
 // This exists ONLY so joystick runtime behavior (hot-plug, capabilities, raw state) can be
 // unit-tested without real hardware: tests inject a fake implementation. It is NOT part of the XNA

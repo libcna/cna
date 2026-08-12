@@ -1,33 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
-#include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
-#include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
 namespace CNA::Internal::Input
 {
-    /// Raw gamepad values read directly from the SDL layer, before dead-zone processing.
-    struct RawGamePadState
-    {
-        bool isConnected = false;
-        Microsoft::Xna::Framework::Input::Buttons buttons =
-            static_cast<Microsoft::Xna::Framework::Input::Buttons>(0);
-        float leftX       = 0.0f;
-        float leftY       = 0.0f;
-        float rightX      = 0.0f;
-        float rightY      = 0.0f;
-        float leftTrigger  = 0.0f;
-        float rightTrigger = 0.0f;
-        int packetNumber   = 0;
-    };
-
     /**
      * @brief Internal identification of supported mouse buttons.
      */
@@ -41,54 +23,12 @@ namespace CNA::Internal::Input
     };
 
     /**
-     * @brief Internal identification of supported gamepad buttons.
-     */
-    enum class GamePadButton
-    {
-        A,
-        B,
-        X,
-        Y,
-        Back,
-        Start,
-        LeftShoulder,
-        RightShoulder,
-        LeftStick,
-        RightStick,
-        DPadUp,
-        DPadDown,
-        DPadLeft,
-        DPadRight,
-        BigButton,
-        Misc1EXT,
-        Paddle1EXT,
-        Paddle2EXT,
-        Paddle3EXT,
-        Paddle4EXT,
-        TouchPadEXT,
-    };
-
-    /**
-     * @brief Internal identification of supported gamepad axes.
-     */
-    enum class GamePadAxis
-    {
-        LeftThumbstickX,
-        LeftThumbstickY,
-        RightThumbstickX,
-        RightThumbstickY,
-        LeftTrigger,
-        RightTrigger,
-    };
-
-    /**
      * @brief Internal CNA input state manager.
      *
-     * Keeps event-accumulated compatibility state for the legacy raw bridge plus the gamepad and
-     * touch paths that have not yet completed their platform-service migrations. Public keyboard
-     * and mouse state read `IPlatformKeyboard`/`IPlatformMouse` instead.
+     * Keeps event-accumulated compatibility state for the legacy raw bridge and touch path.
+     * Public keyboard, mouse and gamepad state read their corresponding platform services instead.
      *
-     * Currently stores Mouse, basic Keyboard, basic TouchPanel and basic GamePad state.
+     * Currently stores mouse, basic keyboard and basic TouchPanel state.
      *
      * Architecturally, this is event-driven rather than poll-driven: FNA's platform layer
      * (e.g. SDL3_FNAPlatform) re-queries SDL fresh on every `Get*State()` call, while this
@@ -162,29 +102,6 @@ namespace CNA::Internal::Input
         );
 
         /**
-         * @brief Marks one gamepad player slot as connected/disconnected.
-         */
-        static void SetGamePadConnection(Microsoft::Xna::Framework::PlayerIndex playerIndex, bool isConnected);
-
-        /**
-         * @brief Updates selected gamepad button state.
-         */
-        static void SetGamePadButtonState(
-            Microsoft::Xna::Framework::PlayerIndex playerIndex,
-            GamePadButton button,
-            Microsoft::Xna::Framework::Input::ButtonState state
-        );
-
-        /**
-         * @brief Updates selected gamepad axis/trigger value.
-         */
-        static void SetGamePadAxisValue(
-            Microsoft::Xna::Framework::PlayerIndex playerIndex,
-            GamePadAxis axis,
-            float value
-        );
-
-        /**
          * @brief Returns a snapshot of current mouse state.
          */
         static Microsoft::Xna::Framework::Input::MouseState GetMouseState();
@@ -226,17 +143,7 @@ namespace CNA::Internal::Input
         static bool HasAnyTouch();
 
         /**
-         * @brief Returns raw gamepad values (no dead-zone applied) for one player.
-         *
-         * Used by GamePad::GetState() to apply dead-zone processing at the XNA layer.
-         */
-        static RawGamePadState GetRawGamePadState(
-            Microsoft::Xna::Framework::PlayerIndex playerIndex
-        );
-
-        /**
-         * @brief Test-only: resets all accumulated input state (mouse, keyboard, all gamepad
-         *        slots, touch) to defaults.
+         * @brief Test-only: resets all accumulated input state (mouse, keyboard and touch) to defaults.
          *
          * The input state is a process-wide singleton shared across the whole test binary, so
          * tests that mutate it (connect a gamepad, press keys, etc.) must reset it to avoid

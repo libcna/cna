@@ -6,10 +6,7 @@
 #include "CNA/Input/Joysticks.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
-#include "CNA/Internal/Input/SdlGamepadBackend.hpp"
 #include "CNA/Internal/Input/SdlJoystickBackend.hpp"
-#include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
-#include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
@@ -19,64 +16,19 @@
 #endif
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
 #include <string>
-#include <array>
 #include <optional>
 #include <type_traits>
 #include <unordered_map>
 
 namespace
 {
-    using CNA::Internal::Input::GamePadAxis;
-    using CNA::Internal::Input::GamePadButton;
-    using Microsoft::Xna::Framework::PlayerIndex;
     using Microsoft::Xna::Framework::Input::ButtonState;
     using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
     using Microsoft::Xna::Framework::Input::Keys;
     using SharpRuntime::charcs;
-
-    constexpr std::size_t MaxSupportedGamePads = 4;
-
-    // Mirrors FNA's GamePad.GAMEPAD_COUNT / FNA_GAMEPAD_NUM_GAMEPADS env override
-    // (GamePad.cs:34-53). FNA's comment notes that going *above* the default also
-    // requires adding more PlayerIndex names; CNA's PlayerIndex is frozen XNA API
-    // (only One-Four), so an override above MaxSupportedGamePads is clamped down.
-    // The practically useful direction — reducing/disabling gamepad tracking — works.
-    // Pure parse of the FNA_GAMEPAD_NUM_GAMEPADS value: nullptr / negative / non-numeric ->
-    // MaxSupportedGamePads; a valid non-negative value is clamped to MaxSupportedGamePads (PlayerIndex
-    // is the frozen XNA enum One-Four). Extracted so the parsing is directly unit-testable.
-    std::size_t parse_gamepad_count(const char* envValue)
-    {
-        if (envValue != nullptr)
-        {
-            try
-            {
-                const long parsed = std::stol(envValue);
-                if (parsed >= 0)
-                    return std::min(static_cast<std::size_t>(parsed), MaxSupportedGamePads);
-            }
-            catch (...)
-            {
-            }
-        }
-        return MaxSupportedGamePads;
-    }
-
-    // Test-only override for effective_gamepad_count(); nullopt means "use the cached env value".
-    // The env value is read once (cached), so tests use this to exercise 0/1/4-slot behavior.
-    std::optional<std::size_t> g_gamepadCountTestOverride;
-
-    std::size_t effective_gamepad_count()
-    {
-        if (g_gamepadCountTestOverride.has_value())
-            return g_gamepadCountTestOverride.value();
-        static const std::size_t count = parse_gamepad_count(std::getenv("FNA_GAMEPAD_NUM_GAMEPADS"));
-        return count;
-    }
 
     // Test-only override for use_scancode_mode(): nullopt means "use the cached env value".
     // Because the env value is cached once (below), tests can't toggle FNA_KEYBOARD_USE_SCANCODES
@@ -238,21 +190,8 @@ namespace
         }
     }
 
-    std::array<SDL_Gamepad*, MaxSupportedGamePads>& get_opened_gamepads()
-    {
-        static std::array<SDL_Gamepad*, MaxSupportedGamePads> openedGamePads{};
-        return openedGamePads;
-    }
-
-    std::unordered_map<SDL_JoystickID, PlayerIndex>& get_gamepad_to_player_index_map()
-    {
-        static std::unordered_map<SDL_JoystickID, PlayerIndex> gamepadToPlayerIndex;
-        return gamepadToPlayerIndex;
-    }
-
     // CNAEXT/EXT (input_noxna.md N-007): every connected raw joystick, opened for as long as it stays
-    // connected. Deliberately independent of the gamepad slot map above — a device SDL also maps as a
-    // gamepad is opened here too, so CNA::Input::Joysticks stays a complete, unmapped view.
+    // connected. Mapped gamepads are handled independently by IPlatformGamepad.
     std::unordered_map<SDL_JoystickID, SDL_Joystick*>& get_opened_joysticks()
     {
         static std::unordered_map<SDL_JoystickID, SDL_Joystick*> openedJoysticks;
@@ -264,203 +203,6 @@ namespace
         auto& opened = get_opened_joysticks();
         const auto it = opened.find(static_cast<SDL_JoystickID>(id));
         return it != opened.end() ? it->second : nullptr;
-    }
-
-    PlayerIndex slot_to_player_index(const std::size_t slot)
-    {
-        switch (slot)
-        {
-        case 0:
-            return PlayerIndex::One;
-        case 1:
-            return PlayerIndex::Two;
-        case 2:
-            return PlayerIndex::Three;
-        default:
-            return PlayerIndex::Four;
-        }
-    }
-
-    std::optional<std::size_t> try_get_slot_for_player_index(const PlayerIndex playerIndex)
-    {
-        const int slot = static_cast<int>(playerIndex);
-        if (slot < 0 || slot >= static_cast<int>(MaxSupportedGamePads))
-        {
-            return std::nullopt;
-        }
-        return static_cast<std::size_t>(slot);
-    }
-
-    std::optional<std::size_t> try_find_free_gamepad_slot()
-    {
-        const auto& openedGamePads = get_opened_gamepads();
-        const std::size_t limit = effective_gamepad_count();
-        for (std::size_t slot = 0; slot < limit; ++slot)
-        {
-            if (openedGamePads[slot] == nullptr)
-            {
-                return slot;
-            }
-        }
-        return std::nullopt;
-    }
-
-    std::optional<PlayerIndex> try_get_player_index_for_gamepad_id(const SDL_JoystickID gamePadId)
-    {
-        const auto& gamepadToPlayerIndex = get_gamepad_to_player_index_map();
-        const auto item = gamepadToPlayerIndex.find(gamePadId);
-        if (item == gamepadToPlayerIndex.end())
-        {
-            return std::nullopt;
-        }
-        return item->second;
-    }
-
-    std::optional<GamePadButton> try_convert_sdl_gamepad_button(const SDL_GamepadButton button)
-    {
-        switch (button)
-        {
-        case SDL_GAMEPAD_BUTTON_SOUTH:
-            return GamePadButton::A;
-        case SDL_GAMEPAD_BUTTON_EAST:
-            return GamePadButton::B;
-        case SDL_GAMEPAD_BUTTON_WEST:
-            return GamePadButton::X;
-        case SDL_GAMEPAD_BUTTON_NORTH:
-            return GamePadButton::Y;
-        case SDL_GAMEPAD_BUTTON_BACK:
-            return GamePadButton::Back;
-        case SDL_GAMEPAD_BUTTON_START:
-            return GamePadButton::Start;
-        case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
-            return GamePadButton::LeftShoulder;
-        case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
-            return GamePadButton::RightShoulder;
-        case SDL_GAMEPAD_BUTTON_LEFT_STICK:
-            return GamePadButton::LeftStick;
-        case SDL_GAMEPAD_BUTTON_RIGHT_STICK:
-            return GamePadButton::RightStick;
-        case SDL_GAMEPAD_BUTTON_DPAD_UP:
-            return GamePadButton::DPadUp;
-        case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
-            return GamePadButton::DPadDown;
-        case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
-            return GamePadButton::DPadLeft;
-        case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
-            return GamePadButton::DPadRight;
-        case SDL_GAMEPAD_BUTTON_GUIDE:
-            return GamePadButton::BigButton;
-        case SDL_GAMEPAD_BUTTON_MISC1:
-            return GamePadButton::Misc1EXT;
-        case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1:
-            return GamePadButton::Paddle1EXT;
-        case SDL_GAMEPAD_BUTTON_LEFT_PADDLE1:
-            return GamePadButton::Paddle2EXT;
-        case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2:
-            return GamePadButton::Paddle3EXT;
-        case SDL_GAMEPAD_BUTTON_LEFT_PADDLE2:
-            return GamePadButton::Paddle4EXT;
-        case SDL_GAMEPAD_BUTTON_TOUCHPAD:
-            return GamePadButton::TouchPadEXT;
-        default:
-            return std::nullopt;
-        }
-    }
-
-    std::optional<SDL_GamepadButton> try_convert_xna_button_to_sdl(
-        const Microsoft::Xna::Framework::Input::Buttons button)
-    {
-        using Microsoft::Xna::Framework::Input::Buttons;
-        switch (button)
-        {
-        case Buttons::A:              return SDL_GAMEPAD_BUTTON_SOUTH;
-        case Buttons::B:              return SDL_GAMEPAD_BUTTON_EAST;
-        case Buttons::X:              return SDL_GAMEPAD_BUTTON_WEST;
-        case Buttons::Y:              return SDL_GAMEPAD_BUTTON_NORTH;
-        case Buttons::Back:           return SDL_GAMEPAD_BUTTON_BACK;
-        case Buttons::Start:          return SDL_GAMEPAD_BUTTON_START;
-        case Buttons::LeftShoulder:   return SDL_GAMEPAD_BUTTON_LEFT_SHOULDER;
-        case Buttons::RightShoulder:  return SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER;
-        case Buttons::LeftStick:      return SDL_GAMEPAD_BUTTON_LEFT_STICK;
-        case Buttons::RightStick:     return SDL_GAMEPAD_BUTTON_RIGHT_STICK;
-        case Buttons::DPadUp:         return SDL_GAMEPAD_BUTTON_DPAD_UP;
-        case Buttons::DPadDown:       return SDL_GAMEPAD_BUTTON_DPAD_DOWN;
-        case Buttons::DPadLeft:       return SDL_GAMEPAD_BUTTON_DPAD_LEFT;
-        case Buttons::DPadRight:      return SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
-        case Buttons::BigButton:      return SDL_GAMEPAD_BUTTON_GUIDE;
-        case Buttons::Misc1EXT:       return SDL_GAMEPAD_BUTTON_MISC1;
-        case Buttons::Paddle1EXT:     return SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1;
-        case Buttons::Paddle2EXT:     return SDL_GAMEPAD_BUTTON_LEFT_PADDLE1;
-        case Buttons::Paddle3EXT:     return SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2;
-        case Buttons::Paddle4EXT:     return SDL_GAMEPAD_BUTTON_LEFT_PADDLE2;
-        case Buttons::TouchPadEXT:    return SDL_GAMEPAD_BUTTON_TOUCHPAD;
-        default:                      return std::nullopt;
-        }
-    }
-
-    CNA::Input::GamePadButtonLabelEXT sdl_button_label_to_ext(SDL_GamepadButtonLabel label)
-    {
-        using CNA::Input::GamePadButtonLabelEXT;
-        switch (label)
-        {
-        case SDL_GAMEPAD_BUTTON_LABEL_A:        return GamePadButtonLabelEXT::A;
-        case SDL_GAMEPAD_BUTTON_LABEL_B:        return GamePadButtonLabelEXT::B;
-        case SDL_GAMEPAD_BUTTON_LABEL_X:        return GamePadButtonLabelEXT::X;
-        case SDL_GAMEPAD_BUTTON_LABEL_Y:        return GamePadButtonLabelEXT::Y;
-        case SDL_GAMEPAD_BUTTON_LABEL_CROSS:    return GamePadButtonLabelEXT::Cross;
-        case SDL_GAMEPAD_BUTTON_LABEL_CIRCLE:   return GamePadButtonLabelEXT::Circle;
-        case SDL_GAMEPAD_BUTTON_LABEL_SQUARE:   return GamePadButtonLabelEXT::Square;
-        case SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE: return GamePadButtonLabelEXT::Triangle;
-        case SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN:
-        default:                                return GamePadButtonLabelEXT::Unknown;
-        }
-    }
-
-    std::optional<GamePadAxis> try_convert_sdl_gamepad_axis(const SDL_GamepadAxis axis)
-    {
-        switch (axis)
-        {
-        case SDL_GAMEPAD_AXIS_LEFTX:
-            return GamePadAxis::LeftThumbstickX;
-        case SDL_GAMEPAD_AXIS_LEFTY:
-            return GamePadAxis::LeftThumbstickY;
-        case SDL_GAMEPAD_AXIS_RIGHTX:
-            return GamePadAxis::RightThumbstickX;
-        case SDL_GAMEPAD_AXIS_RIGHTY:
-            return GamePadAxis::RightThumbstickY;
-        case SDL_GAMEPAD_AXIS_LEFT_TRIGGER:
-            return GamePadAxis::LeftTrigger;
-        case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER:
-            return GamePadAxis::RightTrigger;
-        default:
-            return std::nullopt;
-        }
-    }
-
-    float normalize_stick_axis(const Sint16 value)
-    {
-        // Match FNA exactly: it divides the whole Sint16 stick range by 32767 for both the positive
-        // (0..32767) and the negative (-32768..0) halves (SDL3_FNAPlatform.cs:1814-1822 — `axis / 32767`,
-        // and `axis / -32767` for the inverted Y). The -32768 endpoint yields -1.00003, which FNA resolves
-        // to -1.0 via GamePadThumbSticks' clamp; clamping to [-1,1] here gives the byte-identical final
-        // value. (An earlier CNA build divided the negative half by 32768, which diverged from FNA at every
-        // non-endpoint negative sample, e.g. -16384 → -0.5 instead of FNA's -0.50001.)
-        return std::clamp(static_cast<float>(value) / 32767.0f, -1.0f, 1.0f);
-    }
-
-    float normalize_trigger_axis(const Sint16 value)
-    {
-        return std::clamp(static_cast<float>(value) / 32767.0f, 0.0f, 1.0f);
-    }
-
-    // Converts a caller-supplied motor level [0,1] to SDL's 16-bit intensity, exactly as FNA does:
-    // (ushort)(Clamp(level, 0, 1) * 0xFFFF). std::clamp propagates NaN unchanged (every NaN
-    // comparison is false), and casting a NaN float to an integer is undefined behavior in C++, so
-    // map NaN to 0 first — matching C#'s well-defined (ushort)NaN == 0. +Inf clamps to 1, -Inf to 0.
-    Uint16 motor_level(const float level)
-    {
-        const float clamped = std::isnan(level) ? 0.0f : std::clamp(level, 0.0f, 1.0f);
-        return static_cast<Uint16>(clamped * 0xFFFF);
     }
 
     std::unordered_map<std::uint64_t, int>& get_finger_id_to_touch_id_map()
@@ -1018,152 +760,7 @@ namespace
 
 namespace CNA::Internal::Input
 {
-    static SDL_Gamepad* get_sdl_gamepad_for_player(const Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        const auto slot = static_cast<std::size_t>(static_cast<int>(playerIndex));
-        if (slot >= MaxSupportedGamePads)
-            return nullptr;
-        return get_opened_gamepads()[slot];
-    }
-
-    static bool read_gamepad_sensor(
-        SDL_Gamepad* gamepad,
-        const SDL_SensorType type,
-        Microsoft::Xna::Framework::Vector3& out
-    )
-    {
-        if (gamepad == nullptr)
-        {
-            out = Microsoft::Xna::Framework::Vector3::Zero;
-            return false;
-        }
-
-        if (!sdl_gamepad_backend().GamepadSensorEnabled(gamepad, type))
-        {
-            sdl_gamepad_backend().SetGamepadSensorEnabled(gamepad, type, true);
-        }
-
-        float data[3] = {};
-        if (!sdl_gamepad_backend().GetGamepadSensorData(gamepad, type, data, 3))
-        {
-            out = Microsoft::Xna::Framework::Vector3::Zero;
-            return false;
-        }
-
-        out = Microsoft::Xna::Framework::Vector3(data[0], data[1], data[2]);
-        return true;
-    }
-
-    bool SdlInputBridge::SetVibration(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex,
-        float leftMotor,
-        float rightMotor
-    )
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return false;
-        return sdl_gamepad_backend().RumbleGamepad(gamepad, motor_level(leftMotor), motor_level(rightMotor), 0);
-    }
-
-    bool SdlInputBridge::SetTriggerVibration(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex,
-        float leftTrigger,
-        float rightTrigger
-    )
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return false;
-        return sdl_gamepad_backend().RumbleGamepadTriggers(gamepad, motor_level(leftTrigger), motor_level(rightTrigger), 0);
-    }
-
-    void SdlInputBridge::SetLightBar(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex,
-        Microsoft::Xna::Framework::Color color
-    )
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return;
-        sdl_gamepad_backend().SetGamepadLED(gamepad, color.getRProperty(), color.getGProperty(), color.getBProperty());
-    }
-
-    std::string SdlInputBridge::FormatGamePadGUIDEXT(const std::uint16_t vendor, const std::uint16_t product)
-    {
-        // FNA's GetGamePadGUID format (SDL3_FNAPlatform.cs:2176-2191): "xinput" for a device that
-        // reports no USB vendor/product (XInput on Windows), otherwise the vendor then product
-        // 16-bit IDs as 8 lowercase hex chars, each little-endian (low byte first).
-        if (vendor == 0x0000 && product == 0x0000)
-            return "xinput";
-        char buf[9];
-        std::snprintf(buf, sizeof(buf), "%02x%02x%02x%02x",
-                      vendor & 0xFF, (vendor >> 8) & 0xFF,
-                      product & 0xFF, (product >> 8) & 0xFF);
-        return std::string(buf);
-    }
-
-    std::string SdlInputBridge::GetGUID(Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return "";
-        SDL_Joystick* joystick = sdl_gamepad_backend().GetGamepadJoystick(gamepad);
-        if (joystick == nullptr)
-            return "";
-
-        const std::uint16_t vendor  = sdl_gamepad_backend().GetJoystickVendor(joystick);
-        const std::uint16_t product = sdl_gamepad_backend().GetJoystickProduct(joystick);
-        std::string guid = FormatGamePadGUIDEXT(vendor, product);
-
-        // Valve controllers report the Steam vendor id (0x28de); FNA remaps the re-exposed
-        // controller types to fixed GUIDs (SDL3_FNAPlatform.cs:2193-2210).
-        if (vendor == 0x28de)
-        {
-            const SDL_GamepadType type = sdl_gamepad_backend().GetGamepadType(gamepad);
-            if (type == SDL_GAMEPAD_TYPE_XBOX360 || type == SDL_GAMEPAD_TYPE_XBOXONE)
-                guid = "xinput";
-            else if (type == SDL_GAMEPAD_TYPE_PS4)
-                guid = "4c05c405";
-            else if (type == SDL_GAMEPAD_TYPE_PS5)
-                guid = "4c05e60c";
-        }
-        return guid;
-    }
-
-    bool SdlInputBridge::GetGyro(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex,
-        Microsoft::Xna::Framework::Vector3& gyro
-    )
-    {
-        return read_gamepad_sensor(get_sdl_gamepad_for_player(playerIndex), SDL_SENSOR_GYRO, gyro);
-    }
-
-    bool SdlInputBridge::GetAccelerometer(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex,
-        Microsoft::Xna::Framework::Vector3& accel
-    )
-    {
-        return read_gamepad_sensor(get_sdl_gamepad_for_player(playerIndex), SDL_SENSOR_ACCEL, accel);
-    }
-
-    int SdlInputBridge::GetPlayerIndex(Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return -1;
-        return sdl_gamepad_backend().GetGamepadPlayerIndex(gamepad);
-    }
-
-    bool SdlInputBridge::SetPlayerIndex(Microsoft::Xna::Framework::PlayerIndex playerIndex, int index)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return false;
-        return sdl_gamepad_backend().SetGamepadPlayerIndex(gamepad, index);
-    }
-
-    static CNA::Input::PowerStateEXT sdl_power_state_to_ext(SDL_PowerState state)
+    static CNA::Input::PowerStateEXT sdl_power_state_to_ext(const SDL_PowerState state)
     {
         using CNA::Input::PowerStateEXT;
         switch (state)
@@ -1178,132 +775,7 @@ namespace CNA::Internal::Input
         }
     }
 
-    CNA::Input::PowerStateEXT SdlInputBridge::GetPowerInfo(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex, int& percent)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-        {
-            percent = -1;
-            return CNA::Input::PowerStateEXT::Error;
-        }
-        percent = -1;
-        return sdl_power_state_to_ext(sdl_gamepad_backend().GetGamepadPowerInfo(gamepad, &percent));
-    }
-
-    CNA::Input::GamePadButtonLabelEXT SdlInputBridge::GetButtonLabel(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex,
-        Microsoft::Xna::Framework::Input::Buttons button)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return CNA::Input::GamePadButtonLabelEXT::Unknown;
-        const std::optional<SDL_GamepadButton> sdlButton = try_convert_xna_button_to_sdl(button);
-        if (!sdlButton.has_value())
-            return CNA::Input::GamePadButtonLabelEXT::Unknown;
-        return sdl_button_label_to_ext(sdl_gamepad_backend().GetGamepadButtonLabel(gamepad, *sdlButton));
-    }
-
-    std::string SdlInputBridge::GetName(Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        return gamepad ? sdl_gamepad_backend().GetGamepadName(gamepad) : std::string();
-    }
-
-    std::string SdlInputBridge::GetPath(Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        return gamepad ? sdl_gamepad_backend().GetGamepadPath(gamepad) : std::string();
-    }
-
-    std::string SdlInputBridge::GetSerial(Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        return gamepad ? sdl_gamepad_backend().GetGamepadSerial(gamepad) : std::string();
-    }
-
-    std::uint16_t SdlInputBridge::GetFirmwareVersion(Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        return gamepad ? sdl_gamepad_backend().GetGamepadFirmwareVersion(gamepad) : 0;
-    }
-
-    std::uint64_t SdlInputBridge::GetSteamHandle(Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        return gamepad ? sdl_gamepad_backend().GetGamepadSteamHandle(gamepad) : 0;
-    }
-
-    static CNA::Input::GamePadConnectionStateEXT sdl_connection_state_to_ext(SDL_JoystickConnectionState state)
-    {
-        using CNA::Input::GamePadConnectionStateEXT;
-        switch (state)
-        {
-        case SDL_JOYSTICK_CONNECTION_WIRED:    return GamePadConnectionStateEXT::Wired;
-        case SDL_JOYSTICK_CONNECTION_WIRELESS: return GamePadConnectionStateEXT::Wireless;
-        case SDL_JOYSTICK_CONNECTION_INVALID:
-        case SDL_JOYSTICK_CONNECTION_UNKNOWN:
-        default:                               return GamePadConnectionStateEXT::Unknown;
-        }
-    }
-
-    CNA::Input::GamePadConnectionStateEXT SdlInputBridge::GetConnectionState(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return CNA::Input::GamePadConnectionStateEXT::Unknown;
-        return sdl_connection_state_to_ext(sdl_gamepad_backend().GetGamepadConnectionState(gamepad));
-    }
-
-    int SdlInputBridge::GetTouchpadCount(Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        return gamepad ? sdl_gamepad_backend().GetNumGamepadTouchpads(gamepad) : 0;
-    }
-
-    int SdlInputBridge::GetTouchpadFingerCount(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex, int touchpad)
-    {
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        return gamepad ? sdl_gamepad_backend().GetNumGamepadTouchpadFingers(gamepad, touchpad) : 0;
-    }
-
-    bool SdlInputBridge::GetTouchpadFinger(
-        Microsoft::Xna::Framework::PlayerIndex playerIndex, int touchpad, int finger,
-        bool& down, float& x, float& y, float& pressure)
-    {
-        down = false;
-        x = 0.0f;
-        y = 0.0f;
-        pressure = 0.0f;
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return false;
-        return sdl_gamepad_backend().GetGamepadTouchpadFinger(gamepad, touchpad, finger,
-                                                              &down, &x, &y, &pressure);
-    }
-
-    static Microsoft::Xna::Framework::Input::GamePadType sdl_joystick_type_to_gamepad_type(SDL_JoystickType t)
-    {
-        using Microsoft::Xna::Framework::Input::GamePadType;
-        switch (t)
-        {
-        case SDL_JOYSTICK_TYPE_GAMEPAD:      return GamePadType::GamePad;
-        case SDL_JOYSTICK_TYPE_WHEEL:        return GamePadType::Wheel;
-        case SDL_JOYSTICK_TYPE_ARCADE_STICK: return GamePadType::ArcadeStick;
-        case SDL_JOYSTICK_TYPE_FLIGHT_STICK: return GamePadType::FlightStick;
-        case SDL_JOYSTICK_TYPE_DANCE_PAD:    return GamePadType::DancePad;
-        case SDL_JOYSTICK_TYPE_GUITAR:       return GamePadType::Guitar;
-        case SDL_JOYSTICK_TYPE_DRUM_KIT:     return GamePadType::DrumKit;
-        case SDL_JOYSTICK_TYPE_ARCADE_PAD:   return GamePadType::BigButtonPad;
-        default:                             return GamePadType::Unknown;
-        }
-    }
-
-    // CNAEXT/EXT (input_noxna.md N-007): SDL_JoystickType -> the raw-joystick CNA::Input enum. Distinct
-    // from sdl_joystick_type_to_gamepad_type above (that one maps into XNA's GamePadType for mapped
-    // pads; this one is the unmapped CNA::Input::Joysticks surface).
+    // CNAEXT/EXT (input_noxna.md N-007): SDL_JoystickType -> the raw-joystick CNA::Input enum.
     static CNA::Input::JoystickTypeEXT sdl_joystick_type_to_ext(SDL_JoystickType t)
     {
         using CNA::Input::JoystickTypeEXT;
@@ -1338,80 +810,6 @@ namespace CNA::Internal::Input
         case SDL_HAT_LEFTDOWN:  return JoystickHatPositionEXT::LeftDown;
         default:                return JoystickHatPositionEXT::Centered;
         }
-    }
-
-    Microsoft::Xna::Framework::Input::GamePadCapabilities
-    SdlInputBridge::GetCapabilities(Microsoft::Xna::Framework::PlayerIndex playerIndex)
-    {
-        using Microsoft::Xna::Framework::Input::GamePadCapabilities;
-
-        SDL_Gamepad* gamepad = get_sdl_gamepad_for_player(playerIndex);
-        if (gamepad == nullptr)
-            return GamePadCapabilities{};
-
-        GamePadCapabilities caps{};
-        caps.setIsConnectedProperty(true);
-
-        // Joystick type → GamePadType
-        SDL_Joystick* joystick = sdl_gamepad_backend().GetGamepadJoystick(gamepad);
-        if (joystick != nullptr)
-            caps.setGamePadTypeProperty(sdl_joystick_type_to_gamepad_type(sdl_gamepad_backend().GetJoystickType(joystick)));
-
-        // Buttons
-        caps.setHasAButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_SOUTH));
-        caps.setHasBButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_EAST));
-        caps.setHasXButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_WEST));
-        caps.setHasYButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_NORTH));
-        caps.setHasBackButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_BACK));
-        caps.setHasBigButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_GUIDE));
-        caps.setHasStartButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_START));
-        caps.setHasLeftStickButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_LEFT_STICK));
-        caps.setHasRightStickButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_RIGHT_STICK));
-        caps.setHasLeftShoulderButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_LEFT_SHOULDER));
-        caps.setHasRightShoulderButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER));
-        caps.setHasDPadUpButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_DPAD_UP));
-        caps.setHasDPadDownButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_DPAD_DOWN));
-        caps.setHasDPadLeftButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_DPAD_LEFT));
-        caps.setHasDPadRightButtonProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_DPAD_RIGHT));
-
-        // Axes
-        caps.setHasLeftXThumbStickProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_LEFTX));
-        caps.setHasLeftYThumbStickProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_LEFTY));
-        caps.setHasRightXThumbStickProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_RIGHTX));
-        caps.setHasRightYThumbStickProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_RIGHTY));
-        caps.setHasLeftTriggerProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
-        caps.setHasRightTriggerProperty(sdl_gamepad_backend().GamepadHasAxis(gamepad,SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
-
-        // Rumble / trigger-rumble / light-bar capabilities: query the gamepad's capability
-        // PROPERTIES rather than probing. Do NOT probe with SDL_RumbleGamepad(gamepad, 0, 0, 0):
-        // a zero-magnitude rumble call STOPS any active vibration, so probing here would silently
-        // cancel a game's SetVibration every time it reads capabilities. FNA sidesteps this by
-        // caching capabilities once at connect; we instead read the non-mutating cap properties.
-        const SDL_PropertiesID props = sdl_gamepad_backend().GetGamepadProperties(gamepad);
-        const bool hasRumble = props != 0 &&
-            SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
-        caps.setHasLeftVibrationMotorProperty(hasRumble);
-        caps.setHasRightVibrationMotorProperty(hasRumble);
-
-        caps.setHasTriggerVibrationMotorsEXTProperty(props != 0 &&
-            SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_TRIGGER_RUMBLE_BOOLEAN, false));
-
-        if (props != 0)
-            caps.setHasLightBarEXTProperty(SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false));
-
-        // Extended buttons
-        caps.setHasMisc1EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_MISC1));
-        caps.setHasPaddle1EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1));
-        caps.setHasPaddle2EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_LEFT_PADDLE1));
-        caps.setHasPaddle3EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2));
-        caps.setHasPaddle4EXTProperty(sdl_gamepad_backend().GamepadHasButton(gamepad,SDL_GAMEPAD_BUTTON_LEFT_PADDLE2));
-
-        // Touchpad, gyro, accelerometer
-        caps.setHasTouchPadEXTProperty(sdl_gamepad_backend().GetNumGamepadTouchpads(gamepad) > 0);
-        caps.setHasGyroEXTProperty(sdl_gamepad_backend().GamepadHasSensor(gamepad,SDL_SENSOR_GYRO));
-        caps.setHasAccelerometerEXTProperty(sdl_gamepad_backend().GamepadHasSensor(gamepad,SDL_SENSOR_ACCEL));
-
-        return caps;
     }
 
     std::vector<CNA::Input::JoystickInfoEXT> SdlInputBridge::GetJoysticks()
@@ -1562,21 +960,6 @@ namespace CNA::Internal::Input
         g_scancodeModeTestOverride = std::nullopt;
     }
 
-    std::size_t SdlInputBridge::ParseGamepadCountForTests(const char* envValue)
-    {
-        return parse_gamepad_count(envValue);
-    }
-
-    void SdlInputBridge::SetGamepadCountForTests(const std::size_t count)
-    {
-        g_gamepadCountTestOverride = std::min(count, MaxSupportedGamePads);
-    }
-
-    void SdlInputBridge::ClearGamepadCountForTests()
-    {
-        g_gamepadCountTestOverride = std::nullopt;
-    }
-
     void SdlInputBridge::ResetForTests()
     {
         g_textInputSuppress = false;
@@ -1585,35 +968,9 @@ namespace CNA::Internal::Input
         get_finger_id_to_touch_id_map().clear();
         get_next_touch_id() = 1;
         g_scancodeModeTestOverride = std::nullopt;
-        g_gamepadCountTestOverride = std::nullopt;
-        // Clear the gamepad slot/player maps. We deliberately do NOT close the opened handles here:
-        // with the real SDL backend no gamepad is ever opened headless (these stay null/empty), and
-        // closing an app-owned handle from a test reset would be unsafe. A test using the FAKE
-        // backend closes handles through its own bookkeeping. We only drop CNA's slot maps so a
-        // synthetic add/remove test starts clean, and restore the real SDL gamepad backend.
-        get_opened_gamepads().fill(nullptr);
-        get_gamepad_to_player_index_map().clear();
-        SetSdlGamepadBackendForTests(nullptr);
-        // Same reasoning as above, for the independent raw-joystick registry (N-007).
+        // Drop the independent raw-joystick test registry (N-007) and restore its SDL backend.
         get_opened_joysticks().clear();
         SetSdlJoystickBackendForTests(nullptr);
-    }
-
-    void SdlInputBridge::EnsureGamepadSubsystemInitialized()
-    {
-        if (SDL_WasInit(SDL_INIT_GAMEPAD) & SDL_INIT_GAMEPAD)
-        {
-            return;
-        }
-        // Deliver gamepad button/axis events even when the game window is not focused, matching
-        // FNA (SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS = "1").
-        SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
-        SDL_InitSubSystem(SDL_INIT_GAMEPAD);
-    }
-
-    void SdlInputBridge::ShutdownGamepadSubsystem()
-    {
-        SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
     }
 
     void PlatformInputBridge::ProcessEvent(const CNA::Platform::PlatformEvent& event)
@@ -1674,47 +1031,6 @@ namespace CNA::Internal::Input
                         CNA::Input::InputDevices::KeyboardConnectedEXT.Invoke(platformEvent.device);
                     else
                         CNA::Input::InputDevices::KeyboardDisconnectedEXT.Invoke(platformEvent.device);
-                }
-                else if (platformEvent.kind == InputDeviceKind::Gamepad)
-                {
-                    const auto device = platformEvent.device;
-                    auto& gamepadToPlayerIndex = get_gamepad_to_player_index_map();
-                    if (platformEvent.connected)
-                    {
-                        if (!sdl_gamepad_backend().IsGamepad(device) ||
-                            gamepadToPlayerIndex.contains(device))
-                        {
-                            return;
-                        }
-                        const auto freeSlot = try_find_free_gamepad_slot();
-                        if (!freeSlot.has_value())
-                            return;
-                        auto* gamepad = sdl_gamepad_backend().OpenGamepad(device);
-                        if (gamepad == nullptr)
-                            return;
-                        const PlayerIndex playerIndex = slot_to_player_index(freeSlot.value());
-                        get_opened_gamepads()[freeSlot.value()] = gamepad;
-                        gamepadToPlayerIndex[device] = playerIndex;
-                        InputManager::SetGamePadConnection(playerIndex, true);
-                    }
-                    else
-                    {
-                        const auto playerIndex = try_get_player_index_for_gamepad_id(device);
-                        if (!playerIndex.has_value())
-                            return;
-                        if (const auto slot = try_get_slot_for_player_index(playerIndex.value());
-                            slot.has_value())
-                        {
-                            auto& opened = get_opened_gamepads()[slot.value()];
-                            if (opened != nullptr)
-                            {
-                                sdl_gamepad_backend().CloseGamepad(opened);
-                                opened = nullptr;
-                            }
-                        }
-                        gamepadToPlayerIndex.erase(device);
-                        InputManager::SetGamePadConnection(playerIndex.value(), false);
-                    }
                 }
                 else if (platformEvent.kind == InputDeviceKind::Joystick)
                 {
@@ -1816,70 +1132,11 @@ namespace CNA::Internal::Input
                 if (released)
                     release_touch_id_mapping(fingerId);
             }
-            else if constexpr (std::is_same_v<Event, ControllerButtonEvent>)
-            {
-                const auto playerIndex = try_get_player_index_for_gamepad_id(
-                    platformEvent.device);
-                if (!playerIndex.has_value())
-                    return;
-
-                GamePadButton button = GamePadButton::A;
-                switch (platformEvent.button)
-                {
-                case GamepadButton::A: button = GamePadButton::A; break;
-                case GamepadButton::B: button = GamePadButton::B; break;
-                case GamepadButton::X: button = GamePadButton::X; break;
-                case GamepadButton::Y: button = GamePadButton::Y; break;
-                case GamepadButton::Back: button = GamePadButton::Back; break;
-                case GamepadButton::Start: button = GamePadButton::Start; break;
-                case GamepadButton::LeftShoulder: button = GamePadButton::LeftShoulder; break;
-                case GamepadButton::RightShoulder: button = GamePadButton::RightShoulder; break;
-                case GamepadButton::LeftStick: button = GamePadButton::LeftStick; break;
-                case GamepadButton::RightStick: button = GamePadButton::RightStick; break;
-                case GamepadButton::DPadUp: button = GamePadButton::DPadUp; break;
-                case GamepadButton::DPadDown: button = GamePadButton::DPadDown; break;
-                case GamepadButton::DPadLeft: button = GamePadButton::DPadLeft; break;
-                case GamepadButton::DPadRight: button = GamePadButton::DPadRight; break;
-                case GamepadButton::BigButton: button = GamePadButton::BigButton; break;
-                case GamepadButton::Misc1: button = GamePadButton::Misc1EXT; break;
-                case GamepadButton::Paddle1: button = GamePadButton::Paddle1EXT; break;
-                case GamepadButton::Paddle2: button = GamePadButton::Paddle2EXT; break;
-                case GamepadButton::Paddle3: button = GamePadButton::Paddle3EXT; break;
-                case GamepadButton::Paddle4: button = GamePadButton::Paddle4EXT; break;
-                case GamepadButton::TouchPad: button = GamePadButton::TouchPadEXT; break;
-                }
-                InputManager::SetGamePadButtonState(
-                    playerIndex.value(), button,
-                    platformEvent.pressed ? ButtonState::Pressed : ButtonState::Released);
-            }
-            else if constexpr (std::is_same_v<Event, ControllerAxisEvent>)
-            {
-                const auto playerIndex = try_get_player_index_for_gamepad_id(
-                    platformEvent.device);
-                if (!playerIndex.has_value())
-                    return;
-
-                GamePadAxis axis = GamePadAxis::LeftThumbstickX;
-                switch (platformEvent.axis)
-                {
-                case GamepadAxis::LeftThumbstickX: axis = GamePadAxis::LeftThumbstickX; break;
-                case GamepadAxis::LeftThumbstickY: axis = GamePadAxis::LeftThumbstickY; break;
-                case GamepadAxis::RightThumbstickX: axis = GamePadAxis::RightThumbstickX; break;
-                case GamepadAxis::RightThumbstickY: axis = GamePadAxis::RightThumbstickY; break;
-                case GamepadAxis::LeftTrigger: axis = GamePadAxis::LeftTrigger; break;
-                case GamepadAxis::RightTrigger: axis = GamePadAxis::RightTrigger; break;
-                }
-                InputManager::SetGamePadAxisValue(playerIndex.value(), axis, platformEvent.value);
-            }
         }, event);
     }
 
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)
     {
-        // SDL_INIT_VIDEO does not init the gamepad subsystem; do it lazily on first event so
-        // gamepad add/remove/axis/button events flow (and already-connected pads are enumerated).
-        EnsureGamepadSubsystemInitialized();
-
 #if defined(CNA_PLATFORM_SDL3)
         CNA::Platform::PlatformEvent platformEvent;
         if (CNA::Platform::Sdl3::MapSdlEvent(event, platformEvent))
@@ -2185,67 +1442,12 @@ namespace CNA::Internal::Input
                 release_touch_id_mapping(event.tfinger.fingerID);
                 break;
             }
-        case SDL_EVENT_GAMEPAD_ADDED:
-            {
-                if (!sdl_gamepad_backend().IsGamepad(event.gdevice.which))
-                {
-                    break;
-                }
-
-                auto& gamepadToPlayerIndex = get_gamepad_to_player_index_map();
-                if (gamepadToPlayerIndex.contains(event.gdevice.which))
-                {
-                    break;
-                }
-
-                const auto freeSlot = try_find_free_gamepad_slot();
-                if (!freeSlot.has_value())
-                {
-                    break;
-                }
-
-                SDL_Gamepad* gamepad = sdl_gamepad_backend().OpenGamepad(event.gdevice.which);
-                if (gamepad == nullptr)
-                {
-                    break;
-                }
-
-                const PlayerIndex playerIndex = slot_to_player_index(freeSlot.value());
-                get_opened_gamepads()[freeSlot.value()] = gamepad;
-                gamepadToPlayerIndex[event.gdevice.which] = playerIndex;
-                InputManager::SetGamePadConnection(playerIndex, true);
-                break;
-            }
-        case SDL_EVENT_GAMEPAD_REMOVED:
-            {
-                auto& gamepadToPlayerIndex = get_gamepad_to_player_index_map();
-                const auto playerIndex = try_get_player_index_for_gamepad_id(event.gdevice.which);
-                if (!playerIndex.has_value())
-                {
-                    break;
-                }
-
-                const auto slot = try_get_slot_for_player_index(playerIndex.value());
-                if (slot.has_value())
-                {
-                    auto& openedGamePad = get_opened_gamepads()[slot.value()];
-                    if (openedGamePad != nullptr)
-                    {
-                        sdl_gamepad_backend().CloseGamepad(openedGamePad);
-                        openedGamePad = nullptr;
-                    }
-                }
-
-                gamepadToPlayerIndex.erase(event.gdevice.which);
-                InputManager::SetGamePadConnection(playerIndex.value(), false);
-                break;
-            }
         // CNAEXT/EXT (input_noxna.md N-007): raw joystick hot-plug, routed to CNA::Input::Joysticks.
-        // Every connected joystick is opened here — including devices SDL also maps as a gamepad
-        // above — so raw axis/button/hat/trackball state stays queryable independent of GamePad.
+        // Every connected joystick is opened here, including devices SDL maps as a gamepad, so
+        // raw axis/button/hat/trackball state stays independent of IPlatformGamepad polling.
         // Axis/button/hat/ball motion events need no handling: SDL's own event pump already updates
         // its internal joystick-state cache (that's what SDL_GetJoystickAxis/Button/Hat/Ball read),
-        // so GetJoystickState can poll live values on demand, exactly like the gamepad EXT getters do.
+        // so GetJoystickState can poll live values on demand.
         case SDL_EVENT_JOYSTICK_ADDED:
             {
                 auto& opened = get_opened_joysticks();
@@ -2276,66 +1478,6 @@ namespace CNA::Internal::Input
                 sdl_joystick_backend().CloseJoystick(it->second);
                 opened.erase(it);
                 CNA::Input::Joysticks::DisconnectedEXT.Invoke(static_cast<std::uint32_t>(event.jdevice.which));
-                break;
-            }
-        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-        case SDL_EVENT_GAMEPAD_BUTTON_UP:
-            {
-                const auto playerIndex = try_get_player_index_for_gamepad_id(event.gbutton.which);
-                if (!playerIndex.has_value())
-                {
-                    break;
-                }
-
-                const auto button = try_convert_sdl_gamepad_button(
-                    static_cast<SDL_GamepadButton>(event.gbutton.button)
-                );
-                if (!button.has_value())
-                {
-                    break;
-                }
-
-                const auto state = event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN
-                                       ? ButtonState::Pressed
-                                       : ButtonState::Released;
-
-                InputManager::SetGamePadButtonState(playerIndex.value(), button.value(), state);
-                break;
-            }
-        case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-            {
-                const auto playerIndex = try_get_player_index_for_gamepad_id(event.gaxis.which);
-                if (!playerIndex.has_value())
-                {
-                    break;
-                }
-
-                const auto axis = try_convert_sdl_gamepad_axis(
-                    static_cast<SDL_GamepadAxis>(event.gaxis.axis)
-                );
-                if (!axis.has_value())
-                {
-                    break;
-                }
-
-                float value = 0.0f;
-                switch (axis.value())
-                {
-                case GamePadAxis::LeftThumbstickX:
-                case GamePadAxis::RightThumbstickX:
-                    value = normalize_stick_axis(event.gaxis.value);
-                    break;
-                case GamePadAxis::LeftThumbstickY:
-                case GamePadAxis::RightThumbstickY:
-                    value = -normalize_stick_axis(event.gaxis.value);
-                    break;
-                case GamePadAxis::LeftTrigger:
-                case GamePadAxis::RightTrigger:
-                    value = normalize_trigger_axis(event.gaxis.value);
-                    break;
-                }
-
-                InputManager::SetGamePadAxisValue(playerIndex.value(), axis.value(), value);
                 break;
             }
         default:

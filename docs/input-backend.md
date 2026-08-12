@@ -29,11 +29,11 @@ accumulator; whole-device services publish one frame snapshot:
 ```
 IPlatform::PollEvents(batch)  (Game::PollEvents(), once per frame from Game::Tick())
   → CNA::Internal::Input::PlatformInputBridge::ProcessEvent(event) // visit PlatformEvent
-      → CNA::Internal::Input::InputManager::Set*State(...)      // gamepad / touch + legacy bridge compatibility
+      → CNA::Internal::Input::InputManager::Set*State(...)      // touch + legacy bridge compatibility
       → Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_On*(...)   // text input / editing
       → Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(...)
           → CNA::Internal::Input::GestureDetector::On{Pressed,Moved,Released}(...)
-  → IPlatformKeyboard::Update() / IPlatformMouse::Update()      // whole-device frame snapshots
+  → IPlatformKeyboard::Update() / IPlatformMouse::Update() / IPlatformGamepad::Update()
   → Keyboard/Mouse/GamePad/TouchPanel::GetState()   // read by game code each frame
   → Microsoft::Xna::Framework::FrameworkDispatcher::Update()
       → TouchPanel::Update() → GestureDetector::OnUpdate()   // Hold/Flick timing gestures
@@ -45,19 +45,20 @@ Three classes define the current event/state boundary:
   (`include/CNA/Internal/Input/PlatformInputBridge.hpp`) — the single production event funnel.
   It consumes CNA's SDL-free `PlatformEvent` vocabulary; native translation is performed once by
   the selected `IPlatform` implementation before the event reaches `Game`.
-- **`CNA::Internal::Input::SdlInputBridge`** retains the still-unmigrated SDL device/query
-  services (`SetVibration`, `GetGUID`, capability queries, etc.). Its raw `ProcessEvent` overload
-  is only a compatibility adapter for legacy SDL-shaped tests and delegates to the platform bridge
-  in an SDL3 build; production `Game` no longer calls it.
+- **`CNA::Internal::Input::SdlInputBridge`** retains raw-joystick queries and a few
+  keyboard/touch compatibility helpers. Its raw `ProcessEvent` overload is only an adapter for
+  legacy SDL-shaped tests and delegates to the platform bridge in an SDL3 build; production
+  `Game` no longer calls it. PLAT-82 removed its mapped-gamepad queries and handle ownership.
 - **`CNA::Internal::Input::InputManager`** (`include/CNA/Internal/Input/InputManager.hpp`,
   `src/Input/Internal/InputManager.cpp`) — accumulates per-device state pushed by
   `PlatformInputBridge` (`Set*State`/`Add*Delta` methods) and hands back state objects for input
   areas still awaiting their Phase 5 migration. Its keyboard and mouse sets remain internal parts
   of control-character/click synthesis and raw-adapter tests; public `Keyboard::GetState()` and
   `Mouse::GetState()` read their platform services instead.
-  `GamePad::GetState(playerIndex, deadZoneMode)` calls
-  `GetRawGamePadState` and applies dead-zone processing itself at the XNA layer, since the same
-  raw state can be read back through three different `GamePadDeadZone` modes.
+- **`CNA::Platform::IPlatformGamepad`** owns the four stable player slots, immutable frame
+  snapshots, cached capabilities/identity and all mapped-controller actuators. Public
+  `GamePad::GetState(playerIndex, deadZoneMode)` projects one raw platform snapshot through the
+  requested dead-zone mode; `InputManager` no longer contains any mapped-gamepad state.
 
 Gesture handling adds another internal class:
 
@@ -91,17 +92,16 @@ An SDL event the mapper does not recognise is intentionally omitted from the pla
 | `SDL_EVENT_FINGER_DOWN` | `SetTouchState(id, Pressed, pixelPos)`; also `TouchPanel::setTouchDeviceExistsProperty(true)` and `TouchPanel::INTERNAL_onTouchEvent(id, Pressed, x, y, 0, 0)` | `TouchPanel::GetState()`; `GestureDetector::OnPressed` |
 | `SDL_EVENT_FINGER_MOTION` | `SetTouchState(id, Moved, pixelPos)`; `TouchPanel::INTERNAL_onTouchEvent(id, Moved, x, y, dx, dy)` | `TouchPanel::GetState()`; `GestureDetector::OnMoved` |
 | `SDL_EVENT_FINGER_UP` / `SDL_EVENT_FINGER_CANCELED` | `SetTouchState(id, Released, pixelPos)`; `TouchPanel::INTERNAL_onTouchEvent(id, Released, x, y, 0, 0)` | `TouchPanel::GetState()`; `GestureDetector::OnReleased` — both event types share one `case` fallthrough (P5-034/P6 audit), matching FNA's own `SDL_EVENT_FINGER_UP \|\| SDL_EVENT_FINGER_CANCELED` single branch |
-| `SDL_EVENT_GAMEPAD_ADDED` | `SetGamePadConnection(playerIndex, true)` (assigns the next free `PlayerIndex` slot, opens the `SDL_Gamepad`) | `GamePad::GetState(playerIndex).IsConnected` |
-| `SDL_EVENT_GAMEPAD_REMOVED` | `SetGamePadConnection(playerIndex, false)` (closes the `SDL_Gamepad`, frees the slot) | `GamePad::GetState(playerIndex).IsConnected` becomes false |
-| `SDL_EVENT_GAMEPAD_BUTTON_DOWN` / `_UP` | `SetGamePadButtonState(playerIndex, button, state)` | `GamePadState.Buttons`/`.DPad` |
-| `SDL_EVENT_GAMEPAD_AXIS_MOTION` | `SetGamePadAxisValue(playerIndex, axis, normalizedValue)` (stick Y axes negated to match XNA's up-positive convention) | `GamePadState.ThumbSticks`/`.Triggers` (raw; dead zone applied by `GamePad::GetState`) |
+| `SDL_EVENT_GAMEPAD_ADDED` / `_REMOVED` | Mapped for general device notification, but mapped-gamepad ownership is reconciled by `IPlatformGamepad::Update()` after the event drain | `Sdl3Gamepad` preserves existing slots, closes vanished handles and assigns new devices to the first free `PlayerIndex` slot |
+| `SDL_EVENT_GAMEPAD_BUTTON_DOWN` / `_UP` | The event is mapped but does not mutate a second store; `Sdl3Gamepad::Update()` polls the complete held-button mask once per frame | `GamePadState.Buttons`/`.DPad` read one immutable platform snapshot |
+| `SDL_EVENT_GAMEPAD_AXIS_MOTION` | The event is mapped but state is polled with the same CNA-owned axis helper; stick Y is inverted and triggers normalised at the SDL edge | `GamePadState.ThumbSticks`/`.Triggers`; the requested dead zone is applied by public `GamePad::GetState` |
 | `SDL_EVENT_JOYSTICK_ADDED` / `_REMOVED` | none (bypasses `InputManager` — separate `get_opened_joysticks()` handle map) | `CNA::Input::Joysticks::ConnectedEXT`/`DisconnectedEXT.Invoke(deviceId)` — the raw-joystick CNAEXT extension, distinct from `GamePad`'s XNA-mapped view of the same physical device (P7-017/029/P8-013) |
 
 **Intentionally unhandled event types (P8-012/014, confirmed 2026-07-17):**
 - `SDL_EVENT_GAMEPAD_REMAPPED` — FNA itself has no handler for this event either (confirmed: zero
   matches in `SDL3_FNAPlatform.cs`). XNA's `Buttons`/`GamePadState` model is read fresh on every
-  `GetState()` call rather than cached, so a live SDL mapping change is simply picked up on the next
-  read with no special-case handling needed in either engine.
+  frame update rather than kept in an event accumulator, so a live SDL mapping change is picked up
+  by the next `IPlatformGamepad::Update()` without a special-case handler.
 - `SDL_EVENT_SENSOR_UPDATE` — `CNA::Input::Sensors` (and `Microsoft::Devices::Sensors::Accelerometer`
   etc.) read sensor data via an on-demand `SDL_GetSensorData` poll (`SystemSensorBackend.cpp:80`), the
   same "query, not event-stream" pattern already used for gamepad rumble/light bar/gyro/accelerometer
@@ -119,8 +119,8 @@ normalized→pixel intent, just via two different size sources for two different
 
 Gamepad rumble, light bar, trigger vibration, gyroscope, and accelerometer are **not** part of
 the event stream above — they're on-demand queries/commands issued by `GamePad`'s EXT methods
-directly through `SdlInputBridge`'s public static methods (`SetVibration`, `SetLightBar`,
-`SetTriggerVibration`, `GetGyro`, `GetAccelerometer`), not accumulated state.
+through `IPlatformGamepad` (`SetRumble`, `SetLightBar`, `SetTriggerRumble`, `TryGetSensor`), not
+accumulated state.
 
 ---
 

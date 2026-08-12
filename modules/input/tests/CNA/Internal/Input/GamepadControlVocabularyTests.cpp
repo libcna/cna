@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 
@@ -10,7 +9,6 @@
 
 namespace {
 
-using CNA::Internal::Input::GamePadAxis;
 using CNA::Platform::GamepadAxis;
 using CNA::Platform::GamepadButton;
 using Microsoft::Xna::Framework::Input::Buttons;
@@ -46,14 +44,14 @@ TEST(GamepadControlVocabularyTests, PlatformButtonValuesMatchXnaButtons)
     EXPECT_TRUE(SameValue(GamepadButton::TouchPad, Buttons::TouchPadEXT));
 }
 
-TEST(GamepadControlVocabularyTests, PlatformAxisValuesMatchTheInputManagersVocabulary)
+TEST(GamepadControlVocabularyTests, PlatformAxisValuesMatchSnapshotArrayOrder)
 {
-    EXPECT_TRUE(SameValue(GamepadAxis::LeftThumbstickX, GamePadAxis::LeftThumbstickX));
-    EXPECT_TRUE(SameValue(GamepadAxis::LeftThumbstickY, GamePadAxis::LeftThumbstickY));
-    EXPECT_TRUE(SameValue(GamepadAxis::RightThumbstickX, GamePadAxis::RightThumbstickX));
-    EXPECT_TRUE(SameValue(GamepadAxis::RightThumbstickY, GamePadAxis::RightThumbstickY));
-    EXPECT_TRUE(SameValue(GamepadAxis::LeftTrigger, GamePadAxis::LeftTrigger));
-    EXPECT_TRUE(SameValue(GamepadAxis::RightTrigger, GamePadAxis::RightTrigger));
+    EXPECT_EQ(static_cast<std::uint32_t>(GamepadAxis::LeftThumbstickX), 0u);
+    EXPECT_EQ(static_cast<std::uint32_t>(GamepadAxis::LeftThumbstickY), 1u);
+    EXPECT_EQ(static_cast<std::uint32_t>(GamepadAxis::RightThumbstickX), 2u);
+    EXPECT_EQ(static_cast<std::uint32_t>(GamepadAxis::RightThumbstickY), 3u);
+    EXPECT_EQ(static_cast<std::uint32_t>(GamepadAxis::LeftTrigger), 4u);
+    EXPECT_EQ(static_cast<std::uint32_t>(GamepadAxis::RightTrigger), 5u);
 }
 
 } // namespace
