@@ -7,4 +7,6 @@ cna_add_module(cna_storage Storage ${CNA_STORAGE_SOURCES})
 # (no core symbol referenced), so storage's accepted link closure is unchanged.
 target_link_libraries(cna_storage PUBLIC cna_core_headers)
 cna_link_sharp_runtime(cna_storage PUBLIC Core.Base IO Runtime Threading)
-target_link_libraries(cna_storage PRIVATE SDL3::SDL3)
+# plan_platform.md PLAT-109: StorageDevice resolves its save root through the platform
+# filesystem service instead of SDL_GetPrefPath, so this module no longer links SDL.
+target_link_libraries(cna_storage PRIVATE cna_platform)

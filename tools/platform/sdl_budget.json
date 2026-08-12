@@ -1,7 +1,7 @@
 {
   "_comment": "PLAT-8 ratchet budget. Maximum SDL-referencing production files (and total references) allowed outside the PLAT-3 allowlist. This may go DOWN and never UP: each migration task lowers it. Regenerate with 'python3 tools/platform/sdl_ratchet.py --update'. See plan_platform.md.",
-  "max_files": 253,
-  "max_references": 3641,
+  "max_files": 250,
+  "max_references": 3597,
   "by_module_at_last_update": {
     "input": 48,
     "devices-ext": 34,
@@ -22,7 +22,6 @@
     "renderers/magnum": 4,
     "renderers/openvg": 4,
     "content": 3,
-    "core": 3,
     "gamer-services": 3,
     "renderers/opengl4": 3,
     "renderers/bgfx": 2,
@@ -47,11 +46,11 @@
     "renderers/vulkan": 2,
     "renderers/webgpu": 2,
     "renderers/wicked": 2,
+    "core": 1,
     "graphics-ext": 1,
     "renderers/headless": 1,
     "renderers/portablegl": 1,
     "renderers/software": 1,
-    "renderers/stub": 1,
-    "storage": 1
+    "renderers/stub": 1
   }
 }

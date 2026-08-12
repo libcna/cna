@@ -8,7 +8,10 @@
 #include <filesystem>
 #include <stdexcept>
 
-#include <SDL3/SDL.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/PlatformException.hpp"
+
+#include <cstdlib>
 
 #include "CNA/Internal/PathContainment.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
@@ -72,13 +75,17 @@ namespace Microsoft::Xna::Framework::Storage
         storageRootInitialized_ = true;
 
         const std::string app = appName_.empty() ? "game" : appName_;
-        char* prefPath = SDL_GetPrefPath(nullptr, app.c_str());
-        if (prefPath)
+
+        try
         {
-            storageRoot_ = prefPath;
-            SDL_free(prefPath);
-            // SDL_GetPrefPath creates the directory; strip the trailing separator
-            // so StorageContainer can append its own components cleanly.
+            // The platform's preferences path is documented to create the directory, so a
+            // successful call means a usable location, not merely a name.
+            storageRoot_ =
+                CNA::Platform::GetCurrentPlatform().GetFileSystem()->GetPreferencesPath(std::string(), app);
+
+            // Strip the trailing separator so StorageContainer can append its own components
+            // cleanly -- the platform contract returns one, as the previous
+            // implementation's path source did.
             while (!storageRoot_.empty() &&
                    (storageRoot_.back() == '/' || storageRoot_.back() == '\\'))
             {
@@ -86,16 +93,21 @@ namespace Microsoft::Xna::Framework::Storage
             }
             return storageRoot_;
         }
+        catch (const CNA::Platform::PlatformException&)
+        {
+            // Fall through to the environment-based fallback below, exactly as the previous
+            // implementation did when its path source returned nothing.
+        }
 
-        // Fallback: XDG_DATA_HOME or HOME/.local/share/<app>
-        const char* xdg = SDL_getenv("XDG_DATA_HOME");
-        if (xdg && *xdg)
+        // Fallback: XDG_DATA_HOME or HOME/.local/share/<app>. Read through the standard library
+        // rather than through the platform -- reading an environment variable never needed a
+        // platform abstraction, and routing it through one would be abstraction for its own sake.
+        if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg != nullptr && *xdg != '\0')
         {
             storageRoot_ = (fs::path(xdg) / app).string();
             return storageRoot_;
         }
-        const char* home = SDL_getenv("HOME");
-        if (home && *home)
+        if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0')
         {
             storageRoot_ = (fs::path(home) / ".local" / "share" / app).string();
             return storageRoot_;
