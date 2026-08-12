@@ -120,3 +120,27 @@ TEST(SrgbTransferTest, TheGlslDeclaresBothFunctionsWithTheSameConstants)
     EXPECT_EQ(std::string::npos, glsl.find("vec4"))
         << "the transfer took a vec4 -- alpha must never be encoded";
 }
+
+// The transfer is a MACRO of string literals rather than a `const char*` for one reason: a renderer
+// builds its shader source by literal concatenation, and a variable cannot join that. The first
+// version of SrgbTransfer.hpp got this wrong and would not have compiled inside a shader source.
+// This reproduces the exact splice EasyGLRenderer performs, so the mistake cannot come back --
+// especially since the renderers that consume it need sibling checkouts (easy-gl, meta-gl) that a
+// STUB-configured tree does not have, and therefore are not compiled by this suite at all.
+TEST(SrgbTransferTest, TheMacroSplicesIntoShaderSourceConcatenation)
+{
+    static const char* fragmentSource =
+        "#version 300 es\n"
+        "uniform vec3 uSrgb;\n"
+        "out vec4 FragColor;\n"
+        CNA_GLSL_SRGB_TRANSFER
+        "void main(){ FragColor=vec4(cnaLinearToSrgb(cnaSrgbToLinear(vec3(0.5))),1.0); }\n";
+
+    const std::string source = fragmentSource;
+    EXPECT_NE(std::string::npos, source.find("out vec4 FragColor;\nvec3 cnaSrgbToLinear"))
+        << "the macro did not splice in place -- shader source would be malformed";
+    EXPECT_NE(std::string::npos, source.find("void main()"))
+        << "the text after the macro was lost";
+    EXPECT_EQ(std::string(kSrgbTransferGlsl), std::string(CNA_GLSL_SRGB_TRANSFER))
+        << "the value form and the macro form are no longer the same text";
+}
