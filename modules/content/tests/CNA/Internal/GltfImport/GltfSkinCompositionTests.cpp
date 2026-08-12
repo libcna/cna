@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-246 / GLTF-250 / GLTF-253 / GLTF-259 / GLTF-273: the matrices a skin composes,
-// when it composes them at all, and what the import reports about the approximations it made.
+// plan_gltf.md GLTF-246 / GLTF-250 / GLTF-253 / GLTF-259 / GLTF-269 / GLTF-273 / GLTF-286: the
+// matrices a skin composes, when it composes them at all, what the import reports about the
+// approximations it made, and how skinning and morphing share one vertex buffer.
 //
 // Skinning is where this campaign's two collapse mechanisms live (D8 and H12), and both were
 // arithmetic in the same handful of multiplications: the inverse bind matrix, the joint's world
@@ -19,6 +20,7 @@
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "GltfFixtureCorpus.hpp"
+#include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 
 using namespace CNA::Internal::GltfImport;
 using namespace Microsoft::Xna::Framework;
@@ -389,4 +391,111 @@ TEST(GltfSkinComposition, AnUnskinnedPrimitiveReportsNoJointsRatherThanAnEmptySk
     EXPECT_EQ(0, report.droppedInfluenceSets);
     EXPECT_EQ(0u, report.renormalisedVertexCount);
     EXPECT_FALSE(report.hasDeclaredSkeletonRoot);
+}
+
+// --- GLTF-269 / GLTF-286: morphing and skinning share one vertex buffer ---------------------------
+
+TEST(GltfSkinComposition, AMorphedSkinnedPrimitiveKeepsBothItsSkinAndItsBlendedPositions)
+{
+    // The two features meet in one place: the CPU morph blend rewrites the vertex buffer, and the
+    // skinning shader reads that same buffer. So they must not be mutually exclusive at import
+    // (a primitive with both has to keep both) and the blend must write into the layout the SKIN
+    // is in -- a blend that assumed an unskinned stride would move whichever field happens to sit
+    // at the unskinned position offset, which for a skinned layout is still Position, so the
+    // failure would appear only in the fields *after* it.
+    //
+    // The document is a one-joint skinned triangle with one morph target moving vertex 1 by +7 on
+    // Y, and a mesh-level default weight of 1, so the imported rest pose is already morphed.
+    const char* json = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "Joint0" },
+    { "name": "SkinnedMeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "skins": [ { "name": "Skin", "joints": [0], "inverseBindMatrices": 5 } ],
+  "meshes": [ { "name": "MorphedSkin", "weights": [1.0], "primitives": [ {
+      "attributes": { "POSITION": 0, "JOINTS_0": 1, "WEIGHTS_0": 2 },
+      "indices": 4,
+      "targets": [ { "POSITION": 3 } ] } ] } ],
+  "buffers": [ { "byteLength": 204, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4EAAAAAAAAAAAAAAAAAAAAAAAAABAAIAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 48,  "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 132, "byteLength": 6 },
+    { "buffer": 0, "byteOffset": 140, "byteLength": 64 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5121, "count": 3, "type": "VEC4" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0,0,0], "max": [0,7,0] },
+    { "bufferView": 4, "componentType": 5123, "count": 3, "type": "SCALAR" },
+    { "bufferView": 5, "componentType": 5126, "count": 1, "type": "MAT4" }
+  ]
+})GLTF";
+
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, json));
+    const SceneGraphOut scene = BuildSceneGraph(doc.data);
+    const SkeletonResult skeleton =
+        BuildSkeleton(doc.data->skins, scene, Matrix::getIdentityProperty(), 1.0f);
+    const MeshOut mesh =
+        ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe", &skeleton, 1.0f);
+
+    // Both features survived: the primitive is skinned AND carries its morph deltas.
+    EXPECT_TRUE(mesh.skinned) << "the skin was dropped because the primitive also morphs";
+    ASSERT_EQ(1u, mesh.morphPositionDeltas.size())
+        << "the morph target was dropped because the primitive is also skinned";
+    EXPECT_FLOAT_EQ(7.0f, mesh.morphPositionDeltas[0][1].Y);
+
+    // The default weight is the mesh's own, so the rest pose really is morphed rather than the
+    // deltas merely being present (GLTF-281).
+    const std::vector<float> defaults = GetMeshDefaultWeights(&doc.data->meshes[0], 1);
+    ASSERT_EQ(1u, defaults.size());
+    EXPECT_FLOAT_EQ(1.0f, defaults[0]);
+
+    // And the blend writes into the SKINNED layout, not an assumed unskinned one: the blended
+    // buffer keeps every skinning field intact while the position moves.
+    Microsoft::Xna::Framework::Graphics::MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = mesh.vertexBytes;
+    morph.Stride = mesh.stride;
+    morph.PositionDeltas.push_back(mesh.morphPositionDeltas[0]);
+    morph.NormalDeltas.push_back({});
+    morph.TangentDeltas.push_back({});
+    const std::vector<std::uint8_t> blended =
+        Microsoft::Xna::Framework::Graphics::BlendMorphTargetsEXT(morph, {1.0f});
+    ASSERT_EQ(mesh.vertexBytes.size(), blended.size());
+
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            mesh.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known);
+    int blendWeightOffset = -1;
+    for (std::size_t e = 0; e < layout.count; ++e)
+    {
+        if (layout.elements[e].usage ==
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendWeight)
+        {
+            blendWeightOffset = layout.elements[e].offset;
+        }
+    }
+    ASSERT_GE(blendWeightOffset, 0) << "this stride is not a skinned one after all";
+
+    float position[3];
+    std::memcpy(position, blended.data() + static_cast<std::size_t>(mesh.stride), sizeof(position));
+    EXPECT_FLOAT_EQ(7.0f, position[1]) << "the morph did not reach the skinned buffer";
+
+    float blendWeights[4];
+    std::memcpy(blendWeights, blended.data() + static_cast<std::size_t>(mesh.stride) +
+                                   static_cast<std::size_t>(blendWeightOffset),
+                sizeof(blendWeights));
+    EXPECT_FLOAT_EQ(1.0f, blendWeights[0])
+        << "the blend overwrote the skinning weights -- it is writing at an unskinned layout's "
+           "offsets";
 }
