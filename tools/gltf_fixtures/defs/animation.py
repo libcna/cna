@@ -154,4 +154,116 @@ def anim_rigid_node() -> Fixture:
     )
 
 
-FIXTURES = [anim_rigid_node]
+#: `anim-nonzero-start`'s key times: the first is deliberately NOT 0, which is the case the
+#: duration and start-behaviour question exists for. The last is 3.0, so "last key" (3.0) and
+#: "span between the keys" (1.5) are different numbers and a manifest can distinguish them.
+_NONZERO_START_TIMES = [1.5, 3.0]
+
+
+def anim_nonzero_start() -> Fixture:
+    """A clip whose first keyframe is at ``t = 1.5``. Owns **GLTF-299**.
+
+    glTF animations live on an absolute timeline anchored at 0 and Appendix C clamps a sampler
+    below its first key to that key's value, so two questions have exactly one spec-conformant
+    answer each and the manifest states both:
+
+    * the clip's duration is the **last** input sample (3.0) -- not the span between the first and
+      last keys (1.5), which would silently reinterpret the timeline as clip-relative and make
+      every authored time wrong by the offset;
+    * the pose anywhere in ``[0, 1.5]`` is the **first key's**, held -- not the node's rest pose,
+      and not an extrapolation backwards along the curve.
+
+    The rest pose is authored as a distinct third rotation precisely so "holds the first key" and
+    "falls back to the node's own transform" cannot be confused: they are different quaternions.
+    """
+    b = GltfBuilder("anim-nonzero-start")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="LateStartTri")
+
+    # Rest pose: the identity rotation. First key: a quarter turn. Last key: back to identity.
+    # So the rest pose and the first key differ, and the first and last keys differ.
+    rest_rotation = [0.0, 0.0, 0.0, 1.0]
+    key_rotations = [(0.0, 0.0, _HALF_SQRT2, _HALF_SQRT2), (0.0, 0.0, 0.0, 1.0)]
+
+    node = b.add_node(name="LateStartMesh", mesh=mesh, rotation=rest_rotation)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    times = b.add_packed_accessor(usage="animation input (time)", values=_NONZERO_START_TIMES,
+                                  accessor_type="SCALAR", component_type=FLOAT)
+    rotations = b.add_packed_accessor(usage="animation output (rotation)", values=key_rotations,
+                                      accessor_type="VEC4", component_type=FLOAT)
+    b.add_animation({
+        "name": "LateSpin",
+        "samplers": [{"input": times, "output": rotations, "interpolation": "LINEAR"}],
+        "channels": [{"sampler": 0, "target": {"node": node, "path": "rotation"}}],
+    })
+
+    poses = []
+    for t, q in zip(_NONZERO_START_TIMES, key_rotations):
+        matrix = mat_from_trs(None, q, None)
+        poses.append({
+            "time": t,
+            "nodeLocalColumnMajor": matrix,
+            "worldPositions": [transform_point(matrix, p) for p in TRIANGLE_POSITIONS],
+        })
+
+    first_key_matrix = mat_from_trs(None, key_rotations[0], None)
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 1,
+        "clipNames": ["LateSpin"],
+        "duration": _NONZERO_START_TIMES[-1],
+        "firstKeyTime": _NONZERO_START_TIMES[0],
+        "durationRule": "the last input sample across every channel, on glTF's own absolute "
+                        "timeline anchored at 0 -- NOT the span between the first and last keys, "
+                        "which would be 1.5 here and would shift every authored time by the "
+                        "offset.",
+        "restPoseRotation": list(rest_rotation),
+        "posesBeforeFirstKey": [
+            {"time": 0.0, "nodeLocalColumnMajor": first_key_matrix},
+            {"time": 0.75, "nodeLocalColumnMajor": first_key_matrix},
+            {"time": _NONZERO_START_TIMES[0], "nodeLocalColumnMajor": first_key_matrix},
+        ],
+        "startRule": "Appendix C clamps a sampler below its first key to that key's value, so the "
+                     "pose anywhere in [0, 1.5] is the FIRST KEY's -- not the node's rest pose, "
+                     "which is a different rotation here on purpose.",
+        "channels": [{
+            "animation": 0,
+            "channel": 0,
+            "targetNode": node,
+            "targetNodeName": "LateStartMesh",
+            "path": "rotation",
+            "interpolation": "LINEAR",
+            "targetsSkinJoint": False,
+            "times": list(_NONZERO_START_TIMES),
+            "values": [list(q) for q in key_rotations],
+        }],
+        "posesAtKeyTimes": poses,
+    }
+    return Fixture(
+        id="anim-nonzero-start", audit_fixture=None, owning_group="animation",
+        description="A LINEAR rotation channel whose first keyframe is at t=1.5, on a node whose "
+                    "rest rotation differs from that first key. Separates the clip's duration "
+                    "(the last sample, 3.0) from the key span (1.5), and 'holds the first key "
+                    "before it' from 'falls back to the rest pose'.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["animation with a non-zero first key time", "clip duration", "pre-first-key "
+                  "clamping", "rotation path", "no skin"],
+        spec_anchors=["animations", "interpolation-cubic", "transformations"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="LateStartTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+FIXTURES = [anim_rigid_node, anim_nonzero_start]

@@ -27,6 +27,7 @@
 // asserts CNA does the second. GLTF-260 is what proves the mesh-space cancellation then happens
 // exactly once; until it lands, D8 keeps that half open.
 
+#include <cmath>
 #include <filesystem>
 #include <stdexcept>
 #include <fstream>
@@ -37,6 +38,7 @@
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "GltfFixtureCorpus.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -803,4 +805,107 @@ TEST(GltfRigidAnimation, APaletteClipIsRefusedRatherThanPosingTheWrongBones)
     EXPECT_EQ(ClipTargetSpaceEXT::JointPalette, palette.TargetSpace) << "the default moved";
     EXPECT_THROW(ApplyClipToBonesEXT(model, palette, System::TimeSpan::FromSeconds(0.0)),
                  std::invalid_argument);
+}
+
+// --- plan_gltf.md GLTF-299: a clip whose first key is not at t = 0 ---------------------------------
+
+// glTF animations live on an absolute timeline anchored at 0, so two questions have exactly one
+// spec-conformant answer each and `anim-nonzero-start` states both in its own manifest rather than
+// leaving a test to decide them. Its first key is at t=1.5 and its last at t=3.0, so "the last
+// sample" and "the span between the keys" are different numbers; and its node's rest rotation
+// differs from its first key, so "holds the first key" and "falls back to the rest pose" are
+// different poses. Neither question could be answered by a fixture starting at 0.
+TEST(GltfRigidAnimation, AClipStartingAfterZeroKeepsTheAbsoluteTimeline)
+{
+    using Microsoft::Xna::Framework::Graphics::ModelAnimationsEXT;
+
+    const LoadedFixture fixture("anim-nonzero-start");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& animation = Path(fixture.Expected(), "l4.animation");
+    const double expectedDuration = NumberOr(animation, "duration", -1.0);
+    const double firstKeyTime     = NumberOr(animation, "firstKeyTime", -1.0);
+    ASSERT_GT(firstKeyTime, 0.0) << "the fixture no longer starts after zero";
+    ASSERT_GT(expectedDuration, firstKeyTime);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("anim-nonzero-start");
+
+    auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
+    ASSERT_NE(nullptr, animations);
+    ASSERT_EQ(1u, animations->Clips.size());
+    const auto& clip = animations->Clips.at("LateSpin");
+
+    // The duration is the last sample. Taking the key SPAN instead would give 1.5 here, and every
+    // authored time would then be off by the 1.5 offset -- a whole-clip time shift that no single
+    // pose comparison would localise.
+    EXPECT_NEAR(expectedDuration, clip.Duration.getTotalSecondsProperty(), 1e-6);
+    EXPECT_GT(clip.Duration.getTotalSecondsProperty(), firstKeyTime + 1e-6)
+        << "the duration collapsed to the key span, reinterpreting an absolute timeline as a "
+           "clip-relative one";
+}
+
+TEST(GltfRigidAnimation, BeforeTheFirstKeyTheClipHoldsThatKeyNotTheRestPose)
+{
+    using Microsoft::Xna::Framework::Graphics::ApplyClipToBonesEXT;
+    using Microsoft::Xna::Framework::Graphics::ModelAnimationsEXT;
+
+    const LoadedFixture fixture("anim-nonzero-start");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& animation = Path(fixture.Expected(), "l4.animation");
+    const CNA::Internal::JsonValue& before = Member(animation, "posesBeforeFirstKey");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, before.type);
+    ASSERT_FALSE(before.arrayValue.empty());
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("anim-nonzero-start");
+    auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
+    ASSERT_NE(nullptr, animations);
+    const auto& clip = animations->Clips.at("LateSpin");
+    ASSERT_EQ(1u, clip.Tracks.size());
+    const int bone = clip.Tracks[0].BoneIndex;
+    ASSERT_GE(bone, 0);
+    ASSERT_LT(bone, model.getBonesProperty().getCountProperty());
+
+    // The rest pose the node itself declares, so the two candidate answers can be told apart.
+    const std::vector<double> restRotation = Numbers(Member(animation, "restPoseRotation"));
+    ASSERT_EQ(4u, restRotation.size());
+    const Matrix restMatrix = Matrix::CreateFromQuaternion(Microsoft::Xna::Framework::Quaternion(
+        static_cast<float>(restRotation[0]), static_cast<float>(restRotation[1]),
+        static_cast<float>(restRotation[2]), static_cast<float>(restRotation[3])));
+
+    for (const CNA::Internal::JsonValue& sample : before.arrayValue)
+    {
+        const double time = NumberOr(sample, "time", -1.0);
+        SCOPED_TRACE("t = " + std::to_string(time));
+        const std::vector<double> expectedColumnMajor =
+            Numbers(Member(sample, "nodeLocalColumnMajor"));
+        ASSERT_EQ(16u, expectedColumnMajor.size());
+
+        ApplyClipToBonesEXT(model, clip, System::TimeSpan::FromSeconds(time));
+        const Matrix actual = model.getBonesProperty()[bone]->getTransformProperty();
+
+        float actualColumnMajor[16];
+        actual.ToColumnMajor(actualColumnMajor);
+        for (std::size_t i = 0; i < 16; ++i)
+        {
+            EXPECT_NEAR(static_cast<float>(expectedColumnMajor[i]), actualColumnMajor[i], kTolerance)
+                << "element " << i;
+        }
+
+        // And it is the first key, not the rest pose -- the fixture authors them different on
+        // purpose, so this is a real distinction and not a restatement of the comparison above.
+        bool matchesRestPose = true;
+        const float* r = &restMatrix.M11;
+        const float* a = &actual.M11;
+        for (int i = 0; i < 16; ++i)
+        {
+            if (std::fabs(r[i] - a[i]) > kTolerance) { matchesRestPose = false; break; }
+        }
+        EXPECT_FALSE(matchesRestPose)
+            << "the bone fell back to the node's rest pose instead of holding the first key";
+    }
 }

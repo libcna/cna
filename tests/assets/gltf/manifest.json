@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 26,
+  "distinctAssetCount": 27,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
@@ -21,7 +21,7 @@
     "transforms": 5,
     "materials": 2,
     "skinning": 3,
-    "animation": 1,
+    "animation": 2,
     "scenes": 1,
     "robustness": 1
   },
@@ -650,6 +650,25 @@
       "auditFixture": "f7"
     },
     {
+      "id": "anim-nonzero-start",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "animation with a non-zero first key time",
+        "clip duration",
+        "pre-first-key clamping",
+        "rotation path",
+        "no skin"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "scene-default-selection",
       "owningGroup": "scenes",
       "referencingGroups": [],
@@ -681,6 +700,31 @@
     }
   ],
   "files": [
+    {
+      "path": "anim-nonzero-start.expected.json",
+      "bytes": 11724,
+      "sha256": "950c2c5c0281af92dc8db5c7e25a2ee45d5ba0b0075742ac6bc95ea600b09cb3"
+    },
+    {
+      "path": "anim-nonzero-start.glb",
+      "bytes": 1240,
+      "sha256": "b7402bb15e8f994835c22ebb645da99edfd670133fca69d55e4daf8aedc95dc0"
+    },
+    {
+      "path": "anim-nonzero-start.gltf",
+      "bytes": 2290,
+      "sha256": "c427091ed7a3327120f5b51f1963abe8008354931b511506c7bda9c161d54988"
+    },
+    {
+      "path": "anim-nonzero-start.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-nonzero-start.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
     {
       "path": "anim-rigid-node.expected.json",
       "bytes": 12684,

@@ -372,7 +372,7 @@ working directory, which is what CTest is configured to use. The suites are:
 | `GltfIndexDecode` | the sparse-safe, bounds-checked index reader and D4's regression witness (`GLTF-063`) |
 | `GltfPrimitiveTopology` | the seven-mode classification table, the never-reinterpret policy (`GLTF-071`), and the strip/fan → triangle-list conversion with its winding rule (`GLTF-072`) |
 | `GltfContainerValidation` | structural validation, `extensionsRequired` enforcement and the ignored-extension report, and the severity difference between them (`GLTF-021` … `GLTF-024`) |
-| `GltfRigidAnimation` | rigid (non-joint) node animation: resolved against the scene graph (`GLTF-293`), serialised, read back and posed (`GLTF-294`) |
+| `GltfRigidAnimation` | rigid (non-joint) node animation: resolved against the scene graph (`GLTF-293`), serialised, read back and posed (`GLTF-294`), and the absolute-timeline rules for a clip whose first key is not at 0 (`GLTF-299`) |
 | `GltfMaterialState` | every authored material property reaching the effect, and glTF's defaults when none is declared (`GLTF-215` … `GLTF-231`) |
 | `GltfDrawTopology` | each primitive mode reaching its `ModelMeshPart` as a real `PrimitiveType` with a §12.3 count (`GLTF-073`/`GLTF-078`) |
 | `GltfLightingPolicy` | the default-lighting fallback for a file that declares no light (`GLTF-215`) |
