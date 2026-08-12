@@ -432,7 +432,7 @@ if(CNA_BUILD_TESTS)
     # silently sitting outside `ctest -L gltf-conformance`. Keep the entries here only.
     set(CNA_GLTF_CONFORMANCE_RUNGS
         "L0|GltfFixtureCorpus.*:GltfOracleEXT.*:GltfConformanceLadder.*"
-        "L1|GltfConformanceL1.*:GltfContainerValidation.*:GltfUriContainment.*"
+        "L1|GltfConformanceL1.*:GltfContainerRobustness.*:GltfContainerValidation.*:GltfUriContainment.*"
         "L2|GltfConformanceL2.*:GltfAccessorDecodeLock.*:GltfBufferAndWeightForm.*:GltfIndexDecode.*:GltfIndexForm.*"
         "L3|GltfConformanceL3.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfDrawTopology.*:GltfSamplerMapping.*:GltfImageSource.*:GltfUvChannel.*:GltfOcclusionRemap.*:GltfUnsupportedTexture.*"
         "L4|GltfConformanceL4.*:GltfConventions.*:GltfNodeTransformOrder.*:GltfNodeHierarchy.*:GltfMirroring.*:GltfModelShape.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfSkinComposition.*:GltfRigidAnimation.*:GltfAnimationSampling.*:GltfClipAndLight.*:GltfCameras.*:GltfMorphWeights.*:GltfMorphBlending.*:GltfSceneSelection.*"
