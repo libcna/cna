@@ -15,6 +15,7 @@
 //     renamed field must break the document that promised it instead of leaving a dead name behind.
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -29,6 +30,7 @@
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "GltfFixtureCorpus.hpp"
 
+using CNA::Internal::GltfImport::FindGltfExtensionEXT;
 using CNA::Internal::GltfImport::GltfExtensionRecordEXT;
 using CNA::Internal::GltfImport::GltfExtensionRegistryEXT;
 using CNA::Internal::GltfImport::GltfExtensionSupportNameEXT;
@@ -260,4 +262,81 @@ TEST(GltfLimitationsDoc, EveryApproximatedOrUnsupportedExtensionIsInTheApproxima
                "the approximation costs or which field reports it";
     }
     EXPECT_GT(approximated, 0u) << "no approximated extension at all -- this test proved nothing";
+}
+
+// --- CNAEXT.md §3.2 may not claim more than the registry does -----------------------------------
+
+// plan_gltf.md GLTF-448. `CNAEXT.md` is the document a reader consults when *choosing* CNA, and its
+// glTF section used to be a bullet list of what imports -- which reads as a completeness claim. It
+// is now a status table, and this is what stops it drifting back: an extension it marks implemented
+// (✅) must be one the registry classifies as implemented, and every extension it names at all must
+// be classified. The direction that matters is one-way; the section is deliberately allowed to
+// summarise rather than list all twenty, because `docs/gltf-limitations.md` §1 is the full table and
+// duplicating it here would create the second source of truth GLTF-334 removed.
+TEST(GltfLimitationsDoc, CnaextSection32DoesNotClaimMoreThanTheRegistry)
+{
+    std::string error;
+    const std::vector<std::vector<std::string>> rows =
+        [&error]() -> std::vector<std::vector<std::string>> {
+            std::ifstream file(RepositoryRoot() / "CNAEXT.md");
+            if (!file) { error = "cannot open CNAEXT.md"; return {}; }
+            std::vector<std::vector<std::string>> out;
+            std::string line;
+            bool inSection = false;
+            while (std::getline(file, line))
+            {
+                if (line.rfind("### 3.2 ", 0) == 0) { inSection = true; continue; }
+                if (inSection && line.rfind("### ", 0) == 0) { break; }
+                if (!inSection || line.empty() || line.front() != '|') { continue; }
+                if (line.find("---") != std::string::npos) { continue; }
+                out.push_back(Cells(line));
+            }
+            if (out.empty()) { error = "no table rows under CNAEXT.md §3.2"; }
+            return out;
+        }();
+    ASSERT_TRUE(error.empty()) << error;
+
+    std::size_t namedExtensions = 0;
+    for (const std::vector<std::string>& cells : rows)
+    {
+        if (cells.size() < 2) { continue; }
+        if (cells[0] == "Capability") { continue; }  // the header row
+
+        // Every extension name the capability column mentions, in declaration order.
+        for (std::string::size_type at = 0; at < cells[0].size();)
+        {
+            const auto start = cells[0].find_first_of("KE", at);
+            if (start == std::string::npos) { break; }
+            std::string::size_type end = start;
+            while (end < cells[0].size() &&
+                   (std::isalnum(static_cast<unsigned char>(cells[0][end])) != 0 ||
+                    cells[0][end] == '_'))
+            {
+                ++end;
+            }
+            const std::string token = cells[0].substr(start, end - start);
+            at = end + 1;
+            if (token.rfind("KHR_", 0) != 0 && token.rfind("EXT_", 0) != 0) { continue; }
+            // A bare suffix like `_ior` in an enumerated list is written that way deliberately and
+            // is not a full name; the row's first full name carries the classification.
+            const CNA::Internal::GltfImport::GltfExtensionRecordEXT* record =
+                CNA::Internal::GltfImport::FindGltfExtensionEXT(token);
+            SCOPED_TRACE(token);
+            ASSERT_NE(nullptr, record)
+                << "CNAEXT.md §3.2 names " << token
+                << ", which the extension registry does not classify -- so the section describes "
+                   "behaviour no code decides";
+            ++namedExtensions;
+
+            const bool claimsImplemented = cells[1].find("✅") != std::string::npos;
+            if (!claimsImplemented) { continue; }
+            const std::string classification = GltfExtensionSupportNameEXT(record->support);
+            EXPECT_EQ(0u, classification.rfind("IMPLEMENTED", 0))
+                << "CNAEXT.md §3.2 marks " << token << " implemented (✅) and the registry "
+                   "classifies it " << classification
+                << " -- which is the overclaim GLTF-448 rewrote the section to stop";
+        }
+    }
+    EXPECT_GT(namedExtensions, 5u)
+        << "§3.2 names too few extensions for this check to mean anything";
 }
