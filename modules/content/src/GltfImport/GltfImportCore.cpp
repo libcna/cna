@@ -1737,6 +1737,29 @@ namespace CNA::Internal::GltfImport
                                  : (out.colored ? 24 : (out.usePbr ? 48 : (out.useDualTexture ? 20 : 32)));
 
         const cgltf_size vertexCount = posAcc->count;
+
+        // plan_gltf.md GLTF-060. §3.7.2.1 requires every attribute of a primitive to have the SAME
+        // count, and CNA relies on it absolutely: POSITION's count drives the loop that indexes
+        // every other decoded stream, so a shorter NORMAL reads past the end of its own vector. A
+        // malformed file therefore had to be caught here or become undefined behaviour a few lines
+        // down -- and it was not caught anywhere.
+        //
+        // Checked against every attribute the primitive declares, not only the ones this stride
+        // happens to use: an attribute CNA ignores today is still evidence the file is malformed,
+        // and refusing it now is better than refusing it the day a layout starts reading it.
+        for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai)
+        {
+            const cgltf_attribute& attribute = prim.attributes[ai];
+            if (attribute.data == nullptr || attribute.data->count == vertexCount) { continue; }
+            throw std::runtime_error(
+                "Primitive '" + name + "' declares attribute '" +
+                std::string(attribute.name != nullptr ? attribute.name : "<unnamed>") +
+                "' with " + std::to_string(attribute.data->count) +
+                " elements, but POSITION has " + std::to_string(vertexCount) +
+                ". glTF §3.7.2.1 requires every attribute of a primitive to have the same count "
+                "(malformed file).");
+        }
+
         out.vertexBytes.reserve(static_cast<std::size_t>(vertexCount) * static_cast<std::size_t>(out.stride));
 
 #ifdef CNA_DRACO_AVAILABLE

@@ -26,6 +26,7 @@
 using namespace CNA::Internal::GltfImport;
 using CNA::Internal::JsonType;
 using CNA::Internal::JsonValue;
+using CnaTest::GltfOracle::BoolOr;
 using CnaTest::GltfOracle::CorpusFixtureIds;
 using CnaTest::GltfOracle::LoadedFixture;
 using CnaTest::GltfOracle::Member;
@@ -33,6 +34,31 @@ using CnaTest::GltfOracle::StringOr;
 
 namespace
 {
+    /// Extracts every primitive of a fixture and returns the first failure, or "" if all succeeded.
+    ///
+    /// The stage AFTER validation. Some malformed files are structurally sound accessor-by-accessor
+    /// and only contradict each other, which `cgltf_validate` cannot see -- those have to be
+    /// refused here or become undefined behaviour in the packing loop.
+    std::string ExtractionErrorFor(const LoadedFixture& fixture)
+    {
+        const cgltf_data& data = fixture.Data();
+        for (cgltf_size m = 0; m < data.meshes_count; ++m)
+        {
+            for (cgltf_size p = 0; p < data.meshes[m].primitives_count; ++p)
+            {
+                try
+                {
+                    (void)ExtractMesh(&data, data.meshes[m].primitives[p], "probe", nullptr, 1.0f);
+                }
+                catch (const std::exception& e)
+                {
+                    return e.what();
+                }
+            }
+        }
+        return {};
+    }
+
     /// Runs the validation pass over a fixture and returns the diagnostic, or "" if it passed.
     std::string ValidationErrorFor(const LoadedFixture& fixture, std::vector<std::string>& warnings)
     {
@@ -63,15 +89,24 @@ TEST(GltfContainerValidation, EveryFixtureDeclaringARejectionIsRejectedAndSaysWh
         ++checked;
 
         // The file must PARSE -- that is the whole point. A rejection fixture is one a parse-only
-        // reader would happily accept, so if it failed to parse it would prove nothing about
-        // validation.
-        EXPECT_EQ("validation", StringOr(rejection, "stage", ""));
+        // reader would happily accept, so if it failed to parse it would prove nothing.
+        //
+        // WHERE it is refused is part of the expectation, not an implementation detail. A file
+        // whose accessor reaches past its own bufferView is caught by structural VALIDATION; a
+        // file whose two attribute accessors are each individually valid but disagree with each
+        // other (GLTF-060) passes validation entirely and is refused later, by EXTRACTION, because
+        // nothing reads outside a buffer until CNA's own packing loop indexes the short stream.
+        // Asserting the stage keeps those two from being conflated into "something threw".
+        const std::string stage = StringOr(rejection, "stage", "");
+        ASSERT_TRUE(stage == "validation" || stage == "extraction")
+            << "unknown rejection stage '" << stage << "'";
 
         std::vector<std::string> warnings;
-        const std::string error = ValidationErrorFor(fixture, warnings);
+        std::string error = stage == "extraction" ? ExtractionErrorFor(fixture)
+                                                  : ValidationErrorFor(fixture, warnings);
         ASSERT_FALSE(error.empty())
-            << "the fixture imported without complaint -- validation did not run, or no longer "
-               "catches what this fixture declares";
+            << "the fixture imported without complaint -- the " << stage << " stage did not run, "
+               "or no longer catches what this fixture declares";
 
         // A rejection that does not say what is wrong is barely better than a silent one.
         for (const JsonValue& fragment : Member(rejection, "errorContains").arrayValue)
@@ -79,6 +114,26 @@ TEST(GltfContainerValidation, EveryFixtureDeclaringARejectionIsRejectedAndSaysWh
             const std::string& text = fragment.stringValue;
             EXPECT_NE(std::string::npos, error.find(text))
                 << "the diagnostic does not name '" << text << "': " << error;
+        }
+
+        // Some files are refused by more than one layer, and where that is true it is part of the
+        // expectation rather than a happy accident. `accessor-count-mismatch` is caught by
+        // structural validation -- so both loaders reject it early -- AND by extraction, which
+        // matters because `ExtractMesh` is also called directly, without validation, by the L3
+        // oracle itself. A defence-in-depth check that quietly stopped working would otherwise be
+        // invisible behind the layer in front of it.
+        if (CnaTest::GltfOracle::BoolOr(rejection, "alsoRefusedAtExtraction", false))
+        {
+            const std::string extractionError = ExtractionErrorFor(fixture);
+            ASSERT_FALSE(extractionError.empty())
+                << "validation catches this file but extraction does not -- a caller that skips "
+                   "validation would read out of bounds";
+            for (const JsonValue& fragment : Member(rejection, "extractionErrorContains").arrayValue)
+            {
+                EXPECT_NE(std::string::npos, extractionError.find(fragment.stringValue))
+                    << "the extraction diagnostic does not name '" << fragment.stringValue
+                    << "': " << extractionError;
+            }
         }
     }
     EXPECT_GT(checked, 0) << "no rejection fixtures in the corpus -- the suite proved nothing";

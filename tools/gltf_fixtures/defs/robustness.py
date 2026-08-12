@@ -13,7 +13,7 @@ from __future__ import annotations
 from ..builder import FLOAT, TRIANGLES, UNSIGNED_SHORT, GltfBuilder, flatten, pack
 from ..l5 import unsupported as l5_unsupported
 from ..manifest import Fixture
-from .common import TRIANGLE_INDICES, TRIANGLE_POSITIONS
+from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
 
 
 def bad_accessor_out_of_bounds() -> Fixture:
@@ -71,4 +71,70 @@ def bad_accessor_out_of_bounds() -> Fixture:
     )
 
 
-FIXTURES = [bad_accessor_out_of_bounds]
+def accessor_count_mismatch() -> Fixture:
+    """A primitive whose ``NORMAL`` accessor is shorter than its ``POSITION``. Proves **`GLTF-060`**.
+
+    §3.7.2.1 requires every attribute of a primitive to have the same count, and CNA depends on it
+    absolutely: ``POSITION``'s count drives the loop that indexes every other decoded stream, so a
+    ``NORMAL`` one element short is read past the end of its own vector. Nothing checked it, so a
+    malformed file of this shape was undefined behaviour rather than an error.
+
+    Both accessors are *honestly* described here -- each really does hold what it claims. The file
+    is malformed because the two disagree with each other, which is a different failure from
+    `bad-accessor-out-of-bounds`, where one accessor lies about its own bufferView.
+
+    It is refused **twice**, and both refusals matter. ``cgltf_validate`` catches the disagreement,
+    so both loaders reject the file before extraction is reached. But ``ExtractMesh`` is also called
+    directly, without validation -- the L3 oracle does exactly that -- and had no check of its own,
+    so a short ``NORMAL`` was simply read past the end of its vector.
+    """
+    b = GltfBuilder("accessor-count-mismatch")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    # Two normals for three positions. Truthfully packed and truthfully described -- the lie is
+    # only in the relationship between the two accessors.
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS[:2],
+                                   accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="MismatchedTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="accessor-count-mismatch", audit_fixture=None, owning_group="robustness",
+        description="A primitive whose NORMAL accessor holds two elements while its POSITION holds "
+                    "three. Every accessor is individually valid; the file is malformed because "
+                    "they disagree. Refused by structural validation and, independently, by "
+                    "extraction -- which matters because extraction is also called directly.",
+        builder=b, validated_layers=["L1", "L2"],
+        features=["attribute count mismatch", "per-primitive attribute agreement",
+                  "import rejection"],
+        spec_anchors=["meshes-overview", "accessors"],
+        l3={"primitives": []},
+        l4={},
+        l5=l5_unsupported("The primitive is refused at extraction, so no buffers are produced.",
+                          ["GLTF-060"]),
+        rejection={
+            "stage": "validation",
+            "task": "GLTF-060",
+            "errorContains": ["structural validation"],
+            "alsoRefusedAtExtraction": True,
+            "extractionErrorContains": ["NORMAL", "same count"],
+            "note": "Refused TWICE, and both matter. cgltf_validate catches the disagreement "
+                    "(code 4), so every path that validates -- both loaders -- rejects the file "
+                    "before extraction is reached. But ExtractMesh is also called DIRECTLY, "
+                    "without validation, by the L3 oracle itself, and it had no check of its own: "
+                    "POSITION's count drives the loop that indexes every other decoded stream, so "
+                    "a short NORMAL was read past the end of its vector. GLTF-060's check turns "
+                    "that undefined behaviour into a named error for any caller, which is why it "
+                    "is not redundant with the validation cgltf already performs.",
+        },
+    )
+
+
+FIXTURES = [bad_accessor_out_of_bounds, accessor_count_mismatch]

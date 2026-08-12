@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 33,
+  "distinctAssetCount": 34,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
@@ -24,7 +24,7 @@
     "animation": 2,
     "cameras": 3,
     "scenes": 1,
-    "robustness": 1
+    "robustness": 2
   },
   "promotedAuditFixtures": {
     "f1": "xf-shared-mesh",
@@ -819,9 +819,39 @@
         "import rejection"
       ],
       "auditFixture": null
+    },
+    {
+      "id": "accessor-count-mismatch",
+      "owningGroup": "robustness",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2"
+      ],
+      "features": [
+        "attribute count mismatch",
+        "per-primitive attribute agreement",
+        "import rejection"
+      ],
+      "auditFixture": null
     }
   ],
   "files": [
+    {
+      "path": "accessor-count-mismatch.expected.json",
+      "bytes": 4151,
+      "sha256": "15da3e17ff53089841a057b2437d790aa96009c3d61517529e66156bf2a603d4"
+    },
+    {
+      "path": "accessor-count-mismatch.glb",
+      "bytes": 780,
+      "sha256": "96449f4610d53d02490e267dca897333d999e82c7af9636ef63d67a3f89b096d"
+    },
+    {
+      "path": "accessor-count-mismatch.gltf",
+      "bytes": 1415,
+      "sha256": "962b43bad2d86c96bbaf424f2f563b0b96ace7e736ee51e0494022f0d769115d"
+    },
     {
       "path": "anim-nonzero-start.expected.json",
       "bytes": 11724,

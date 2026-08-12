@@ -1535,7 +1535,7 @@ same asset in another container, not another asset.
 > cross-referenced ladders were re-counted and the counts here now match them exactly: transforms
 > 17 (§11.4), skinning 13 (§15.4), morph 13 (§16.3), animation 10 (§17.2, excluding the
 > morph-owned `anim-weights-*`), and the remaining groups enumerated in full below. The generated
-> corpus stands at **33** assets today (`GLTF-072` completed the topology group's seven;
+> corpus stands at **34** assets today (`GLTF-072` completed the topology group's seven;
 > `GLTF-021`/`GLTF-023` added the first container and robustness fixtures; `GLTF-267` generated
 > §11.4's `xf-scale-nonuniform`, the corpus's first non-uniform node scale); `GLTF-399` completes
 > the rest.
@@ -1550,7 +1550,7 @@ same asset in another container, not another asset.
 | Group | Count | Assets |
 |---|---|---|
 | Container / buffer | 8 | `glb-basic`, `glb-bin-chunk-padding`, `gltf-external-bin`, `gltf-data-uri-bin`, `gltf-external-image`, `gltf-data-uri-image`, `gltf-uri-percent-encoded`, `gltf-required-extension-unsupported` |
-| bufferView / accessor | 14 | `accessor-offset`, `bufferview-offset`, `bufferview-stride-tight`, `interleaved-position-normal`, `interleaved-pos-nrm-uv`, `interleaved-mixed-widths`, `stride-padded`, `two-primitives-one-buffer`, `sparse-position`, `sparse-indices`, `sparse-interleaved-base`, `accessor-count-mismatch`, `accessor-minmax`, `mat3-padded` |
+| bufferView / accessor | 13 | `accessor-offset`, `bufferview-offset`, `bufferview-stride-tight`, `interleaved-position-normal`, `interleaved-pos-nrm-uv`, `interleaved-mixed-widths`, `stride-padded`, `two-primitives-one-buffer`, `sparse-position`, `sparse-indices`, `sparse-interleaved-base`, `accessor-minmax`, `mat3-padded` |
 | Component types | 8 | `u8-idx`, `u16-idx`, `u32-idx`, `normalized-u8-color`, `normalized-u16-color`, `float-color`, `normalized-i8-normal`, `u16-joints` |
 | Topology | 7 | `mode-points`, `mode-lines`, `mode-line-loop`, `mode-line-strip`, `mode-triangles`, `mode-triangle-strip`, `mode-triangle-fan` |
 | Transforms | 17 | the `xf-*` ladder in §11.4 |
@@ -1563,9 +1563,9 @@ same asset in another container, not another asset.
 | Scenes | 3 | `scene-default-selection`, `scene-two-roots`, `scene-no-scenes` |
 | Cameras / lights | 4 | `camera-perspective`, `camera-perspective-infinite`, `camera-orthographic`, `lights-punctual-three` |
 | Draco parity | 4 | `draco-triangle`, `draco-vs-uncompressed-pair`, `draco-skinned`, `draco-morph` |
-| Robustness / malformed | 6 | `bad-accessor-out-of-bounds`, `bad-index-out-of-range`, `bad-buffer-truncated`, `bad-glb-chunk-length`, `bad-matrix-and-trs`, `bad-version-1.0` |
+| Robustness / malformed | 6 | `bad-accessor-out-of-bounds`, `accessor-count-mismatch` (moved here from the accessor group, whose 14 it was planned in — it is a malformed-input fixture by construction and the robustness group is where the rejection tests look), `bad-index-out-of-range`, `bad-buffer-truncated`, `bad-glb-chunk-length`, `bad-matrix-and-trs`, `bad-version-1.0` |
 
-**Total: 8 + 14 + 8 + 7 + 17 + 6 + 10 + 12 + 15 + 13 + 10 + 3 + 4 + 4 + 6 = 137 distinct assets.**
+**Total: 8 + 13 + 8 + 7 + 17 + 6 + 10 + 12 + 15 + 13 + 10 + 3 + 4 + 4 + 7 = 137 distinct assets.**
 
 > **Materials group, twice adjusted (`GLTF-241`, `GLTF-224`/`GLTF-225`).** `mat-vertex-color-pbr`
 > was added (12 → 13) because no planned fixture carried `COLOR_0` together with a PBR material.
@@ -2029,7 +2029,7 @@ fixture; every address computation is bounds-checked.*
 | GLTF-057 | Non-normalized integer attributes stay integral | ✅ | GLTF-052 | `JOINTS_0` must **not** be normalized. **Accept:** a `JOINTS_0` value of 200 decodes to 200.0, not 0.784. |
 | GLTF-058 | `MAT2`/`MAT3` column-padding fixture | ⬜ | GLTF-041 | Unexposed today (only `MAT4` `FLOAT` is used) but must not regress. **Accept:** `mat3-padded` decodes per §3.6.2.4. |
 | GLTF-059 | `MAT4` inverse-bind-matrix accessor fixture | ✅ | GLTF-041 | `f9` proved read correctness. **Accept:** locked at L2. |
-| GLTF-060 | Cross-attribute `count` consistency check | 🐛 | GLTF-042 | `posAcc->count` drives indexing of every other stream; a shorter `NORMAL` accessor reads out of range. **Accept:** `accessor-count-mismatch` errors with a clear message; ASan clean. |
+| GLTF-060 | Cross-attribute `count` consistency check | ✔ | GLTF-042 | `posAcc->count` drives indexing of every other stream; a shorter `NORMAL` accessor reads out of range. **Accept:** `accessor-count-mismatch` errors with a clear message; ASan clean. **Landed, and the fixture corrected the premise.** `cgltf_validate` *does* catch the disagreement (code 4), so both loaders already rejected such a file before extraction was reached — the task's assumption that it slipped through was wrong. The check is still not redundant: `ExtractMesh` is called **directly, without validation**, by the L3 oracle itself, and had no check of its own, so `POSITION`'s count drove the loop that indexes every other decoded stream and a short `NORMAL` was read past the end of its vector. The check turns that undefined behaviour into a named error for any caller. It runs over **every** attribute the primitive declares, not only the ones the chosen stride uses: an attribute CNA ignores today is still evidence the file is malformed. `accessor-count-mismatch` therefore records **two** refusals, and the rejection test now asserts both — a defence-in-depth check that quietly stopped working would otherwise be invisible behind the layer in front of it. |
 | GLTF-061 | Cross-check decoded bounds against `accessor.min`/`max` | ⬜ | GLTF-041 | Never read today. Would have caught D4 instantly. **Accept:** `accessor-minmax` warns on divergence via the import report. |
 | GLTF-062 | Sparse + interleaved base accessor | 🔬 | GLTF-047 | cgltf advances the sparse **values** pointer by `accessor->stride`; the spec says the values array is tightly packed. **Accept:** `sparse-interleaved-base` either decodes correctly or is rejected with a documented reason; upstream report filed if it is a cgltf bug. |
 
