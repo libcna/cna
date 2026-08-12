@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -41,8 +42,8 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         /**
-         * Volume and cube transfers are RGBA8 in CNA's own renderer contract, so a block-
-         * compressed request would be sized wrongly by every transfer. Refuse it by name.
+         * FNA3D exposes no valid block-compressed volume/cube transfer route in CNA. Keep those
+         * resources linear; each accepted format then uses its real unit size below.
          */
         void RequireLinearTransferFormatEXT(int surfaceFormat, const char* what)
         {
@@ -51,8 +52,8 @@ namespace CNA::Internal::Renderers::Fna3d
                 throw std::runtime_error(
                     std::string("FNA3D renderer: ") + what +
                     " does not accept a block-compressed surface format -- CNA's renderer "
-                    "contract transfers volume and cube data as RGBA8, so the compressed byte "
-                    "layout could not be honoured.");
+                    "contract has no compressed volume/cube transfer layout, so the compressed "
+                    "byte layout could not be honoured.");
             }
         }
 
@@ -70,6 +71,44 @@ namespace CNA::Internal::Renderers::Fna3d
                 ++levels;
             }
             return levels;
+        }
+
+        int VolumeByteCount(int surfaceFormat, int width, int height, int depth)
+        {
+            const int sliceBytes = FormatRegionByteCount(surfaceFormat, width, height);
+            if (sliceBytes <= 0 || depth <= 0 ||
+                depth > std::numeric_limits<int>::max() / sliceBytes)
+            {
+                return 0;
+            }
+            return sliceBytes * depth;
+        }
+
+        bool TryVolumeStorageSize(int width, int height, int depth, int unitBytes,
+                                  std::size_t& voxelCount, std::size_t& byteCount)
+        {
+            if (width <= 0 || height <= 0 || depth <= 0 || unitBytes <= 0)
+            {
+                return false;
+            }
+            const std::size_t max = std::numeric_limits<std::size_t>::max();
+            voxelCount = static_cast<std::size_t>(width);
+            if (voxelCount > max / static_cast<std::size_t>(height))
+            {
+                return false;
+            }
+            voxelCount *= static_cast<std::size_t>(height);
+            if (voxelCount > max / static_cast<std::size_t>(depth))
+            {
+                return false;
+            }
+            voxelCount *= static_cast<std::size_t>(depth);
+            if (voxelCount > max / static_cast<std::size_t>(unitBytes))
+            {
+                return false;
+            }
+            byteCount = voxelCount * static_cast<std::size_t>(unitBytes);
+            return true;
         }
     }
 
@@ -129,7 +168,9 @@ namespace CNA::Internal::Renderers::Fna3d
         // derived from `width * 4` -- doing so reads past the end of the source buffer.
         const int levelBytes = FormatRegionByteCount(surfaceFormat_, width_, height_);
         const int tightStride = FormatRowByteCount(surfaceFormat_, width_);
-        const int rowCount = IsBlockCompressedFormat(surfaceFormat_) ? (height_ + 3) / 4 : height_;
+        const int rowCount = IsBlockCompressedFormat(surfaceFormat_)
+                                 ? height_ / 4 + (height_ % 4 == 0 ? 0 : 1)
+                                 : height_;
         if (levelBytes <= 0 || tightStride <= 0)
         {
             return;
@@ -166,7 +207,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                                  int levelH)
     {
         if (pixels == nullptr || texture_ == nullptr || level < 0 || level >= levelCount_ ||
-            levelW <= 0 || levelH <= 0)
+            levelW != LevelExtent(width_, level) || levelH != LevelExtent(height_, level))
         {
             return;
         }
@@ -185,7 +226,10 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
         if (texture_ == nullptr || data == nullptr || w <= 0 || h <= 0 || level < 0 ||
-            level >= levelCount_ || regionBytes <= 0 || dataLength < regionBytes)
+            level >= levelCount_ ||
+            !IsValidTextureRegion2D(LevelExtent(width_, level), LevelExtent(height_, level), x,
+                                    y, w, h) ||
+            regionBytes <= 0 || dataLength < regionBytes)
         {
             return false;
         }
@@ -326,7 +370,10 @@ namespace CNA::Internal::Renderers::Fna3d
         // so its readback is sized by that format rather than assumed to be RGBA8.
         const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
         if (texture_ == nullptr || data == nullptr || w <= 0 || h <= 0 || level < 0 ||
-            level >= levelCount_ || regionBytes <= 0 || dataLength < regionBytes)
+            level >= levelCount_ ||
+            !IsValidTextureRegion2D(LevelExtent(width_, level), LevelExtent(height_, level), x,
+                                    y, w, h) ||
+            regionBytes <= 0 || dataLength < regionBytes)
         {
             return false;
         }
@@ -364,27 +411,35 @@ namespace CNA::Internal::Renderers::Fna3d
     bool Fna3dTextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                            const void* data, int dataLength)
     {
+        const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
         if (texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
-            level >= levelCount_ || w <= 0 || h <= 0 || dataLength < w * h * 4)
+            level >= levelCount_ ||
+            !IsValidTextureRegion2D(LevelExtent(size_, level), LevelExtent(size_, level), x, y,
+                                    w, h) ||
+            regionBytes <= 0 || dataLength < regionBytes)
         {
             return false;
         }
         FNA3D_SetTextureDataCube(device_, texture_, x, y, w, h,
                                  static_cast<FNA3D_CubeMapFace>(face), level,
-                                 const_cast<void*>(data), w * h * 4);
+                                 const_cast<void*>(data), regionBytes);
         return true;
     }
 
     bool Fna3dTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
+        const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
         if (texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
-            level >= levelCount_ || w <= 0 || h <= 0 || dataLength < w * h * 4)
+            level >= levelCount_ ||
+            !IsValidTextureRegion2D(LevelExtent(size_, level), LevelExtent(size_, level), x, y,
+                                    w, h) ||
+            regionBytes <= 0 || dataLength < regionBytes)
         {
             return false;
         }
         FNA3D_GetTextureDataCube(device_, texture_, x, y, w, h,
-                                 static_cast<FNA3D_CubeMapFace>(face), level, data, w * h * 4);
+                                 static_cast<FNA3D_CubeMapFace>(face), level, data, regionBytes);
         return true;
     }
 
@@ -462,7 +517,12 @@ namespace CNA::Internal::Renderers::Fna3d
         std::memset(&binding, 0, sizeof(binding));
         binding.type = FNA3D_RENDERTARGET_TYPE_CUBE;
         binding.cube.size = size_;
-        binding.cube.face = static_cast<FNA3D_CubeMapFace>(face < 0 ? 0 : (face > 5 ? 5 : face));
+        if (face < 0 || face > 5)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: render-target cube face must be in the range [0, 5].");
+        }
+        binding.cube.face = static_cast<FNA3D_CubeMapFace>(face);
         binding.levelCount = levelCount_;
         binding.multiSampleCount = multiSampleCount_;
         binding.texture = texture_;
@@ -497,13 +557,18 @@ namespace CNA::Internal::Renderers::Fna3d
     bool Fna3dRenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                 void* data, int dataLength) const
     {
+        constexpr int kColorFormat = static_cast<int>(FNA3D_SURFACEFORMAT_COLOR);
+        const int regionBytes = FormatRegionByteCount(kColorFormat, w, h);
         if (texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
-            level >= levelCount_ || w <= 0 || h <= 0 || dataLength < w * h * 4)
+            level >= levelCount_ ||
+            !IsValidTextureRegion2D(LevelExtent(size_, level), LevelExtent(size_, level), x, y,
+                                    w, h) ||
+            regionBytes <= 0 || dataLength < regionBytes)
         {
             return false;
         }
         FNA3D_GetTextureDataCube(device_, texture_, x, y, w, h,
-                                 static_cast<FNA3D_CubeMapFace>(face), level, data, w * h * 4);
+                                 static_cast<FNA3D_CubeMapFace>(face), level, data, regionBytes);
         return true;
     }
 
@@ -527,6 +592,7 @@ namespace CNA::Internal::Renderers::Fna3d
         if (keepUploadMirror_)
         {
             uploadMirror_.resize(static_cast<std::size_t>(levelCount_));
+            uploadMirrorDefined_.resize(static_cast<std::size_t>(levelCount_));
         }
     }
 
@@ -542,21 +608,37 @@ namespace CNA::Internal::Renderers::Fna3d
     bool Fna3dTexture3DRenderer::SetData(int level, int x, int y, int z, int w, int h, int depth,
                                          const void* data, int dataLength)
     {
-        if (texture_ == nullptr || data == nullptr || level < 0 || level >= levelCount_ ||
-            w <= 0 || h <= 0 || depth <= 0 || dataLength < w * h * depth * 4)
+        const bool validLevel = level >= 0 && level < levelCount_;
+        const int levelWidth = validLevel ? LevelExtent(width_, level) : 0;
+        const int levelHeight = validLevel ? LevelExtent(height_, level) : 0;
+        const int levelDepth = validLevel ? LevelExtent(depth_, level) : 0;
+        const int transferBytes = VolumeByteCount(surfaceFormat_, w, h, depth);
+        if (texture_ == nullptr || data == nullptr || !validLevel ||
+            !IsValidTextureRegion3D(levelWidth, levelHeight, levelDepth, x, y, z, w, h, depth) ||
+            transferBytes <= 0 || dataLength < transferBytes)
+        {
+            return false;
+        }
+
+        const int unitBytes = FormatUnitByteCount(surfaceFormat_);
+        std::size_t voxelCount = 0;
+        std::size_t mirrorByteCount = 0;
+        if (keepUploadMirror_ &&
+            !TryVolumeStorageSize(levelWidth, levelHeight, levelDepth, unitBytes, voxelCount,
+                                  mirrorByteCount))
         {
             return false;
         }
         FNA3D_SetTextureData3D(device_, texture_, x, y, z, w, h, depth, level,
-                               const_cast<void*>(data), w * h * depth * 4);
+                               const_cast<void*>(data), transferBytes);
 
         if (keepUploadMirror_)
         {
-            const int levelWidth = LevelExtent(width_, level);
-            const int levelHeight = LevelExtent(height_, level);
-            const int levelDepth = LevelExtent(depth_, level);
             std::vector<std::uint8_t>& mirror = uploadMirror_[static_cast<std::size_t>(level)];
-            mirror.resize(static_cast<std::size_t>(levelWidth) * levelHeight * levelDepth * 4);
+            std::vector<std::uint8_t>& defined =
+                uploadMirrorDefined_[static_cast<std::size_t>(level)];
+            mirror.resize(mirrorByteCount);
+            defined.resize(voxelCount);
 
             const auto* source = static_cast<const std::uint8_t*>(data);
             for (int slice = 0; slice < depth; ++slice)
@@ -566,12 +648,19 @@ namespace CNA::Internal::Renderers::Fna3d
                     const std::size_t destinationOffset =
                         ((static_cast<std::size_t>(z + slice) * levelHeight +
                           static_cast<std::size_t>(y + row)) * levelWidth +
-                         static_cast<std::size_t>(x)) * 4;
+                         static_cast<std::size_t>(x)) * unitBytes;
                     const std::size_t sourceOffset =
                         ((static_cast<std::size_t>(slice) * h + static_cast<std::size_t>(row)) *
-                         static_cast<std::size_t>(w)) * 4;
+                         static_cast<std::size_t>(w)) * unitBytes;
                     std::memcpy(mirror.data() + destinationOffset, source + sourceOffset,
-                                static_cast<std::size_t>(w) * 4);
+                                static_cast<std::size_t>(w) * unitBytes);
+
+                    const std::size_t firstVoxel =
+                        (static_cast<std::size_t>(z + slice) * levelHeight +
+                         static_cast<std::size_t>(y + row)) * levelWidth +
+                        static_cast<std::size_t>(x);
+                    std::memset(defined.data() + firstVoxel, 1,
+                                static_cast<std::size_t>(w));
                 }
             }
         }
@@ -581,15 +670,21 @@ namespace CNA::Internal::Renderers::Fna3d
     bool Fna3dTexture3DRenderer::GetData(int level, int x, int y, int z, int w, int h, int depth,
                                          void* data, int dataLength) const
     {
-        if (texture_ == nullptr || data == nullptr || level < 0 || level >= levelCount_ ||
-            w <= 0 || h <= 0 || depth <= 0 || dataLength < w * h * depth * 4)
+        const bool validLevel = level >= 0 && level < levelCount_;
+        const int levelWidth = validLevel ? LevelExtent(width_, level) : 0;
+        const int levelHeight = validLevel ? LevelExtent(height_, level) : 0;
+        const int levelDepth = validLevel ? LevelExtent(depth_, level) : 0;
+        const int transferBytes = VolumeByteCount(surfaceFormat_, w, h, depth);
+        if (texture_ == nullptr || data == nullptr || !validLevel ||
+            !IsValidTextureRegion3D(levelWidth, levelHeight, levelDepth, x, y, z, w, h, depth) ||
+            transferBytes <= 0 || dataLength < transferBytes)
         {
             return false;
         }
         if (!keepUploadMirror_)
         {
             FNA3D_GetTextureData3D(device_, texture_, x, y, z, w, h, depth, level, data,
-                                   w * h * depth * 4);
+                                   transferBytes);
             return true;
         }
 
@@ -598,34 +693,34 @@ namespace CNA::Internal::Renderers::Fna3d
         // so is the whole point of this method's bool -- the shared layer turns it into a
         // System::NotSupportedException rather than a buffer of invented zeroes.
         const std::vector<std::uint8_t>& mirror = uploadMirror_[static_cast<std::size_t>(level)];
-        if (mirror.empty())
+        const std::vector<std::uint8_t>& defined =
+            uploadMirrorDefined_[static_cast<std::size_t>(level)];
+        if (mirror.empty() || defined.empty())
         {
             return false;
         }
 
-        const int levelWidth = LevelExtent(width_, level);
-        const int levelHeight = LevelExtent(height_, level);
-        const int levelDepth = LevelExtent(depth_, level);
-        if (x < 0 || y < 0 || z < 0 || x + w > levelWidth || y + h > levelHeight ||
-            z + depth > levelDepth)
-        {
-            return false;
-        }
-
+        const int unitBytes = FormatUnitByteCount(surfaceFormat_);
         auto* destination = static_cast<std::uint8_t*>(data);
         for (int slice = 0; slice < depth; ++slice)
         {
             for (int row = 0; row < h; ++row)
             {
-                const std::size_t sourceOffset =
+                const std::size_t firstVoxel =
                     ((static_cast<std::size_t>(z + slice) * levelHeight +
                       static_cast<std::size_t>(y + row)) * levelWidth +
-                     static_cast<std::size_t>(x)) * 4;
+                     static_cast<std::size_t>(x));
+                const std::uint8_t* coverage = defined.data() + firstVoxel;
+                if (std::find(coverage, coverage + w, std::uint8_t { 0 }) != coverage + w)
+                {
+                    return false;
+                }
+                const std::size_t sourceOffset = firstVoxel * unitBytes;
                 const std::size_t destinationOffset =
                     ((static_cast<std::size_t>(slice) * h + static_cast<std::size_t>(row)) *
-                     static_cast<std::size_t>(w)) * 4;
+                     static_cast<std::size_t>(w)) * unitBytes;
                 std::memcpy(destination + destinationOffset, mirror.data() + sourceOffset,
-                            static_cast<std::size_t>(w) * 4);
+                            static_cast<std::size_t>(w) * unitBytes);
             }
         }
         return true;
@@ -871,6 +966,16 @@ namespace CNA::Internal::Renderers::Fna3d
         const int levelCount = data.mipLevels > 0 ? data.mipLevels : 1;
         const FNA3D_SurfaceFormat format = ToFna3dSurfaceFormat(data.surfaceFormat);
         RequireTextureFormatSupportedEXT(data.surfaceFormat, "Texture2D");
+        if (!data.pixels.empty())
+        {
+            const int expectedBytes = FormatRegionByteCount(data.surfaceFormat, width, height);
+            if (expectedBytes <= 0 || data.pixels.size() < static_cast<std::size_t>(expectedBytes))
+            {
+                throw std::runtime_error(
+                    "FNA3D renderer: ImageData level-zero pixels do not cover its declared "
+                    "surface format and dimensions.");
+            }
+        }
 
         FNA3D_Texture* texture =
             FNA3D_CreateTexture2D(device_, format, width, height, levelCount, 0);
@@ -910,9 +1015,9 @@ namespace CNA::Internal::Renderers::Fna3d
         const int width = w > 0 ? w : 1;
         const int height = h > 0 ? h : 1;
         const int slices = depth > 0 ? depth : 1;
-        // Volume and cube transfers are RGBA8 in CNA's own renderer contract (the DDS/XNB readers
-        // decompress on the CPU before upload), so a block-compressed request here would be sized
-        // wrongly by every transfer below. Refusing is the honest answer rather than mis-sizing.
+        // FNA3D receives a byte length for every volume upload, but CNA has no compressed
+        // volume-transfer layout. Refusing compressed input is the honest answer rather than
+        // mis-sizing its blocks as linear texels.
         RequireLinearTransferFormatEXT(surfaceFormat, "Texture3D");
         const int levelCount = LevelCountFor(std::max({ width, height, slices }), mipMap);
         FNA3D_Texture* texture = FNA3D_CreateTexture3D(

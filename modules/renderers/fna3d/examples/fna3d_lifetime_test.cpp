@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
@@ -206,6 +207,32 @@ private:
         Check(cubeRefused, "a block-compressed TextureCube is refused");
         Check(message.find("block-compressed") != std::string::npos,
               "the compressed-cube refusal names the reason");
+
+        // OpenGL has no native FNA3D volume readback. Its fallback must never turn a partial
+        // upload into resize-created zeroes for voxels the caller never supplied. Drivers with a
+        // genuine native readback path are checked by their own probe instead.
+        if (!fna3d->SupportsTexture3DReadbackEXT())
+        {
+            Texture3D volume(device, 2, 2, 2, false, SurfaceFormat::Color);
+            const Color written(17, 34, 51, 255);
+            volume.SetData(0, 0, 0, 1, 1, 0, 1, &written, 0, 1);
+            std::vector<Color> wholeVolume(8, Color(222, 222, 222, 222));
+            const bool undefinedRefused = Threw(
+                [&] { volume.GetData(wholeVolume.data(), static_cast<int>(wholeVolume.size())); },
+                message);
+            Check(undefinedRefused,
+                  "a volume fallback refuses a read that includes never-uploaded voxels");
+            Check(undefinedRefused && wholeVolume[0].getRProperty() == 222 &&
+                      wholeVolume[7].getAProperty() == 222,
+                  "a refused partial volume read leaves the caller's destination unchanged");
+
+            Color recovered(0, 0, 0, 0);
+            const bool knownVoxelServed = !Threw(
+                [&] { volume.GetData(0, 0, 0, 1, 1, 0, 1, &recovered, 0, 1); }, message);
+            Check(knownVoxelServed && recovered.getRProperty() == 17 &&
+                      recovered.getGProperty() == 34 && recovered.getBProperty() == 51,
+                  "the defined volume voxel still reads back exactly");
+        }
 
         // An out-of-contract enum ordinal must be refused rather than cast into an undefined
         // FNA3D enumerator.

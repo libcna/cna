@@ -443,7 +443,7 @@ namespace CNA::Internal::Renderers::Fna3d
         Fna3dTexture3DRenderer& operator=(const Fna3dTexture3DRenderer&) = delete;
 
         /**
-         * @brief Uploads RGBA8 voxels into a sub-volume.
+         * @brief Uploads tightly packed voxels in the texture's declared surface format.
          * @param level      Mip level to write.
          * @param x          Left edge of the box, in voxels.
          * @param y          Top edge of the box, in voxels.
@@ -451,7 +451,7 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param w          Box width in voxels.
          * @param h          Box height in voxels.
          * @param depth      Box depth in voxels.
-         * @param data       Source voxels, tightly packed RGBA8.
+         * @param data       Source voxels, tightly packed in the declared surface format.
          * @param dataLength Size of @p data in bytes.
          * @return True when the whole box was stored.
          */
@@ -459,7 +459,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                    const void* data, int dataLength) override;
 
         /**
-         * @brief Reads RGBA8 voxels back from a sub-volume.
+         * @brief Reads tightly packed voxels in the texture's declared surface format.
          * @param level      Mip level to read.
          * @param x          Left edge of the box, in voxels.
          * @param y          Top edge of the box, in voxels.
@@ -467,7 +467,7 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param w          Box width in voxels.
          * @param h          Box height in voxels.
          * @param depth      Box depth in voxels.
-         * @param data       Destination for the tightly packed RGBA8 box.
+         * @param data       Destination for the tightly packed declared-format box.
          * @param dataLength Size of @p data in bytes.
          * @return True when the whole box was read back.
          */
@@ -496,11 +496,12 @@ namespace CNA::Internal::Renderers::Fna3d
         // FNA3D's OpenGL driver implements no GetTextureData3D at all (it logs
         // "GetTextureData3D is unsupported!" and writes nothing), while its SDL_GPU and Direct3D
         // 11 drivers do. A volume texture in XNA has no GPU write path -- its content can only
-        // come from SetData -- so mirroring the uploads is an exact answer rather than invented
-        // content, and it is kept only when the running driver was measured not to support the
-        // readback (Fna3dRenderer's own probe at device creation).
+        // come from SetData -- so mirroring the uploads is exact only if every requested voxel is
+        // known to have been supplied. `uploadMirrorDefined_` tracks that coverage and makes a
+        // read touching an uninitialised voxel fail rather than return resize-created zeroes.
         bool keepUploadMirror_ = false;
         std::vector<std::vector<std::uint8_t>> uploadMirror_;
+        std::vector<std::vector<std::uint8_t>> uploadMirrorDefined_;
     };
 
     /**
@@ -1406,6 +1407,17 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] bool SupportsCompressedReadbackEXT() const
         {
             return compressedReadbackSupported_;
+        }
+
+        /**
+         * @brief CNAEXT. Whether this driver returned an exact probe result for volume readback.
+         *
+         * When false, each `Fna3dTexture3DRenderer` uses its checked upload mirror instead of
+         * asking the native driver to write an uninitialised output buffer.
+         */
+        [[nodiscard]] bool SupportsTexture3DReadbackEXT() const
+        {
+            return texture3DReadbackSupported_;
         }
 
         /**

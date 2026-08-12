@@ -156,10 +156,18 @@ is based on source inspection, not only on the older document's intended design.
 | ID | Task | Status |
 |---|---|---|
 | FNA3D-36 | Remove the per-draw `std::vector` allocations in vertex-binding assembly. Use CNA's 16-stream ceiling and fixed-capacity declaration storage, while retaining caller declarations verbatim and rejecting oversized stream/declaration input. | **done** — stack `std::array` binding/declaration storage; canonical layouts are static `std::span` views |
-| FNA3D-37 | Validate 2D, 3D, and cube transfer regions and byte counts before every native FNA3D call; make format-size arithmetic overflow-safe; reject short `ImageData` uploads before FNA3D can read past caller memory. | **in progress** |
-| FNA3D-38 | Make the Texture3D upload mirror exact for partial uploads: track defined voxels and refuse reads that include data never supplied by the caller. | **in progress** |
+| FNA3D-37 | Validate 2D, 3D, and cube transfer regions and byte counts before every native FNA3D call; make format-size arithmetic overflow-safe; reject short `ImageData` uploads before FNA3D can read past caller memory. | **done** — checked subtraction-form region bounds, `int64_t` byte arithmetic, format-aware cube/volume transfers, short-image rejection, and `Fna3dSurfaceFormatTests` coverage |
+| FNA3D-38 | Make the Texture3D upload mirror exact for partial uploads: track defined voxels and refuse reads that include data never supplied by the caller. | **done** — per-mip voxel coverage; OpenGL fallback test confirms an undefined read is rejected without modifying the destination, while a defined voxel round-trips |
 | FNA3D-39 | Replace raw resource-to-device ownership with a shared device-liveness control block, so destruction or use of an FNA3D resource after its device is gone cannot enter freed native state. Cover it with a post-device-destruction test. | **open — shared lifetime work** |
 
 FNA3D-39 is deliberately still open. The current resource wrappers keep raw `FNA3D_Device*`
 values, so a complete solution must cover resources, sprite batches, and all public destruction
 orders together; a partial flag in only one destructor would give a misleading guarantee.
+
+### Reconciliation findings
+
+| Finding | Resolution |
+|---|---|
+| `ApplyVertexBindingsEXT` and the canonical-layout helper allocated nested `std::vector`s once per draw. | **fixed** in FNA3D-36 with bounded stack arrays and static `std::span` layout views. |
+| Texture-region checks either reached FNA3D unchecked or used signed addition/multiplication that could overflow. Cube and volume transfers also assumed four bytes per texel. | **fixed** in FNA3D-37: format-aware, overflow-safe byte counts and checked 2D/3D mip regions protect every exposed transfer. |
+| OpenGL's missing `GetTextureData3D` fallback mirrored only bytes, so a partial upload made never-written voxels look like valid zeroes. | **fixed** in FNA3D-38: coverage is tracked separately and an incomplete read returns `false`; the shared layer leaves its caller buffer untouched and raises its documented unsupported-read error. |
