@@ -131,6 +131,33 @@ unmirrored node shares a single index buffer and a single vertex buffer, so reve
 or flipping `TANGENT.w`, which mirroring also inverts — at import would fix one placement by
 breaking the other. Both are per-draw raster decisions, the same boundary `doubleSided` sits behind.
 
+## Where normals and tangents are renormalised
+
+`plan_gltf.md` `GLTF-177`. §3.7.2.1 requires `NORMAL` and `TANGENT` to be unit length, but three
+things downstream break that, and each is renormalised at a **stated** point rather than wherever
+it happened to be convenient:
+
+| Stage | What breaks unit length | Renormalised? |
+|---|---|---|
+| Import, authored normals | nothing — the file promises unit length | **No.** Passed through byte-exact |
+| Import, generated normals (`GLTF-173`) | the area-weighted sum of face normals is not unit | **Yes**, at generation |
+| Import, generated tangents | Gram-Schmidt against the normal | **Yes**, at generation |
+| Morph blending (CPU, `SetMorphWeightsEXT`) | a weighted sum of unit normals is not unit | **Yes**, per vertex after blending |
+| Skinning (GPU) | a weighted sum of rotated normals is not unit | **Yes**, in the vertex shader |
+| Non-uniform node scale (GPU) | `transpose(inverse(W))` does not preserve length | **Yes**, in the vertex shader |
+| Rasterizer interpolation (GPU) | interpolating two unit normals shortens the result | **Yes**, in the fragment shader |
+
+Two consequences worth stating, because both look like bugs from the outside:
+
+* **An authored non-unit normal survives import unchanged.** CNA does not "fix" it. The file is
+  malformed, the vertex buffer says exactly what the file said, and the shader's own `normalize`
+  makes it harmless at draw time. Renormalising at import would hide a broken export *and* make
+  the vertex bytes disagree with the accessor they came from — which the L5 goldens compare.
+* **The CPU morph path renormalises but the GPU one would not have to.** The blend happens on the
+  CPU because the deformed buffer is re-uploaded (`SetDataRaw`), and the result is what every
+  later reader sees — including a CPU-side bounds computation. Leaving it unnormalised would make
+  a heavily morphed surface light darker as its normals shrink.
+
 ## Where this leaves `unitScale`
 
 glTF §3.4 says one unit is one metre. XNA says nothing at all, so there is no conversion to apply at

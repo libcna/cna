@@ -344,3 +344,61 @@ TEST(GltfUvChannel, TangentGenerationUsesTheGeneratedNormalRatherThanAFabricated
             << "handedness must be a sign, not a scale: " << tangent[3];
     }
 }
+
+// --- GLTF-177: what import does NOT renormalise ----------------------------------------------------
+
+TEST(GltfUvChannel, AnAuthoredNonUnitNormalSurvivesImportUnchanged)
+{
+    // The other half of the renormalisation policy (docs/gltf-conventions.md), and the one that
+    // looks wrong until it is written down: a normal the file authored at length 2 arrives in the
+    // vertex buffer at length 2. §3.7.2.1 requires unit length, so such a file is malformed -- but
+    // "fixing" it at import would hide a broken export AND make the vertex bytes disagree with the
+    // accessor they came from, which is exactly what the L5 goldens compare. The shader's own
+    // `normalize` makes it harmless at draw time.
+    Parsed doc;
+    ASSERT_TRUE(Parse(doc, R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1 },
+                                  "indices": 2 } ] } ],
+  "buffers": [ { "byteLength": 80, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAABAAAAAAAAAAAAAAABAAAABAAIAAAA=" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 6 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0, 0, 0], "max": [1, 1, 0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5123, "count": 3, "type": "SCALAR" }
+  ]
+})GLTF"));
+
+    const MeshOut mesh = ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe",
+                                      nullptr, 1.0f);
+    EXPECT_FALSE(mesh.generatedNormalsEXT) << "the fixture authors its own normals";
+
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            mesh.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known);
+    int normalOffset = -1;
+    for (std::size_t e = 0; e < layout.count; ++e)
+    {
+        if (layout.elements[e].usage == VertexElementUsage::Normal)
+        {
+            normalOffset = layout.elements[e].offset;
+        }
+    }
+    ASSERT_GE(normalOffset, 0);
+
+    float normal[3];
+    std::memcpy(normal, mesh.vertexBytes.data() + static_cast<std::size_t>(normalOffset),
+                sizeof(normal));
+    EXPECT_NEAR(2.0f, normal[2], kTolerance)
+        << "import renormalised an authored normal, so the vertex bytes no longer say what the "
+           "accessor said";
+}

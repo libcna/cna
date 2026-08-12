@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-275 / GLTF-276 / GLTF-277 / GLTF-283 / GLTF-284: how morph deltas are applied.
+// plan_gltf.md GLTF-177 / GLTF-275 / GLTF-276 / GLTF-277 / GLTF-283 / GLTF-284: how morph deltas
+// are applied.
 //
 // A morph target is a per-vertex delta array, and `BlendMorphTargetsEXT` adds a weighted sum of
 // those arrays onto the base vertex bytes. Every rule here is one where the wrong answer still
@@ -254,4 +255,49 @@ TEST(GltfMorphBlending, TheCorrectWeightCountIsAcceptedSoTheGuardIsNotSimplyAlwa
     morph.NormalDeltas = {{}, {}};
 
     EXPECT_NO_THROW((void)BlendMorphTargetsEXT(morph, {0.5f, 0.5f}));
+}
+
+// --- GLTF-177: the renormalisation point on the CPU blend path -------------------------------------
+
+TEST(GltfMorphBlending, ABlendedNormalAndTangentComeBackUnitLength)
+{
+    // A weighted sum of unit vectors is not a unit vector, and the shortfall is largest exactly
+    // where morphing is most visible: two normals 90 degrees apart at half weight each sum to
+    // length 0.707, so a fully morphed surface would light about 30% too dark. The shader's own
+    // `normalize` would rescue the *drawn* result, but not a CPU-side reader of the blended buffer
+    // -- a bounds computation, a picking ray, a `.cnj` re-export -- so the policy
+    // (docs/gltf-conventions.md) puts the renormalisation here, on the buffer everything sees.
+    //
+    // The base normal is +Z and the delta turns it toward +X; at weight 1 the sum is (1,0,1),
+    // whose length is sqrt(2). Nothing about that is subtle, which is the point.
+    MorphTargetDataEXT morph;
+    morph.BaseVertexBytes = BaseVertices(1);
+    morph.Stride = kStride;
+    morph.PositionDeltas.push_back({Vector3(0.0f, 0.0f, 0.0f)});
+    morph.NormalDeltas.push_back({Vector3(1.0f, 0.0f, -0.0f)});
+    morph.TangentDeltas.push_back({Vector3(0.0f, 1.0f, 0.0f)});
+
+    const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(morph, {1.0f});
+    ASSERT_EQ(morph.BaseVertexBytes.size(), blended.size());
+
+    float normal[3];
+    std::memcpy(normal, blended.data() + static_cast<std::size_t>(OffsetOf(VertexElementUsage::Normal)),
+                sizeof(normal));
+    const float normalLength =
+        std::sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+    EXPECT_NEAR(1.0f, normalLength, 1e-4f)
+        << "the blended normal is " << normalLength << " long; a morphed surface lights by that "
+           "factor";
+    // And it points the way the sum does, not merely somewhere unit-length: (1,0,1) normalised.
+    EXPECT_NEAR(0.70710678f, normal[0], 1e-4f);
+    EXPECT_NEAR(0.70710678f, normal[2], 1e-4f);
+
+    float tangent[4];
+    std::memcpy(tangent, blended.data() + static_cast<std::size_t>(OffsetOf(VertexElementUsage::Tangent)),
+                sizeof(tangent));
+    const float tangentLength =
+        std::sqrt(tangent[0] * tangent[0] + tangent[1] * tangent[1] + tangent[2] * tangent[2]);
+    EXPECT_NEAR(1.0f, tangentLength, 1e-4f) << "the blended tangent is not unit length";
+    EXPECT_FLOAT_EQ(-1.0f, tangent[3])
+        << "renormalisation rewrote the handedness sign, which is not a length at all";
 }
