@@ -7,6 +7,53 @@
 namespace CNA::Platform {
 
     /**
+     * @brief Modifier keys, as bits in `KeyboardSnapshot::modifiers`.
+     *
+     * CNA's own layout, not any implementation's. The distinction matters more here than
+     * elsewhere in the contract: a bare `std::uint16_t` with no stated meaning invites an
+     * implementation to pass its native mask straight through, which compiles, runs, and is
+     * silently wrong on the second implementation — the values simply mean something else.
+     *
+     * Shift, Control, Alt and Gui do **not** distinguish left from right. XNA has no notion of
+     * sided modifiers and neither does any consumer in CNA, so reporting the side would be
+     * information nothing can use and every implementation would have to invent bits for.
+     */
+    enum class KeyModifier : std::uint16_t
+    {
+        /** @brief No modifier is active. */
+        None = 0,
+        /** @brief Either Shift key is held. */
+        Shift = 1u << 0,
+        /** @brief Either Control key is held. */
+        Control = 1u << 1,
+        /** @brief Either Alt key is held. */
+        Alt = 1u << 2,
+        /** @brief Either GUI key (Windows, Command, Super) is held. */
+        Gui = 1u << 3,
+        /** @brief Caps Lock is on. A latched state, not a held key. */
+        CapsLock = 1u << 4,
+        /** @brief Num Lock is on. A latched state, not a held key. */
+        NumLock = 1u << 5,
+        /** @brief Scroll Lock is on. A latched state, not a held key. */
+        ScrollLock = 1u << 6,
+        /** @brief The AltGr / Mode key is held. */
+        Mode = 1u << 7
+    };
+
+    /**
+     * @brief Tests whether a modifier is set in a mask.
+     *
+     * @param modifiers The mask, as taken from `KeyboardSnapshot::modifiers`.
+     * @param modifier The modifier to test for.
+     * @return True if the modifier is set.
+     */
+    [[nodiscard]] constexpr bool HasModifier(const std::uint16_t modifiers,
+                                             const KeyModifier modifier)
+    {
+        return (modifiers & static_cast<std::uint16_t>(modifier)) != 0;
+    }
+
+    /**
      * @brief A whole-keyboard snapshot taken at one instant.
      *
      * XNA's `Keyboard::GetState()` is a level query — "is this key held right now" — so the
@@ -18,7 +65,12 @@ namespace CNA::Platform {
     {
         /** @brief Virtual key codes currently held, matching `Microsoft::Xna::Framework::Input::Keys`. */
         std::vector<std::uint32_t> pressedKeys;
-        /** @brief Bitmask of modifier keys held. */
+        /**
+         * @brief Modifier keys held or latched, as a bitmask of `KeyModifier` values.
+         *
+         * An implementation must translate into this layout rather than passing its own mask
+         * through — see KeyModifier.
+         */
         std::uint16_t modifiers = 0;
     };
 

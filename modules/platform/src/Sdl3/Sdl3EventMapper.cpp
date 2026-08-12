@@ -2,6 +2,8 @@
 
 #include "Sdl3EventMapper.hpp"
 
+#include "Sdl3Modifiers.hpp"
+
 #include <SDL3/SDL.h>
 
 namespace CNA::Platform::Sdl3 {
@@ -73,7 +75,7 @@ namespace CNA::Platform::Sdl3 {
                 key.window = static_cast<WindowId>(source.key.windowID);
                 key.scancode = static_cast<std::uint32_t>(source.key.scancode);
                 key.keycode = static_cast<std::uint32_t>(source.key.key);
-                key.modifiers = static_cast<std::uint16_t>(source.key.mod);
+                key.modifiers = ToPlatformModifiers(source.key.mod);
                 key.pressed = source.key.down;
                 key.repeat = source.key.repeat;
                 destination = key;

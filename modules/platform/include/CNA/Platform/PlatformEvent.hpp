@@ -81,7 +81,10 @@ namespace CNA::Platform {
         std::uint32_t scancode = 0;
         /** @brief Layout-dependent virtual key code, matching `Microsoft::Xna::Framework::Input::Keys`. */
         std::uint32_t keycode = 0;
-        /** @brief Bitmask of modifier keys held at the time of the event. */
+        /**
+         * @brief Modifier keys held at the time of the event, as a bitmask of `KeyModifier`
+         * values — the same layout as `KeyboardSnapshot::modifiers`.
+         */
         std::uint16_t modifiers = 0;
         /** @brief True for a press, false for a release. */
         bool pressed = false;

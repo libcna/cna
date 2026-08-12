@@ -2,6 +2,8 @@
 
 #include "Sdl3InputServices.hpp"
 
+#include "Sdl3Modifiers.hpp"
+
 #include "CNA/Platform/PlatformException.hpp"
 #include "Sdl3Window.hpp"
 
@@ -40,10 +42,11 @@ namespace CNA::Platform::Sdl3 {
 
     // --- keyboard (PLAT-79) --------------------------------------------------------------------
 
+
     void Sdl3Keyboard::Update()
     {
         snapshot_.pressedKeys.clear();
-        snapshot_.modifiers = static_cast<std::uint16_t>(SDL_GetModState());
+        snapshot_.modifiers = ToPlatformModifiers(SDL_GetModState());
 
         int count = 0;
         const bool* keys = SDL_GetKeyboardState(&count);

@@ -198,3 +198,65 @@ TEST_F(Sdl3InputTest, TextInputRefusesAWindowItDidNotCreate)
 }
 
 } // namespace
+
+// --- modifier layout (PLAT-77e) ---------------------------------------------------------------
+
+TEST_F(Sdl3InputTest, ModifierBitsUseTheContractsLayoutNotSdls)
+{
+    // The snapshot's modifier field is a bare uint16_t, which is exactly the shape that invites
+    // an implementation to pass its native mask straight through: it compiles, it runs, and it is
+    // silently wrong on the second implementation because the values mean something else. With no
+    // modifier held, every contract bit must be clear -- a passed-through mask would still carry
+    // whatever latched state the host reports in bits the contract never assigned.
+    IPlatformKeyboard* keyboard = platform_->GetKeyboard();
+    ASSERT_NE(keyboard, nullptr);
+    keyboard->Update();
+
+    const std::uint16_t modifiers = keyboard->GetSnapshot().modifiers;
+    constexpr std::uint16_t known =
+        static_cast<std::uint16_t>(KeyModifier::Shift) |
+        static_cast<std::uint16_t>(KeyModifier::Control) |
+        static_cast<std::uint16_t>(KeyModifier::Alt) |
+        static_cast<std::uint16_t>(KeyModifier::Gui) |
+        static_cast<std::uint16_t>(KeyModifier::CapsLock) |
+        static_cast<std::uint16_t>(KeyModifier::NumLock) |
+        static_cast<std::uint16_t>(KeyModifier::ScrollLock) |
+        static_cast<std::uint16_t>(KeyModifier::Mode);
+
+    EXPECT_EQ(modifiers & ~known, 0)
+        << "the mask carries bits the contract never assigned, which means it was not translated";
+}
+
+TEST_F(Sdl3InputTest, HasModifierReadsTheDocumentedBits)
+{
+    constexpr std::uint16_t mask = static_cast<std::uint16_t>(KeyModifier::Shift) |
+                                   static_cast<std::uint16_t>(KeyModifier::NumLock);
+
+    EXPECT_TRUE(HasModifier(mask, KeyModifier::Shift));
+    EXPECT_TRUE(HasModifier(mask, KeyModifier::NumLock));
+    EXPECT_FALSE(HasModifier(mask, KeyModifier::Control));
+    EXPECT_FALSE(HasModifier(mask, KeyModifier::Mode));
+
+    // None is zero, so it is never "present" -- a caller testing for it would otherwise get true
+    // for every mask.
+    EXPECT_FALSE(HasModifier(mask, KeyModifier::None));
+    EXPECT_FALSE(HasModifier(0, KeyModifier::None));
+}
+
+TEST_F(Sdl3InputTest, EveryModifierBitIsDistinct)
+{
+    // Two modifiers sharing a bit would make one of them unreadable, and the failure would look
+    // like "Alt is stuck on" rather than like a layout mistake.
+    constexpr KeyModifier all[] = {KeyModifier::Shift,    KeyModifier::Control,
+                                   KeyModifier::Alt,      KeyModifier::Gui,
+                                   KeyModifier::CapsLock, KeyModifier::NumLock,
+                                   KeyModifier::ScrollLock, KeyModifier::Mode};
+    std::uint16_t seen = 0;
+    for (const KeyModifier modifier : all)
+    {
+        const auto bit = static_cast<std::uint16_t>(modifier);
+        EXPECT_NE(bit, 0) << "a modifier other than None must have a bit";
+        EXPECT_EQ(seen & bit, 0) << "bit reused";
+        seen = static_cast<std::uint16_t>(seen | bit);
+    }
+}
