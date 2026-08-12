@@ -807,3 +807,139 @@ TEST(GltfConformanceL4, CnaWorldPositionsMatchTheExpectedGeometry)
         }
     }
 }
+
+// --- plan_gltf.md GLTF-401: the manifest describes every asset, completely ------------------------
+
+TEST(GltfFixtureCorpus, EveryAssetDeclaresItsGroupItsLayersAndAnExpectationForEachOfThem)
+{
+    // §24.1's inventory is only worth having if it is total. The count check above proves the
+    // owning groups add up; this proves each entry actually says what it claims to validate, and
+    // -- the part that matters -- that the fixture carries an expectation for every layer it
+    // names. A fixture declaring "L4" with an empty `l4` block is compared against nothing at that
+    // layer while the inventory reports coverage, which is worse than declaring nothing at all.
+    const JsonValue& manifest = CorpusManifest();
+    const JsonValue& assets = Member(manifest, "assets");
+    ASSERT_EQ(JsonType::Array, assets.type);
+    ASSERT_FALSE(assets.arrayValue.empty());
+
+    std::set<std::string> knownGroups;
+    for (const auto& [name, unused] : Member(manifest, "owningGroupCounts").objectValue)
+    {
+        (void)unused;
+        knownGroups.insert(name);
+    }
+    ASSERT_FALSE(knownGroups.empty());
+
+    const std::set<std::string> layerNames{"L1", "L2", "L3", "L4", "L5", "L6"};
+    std::size_t declaredLayers = 0;
+    for (const JsonValue& asset : assets.arrayValue)
+    {
+        const std::string id = StringOr(asset, "id", "");
+        SCOPED_TRACE(id);
+        ASSERT_FALSE(id.empty()) << "an inventory entry has no id";
+
+        const std::string owning = StringOr(asset, "owningGroup", "");
+        EXPECT_NE(knownGroups.end(), knownGroups.find(owning))
+            << "owningGroup '" << owning << "' is not one of the counted groups";
+
+        // A referencing group is a *different* group that uses the asset. Naming its own owning
+        // group would double-count it in exactly the way §24.1's ownership model exists to prevent.
+        const JsonValue& referencing = Member(asset, "referencingGroups");
+        ASSERT_EQ(JsonType::Array, referencing.type) << "referencingGroups is not an array";
+        for (const JsonValue& group : referencing.arrayValue)
+        {
+            ASSERT_EQ(JsonType::String, group.type);
+            EXPECT_NE(owning, group.stringValue)
+                << "an asset lists its own owning group as a referencing group";
+            EXPECT_NE(knownGroups.end(), knownGroups.find(group.stringValue))
+                << "referencingGroups names '" << group.stringValue << "', which is not a group";
+        }
+
+        const JsonValue& layers = Member(asset, "validatedLayers");
+        ASSERT_EQ(JsonType::Array, layers.type);
+        EXPECT_FALSE(layers.arrayValue.empty())
+            << "the asset validates no layer at all, so nothing compares it to anything";
+
+        const LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        for (const JsonValue& layer : layers.arrayValue)
+        {
+            ASSERT_EQ(JsonType::String, layer.type);
+            const std::string name = layer.stringValue;
+            EXPECT_NE(layerNames.end(), layerNames.find(name)) << "unknown layer '" << name << "'";
+            ++declaredLayers;
+
+            // L1 is the container itself -- the file parsing at all is its expectation, and the
+            // manifest's `l1` block carries the container facts rather than a comparison.
+            if (name == "L1") { continue; }
+            const std::string key = "l" + name.substr(1);
+            const JsonValue& block = Member(fixture.Expected(), key);
+            EXPECT_NE(JsonType::Null, block.type)
+                << "the inventory says this asset validates " << name
+                << ", and its expectation has no '" << key << "' block to validate against";
+        }
+    }
+    EXPECT_GT(declaredLayers, 100u)
+        << "too few declared layers across the corpus for this to be a completeness check";
+}
+
+// --- plan_gltf.md GLTF-419: the corpus stays small enough to read --------------------------------
+
+TEST(GltfFixtureCorpus, EveryAssetFitsTheSizeBudgetOrStatesWhyItCannot)
+{
+    // A conformance fixture is evidence a human reads. One that has grown to hundreds of kilobytes
+    // is a blob nobody checks, and a corpus of them is a build-time cost paid on every clone.
+    //
+    // The budget is on the ASSETS -- the .gltf and its .glb twin -- rather than on their
+    // expectations, which are allowed to be long because they are the stated answers, not the
+    // input. An asset over budget is not automatically wrong, but it must carry a REASON in the
+    // manifest: an exemption list living in this test is how a budget quietly stops binding.
+    constexpr std::uintmax_t kPerAssetBudget = 8 * 1024;
+    constexpr std::uintmax_t kCorpusBudget = 2 * 1024 * 1024;
+
+    std::map<std::string, std::string> exemptions;
+    for (const JsonValue& asset : Member(CorpusManifest(), "assets").arrayValue)
+    {
+        const std::string reason = StringOr(asset, "sizeExemptionReason", "");
+        if (!reason.empty()) { exemptions.emplace(StringOr(asset, "id", ""), reason); }
+    }
+
+    std::uintmax_t corpusBytes = 0;
+    std::uintmax_t largestAsset = 0;
+    std::string largestName;
+    std::size_t checked = 0;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(CorpusDirectory()))
+    {
+        if (!entry.is_regular_file()) { continue; }
+        const std::uintmax_t size = entry.file_size();
+        corpusBytes += size;
+
+        const std::string name = entry.path().filename().string();
+        const std::string extension = entry.path().extension().string();
+        if (extension != ".gltf" && extension != ".glb") { continue; }
+        ++checked;
+        const std::string id = name.substr(0, name.size() - extension.size());
+        if (size > largestAsset) { largestAsset = size; largestName = name; }
+
+        const auto exemption = exemptions.find(id);
+        if (exemption != exemptions.end())
+        {
+            EXPECT_GT(size, kPerAssetBudget / 2)
+                << id << " declares a size exemption it does not need (" << size
+                << " bytes) -- an exemption nobody needs is one nobody notices going stale";
+            continue;
+        }
+        EXPECT_LE(size, kPerAssetBudget)
+            << name << " is " << size << " bytes, over the " << kPerAssetBudget
+            << "-byte per-asset budget, and its manifest entry states no sizeExemptionReason";
+    }
+
+    EXPECT_GT(checked, 100u) << "too few assets measured -- the .gltf/.glb pairs were not found";
+    EXPECT_LE(corpusBytes, kCorpusBudget)
+        << "the whole corpus is " << corpusBytes << " bytes, over the stated "
+        << kCorpusBudget << "-byte ceiling";
+    RecordProperty("corpusBytes", static_cast<int>(corpusBytes));
+    RecordProperty("largestAssetBytes", static_cast<int>(largestAsset));
+    RecordProperty("largestAsset", largestName);
+}

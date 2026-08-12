@@ -91,6 +91,12 @@ jobs:
       - name: Verify the fixture corpus regenerates byte-identically
         run: scripts/regenerate-gltf-goldens.sh --check
 
+      # GLTF-418: determinism is a property ACROSS runs, so it needs two processes with different
+      # hash seeds -- a set iterated in hash order is stable within one process and varies between
+      # them. Cheap (a second and a half) and it is the assumption every golden rests on.
+      - name: Verify the generator is deterministic across processes
+        run: scripts/regenerate-gltf-goldens.sh --determinism
+
       # The tool tests spawn cna_tool_gltf_to_cnj as a subprocess; it is built with the same
       # sanitizers, so the offline conversion path is covered too rather than only the in-process
       # one. Leak detection is ON -- the importer allocates cgltf_data and decoded buffers on every

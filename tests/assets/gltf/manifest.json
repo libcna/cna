@@ -1048,7 +1048,8 @@
         "palette limit",
         "import rejection"
       ],
-      "auditFixture": null
+      "auditFixture": null,
+      "sizeExemptionReason": "73 joints require 73 nodes and 73 inverse bind matrices -- 1168 floats of authored data before anything else. The fixture exists to sit exactly one past the 72-entry palette, so it cannot be made smaller without ceasing to test the boundary at all."
     },
     {
       "id": "skin-eight-influences",
@@ -2583,8 +2584,8 @@
     },
     {
       "path": "skin-73-joints.expected.json",
-      "bytes": 22327,
-      "sha256": "1d2ced9ae4329a34957c641082d5ce5810187e79780c24f4c76841caa830a511"
+      "bytes": 22606,
+      "sha256": "d0eabbffeb58591dde5827c478de0ee94af50829b4f36dfabf4aa5074534b169"
     },
     {
       "path": "skin-73-joints.glb",

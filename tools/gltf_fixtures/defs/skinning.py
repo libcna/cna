@@ -715,6 +715,10 @@ def skin_73_joints() -> Fixture:
 
     return Fixture(
         id="skin-73-joints", audit_fixture=None, owning_group="skinning",
+        size_exemption="73 joints require 73 nodes and 73 inverse bind matrices -- 1168 floats of "
+                       "authored data before anything else. The fixture exists to sit exactly one "
+                       "past the 72-entry palette, so it cannot be made smaller without ceasing to "
+                       "test the boundary at all.",
         description="A skin with 73 joints, one past the 72-entry GPU bone palette, with every "
                     "vertex bound to the last one. Refused rather than truncated: truncating "
                     "leaves those joints at the identity and collapses their vertices toward the "

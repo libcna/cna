@@ -11,9 +11,11 @@
 # the generator's own --check and then, if this is a git worktree, reports whether the tree changed.
 # On an unchanged tree the whole run is a zero diff.
 #
-# Usage:  scripts/regenerate-gltf-goldens.sh [--check]
+# Usage:  scripts/regenerate-gltf-goldens.sh [--check | --determinism]
 #           (no argument)  regenerate, then verify
 #           --check        verify only, write nothing -- what CI runs
+#           --determinism  GLTF-418: emit the corpus twice, in two processes with different hash
+#                          seeds, into throwaway directories, and require the two to be identical
 #
 # Exit codes: 0 ok · 1 the corpus does not match its generator · 2 the environment is unusable.
 
@@ -22,11 +24,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CORPUS="tests/assets/gltf"
 CHECK_ONLY=0
+DETERMINISM=0
 
 case "${1:-}" in
-    --check) CHECK_ONLY=1 ;;
-    "")      ;;
-    *)       echo "usage: $(basename "$0") [--check]" >&2; exit 2 ;;
+    --check)       CHECK_ONLY=1 ;;
+    --determinism) DETERMINISM=1 ;;
+    "")            ;;
+    *)             echo "usage: $(basename "$0") [--check | --determinism]" >&2; exit 2 ;;
 esac
 
 cd "$REPO_ROOT"
@@ -41,6 +45,25 @@ if [ ! -d "tools/gltf_fixtures" ]; then
 fi
 
 export PYTHONPATH="tools${PYTHONPATH:+:$PYTHONPATH}"
+
+# GLTF-418. Determinism is a property of the generator ACROSS RUNS, so comparing two emissions
+# inside one process would prove nothing: the interesting failure is a set or dict iterated in hash
+# order, which is stable within a process and varies between them. Two separate interpreters with
+# deliberately different PYTHONHASHSEED values is what makes that visible.
+if [ "$DETERMINISM" -eq 1 ]; then
+    first="$(mktemp -d)"
+    second="$(mktemp -d)"
+    trap 'rm -rf "$first" "$second"' EXIT
+    PYTHONHASHSEED=1 python3 -m gltf_fixtures --out "$first"  > /dev/null
+    PYTHONHASHSEED=987654321 python3 -m gltf_fixtures --out "$second" > /dev/null
+    if diff -r --brief "$first" "$second" > /dev/null; then
+        echo "regenerate-gltf-goldens: two independent runs are byte-identical ($(find "$first" -type f | wc -l) files)."
+        exit 0
+    fi
+    echo "regenerate-gltf-goldens: THE GENERATOR IS NOT DETERMINISTIC. Differing files:" >&2
+    diff -r --brief "$first" "$second" >&2 || true
+    exit 1
+fi
 
 if [ "$CHECK_ONLY" -eq 0 ]; then
     python3 -m gltf_fixtures --out "$CORPUS"

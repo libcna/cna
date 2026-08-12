@@ -220,6 +220,10 @@ class Fixture:
     referencing_groups: list[str] = field(default_factory=list)
     spec_anchors: list[str] = field(default_factory=list)
     audit_fixture: str | None = None
+    #: Why this asset is allowed past the per-asset size budget (`GLTF-419`), or ``None``.
+    #: A corpus fixture is meant to be small enough to read; one that cannot be needs a stated
+    #: reason rather than an exemption list in a test, which is how a budget quietly stops binding.
+    size_exemption: str | None = None
     l3: dict[str, Any] = field(default_factory=dict)
     l4: dict[str, Any] = field(default_factory=dict)
     #: The L5 golden expectation (`GLTF-007`). Left ``None`` it is derived from the fixture's own
@@ -243,7 +247,7 @@ class Fixture:
 
     def inventory(self) -> dict[str, Any]:
         """The §24.1 inventory record: one canonical id, exactly one owning group."""
-        return {
+        record: dict[str, Any] = {
             "id": self.id,
             "owningGroup": self.owning_group,
             "referencingGroups": list(self.referencing_groups),
@@ -251,6 +255,11 @@ class Fixture:
             "features": list(self.features),
             "auditFixture": self.audit_fixture,
         }
+        # Emitted only by an asset that actually needs one, so adding the field churned exactly one
+        # fixture's expectation instead of all 71 (`GLTF-419`).
+        if self.size_exemption is not None:
+            record["sizeExemptionReason"] = self.size_exemption
+        return record
 
     def expectation(self) -> dict[str, Any]:
         """The complete ``<id>.expected.json`` document."""
