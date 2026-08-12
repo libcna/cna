@@ -190,7 +190,7 @@ namespace CNA::Platform::Headless {
             return static_cast<int>(std::thread::hardware_concurrency());
         }
 
-        [[nodiscard]] std::vector<std::string> GetPreferredLocales() const override { return {}; }
+        [[nodiscard]] std::vector<PlatformLocale> GetPreferredLocales() const override { return {}; }
 
         [[nodiscard]] PowerInfo GetPowerInfo() const override
         {

@@ -152,10 +152,13 @@ TEST_F(Sdl3ServiceTest, PowerInfoKeepsUnknownDistinguishableFromEmpty)
 TEST_F(Sdl3ServiceTest, PreferredLocalesAreWellFormedWhenPresent)
 {
     // A container may report none; the assertion is on shape, not on presence.
-    for (const std::string& locale : platform_->GetSystemInfo()->GetPreferredLocales())
+    for (const PlatformLocale& locale : platform_->GetSystemInfo()->GetPreferredLocales())
     {
-        EXPECT_FALSE(locale.empty());
-        EXPECT_EQ(locale.find(' '), std::string::npos) << locale;
+        // Structured rather than a formatted tag: the language is what identifies a locale, and
+        // a reported entry with an empty one would be meaningless.
+        EXPECT_FALSE(locale.language.empty());
+        EXPECT_EQ(locale.language.find('-'), std::string::npos)
+            << "language and country stay separate; this is not a BCP 47 tag";
     }
 }
 

@@ -66,8 +66,8 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1107** |
-| Files referencing SDL (all) | **593** |
-| Production files (`src/` + `include/`) referencing SDL | **273** |
+| Files referencing SDL (all) | **587** |
+| Production files (`src/` + `include/`) referencing SDL | **267** |
 | …of which are renderer production files | **116** |
 | Test/example files referencing SDL | **320** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
@@ -78,13 +78,13 @@ Production SDL surface per module (`src/` + `include/` only):
 | Module | Files | Dominant concern |
 |---|---:|---|
 | `modules/input` | 48 | keyboard, mouse, gamepad, joystick, haptic, sensor, touch, text input |
-| `modules/devices-ext` | 34 | clipboard, message box, file dialog, tray, camera, locale, power, display, URL |
+| `modules/devices-ext` | 30 | clipboard, message box, file dialog, tray, camera, locale, power, display, URL |
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
 | `modules/platform` | 14 | - |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
 | `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
-| `modules/runtime` | 7 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
+| `modules/runtime` | 5 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
 | `modules/content` | 3 | `SDL_IOStream`-based readers, glTF import |
 | `modules/gamer-services` | 3 | `Guide` overlay, local store |
 | `modules/core` | 1 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
@@ -451,17 +451,17 @@ Separate contract, separate selection variable, per design decision 7.
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
-| PLAT-100 | Migrate `devices-ext` `Clipboard` | ⬜ | Shares the PLAT-88 service; the duplicate implementation is removed, not paralleled. |
-| PLAT-101 | Migrate `devices-ext` `PowerInfo` | ⬜ | `SDL_GetPowerInfo` (8 references); shares PLAT-89's service. |
+| PLAT-100 | Migrate `devices-ext` `Clipboard` | ✅ | On `IPlatformClipboard`. A null service (no clipboard capability) returns `false`/empty rather than throwing — this API answers with a `bool`, the same shape it had when `SDL_SetClipboardText` failed. Original scope: | Shares the PLAT-88 service; the duplicate implementation is removed, not paralleled. |
+| PLAT-101 | Migrate `devices-ext` `PowerInfo` | ✅ | On `IPlatformSystemInfo::GetPowerInfo()`. Required adding **`PowerState::Error`** to the contract: `Devices::PowerState` distinguishes it from `Unknown`, and collapsing the two would have lost the difference between "this device has no answer" and "the query failed" — one is diagnosable, the other is not. Original scope: | `SDL_GetPowerInfo` (8 references); shares PLAT-89's service. |
 | PLAT-102 | Migrate `DisplayInfo` | ⬜ | Via the displays service. |
 | PLAT-103 | Migrate `SdlMessageBoxBackend` | ⬜ | `SDL_ShowMessageBox`/`ShowSimpleMessageBox` → dialogs service; capability-gated. |
 | PLAT-104 | Migrate `SdlFileDialogBackend` | ⬜ | Open/save/folder dialogs; capability-gated (`supportsNativeFileDialog`). |
 | PLAT-105 | Migrate `SdlTrayBackend` | ⬜ | Tray + menus; capability-gated. |
 | PLAT-106 | Migrate `SdlCameraBackend` | ⬜ | `SDL_GetCameras`/`SDL_OpenCamera`; capability-gated. |
-| PLAT-107 | Migrate `Locale` / `SystemInfo` / `UrlLauncher` | ⬜ | `SDL_GetPreferredLocales`, `SDL_GetSystemRAM`, `SDL_GetNumLogicalCPUCores`, `SDL_GetPlatform`, `SDL_OpenURL`. |
+| PLAT-107 | Migrate `Locale` / `SystemInfo` / `UrlLauncher` | ✅ | All three on `IPlatformSystemInfo`. Required changing `GetPreferredLocales()` to return a structured **`PlatformLocale{language, country}`** instead of a BCP 47 tag: `Devices::LocaleInfo` needs the parts separately, and re-splitting a formatted tag would be a lossy round-trip through a string for no benefit. Changed now, with one consumer, rather than later with several. Original scope: | `SDL_GetPreferredLocales`, `SDL_GetSystemRAM`, `SDL_GetNumLogicalCPUCores`, `SDL_GetPlatform`, `SDL_OpenURL`. |
 | PLAT-108 | Migrate `Microsoft::Devices` sensors and vibrate | ⬜ | `Accelerometer`, `Gyroscope`, `SdlSensorSubsystem`, `SdlHapticVibrateBackend`, `SdlSubsystemMutex`. Must preserve the audited shutdown ordering (PLAT-4) — this subsystem has dedicated ordering tests for a reason. |
 | PLAT-109 | Migrate `StorageDevice` | ✅ | `SDL_GetPrefPath` → `IPlatformFileSystem::GetPreferencesPath()`, and `SDL_getenv` → `std::getenv` for the XDG/HOME fallback — **reading an environment variable never needed a platform abstraction**, and routing it through one would have been abstraction for its own sake. Fallback ordering and trailing-separator stripping preserved exactly. `modules/storage` no longer links SDL. Required a design addition recorded here: `CNA/Platform/CurrentPlatform.hpp`, an ambient accessor for the **static** XNA API surface (`StorageDevice`, `TitleContainer`, `Keyboard::GetState`) which takes no context argument and cannot be given one without changing the API CNA exists to reproduce. `Game` still owns and passes its instance; this is only for what genuinely cannot. Lazily creates the build-time default so bare XNA calls work with no ceremony, and `SetCurrentPlatform()` lets a test point the static surface at `HeadlessPlatform`. 5 tests. Original scope: | `SDL_GetPrefPath` → filesystem service. |
-| PLAT-110 | Migrate `TitleContainer` / `TitleLocation` | ⬜ | Base path and file loading. |
+| PLAT-110 | Migrate `TitleContainer` / `TitleLocation` | ✅ | `SDL_GetBasePath` → `IPlatformFileSystem::GetBasePath()`, and the Android asset path's `SDL_LoadFile`/`SDL_free` pairs → `TryLoadFile()`. The malloc-and-copy in `ReadAllBytes` is preserved deliberately: the caller owns the returned block and frees it with `std::free`, so the platform's vector cannot be released into it. Original scope: | Base path and file loading. |
 | PLAT-111 | Migrate content readers and glTF import | ⬜ | `SoundEffectContentTypeReader`, `GltfImportCore` — `SDL_IOStream` usage only. |
 | PLAT-112 | Migrate `media` | ⬜ | `MediaPlayer`, `VideoPlayer`, `MediaLibraryPaths`, `ThumbnailGenerator`. FFmpeg stays as-is; only the SDL touchpoints move. |
 

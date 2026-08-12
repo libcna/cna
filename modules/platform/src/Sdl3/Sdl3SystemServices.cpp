@@ -196,7 +196,7 @@ namespace CNA::Platform::Sdl3 {
 
     int Sdl3SystemInfo::GetLogicalCoreCount() const { return SDL_GetNumLogicalCPUCores(); }
 
-    std::vector<std::string> Sdl3SystemInfo::GetPreferredLocales() const
+    std::vector<PlatformLocale> Sdl3SystemInfo::GetPreferredLocales() const
     {
         int count = 0;
         SDL_Locale** locales = SDL_GetPreferredLocales(&count);
@@ -205,7 +205,7 @@ namespace CNA::Platform::Sdl3 {
             return {};
         }
 
-        std::vector<std::string> result;
+        std::vector<PlatformLocale> result;
         result.reserve(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i)
         {
@@ -213,13 +213,10 @@ namespace CNA::Platform::Sdl3 {
             {
                 continue;
             }
-            std::string tag = locales[i]->language;
-            if (locales[i]->country != nullptr)
-            {
-                tag += "-";
-                tag += locales[i]->country;
-            }
-            result.push_back(tag);
+            PlatformLocale locale;
+            locale.language = locales[i]->language;
+            locale.country = locales[i]->country != nullptr ? locales[i]->country : "";
+            result.push_back(std::move(locale));
         }
         SDL_free(locales);
         return result;
@@ -238,7 +235,7 @@ namespace CNA::Platform::Sdl3 {
             case SDL_POWERSTATE_NO_BATTERY: info.state = PowerState::NoBattery; break;
             case SDL_POWERSTATE_CHARGING:   info.state = PowerState::Charging; break;
             case SDL_POWERSTATE_CHARGED:    info.state = PowerState::Charged; break;
-            case SDL_POWERSTATE_ERROR:
+            case SDL_POWERSTATE_ERROR:      info.state = PowerState::Error; break;
             case SDL_POWERSTATE_UNKNOWN:
             default:                        info.state = PowerState::Unknown; break;
         }

@@ -76,7 +76,7 @@ namespace CNA::Platform::Sdl3 {
         /** @brief Gets the logical core count. @return The count, or zero when unknown. */
         [[nodiscard]] int GetLogicalCoreCount() const override;
         /** @brief Gets preferred locales, most preferred first. @return BCP 47 identifiers. */
-        [[nodiscard]] std::vector<std::string> GetPreferredLocales() const override;
+        [[nodiscard]] std::vector<PlatformLocale> GetPreferredLocales() const override;
         /** @brief Gets power state. @return The current power info. */
         [[nodiscard]] PowerInfo GetPowerInfo() const override;
         /** @brief Opens a URL. @param url The URL to open. @return True if accepted. */

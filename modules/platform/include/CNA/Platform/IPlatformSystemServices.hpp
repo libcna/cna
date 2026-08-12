@@ -235,6 +235,14 @@ namespace CNA::Platform {
     {
         /** @brief Cannot be determined. */
         Unknown,
+        /**
+         * @brief The query itself failed.
+         *
+         * Distinct from Unknown: Unknown means "there is no answer on this device", Error means
+         * "the answer could not be obtained". A caller showing a battery indicator treats them
+         * the same, but one is diagnosable and the other is not.
+         */
+        Error,
         /** @brief Running on battery. */
         OnBattery,
         /** @brief Plugged in, battery not full. */
@@ -254,6 +262,21 @@ namespace CNA::Platform {
         int percent = -1;
         /** @brief Estimated remaining seconds, or -1 when unknown. */
         int secondsRemaining = -1;
+    };
+
+    /**
+     * @brief One of the user's preferred locales.
+     *
+     * Kept structured rather than collapsed into a BCP 47 tag: the consumer
+     * (`CNA::Devices::Locale`) needs the parts separately, and re-splitting a formatted tag would
+     * be a lossy round-trip through a string for no benefit.
+     */
+    struct PlatformLocale
+    {
+        /** @brief ISO 639 language code, e.g. `"cs"`. Never empty in a reported locale. */
+        std::string language;
+        /** @brief ISO 3166 country code, e.g. `"CZ"`. Empty when the locale names no country. */
+        std::string country;
     };
 
     /** @brief Queries host and power information, and opens URLs. */
@@ -287,9 +310,9 @@ namespace CNA::Platform {
         /**
          * @brief Gets the user's preferred locales, most preferred first.
          *
-         * @return BCP 47 locale identifiers; empty when unknown.
+         * @return The locales; empty when unknown.
          */
-        [[nodiscard]] virtual std::vector<std::string> GetPreferredLocales() const = 0;
+        [[nodiscard]] virtual std::vector<PlatformLocale> GetPreferredLocales() const = 0;
 
         /**
          * @brief Gets battery and power-source state.

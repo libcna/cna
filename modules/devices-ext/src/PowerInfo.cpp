@@ -3,23 +3,22 @@
 
 #ifdef CNA_DEVICES
 
-#include <SDL3/SDL_power.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
 
 namespace
 {
-    CNA::Devices::PowerState ConvertSdlPowerState(SDL_PowerState state)
+    CNA::Devices::PowerState ConvertPlatformPowerState(const CNA::Platform::PowerState state)
     {
         switch (state)
         {
-        case SDL_POWERSTATE_ON_BATTERY: return CNA::Devices::PowerState::OnBattery;
-        case SDL_POWERSTATE_NO_BATTERY: return CNA::Devices::PowerState::NoBattery;
-        case SDL_POWERSTATE_CHARGING:   return CNA::Devices::PowerState::Charging;
-        case SDL_POWERSTATE_CHARGED:    return CNA::Devices::PowerState::Charged;
-        case SDL_POWERSTATE_UNKNOWN:    return CNA::Devices::PowerState::Unknown;
-        case SDL_POWERSTATE_ERROR:
-        default:
-            return CNA::Devices::PowerState::Error;
+        case CNA::Platform::PowerState::OnBattery: return CNA::Devices::PowerState::OnBattery;
+        case CNA::Platform::PowerState::NoBattery: return CNA::Devices::PowerState::NoBattery;
+        case CNA::Platform::PowerState::Charging:  return CNA::Devices::PowerState::Charging;
+        case CNA::Platform::PowerState::Charged:   return CNA::Devices::PowerState::Charged;
+        case CNA::Platform::PowerState::Unknown:   return CNA::Devices::PowerState::Unknown;
+        case CNA::Platform::PowerState::Error:     return CNA::Devices::PowerState::Error;
         }
+        return CNA::Devices::PowerState::Error;
     }
 } // namespace
 
@@ -27,21 +26,18 @@ namespace CNA::Devices
 {
     PowerState PowerInfo::getStateProperty()
     {
-        return ConvertSdlPowerState(SDL_GetPowerInfo(nullptr, nullptr));
+        return ConvertPlatformPowerState(
+            Platform::GetCurrentPlatform().GetSystemInfo()->GetPowerInfo().state);
     }
 
     int PowerInfo::getBatteryPercentProperty()
     {
-        int percent = -1;
-        SDL_GetPowerInfo(nullptr, &percent);
-        return percent;
+        return Platform::GetCurrentPlatform().GetSystemInfo()->GetPowerInfo().percent;
     }
 
     int PowerInfo::getSecondsRemainingProperty()
     {
-        int seconds = -1;
-        SDL_GetPowerInfo(&seconds, nullptr);
-        return seconds;
+        return Platform::GetCurrentPlatform().GetSystemInfo()->GetPowerInfo().secondsRemaining;
     }
 } // namespace CNA::Devices
 
