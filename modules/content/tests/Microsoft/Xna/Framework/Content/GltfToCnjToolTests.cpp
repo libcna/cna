@@ -1302,6 +1302,73 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnBasicEffect)
     EXPECT_TRUE(basicFx->VertexColorEnabled);
 }
 
+// plan_gltf.md GLTF-121: the node-hierarchy half of the same conversion.
+//
+// Before GLTF-114 the node translations were discarded outright, so there was nothing for
+// unitScale to reach; now they are emitted as the .cnj "bones" array and the two must convert
+// together. A model authored in centimetres whose vertices shrink by 100 while its node offsets
+// do not is worse than one that ignored unitScale entirely: it comes apart, with each part
+// correctly sized and standing a hundred times too far from the next.
+TEST(GltfToCnjToolTest, UnitScaleReachesTheNodeHierarchyAndNotOnlyTheVertices)
+{
+    static const char* kRigidCentimetreGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [
+    { "name": "Pivot", "translation": [200, 0, 0], "children": [1] },
+    { "name": "MeshNode", "mesh": 0, "translation": [0, 300, 0] }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+  "buffers": [ { "byteLength": 36,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAADIQgAAAAAAAAAAAAAAAAAAyEIAAAAA" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+                   "min": [0,0,0], "max": [100,100,0] } ]
+})GLTF";
+
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+    const std::filesystem::path gltfPath = gltfDir.path() / "cm.gltf";
+    WriteFile(gltfPath, kRigidCentimetreGltf);
+
+    ASSERT_EQ(0, RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "cm", "0.01"));
+
+    // The vertices convert -- the half that already worked, asserted here so a regression in
+    // either half fails this test rather than only one of them.
+    std::ifstream verts(contentRoot.path() / "cm_mesh0_verts.bin", std::ios::binary);
+    const std::vector<char> vertexBytes((std::istreambuf_iterator<char>(verts)),
+                                         std::istreambuf_iterator<char>());
+    ASSERT_FALSE(vertexBytes.empty());
+    const std::size_t stride = vertexBytes.size() / 3u;
+    float position[3];
+    std::memcpy(position, vertexBytes.data() + stride, sizeof(position));
+    EXPECT_NEAR(1.0f, position[0], 1e-4f) << "100 cm did not become 1 unit";
+
+    // And so do the node translations, which is what this test is for. The emitted transform is
+    // XNA row-major, so a translation is elements 12..14 of the 16.
+    std::ifstream cnj(contentRoot.path() / "cm.cnj");
+    const std::string text((std::istreambuf_iterator<char>(cnj)), std::istreambuf_iterator<char>());
+    ASSERT_NE(std::string::npos, text.find("\"bones\""));
+
+    // 200 cm -> 2 units and 300 cm -> 3 units. Searched by the value rather than by parsing the
+    // whole document, but anchored to the bone's own name so a coincidental 2 elsewhere in the
+    // file cannot satisfy it.
+    const std::size_t pivot = text.find("\"name\": \"Pivot\"");
+    ASSERT_NE(std::string::npos, pivot);
+    const std::size_t pivotEnd = text.find('\n', pivot);
+    const std::string pivotLine = text.substr(pivot, pivotEnd - pivot);
+    EXPECT_NE(std::string::npos, pivotLine.find(", 2, 0, 0, 1]"))
+        << "Pivot's translation did not convert with the vertices: " << pivotLine;
+
+    const std::size_t meshNode = text.find("\"name\": \"MeshNode\"");
+    ASSERT_NE(std::string::npos, meshNode);
+    const std::size_t meshNodeEnd = text.find('\n', meshNode);
+    const std::string meshNodeLine = text.substr(meshNode, meshNodeEnd - meshNode);
+    EXPECT_NE(std::string::npos, meshNodeLine.find(", 0, 3, 0, 1]"))
+        << "MeshNode's translation did not convert with the vertices: " << meshNodeLine;
+}
+
 TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
 {
     ScratchDir gltfDir;

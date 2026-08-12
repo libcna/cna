@@ -339,6 +339,55 @@ TEST(GltfFixtureCorpus, EveryGlbTwinIsAValidContainerCarryingTheSameAsset)
     }
 }
 
+// plan_gltf.md GLTF-131: the transform ladder in `.glb` form too.
+//
+// The test above proves the two containers hold the same *counts*. This one asks the question the
+// row is actually about: does CNA place the geometry identically out of either container? A GLB
+// reaches the importer through a different path -- the JSON is a chunk rather than a file, and
+// every buffer resolves to the BIN chunk instead of a URI -- and the world transform is composed
+// from the JSON the same way in both cases only if that JSON really did survive the repackaging.
+// Byte-for-byte equality is the right bar here: the two files describe the same numbers, so any
+// difference at all is a container bug rather than an accumulated rounding difference.
+TEST(GltfConformanceL4, TheGlbAndGltfTwinsPlaceTheSameGeometry)
+{
+    for (const std::string& id : CorpusFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        const LoadedFixture textForm(id);
+        ASSERT_TRUE(textForm.Ok()) << textForm.Error();
+        if (IsRejectionFixture(textForm.Expected())) { continue; }
+        if (IsKnownDefectField(textForm.Expected(), "L4", "worldPositions")) { continue; }
+
+        cgltf_options options{};
+        cgltf_data* binaryForm = nullptr;
+        const std::string glbPath = (CorpusDirectory() / (id + ".glb")).string();
+        ASSERT_EQ(cgltf_result_success,
+                  cgltf_parse_file(&options, glbPath.c_str(), &binaryForm));
+        ASSERT_EQ(cgltf_result_success,
+                  cgltf_load_buffers(&options, binaryForm, glbPath.c_str()));
+
+        const WorldPositions fromText = EvaluateCnaWorldPositionsEXT(textForm.Data());
+        const WorldPositions fromBinary = EvaluateCnaWorldPositionsEXT(*binaryForm);
+        cgltf_free(binaryForm);
+
+        ASSERT_EQ(fromText.instances.size(), fromBinary.instances.size())
+            << "the two containers produced a different number of placements";
+        for (std::size_t i = 0; i < fromText.instances.size(); ++i)
+        {
+            SCOPED_TRACE("instance " + std::to_string(i));
+            EXPECT_EQ(fromText.instances[i].node, fromBinary.instances[i].node);
+            EXPECT_EQ(fromText.instances[i].mesh, fromBinary.instances[i].mesh);
+            EXPECT_EQ(fromText.instances[i].worldMatrix, fromBinary.instances[i].worldMatrix)
+                << "the composed world transform differs between the .gltf and its .glb twin";
+            ASSERT_EQ(fromText.instances[i].worldPositions.size(),
+                      fromBinary.instances[i].worldPositions.size());
+            EXPECT_EQ(fromText.instances[i].worldPositions,
+                      fromBinary.instances[i].worldPositions)
+                << "the placed vertices differ between the .gltf and its .glb twin";
+        }
+    }
+}
+
 // --- L1: container / parser structure --------------------------------------------------------
 
 TEST(GltfConformanceL1, ContainerStructureMatchesTheManifest)

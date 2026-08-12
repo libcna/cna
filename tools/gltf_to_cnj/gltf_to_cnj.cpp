@@ -171,6 +171,18 @@ namespace
         return out.empty() ? "unnamed" : out;
     }
 
+    // Applies a unit-of-measure conversion to a transform's translation only. The importer's own
+    // ScaleTranslation does the same thing for bind poses and inverse bind matrices; this is the
+    // node-hierarchy half of the same rule (plan_gltf.md GLTF-121).
+    Matrix ScaleLocalTranslation(const Matrix& m, float unitScale)
+    {
+        Matrix result = m;
+        result.M41 *= unitScale;
+        result.M42 *= unitScale;
+        result.M43 *= unitScale;
+        return result;
+    }
+
     // ---------------------------------------------------------------------------
     // Per-group conversion + .cnj/binary output.
     // ---------------------------------------------------------------------------
@@ -592,7 +604,14 @@ namespace
         for (std::size_t b = 0; b < sceneGraph.nodes.size(); ++b)
         {
             const SceneNodeOut& node = sceneGraph.nodes[b];
-            const Matrix& m = node.localTransform;
+            // plan_gltf.md GLTF-121: unitScale converts the file's unit of measure, so it has to
+            // reach the node translations as well as the vertex positions ExtractMesh already
+            // scales. Scaling each node's LOCAL translation scales every composed world
+            // translation by the same factor -- composition only ever adds a parent's already
+            // scaled translation to a child's -- so a model converted from centimetres shrinks as
+            // one object instead of collapsing its parts onto a full-size skeleton. Rotation and
+            // any authored scale are untouched: this is a change of unit, not of shape.
+            const Matrix m = ScaleLocalTranslation(node.localTransform, unitScale);
             json << "    { \"name\": \"" << JsonEscape(node.name) << "\", \"parent\": " << node.parentIndex
                  << ", \"transform\": ["
                  << m.M11 << ", " << m.M12 << ", " << m.M13 << ", " << m.M14 << ", "

@@ -62,9 +62,83 @@ operand is applied first:
 * **Scene-graph composition** is `local * parentWorld` — a node's own transform first, then its
   ancestry. `SceneNodeOut::worldTransform` is built that way, and `AnimationPlayer` reproduces it.
 
+## The transform pipeline
+
+`plan_gltf.md` `GLTF-132`. Where a node's authored transform goes, end to end, and which stage owns
+each step. The architecture is `GLTF-103` Option A: **vertex positions stay mesh-local**, and a
+node's placement travels as a `ModelBone` transform. Nothing is ever baked into a vertex buffer,
+which is what lets one mesh be instanced by many nodes.
+
+| Stage | Input | Output | Owner |
+|---|---|---|---|
+| Local transform | `node.matrix`, **or** its TRS | `SceneNodeOut::localTransform` | `BuildSceneGraph` |
+| Composition | `local`, parent's world | `SceneNodeOut::worldTransform` | `BuildSceneGraph` |
+| Placement | the graph, `node.mesh` | one `MeshInstanceOut` per placement | `CollectMeshGroups` |
+| Model shape | the graph | one `ModelBone` per node, index-for-index | both loaders |
+| Draw | bone tree, caller's `world` | `IEffectMatrices::World` | `Model::Draw` |
+| Normals | the bound world | `uNormalMatrix` | the renderer |
+
+### The equations
+
+A node's local transform, per §3.5.3, with the components applied in this order:
+
+```
+local = S · R · T          (glTF, column-vector: scale first, then rotate, then translate)
+local = S * R * T          (XNA, row-vector: identical order, read left to right)
+```
+
+`matrix` and TRS are mutually exclusive; when a malformed file authors both, `matrix` wins, and it
+wins regardless of the order the two appear in the JSON.
+
+Composition down the hierarchy, and the composed transform of a mesh placement:
+
+```
+world(node) = local(node) * world(parent)          world(scene root's parent) = identity
+```
+
+The synthetic `Root` bone at index 0 is an identity parent invented so a glTF scene's several roots
+map onto `Model`'s single `Root`. It contributes nothing to any composition.
+
+At draw time, again left-operand-first:
+
+```
+World bound for a part = absoluteBoneTransform(mesh.ParentBone) * callerWorld
+uNormalMatrix          = transpose(inverse(World₃ₓ₃))
+```
+
+The normal matrix is the inverse transpose rather than the world 3×3 because a **non-uniform** scale
+skews a normal that is merely multiplied by the world matrix. Under uniform scale the two agree,
+which is exactly why the difference goes unnoticed until an asset with a non-uniform scale arrives.
+
+### Defaults, and the values they are not
+
+| Field | Omitted value | The wrong default, and what it does |
+|---|---|---|
+| `translation` | `(0, 0, 0)` | — |
+| `rotation` | `(0, 0, 0, 1)` | `(0,0,0,0)` is not a rotation at all |
+| `scale` | `(1, 1, 1)` | A zero-initialised scale collapses the node's whole subtree to a point |
+
+### Mirroring
+
+A node whose composed world transform has a **negative determinant** mirrors its geometry, and
+§3.7.4 asks for the triangle winding to be reversed so its front faces stay front-facing. The
+property belongs to the composed transform, never to the instancing node's own scale: an odd number
+of mirroring ancestors mirrors, an even number does not.
+
+CNA **detects** this (`MeshInstanceOut::mirroredEXT`) and reports it; it does not apply it. That is
+not an omission but a consequence of Option A: one mesh instanced by both a mirrored and an
+unmirrored node shares a single index buffer and a single vertex buffer, so reversing the winding —
+or flipping `TANGENT.w`, which mirroring also inverts — at import would fix one placement by
+breaking the other. Both are per-draw raster decisions, the same boundary `doubleSided` sits behind.
+
 ## Where this leaves `unitScale`
 
 glTF §3.4 says one unit is one metre. XNA says nothing at all, so there is no conversion to apply at
 import — the runtime path always uses `unitScale = 1`. The offline `gltf_to_cnj` tool exposes a
-`unitScale` argument for content authored in another unit; it scales translations, not orientation,
-and is the only place a length is reinterpreted.
+`unitScale` argument for content authored in another unit.
+
+It scales **translations only** — vertex positions, bone bind poses and inverse bind matrices,
+animated translation keys, and the node hierarchy's own local translations — never orientation and
+never a node's authored scale, because a change of unit is not a change of shape. All of those have
+to move together: a model whose vertices shrink by a hundred while its node offsets do not comes
+apart, each part correctly sized and standing a hundred times too far from the next.
