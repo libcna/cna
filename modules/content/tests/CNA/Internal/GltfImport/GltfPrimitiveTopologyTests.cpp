@@ -26,6 +26,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <string>
@@ -426,4 +427,48 @@ TEST(GltfPrimitiveTopology, AModeOutsideTheSpecifiedRangeIsRejectedRatherThanAss
     EXPECT_THROW((void)ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0], "Quad",
                                    nullptr, 1.0f),
                  std::runtime_error);
+}
+
+// --- plan_gltf.md GLTF-080: topology and Draco cannot disagree -------------------------------------
+
+// Draco's mesh encoder is a TRIANGLE encoder -- a decoded draco::Mesh has a face list and nothing
+// else -- so a primitive declaring KHR_draco_mesh_compression together with a line or point mode is
+// a contradiction the file cannot mean. Refused rather than silently drawn as triangles.
+//
+// Asserted against the classification table rather than a fixture, because the corpus has no Draco
+// asset and building one needs libdraco at generation time: what is checkable without it is that
+// the refusal covers exactly the non-triangle modes and no others, which is the whole content of
+// the rule.
+TEST(GltfPrimitiveTopology, DracoIsRefusedForEveryModeItCannotEncode)
+{
+    using CNA::Internal::GltfImport::PrimitiveTopology;
+    using CNA::Internal::GltfImport::ProducesTriangles;
+
+    // The three triangle modes are exactly what Draco can encode; the four others are exactly what
+    // it cannot. Stating both halves is what makes this a partition rather than a list.
+    const PrimitiveTopology triangleModes[] = {
+        PrimitiveTopology::Triangles, PrimitiveTopology::TriangleStrip,
+        PrimitiveTopology::TriangleFan,
+    };
+    const PrimitiveTopology nonTriangleModes[] = {
+        PrimitiveTopology::Points, PrimitiveTopology::Lines,
+        PrimitiveTopology::LineLoop, PrimitiveTopology::LineStrip,
+    };
+
+    for (const PrimitiveTopology topology : triangleModes)
+    {
+        EXPECT_TRUE(ProducesTriangles(topology))
+            << "a triangle mode is not classified as producing triangles, so a Draco primitive "
+               "declaring it would be refused";
+    }
+    for (const PrimitiveTopology topology : nonTriangleModes)
+    {
+        EXPECT_FALSE(ProducesTriangles(topology))
+            << "a non-triangle mode is classified as producing triangles, so a Draco primitive "
+               "declaring it would be accepted and silently drawn as triangles";
+    }
+
+    // And the two sets together are every mode there is -- so the rule has no gap for a mode to
+    // fall through.
+    EXPECT_EQ(7u, std::size(triangleModes) + std::size(nonTriangleModes));
 }

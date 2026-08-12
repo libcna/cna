@@ -1445,7 +1445,9 @@ namespace CNA::Internal::GltfImport
     }
 
     /// Whether a topology describes triangles at all -- and therefore whether it has a
-    /// triangle-list equivalent to be converted into (GLTF-072).
+    /// triangle-list equivalent to be converted into (GLTF-072), and whether Draco's triangle-only
+    /// encoder could have produced it (GLTF-080). Two rules on one partition, which is why this is
+    /// declared in the header rather than kept local.
     bool ProducesTriangles(PrimitiveTopology topology)
     {
         return topology == PrimitiveTopology::Triangles
@@ -1511,6 +1513,22 @@ namespace CNA::Internal::GltfImport
                 "decodes correctly but has no draw path, since every loader still computes a "
                 "triangle-list primitive count. " + owner + ". The triangle topologies (modes 4, "
                 "5, 6) are supported; nothing is silently reinterpreted as a triangle list.");
+        }
+
+        // plan_gltf.md GLTF-080: Draco's mesh encoder is a TRIANGLE encoder -- a decoded
+        // draco::Mesh has a face list and nothing else -- so a Draco primitive declaring a line or
+        // point mode is a contradiction the file cannot mean. Refused rather than silently drawn
+        // as triangles, and checked BEFORE decoding so the diagnostic names the contradiction
+        // instead of some later symptom of it. Independent of whether this build has libdraco: the
+        // file is self-contradictory either way.
+        if (prim.has_draco_mesh_compression && !ProducesTriangles(sourceTopology))
+        {
+            throw std::runtime_error(
+                "Primitive '" + name + "' declares mode " +
+                std::string(PrimitiveTopologyName(sourceTopology)) +
+                " together with KHR_draco_mesh_compression, which encodes triangles only. The two "
+                "cannot both be true, so the primitive is refused rather than drawn as something "
+                "the file did not ask for (plan_gltf.md GLTF-080).");
         }
 
 #ifdef CNA_DRACO_AVAILABLE

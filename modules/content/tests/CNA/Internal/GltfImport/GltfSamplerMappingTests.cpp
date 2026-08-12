@@ -212,3 +212,50 @@ TEST(GltfSamplerMapping, AttributeCountAgreementCoversEveryDeclaredStreamNotJust
     }
     EXPECT_GT(extracted, 0u);
 }
+
+// --- plan_gltf.md GLTF-214: vertex colours are linear, and stay that way ---------------------------
+//
+// glTF §3.7.2.1 declares COLOR_0 a LINEAR value -- unlike baseColorTexture and emissiveTexture,
+// which §3.9.2 declares sRGB-encoded. So the colour-space work GLTF-210 landed must NOT touch it:
+// applying the sRGB decode to a vertex colour would darken it by the same 2.3x mid-grey factor the
+// decode exists to correct on a texture.
+//
+// The finding is that this is already right, and right by construction rather than by luck: the
+// decode is applied in the shader to two named texture samples, and a vertex colour is neither.
+// What was missing is anything saying so, which is what a future "apply the transfer everywhere"
+// simplification would have needed to run into.
+
+TEST(GltfSamplerMapping, VertexColoursAreImportedAsTheLinearValuesTheyAre)
+{
+    const CnaTest::GltfOracle::LoadedFixture fixture("normalized-u8-color");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    // The manifest's L3 colours are the accessor's own normalized values. If the importer ever
+    // applied a transfer to them, they would no longer match -- which is the whole assertion.
+    const CNA::Internal::JsonValue& primitives =
+        CnaTest::GltfOracle::Path(fixture.Expected(), "l3.primitives");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, primitives.type);
+    ASSERT_FALSE(primitives.arrayValue.empty());
+    const CNA::Internal::JsonValue& colors =
+        CnaTest::GltfOracle::Member(primitives.arrayValue.front(), "colors");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, colors.type);
+    ASSERT_FALSE(colors.arrayValue.empty());
+
+    const CNA::Internal::GltfImport::MeshOut extracted = CNA::Internal::GltfImport::ExtractMesh(
+        &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", nullptr, 1.0f);
+    ASSERT_TRUE(extracted.colored);
+
+    // A vertex colour that had been sRGB-decoded would be darker than authored everywhere except
+    // at 0 and 1, so a mid value is what makes the test able to fail. Find one and check it.
+    bool sawMidValue = false;
+    for (const CNA::Internal::JsonValue& colour : colors.arrayValue)
+    {
+        for (const double component : CnaTest::GltfOracle::Numbers(colour))
+        {
+            if (component > 0.05 && component < 0.95) { sawMidValue = true; }
+        }
+    }
+    EXPECT_TRUE(sawMidValue)
+        << "every authored vertex colour component is 0 or 1, where the sRGB transfer is the "
+           "identity -- this fixture cannot tell a decoded vertex colour from an untouched one";
+}

@@ -874,6 +874,19 @@ namespace CNA::Internal::GltfImport
     bool IsPrimitiveTopologySupported(PrimitiveTopology topology);
 
     /**
+     * @brief True for the three modes whose primitives are triangles (§3.7.2.1).
+     *
+     * `TRIANGLES`, `TRIANGLE_STRIP` and `TRIANGLE_FAN`; false for the points and the three line
+     * modes. Exported rather than file-local because two rules now depend on the same partition:
+     * strip/fan conversion (`GLTF-072`) and the refusal of a Draco primitive that declares a mode
+     * Draco's triangle-only encoder cannot mean (`GLTF-080`).
+     *
+     * @param topology The classified topology.
+     * @return True when the mode's primitives are triangles.
+     */
+    bool ProducesTriangles(PrimitiveTopology topology);
+
+    /**
      * @brief Rewrites a strip's or fan's index list as an equivalent triangle list (§3.7.2.1).
      *
      * A `Triangles` list is returned unchanged, so this is safe to apply unconditionally to any
