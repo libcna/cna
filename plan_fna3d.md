@@ -155,7 +155,7 @@ is based on source inspection, not only on the older document's intended design.
 
 | ID | Task | Status |
 |---|---|---|
-| FNA3D-36 | Remove the per-draw `std::vector` allocations in vertex-binding assembly. Use CNA's 16-stream ceiling and fixed-capacity declaration storage, while retaining caller declarations verbatim and rejecting oversized stream/declaration input. | **in progress** |
+| FNA3D-36 | Remove the per-draw `std::vector` allocations in vertex-binding assembly. Use CNA's 16-stream ceiling and fixed-capacity declaration storage, while retaining caller declarations verbatim and rejecting oversized stream/declaration input. | **done** — stack `std::array` binding/declaration storage; canonical layouts are static `std::span` views |
 | FNA3D-37 | Validate 2D, 3D, and cube transfer regions and byte counts before every native FNA3D call; make format-size arithmetic overflow-safe; reject short `ImageData` uploads before FNA3D can read past caller memory. | **in progress** |
 | FNA3D-38 | Make the Texture3D upload mirror exact for partial uploads: track defined voxels and refuse reads that include data never supplied by the caller. | **in progress** |
 | FNA3D-39 | Replace raw resource-to-device ownership with a shared device-liveness control block, so destruction or use of an FNA3D resource after its device is gone cannot enter freed native state. Cover it with a post-device-destruction test. | **open — shared lifetime work** |

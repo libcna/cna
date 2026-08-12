@@ -300,7 +300,7 @@ namespace CNA::Internal::Renderers::Fna3d
         spriteRasterizer.cullMode = FNA3D_CULLMODE_NONE;
         FNA3D_ApplyRasterizerState(device_, &spriteRasterizer);
 
-        const std::vector<FNA3D_VertexElement> elements = ElementsForStride(kSpriteVertexStride);
+        const auto elements = ElementsForStride(kSpriteVertexStride);
         FNA3D_VertexBufferBinding binding{};
         binding.vertexBuffer = spriteVertexBuffer_->GetFna3dBufferEXT();
         binding.vertexOffset = 0;
