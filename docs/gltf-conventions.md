@@ -472,6 +472,46 @@ every clip after it from the application's point of view.
 
 ---
 
+## The vendored cgltf: never patched, always worked around (`GLTF-038`)
+
+CNA parses glTF with a vendored copy of `cgltf` (`third_party/cgltf/cgltf.h`, single header, MIT).
+Three faults in it are known and CNA lives with all three, which raises the obvious question: why
+not simply fix the header?
+
+**The rule, and it has no exceptions today.** The vendored header is kept **byte-identical to
+upstream**. A fault found in it is fixed *on CNA's side of the call*, and the workaround is written
+so it can be deleted when an upgrade retires it. `GltfVendoredCgltf.TheVendoredHeaderCarriesNoCnaEdits`
+enforces the first half mechanically — no `CNA`, `plan_gltf` or `GLTF-nnn` marker may appear in the
+file — because a patch nobody can find is worse than one nobody made.
+
+**Why.** A patched vendored header is invisible at exactly the moment it matters. The next upgrade
+is a file replacement; a local edit inside it is either silently lost (and the fault returns, now
+with a test that no longer explains itself) or silently kept (and the upgrade is not the upgrade
+anyone thought they made). Neither failure announces itself. A workaround in CNA's own code is in
+CNA's own diff, its own tests and its own blame.
+
+**What that costs, honestly.** The workarounds run per accessor rather than inside the reader, and
+one of them — the sparse-override re-application — walks data cgltf already walked. That is real,
+and it is a load-time cost on an import path, not a per-frame one.
+
+**The three faults, and where each is answered:**
+
+| Fault | CNA's answer | Task |
+|---|---|---|
+| Sparse accessor values are read at the **base accessor's stride** rather than tightly packed, contradicting cgltf's own validator | `ApplySparseOverridesTightly` re-applies every sparse override after `cgltf_accessor_unpack_floats` returns | `GLTF-062` |
+| §3.6.2.2's `max(c/N, −1)` clamp is omitted for signed normalized components, so `−128` decodes to `−1.0079` | `ClampNormalizedSigned` clamps after unpacking | `GLTF-056` |
+| An accessor whose declared span **overflows `size_t`** passes `cgltf_validate`, because the span is computed with wrapping arithmetic | `ValidateGltfEXT` recomputes every span through `RequiredSpan`, and `UnpackAccessor` repeats the check where it allocates | `GLTF-039` |
+
+**When the rule would change.** If a fault could not be answered outside the reader — a wrong value
+with no CNA-side hook to correct it — the choice would be a patch *or* replacing the reader, and
+that is a decision with its own review, not something to do quietly in a bug fix. `REMED-NA-016`
+is the precedent for the current disposition: the misaligned `float` load UBSan found inside cgltf
+was **not** patched there either. It turned out to be a malformed fixture CNA had accepted, and the
+answer was to refuse such a file (§3.6.2.4) rather than to make the parser tolerate it.
+
+**Upstream.** Report faults upstream; do not wait for them. The workaround lands with its own test
+and stays until an upgrade proves it unnecessary — at which point the test is what tells you.
+
 ## What this file does not cover
 
 Every decision here is one CNA *made*. What it **cannot** do — the approximations, the data no
