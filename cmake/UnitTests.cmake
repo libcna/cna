@@ -433,7 +433,7 @@ if(CNA_BUILD_TESTS)
     set(CNA_GLTF_CONFORMANCE_RUNGS
         "L0|GltfFixtureCorpus.*:GltfOracleEXT.*:GltfConformanceLadder.*"
         "L1|GltfConformanceL1.*:GltfContainerValidation.*:GltfUriContainment.*"
-        "L2|GltfConformanceL2.*:GltfAccessorDecodeLock.*:GltfIndexDecode.*"
+        "L2|GltfConformanceL2.*:GltfAccessorDecodeLock.*:GltfBufferAndWeightForm.*:GltfIndexDecode.*"
         "L3|GltfConformanceL3.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfDrawTopology.*:GltfSamplerMapping.*:GltfImageSource.*:GltfUvChannel.*:GltfUnsupportedTexture.*"
         "L4|GltfConformanceL4.*:GltfConventions.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfSkinComposition.*:GltfRigidAnimation.*:GltfAnimationSampling.*:GltfCameras.*:GltfMorphWeights.*:GltfMorphBlending.*:GltfSceneSelection.*"
         "L5|GltfConformanceL5.*:GltfBufferOracle.*:GltfVertexBufferInvariants.*"
