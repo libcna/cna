@@ -309,3 +309,176 @@ TEST(GltfVertexBufferInvariants, AVec3ColourGetsFullyOpaqueAlphaRatherThanZero)
             << "a VEC3 colour's implied alpha must be fully opaque, not zero";
     }
 }
+
+// --- GLTF-169 / GLTF-170 / GLTF-172: the tangent basis -----------------------------------------
+//
+// A PBR primitive needs a per-vertex tangent, and glTF leaves a reader two jobs: use the authored
+// TANGENT verbatim when there is one, and generate a basis when there is not (§3.7.2.1 recommends
+// exactly that). Both have a silent failure mode. An authored tangent quietly recomputed loses the
+// handedness the author chose, mirroring every normal-mapped detail on half the surface. A
+// generated one that divides by a degenerate UV area produces NaN, which propagates through the
+// whole lighting term and renders as black or as nothing at all -- and NaN compares false against
+// everything, so an ordinary value assertion will not catch it.
+
+namespace
+{
+    /// A PBR primitive (base-colour + normal map, so the layout has a tangent slot) with POSITION,
+    /// NORMAL, TEXCOORD_0 and optionally TANGENT.
+    std::string TangentDocument(const std::vector<float>& positions,
+                                 const std::vector<float>& normals,
+                                 const std::vector<float>& uvs,
+                                 const std::vector<float>& tangents)
+    {
+        std::vector<std::uint8_t> buffer;
+        AppendFloats(buffer, positions);
+        const std::size_t normalOffset = buffer.size();
+        AppendFloats(buffer, normals);
+        const std::size_t uvOffset = buffer.size();
+        AppendFloats(buffer, uvs);
+        const std::size_t tangentOffset = buffer.size();
+        AppendFloats(buffer, tangents);
+
+        std::string views =
+            R"({ "buffer": 0, "byteOffset": 0, "byteLength": )" + std::to_string(normalOffset) +
+            R"( },
+    { "buffer": 0, "byteOffset": )" + std::to_string(normalOffset) + R"(, "byteLength": )" +
+            std::to_string(uvOffset - normalOffset) + R"( },
+    { "buffer": 0, "byteOffset": )" + std::to_string(uvOffset) + R"(, "byteLength": )" +
+            std::to_string(tangentOffset - uvOffset) + " }";
+        std::string accessors =
+            R"({ "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" })";
+        std::string attributes = R"("POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2)";
+        if (!tangents.empty())
+        {
+            views += R"(,
+    { "buffer": 0, "byteOffset": )" + std::to_string(tangentOffset) + R"(, "byteLength": )" +
+                     std::to_string(tangents.size() * 4) + " }";
+            accessors += R"(,
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC4" })";
+            attributes += R"(, "TANGENT": 3)";
+        }
+
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { )GLTF") + attributes +
+               R"GLTF( }, "material": 0, "mode": 4 } ] } ],
+  "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } },
+                   "normalTexture": { "index": 0 } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "uri": "n.png", "mimeType": "image/png" } ],
+  "buffers": [ { "byteLength": )GLTF" + std::to_string(buffer.size()) +
+               R"GLTF(, "uri": "data:application/octet-stream;base64,)GLTF" + Base64(buffer) +
+               R"GLTF(" } ],
+  "bufferViews": [ )GLTF" + views + R"GLTF( ],
+  "accessors": [ )GLTF" + accessors + R"GLTF( ]
+})GLTF";
+    }
+
+    std::vector<float> TangentOfVertex(const MeshOut& mesh, std::size_t vertex)
+    {
+        const int offset = OffsetOf(mesh, VertexElementUsage::Tangent);
+        EXPECT_GE(offset, 0) << "the chosen layout has no Tangent slot";
+        std::vector<float> tangent(4);
+        if (offset >= 0)
+        {
+            std::memcpy(tangent.data(),
+                        mesh.vertexBytes.data() + vertex * static_cast<std::size_t>(mesh.stride) +
+                            static_cast<std::size_t>(offset),
+                        4 * sizeof(float));
+        }
+        return tangent;
+    }
+}
+
+TEST(GltfVertexBufferInvariants, AnAuthoredTangentIsCarriedVerbatimIncludingItsHandedness)
+{
+    // The `w` is the half that gets lost. It is not a direction but a SIGN -- which way the
+    // bitangent runs, decided by the UV winding the author baked in. Recomputing it, or dropping it
+    // to a default +1, mirrors every normal-mapped detail on any surface whose UVs are flipped, and
+    // that reads as an art bug rather than an importer one.
+    //
+    // The authored tangent here is deliberately NOT what generation would produce for these UVs:
+    // (0,1,0) with w = -1, against a UV layout whose natural tangent runs along +X.
+    const MeshOut mesh = ExtractFirst(TangentDocument(
+        {0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f, 1.0f},
+        {0.0f, 0.0f,  1.0f, 0.0f,  0.0f, 1.0f},
+        {0.0f, 1.0f, 0.0f, -1.0f,  0.0f, 1.0f, 0.0f, -1.0f,  0.0f, 1.0f, 0.0f, -1.0f}));
+    ASSERT_EQ(3u, mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride));
+
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<float> tangent = TangentOfVertex(mesh, v);
+        EXPECT_NEAR(0.0f, tangent[0], 1e-5f);
+        EXPECT_NEAR(1.0f, tangent[1], 1e-5f)
+            << "the authored tangent was recomputed instead of carried";
+        EXPECT_NEAR(0.0f, tangent[2], 1e-5f);
+        EXPECT_FLOAT_EQ(-1.0f, tangent[3])
+            << "the authored handedness was replaced -- normal-mapped detail mirrors wherever the "
+               "author's UV winding disagrees with the default";
+    }
+}
+
+TEST(GltfVertexBufferInvariants, AnAbsentTangentIsGeneratedAlongTheUDirection)
+{
+    // §3.7.2.1 recommends generating a basis when TANGENT is absent, and the basis is defined by
+    // the UVs: a tangent points along increasing U. These UVs put U along +X, so the generated
+    // tangent must too -- and it must be unit length, because a Gram-Schmidt step that forgets to
+    // renormalise leaves a shorter vector that silently dims the normal-map contribution.
+    const MeshOut mesh = ExtractFirst(TangentDocument(
+        {0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f, 1.0f},
+        {0.0f, 0.0f,  1.0f, 0.0f,  0.0f, 1.0f},
+        {}));
+    ASSERT_EQ(3u, mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride));
+
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<float> tangent = TangentOfVertex(mesh, v);
+        EXPECT_NEAR(1.0f, tangent[0], 1e-4f) << "U runs along +X here, so the tangent must too";
+        EXPECT_NEAR(0.0f, tangent[1], 1e-4f);
+        EXPECT_NEAR(0.0f, tangent[2], 1e-4f);
+        const float length = std::sqrt(tangent[0] * tangent[0] + tangent[1] * tangent[1] +
+                                       tangent[2] * tangent[2]);
+        EXPECT_NEAR(1.0f, length, 1e-4f)
+            << "a non-unit tangent silently dims every normal-map contribution";
+    }
+}
+
+TEST(GltfVertexBufferInvariants, ADegenerateUvTriangleProducesNoNaNInTheGeneratedTangent)
+{
+    // The tangent solve divides by the UV-space area, which is zero when all three vertices share a
+    // UV -- a real authoring outcome for untextured or collapsed geometry. Unguarded that is 0/0:
+    // NaN, which propagates through the entire lighting term and renders as black or as nothing.
+    //
+    // NaN is why this needs its own assertion rather than a value comparison: NaN compares false
+    // against everything, so `EXPECT_NEAR(anything, nan)` fails with a confusing message and
+    // `EXPECT_NE` passes. std::isfinite is the only honest check.
+    const MeshOut mesh = ExtractFirst(TangentDocument(
+        {0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f, 1.0f},
+        {0.5f, 0.5f,  0.5f, 0.5f,  0.5f, 0.5f},
+        {}));
+    ASSERT_EQ(3u, mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride));
+
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<float> tangent = TangentOfVertex(mesh, v);
+        for (std::size_t c = 0; c < 4; ++c)
+        {
+            EXPECT_TRUE(std::isfinite(tangent[c]))
+                << "component " << c << " is not finite -- a degenerate UV triangle divided by a "
+                   "zero area and the NaN reached the vertex buffer";
+        }
+        EXPECT_TRUE(tangent[3] == 1.0f || tangent[3] == -1.0f)
+            << "the handedness must still be a sign, even when the basis could not be solved";
+    }
+}
