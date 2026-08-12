@@ -14,9 +14,9 @@
  * program does, and what it asks for — *discard below a cutoff* — is exactly what
  * `GpuDrawParams::alphaTest` already expresses for `AlphaTestEffect`. The shaders evaluate
  *
- * ```
+ * @code
  * at = (y > 0) ? (|a - x| < y ? z : w) : ((a < x) ? z : w);   if (at < 0) discard;
- * ```
+ * @endcode
  *
  * so a `MASK` material is `{cutoff, 0, -1, +1}`: the equality band is unused, alpha below the
  * cutoff selects the negative weight and is discarded, and alpha at or above it is kept. `OPAQUE`
@@ -32,13 +32,14 @@ namespace CNA::Internal::Graphics
     /**
      * @brief The `GpuDrawParams::alphaTest` vector a glTF alpha-coverage mode requires.
      *
+     * A `MASK` cutoff is used verbatim rather than quantised: glTF states it as a float in
+     * `[0,1]`, unlike XNA's byte `ReferenceAlpha`, so the half-step tolerance `AlphaTestEffect`
+     * needs has nothing to correct for here.
+     *
      * @param mode The material's alpha-coverage mode (glTF §3.9.4).
-     * @param cutoff The material's `alphaCutoff`; meaningful only for
-     *               `AlphaModeEXT::Mask`, and used verbatim rather than quantised — glTF states it
-     *               as a float in `[0,1]`, unlike XNA's byte `ReferenceAlpha`, so the half-step
-     *               tolerance `AlphaTestEffect` needs has nothing to correct for here.
-     * @return `{x, y, z, w}` in the shader's own convention: reference, equality tolerance, then
-     *         the pass and fail weights whose sign decides the discard.
+     * @param cutoff The material's `alphaCutoff`; meaningful only for `AlphaModeEXT::Mask`.
+     * @return The four components in the shader's own convention: reference, equality tolerance,
+     * then the pass and fail weights whose sign decides the discard.
      */
     [[nodiscard]] inline std::array<float, 4> AlphaTestVectorForAlphaModeEXT(
         Microsoft::Xna::Framework::Graphics::AlphaModeEXT mode, float cutoff) noexcept

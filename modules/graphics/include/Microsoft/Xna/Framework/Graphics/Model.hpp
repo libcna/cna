@@ -44,6 +44,16 @@ namespace Microsoft::Xna::Framework::Graphics
     CNAEXT [[nodiscard]] Matrix CreateInfinitePerspectiveFieldOfViewEXT(
         float fieldOfView, float aspectRatio, float nearPlaneDistance);
 
+    /**
+     * @brief One camera placement imported from a glTF scene (plan_gltf.md `GLTF-317`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. XNA's `Model` has no cameras at all. A placement
+     * rather than a camera: one glTF camera instanced by several nodes is several placements, and
+     * walking `data->cameras` instead of the scene graph would collapse them into one.
+     *
+     * Projection and placement are kept apart, as §3.10 keeps them, because an application
+     * animating the camera node must recompute the view without touching the projection.
+     */
     CNAEXT struct ModelCameraEXT
     {
         /** @brief The camera's name; may be empty. */

@@ -229,6 +229,15 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT void setOcclusionStrengthEXTProperty(float value);
 
+        /**
+         * @brief Whether the bound base-colour texture's samples are sRGB-encoded.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Identical in meaning to `PbrEffect`'s own:
+         * glTF §3.9.2 makes the base-colour map sRGB and the factor beside it linear, so the flag
+         * travels separately from the factor rather than being inferred from it.
+         *
+         * @return True when the sample must be decoded before lighting.
+         */
         CNAEXT [[nodiscard]] bool getBaseColorTextureIsSrgbEXTProperty() const;
 
         /**
