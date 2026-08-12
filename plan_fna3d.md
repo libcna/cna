@@ -144,3 +144,22 @@ across the driver matrix. Do not describe it as validated on SDL_GPU or Direct3D
 | `FNA3D_GetVertexBufferData` / `FNA3D_GetIndexBufferData` | Unreachable: `IVertexBufferRenderer`/`IIndexBufferRenderer` expose no readback method, and XNA's `GetData` on those buffers is served from the shared layer's own CPU shadow. Would need a shared-contract change. |
 | `FNA3D_CloneEffect` | Unreachable: CNA has one instance of each stock effect per device and no public `Effect` clone route. |
 | `FNA3D_VerifyVertexSampler` | Unreachable: the stock effects declare no vertex-shader sampler, and `IGraphicsRenderer` exposes no vertex-texture binding. The driver's vertex slot count is nevertheless reported (`GetMaxVertexTextureSlotsEXT`). |
+
+## Reconciliation remediation (FNA3D-36+)
+
+The original, now-archival `../plan_fna3d.md` is useful as a design checklist, but it predates
+this implementation and must not replace the evidence above. Its remaining applicable rules are
+carried forward here: validate every native boundary before calling FNA3D, make post-device
+destruction harmless, and keep normal draw submission allocation-free. The completed work below
+is based on source inspection, not only on the older document's intended design.
+
+| ID | Task | Status |
+|---|---|---|
+| FNA3D-36 | Remove the per-draw `std::vector` allocations in vertex-binding assembly. Use CNA's 16-stream ceiling and fixed-capacity declaration storage, while retaining caller declarations verbatim and rejecting oversized stream/declaration input. | **in progress** |
+| FNA3D-37 | Validate 2D, 3D, and cube transfer regions and byte counts before every native FNA3D call; make format-size arithmetic overflow-safe; reject short `ImageData` uploads before FNA3D can read past caller memory. | **in progress** |
+| FNA3D-38 | Make the Texture3D upload mirror exact for partial uploads: track defined voxels and refuse reads that include data never supplied by the caller. | **in progress** |
+| FNA3D-39 | Replace raw resource-to-device ownership with a shared device-liveness control block, so destruction or use of an FNA3D resource after its device is gone cannot enter freed native state. Cover it with a post-device-destruction test. | **open — shared lifetime work** |
+
+FNA3D-39 is deliberately still open. The current resource wrappers keep raw `FNA3D_Device*`
+values, so a complete solution must cover resources, sprite batches, and all public destruction
+orders together; a partial flag in only one destructor would give a misleading guarantee.
