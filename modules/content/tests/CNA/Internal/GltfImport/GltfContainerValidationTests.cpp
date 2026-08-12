@@ -220,3 +220,155 @@ TEST(GltfContainerValidation, SupportedExtensionsAreTheOnesCnaActuallyImplements
            "rather than failing later inside ExtractMesh";
 #endif
 }
+
+// --- GLTF-036: §3.6.2.4 data alignment ----------------------------------------------------------
+
+namespace
+{
+    /// A document whose sparse VEC3<float> values bufferView starts at @p valuesOffset. Everything
+    /// else is held constant, so the offset is the only variable between the aligned and
+    /// misaligned cases.
+    std::string SparseDocumentWithValuesOffset(int valuesOffset)
+    {
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+  "buffers": [ { "byteLength": 76, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AQAAAAAAAEAAAEBAAACAQA==" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 60, "byteLength": 2 },
+    { "buffer": 0, "byteOffset": )GLTF") + std::to_string(valuesOffset) + R"GLTF(, "byteLength": 12 }
+  ],
+  "accessors": [
+    { "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [2,3,4],
+      "sparse": { "count": 1,
+                  "indices": { "bufferView": 0, "componentType": 5123 },
+                  "values": { "bufferView": 1 } } }
+  ]
+})GLTF";
+    }
+
+    /// Parses an in-memory document and runs validation on it, returning the refusal or "".
+    std::string ValidationErrorForDocument(const std::string& json)
+    {
+        cgltf_options options{};
+        cgltf_data* data = nullptr;
+        if (cgltf_parse(&options, json.data(), json.size(), &data) != cgltf_result_success)
+        {
+            return "the fixture document did not parse";
+        }
+        struct Guard { cgltf_data* d; ~Guard() { cgltf_free(d); } } guard{data};
+        if (cgltf_load_buffers(&options, data, ".") != cgltf_result_success)
+        {
+            return "the fixture document's buffers did not load";
+        }
+
+        std::vector<std::string> warnings;
+        try
+        {
+            ValidateGltfEXT(data, "alignment-fixture.gltf", warnings);
+            return {};
+        }
+        catch (const std::exception& e)
+        {
+            return e.what();
+        }
+    }
+}
+
+TEST(GltfContainerValidation, AMisalignedSparseValuesArrayIsRejected)
+{
+    // The real finding behind REMED-NA-016, which the audit recorded as a UBSan-confirmed
+    // misaligned float load inside cgltf. It is neither a cgltf bug nor a CNA decode bug: it is a
+    // MALFORMED FILE that CNA accepted. §3.6.2.4 makes an accessor's effective offset a multiple of
+    // its component size, cgltf_validate does not check it, and cgltf reads a component with a raw
+    // `*(const float*)` cast -- so 62, two off a float boundary, makes the parser perform a
+    // misaligned load. Undefined behaviour, and an outright fault on targets without unaligned
+    // access.
+    const std::string error = ValidationErrorForDocument(SparseDocumentWithValuesOffset(62));
+    ASSERT_FALSE(error.empty()) << "a misaligned sparse values array was accepted";
+    EXPECT_NE(std::string::npos, error.find("3.6.2.4")) << error;
+    EXPECT_NE(std::string::npos, error.find("sparse values array")) << error;
+    EXPECT_NE(std::string::npos, error.find("62")) << error;
+}
+
+TEST(GltfContainerValidation, TheSameDocumentAlignedPassesValidation)
+{
+    // The control. Without it, "rejected" could just as well mean the document was broken in some
+    // other way -- the offset is the only thing that differs between this and the case above.
+    EXPECT_EQ("", ValidationErrorForDocument(SparseDocumentWithValuesOffset(64)));
+}
+
+TEST(GltfContainerValidation, AMisalignedBaseAccessorIsRejectedToo)
+{
+    // The base array has the same exposure as the sparse one; a check that covered only sparse
+    // accessors would leave the far more common case open.
+    const std::string error = ValidationErrorForDocument(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+  "buffers": [ { "byteLength": 76, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AQAAAAAAAEAAAEBAAACAQA==" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 2, "byteLength": 36 } ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" }
+  ]
+})GLTF");
+    ASSERT_FALSE(error.empty()) << "a misaligned base bufferView was accepted";
+    EXPECT_NE(std::string::npos, error.find("base bufferView")) << error;
+}
+
+TEST(GltfContainerValidation, AByteStrideThatIsNotAMultipleOfFourIsRejected)
+{
+    // §3.6.2.1. A stride of 14 keeps element 0 aligned and misaligns every element after it, which
+    // is the same undefined behaviour arriving one element later.
+    const std::string error = ValidationErrorForDocument(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+  "buffers": [ { "byteLength": 76, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AQAAAAAAAEAAAEBAAACAQA==" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 44, "byteStride": 14 } ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" }
+  ]
+})GLTF");
+    ASSERT_FALSE(error.empty()) << "a byteStride of 14 was accepted";
+    EXPECT_NE(std::string::npos, error.find("multiple of 4")) << error;
+}
+
+TEST(GltfContainerValidation, EveryCorpusFixtureSatisfiesTheAlignmentRule)
+{
+    // The generator packs everything at 4-byte alignment, and this is what says so out loud: if a
+    // future fixture is authored misaligned, it fails here rather than becoming a UBSan report in
+    // some unrelated test months later.
+    for (const std::string& id : CorpusFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        const LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const cgltf_data& data = fixture.Data();
+        for (cgltf_size i = 0; i < data.accessors_count; ++i)
+        {
+            const cgltf_accessor& accessor = data.accessors[i];
+            const cgltf_size size = cgltf_component_size(accessor.component_type);
+            if (size == 0) { continue; }
+            if (accessor.buffer_view != nullptr)
+            {
+                EXPECT_EQ(0u, (accessor.buffer_view->offset + accessor.offset) % size)
+                    << "accessor " << i << "'s base offset is not a multiple of " << size;
+            }
+            if (accessor.is_sparse == 0) { continue; }
+            const cgltf_accessor_sparse& sparse = accessor.sparse;
+            if (sparse.values_buffer_view != nullptr)
+            {
+                EXPECT_EQ(0u, (sparse.values_buffer_view->offset + sparse.values_byte_offset) % size)
+                    << "accessor " << i << "'s sparse values offset is not a multiple of " << size;
+            }
+        }
+    }
+}

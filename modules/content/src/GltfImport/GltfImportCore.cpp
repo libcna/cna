@@ -2694,6 +2694,72 @@ namespace CNA::Internal::GltfImport
                 "rather than imported.");
         }
 
+        // (1b) GLTF-036 / §3.6.2.4 data alignment. cgltf_validate does NOT check this, and the
+        // omission is not cosmetic: cgltf reads a component with a raw `*(const float*)` cast, so
+        // a bufferView whose effective offset is not a multiple of the component size makes the
+        // parser perform a misaligned load. That is undefined behaviour by the standard and a
+        // genuine fault on targets without unaligned access -- UBSan reports it as
+        // `load of misaligned address ... which requires 4 byte alignment`, which is how this was
+        // found: a hand-authored fixture in this repository put a sparse VEC3<float> values
+        // bufferView at byteOffset 62.
+        //
+        // Rejection rather than a warning, for the same reason as (1): CNA cannot make the
+        // vendored parser safe on such a file, and a warning would leave the undefined behaviour
+        // in place while claiming the file loaded. The alternative considered -- read misaligned
+        // data through memcpy and carry on -- would mean replacing cgltf's whole element reader,
+        // which GLTF-041 exists to prevent.
+        {
+            const auto componentSize = [](cgltf_component_type type) -> cgltf_size {
+                return cgltf_component_size(type);
+            };
+            const auto requireAligned = [&](cgltf_size offset, cgltf_size size, const char* what,
+                                            cgltf_size index) {
+                if (size == 0 || offset % size == 0) { return; }
+                throw std::runtime_error(
+                    "'" + sourceName + "' violates glTF §3.6.2.4 data alignment: the " +
+                    std::string(what) + " of accessor " + std::to_string(index) +
+                    " begins at byte offset " + std::to_string(offset) +
+                    ", which is not a multiple of its " + std::to_string(size) +
+                    "-byte component size. Reading it performs a misaligned load, which is "
+                    "undefined behaviour and faults outright on targets without unaligned access, "
+                    "so the file is rejected rather than imported.");
+            };
+
+            for (cgltf_size i = 0; i < data->accessors_count; ++i)
+            {
+                const cgltf_accessor& accessor = data->accessors[i];
+                const cgltf_size size = componentSize(accessor.component_type);
+                if (accessor.buffer_view != nullptr)
+                {
+                    requireAligned(accessor.buffer_view->offset + accessor.offset, size,
+                                   "base bufferView", i);
+                    // §3.6.2.1: a declared byteStride must itself be a multiple of 4, or every
+                    // element after the first inherits the misalignment.
+                    if (accessor.buffer_view->stride != 0 && accessor.buffer_view->stride % 4 != 0)
+                    {
+                        throw std::runtime_error(
+                            "'" + sourceName + "' violates glTF §3.6.2.1: the bufferView backing "
+                            "accessor " + std::to_string(i) + " declares byteStride " +
+                            std::to_string(accessor.buffer_view->stride) +
+                            ", which is not a multiple of 4.");
+                    }
+                }
+                if (accessor.is_sparse == 0) { continue; }
+                const cgltf_accessor_sparse& sparse = accessor.sparse;
+                if (sparse.indices_buffer_view != nullptr)
+                {
+                    requireAligned(sparse.indices_buffer_view->offset + sparse.indices_byte_offset,
+                                   componentSize(sparse.indices_component_type),
+                                   "sparse indices array", i);
+                }
+                if (sparse.values_buffer_view != nullptr)
+                {
+                    requireAligned(sparse.values_buffer_view->offset + sparse.values_byte_offset,
+                                   size, "sparse values array", i);
+                }
+            }
+        }
+
         // (2) GLTF-023. The author declared the file cannot be interpreted correctly without these.
         for (cgltf_size i = 0; i < data->extensions_required_count; ++i)
         {

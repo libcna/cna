@@ -161,14 +161,14 @@ namespace
   "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
   "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 } } ] } ],
   "buffers": [ {
-    "byteLength": 74,
-    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AQAAAABAAABAQAAAgEA="
+    "byteLength": 76,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AQAAAAAAAEAAAEBAAACAQA=="
   } ],
   "bufferViews": [
     { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
     { "buffer": 0, "byteOffset": 36, "byteLength": 24 },
     { "buffer": 0, "byteOffset": 60, "byteLength": 2 },
-    { "buffer": 0, "byteOffset": 62, "byteLength": 12 }
+    { "buffer": 0, "byteOffset": 64, "byteLength": 12 }
   ],
   "accessors": [
     { "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [2,3,4],
@@ -986,6 +986,12 @@ TEST(GltfToCnjToolTest, MissingInputFileFailsCleanly)
 // Vertex 1's POSITION comes entirely from a sparse override on an accessor with no base
 // bufferView -- proves cgltf_accessor_unpack_floats (sparse-safe) is used, not
 // cgltf_accessor_read_float (rejects sparse accessors outright, which would fail this conversion).
+//
+// plan_gltf.md GLTF-036: the sparse values bufferView sits at byteOffset 64, not 62 as originally
+// authored. 62 is not a multiple of a float's 4 bytes, and cgltf reads a component with a raw
+// `*(const float*)` cast, so the old fixture made the parser perform a misaligned load -- the
+// undefined behaviour UBSan flagged as REMED-NA-016. The fixture was the defect, not the parser;
+// ValidateGltfEXT now refuses such a file, so this document would be rejected unchanged.
 TEST(GltfToCnjToolTest, ResolvesSparseAccessorOverride)
 {
     ScratchDir gltfDir;
