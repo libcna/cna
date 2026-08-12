@@ -2849,6 +2849,80 @@ namespace CNA::Internal::GltfImport
         return false;
     }
 
+    void CrossCheckAccessorBoundsEXT(const cgltf_data* data, std::vector<std::string>& warnings)
+    {
+        if (data == nullptr) { return; }
+
+        for (cgltf_size i = 0; i < data->accessors_count; ++i)
+        {
+            const cgltf_accessor& accessor = data->accessors[i];
+            if (accessor.has_min == 0 && accessor.has_max == 0) { continue; }
+            // A normalized accessor's declared bounds are in RAW units while the decode produces
+            // unit-range values, so comparing the two would report every normalized accessor in
+            // every file. An integer accessor's bounds are exact by construction and carry no
+            // information a decode error could contradict.
+            if (accessor.component_type != cgltf_component_type_r_32f || accessor.normalized != 0)
+            {
+                continue;
+            }
+
+            const cgltf_size components = cgltf_num_components(accessor.type);
+            if (components == 0 || components > 16) { continue; }
+
+            std::vector<float> values;
+            try
+            {
+                values = UnpackAccessor(&accessor, components, "bounds cross-check");
+            }
+            catch (const std::exception&)
+            {
+                // A decode failure is somebody else's diagnostic; this one only speaks about
+                // values it actually has.
+                continue;
+            }
+
+            // A generous epsilon: the bounds are authored as decimal text and the values as
+            // binary floats, so an exporter's own rounding routinely puts the extreme value a few
+            // ULPs outside its stated bound. What this check exists to catch is a decode that
+            // produced something else entirely -- D4's all-zeros, a mis-strided read, a swapped
+            // component -- not a last-digit disagreement.
+            const auto tolerance = [](float bound) {
+                return std::max(1e-5f, std::fabs(bound) * 1e-4f);
+            };
+
+            for (cgltf_size c = 0; c < components; ++c)
+            {
+                float lo = std::numeric_limits<float>::infinity();
+                float hi = -std::numeric_limits<float>::infinity();
+                for (cgltf_size v = 0; v < accessor.count; ++v)
+                {
+                    const float value = values[static_cast<std::size_t>(v * components + c)];
+                    if (!std::isfinite(value)) { continue; }
+                    lo = std::min(lo, value);
+                    hi = std::max(hi, value);
+                }
+                if (!std::isfinite(lo) || !std::isfinite(hi)) { continue; }
+
+                if (accessor.has_min != 0 && lo < accessor.min[c] - tolerance(accessor.min[c]))
+                {
+                    warnings.push_back(
+                        "Accessor " + std::to_string(i) + " component " + std::to_string(c) +
+                        " decodes to a minimum of " + std::to_string(lo) +
+                        ", below its own declared min of " + std::to_string(accessor.min[c]) +
+                        ". The file's bounds and the decoded data disagree (GLTF-061).");
+                }
+                if (accessor.has_max != 0 && hi > accessor.max[c] + tolerance(accessor.max[c]))
+                {
+                    warnings.push_back(
+                        "Accessor " + std::to_string(i) + " component " + std::to_string(c) +
+                        " decodes to a maximum of " + std::to_string(hi) +
+                        ", above its own declared max of " + std::to_string(accessor.max[c]) +
+                        ". The file's bounds and the decoded data disagree (GLTF-061).");
+                }
+            }
+        }
+    }
+
     std::filesystem::path ResolveExternalUriEXT(const std::filesystem::path& gltfDir,
                                                 const std::string& uri, const char* what)
     {
@@ -3052,6 +3126,14 @@ namespace CNA::Internal::GltfImport
                 }
             }
         }
+
+        // (1c) GLTF-061. The one piece of redundancy glTF gives a reader: the author states each
+        // accessor's bounds, and a decoder producing values outside them has decoded something
+        // other than what was written. Nothing read them before, which is why D4 -- a sparse index
+        // accessor decoding to all zeros -- collapsed a quad to a point with every layer reporting
+        // success. A warning rather than a rejection: stale bounds are common and harmless, while
+        // the values themselves may still be exactly what the file contains.
+        CrossCheckAccessorBoundsEXT(data, warnings);
 
         // (2) GLTF-023. The author declared the file cannot be interpreted correctly without these.
         for (cgltf_size i = 0; i < data->extensions_required_count; ++i)

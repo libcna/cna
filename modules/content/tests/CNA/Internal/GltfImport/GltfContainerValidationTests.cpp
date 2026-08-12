@@ -269,8 +269,11 @@ namespace
 })GLTF";
     }
 
-    /// Parses an in-memory document and runs validation on it, returning the refusal or "".
-    std::string ValidationErrorForDocument(const std::string& json)
+    /// Parses an in-memory document and runs validation on it, returning the refusal or "". When
+    /// `warningsOut` is given it receives the warnings the pass produced, which is how the
+    /// report-rather-than-reject rules are asserted.
+    std::string ValidationErrorForDocument(const std::string& json,
+                                           std::vector<std::string>* warningsOut = nullptr)
     {
         cgltf_options options{};
         cgltf_data* data = nullptr;
@@ -288,10 +291,12 @@ namespace
         try
         {
             ValidateGltfEXT(data, "alignment-fixture.gltf", warnings);
+            if (warningsOut != nullptr) { *warningsOut = warnings; }
             return {};
         }
         catch (const std::exception& e)
         {
+            if (warningsOut != nullptr) { *warningsOut = warnings; }
             return e.what();
         }
     }
@@ -388,6 +393,109 @@ TEST(GltfContainerValidation, EveryCorpusFixtureSatisfiesTheAlignmentRule)
                 EXPECT_EQ(0u, (sparse.values_buffer_view->offset + sparse.values_byte_offset) % size)
                     << "accessor " << i << "'s sparse values offset is not a multiple of " << size;
             }
+        }
+    }
+}
+
+// --- GLTF-061: the decoded values against the file's own declared bounds ------------------------
+//
+// §3.6.2 makes `min`/`max` required on POSITION and optional elsewhere, and they are the one piece
+// of redundancy the format gives a reader: the author states the bounds, and a decoder producing
+// values outside them has decoded something other than what was written.
+//
+// Nothing read them before. That is why D4 -- a sparse index accessor decoding to all zeros --
+// could collapse a quad to a point with every layer reporting success: the file said the positions
+// spanned [0,1] and the decode produced them, so only the *indices* were wrong and nothing
+// compared anything.
+
+TEST(GltfContainerValidation, DecodedValuesOutsideTheDeclaredBoundsAreReportedNotRejected)
+{
+    // The bounds claim [0,1] on every axis; the data reaches 5 on X. That is the shape of a decode
+    // gone wrong -- a mis-strided read, a swapped component, a sparse override landing in the wrong
+    // element -- and it must be reported.
+    //
+    // A WARNING rather than a rejection, deliberately: a file whose bounds are merely stale is
+    // common and harmless, and the values may still be exactly what the file contains. Refusing
+    // would turn a diagnostic into a load failure for assets that render correctly today.
+    std::vector<std::string> warnings;
+    const std::string error = ValidationErrorForDocument(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 }, "mode": 4 } ] } ],
+  "buffers": [ { "byteLength": 36, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACgQAAAAAAAAAAAAAAAAAAAgD8AAAAA" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0, 0, 0], "max": [1, 1, 1] }
+  ]
+})GLTF", &warnings);
+
+    EXPECT_EQ("", error) << "a bounds disagreement must warn, not reject: " << error;
+    ASSERT_FALSE(warnings.empty()) << "the decoded data leaves the declared bounds and nothing said so";
+
+    bool named = false;
+    for (const std::string& warning : warnings)
+    {
+        if (warning.find("declared max") != std::string::npos &&
+            warning.find("GLTF-061") != std::string::npos)
+        {
+            named = true;
+            // Both numbers have to appear, because "out of bounds" alone does not say whether the
+            // bounds are stale by a rounding error or the decode is wrong by a factor of five.
+            EXPECT_NE(std::string::npos, warning.find("5.0")) << warning;
+        }
+    }
+    EXPECT_TRUE(named) << "no warning named the bound that was exceeded";
+}
+
+TEST(GltfContainerValidation, DataInsideItsDeclaredBoundsProducesNoBoundsWarning)
+{
+    // The control, and the one that decides whether this check is usable at all: bounds are
+    // authored as decimal text and values as binary floats, so an exporter's rounding routinely
+    // puts an extreme value a few ULPs outside its stated bound. A check without tolerance would
+    // warn on a large share of real files and be turned off within a week.
+    std::vector<std::string> warnings;
+    const std::string error = ValidationErrorForDocument(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 }, "mode": 4 } ] } ],
+  "buffers": [ { "byteLength": 36, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0, 0, 0], "max": [1, 1, 0] }
+  ]
+})GLTF", &warnings);
+
+    EXPECT_EQ("", error) << error;
+    for (const std::string& warning : warnings)
+    {
+        EXPECT_EQ(std::string::npos, warning.find("GLTF-061"))
+            << "data inside its bounds was reported: " << warning;
+    }
+}
+
+TEST(GltfContainerValidation, EveryCorpusFixtureAgreesWithItsOwnDeclaredBounds)
+{
+    // The sweep that gives the check its value: every generated fixture states bounds derived from
+    // the same source as its data, so any disagreement is a decode defect rather than an authoring
+    // one. This is the assertion that would have caught D4 on the campaign baseline.
+    for (const std::string& id : CorpusFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        const LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        if (CnaTest::GltfOracle::IsRejectionFixture(fixture.Expected())) { continue; }
+
+        std::vector<std::string> warnings;
+        CrossCheckAccessorBoundsEXT(&fixture.Data(), warnings);
+        for (const std::string& warning : warnings)
+        {
+            ADD_FAILURE() << warning;
         }
     }
 }

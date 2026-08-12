@@ -1344,6 +1344,33 @@ namespace CNA::Internal::GltfImport
      * @return The resolved path, guaranteed to be inside @p gltfDir.
      * @throws std::runtime_error if the URI is unsupported, absolute, or escapes @p gltfDir.
      */
+    /**
+     * @brief Cross-checks every accessor's decoded values against its own declared `min`/`max`
+     * (`GLTF-061`).
+     *
+     * §3.6.2 makes `min` and `max` **required** on a `POSITION` accessor and optional elsewhere, and
+     * they are the one piece of redundancy the format gives a reader: the author states the bounds,
+     * and a decoder that produces values outside them has decoded something other than what was
+     * written. Nothing in CNA read them, which is why `D4` — a sparse index accessor decoding to
+     * all zeros — could collapse a quad to a point with every layer reporting success.
+     *
+     * A **warning**, not a rejection, and the asymmetry is deliberate. A file whose declared bounds
+     * are merely stale is common and harmless; a decoder producing values outside them is a serious
+     * signal, but the values themselves may still be exactly what the file contains. Refusing would
+     * turn a diagnostic into a load failure for assets that render correctly today.
+     *
+     * Only `FLOAT` accessors are checked. An integer accessor's bounds are exact by construction,
+     * and a normalized one's declared bounds are in raw units while the decode produces unit-range
+     * values — comparing those would report every normalized accessor in every file.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param data The parsed glTF file, with buffers loaded.
+     * @param warnings Appended with one entry per accessor whose decoded values leave its bounds,
+     *                 naming the accessor, the component, and both numbers.
+     */
+    void CrossCheckAccessorBoundsEXT(const cgltf_data* data, std::vector<std::string>& warnings);
+
     std::filesystem::path ResolveExternalUriEXT(const std::filesystem::path& gltfDir,
                                                 const std::string& uri, const char* what);
 
