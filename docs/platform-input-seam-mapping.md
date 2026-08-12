@@ -1,0 +1,180 @@
+# The input backend seam, mapped onto the platform contract
+
+*plan_platform.md Task PLAT-77. Written before any input migration code, so that the two
+abstractions never coexist by accident.*
+
+`modules/input` already has an abstraction layer. It is not the platform contract, it was not
+built for platform selection, and it is 48 files — the largest remaining block of direct SDL
+coupling in the repository. Migrating input without first deciding what happens to that existing
+layer would produce two parallel seams doing the same job, which is the failure mode this
+document exists to prevent.
+
+This is a map of what is there, what each part becomes, and — for four of the eight backends —
+why it stops existing entirely.
+
+---
+
+## 1. What the existing seam actually is
+
+Eight backends under `modules/input/src/Internal/`, every one of them the same shape:
+
+```cpp
+class ISdlGamepadBackend
+{
+public:
+    virtual ~ISdlGamepadBackend() = default;
+    virtual bool IsGamepad(SDL_JoystickID instanceId) = 0;
+    // …
+};
+
+ISdlGamepadBackend& sdl_gamepad_backend();
+void SetSdlGamepadBackendForTests(ISdlGamepadBackend* backend);
+```
+
+with, in the `.cpp`:
+
+```cpp
+RealSdlGamepadBackend g_realBackend;
+ISdlGamepadBackend*   g_currentBackend = &g_realBackend;
+```
+
+Three facts follow, and all three matter:
+
+- **The vtable indirection already exists.** Every call site already goes through a virtual call
+  to a swappable pointer. Re-pointing those pointers at platform services costs nothing at the
+  call sites — the dispatch is already paid for.
+- **Selection is runtime, through a mutable global, and its only current purpose is test
+  injection.** There is no compile-time backend variance anywhere to preserve:
+  `modules/input/CMakeLists.txt` globs `src/*.cpp` unconditionally and links `SDL3::SDL3`, and the
+  only preprocessor conditionals in `src/Internal/` are `#ifdef __ANDROID__` guards around
+  *logging*. Nothing has to be kept working across a configuration this migration would change.
+- **Two of the most important pieces are not behind the seam at all.** `InputManager` and
+  `SdlInputBridge` are concrete classes of static methods, called directly by name.
+
+---
+
+## 2. Per-backend disposition
+
+| Backend | Disposition | Why |
+|---|---|---|
+| `SystemPowerBackend` | **Deleted** | Duplicates `IPlatformSystemInfo::GetPowerInfo()`, which `modules/devices-ext` already uses. Its whole surface is one method wrapping one SDL call. |
+| `SystemSensorBackend` | **Deleted** | Duplicates `IPlatformSensors` (PLAT-85). Its SDL↔EXT enum mapping is already isolated in the `.cpp`, and `SensorKind` is the same mapping done once in the platform. |
+| `SystemKeyboardBackend` | **Deleted** | One method, `GetModState()`. `KeyboardSnapshot::modifiers` already carries it, computed once per frame instead of on demand. |
+| `SystemMouseBackend` | **Deleted after a contract addition** | `CaptureMouse` / `GetGlobalMouseState` / `WarpMouseGlobal` have **no counterpart** in `IPlatformMouse`, which is window-scoped throughout. See §4. |
+| `SystemDeviceBackend` | **Deleted after a contract addition** | `GetMice` / `GetKeyboards` / `GetTouchDevices` have no counterpart. See §4. |
+| `SdlJoystickBackend` | **Replaced** by an `IPlatformJoystick` contract | The raw-joystick path is genuinely distinct from `IPlatformGamepad`'s mapped-controller view: hats, balls and un-mapped axes have nowhere to go in a `GamepadSnapshot`. PLAT-83. |
+| `SdlGamepadBackend` | **Replaced** by `IPlatformGamepad`, extended | 33 methods against `IPlatformGamepad`'s 5. See §3 — most of the gap is real capability, not redundancy. |
+| `SdlHapticBackend` | **Survives, for now** | 28 methods covering the full effect model. `IPlatformHaptics` (PLAT-84) covers rumble only. See §5. |
+
+Four deletions, two replacements, one extension, one survivor. The four deletions are the point:
+this migration should end with *fewer* abstractions than it started with, not the same number
+wearing new names.
+
+`InputManager` is untouched by all of this. It is a pure in-process state store that makes **no
+SDL calls at all** — the only SDL symbol it reaches at runtime is an `SDL_Log` inside an
+`#ifdef __ANDROID__` diagnostic, and its header has zero SDL symbols. It is the destination the
+bridge writes into and the XNA layer reads from, and it stays exactly as it is. Removing its
+unnecessary `#include <SDL3/SDL.h>` is a one-line change with no design content.
+
+---
+
+## 3. Where `IPlatformGamepad` is genuinely short
+
+`SdlGamepadBackend` exposes 33 methods; `IPlatformGamepad` has 5. Most of that difference is real
+capability rather than redundancy, and pretending otherwise would silently drop features:
+
+- **Identity beyond a name** — path, serial, firmware version, Steam handle, connection state,
+  vendor/product IDs. `GamePadCapabilities` and `CNA::Input::Joysticks` surface these to games.
+- **Touchpads** — count, finger count, per-finger state. DualShock/DualSense controllers.
+- **Motion sensors on the pad itself** — enable/disable plus data, which is *not*
+  `IPlatformSensors`: those are the device's own sensors, these are a specific controller's.
+- **Outputs beyond rumble** — trigger rumble and the LED light bar.
+- **Player index** — get and set, which is how slot assignment survives a hotplug.
+
+The contract additions this implies are listed as their own tasks rather than smuggled into the
+migration commit, because each is a capability a second implementation must be able to refuse.
+
+---
+
+## 4. Two capabilities the contract has nowhere to put
+
+Both are small, both are load-bearing, and both were missed when the contract was drafted because
+they are not window-scoped:
+
+**Global-space pointer control.** `Mouse::SetCaptureEXT`, `Mouse::GetGlobalPositionEXT` and
+`Mouse::WarpGlobalEXT` work in desktop coordinates, across windows, and are what makes a drag
+survive the pointer leaving the window. `IPlatformMouse` is window-scoped throughout —
+`SetPosition` takes an `IPlatformWindow&` — and cannot express any of the three. It needs a
+capture call, a global-space warp and a global position read, or an explicit decision that CNA
+drops the capability. It should not make that decision silently.
+
+**Input device enumeration.** `CNA::Input::InputDevicesEXT` lists connected mice, keyboards and
+touch devices by id and name. `TouchPanel::GetCapabilities` queries the touch-device list on
+*every call*, matching FNA — with a sticky flag and a live touch-state peek as fallbacks for
+platforms that only enumerate a touchscreen after the first interaction. Nothing in `IPlatform`
+enumerates input devices: `DeviceEvent` reports *changes*, but there is no way to ask for the
+current set. A platform that starts with a touchscreen already attached and never fires an add
+event therefore cannot answer "is there a touchscreen?" at all — only the two fallbacks would,
+and they were written as fallbacks, not as the answer.
+
+---
+
+## 5. Haptics: two contracts, one device
+
+`IPlatformHaptics` (PLAT-84) does rumble: play, stop, supported. `SdlHapticBackend` does the full
+SDL effect model — create/update/run/stop/destroy arbitrary effect structures, effect status,
+gain, autocenter, pause/resume, plus feature and capacity queries — and
+`CnaExt/HapticDevice.cpp` uses essentially all of it.
+
+Collapsing the two now would mean either lifting the whole SDL effect struct into the platform
+contract (which puts an SDL data layout in a header whose entire purpose is not having one) or
+deleting a feature CNA already ships. Neither is acceptable as a side effect of a refactor, so
+`SdlHapticBackend` survives this phase and the effect model gets its own design task.
+
+---
+
+## 6. The two things that must be done together
+
+**`SdlInputBridge` is the whole job.** It is the only consumer that both fans out to three seams
+(58 gamepad calls, 13 joystick, 1 keyboard) *and* bypasses them with direct SDL calls of its own:
+subsystem init/quit, window and coordinate mapping, gamepad capability properties, keyboard
+name/scancode translation. It also owns every mapping table — `SDL_SCANCODE_*` ↔ XNA `Keys`,
+`SDL_GAMEPAD_BUTTON_*`, `SDL_GAMEPAD_AXIS_*`, `SDL_JOYSTICK_TYPE_*`, `SDL_POWERSTATE_*`,
+`SDL_KMOD_*`, `SDL_HAT_*`. And its entry point is `ProcessEvent(const SDL_Event&)`, whose single
+production caller is `modules/runtime/src/Game.cpp`.
+
+That signature is why **PLAT-47 is blocked on PLAT-78**. `Game::PollEvents` hands every raw
+`SDL_Event` to the bridge before its own switch sees it, so the game loop cannot stop polling SDL
+until the bridge consumes `PlatformEvent`. Running both loops would drain the queue twice and lose
+half the events to whichever ran first.
+
+**A raw SDL handle crosses between two seams.** `CnaExt/Haptics.cpp` calls
+`SdlInputBridge::GetOpenedJoystickHandle(id)` — which returns a raw `SDL_Joystick*` from the
+bridge's public surface — and feeds it straight into
+`sdl_haptic_backend().OpenHapticFromJoystick(joystick)`:
+
+```cpp
+SDL_Joystick* joystick = SdlInputBridge::GetOpenedJoystickHandle(joystickId);
+return HapticDevice(sdl_haptic_backend().OpenHapticFromJoystick(joystick));
+```
+
+Migrating the joystick seam and the haptic seam independently breaks this: the moment the bridge
+stops handing out `SDL_Joystick*`, the haptic path has no way to name the device it wants. The
+replacement is an opaque device identifier that both sides agree on, and it has to land in the
+same change as the joystick migration, not after it.
+
+---
+
+## 7. Order of work
+
+1. Contract additions first (§3, §4) — each as its own task, each refusable by a second
+   implementation.
+2. `SdlInputBridge` → `PlatformEvent` (**PLAT-78**), including the joystick/haptic handle break
+   from §6. This is the largest single piece and it unblocks PLAT-47.
+3. The four deletions (§2), each re-pointing its XNA-side caller at the platform service.
+4. `SdlGamepadBackend` and `SdlJoystickBackend` replacement.
+5. `SdlHapticBackend`'s effect model, on its own design decision.
+
+The two renderer examples that call `InputManager::SetKeyState` directly
+(`modules/renderers/easygl/examples/`, `modules/renderers/sdl-renderer/examples/`) use it as a
+synthetic-input injection seam and are unaffected throughout: `InputManager` does not change.
