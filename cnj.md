@@ -19,7 +19,8 @@
 > `include/CNA/Internal/CnjEnvelope.hpp`, `include/CNA/Internal/Json.hpp`,
 > `include/CNA/Internal/CnjSourceFile.hpp`) now implements this document as designed: the `.cnj`
 > envelope (`cnjVersion`/`type`/`sourceFile`) parses via a real recursive-descent JSON parser and
-> validates against the requested C++ type with a strict `cnjVersion == 1` policy;
+> validates against the requested C++ type with a strict `cnjVersion` ceiling policy (1 for every
+> type; `Model` raised its own to 2 — see "`Model` `.cnj` version 2" below);
 > `.cnj` is tried **before** any native extension for every registered type
 > (`ResolveAssetPath`), letting it act as an optional metadata sidecar (proven on `Texture2D` via
 > `sourceFile` + `colorKey`) rather than only a mutually-exclusive alternative; `SpriteFontTypeReader`,
@@ -280,9 +281,14 @@ A `.cnj` file is always a single JSON object with (at least) these top-level fie
 }
 ```
 
-- `cnjVersion` — an integer schema version for the *envelope* itself (not per-type). Bump only if the
-  envelope shape changes (e.g. if a `"assetName"`/`"sourceTool"` provenance field is added later).
-  Per-type schema evolution is handled by each type's own fields/versioning, not this field.
+- `cnjVersion` — an integer schema version for the envelope. The *ceiling* a reader accepts is
+  **per document type**, not global: `Model` accepts 1 and 2, every other type accepts 1 only, and a
+  version above a type's own ceiling is rejected by name. Raising it globally would make "a future
+  version is rejected" false for every type that has not defined one. Bump a type's ceiling only
+  when the change is one an older reader cannot ignore — `Model`'s version 2 adds the `"bones"`
+  hierarchy, without which every mesh sits at the origin — and prefer optional, written-only-when-
+  non-default fields, which need no bump at all. See "`Model` `.cnj` version 2 — migration notes for
+  consumers" below.
 - `type` — a stable string key (e.g. `"SpriteFont"`, `"Model"`, `"Effect"`, `"AnimationClip"`, or a
   game-specific type name for migrated custom data) identifying what the document is. As covered in
   "Note on dispatch" above, the primary dispatch key in CNA is still the requested C++ type `T` at
@@ -451,6 +457,62 @@ essentially the same hard/impossible boundary here. `.cnj` does not make the gen
 problem solvable, and does not make large per-vertex arrays pleasant in JSON — it only removes the
 *binary protocol and reader-registry* complexity around the parts that were never protocol-hard to
 begin with (primitives, math structs, simple metadata, font/model metadata).
+
+## `Model` `.cnj` version 2 — migration notes for consumers (`GLTF-455`)
+
+The `plan_gltf.md` campaign changed what a `Model` `.cnj` contains. This section is for anyone who
+**reads** one — a tool, a validator, or a game that shipped assets converted by an older
+`gltf_to_cnj`.
+
+### The version ceiling is per type, not global
+
+`cnjVersion` is the envelope's version, and the ceiling a reader accepts is passed **per document
+type** (`ValidateCnjEnvelopeBaseline`'s `maxVersion`). `Model` accepts **1 and 2**; every other type
+still accepts **1 only**. Raising the ceiling globally would have made "a future version is
+rejected" false for types that never defined one, which is the whole point of having the field.
+
+A non-integer version (`1.5`) is rejected outright rather than truncated into range.
+
+### What version 2 adds
+
+| Field | Where | Why it exists |
+|---|---|---|
+| `"bones"` | top level | The scene's node hierarchy: `{ "name", "parent", "transform" }` per node, parent-before-child. Before it, **every mesh was emitted in mesh-local space with an identity bone** — audit defects D1–D3, so a mesh instanced by two nodes drew twice at the origin. |
+| `"parentBone"` | each `"meshes"` entry | Which node in `"bones"` places this mesh. The other half of the same fix. |
+
+A version-1 `Model` document has neither, and the reader treats an absent `"bones"` as "no
+hierarchy" rather than an error — so an old asset still loads, with exactly the placement behaviour
+it had when it was written. **It does not silently gain correct placement**: re-convert the source
+`.gltf` to get that.
+
+### Fields added since, all optional and all written only when non-default
+
+Everything below is emitted by `tools/gltf_to_cnj` **only when it differs from the default**, so a
+`.cnj` for an ordinary opaque triangle-list asset is byte-identical to what the same tool wrote
+before these fields existed. A reader that does not know a field may ignore it and will get the
+pre-campaign behaviour for that asset; the *file* is still version 2 whenever it has `"bones"`.
+
+| Field | Default when absent | Added by |
+|---|---|---|
+| `"primitiveTopology"` | `"TRIANGLES"` | `GLTF-073` — a part's real topology, so a line or point primitive is no longer drawn as a triangle list. |
+| `"partOfMesh"` | the placement is its own mesh | `GLTF-139` — groups the parts of a multi-primitive mesh. |
+| `"alphaMode"` | `"OPAQUE"` | `GLTF-228` |
+| `"alphaCutoff"` | `0.5` | `GLTF-229`. Applied since `GLTF-372`: a `MASK` material's cutoff reaches the shader's alpha test. |
+| `"doubleSided"` | `false` | `GLTF-231`. **Carried, not applied** — culling is a `RasterizerState` the application sets. |
+| `"unlit"`, and `"diffuseColor"`/`"alpha"` beside it | lit | `GLTF-337` — `KHR_materials_unlit`. The base colour travels with the flag because nothing else on the non-PBR path reads it. |
+| `"vertexColorEnabled"` | `false` | vertex colours on the non-PBR path. |
+| `"metallicFactor"`, `"roughnessFactor"`, `"emissiveFactor"`, `"diffuseColor"`, `"alpha"` | PBR entries only | `GLTF-216`/`GLTF-219`/`GLTF-221` — written for `PbrEffect`/`SkinnedPbrEffect` entries. |
+| `"normalMap"`, `"metallicRoughnessMap"`, `"emissiveMap"`, `"occlusionMap"` | no map | PBR entries only. |
+| `"morphTargets"`, `"morphWeights"`, `"morphWeightTrack"` | no morph targets | the `_morph.bin` sidecar plus its default weights and, when animated, its weight track. |
+| `"lights"` | no imported lights | `KHR_lights_punctual`, at most three directional. |
+| `"animations"` | none | each entry names a standalone `AnimationClip` `.cnj`. |
+
+### One thing the `.cnj` path still loses
+
+**Morph tangent deltas.** They are imported and correct in memory on the runtime path, and
+`BuildMorphBytes` writes only position and normal deltas — so a model converted offline morphs its
+positions and normals and keeps its rest-pose tangents. That is `GLTF-289`'s open residue, and it is
+recorded here rather than left for a consumer to discover from a subtly wrong normal map.
 
 ## Custom loaders (game-registered, selected by `.cnj` `"type"`)
 
