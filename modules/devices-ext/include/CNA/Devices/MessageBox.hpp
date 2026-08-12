@@ -3,11 +3,9 @@
 
 #ifdef CNA_DEVICES
 
-#include <memory>
 #include <string>
 #include <vector>
 
-#include "CNA/Devices/Detail/IMessageBoxBackend.hpp"
 #include "CNA/Devices/MessageBoxType.hpp"
 
 namespace CNA::Devices
@@ -15,11 +13,10 @@ namespace CNA::Devices
     /**
      * @brief Shows native, modal OS message/alert dialogs.
      *
-     * CNA extension — no XNA/WP7 equivalent exists. Calls through
-     * `Detail::IMessageBoxBackend` (default: `Detail::PlatformMessageBoxBackend`, backed
-     * by the platform's dialog service) rather than calling a windowing system
-     * directly, specifically so tests can inject a fake backend — see
-     * `SetBackendForTesting()`'s own doc comment for why this matters here.
+     * CNA extension — no XNA/WP7 equivalent exists. Calls straight through to the platform's
+     * dialog service. A test that must not show a real dialog installs a platform whose dialog
+     * service records instead of showing (`CNA::Platform::Testing::CannedDialogPlatform`); there
+     * is deliberately no test-only injection hook on this class.
      *
      * @note Unlike `FileDialog`, every call here is **synchronous**: a message box blocks the
      * calling thread until the user clicks a button or closes the dialog. There is no result
@@ -71,19 +68,6 @@ namespace CNA::Devices
             const std::string& message,
             const std::vector<std::string>& buttonLabels);
 
-        /**
-         * @brief Test-only hook: replaces the real, platform-default backend with a
-         * caller-supplied one (typically a test fake).
-         *
-         * The real backend (`Detail::PlatformMessageBoxBackend`) pops a genuine,
-         * interactive, modal native OS dialog and blocks the calling thread until a
-         * human responds — an automated test must never call it directly. This hook
-         * exists specifically so tests never call the real backend at all.
-         *
-         * @param backend Replacement backend; pass nullptr to restore the
-         * platform-default (`Detail::PlatformMessageBoxBackend`) behavior.
-         */
-        static void SetBackendForTesting(std::unique_ptr<Detail::IMessageBoxBackend> backend);
 
     private:
         /** @brief Not instantiable — every member is static. */

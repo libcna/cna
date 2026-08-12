@@ -3,37 +3,46 @@
 
 #ifdef CNA_DEVICES
 
-#include <mutex>
-
-#include "CNA/Devices/Detail/PlatformFileDialogBackend.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/TargetPlatform.hpp"
+
+#include <utility>
 
 namespace
 {
-    std::mutex& BackendMutex()
+    std::vector<CNA::Platform::FileDialogFilter> ToPlatformFilters(
+        const std::vector<CNA::Devices::FileDialogFilter>& filters)
     {
-        static std::mutex mutex;
-        return mutex;
+        std::vector<CNA::Platform::FileDialogFilter> converted;
+        converted.reserve(filters.size());
+        for (const CNA::Devices::FileDialogFilter& filter : filters)
+        {
+            converted.push_back(CNA::Platform::FileDialogFilter{filter.Name, filter.Pattern});
+        }
+        return converted;
     }
 
-    // Task REMED-DEVICES-001: shared_ptr, not unique_ptr -- GetBackend() below
-    // returns a local copy (a new owning reference) while holding the lock, so a
-    // concurrent SetBackendForTesting() reassigning this storage can never destroy
-    // the object an in-flight call is still using. Holding BackendMutex() across
-    // the actual backend call instead was rejected: it would serialize a
-    // UI-blocking dialog call against every other FileDialog caller and invite
-    // deadlock.
-    std::shared_ptr<CNA::Devices::Detail::IFileDialogBackend>& BackendStorage()
+    /// The dialog service, or null when this platform has no native file dialogs.
+    CNA::Platform::IPlatformDialogs* Dialogs()
     {
-        static std::shared_ptr<CNA::Devices::Detail::IFileDialogBackend> backend =
-            std::make_shared<CNA::Devices::Detail::PlatformFileDialogBackend>();
-        return backend;
+        CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+        return platform.GetCapabilities().nativeFileDialog ? platform.GetDialogs() : nullptr;
     }
 
-    std::shared_ptr<CNA::Devices::Detail::IFileDialogBackend> GetBackend()
+    /// Delivers "the user chose nothing" to a caller waiting on a dialog that will never appear.
+    ///
+    /// A caller has already registered a continuation by the time it learns the dialog is
+    /// unavailable, so silently dropping the callback leaves that continuation pending forever --
+    /// a hang rather than a refusal. An empty result is what a cancel produces, which every
+    /// caller of this API already handles.
+    void ReportUnavailable(const CNA::Devices::Detail::FileDialogResultCallback& onResult)
     {
-        std::lock_guard<std::mutex> lock(BackendMutex());
-        return BackendStorage();
+        if (onResult)
+        {
+            onResult({});
+        }
     }
 } // namespace
 
@@ -41,6 +50,10 @@ namespace CNA::Devices
 {
     bool FileDialog::getIsSupportedProperty()
     {
+        // The build target still decides this rather than the platform capability: a desktop
+        // build reports supported before any dialog is shown, which is what callers gate their
+        // UI on, and the capability answers the narrower question of whether this particular
+        // platform implementation can show one.
         switch (CNA::getCurrentPlatform())
         {
         case CNA::TargetPlatform::Web:
@@ -49,7 +62,7 @@ namespace CNA::Devices
         case CNA::TargetPlatform::Desktop:
         case CNA::TargetPlatform::Android:
         default:
-            return true;
+            return Platform::GetCurrentPlatform().GetCapabilities().nativeFileDialog;
         }
     }
 
@@ -59,7 +72,24 @@ namespace CNA::Devices
         const std::string& defaultLocation,
         bool allowMultiple)
     {
-        GetBackend()->ShowOpenFile(std::move(onResult), filters, defaultLocation, allowMultiple);
+        Platform::IPlatformDialogs* dialogs = Dialogs();
+        if (dialogs == nullptr)
+        {
+            ReportUnavailable(onResult);
+            return;
+        }
+
+        try
+        {
+            dialogs->ShowOpenFileDialog(std::move(onResult), ToPlatformFilters(filters),
+                                        defaultLocation, allowMultiple, nullptr);
+        }
+        catch (const Platform::PlatformException&)
+        {
+            // The callback was moved from and cannot be reported to here. A throw at this point
+            // means the request was rejected rather than shown, which the caller sees as a dialog
+            // that never opened.
+        }
     }
 
     void FileDialog::ShowSaveFile(
@@ -67,7 +97,21 @@ namespace CNA::Devices
         const std::vector<FileDialogFilter>& filters,
         const std::string& defaultLocation)
     {
-        GetBackend()->ShowSaveFile(std::move(onResult), filters, defaultLocation);
+        Platform::IPlatformDialogs* dialogs = Dialogs();
+        if (dialogs == nullptr)
+        {
+            ReportUnavailable(onResult);
+            return;
+        }
+
+        try
+        {
+            dialogs->ShowSaveFileDialog(std::move(onResult), ToPlatformFilters(filters),
+                                        defaultLocation, nullptr);
+        }
+        catch (const Platform::PlatformException&)
+        {
+        }
     }
 
     void FileDialog::ShowOpenFolder(
@@ -75,19 +119,20 @@ namespace CNA::Devices
         const std::string& defaultLocation,
         bool allowMultiple)
     {
-        GetBackend()->ShowOpenFolder(std::move(onResult), defaultLocation, allowMultiple);
-    }
-
-    void FileDialog::SetBackendForTesting(std::unique_ptr<Detail::IFileDialogBackend> backend)
-    {
-        std::lock_guard<std::mutex> lock(BackendMutex());
-        if (backend)
+        Platform::IPlatformDialogs* dialogs = Dialogs();
+        if (dialogs == nullptr)
         {
-            BackendStorage() = std::shared_ptr<Detail::IFileDialogBackend>(std::move(backend));
+            ReportUnavailable(onResult);
+            return;
         }
-        else
+
+        try
         {
-            BackendStorage() = std::make_shared<Detail::PlatformFileDialogBackend>();
+            dialogs->ShowOpenFolderDialog(std::move(onResult), defaultLocation, allowMultiple,
+                                          nullptr);
+        }
+        catch (const Platform::PlatformException&)
+        {
         }
     }
 } // namespace CNA::Devices

@@ -1,197 +1,137 @@
 // SPDX-License-Identifier: MS-PL
+//
+// PLAT-90: MessageBox is driven through the platform's dialog service, not an injected backend.
+//
+// A real message box blocks the calling thread until a human closes it, so no test may ever reach
+// one. That protection used to be a `SetBackendForTesting` hook on the public class; it is now a
+// platform whose dialog service records instead of showing.
+
 #ifdef CNA_DEVICES
 
 #include <gtest/gtest.h>
 
-#include <atomic>
 #include <memory>
-#include <thread>
+#include <string>
+#include <vector>
 
-#include "CNA/Devices/Detail/IMessageBoxBackend.hpp"
 #include "CNA/Devices/MessageBox.hpp"
+#include "CNA/Platform/CannedDialogs.hpp"
 
 using CNA::Devices::MessageBox;
 using CNA::Devices::MessageBoxType;
-using CNA::Devices::Detail::IMessageBoxBackend;
+using CNA::Platform::MessageBoxSeverity;
+using CNA::Platform::Testing::CannedDialogPlatform;
+using CNA::Platform::Testing::ScopedCurrentPlatform;
 
 namespace
 {
-    // Task DEVICES-CNA-011: the real backend (Detail::PlatformMessageBoxBackend) pops a
-    // genuine, interactive, modal native OS dialog and blocks the calling thread
-    // until a human responds -- the same class of incident already hit once during
-    // FileDialog's own development (see FileDialogTests.cpp's own doc comment).
-    // Every test below uses this fake instead, never the real backend.
-    class FakeMessageBoxBackend final : public IMessageBoxBackend
+    class MessageBoxTest : public ::testing::Test
     {
-    public:
-        int ShowSimpleCallCount = 0;
-        MessageBoxType LastShowSimpleType = MessageBoxType::Information;
-        std::string LastShowSimpleTitle;
-        std::string LastShowSimpleMessage;
+    protected:
+        CannedDialogPlatform platform;
+        std::unique_ptr<ScopedCurrentPlatform> installed;
 
-        int ShowCallCount = 0;
-        MessageBoxType LastShowType = MessageBoxType::Information;
-        std::string LastShowTitle;
-        std::string LastShowMessage;
-        std::vector<std::string> LastShowButtonLabels;
-
-        // The result Show() immediately returns, instead of ever showing a real
-        // dialog -- simulates "the user clicked this button" without any real OS
-        // interaction.
-        int SimulatedButtonIndex = 0;
-
-        void ShowSimple(MessageBoxType type, const std::string& title, const std::string& message) override
-        {
-            ++ShowSimpleCallCount;
-            LastShowSimpleType = type;
-            LastShowSimpleTitle = title;
-            LastShowSimpleMessage = message;
-        }
-
-        int Show(
-            MessageBoxType type,
-            const std::string& title,
-            const std::string& message,
-            const std::vector<std::string>& buttonLabels) override
-        {
-            ++ShowCallCount;
-            LastShowType = type;
-            LastShowTitle = title;
-            LastShowMessage = message;
-            LastShowButtonLabels = buttonLabels;
-            return SimulatedButtonIndex;
-        }
+        void SetUp() override { installed = std::make_unique<ScopedCurrentPlatform>(platform); }
+        void TearDown() override { installed.reset(); }
     };
-
-    // RAII: installs the fake in the constructor, restores the real
-    // Detail::PlatformMessageBoxBackend in the destructor -- MessageBox's backend is
-    // process-wide static state, so every test must restore it, or a fake would leak
-    // into unrelated tests run afterward in the same process.
-    class ScopedFakeMessageBoxBackend
-    {
-    public:
-        ScopedFakeMessageBoxBackend()
-        {
-            auto fake = std::make_unique<FakeMessageBoxBackend>();
-            fake_ = fake.get();
-            MessageBox::SetBackendForTesting(std::move(fake));
-        }
-
-        ~ScopedFakeMessageBoxBackend()
-        {
-            MessageBox::SetBackendForTesting(nullptr);
-        }
-
-        ScopedFakeMessageBoxBackend(const ScopedFakeMessageBoxBackend&) = delete;
-        ScopedFakeMessageBoxBackend& operator=(const ScopedFakeMessageBoxBackend&) = delete;
-
-        FakeMessageBoxBackend* operator->() const
-        {
-            return fake_;
-        }
-
-    private:
-        FakeMessageBoxBackend* fake_;
-    };
-} // namespace
-
-TEST(MessageBoxTests, GetIsSupportedPropertyIsAlwaysTrue)
-{
-    EXPECT_TRUE(MessageBox::getIsSupportedProperty());
 }
 
-TEST(MessageBoxTests, ShowSimpleForwardsParametersToBackend)
+TEST_F(MessageBoxTest, GetIsSupportedPropertyReportsTheCapability)
 {
-    ScopedFakeMessageBoxBackend fake;
+    // Previously an unconditional true. It now answers from the platform, so a host that cannot
+    // show a dialog says so instead of letting a caller believe one appeared.
+    EXPECT_EQ(MessageBox::getIsSupportedProperty(),
+              platform.GetCapabilities().messageBox);
+}
 
+TEST_F(MessageBoxTest, ShowSimpleForwardsItsParameters)
+{
     MessageBox::ShowSimple(MessageBoxType::Warning, "Careful", "Something needs attention.");
 
-    EXPECT_EQ(fake->ShowSimpleCallCount, 1);
-    EXPECT_EQ(fake->LastShowSimpleType, MessageBoxType::Warning);
-    EXPECT_EQ(fake->LastShowSimpleTitle, "Careful");
-    EXPECT_EQ(fake->LastShowSimpleMessage, "Something needs attention.");
+    ASSERT_EQ(platform.Canned().messageBoxes.size(), 1u);
+    const auto& call = platform.Canned().messageBoxes.front();
+    EXPECT_EQ(call.severity, MessageBoxSeverity::Warning);
+    EXPECT_EQ(call.title, "Careful");
+    EXPECT_EQ(call.message, "Something needs attention.");
+    EXPECT_TRUE(call.buttons.empty()) << "the single-button form must not invent buttons";
 }
 
-TEST(MessageBoxTests, ShowForwardsParametersToBackendAndReturnsClickedIndex)
+TEST_F(MessageBoxTest, ShowForwardsItsParametersAndReturnsTheClickedIndex)
 {
-    ScopedFakeMessageBoxBackend fake;
-    fake->SimulatedButtonIndex = 1;
+    platform.Canned().chosenButton = 1;
 
     const std::vector<std::string> buttons = {"Cancel", "OK"};
-    const int clicked = MessageBox::Show(MessageBoxType::Error, "Failure", "Something went wrong.", buttons);
+    const int clicked =
+        MessageBox::Show(MessageBoxType::Error, "Failure", "Something went wrong.", buttons);
 
-    EXPECT_EQ(fake->ShowCallCount, 1);
-    EXPECT_EQ(fake->LastShowType, MessageBoxType::Error);
-    EXPECT_EQ(fake->LastShowTitle, "Failure");
-    EXPECT_EQ(fake->LastShowMessage, "Something went wrong.");
-    EXPECT_EQ(fake->LastShowButtonLabels, buttons);
+    ASSERT_EQ(platform.Canned().messageBoxes.size(), 1u);
+    const auto& call = platform.Canned().messageBoxes.front();
+    EXPECT_EQ(call.severity, MessageBoxSeverity::Error);
+    EXPECT_EQ(call.title, "Failure");
+    EXPECT_EQ(call.message, "Something went wrong.");
+    EXPECT_EQ(call.buttons, buttons);
     EXPECT_EQ(clicked, 1);
 }
 
-TEST(MessageBoxTests, SetBackendForTestingNullRestoresDefaultBackendBehavior)
+TEST_F(MessageBoxTest, EverySeverityIsForwardedDistinctly)
 {
+    // Collapsing two severities would show an error as an information dialog, which is exactly
+    // the sort of thing nobody notices until a user reports the wrong icon.
+    MessageBox::ShowSimple(MessageBoxType::Information, "i", "m");
+    MessageBox::ShowSimple(MessageBoxType::Warning, "w", "m");
+    MessageBox::ShowSimple(MessageBoxType::Error, "e", "m");
+
+    ASSERT_EQ(platform.Canned().messageBoxes.size(), 3u);
+    EXPECT_EQ(platform.Canned().messageBoxes[0].severity, MessageBoxSeverity::Information);
+    EXPECT_EQ(platform.Canned().messageBoxes[1].severity, MessageBoxSeverity::Warning);
+    EXPECT_EQ(platform.Canned().messageBoxes[2].severity, MessageBoxSeverity::Error);
+}
+
+TEST_F(MessageBoxTest, ADismissedDialogReportsNoChoice)
+{
+    platform.Canned().chosenButton = -1;
+    EXPECT_EQ(MessageBox::Show(MessageBoxType::Information, "t", "m", {"OK"}), -1);
+}
+
+namespace
+{
+    /// A platform with no message box at all, which is what HEADLESS reports.
+    class MessageBoxlessPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
     {
-        ScopedFakeMessageBoxBackend fake;
-        MessageBox::ShowSimple(MessageBoxType::Information, "Title", "Message");
-        EXPECT_EQ(fake->ShowSimpleCallCount, 1);
-    }
-    // After the scope above, the real Detail::PlatformMessageBoxBackend is restored.
-    // getIsSupportedProperty() does not depend on the backend, so this only proves
-    // SetBackendForTesting(nullptr) does not crash -- the real backend's dialog-
-    // showing behavior itself is deliberately never exercised in this test file.
-    EXPECT_NO_THROW({ (void)MessageBox::getIsSupportedProperty(); });
+    public:
+        [[nodiscard]] CNA::Platform::PlatformCapabilities GetCapabilities() const override
+        {
+            CNA::Platform::PlatformCapabilities capabilities =
+                PlatformTestDecorator::GetCapabilities();
+            capabilities.messageBox = false;
+            return capabilities;
+        }
+    };
 }
 
-// Task REMED-DEVICES-001: MessageBox's GetBackend() (see MessageBox.cpp, internal
-// linkage) used to return a raw pointer after already releasing BackendMutex(),
-// so a concurrent SetBackendForTesting() could reassign -- and destroy -- the
-// backend object while another thread was still calling through the just-returned
-// pointer (a genuine use-after-free window). GetBackend() now returns a
-// shared_ptr copy taken under the lock, which keeps the pointee alive for the
-// full duration of any in-flight call regardless of a concurrent swap. See
-// FileDialogTests.cpp's identical test for the full rationale on why this is a
-// stress test rather than a deterministic single-shot reproduction.
-TEST(MessageBoxTests, ConcurrentSetBackendForTestingDoesNotRaceWithLiveCalls)
+TEST(MessageBoxWithoutAServiceTest, ReportsUnsupportedAndDoesNothingRatherThanFailing)
 {
-    constexpr int kIterations = 2000;
-    std::atomic<int> callCount{0};
+    // The branch that did not exist before the migration. This is usually the last thing a game
+    // does on its way out, so it must not take the process down on a host with no one to show it
+    // to -- and Show's -1 is already this API's "no choice was made".
+    MessageBoxlessPlatform platform;
+    const ScopedCurrentPlatform installed(platform);
 
-    // Install a fake before racing -- the caller thread below must never reach
-    // the real Detail::PlatformMessageBoxBackend, which would pop a real, modal,
-    // interactive dialog and block forever (see this file's own top-of-file
-    // comment on why).
-    MessageBox::SetBackendForTesting(std::make_unique<FakeMessageBoxBackend>());
-
-    std::thread caller(
-        [&]
-        {
-            for (int i = 0; i < kIterations; ++i)
-            {
-                MessageBox::ShowSimple(MessageBoxType::Information, "Title", "Message");
-                ++callCount;
-            }
-        });
-
-    std::thread swapper(
-        [&]
-        {
-            for (int i = 0; i < kIterations; ++i)
-            {
-                // Never pass nullptr here -- that would install the real
-                // backend mid-race, which the caller thread above must never
-                // touch.
-                MessageBox::SetBackendForTesting(std::make_unique<FakeMessageBoxBackend>());
-            }
-        });
-
-    caller.join();
-    swapper.join();
-
-    MessageBox::SetBackendForTesting(nullptr);
-
-    // A UAF would show up as a crash (under a sanitizer or even a plain build,
-    // given enough iterations) well before this assertion is reached.
-    EXPECT_EQ(callCount.load(), kIterations);
+    EXPECT_FALSE(MessageBox::getIsSupportedProperty());
+    EXPECT_NO_THROW(MessageBox::ShowSimple(MessageBoxType::Error, "t", "m"));
+    EXPECT_EQ(MessageBox::Show(MessageBoxType::Error, "t", "m", {"OK"}), -1);
 }
+
+// The concurrency test that used to live here raced a caller thread against
+// SetBackendForTesting, pinning REMED-DEVICES-001: a swap could destroy the backend while a call
+// was still running through it. It is deleted rather than ported, because with no swappable
+// backend the race has no parts left to have -- there is nothing to swap and nothing to destroy.
+//
+// Porting it was tried and is the wrong shape: two threads calling through the recording service
+// race on the recording itself, so the test would have been measuring test scaffolding, and
+// making that scaffolding thread-safe would have been work done purely to keep a test of it
+// alive. The one remaining instance of the pattern is `GetCurrentPlatform()`, which returns a
+// reference the caller uses after the lock is released -- and that is governed by a stated
+// ownership rule (the platform must outlive every use of it) rather than by a swap.
 
 #endif // CNA_DEVICES
