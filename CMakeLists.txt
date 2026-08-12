@@ -122,6 +122,11 @@ cna_detect_sharp_runtime_shape()
 
 include(cmake/RendererSelection.cmake)
 
+# Platform ratchet (plan_platform.md PLAT-8): reports how much of CNA still calls SDL
+# directly outside the PLAT-3 allowlist, and warns when that count has gone up. Warning
+# only until PLAT-121 flips it strict; skips itself cleanly with no Python 3 present.
+include(cmake/PlatformRatchet.cmake)
+
 # Example and test registrations live inside the module tree (modules/<name>/examples/,
 # modules/renderers/<family>/examples/): testing must be enabled before the modules are
 # composed so their subdirectory add_test() registrations take effect.
