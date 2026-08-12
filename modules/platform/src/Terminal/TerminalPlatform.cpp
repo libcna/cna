@@ -139,13 +139,17 @@ namespace CNA::Platform::Terminal {
         WindowFullscreenMode mode_ = WindowFullscreenMode::Windowed;
     };
 
-    TerminalPlatform::TerminalPlatform()
+    TerminalPlatform::TerminalPlatform() : TerminalPlatform(STDOUT_FILENO, STDIN_FILENO) {}
+
+    TerminalPlatform::TerminalPlatform(const int outputDescriptor, const int inputDescriptor)
         : createdAtNanoseconds_(NowNanoseconds())
         // Free, and changes no terminal state: no raw mode, no escape sequences, no waiting for a
         // reply. Full detection needs raw mode and belongs to the session (PLAT-131), not here --
         // constructing a platform must stay safe in a process whose terminal belongs to somebody
         // else, which is exactly what the conformance suite does.
-        , attachedToTerminal_(CNA::Platform::Terminal::IsAttachedToTerminal())
+        , attachedToTerminal_(isatty(outputDescriptor) != 0)
+        , outputDescriptor_(outputDescriptor)
+        , inputDescriptor_(inputDescriptor)
         , windowSlot_(std::make_shared<WindowSlot>())
         , fileSystem_(std::make_unique<Common::StandardFileSystem>("cna-terminal"))
         , systemInfo_(std::make_unique<Common::StandardSystemInfo>())
@@ -162,6 +166,7 @@ namespace CNA::Platform::Terminal {
 
     PlatformCapabilities TerminalPlatform::GetCapabilities() const
     {
+        EnsureCapabilitiesDetected();
         PlatformCapabilities capabilities;
 
         // True only where stdout really is a terminal. Reported honestly rather than
@@ -169,9 +174,39 @@ namespace CNA::Platform::Terminal {
         // true one works: advertising presentation into a pipe would be a promise this cannot
         // keep, and a caller branching on it would pick the path that draws nothing.
         capabilities.surfacePresentation = attachedToTerminal_;
+        capabilities.exactKeyboardState = detectedCapabilities_.hasKittyKeyboard;
 
-        // Keyboard (PLAT-137/138) and mouse (PLAT-139) stay false until they land.
+        // The non-Kitty keyboard fallback (PLAT-138) reports the service with this flag false;
+        // mouse (PLAT-139) stays absent until its own task lands.
         return capabilities;
+    }
+
+    void TerminalPlatform::EnsureCapabilitiesDetected() const
+    {
+        if (capabilitiesDetected_)
+        {
+            return;
+        }
+
+        const TerminalCapabilities detected =
+            DetectTerminalCapabilities(outputDescriptor_, inputDescriptor_);
+        auto sessions = std::make_shared<TerminalSessionController>(
+            outputDescriptor_, inputDescriptor_, detected.hasKittyKeyboard);
+        std::shared_ptr<TerminalInputDecoder> decoder;
+        std::unique_ptr<TerminalKeyboard> keyboard;
+        if (detected.hasKittyKeyboard)
+        {
+            decoder = std::make_shared<TerminalInputDecoder>(sessions);
+            keyboard = std::make_unique<TerminalKeyboard>(decoder);
+        }
+
+        // Publish the cache only after every allocation succeeded. A failed first call remains
+        // retryable instead of exposing a true capability whose service was never constructed.
+        detectedCapabilities_ = detected;
+        sessions_ = std::move(sessions);
+        inputDecoder_ = std::move(decoder);
+        keyboard_ = std::move(keyboard);
+        capabilitiesDetected_ = true;
     }
 
     void TerminalPlatform::AcquireSubsystem(const PlatformSubsystem subsystem)
@@ -245,7 +280,7 @@ namespace CNA::Platform::Terminal {
             // SIGWINCH carries no size, so the size is read here rather than in the handler --
             // which is also why coalescing is free: what a caller wants is the current size, and
             // ten resizes between two frames have one current size.
-            const TerminalSize grid = QueryTerminalSize(STDOUT_FILENO);
+            const TerminalSize grid = QueryTerminalSize(outputDescriptor_);
             int width = 0, height = 0;
             CellGridToPixelSize(grid.columns, grid.rows, width, height);
             windowSlot_->window->ApplyTerminalSize(width, height);
@@ -263,6 +298,16 @@ namespace CNA::Platform::Terminal {
 
             resized.kind = WindowEventKind::PixelSizeChanged;
             destination.emplace_back(resized);
+        }
+
+        EnsureCapabilitiesDetected();
+        if (inputDecoder_ != nullptr)
+        {
+            inputDecoder_->Pump();
+            const WindowId window = windowSlot_->window != nullptr
+                                        ? windowSlot_->window->GetId()
+                                        : WindowId{0};
+            inputDecoder_->DrainEvents(destination, window);
         }
 
         destination.insert(destination.end(), queued_.begin(), queued_.end());
@@ -283,7 +328,11 @@ namespace CNA::Platform::Terminal {
         std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     }
 
-    IPlatformKeyboard* TerminalPlatform::GetKeyboard() { return nullptr; }
+    IPlatformKeyboard* TerminalPlatform::GetKeyboard()
+    {
+        EnsureCapabilitiesDetected();
+        return keyboard_.get();
+    }
     IPlatformMouse* TerminalPlatform::GetMouse() { return nullptr; }
     IPlatformGamepad* TerminalPlatform::GetGamepad() { return nullptr; }
     IPlatformTextInput* TerminalPlatform::GetTextInput() { return nullptr; }
@@ -309,15 +358,12 @@ namespace CNA::Platform::Terminal {
             throw PlatformNotSupportedException(PlatformCapability::SurfacePresentation, GetName());
         }
 
-        // Detection is deferred to exactly this point: it needs raw mode and a round trip to the
-        // terminal, which is far too costly and far too intrusive to do when a platform is merely
-        // constructed. Here, something is about to draw, so asking is warranted.
-        const TerminalCapabilities detected = DetectTerminalCapabilities();
+        EnsureCapabilitiesDetected();
 
         const WindowSize size = window.GetPixelSize();
-        return std::make_unique<TerminalSurfacePresenter>(STDOUT_FILENO, STDIN_FILENO,
-                                                          detected.colourDepth, size.width,
-                                                          size.height);
+        return std::make_unique<TerminalSurfacePresenter>(sessions_,
+                                                          detectedCapabilities_.colourDepth,
+                                                          size.width, size.height);
     }
 
     bool TerminalPlatform::IsAttachedToTerminal() const { return attachedToTerminal_; }

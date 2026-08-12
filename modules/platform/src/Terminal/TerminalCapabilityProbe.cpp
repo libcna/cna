@@ -6,6 +6,8 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <charconv>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 
@@ -146,6 +148,24 @@ namespace CNA::Platform::Terminal {
             return name;
         }
 
+        std::uint32_t ParseKittyFlags(const std::string& reply)
+        {
+            const std::size_t start = reply.find("\x1b[?");
+            if (start == std::string::npos)
+            {
+                return 0;
+            }
+            const char* first = reply.data() + start + 3;
+            const char* last = reply.data() + reply.size();
+            std::uint32_t flags = 0;
+            const auto [end, error] = std::from_chars(first, last, flags);
+            if (error != std::errc{} || end == first || end == last || *end != 'u')
+            {
+                return 0;
+            }
+            return flags;
+        }
+
     } // namespace
 
     TerminalCapabilities DetectTerminalCapabilities(const int outputDescriptor,
@@ -188,9 +208,16 @@ namespace CNA::Platform::Terminal {
             return capabilities;
         }
 
-        const std::string kitty = Ask(inputDescriptor, "\x1b[?u", queryTimeoutMilliseconds);
+        // A reply proves the protocol exists, but not that an implementation supports every
+        // enhancement exact game input needs. Push 15 on the main-screen stack, query what really
+        // became active, and pop even on silence. The later session uses the same four flags.
+        constexpr std::uint32_t kRequiredKittyFlags = 15;
+        const std::string kitty =
+            Ask(inputDescriptor, "\x1b[>15u\x1b[?u", queryTimeoutMilliseconds);
+        const char popKitty[] = "\x1b[<u";
+        (void)write(inputDescriptor, popKitty, sizeof(popKitty) - 1);
         capabilities.hasKittyKeyboard =
-            kitty.find("\x1b[?") != std::string::npos && !kitty.empty() && kitty.back() == 'u';
+            (ParseKittyFlags(kitty) & kRequiredKittyFlags) == kRequiredKittyFlags;
 
         capabilities.terminalName =
             ParseTerminalName(Ask(inputDescriptor, "\x1b[>0q", queryTimeoutMilliseconds));

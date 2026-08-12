@@ -27,6 +27,8 @@ namespace CNA::Platform::Terminal {
         bool hideCursor = true;
         /** @brief Ask the terminal to report mouse press, release, motion and wheel (SGR 1006). */
         bool mouseReporting = false;
+        /** @brief Ask a Kitty-capable terminal to report every key's press, repeat and release. */
+        bool kittyKeyboard = false;
     };
 
     /**

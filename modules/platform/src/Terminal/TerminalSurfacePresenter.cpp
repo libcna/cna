@@ -49,8 +49,19 @@ namespace CNA::Platform::Terminal {
                                                        const int inputDescriptor,
                                                        const TerminalColourDepth depth,
                                                        const int targetWidth, const int targetHeight)
-        : writer_(depth)
-        , outputDescriptor_(outputDescriptor)
+        : TerminalSurfacePresenter(
+              std::make_shared<TerminalSessionController>(outputDescriptor, inputDescriptor,
+                                                          /*kittyKeyboardSupported=*/false),
+              depth, targetWidth, targetHeight)
+    {
+    }
+
+    TerminalSurfacePresenter::TerminalSurfacePresenter(
+        std::shared_ptr<TerminalSessionController> sessions, const TerminalColourDepth depth,
+        const int targetWidth, const int targetHeight)
+        : sessions_(std::move(sessions))
+        , writer_(depth)
+        , outputDescriptor_(sessions_->GetOutputDescriptor())
         , targetWidth_(targetWidth)
         , targetHeight_(targetHeight)
     {
@@ -58,10 +69,11 @@ namespace CNA::Platform::Terminal {
         {
             throw PlatformException("TerminalPresenter", "a non-positive target size");
         }
-        // Starting the session here, and only here, is the whole point: this is the first moment
-        // anything actually needs the terminal.
-        session_ = std::make_unique<TerminalSession>(outputDescriptor, inputDescriptor,
-                                                    TerminalSessionOptions{});
+        // Acquiring the presenter's lease here is still the first point presentation touches the
+        // terminal. The controller lets a keyboard lease coexist without either subsystem trying
+        // to create the process-global TerminalSession a second time.
+        presenterLease_ = sessions_->Acquire(TerminalSessionUse::Presenter);
+        sessionGeneration_ = sessions_->GetGeneration();
     }
 
     TerminalSurfacePresenter::~TerminalSurfacePresenter() = default;
@@ -99,6 +111,16 @@ namespace CNA::Platform::Terminal {
         {
             throw PlatformException("TerminalPresenter::Present",
                                     "the frame has a non-positive size");
+        }
+
+        if (sessionGeneration_ != sessions_->GetGeneration())
+        {
+            // Enabling keyboard input rebuilds the signal-safe session with the union of both
+            // option sets. Leaving and re-entering the alternate screen invalidates every cell
+            // the presenter remembered, so the next frame must be complete rather than a diff.
+            sessionGeneration_ = sessions_->GetGeneration();
+            haveScreenContents_ = false;
+            writer_.ForgetTerminalState();
         }
 
         const TerminalSize size = QueryTerminalSize(outputDescriptor_);

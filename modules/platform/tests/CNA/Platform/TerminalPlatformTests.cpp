@@ -61,10 +61,10 @@ TEST(TerminalPlatformTest, ConstructionTouchesNoTerminalState)
 
 TEST(TerminalPlatformTest, OnlyTheCapabilitiesWhoseTasksHaveLandedAreAdvertised)
 {
-    // Not an aspiration: keyboard (PLAT-137/138) and mouse (PLAT-139) each land in their own
-    // task, and a capability advertised before its implementation exists is the silent no-op the
-    // contract forbids. This fails the moment one is turned on without its work, which is the
-    // point -- turning one on should be a deliberate edit here too.
+    // Not an aspiration: the synthetic keyboard (PLAT-138) and mouse (PLAT-139) each land in
+    // their own task, and a capability advertised before its implementation exists is the silent
+    // no-op the contract forbids. Exact keyboard state is conditional on a successful Kitty
+    // probe, so its service and flag must agree rather than being hard-coded here.
     //
     // Surface presentation is the exception, and conditionally: it is implemented (PLAT-132), so
     // it is true exactly when standard output really is a terminal and false otherwise. Asserting
@@ -74,10 +74,12 @@ TEST(TerminalPlatformTest, OnlyTheCapabilitiesWhoseTasksHaveLandedAreAdvertised)
     const PlatformCapabilities capabilities = platform->GetCapabilities();
 
     EXPECT_EQ(capabilities.surfacePresentation, isatty(STDOUT_FILENO) != 0);
+    EXPECT_EQ(capabilities.exactKeyboardState, platform->GetKeyboard() != nullptr);
 
     for (const PlatformCapability capability : AllCapabilities())
     {
-        if (capability == PlatformCapability::SurfacePresentation)
+        if (capability == PlatformCapability::SurfacePresentation ||
+            capability == PlatformCapability::ExactKeyboardState)
         {
             continue;
         }
@@ -196,8 +198,12 @@ TEST(TerminalPlatformTest, SettingATitleDoesNotWriteToStandardOutput)
 
 TEST(TerminalPlatformTest, PollingEmitsNothingAndProducesNoEventsYet)
 {
-    // Input arrives with PLAT-137/138/139. Until then polling must be silent in both senses: no
-    // events invented, and nothing written where a frame will go.
+    // With output redirected there is no terminal to query and no input service to start, so
+    // polling remains silent in both senses: no events invented and no escape bytes in the log.
+    if (isatty(STDOUT_FILENO) != 0)
+    {
+        GTEST_SKIP() << "this assertion covers the redirected-output path";
+    }
     const std::unique_ptr<IPlatform> platform = MakeTerminal();
 
     ::testing::internal::CaptureStdout();

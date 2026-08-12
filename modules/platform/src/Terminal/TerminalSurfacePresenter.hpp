@@ -6,7 +6,7 @@
 #include "TerminalAnsiWriter.hpp"
 #include "TerminalFrameBudget.hpp"
 #include "TerminalFrameGrid.hpp"
-#include "TerminalSession.hpp"
+#include "TerminalSessionController.hpp"
 
 #include <memory>
 #include <string>
@@ -40,13 +40,12 @@ namespace CNA::Platform::Terminal {
      * window, no GPU and no pixels at all — the frame becomes a grid of glyphs, and a caller that
      * only knows `Present(frame)` never learns the difference.
      *
-     * ### Owning the terminal starts here
+     * ### Presentation ownership starts here
      *
-     * Constructing a presenter is the first moment anything genuinely needs the terminal, so this
-     * is where PLAT-131's `TerminalSession` starts. Deliberately not at platform construction and
-     * not at `AcquireSubsystem(Video)`: both happen in processes that merely *have* a platform —
-     * the conformance suite among them — and taking over the terminal of whoever ran the test
-     * binary would be a hostile surprise.
+     * Constructing a presenter is the first moment presentation needs the terminal, so this is
+     * where it acquires its PLAT-131 session lease. Exact keyboard input may already hold another
+     * lease; the shared controller applies the union and restores only after the final user exits.
+     * Deliberately neither starts at platform construction nor at `AcquireSubsystem(Video)`.
      *
      * ### Aspect ratio
      *
@@ -71,7 +70,17 @@ namespace CNA::Platform::Terminal {
         TerminalSurfacePresenter(int outputDescriptor, int inputDescriptor,
                                  TerminalColourDepth depth, int targetWidth, int targetHeight);
 
-        /** @brief Gives the terminal back. */
+        /**
+         * @brief Uses a session controller shared with terminal input.
+         * @param sessions The controller that owns the process's one terminal session.
+         * @param depth How much colour the terminal can show.
+         * @param targetWidth The width, in pixels, callers should rasterise at.
+         * @param targetHeight The height, in pixels, callers should rasterise at.
+         */
+        TerminalSurfacePresenter(std::shared_ptr<TerminalSessionController> sessions,
+                                 TerminalColourDepth depth, int targetWidth, int targetHeight);
+
+        /** @brief Releases presentation; the final session user gives the terminal back. */
         ~TerminalSurfacePresenter() override;
 
         TerminalSurfacePresenter(const TerminalSurfacePresenter&) = delete;
@@ -178,7 +187,9 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] const std::string& GetLastFrameBytes() const { return lastFrame_; }
 
     private:
-        std::unique_ptr<TerminalSession> session_;
+        std::shared_ptr<TerminalSessionController> sessions_;
+        TerminalSessionController::Lease presenterLease_;
+        std::uint64_t sessionGeneration_ = 0;
         TerminalAnsiWriter writer_;
         int outputDescriptor_;
         int targetWidth_;

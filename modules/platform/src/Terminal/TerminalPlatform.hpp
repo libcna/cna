@@ -6,7 +6,9 @@
 #include "../Common/StandardFileSystem.hpp"
 #include "../Common/StandardSystemInfo.hpp"
 #include "TerminalCapabilityProbe.hpp"
+#include "TerminalKeyboard.hpp"
 #include "TerminalResizeWatcher.hpp"
+#include "TerminalSessionController.hpp"
 
 #include <cstdint>
 #include <map>
@@ -28,10 +30,9 @@ namespace CNA::Platform::Terminal {
      * ### What this task provides
      *
      * Selection, factory registration, timing, the subsystem lifecycle, a window, the services
-     * every platform must have (PLAT-130), and surface presentation (PLAT-132). Keyboard
-     * (PLAT-137/138) and mouse (PLAT-139) are still reported `false` and still refuse: a
-     * capability reported `true` before its implementation exists is exactly the silent no-op the
-     * contract forbids.
+     * every platform must have (PLAT-130), surface presentation (PLAT-132), and exact keyboard
+     * state where the terminal answers the Kitty protocol probe (PLAT-137). The synthetic
+     * keyboard fallback (PLAT-138) and mouse (PLAT-139) still refuse until their tasks land.
      *
      * ### The window is a pixel surface, not the character grid
      *
@@ -45,7 +46,8 @@ namespace CNA::Platform::Terminal {
      * No raw mode, no escape sequences, no queries: construction asks only whether standard
      * output is a terminal, which is free and changes no state. That is what makes it safe for
      * the conformance suite to build one in a process whose terminal belongs to somebody else.
-     * Taking the terminal over happens when a presenter is created, and not before.
+     * Taking the terminal over happens on the first keyboard update or when a presenter is
+     * created, and not before.
      *
      * Compiled on every POSIX target regardless of `CNA_PLATFORM`, for the same reason
      * `HeadlessPlatform` is: the conformance suite needs the implementations live in one process,
@@ -56,6 +58,16 @@ namespace CNA::Platform::Terminal {
     public:
         /** @brief Creates the platform without touching the terminal. */
         TerminalPlatform();
+
+        /**
+         * @brief Creates a platform over descriptors supplied by an embedding host or test.
+         *
+         * Construction still performs only `isatty()` and sends no query.
+         *
+         * @param outputDescriptor The terminal output descriptor.
+         * @param inputDescriptor The terminal input descriptor.
+         */
+        TerminalPlatform(int outputDescriptor, int inputDescriptor);
 
         /** @brief Destroys the platform and any windows it still owns. */
         ~TerminalPlatform() override;
@@ -71,7 +83,7 @@ namespace CNA::Platform::Terminal {
          *
          * `surfacePresentation` is true exactly when standard output is a terminal, so the answer
          * differs between a process run from a shell and the same process with its output
-         * redirected. Everything else stays false until its own task lands.
+         * redirected. `exactKeyboardState` is true only after a successful Kitty-protocol probe.
          *
          * @return The capability set.
          */
@@ -117,7 +129,7 @@ namespace CNA::Platform::Terminal {
         /** @brief Sleeps for the requested duration. @param milliseconds How long to sleep. */
         void Delay(std::uint32_t milliseconds) override;
 
-        /** @brief Gets the keyboard service. @return Null until PLAT-137/138 land. */
+        /** @brief Gets the keyboard service. @return Exact Kitty service, or null until PLAT-138. */
         [[nodiscard]] IPlatformKeyboard* GetKeyboard() override;
         /** @brief Gets the mouse service. @return Null until PLAT-139 lands. */
         [[nodiscard]] IPlatformMouse* GetMouse() override;
@@ -149,10 +161,10 @@ namespace CNA::Platform::Terminal {
         /**
          * @brief Creates a presenter that draws frames as characters.
          *
-         * Also the moment the terminal is taken over: raw mode, the alternate screen and a hidden
-         * cursor all start here, because this is the first point at which anything genuinely
-         * needs them. Terminal capabilities are detected here too, for the same reason — probing
-         * costs a round trip and raw mode, neither of which belongs in a constructor.
+         * Presentation takes a shared terminal-session lease here: raw mode, the alternate screen
+         * and a hidden cursor remain active until the last presenter/input lease is released.
+         * Terminal capabilities are detected lazily here if no earlier service query did so;
+         * probing costs a round trip and raw mode, neither of which belongs in a constructor.
          *
          * @param window The window whose pixel size sets the resolution callers rasterise at.
          * @return The presenter; destroying it gives the terminal back.
@@ -190,6 +202,8 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] bool IsAttachedToTerminal() const;
 
     private:
+        void EnsureCapabilitiesDetected() const;
+
         class TerminalWindow;
 
         /// Shared between the platform and the one window it made, so that destroying either
@@ -207,6 +221,14 @@ namespace CNA::Platform::Terminal {
         std::uint64_t createdAtNanoseconds_ = 0;
         WindowId nextWindowId_ = 1;
         bool attachedToTerminal_ = false;
+        int outputDescriptor_ = -1;
+        int inputDescriptor_ = -1;
+
+        mutable bool capabilitiesDetected_ = false;
+        mutable TerminalCapabilities detectedCapabilities_;
+        mutable std::shared_ptr<TerminalSessionController> sessions_;
+        mutable std::shared_ptr<TerminalInputDecoder> inputDecoder_;
+        mutable std::unique_ptr<TerminalKeyboard> keyboard_;
 
         /// The single window slot, held jointly with whatever window occupies it.
         std::shared_ptr<WindowSlot> windowSlot_;

@@ -140,12 +140,20 @@ namespace CNA::Platform::Terminal {
         // encoding to SGR -- which is what lifts the 223-column limit of the original scheme and
         // makes release events distinguishable from presses.
         AppendIf(prologue, options.mouseReporting, "\x1b[?1000h\x1b[?1002h\x1b[?1006h");
+        // Push rather than replace the mode. A shell, multiplexer or embedding application may
+        // already have enabled its own flags; popping on exit restores that exact state instead
+        // of assuming CNA was the only terminal application involved. Fifteen requests
+        // disambiguation, event types, alternate keys and all-keys-as-CSI-u. The last flag is
+        // essential for games: without it ordinary WASD presses remain plain UTF-8 and have no
+        // release events even though report-event-types is enabled.
+        AppendIf(prologue, options.kittyKeyboard, "\x1b[>15u");
         return prologue;
     }
 
     std::string BuildSessionEpilogue(const TerminalSessionOptions& options)
     {
         std::string epilogue;
+        AppendIf(epilogue, options.kittyKeyboard, "\x1b[<u");
         AppendIf(epilogue, options.mouseReporting, "\x1b[?1006l\x1b[?1002l\x1b[?1000l");
         // Unconditional: a session that drew anything left an SGR state behind, and a shell
         // inheriting a stray background colour is the most visible way to get this wrong.

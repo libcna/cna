@@ -8,7 +8,7 @@
 > for subsystem campaigns (`NEXT_skia.md`, `NEXTinput.md`, `NEXTaudio.md`, `NEXT_gdi.md`, …).
 > **`NEXT.md` had no record of this campaign at all** until this file was added and cross-linked.
 
-**Branch:** `claude/cna-platform-sdl3-separation-pxuc33`
+**Branch:** `feature/platform`
 **Last updated:** 2026-08-12
 
 ---
@@ -74,6 +74,13 @@ driver themselves, scoped by `--gtest_filter`, which is why they pass.
 | `cmake-build-devices` | **6471 passed, 0 failed** |
 | `cmake-build-terminal` | **6315 passed, 0 failed** |
 
+PLAT-137's focused terminal/session/conformance matrix was rerun after the exact Kitty path
+landed: **120 passed** in `cmake-build-debug`, and **103 passed** in each of
+`cmake-build-headless` and `cmake-build-terminal` (only environment/configuration skips). The
+registered `CnaPlatformWindowTests` + `CnaPlatformTests` also pass; in a restricted sandbox set
+`XDG_DATA_HOME` to a writable `/tmp` path so the preferences-path write test measures the service
+rather than the sandbox's read-only home directory.
+
 **Do not run a full suite while a build is saturating the machine.**
 `TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`
 spawns two real processes and gives host migration a 30-second budget. It hit that budget once
@@ -117,7 +124,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**79 ✅ · 12 🟨 · 58 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **53 %** of the 149
+**80 ✅ · 12 🟨 · 57 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **54 %** of the 149
 actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -133,10 +140,10 @@ actionable rows done, counting partials.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
-- **Phase 10** (terminal) — **8 of 13 done**: PLAT-129 (spike), 130 (skeleton + selection), 131
+- **Phase 10** (terminal) — **9 of 13 done**: PLAT-129 (spike), 130 (skeleton + selection), 131
   (session lifecycle + restoration), 132 (surface presenter), 133 (damage tracking), 134 (colour
-  ladder, landed with 132), 135 (frame budget), 136 (`SIGWINCH`). **Remaining: PLAT-137, 138, 139,
-  140, 141** — see §7. The
+  ladder, landed with 132), 135 (frame budget), 136 (`SIGWINCH`), 137 (exact Kitty keyboard).
+  **Remaining: PLAT-138, 139, 140, 141** — see §7. The
   conformance suite already runs green against `Terminal` as a third implementation, so PLAT-141's
   claim holds for the surface that exists today; the row stays open until the capabilities it is
   meant to cover are actually turned on.
@@ -258,8 +265,8 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-137**. Eight of thirteen rows are done
-   (129–136); five remain: **137, 138, 139, 140, 141**.
+1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-138**. Nine of thirteen rows are done
+   (129–137); four remain: **138, 139, 140, 141**.
 
    **What already exists, and must be used rather than re-derived.** Everything is under
    `modules/platform/src/Terminal/`:
@@ -267,21 +274,20 @@ each, zero difference). The round trip is now checked before it is trusted.
    | File | What it does |
    |---|---|
    | `TerminalCapabilityProbe.*` | Detects tty-ness, colour depth and the **Kitty keyboard protocol**. Takes its descriptors as parameters so it is testable under a pty. `hasKittyKeyboard` is the flag PLAT-137 vs PLAT-138 turns on. |
-   | `TerminalSession.*` | Takes the terminal over (raw mode, alternate screen, hidden cursor, optional SGR-1006 mouse) and gives it back on **every** exit path. `TerminalSessionOptions::mouseReporting` is already wired and defaults false — **PLAT-139 turns it on**, it does not need writing. |
+   | `TerminalSession.*`, `TerminalSessionController.*` | The session takes raw mode, alternate screen, hidden cursor, Kitty keyboard and optional SGR-1006 mouse, then gives all of it back on **every** exit path. The controller shares the one process session through per-use RAII leases; PLAT-138 reuses the keyboard lease without Kitty flags, and PLAT-139 acquires the already-defined mouse lease. |
+   | `TerminalKeyboard.*` | Exact canonical Kitty decoder, held-key snapshot and shared event queue. PLAT-138 should extend this decoder with a legacy/synthetic mode rather than create a second reader for the same descriptor. |
    | `TerminalFrameGrid.*` | RGBA → glyph grid. `TerminalCell` has `operator==` for the diff. |
    | `TerminalAnsiWriter.*` | Grid → ANSI, all four colour rungs, full frame and diff. |
    | `TerminalFrameBudget.*` | Median-of-five measured throughput; drops frames rather than blocking. |
    | `TerminalResizeWatcher.*` | `SIGWINCH` → a flag → a `WindowEvent` at poll time. |
-   | `TerminalSurfacePresenter.*` | Ties them together and **owns the session**. |
+   | `TerminalSurfacePresenter.*` | Ties them together and holds the presentation lease on the shared session. |
 
-   **The one structural decision PLAT-137/138/139 have to respect.** The session starts when the
-   *presenter* is created and not before — not at platform construction, not at
-   `AcquireSubsystem(Video)`. Both of those happen in processes that merely *have* a platform, the
-   conformance suite included, and taking over the terminal of whoever ran the test binary would
-   be a hostile surprise. Keyboard and mouse input therefore need the session too, which means
-   either reading input through the presenter's session or giving `TerminalPlatform` a way to
-   start one on demand for input-only use. **Decide that before writing PLAT-137**, because both
-   137 and 139 depend on it.
+   **The structural decision is now implemented.** `TerminalSessionController` stays dormant at
+   platform construction and owns the process's single session only while a presenter, keyboard
+   or mouse lease exists. Changing the set of users rebuilds the immutable signal-safe restoration
+   record with the union of their modes; the presenter watches a generation counter and forces a
+   full redraw if that rebuild invalidated the alternate screen. PLAT-138 and PLAT-139 must add to
+   this controller/decoder path, not open a parallel session or race a second reader against it.
 
    **Testing terminal code in CI.** This environment has no terminal: output is redirected, so
    `isatty` is false and every interesting path refuses. Two mechanisms already exist and both

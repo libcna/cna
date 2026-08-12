@@ -187,9 +187,13 @@ HarnessResult RunHarness(const std::string& mode)
 bool HasEpilogue(const std::string& output)
 {
     // Asserted against the sequence the session actually builds rather than a literal copied by
-    // hand, so a change to one has to be a change to both.
+    // hand, so a change to one has to be a change to both. The option set must match the
+    // harness's own EverythingOn() in tools/platform/terminal_restoration_harness.cpp: this
+    // compares the exact bytes, so an option enabled in one and not in the other would make every
+    // death mode below report a missing epilogue.
     TerminalSessionOptions everything;
     everything.mouseReporting = true;
+    everything.kittyKeyboard = true;
     return output.find(BuildSessionEpilogue(everything)) != std::string::npos;
 }
 
@@ -453,6 +457,47 @@ TEST(TerminalSessionTest, TheEpilogueUndoesEveryModeThePrologueSet)
 
     // Otherwise a prologue that stopped emitting anything would make this pass vacuously.
     EXPECT_EQ(modesChecked, 5) << "alternate screen, cursor, and three mouse modes";
+}
+
+TEST(TerminalSessionTest, TheKittyKeyboardStackIsPoppedBecauseNoModeSweepCanSeeIt)
+{
+    // The property above sweeps DEC private modes -- `ESC [ ? <digits> h|l` -- and the Kitty
+    // keyboard protocol is not one: it is a *stack*, pushed with `ESC [ > <flags> u` and popped
+    // with `ESC [ < u`. So the sweep that exists to catch a forgotten undo cannot see this one,
+    // and it is the leak with the worst consequence of any here: a shell inheriting a pushed
+    // stack receives every keystroke as a CSI-u sequence and is unusable until reset by hand.
+    TerminalSessionOptions withKeyboard;
+    withKeyboard.kittyKeyboard = true;
+
+    const std::string prologue = BuildSessionPrologue(withKeyboard);
+    const std::string epilogue = BuildSessionEpilogue(withKeyboard);
+
+    ASSERT_NE(prologue.find("\x1b[>"), std::string::npos) << "nothing pushed the keyboard stack";
+    EXPECT_NE(epilogue.find("\x1b[<u"), std::string::npos) << "the keyboard stack is never popped";
+
+    // And it must not be pushed by a session that never asked for it, because the pop is only
+    // emitted for the same option -- an unconditional push would leak on every other session.
+    TerminalSessionOptions withoutKeyboard;
+    EXPECT_EQ(BuildSessionPrologue(withoutKeyboard).find("\x1b[>"), std::string::npos);
+    EXPECT_EQ(BuildSessionEpilogue(withoutKeyboard).find("\x1b[<u"), std::string::npos);
+}
+
+TEST(TerminalSessionTest, TheKeyboardStackIsPoppedBeforeTheAlternateScreenIsLeft)
+{
+    // Same reasoning as the alternate-screen ordering below: the pop has to be applied while the
+    // session still owns the terminal. Popped afterwards it would land on the screen the user is
+    // looking at again -- and if the process dies between the two, the mode left behind is the
+    // keyboard one rather than a cosmetic one.
+    TerminalSessionOptions everything;
+    everything.mouseReporting = true;
+    everything.kittyKeyboard = true;
+    const std::string epilogue = BuildSessionEpilogue(everything);
+
+    const std::size_t leaveScreen = epilogue.find("\x1b[?1049l");
+    ASSERT_NE(leaveScreen, std::string::npos);
+    const std::size_t popKeyboard = epilogue.find("\x1b[<u");
+    ASSERT_NE(popKeyboard, std::string::npos);
+    EXPECT_LT(popKeyboard, leaveScreen);
 }
 
 TEST(TerminalSessionTest, TheEpilogueLeavesTheAlternateScreenLast)

@@ -42,6 +42,9 @@ namespace {
 using CNA::Platform::Terminal::TerminalSession;
 using CNA::Platform::Terminal::TerminalSessionOptions;
 
+/// Every mode the session knows how to take, so that each death mode below is measured against
+/// the largest thing there is to restore. `HasEpilogue()` in TerminalRestorationTests.cpp builds
+/// the expected bytes from the same option set and compares them exactly -- the two must agree.
 TerminalSessionOptions EverythingOn()
 {
     TerminalSessionOptions options;
@@ -49,6 +52,10 @@ TerminalSessionOptions EverythingOn()
     options.alternateScreen = true;
     options.hideCursor = true;
     options.mouseReporting = true;
+    // The keyboard mode is the one whose leak a user cannot shrug off: with the Kitty stack left
+    // pushed, the shell that inherits the terminal receives every keystroke as a CSI-u sequence
+    // and is unusable until it is reset by hand.
+    options.kittyKeyboard = true;
     return options;
 }
 

@@ -25,6 +25,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <thread>
 #include <utility>
@@ -130,9 +131,11 @@ private:
 class TerminalActor
 {
 public:
-    TerminalActor(const int controller, const bool answerKitty)
+    TerminalActor(const int controller, const bool answerKitty,
+                  const std::uint32_t kittyFlags = 15)
         : controller_(controller)
         , answerKitty_(answerKitty)
+        , kittyFlags_(kittyFlags)
         , thread_([this] { Run(); })
     {
     }
@@ -174,7 +177,7 @@ private:
             {
                 if (answerKitty_)
                 {
-                    Reply("\x1b[?1u");
+                    Reply("\x1b[?" + std::to_string(kittyFlags_) + "u");
                 }
             }
             if (Consume(pending, "\x1b[>0q"))
@@ -207,6 +210,7 @@ private:
 
     int controller_;
     bool answerKitty_;
+    std::uint32_t kittyFlags_;
     std::atomic<bool> stop_{false};
     std::thread thread_;
 };
@@ -242,6 +246,24 @@ TEST(TerminalCapabilityProbeTests, SilenceFromTheKittyQueryIsARealNegativeOnceDe
         GTEST_SKIP() << "this environment cannot allocate a pseudo-terminal";
     }
     const TerminalActor actor(pty.Controller(), /*answerKitty=*/false);
+
+    const TerminalCapabilities capabilities =
+        DetectTerminalCapabilities(pty.Device(), pty.Device(), 500);
+
+    EXPECT_TRUE(capabilities.respondedToDeviceAttributes);
+    EXPECT_FALSE(capabilities.hasKittyKeyboard);
+}
+
+TEST(TerminalCapabilityProbeTests, PartialKittyEnhancementsAreNotAdvertisedAsExact)
+{
+    PseudoTerminal pty;
+    if (!pty.IsOpen())
+    {
+        GTEST_SKIP() << "this environment cannot allocate a pseudo-terminal";
+    }
+    // Disambiguation plus event types, but no alternate keys or all-keys-as-CSI-u. In
+    // particular ordinary WASD would still have no release events, so this is not exact.
+    const TerminalActor actor(pty.Controller(), /*answerKitty=*/true, /*kittyFlags=*/3);
 
     const TerminalCapabilities capabilities =
         DetectTerminalCapabilities(pty.Device(), pty.Device(), 500);
