@@ -2512,13 +2512,20 @@ namespace Microsoft::Xna::Framework::Content
                     // channel. A material whose maps disagree renders some of them from the wrong
                     // set -- detected since CNB-97 but, until now, reported only by the offline
                     // tool, so the runtime path was silently wrong on exactly the same file.
-                    if (meshOut.pbrUv2Mismatch)
+                    if (!meshOut.uvSetMismatchedMapsEXT.empty())
                     {
+                        std::string maps;
+                        for (const std::string& map : meshOut.uvSetMismatchedMapsEXT)
+                        {
+                            if (!maps.empty()) { maps += ", "; }
+                            maps += map;
+                        }
                         CNA::Logger::Warn(
-                            "glTF file '" + path + "': primitive '" + meshOut.name +
-                            "' has material maps referencing different TEXCOORD sets. CNA samples "
-                            "every map from one shared UV channel, so the maps that disagree are "
-                            "sampled from the wrong set (GLTF-181, a documented limit).");
+                            "glTF file '" + path + "': primitive '" + meshOut.name + "' samples " +
+                            maps + " from a different TEXCOORD set than the one CNA baked. Its PBR "
+                            "effects have one shared UV channel, so " + maps +
+                            " is sampled with the base colour's coordinates (GLTF-181, a "
+                            "documented limit).");
                     }
                     // plan_gltf.md GLTF-079: an index count that is not a whole number of
                     // primitives. The tail was dropped rather than drawn past the end of the run,

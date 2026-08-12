@@ -2003,18 +2003,30 @@ namespace CNA::Internal::GltfImport
         // taken from the base-color texture's own texcoord, `texcoordIndex` above). Detect (but do
         // not attempt to fix -- see MeshOut::pbrUv2Mismatch's own doc comment) any present map
         // that disagrees, so the caller can at least warn instead of silently mis-rendering it.
+        // GLTF-188 narrowed this from a single bool to the map NAMES, for two reasons: a flag
+        // could not say which map to go and look at, and it counted maps CNA never samples --
+        // a texture whose source it cannot decode (GLTF-200) is not rendered from the wrong UV
+        // set, it is not rendered at all, so warning about its UVs pointed at the wrong problem.
         if (out.usePbr && prim.material)
         {
-            const auto usesDifferentTexcoord = [&](const cgltf_texture_view& view)
+            const auto noteIfDifferent = [&](const cgltf_texture_view& view, const char* mapName)
             {
-                return view.texture != nullptr && view.texcoord != texcoordIndex;
+                if (view.texture == nullptr || view.texcoord == texcoordIndex) { return; }
+                // A map CNA could not decode is reported by GLTF-200 instead; its UV set is moot.
+                // The scratch list is discarded: this call is asking "is there a usable image",
+                // and the unsupported-source report itself belongs to the extraction below.
+                std::vector<std::string> ignored;
+                if (ImageForTexture(view.texture, mapName, &ignored) == nullptr) { return; }
+                out.uvSetMismatchedMapsEXT.emplace_back(mapName);
             };
-            out.pbrUv2Mismatch =
-                usesDifferentTexcoord(prim.material->normal_texture) ||
-                usesDifferentTexcoord(prim.material->emissive_texture) ||
-                usesDifferentTexcoord(prim.material->occlusion_texture) ||
-                (prim.material->has_pbr_metallic_roughness &&
-                 usesDifferentTexcoord(prim.material->pbr_metallic_roughness.metallic_roughness_texture));
+            noteIfDifferent(prim.material->normal_texture, "normalTexture");
+            noteIfDifferent(prim.material->emissive_texture, "emissiveTexture");
+            noteIfDifferent(prim.material->occlusion_texture, "occlusionTexture");
+            if (prim.material->has_pbr_metallic_roughness)
+            {
+                noteIfDifferent(prim.material->pbr_metallic_roughness.metallic_roughness_texture,
+                                "metallicRoughnessTexture");
+            }
         }
         // Unskinned colored meshes reuse the real XNA VertexPositionColorTexture layout (stride
         // 24, Position+Color+TextureCoordinate, no Normal) -- already fully supported end-to-end

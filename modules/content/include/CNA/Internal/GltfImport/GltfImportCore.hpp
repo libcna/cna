@@ -657,17 +657,24 @@ namespace CNA::Internal::GltfImport
          */
         bool transmissionHasTextureEXT = false;
         /**
-         * @brief True when `usePbr` is true and at least one present PBR map (normal,
-         * metallic-roughness, emissive, or occlusion) references a different glTF TEXCOORD set
-         * than the one actually baked into this primitive's vertex buffer (always the base-color
-         * texture's own TEXCOORD set, or TEXCOORD_0 if there is no base-color texture) -- CNA's
-         * PbrEffect/SkinnedPbrEffect currently sample every map from a single shared UV channel,
-         * so a mismatched map will be sampled with the wrong UV data. `ExtractMesh`'s caller
-         * (`gltf_to_cnj.cpp`) surfaces this as a warning rather than silently mis-rendering it;
-         * true multi-UV-channel support is tracked as separate future work (plan_cnj.md Phase
-         * 14B), not implemented here.
+         * @brief The PBR maps that reference a different TEXCOORD set than the one baked, by name.
+         *
+         * plan_gltf.md `GLTF-181`/`GLTF-188`. `PbrEffect`/`SkinnedPbrEffect` sample every map from
+         * **one** shared UV channel — the base-colour texture's own TEXCOORD set, or `TEXCOORD_0`
+         * when there is none — so a map that selects a different set is sampled with the wrong
+         * coordinates. This lists exactly which ones, so the report can name them instead of
+         * saying only that something somewhere disagrees.
+         *
+         * `GLTF-188` narrowed it from a bare `bool` for two reasons. A single flag could not say
+         * *which* map to go and look at, which is the only actionable part of the warning; and it
+         * counted maps CNA never samples — an undecodable texture source (`GLTF-200`) is not
+         * rendered from the wrong UV set, it is not rendered at all, and warning about its UVs
+         * pointed at the wrong problem.
+         *
+         * Empty for a material whose maps agree, which is nearly all of them. Carrying a second UV
+         * channel (which would make this list obsolete) is `GLTF-182`, a new vertex stride.
          */
-        bool pbrUv2Mismatch = false;
+        std::vector<std::string> uvSetMismatchedMapsEXT;
     };
 
     /**

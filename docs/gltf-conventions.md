@@ -131,6 +131,31 @@ unmirrored node shares a single index buffer and a single vertex buffer, so reve
 or flipping `TANGENT.w`, which mirroring also inverts — at import would fix one placement by
 breaking the other. Both are per-draw raster decisions, the same boundary `doubleSided` sits behind.
 
+## `KHR_texture_transform`: baked, not shader-side
+
+`plan_gltf.md` `GLTF-186`. The extension gives each texture reference its own offset/rotation/scale
+on the UV set it samples. There are two places to apply it, and CNA **bakes it into the UV channel
+at import**. That is a decision with a real cost, so it is recorded rather than left implicit.
+
+**Why baking.** CNA's PBR effects sample every map from one shared UV channel (`GLTF-181`). A
+shader-side transform needs a per-map transform *uniform* and a per-map UV *stream* to apply it to
+— the second of which does not exist and would be a new vertex stride (`GLTF-182`). Baking needs
+neither: the coordinates in the vertex buffer are already the transformed ones, and every renderer
+draws the file correctly with no shader change at all. For the overwhelmingly common case — a
+material whose maps all share one `texCoord` and one transform — baking is exactly equivalent and
+free.
+
+**What it costs.** Baking is destructive, and it loses precisely one case: two maps sharing a
+`texCoord` with *different* transforms. One transform can be baked; the other map is then sampled
+with the first one's coordinates. CNA bakes the **base colour's** transform and records every map
+that wanted a different one in `MeshOut::unbakedTextureTransformsEXT`, which both loaders report by
+name (`GLTF-184`). It is a wrong image, and it is a *named* wrong image.
+
+**What would change the decision.** A second UV channel (`GLTF-182`) makes per-map transforms
+expressible, at which point the transform belongs in the shader and this baking — and the report
+that goes with it — should be removed rather than kept alongside. Until then, baking is the only
+one of the two that renders anything at all.
+
 ## Where normals and tangents are renormalised
 
 `plan_gltf.md` `GLTF-177`. §3.7.2.1 requires `NORMAL` and `TANGENT` to be unit length, but three

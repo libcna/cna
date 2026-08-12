@@ -363,6 +363,7 @@ def assert_finite(values: Sequence[float], context: str) -> None:
 def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
                  positions: Sequence[Sequence[float]],
                  normals: Sequence[Sequence[float]] | None = None,
+                 tangents: Sequence[Sequence[float]] | None = None,
                  texcoords: Sequence[Sequence[float]] | None = None,
                  colors: Sequence[Sequence[float]] | None = None,
                  joints: Sequence[Sequence[float]] | None = None,
@@ -420,6 +421,10 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
         "vertexCount": len(positions),
         "positions": [list(p) for p in positions],
         "normals": [list(n) for n in (normals or [])],
+        # AUTHORED tangents only. A generated tangent basis is CNA's own algorithm rather than
+        # anything §3.7.2.1 prescribes, so stating one here would promote an implementation choice
+        # to a conformance expectation -- the opposite of what this manifest is for.
+        "tangents": [list(t) for t in (tangents or [])],
         "texcoords": [list(t) for t in (texcoords or [])],
         "colors": [list(c) for c in (colors or [])],
         "joints": [list(j) for j in (joints or [])],

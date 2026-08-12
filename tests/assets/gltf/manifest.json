@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 48,
+  "distinctAssetCount": 49,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -20,7 +20,7 @@
     "topology": 7,
     "normals": 1,
     "transforms": 7,
-    "materials": 5,
+    "materials": 6,
     "skinning": 9,
     "animation": 3,
     "cameras": 4,
@@ -719,6 +719,24 @@
       "auditFixture": null
     },
     {
+      "id": "mat-authored-tangent",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "authored TANGENT",
+        "tangent handedness",
+        "vertex stride 48"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "skin-armature-ancestor",
       "owningGroup": "skinning",
       "referencingGroups": [],
@@ -1094,8 +1112,8 @@
     },
     {
       "path": "anim-nonzero-start.expected.json",
-      "bytes": 11724,
-      "sha256": "950c2c5c0281af92dc8db5c7e25a2ee45d5ba0b0075742ac6bc95ea600b09cb3"
+      "bytes": 11748,
+      "sha256": "bfba60bbcf5a57a8e3d0d0fbed0afbdc6325018cb6f926a536f36136f0e22e43"
     },
     {
       "path": "anim-nonzero-start.glb",
@@ -1119,8 +1137,8 @@
     },
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 12684,
-      "sha256": "b836e63d1b6b34193bc4bd74101304a44d03911c1c367ce835589abc1b2fca29"
+      "bytes": 12708,
+      "sha256": "fec973ca6fed1a280120614554eb8482fb99e3f9d93e2c4f8cdabcf628ddde69"
     },
     {
       "path": "anim-rigid-node.glb",
@@ -1159,8 +1177,8 @@
     },
     {
       "path": "camera-animated-node.expected.json",
-      "bytes": 10265,
-      "sha256": "5697ccf0936685460d508a803fd15894a4ad79df699126c356ab7723e2d0932e"
+      "bytes": 10289,
+      "sha256": "01f3da3e8a34be2b9707dab18b146ee14a26318fffe4a4670df4454a8d65fa10"
     },
     {
       "path": "camera-animated-node.glb",
@@ -1184,8 +1202,8 @@
     },
     {
       "path": "camera-orthographic.expected.json",
-      "bytes": 7878,
-      "sha256": "6a298949206ab4df6fa32fab06eaaa3543ec85427187ea1baaa0142361be4f6f"
+      "bytes": 7902,
+      "sha256": "f336aef080037d992f135379311e7c138566a6e651281ea0db5b00b33eb5c9a4"
     },
     {
       "path": "camera-orthographic.glb",
@@ -1209,8 +1227,8 @@
     },
     {
       "path": "camera-perspective-infinite.expected.json",
-      "bytes": 7870,
-      "sha256": "dbedb9b8c02e286a50597ae11a02fd541d8e0d1263e70aeeade151d88bb52e38"
+      "bytes": 7894,
+      "sha256": "cdf882a90f0937d2c89cc3a85b9cae8d968aae38e3169d3ebd4594ca965c3705"
     },
     {
       "path": "camera-perspective-infinite.glb",
@@ -1234,8 +1252,8 @@
     },
     {
       "path": "camera-perspective.expected.json",
-      "bytes": 7893,
-      "sha256": "0f4e8a774c26baf304a6f5d27d295f80d2ba6fdac32f97a0430de2f4f7057df7"
+      "bytes": 7917,
+      "sha256": "9e7f05d10b15663ceadce25fc143e0c6e68ecb3782044d1af554b32e41465442"
     },
     {
       "path": "camera-perspective.glb",
@@ -1259,8 +1277,8 @@
     },
     {
       "path": "gltf-required-extension-unsupported.expected.json",
-      "bytes": 5107,
-      "sha256": "c3d1d8dd4df82f44104fb9ee7be912d29d5fdbb2e95d00e10e66859a95e88eed"
+      "bytes": 5131,
+      "sha256": "a303069d43133e01601a69a8dd5e86137bc41a77d7444110d67e1f8ef2a36f1f"
     },
     {
       "path": "gltf-required-extension-unsupported.glb",
@@ -1274,8 +1292,8 @@
     },
     {
       "path": "interleaved-position-normal.expected.json",
-      "bytes": 6445,
-      "sha256": "3b1b6bc2f9ff5237fa8fb2e4068cdb635c988682612901c65265ea7196637c5a"
+      "bytes": 6469,
+      "sha256": "b1bea52ca34b92e6fd6f39eb24bd56dbc48ab24da580d08c8ea4e5239f9fe55d"
     },
     {
       "path": "interleaved-position-normal.glb",
@@ -1298,9 +1316,34 @@
       "sha256": "f9de2f9261a351eea66984930c69ac5a51a1dbdd2260b6c567163e535defb82d"
     },
     {
+      "path": "mat-authored-tangent.expected.json",
+      "bytes": 8631,
+      "sha256": "ba07916f2e7da7c787484c579dcd35268829f2f075af31594788f3b336994cfe"
+    },
+    {
+      "path": "mat-authored-tangent.glb",
+      "bytes": 1224,
+      "sha256": "cc503bdb22fda41b0beb1a83f908f60480b7bfdcf59ffb28f4605aecea5d6840"
+    },
+    {
+      "path": "mat-authored-tangent.gltf",
+      "bytes": 2139,
+      "sha256": "a9b4ca6b0926f7425092adb9da49b3c4056bf5e91002116869481d475ffb58aa"
+    },
+    {
+      "path": "mat-authored-tangent.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-authored-tangent.vb.bin",
+      "bytes": 144,
+      "sha256": "51d2fe984e9cef9a12cbbe1ed50d92593146b3d2dda4f88504e3c0f00ae19caf"
+    },
+    {
       "path": "mat-emissive-strength.expected.json",
-      "bytes": 7302,
-      "sha256": "614ecbf9a9b4b42eadfead254a9868a2074cc7d320b9ae93a425b4c3377ceb0e"
+      "bytes": 7326,
+      "sha256": "3e1e97d6134f3c5e0112ae888b152cb76ac0fcd174a7de6abfe456d50de9e7cb"
     },
     {
       "path": "mat-emissive-strength.glb",
@@ -1324,8 +1367,8 @@
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 11215,
-      "sha256": "2d5b91f186385a5791841d2352532b253d88629525c3d2773f93fa974484c113"
+      "bytes": 11239,
+      "sha256": "5d47de999368922b9c38b477ca8d0a73a4f31ba5ce9b00e9761f5329bad56546"
     },
     {
       "path": "mat-factor-only-gold.glb",
@@ -1349,8 +1392,8 @@
     },
     {
       "path": "mat-normal-occlusion-scale.expected.json",
-      "bytes": 7607,
-      "sha256": "9eed5ce501d1f94c051f4114b638480bd8ccf7533ed1e86fbb3e8176ab549716"
+      "bytes": 7631,
+      "sha256": "08076e1bad30450c6810fd1a8e7d663162080da32dcbb247c6c0ea8ccf479295"
     },
     {
       "path": "mat-normal-occlusion-scale.glb",
@@ -1374,8 +1417,8 @@
     },
     {
       "path": "mat-unlit.expected.json",
-      "bytes": 7685,
-      "sha256": "779fac611a4ee17d3f4b66303a7649388793bc10659f7c62d2c79f522bb1ddaa"
+      "bytes": 7709,
+      "sha256": "cdeb3dc39b3461ef650f173325f9e9f28a70f2b978f05f4f7078c75f2721b789"
     },
     {
       "path": "mat-unlit.glb",
@@ -1399,8 +1442,8 @@
     },
     {
       "path": "mat-vertex-color-pbr.expected.json",
-      "bytes": 10463,
-      "sha256": "c695605eafae1dcbf5fc0ad33240735b58886ee2080d982f771d4d87637b642e"
+      "bytes": 10487,
+      "sha256": "ec49a261b8e34faf45f57b03506a610047e3099d53bdc289f186791422d7745a"
     },
     {
       "path": "mat-vertex-color-pbr.glb",
@@ -1424,8 +1467,8 @@
     },
     {
       "path": "mode-line-loop.expected.json",
-      "bytes": 5649,
-      "sha256": "c6713d1e3b3f1326bf46961e2a55384dcd3219c82080519c55cba1ca86253fb2"
+      "bytes": 5673,
+      "sha256": "2488e7214991de481bedfe5032640f349aa24b596a4fbd706609fabe904bf73a"
     },
     {
       "path": "mode-line-loop.glb",
@@ -1449,8 +1492,8 @@
     },
     {
       "path": "mode-line-strip.expected.json",
-      "bytes": 5519,
-      "sha256": "183bf9a2ef9b92dd0b409c750d4b5c17524ef6d670cd351dc9e49e7b68cf0634"
+      "bytes": 5543,
+      "sha256": "be716b6644e734468b73100b35665bd22456ba88d05b9995c4d45f3eeda0e484"
     },
     {
       "path": "mode-line-strip.glb",
@@ -1474,8 +1517,8 @@
     },
     {
       "path": "mode-lines.expected.json",
-      "bytes": 5600,
-      "sha256": "a75964f2c73ce1499c6340b97af7b913fd4cc9603a0f1ce1b38dd3d00ac3a6b0"
+      "bytes": 5624,
+      "sha256": "14718d2f51df81554622d2f04381837916ccc888989daa5733ba889f49f060fa"
     },
     {
       "path": "mode-lines.glb",
@@ -1499,8 +1542,8 @@
     },
     {
       "path": "mode-points.expected.json",
-      "bytes": 5244,
-      "sha256": "12bf8dbfe23ba3117919278d655f59b97d5614f01f72d3b628b433963a3e7780"
+      "bytes": 5268,
+      "sha256": "abbde81f11c0c53ba892c6b2960d6249de9fe7ed4f2c3f52696c48d8c3befc74"
     },
     {
       "path": "mode-points.glb",
@@ -1524,8 +1567,8 @@
     },
     {
       "path": "mode-triangle-fan.expected.json",
-      "bytes": 5916,
-      "sha256": "25213dd806390add102431ddd66ddc0a0db2cbfa5b0968a67b15268efd3cccc0"
+      "bytes": 5940,
+      "sha256": "102cb7cb25c2896012e9ea70057c61c00acb164849117496603e57c89bd3ba58"
     },
     {
       "path": "mode-triangle-fan.glb",
@@ -1549,8 +1592,8 @@
     },
     {
       "path": "mode-triangle-strip.expected.json",
-      "bytes": 8636,
-      "sha256": "2e1a16b1b2c4737822477bed4f421b14366c1ac4ba8d067ff72e4705a667ea7b"
+      "bytes": 8660,
+      "sha256": "c763b6f36b6b5da7ff59a4ce60136a75fba83e9ebd0ab1ffce85b9ef21e5a51e"
     },
     {
       "path": "mode-triangle-strip.glb",
@@ -1574,8 +1617,8 @@
     },
     {
       "path": "mode-triangles.expected.json",
-      "bytes": 5990,
-      "sha256": "912dde413d0f2586de0ab7cb7f00a5597308c1ba3689799e03eb8f98e7e74fa9"
+      "bytes": 6014,
+      "sha256": "d35d221cda2a89f33e30f717bf4123061a3a84c267118088fc77e9a805242010"
     },
     {
       "path": "mode-triangles.glb",
@@ -1599,8 +1642,8 @@
     },
     {
       "path": "morph-node-weights-override.expected.json",
-      "bytes": 8622,
-      "sha256": "14b2b5d94a46855c51623eedb75597630843f310208b67d633c102995140c86c"
+      "bytes": 8646,
+      "sha256": "8091a7bdd5da8c509b85f901cae9e4fdaa578c302eb4b68986ba0d25f3b352e9"
     },
     {
       "path": "morph-node-weights-override.glb",
@@ -1624,8 +1667,8 @@
     },
     {
       "path": "normal-absent.expected.json",
-      "bytes": 5935,
-      "sha256": "19feb33d555a9e6bdc70b14e7625a1ccdc0da6bbbecc8a3663bd54a301f542af"
+      "bytes": 5959,
+      "sha256": "9db666e4e6cde90b466cb84cdda255757aa47f66eb18c30cdefb6b36ec09f0fe"
     },
     {
       "path": "normal-absent.glb",
@@ -1649,8 +1692,8 @@
     },
     {
       "path": "normalized-u8-color.expected.json",
-      "bytes": 6455,
-      "sha256": "c86eb1175d91a0d6df3265c8143bd079db881f6a7a77895d031e7def8383c105"
+      "bytes": 6479,
+      "sha256": "cd601c25cfa5037f827d8d3d9b3517911d086540fe0f3fac561e21da0422a1e9"
     },
     {
       "path": "normalized-u8-color.glb",
@@ -1674,8 +1717,8 @@
     },
     {
       "path": "scene-default-selection.expected.json",
-      "bytes": 7997,
-      "sha256": "3a14a16d86b491f6ae296ca8c2b650bb4239b4f74a56052e1c98d647724b840c"
+      "bytes": 8021,
+      "sha256": "a4e0b580a1c880fdeb54d3370b500c967133e13805412ce78b93f1b410695408"
     },
     {
       "path": "scene-default-selection.glb",
@@ -1714,8 +1757,8 @@
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 12496,
-      "sha256": "20ee651ff6c1ec77411b07a44f8bd98b57fd71bc55a5d79a204c6d39f43fe9f4"
+      "bytes": 12520,
+      "sha256": "4ddb39e65945c42a66257fe9459555b6300a7570911465ed512de3bd0469abbb"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -1739,8 +1782,8 @@
     },
     {
       "path": "skin-eight-influences.expected.json",
-      "bytes": 13478,
-      "sha256": "3e6809de5eb3337e4682acc5e3611948feeccba0a64529f88fe208db801f720d"
+      "bytes": 13502,
+      "sha256": "5dfcf66f3cdcc871ee4d87b92e3dbff43229ff9e6313b81d7bee0090f5002fd7"
     },
     {
       "path": "skin-eight-influences.glb",
@@ -1779,8 +1822,8 @@
     },
     {
       "path": "skin-joint-index-padding.expected.json",
-      "bytes": 9562,
-      "sha256": "46d5913a1ade276248fe2ba51bccad28aa7fbf004503aa47f77664ad7c5c4209"
+      "bytes": 9586,
+      "sha256": "b8948daaaae5611fc183a3e90a751dec326e1f980342c15f119f4dd8a5be5807"
     },
     {
       "path": "skin-joint-index-padding.glb",
@@ -1804,8 +1847,8 @@
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
-      "bytes": 10405,
-      "sha256": "b4586a31bf712f9443fa813316bec989748261a13973723e1a7152b8e54e500d"
+      "bytes": 10429,
+      "sha256": "1ac435a319edde94f686764f9c10c00cfeb864758a2cf9c663be571d057e3785"
     },
     {
       "path": "skin-mesh-node-transform.glb",
@@ -1829,8 +1872,8 @@
     },
     {
       "path": "skin-plus-static-mesh.expected.json",
-      "bytes": 15095,
-      "sha256": "062739561bce677fe0757a7bd3015bb5170c5b8738c37d138e28927e7c96a639"
+      "bytes": 15143,
+      "sha256": "ab45e6e3f692c6d686a2528dea29d4995d182631c69549a01755e3ce837b1645"
     },
     {
       "path": "skin-plus-static-mesh.glb",
@@ -1864,8 +1907,8 @@
     },
     {
       "path": "skin-skeleton-hint.expected.json",
-      "bytes": 12928,
-      "sha256": "b167b162dcf4a7b5ce987df91d6c2eb32c2940257d1bc2976d13ab1e6988c668"
+      "bytes": 12952,
+      "sha256": "98d0f0566a1b36f98251d3e8cf07010003af3b883b8e72144ba81b61e8f98957"
     },
     {
       "path": "skin-skeleton-hint.glb",
@@ -1889,8 +1932,8 @@
     },
     {
       "path": "skin-unlit.expected.json",
-      "bytes": 10294,
-      "sha256": "3d7d7242e5bc88c303f10841fafb0ae8e891e6f57a77bea38ca699f253878c35"
+      "bytes": 10318,
+      "sha256": "71cfdf512be128e59ae42a678596e72e1b254028df6fdd524db79d45d33492a1"
     },
     {
       "path": "skin-unlit.glb",
@@ -1914,8 +1957,8 @@
     },
     {
       "path": "skin-unnormalized.expected.json",
-      "bytes": 10116,
-      "sha256": "87a1ef47ac05502e3b4f5d2ff020811c3f2642d81ec2215742f00ee503760368"
+      "bytes": 10140,
+      "sha256": "d7fd0075549fd584d9e04bc797261d49b43c2b7c18928b56797ae8b3607ce11c"
     },
     {
       "path": "skin-unnormalized.glb",
@@ -1939,8 +1982,8 @@
     },
     {
       "path": "skin-vertex-color.expected.json",
-      "bytes": 10624,
-      "sha256": "357b1b8a1d25ae6dd01614efa358dbb482882ec1be28a55149b4e0a49dc16742"
+      "bytes": 10648,
+      "sha256": "4a3c568da25aa68675e8fe61287ab0c20e597e9dfecd8fb486c4ee16947f89e2"
     },
     {
       "path": "skin-vertex-color.glb",
@@ -1964,8 +2007,8 @@
     },
     {
       "path": "sparse-indices.expected.json",
-      "bytes": 7590,
-      "sha256": "e9929e442e541def6fb191daf0d8778695a5265ee2abcc663507c822b6f6db37"
+      "bytes": 7614,
+      "sha256": "e2fe21e998590b45b4c5c57bc91ad12dc78e26f37bf0f859bf33356d9a3fc364"
     },
     {
       "path": "sparse-indices.glb",
@@ -1989,8 +2032,8 @@
     },
     {
       "path": "sparse-interleaved-base.expected.json",
-      "bytes": 7269,
-      "sha256": "7bfc13b3a6f6f508e6c5558bb8282a3fe5ce9f76a44919face42001f7f56581d"
+      "bytes": 7293,
+      "sha256": "a1f38990b37737c0d5d15b4d3cb26f149fe0def85745e7d77403a904e3d6efad"
     },
     {
       "path": "sparse-interleaved-base.glb",
@@ -2014,8 +2057,8 @@
     },
     {
       "path": "sparse-position.expected.json",
-      "bytes": 5649,
-      "sha256": "c3af870b719f8484a80228bc40aba0e3736583db8e38a676a48974e0613afd37"
+      "bytes": 5673,
+      "sha256": "72b2f2c0c8e4bbb44da1fd1069d1f0932a81eecd10ce37d3708944bf5f61a303"
     },
     {
       "path": "sparse-position.glb",
@@ -2039,8 +2082,8 @@
     },
     {
       "path": "u8-idx.expected.json",
-      "bytes": 6293,
-      "sha256": "532bd7d13484ea4615503be24554e49b8bf410d0fad38c16b27e348ee6f6fd5a"
+      "bytes": 6317,
+      "sha256": "33ba1d5f727f9dd0c840fafb9e37f1fdfddc1cd3e02bd28f164363f33c6ee4cf"
     },
     {
       "path": "u8-idx.glb",
@@ -2064,8 +2107,8 @@
     },
     {
       "path": "xf-identity.expected.json",
-      "bytes": 6253,
-      "sha256": "98e7edb7c021122e72bb14b1465c147864d9866bb52c6c2d38c515b20833b1f4"
+      "bytes": 6277,
+      "sha256": "0d9789d4a2bcbe9332c7a9c3a483a8100e1971ab76e046d726b50431314cf823"
     },
     {
       "path": "xf-identity.glb",
@@ -2089,8 +2132,8 @@
     },
     {
       "path": "xf-matrix-node.expected.json",
-      "bytes": 7883,
-      "sha256": "eb1529af6bca0e9e2cfe16463f5bf5b2d7e8c294e5d14d6b5a7d44f3e565e103"
+      "bytes": 7907,
+      "sha256": "161c48c0d7f954a6f288729830ef418f18dc73cb2b1b6ddb06ed8592828eecc8"
     },
     {
       "path": "xf-matrix-node.glb",
@@ -2114,8 +2157,8 @@
     },
     {
       "path": "xf-mirror-child.expected.json",
-      "bytes": 7853,
-      "sha256": "77a724ea19faf53ff13377be258424ea11c55440ca86529cad90aec82b55bdb7"
+      "bytes": 7877,
+      "sha256": "68e8e1d426f08bc8204771cd1b198b445cdfdb115ea6b34f92f9f183e935f923"
     },
     {
       "path": "xf-mirror-child.glb",
@@ -2139,8 +2182,8 @@
     },
     {
       "path": "xf-negative-scale.expected.json",
-      "bytes": 6426,
-      "sha256": "cfbf850676c78548574ac7046a0b8dde3aad30ef9f5eb90544a0036544848eec"
+      "bytes": 6450,
+      "sha256": "a7c3fd048df80ddca03232450d189bb366bb788b1f6122d87000247958a33ea0"
     },
     {
       "path": "xf-negative-scale.glb",
@@ -2164,8 +2207,8 @@
     },
     {
       "path": "xf-parent-child.expected.json",
-      "bytes": 7972,
-      "sha256": "2d335fe8c9d034981364bd4c4e9b6d1d7a3b6f55ac6201395552762f0a32c521"
+      "bytes": 7996,
+      "sha256": "91ef76b06fb17f47f1e1733fcbcc6ef09578bca686e376cce809b00d25a87cd9"
     },
     {
       "path": "xf-parent-child.glb",
@@ -2189,8 +2232,8 @@
     },
     {
       "path": "xf-scale-nonuniform.expected.json",
-      "bytes": 6590,
-      "sha256": "d06e983935b290f625b2fd92a7442bf07469ffbcb67d71daf99293dcbaa67856"
+      "bytes": 6614,
+      "sha256": "8eac86cb6d69dfec94e25322a5377cbabaa71399605fc20d7b90624af4f301fc"
     },
     {
       "path": "xf-scale-nonuniform.glb",
@@ -2214,8 +2257,8 @@
     },
     {
       "path": "xf-shared-mesh.expected.json",
-      "bytes": 9202,
-      "sha256": "6fe469a6255e2698279eec1a15f4da866f0c58b8225fd4fbb49bee1dfaeaf5b4"
+      "bytes": 9226,
+      "sha256": "457d35d9a69a76973bf6ac6c8d3e1a501f1291f5ed3b303c0513155c1e74b48d"
     },
     {
       "path": "xf-shared-mesh.glb",

@@ -1,6 +1,6 @@
 {
-  "id": "xf-matrix-node",
-  "description": "A node transform authored as a column-major 'matrix' rather than TRS. A conforming importer must honour it exactly as it honours TRS.",
+  "id": "mat-authored-tangent",
+  "description": "A metallic-roughness primitive authoring POSITION, NORMAL, TANGENT and TEXCOORD_0. The authored tangent basis must survive to the stride-48 vertex buffer unchanged, handedness sign included.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -14,24 +14,26 @@
     "document": "docs/gltf-conformance.md"
   },
   "specAnchors": [
-    "nodes-and-hierarchy",
-    "transformations"
+    "meshes-overview",
+    "metallic-roughness-material"
   ],
   "inventory": {
-    "id": "xf-matrix-node",
-    "owningGroup": "transforms",
+    "id": "mat-authored-tangent",
+    "owningGroup": "materials",
     "referencingGroups": [],
     "validatedLayers": [
       "L1",
       "L2",
       "L3",
-      "L4"
+      "L4",
+      "L5"
     ],
     "features": [
-      "node.matrix",
-      "column-major matrix layout"
+      "authored TANGENT",
+      "tangent handedness",
+      "vertex stride 48"
     ],
-    "auditFixture": "f13"
+    "auditFixture": null
   },
   "l1": {
     "assetVersion": "2.0",
@@ -39,13 +41,13 @@
     "sceneCount": 1,
     "nodeCount": 1,
     "meshCount": 1,
-    "materialCount": 0,
+    "materialCount": 1,
     "skinCount": 0,
     "animationCount": 0,
-    "accessorCount": 3,
-    "bufferViewCount": 3,
+    "accessorCount": 5,
+    "bufferViewCount": 5,
     "bufferCount": 1,
-    "bufferByteLength": 78,
+    "bufferByteLength": 150,
     "extensionsUsed": [],
     "extensionsRequired": []
   },
@@ -105,6 +107,58 @@
       },
       {
         "index": 2,
+        "usage": "TANGENT",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 72,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          -1.0
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "TEXCOORD_0",
+        "type": "VEC2",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 2,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 120,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 4,
         "usage": "indices",
         "type": "SCALAR",
         "componentType": 5123,
@@ -113,9 +167,9 @@
         "componentsPerElement": 1,
         "normalized": false,
         "sparse": false,
-        "bufferView": 2,
+        "bufferView": 4,
         "byteOffset": 0,
-        "bufferViewByteOffset": 72,
+        "bufferViewByteOffset": 144,
         "bufferViewByteStride": null,
         "values": [
           0,
@@ -129,7 +183,7 @@
     "primitives": [
       {
         "mesh": 0,
-        "meshName": "MatrixTri",
+        "meshName": "TangentTri",
         "primitive": 0,
         "mode": 4,
         "modeName": "TRIANGLES",
@@ -169,8 +223,40 @@
             1.0
           ]
         ],
-        "tangents": [],
-        "texcoords": [],
+        "tangents": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            -1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            -1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            -1.0
+          ]
+        ],
+        "texcoords": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0
+          ]
+        ],
         "colors": [],
         "joints": [],
         "weights": [],
@@ -198,7 +284,31 @@
           "converted": false,
           "primitiveCount": 1
         },
-        "material": null
+        "material": {
+          "index": 0,
+          "name": "TangentMat",
+          "baseColorFactor": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "metallicFactor": 0.25,
+          "roughnessFactor": 0.75,
+          "emissiveFactor": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "alphaMode": "OPAQUE",
+          "alphaCutoff": 0.5,
+          "doubleSided": false,
+          "hasBaseColorTexture": false,
+          "hasNormalTexture": false,
+          "hasMetallicRoughnessTexture": false,
+          "hasOcclusionTexture": false,
+          "hasEmissiveTexture": false
+        }
       }
     ]
   },
@@ -206,7 +316,7 @@
     "instances": [
       {
         "node": 0,
-        "nodeName": "MatrixNode",
+        "nodeName": "MeshNode",
         "mesh": 0,
         "parentNodePath": [],
         "worldMatrixColumnMajor": [
@@ -222,40 +332,40 @@
           0.0,
           1.0,
           0.0,
-          4.0,
-          5.0,
-          6.0,
+          0.0,
+          0.0,
+          0.0,
           1.0
         ],
         "worldPositions": [
           [
-            4.0,
-            5.0,
-            6.0
+            0.0,
+            0.0,
+            0.0
           ],
           [
-            5.0,
-            5.0,
-            6.0
+            1.0,
+            0.0,
+            0.0
           ],
           [
-            4.0,
-            6.0,
-            6.0
+            0.0,
+            1.0,
+            0.0
           ]
         ]
       }
     ],
     "worldBounds": {
       "min": [
-        4.0,
-        5.0,
-        6.0
+        0.0,
+        0.0,
+        0.0
       ],
       "max": [
-        5.0,
-        6.0,
-        6.0
+        1.0,
+        1.0,
+        0.0
       ]
     }
   },
@@ -289,12 +399,12 @@
             "size": 8
           }
         ],
-        "vertexBufferFile": "xf-matrix-node.vb.bin",
+        "vertexBufferFile": "mat-authored-tangent.vb.bin",
         "vertexBufferBytes": 144,
-        "vertexBufferSha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683",
+        "vertexBufferSha256": "51d2fe984e9cef9a12cbbe1ed50d92593146b3d2dda4f88504e3c0f00ae19caf",
         "indexElementSize": 2,
         "indexCount": 3,
-        "indexBufferFile": "xf-matrix-node.ib.bin",
+        "indexBufferFile": "mat-authored-tangent.ib.bin",
         "indexBufferBytes": 6,
         "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
         "sourceTopology": "TRIANGLES",
@@ -304,63 +414,5 @@
     ]
   },
   "rejection": null,
-  "defects": [
-    {
-      "id": "D3",
-      "summary": "node.matrix was discarded, by the same mechanism as D1/D2 -- the import data model had nowhere to put it. BuildSceneGraph reads the node's local transform through cgltf_node_transform_local, which already applies the spec's own 'matrix, or else TRS' exclusivity rule, so both authorings now compose alike.",
-      "firstDivergentLayer": "L4",
-      "divergentFields": [],
-      "divergentFieldsByLayer": {},
-      "owner": "GLTF-TRANSFORM",
-      "owningTasks": [
-        "GLTF-103",
-        "GLTF-113",
-        "GLTF-114",
-        "GLTF-115"
-      ],
-      "closedTasks": [
-        "GLTF-103",
-        "GLTF-113",
-        "GLTF-114",
-        "GLTF-115"
-      ],
-      "remainingTasks": [],
-      "status": "fixed",
-      "currentActual": {
-        "worldBounds": {
-          "min": [
-            4.0,
-            5.0,
-            6.0
-          ],
-          "max": [
-            5.0,
-            6.0,
-            6.0
-          ]
-        },
-        "instanceCount": 1,
-        "instanceWorldMatricesAreAllIdentity": false,
-        "note": "The composed world X range is the spec-derived [4,5]."
-      },
-      "priorActual": {
-        "worldBounds": {
-          "min": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "max": [
-            1.0,
-            1.0,
-            0.0
-          ]
-        },
-        "instanceCount": 1,
-        "instanceWorldMatricesAreAllIdentity": true,
-        "measuredOn": "fb3728267e8f2179d43b96357ff372ae712b7e7f",
-        "note": "Decoded X range was the mesh-local [0,1] against an expected [4,5]."
-      }
-    }
-  ]
+  "defects": []
 }

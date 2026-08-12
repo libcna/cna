@@ -530,5 +530,78 @@ def mat_unlit() -> Fixture:
     )
 
 
+#: An authored tangent basis: +X with the handedness sign deliberately -1, which is NOT the value a
+#: generator falls back to, so a dropped or regenerated basis is visible in the sign alone.
+_AUTHORED_TANGENTS = [(1.0, 0.0, 0.0, -1.0), (1.0, 0.0, 0.0, -1.0), (1.0, 0.0, 0.0, -1.0)]
+_AUTHORED_TANGENT_UVS = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+
+
+def mat_authored_tangent() -> Fixture:
+    """A primitive authoring its own `TANGENT` -- the fixture `GLTF-178` compares tangents on.
+
+    Every other corpus fixture either has no tangent slot or gets a generated basis, and a
+    generated one cannot be a conformance expectation: the algorithm is CNA's own, not the
+    specification's. An authored basis is the opposite -- §3.7.2.1 says exactly what it means, so
+    it can be compared numerically, and it is the case a regression would actually break. The
+    handedness is -1 rather than the +1 a generator falls back to, so "the authored basis was
+    dropped and regenerated" shows up in the sign alone.
+    """
+    b = GltfBuilder("mat-authored-tangent")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    tangent = b.add_packed_accessor(usage="TANGENT", values=_AUTHORED_TANGENTS,
+                                    accessor_type="VEC4")
+    texcoord = b.add_packed_accessor(usage="TEXCOORD_0", values=_AUTHORED_TANGENT_UVS,
+                                     accessor_type="VEC2")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "TangentMat",
+        "pbrMetallicRoughness": {"metallicFactor": 0.25, "roughnessFactor": 0.75},
+    })
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal, "TANGENT": tangent,
+                       "TEXCOORD_0": texcoord},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="TangentTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    expected_material = {
+        "index": material,
+        "name": "TangentMat",
+        "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
+        "metallicFactor": 0.25,
+        "roughnessFactor": 0.75,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return Fixture(
+        id="mat-authored-tangent", audit_fixture=None, owning_group="materials",
+        description="A metallic-roughness primitive authoring POSITION, NORMAL, TANGENT and "
+                    "TEXCOORD_0. The authored tangent basis must survive to the stride-48 vertex "
+                    "buffer unchanged, handedness sign included.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["authored TANGENT", "tangent handedness", "vertex stride 48"],
+        spec_anchors=["meshes-overview", "metallic-roughness-material"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="TangentTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+            tangents=_AUTHORED_TANGENTS, texcoords=_AUTHORED_TANGENT_UVS,
+            indices=TRIANGLE_INDICES, material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
 FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr,
-            mat_normal_occlusion_scale, mat_unlit]
+            mat_normal_occlusion_scale, mat_unlit, mat_authored_tangent]

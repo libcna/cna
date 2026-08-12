@@ -284,13 +284,20 @@ namespace
                 // Per-map UV set selection: PbrEffect/SkinnedPbrEffect sample every map from a
                 // single shared UV channel (the base-color texture's own TEXCOORD set); warn
                 // rather than silently mis-rendering when another map references a different one.
-                if (meshOut.pbrUv2Mismatch)
+                if (!meshOut.uvSetMismatchedMapsEXT.empty())
                 {
+                    // GLTF-188: named, so the warning says which map to go and look at.
+                    std::string maps;
+                    for (const std::string& map : meshOut.uvSetMismatchedMapsEXT)
+                    {
+                        if (!maps.empty()) { maps += ", "; }
+                        maps += map;
+                    }
                     warnings.push_back(
-                        "Primitive '" + partName + "' has a PBR map (normal/metallic-roughness/"
-                        "emissive/occlusion) that references a different glTF TEXCOORD set than "
-                        "the base-color texture -- that map will be sampled with the wrong UV "
-                        "data (CNA currently samples every PBR map from one shared UV channel).");
+                        "Primitive '" + partName + "': " + maps + " references a different glTF "
+                        "TEXCOORD set than the base-color texture, and will be sampled with the "
+                        "base colour's UV data instead (CNA samples every PBR map from one shared "
+                        "UV channel).");
                 }
 
                 // plan_gltf.md GLTF-339: transmission approximated as alpha blending.

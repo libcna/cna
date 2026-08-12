@@ -560,9 +560,15 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
             // into a slot whose attribute the file omits is not something the specification
             // constrains, and asserting CNA's fill value here would silently promote an
             // implementation choice to a requirement.
+            // plan_gltf.md GLTF-178: tangents are compared here too, but only where the fixture
+            // AUTHORS them. A generated tangent basis is CNA's own algorithm rather than anything
+            // §3.7.2.1 prescribes, so the manifest states none and this comparison skips it --
+            // asserting a generated basis would promote an implementation choice to a conformance
+            // requirement, which is the one thing this corpus must not do.
             for (const auto& [field, actualValues] : {
                      std::pair{std::string("positions"), Flatten(dump.positions)},
                      std::pair{std::string("normals"), Flatten(dump.normals)},
+                     std::pair{std::string("tangents"), Flatten(dump.tangents)},
                      std::pair{std::string("texcoords"), Flatten(dump.texcoords)},
                      std::pair{std::string("weights"), Flatten(dump.weights)}})
             {

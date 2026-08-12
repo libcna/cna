@@ -4,7 +4,7 @@
 // in-process (cgltf_parse_file + cgltf_load_buffers on a small self-contained fixture written to
 // a scratch file, mirroring gltf_to_cnj.cpp's own parse setup) rather than going through
 // ContentManager or spawning the CLI tool, since the thing under test here (MeshOut::
-// pbrUv2Mismatch) has no separately-observable effect on either of those higher-level paths --
+// uvSetMismatchedMapsEXT) has no separately-observable effect on either of those higher-level paths --
 // the warning it drives (gltf_to_cnj.cpp's own ConvertGroup) is best-effort stdout diagnostics,
 // not asserted on elsewhere in this codebase (see the pre-existing morph-target warning, which
 // has no matching test either).
@@ -98,7 +98,7 @@ namespace
 })GLTF";
 
     // Identical to kMismatchedUvGltf except the normal map is also on TEXCOORD_0 (matching base
-    // color) -- the negative case, proving pbrUv2Mismatch stays false for the common, non-divergent
+    // color) -- the negative case, proving uvSetMismatchedMapsEXT stays empty for the common, non-divergent
     // authoring pattern.
     const char* kMatchedUvGltf = R"GLTF({
   "asset": { "version": "2.0" },
@@ -287,14 +287,16 @@ TEST(GltfImportCoreTest, ExtractMeshDetectsMismatchedPbrMapUvSets)
 {
     const MeshOut out = ExtractPrimitive0(kMismatchedUvGltf);
     ASSERT_TRUE(out.usePbr);
-    EXPECT_TRUE(out.pbrUv2Mismatch);
+    // GLTF-188: named rather than a bare flag, so a report can say which map to look at.
+    ASSERT_EQ(1u, out.uvSetMismatchedMapsEXT.size());
+    EXPECT_EQ("normalTexture", out.uvSetMismatchedMapsEXT.front());
 }
 
 TEST(GltfImportCoreTest, ExtractMeshDoesNotFlagMatchedPbrMapUvSets)
 {
     const MeshOut out = ExtractPrimitive0(kMatchedUvGltf);
     ASSERT_TRUE(out.usePbr);
-    EXPECT_FALSE(out.pbrUv2Mismatch);
+    EXPECT_TRUE(out.uvSetMismatchedMapsEXT.empty());
 }
 
 // DualTextureEffect occlusion brightness fix (CNB-88, Phase 14E). Pixel-value verification
