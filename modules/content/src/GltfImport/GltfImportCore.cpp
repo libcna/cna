@@ -3387,7 +3387,9 @@ namespace CNA::Internal::GltfImport
 
     // plan_gltf.md GLTF-334. One table, and everything about extensions reads from it: the
     // extensionsRequired gate (IsGltfExtensionSupportedEXT below), §19's own classification table
-    // (asserted against this by GltfExtensionRegistry), and the fixture-coverage rule of GLTF-335.
+    // (asserted against this by GltfExtensionRegistry), docs/gltf-limitations.md §1 (asserted by
+    // GltfLimitationsDoc, which additionally compares the `claimed` column -- the one a caller
+    // acts on), and the fixture-coverage rule of GLTF-335.
     //
     // Two hand-maintained lists is the failure this replaces. The support list and §19's table
     // already disagreed in spirit -- §19 called KHR_texture_transform PARTIAL while the gate

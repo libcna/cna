@@ -469,3 +469,14 @@ morphs reads as a broken morph target, not as an unimported channel.
 model with no animated bone is its own kind of lie. A *skinned* clip is emitted even when trackless,
 which is not an inconsistency: skinned clips are selected by name, so dropping one silently renames
 every clip after it from the application's point of view.
+
+---
+
+## What this file does not cover
+
+Every decision here is one CNA *made*. What it **cannot** do — the approximations, the data no
+vertex layout can carry, and the state that is carried but not yet applied — is
+`docs/gltf-limitations.md`, and each entry there names the report field that tells a caller it
+happened. The two are deliberately separate: a reader asking "why does CNA do it this way" and one
+asking "what did my file lose" are asking different questions, and answering both in one document
+is how a limitation ends up buried in a rationale.

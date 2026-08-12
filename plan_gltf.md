@@ -10,7 +10,7 @@ Oracle repository: `openeggbert/cna-gltf-viewer` @ `aaa008dc62bcb1127901ca23b75b
 > working record.** The banner it opened with ("nothing in it was implemented") described the
 > planning session of 2026-08-11 only, and is preserved below for provenance.
 >
-> Of 460 rows: **310 are closed (`✔` 189, `✅` 121)** and **132 remain `⬜`**. The other 18 carry a
+> Of 460 rows: **311 are closed (`✔` 190, `✅` 121)** and **131 remain `⬜`**. The other 18 carry a
 > deliberate partial marker — 8 `🔬` (investigation, no implementation owed), 5 `✅/⬜` and 2 `✅/🐛`
 > (landed with a named residue), 2 `🐛` (open defect), 1 `⛔` (blocked by this environment,
 > `GLTF-009`). Every closed row carries its own evidence in its Scope cell: what was decided, what
@@ -2662,7 +2662,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 |---|---|---|---|---|
 | GLTF-445 | `docs/gltf-conventions.md` | ⬜ | GLTF-132 | §11's tables, §15.1's joint matrix, §16.1's morph equation, §17's animation semantics. **Accept:** written and cross-referenced from the code. |
 | GLTF-446 | `docs/gltf-conformance.md` | ⬜ | GLTF-416 | Corpus, oracle ladder, spec pin, tolerances. **Accept:** written. |
-| GLTF-447 | `docs/gltf-limitations.md` | ⬜ | GLTF-334 | Every documented approximation and unsupported feature, with its report entry. **Accept:** written; matches the registry. |
+| GLTF-447 | `docs/gltf-limitations.md` | ✔ | GLTF-334 | Every documented approximation and unsupported feature, with its report entry. **Accept:** written; matches the registry. **Written, and held to the code by three tests rather than by review.** The document is organised by the campaign's own thesis: every entry names **the report field that says so at run time**, because a row with no report entry is a loss invisible to a caller and is itself the defect. Five sections — §1 extensions (generated), §2 approximations in core glTF, §3 data no vertex layout can carry, §4 carried-but-not-applied, §5 environment-dependent. `GltfLimitationsDoc.ExtensionTableAgreesWithTheRegistry` compares §1 against `GltfExtensionRegistryEXT()` row by row and prints the corrected table on failure, exactly as §19's own test does — and additionally compares the **claimed** column, which §19's does not, because that is the column deciding whether a file REQUIRING an extension loads. `EveryReportFieldNamedHereExistsInTheHeader` requires every identifier in §2/§3's report column to be **declared** in `GltfImportCore.hpp` (as a declaration, not merely as text in a comment), so a renamed field breaks the document that promised it. `EveryApproximatedOrUnsupportedExtensionIsInTheApproximationTables` is the converse — an extension classified `APPROXIMATED_AND_REPORTED` must appear outside the generated table too — and it **failed on its first run**, on `KHR_lights_punctual`, whose §2 row described the approximation without naming the extension. The suite is registered in `CNA_GLTF_CONFORMANCE_RUNGS` under L1. |
 | GLTF-448 | **Rewrite `CNAEXT.md` §3.2 to match reality** | ⬜ | GLTF-447 | The current text reads as a completeness claim (§3.1). **Accept:** each capability is marked implemented/partial/unsupported with its evidence. |
 | GLTF-449 | Update `FUTURE.md` Phase 5 status | ⬜ | GLTF-448 | It currently says "glTF is **not** corrected." **Accept:** updated only when the milestone is actually met. |
 | GLTF-450 | Retire `gltfissues.md` into the campaign record | ⬜ | GLTF-448 | Keep it as historical evidence; add a pointer to this plan. **Accept:** no contradiction between the two. |
