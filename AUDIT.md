@@ -161,13 +161,13 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | IndexElementSize (enum) | ✅ | Member names match FNA, and — **fixed, Task 921** (2026-07-09) — the underlying numeric values now do too: `SixteenBits = 0`, `ThirtyTwoBits = 1`, matching FNA's implicit sequential values exactly (previously `16`/`32`, apparently assuming the enum encoded a literal bit-width; found from Task 479's real FNA-vs-CNA JSON comparison, confirmed via both reading FNA's `IndexElementSize.cs` directly and the real running `FNA.dll`'s own reflection dump). |
 | IRenderTarget | ✅ | Complete |
 | IVertexType | ✅ | Complete |
-| Model | ✅ | API complete. The non-default constructor used to auto-default `Root` to `bones[0]` with no way to specify a different root bone index (FNA's real `Model` constructor never sets `Root` at all — `ModelReader` assigns it externally from an explicit `rootBoneIndex`) — **fixed, Task 916** (2026-07-09): an additive optional `rootBoneIndex` parameter (default `0`, matching prior behavior) was added, so a hand-built CNA model whose true root isn't the first bone in `bones` can now be represented correctly. |
+| Model | ✅ | XNA surface complete, plus a CNAEXT `CamerasEXT` property — see the glTF note below the table. API complete. The non-default constructor used to auto-default `Root` to `bones[0]` with no way to specify a different root bone index (FNA's real `Model` constructor never sets `Root` at all — `ModelReader` assigns it externally from an explicit `rootBoneIndex`) — **fixed, Task 916** (2026-07-09): an additive optional `rootBoneIndex` parameter (default `0`, matching prior behavior) was added, so a hand-built CNA model whose true root isn't the first bone in `bones` can now be represented correctly. |
 | ModelBone | ✅ | API complete |
 | ModelBoneCollection | ✅ | API complete |
 | ModelEffectCollection | ✅ | API complete |
 | ModelMesh | ✅ | API complete |
 | ModelMeshCollection | ✅ | API complete |
-| ModelMeshPart | ✅ | API complete |
+| ModelMeshPart | ✅ | XNA surface complete, plus a CNAEXT `PrimitiveTypeEXT` property and a widened `PrimitiveCount` **meaning** — see the glTF note below the table. API complete |
 | ModelMeshPartCollection | ✅ | API complete |
 | NoSuitableGraphicsDeviceException | ✅ | Complete |
 | OcclusionQuery | ✅ | API complete; full 4-backend correctness audit done (Tasks 441-450, `docs/occlusionquery-support.md`). EasyGL: fully correct, pixel-verified both directions. **Vulkan: fixed, Task 447/854** (2026-07-10) — a real `VulkanOcclusionQueryBackend` now correlates each query's Begin/End span with its draw calls via `Pending3DDraw::occlusionQuery` tagging plus `vkCmdBeginQuery`/`vkCmdEndQuery` recording, verified both visible/occluded directions plus a multi-draw-span case. Bgfx: real fix shipped (Task 448) matching bgfx's own documented API, but this sandbox's software GL driver couldn't discriminate whether it changes observable behavior at all; a further gap (query attached to the same view as other geometry rather than a dedicated view, unlike bgfx's own reference example) is tracked as Task 917. SDL_Renderer correctly throws (2D-only, no occlusion queries in FNA's own 2D path either). |
@@ -213,6 +213,28 @@ Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloa
 | VertexPositionTexture | ✅ | API complete |
 | Viewport | ✅ | API complete |
 | SkinnedModelEXT | ✅ | NOXNA — not part of the XNA 4.0 API. Real, GPU-skinnable mesh + skeleton + animation-clip container for the Avatar real-rendering extension. Deliberately not built on `Model`/`ModelBone`/`ModelMesh` (those encode rigid multi-part model animation, the wrong shape for per-vertex GPU skinning). Its bone hierarchy is entirely independent of the real Xbox Avatar 71-bone arrays. Loaded via a new `SkinnedModelTypeReader` (`.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`) registered in `ContentManager` |
+
+### glTF campaign additions to the types above (`GLTF-453`)
+
+`plan_gltf.md`'s correctness campaign added CNAEXT members to three types this table calls "API
+complete", and that phrase stays accurate: it is a statement about **XNA 4.0 parity**, and every
+member below is an extension to XNA rather than a piece of it that was missing. They are listed here
+so a reader of this table is not surprised by a header that carries more than FNA does.
+
+Per `CLAUDE.md`, none of them counts as complete until its tests do, so each row names them.
+
+| Type | CNAEXT addition | Why XNA has no equivalent | Tests |
+|---|---|---|---|
+| `ModelMeshPart` | `PrimitiveTypeEXT` | XNA passes the topology to `DrawIndexedPrimitives`, so every XNA part is implicitly a triangle list; a glTF line or point primitive has nowhere else to live | `GltfPrimitiveTopology`, `GltfDrawTopology`, `GltfConformanceL5` |
+| `ModelMeshPart` | `PrimitiveCount` now means "primitives of this part's topology" | The value is unchanged for every triangle-list part — which is every XNA part — so the meaning generalises rather than changing | `GltfConformanceL5`, `GltfConformanceL6` |
+| `Model` | `CamerasEXT` / `ModelCameraEXT` | XNA's `Model` has no cameras. A property rather than `Tag`, because `Tag` holds one object and `SkinningData` and `ModelAnimationsEXT` already contend for it | `GltfCameras` |
+| `PbrEffect`, `SkinnedPbrEffect` | the types themselves | XNA 4.0 has no PBR effect at all (`plan_cnj.md` Phase 13A); they are additions, not reinterpretations, and so are outside this FNA-parity table | `GltfConformanceL6`, `GltfMaterialState`, `GltfDrawParamsOracleL6` |
+| `PbrEffect`, `SkinnedPbrEffect` | `AlphaModeEXT`, `AlphaCutoffEXT`, `DoubleSidedEXT` | XNA has no material-level alpha coverage: transparency is a `BlendState` and cutout rendering is `AlphaTestEffect::ReferenceAlpha` | `GltfConformanceL6` (`AMaskMaterialsCutoffReachesTheDrawsAlphaTestVector` and its corpus-wide control) |
+
+Every one went through `docs/gltf-api-change-review.md` before it existed — that gate's standing
+default is **no new public glTF API**, and each row above records why keeping it internal was
+rejected. What the import path still cannot carry is `docs/gltf-limitations.md`, and the deliberate
+divergences from XNA are `CHECKLIST.md`'s glTF table.
 
 ---
 

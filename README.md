@@ -94,6 +94,22 @@ ctest --test-dir build --output-on-failure
 - `SpriteBatch` API with `Begin(...)` / `Draw(...)` / `End()` workflow.
 - `Texture2D` abstraction with renderer-owned texture resources.
 
+### Content pipeline — `.gltf` / `.glb` / `.cnj`
+
+- **glTF 2.0 loads directly**: `Content.Load<Model>("character.glb")` — no offline step. An offline
+  converter (`tools/gltf_to_cnj`) produces `.cnj` + binary sidecars for the same asset, and the two
+  loaders are held to identical output by a per-fixture parity sweep.
+- Geometry, PBR materials, skinning, animation (LINEAR/STEP/CUBICSPLINE), morph targets, cameras and
+  punctual lights all import. What that costs is stated rather than implied: XNA's model is four
+  joint influences and three directional lights, one UV channel, and one colour channel — glTF data
+  beyond those is **counted and reported**, never silently dropped.
+- Correctness is held by a **generated 71-asset conformance corpus** and a nine-rung numerical
+  oracle ladder — container, accessor, semantic mesh, world geometry, packed GPU bytes, and the
+  effect parameters a draw would actually bind — run per commit, including under ASan + UBSan.
+- **Read `docs/gltf-limitations.md` before choosing CNA for a glTF pipeline.** It lists every
+  approximation and every unsupported feature next to the report field that names the loss at run
+  time. `CNAEXT.md` §3.2 carries the same information as a per-capability status table.
+
 ### Cross-Platform Direction
 
 - SDL3-based platform foundation for windowing/input/audio integration.
