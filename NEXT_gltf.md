@@ -6,10 +6,11 @@ session needs to start work without re-deriving the state.
 
 ## Session status
 
-- **Branch:** `claude/gltf-011-center-collapse-swdjna`, pushed. Never push elsewhere without
-  explicit permission. No pull request has been opened and none should be unless asked.
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **301 closed (`✔` 180, `✅` 121),
-  141 `⬜` remaining.** The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Branch:** `feature/gltf_`, pushed. Never push elsewhere without explicit permission. No pull
+  request has been opened and none should be unless asked. (The campaign ran on
+  `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **308 closed (`✔` 187, `✅` 121),
+  134 `⬜` remaining.** The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 5 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-064`, `067`,
   `068`, `093`, `252`, `265`, `289`), 2 `🐛` (open: `GLTF-157`, `421`), and 1 `⛔` (`GLTF-009`,
   blocked by this environment).
@@ -27,9 +28,11 @@ test binary from inside the build directory produces ~80 spurious failures and a
 have nothing to do with the code.
 
 ```bash
-cmake --build cmake-build-tests --target CnaTests -j4        # -j4 is the sandbox cap
-ctest --test-dir cmake-build-tests -L gltf-conformance       # the 9-rung ladder
-./cmake-build-tests/CnaTests                                 # the whole suite, from the ROOT
+B=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-tests
+export CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache CCACHE_MAXSIZE=30G
+cmake --build "$B" --target CnaTests -j3     # -j3 is the ceiling in openeggbert/CLAUDE.md
+ctest --test-dir "$B" -L gltf-conformance    # the 9-rung ladder
+"$B"/CnaTests                                # the whole suite, from the ROOT
 PYTHONPATH=tools python3 -m gltf_fixtures --check tests/assets/gltf
 ```
 
@@ -38,8 +41,8 @@ Expected as of this writing:
 | Check | Expected |
 |---|---|
 | `ctest -L gltf-conformance` | **9/9 passed** |
-| full suite | **5 587 passed, 18 failed** |
-| generator `--check` | **69 assets, 338 files — byte-identical** |
+| full suite | **6 299 passed, 18 failed** |
+| generator `--check` | **70 assets, 343 files — byte-identical** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -48,8 +51,14 @@ capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS 
 Do not attempt to "fix" them as part of this campaign, and do not report a run as clean without
 saying they are there.
 
-The build directory is `cmake-build-tests` (`-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`).
-Never build in the scratchpad — see `CLAUDE.md`.
+The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
+repository** on the partition the owner designated for build output:
+`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-tests`, with
+`CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache` exported on every configure and build and
+`-j3`. Never build in the scratchpad — see `CLAUDE.md`. A fresh worktree needs its submodules
+first; clone them sharing the main checkout's object store
+(`git submodule update --init --reference <cna>/.git/modules/<path> <path>`, ~26 MB instead of
+~500 MB) and copy `.sdl-prebuilt-Linux-x86_64/` from the main worktree rather than rebuilding SDL.
 
 ## What a new session must know before touching anything
 

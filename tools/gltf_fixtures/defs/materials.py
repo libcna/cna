@@ -453,6 +453,99 @@ def mat_normal_occlusion_scale() -> Fixture:
     )
 
 
+#: The mask cutoff of `mat-alpha-mask-cutoff`. Deliberately NOT 0.5: that is glTF's own default
+#: for `alphaCutoff` AND what `PbrEffect` falls back to, so a cutoff that never arrived would
+#: coincide with the expected value and the fixture would prove nothing.
+_MASK_CUTOFF = 0.75
+#: The material's own alpha, authored above the cutoff and away from it. A shader handed the base
+#: colour's alpha where it wanted the cutoff -- the plausible wrong wiring, since both are alpha
+#: quantities on the same material -- produces 0.875 instead of 0.75 and is caught by value.
+_MASK_BASE_COLOR_FACTOR = [0.2, 0.6, 0.55, 0.875]
+
+
+def mat_alpha_mask_cutoff() -> Fixture:
+    """``alphaMode: MASK`` with a non-default cutoff. Owns **GLTF-372**.
+
+    `GLTF-228`/`GLTF-229` gave the alpha state somewhere to live on the effect; this fixture is
+    about the step after that -- whether the cutoff reaches the fragment program that has to
+    perform the cut. Every PBR shader already evaluates a ``uAlphaTest`` vector and discards on it,
+    and nothing filled it in, so a MASK material rendered exactly like an OPAQUE one: no cutout at
+    all, in complete silence.
+
+    Factor-only, like `mat-factor-only-gold`, so the fixture is about the cutoff rather than about
+    texture loading: the alpha a mask compares comes from ``baseColorFactor.a`` alone here.
+    """
+    b = GltfBuilder("mat-alpha-mask-cutoff")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "Foliage",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": _MASK_BASE_COLOR_FACTOR,
+            "metallicFactor": 0.0,
+            "roughnessFactor": 0.7,
+        },
+        "alphaMode": "MASK",
+        "alphaCutoff": _MASK_CUTOFF,
+    })
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="FoliageTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    expected_material = {
+        "index": material,
+        "name": "Foliage",
+        "baseColorFactor": _MASK_BASE_COLOR_FACTOR,
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.7,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "MASK",
+        "alphaCutoff": _MASK_CUTOFF,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+        # GLTF-372: the cutoff's destination, stated as the four numbers a renderer receives rather
+        # than as prose. The shaders evaluate
+        #   at = (y > 0) ? (|a-x| < y ? z : w) : ((a < x) ? z : w);  if (at < 0) discard;
+        # so a mask is {cutoff, 0, -1, +1} -- alpha below the cutoff selects the negative weight.
+        # Getting z/w the wrong way round inverts the cutout, which is why the signs are stated.
+        "gpuAlphaTest": [_MASK_CUTOFF, 0.0, -1.0, 1.0],
+        "alphaTestRule": "OPAQUE and BLEND never discard, so both keep GpuDrawParams' own "
+                         "{0,0,1,1} default; only MASK writes a reference. BLEND's compositing "
+                         "and OPAQUE's ignore-alpha rule are BlendState, which the application "
+                         "owns per draw (docs/gltf-api-change-review.md §1.3).",
+    }
+    return Fixture(
+        id="mat-alpha-mask-cutoff", audit_fixture=None, owning_group="materials",
+        description="A factor-only metallic-roughness material with alphaMode MASK and a cutoff of "
+                    "0.75 -- neither glTF's default nor the material's own alpha (0.875), so a "
+                    "cutoff that never arrived and one wired to the wrong alpha quantity are both "
+                    "visible as values. Every PBR shader already discards on uAlphaTest; until "
+                    "GLTF-372 nothing filled it in and a mask rendered as an opaque surface.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["alphaMode MASK", "non-default alphaCutoff", "alpha test reaches the shader",
+                  "no texture maps"],
+        spec_anchors=["alpha-coverage", "metallic-roughness-material"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="FoliageTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
 #: A UV set with three distinct, non-degenerate coordinates, so a stride whose TextureCoordinate
 #: slot were mis-offset produces visibly wrong bytes rather than three copies of (0,0).
 _UNLIT_TEXCOORDS = [(0.0, 0.0), (0.75, 0.125), (0.25, 0.875)]
@@ -846,5 +939,5 @@ def mat_specular_glossiness() -> Fixture:
 
 
 FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr,
-            mat_normal_occlusion_scale, mat_unlit, mat_unlit_vertex_color_alpha,
-            mat_specular_glossiness, mat_authored_tangent]
+            mat_normal_occlusion_scale, mat_alpha_mask_cutoff, mat_unlit,
+            mat_unlit_vertex_color_alpha, mat_specular_glossiness, mat_authored_tangent]

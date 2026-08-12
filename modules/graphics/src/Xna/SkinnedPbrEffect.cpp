@@ -6,8 +6,10 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "CNA/Internal/Graphics/AlphaCoverageEXT.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
+#include <array>
 #include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -405,6 +407,15 @@ namespace Microsoft::Xna::Framework::Graphics
 
         p.pbrMetallicFactor  = metallicFactor_;
         p.pbrRoughnessFactor = roughnessFactor_;
+
+        // plan_gltf.md GLTF-372: identical to PbrEffect's -- a skinned surface masks on the same
+        // rule, and the pbr_skinned shader reads the same uAlphaTest uniform.
+        const std::array<float, 4> alphaTest =
+            CNA::Internal::Graphics::AlphaTestVectorForAlphaModeEXT(alphaMode_, alphaCutoff_);
+        p.alphaTest[0] = alphaTest[0];
+        p.alphaTest[1] = alphaTest[1];
+        p.alphaTest[2] = alphaTest[2];
+        p.alphaTest[3] = alphaTest[3];
 
         const bool    light0On = DirectionalLight0.getEnabledProperty();
         const Vector3 ld0  = light0On ? DirectionalLight0.getDiffuseColorProperty() : Vector3::Zero;

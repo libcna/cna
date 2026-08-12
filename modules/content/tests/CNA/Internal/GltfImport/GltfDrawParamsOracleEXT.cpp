@@ -296,6 +296,7 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
 
                 dump.pbr                = p.pbr;
                 dump.skinned            = p.skinned;
+                dump.dualTexture        = p.dualTexture;
                 dump.lightingEnabled    = p.lightingEnabled;
                 // plan_gltf.md GLTF-376: the three directional lights as the shader receives them.
                 // A disabled light is a zero diffuse colour, not a flag -- the shader adds all
@@ -312,6 +313,12 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                 }
                 dump.textureEnabled     = p.textureEnabled;
                 dump.vertexColorEnabled = p.vertexColorEnabled;
+                // plan_gltf.md GLTF-377: fog is state no glTF file can request. Both the flag and
+                // the vector are captured, because they can disagree -- a renderer that ignores
+                // the flag still fogs on a non-zero vector.
+                dump.fogEnabled = p.fogEnabled;
+                dump.fogColor   = {p.fogColor[0], p.fogColor[1], p.fogColor[2]};
+                dump.fogVector  = {p.fogVector[0], p.fogVector[1], p.fogVector[2], p.fogVector[3]};
 
                 dump.primitiveType  = PrimitiveTypeName(part->getPrimitiveTypeEXTProperty());
                 dump.primitiveCount = part->getPrimitiveCountProperty();
@@ -375,9 +382,13 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
         out += ",\"doubleSided\":" + Bool(dump.doubleSided);
         out += ",\"pbr\":" + Bool(dump.pbr);
         out += ",\"skinned\":" + Bool(dump.skinned);
+        out += ",\"dualTexture\":" + Bool(dump.dualTexture);
         out += ",\"lightingEnabled\":" + Bool(dump.lightingEnabled);
         out += ",\"textureEnabled\":" + Bool(dump.textureEnabled);
         out += ",\"vertexColorEnabled\":" + Bool(dump.vertexColorEnabled);
+        out += ",\"fogEnabled\":" + Bool(dump.fogEnabled);
+        out += ",\"fogColor\":" + Flat(dump.fogColor);
+        out += ",\"fogVector\":" + Flat(dump.fogVector);
         out += ",\"primitiveType\":" + Quote(dump.primitiveType);
         out += ",\"primitiveCount\":" + std::to_string(dump.primitiveCount);
         out += "}";

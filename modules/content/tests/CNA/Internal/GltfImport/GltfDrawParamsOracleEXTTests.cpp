@@ -23,12 +23,15 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
@@ -623,14 +626,16 @@ TEST(GltfConformanceL6, AFreshlyLoadedSkinnedModelIsAlreadyPosedInItsBindPose)
            "posed model from an unposed one";
 }
 
-// --- GLTF-230's L6 half: what "carried, not applied" looks like as a number -------------------------
+// --- GLTF-230 / GLTF-372: which half of the alpha state is applied, as numbers ---------------------
 
 // docs/gltf-api-change-review.md §1.3/§1.4 decided that alphaMode, alphaCutoff and doubleSided
-// would be CARRIED by the effect and not yet APPLIED to any device state. That is a real boundary,
-// and this test measures it rather than describing it: a BLEND material's alphaTest block is still
-// the never-discard default. When GLTF-230 wires it, this test fails -- which is the point. It is
-// the tripwire that stops the boundary from being crossed silently in either direction.
-TEST(GltfConformanceL6, AlphaStateIsCarriedOnTheEffectButNotYetInTheParameterBlock)
+// would be CARRIED by the effect rather than applied to device state. GLTF-372 moved exactly one
+// of them across that line -- the MASK cutoff, which is fragment-program work and not device state
+// -- and the line itself is what this test measures: BLEND's compositing and doubleSided's culling
+// are still BlendState and RasterizerState the application owns, and a BLEND material must
+// therefore still bind the never-discard alpha test. Both directions matter: an alphaTest that
+// stopped being the default here would mean a blended surface had started cutting holes in itself.
+TEST(GltfConformanceL6, ABlendMaterialCarriesItsAlphaStateWithoutDiscardingAnything)
 {
     GraphicsDevice gd;
     ContentManager cm(nullptr, CorpusDirectory().string());
@@ -652,11 +657,103 @@ TEST(GltfConformanceL6, AlphaStateIsCarriedOnTheEffectButNotYetInTheParameterBlo
     // GLTF-230 still owns.
     EXPECT_NEAR(0.5f, d.diffuseColor[3], kTolerance);
 
-    // Not applied: GpuDrawParams::alphaTest is untouched from its {0,0,1,1} never-discard default.
+    // Not applied: GpuDrawParams::alphaTest keeps its {0,0,1,1} never-discard default. The effect
+    // carries a cutoff of 0.5, so a mask rule applied to the wrong mode would show up as 0.5 here
+    // and cut away every fragment this material has -- its alpha is 0.5 too.
     EXPECT_NEAR(0.0f, d.alphaTest[0], kTolerance);
     EXPECT_NEAR(0.0f, d.alphaTest[1], kTolerance);
     EXPECT_NEAR(1.0f, d.alphaTest[2], kTolerance);
     EXPECT_NEAR(1.0f, d.alphaTest[3], kTolerance);
+}
+
+// plan_gltf.md GLTF-372. Every PBR shader already evaluates uAlphaTest and discards on it; nothing
+// filled the vector in, so a MASK material was indistinguishable from an OPAQUE one at the only
+// place the distinction exists. The fixture states the four numbers a renderer receives, so this
+// compares against the manifest rather than against a second copy of the mapping.
+TEST(GltfConformanceL6, AMaskMaterialsCutoffReachesTheDrawsAlphaTestVector)
+{
+    const LoadedFixture fixture("mat-alpha-mask-cutoff");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& material = FirstMaterial(fixture);
+    const std::vector<double> expectedAlphaTest = Numbers(Member(material, "gpuAlphaTest"));
+    ASSERT_EQ(4u, expectedAlphaTest.size()) << "the fixture must state the vector it expects";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-alpha-mask-cutoff");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    EXPECT_EQ("MASK", d.alphaMode);
+    EXPECT_NEAR(static_cast<float>(NumberOr(material, "alphaCutoff", -1.0)), d.alphaCutoff,
+                kTolerance);
+    ExpectFlatNear(expectedAlphaTest, d.alphaTest.data(), d.alphaTest.size(), "alphaTest");
+
+    // The cutoff is not the material's own alpha, and the fixture authors them apart precisely so
+    // that a vector built from the wrong alpha quantity fails by value rather than by luck.
+    const std::vector<double> baseColorFactor = Numbers(Member(material, "baseColorFactor"));
+    ASSERT_EQ(4u, baseColorFactor.size());
+    EXPECT_NEAR(static_cast<float>(baseColorFactor[3]), d.diffuseColor[3], kTolerance);
+    EXPECT_NE(d.alphaTest[0], d.diffuseColor[3])
+        << "the fixture has stopped discriminating: its cutoff and its alpha now coincide";
+
+    // The discard side of the shader's own expression, evaluated here so the sign convention is
+    // asserted as behaviour and not as four remembered constants. Below the cutoff must discard;
+    // at and above it must not.
+    const auto discards = [&d](float alpha) {
+        const float weight = (d.alphaTest[1] > 0.0f)
+            ? ((std::fabs(alpha - d.alphaTest[0]) < d.alphaTest[1]) ? d.alphaTest[2] : d.alphaTest[3])
+            : ((alpha < d.alphaTest[0]) ? d.alphaTest[2] : d.alphaTest[3]);
+        return weight < 0.0f;
+    };
+    const float cutoff = d.alphaTest[0];
+    EXPECT_TRUE(discards(cutoff - 0.01f)) << "alpha below the cutoff must be discarded";
+    EXPECT_FALSE(discards(cutoff)) << "alpha exactly at the cutoff must be kept (glTF §3.9.4)";
+    EXPECT_FALSE(discards(1.0f)) << "an opaque fragment must never be discarded";
+}
+
+// The control for the row above, over the whole corpus: a material that is not MASK must bind the
+// never-discard default. Without it, "the cutoff reaches the shader" would also be satisfied by an
+// implementation that wrote a reference for every material and cut holes in every opaque surface.
+TEST(GltfConformanceL6, OnlyAMaskMaterialWritesAnAlphaTestReference)
+{
+    int maskDraws = 0;
+    int nonMaskDraws = 0;
+    for (const std::string& id : LoadableFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        GraphicsDevice gd;
+        ContentManager cm(nullptr, CorpusDirectory().string());
+        cm.setGraphicsDevice(gd);
+        Model model = cm.Load<Model>(id);
+
+        for (const DrawParamsDump& d : CaptureDrawParamsEXT(
+                 model, Matrix::getIdentityProperty(), TestView(), TestProjection()))
+        {
+            SCOPED_TRACE(ToJson(d));
+            if (d.alphaMode == "MASK")
+            {
+                ++maskDraws;
+                EXPECT_NEAR(d.alphaCutoff, d.alphaTest[0], kTolerance);
+                EXPECT_LT(d.alphaTest[2], 0.0f) << "a mask must discard below its cutoff";
+                EXPECT_GT(d.alphaTest[3], 0.0f) << "a mask must keep alpha at or above its cutoff";
+                continue;
+            }
+            ++nonMaskDraws;
+            EXPECT_NEAR(0.0f, d.alphaTest[0], kTolerance);
+            EXPECT_NEAR(0.0f, d.alphaTest[1], kTolerance);
+            EXPECT_GE(d.alphaTest[2], 0.0f) << "a non-mask draw must never discard";
+            EXPECT_GE(d.alphaTest[3], 0.0f) << "a non-mask draw must never discard";
+        }
+    }
+    EXPECT_GE(maskDraws, 1) << "no MASK draw was captured, so the positive half proved nothing";
+    EXPECT_GE(nonMaskDraws, 10)
+        << "too few non-mask draws to call this a control over the corpus";
 }
 
 // --- The topology the draw would actually issue ------------------------------------------------------
@@ -1134,4 +1231,172 @@ TEST(GltfConformanceL6, APartWithNoDeclaredSamplerKeepsTheDefaultRatherThanTheLa
               captured.front().samplers.front().filter);
     EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap),
               captured.front().samplers.front().addressU);
+}
+
+// --- plan_gltf.md GLTF-365: the capture is effect-agnostic ------------------------------------------
+
+// The L6 rung is only an oracle if it measures whatever effect a part happens to carry. It reads
+// parameters through `Effect::FillGpuDrawParams` -- the same virtual call the draw path makes -- so
+// being effect-agnostic is a property of the design; this asserts it as a fact, on all five stock
+// effects, because a capture that silently produced an empty record for an unfamiliar effect would
+// turn every later "asserted at L6" claim into a claim about PbrEffect alone.
+//
+// Two of the five are unreachable by import (glTF has no dual-texture material, and a skinned glTF
+// primitive selects SkinnedPbrEffect or SkinnedEffect by its material model), so the test binds
+// them onto a real imported part rather than pretending a fixture could produce one.
+TEST(GltfDrawParamsOracleL6, EveryStockEffectIsCapturableWithItsOwnDistinguishingParameter)
+{
+    using Microsoft::Xna::Framework::Graphics::BasicEffect;
+    using Microsoft::Xna::Framework::Graphics::DualTextureEffect;
+    using Microsoft::Xna::Framework::Graphics::Effect;
+    using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
+    using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+
+    // A PBR draw and a skinned PBR draw, straight out of the corpus.
+    {
+        Model model = cm.Load<Model>("mat-factor-only-gold");
+        const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+            model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+        ASSERT_EQ(1u, captured.size());
+        SCOPED_TRACE(ToJson(captured.front()));
+        EXPECT_EQ("Microsoft.Xna.Framework.Graphics.PbrEffect", captured.front().effectTypeName);
+        EXPECT_TRUE(captured.front().pbr);
+        EXPECT_FALSE(captured.front().skinned);
+    }
+    {
+        Model model = cm.Load<Model>("skin-mesh-node-transform");
+        const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+            model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+        ASSERT_FALSE(captured.empty());
+        SCOPED_TRACE(ToJson(captured.front()));
+        EXPECT_EQ("Microsoft.Xna.Framework.Graphics.SkinnedPbrEffect",
+                  captured.front().effectTypeName);
+        EXPECT_TRUE(captured.front().pbr);
+        EXPECT_TRUE(captured.front().skinned);
+    }
+
+    // The remaining three, bound onto an imported part. The part keeps its own buffers and
+    // primitive count, so what changes between captures is the effect and nothing else.
+    Model model = cm.Load<Model>("xf-identity");
+    ModelMeshPart* part = model.getMeshesProperty()[0]->getMeshPartsProperty()[0];
+    ASSERT_NE(nullptr, part);
+
+    BasicEffect basic(gd);
+    basic.setLightingEnabledProperty(true);
+    basic.setDiffuseColorProperty({0.25f, 0.5f, 0.75f});
+    DualTextureEffect dual(gd);
+    SkinnedEffect skinned(gd);
+    skinned.setWeightsPerVertexProperty(2);
+
+    struct Case
+    {
+        Effect* effect;
+        std::string typeName;
+        bool expectDualTexture;
+        bool expectSkinned;
+    };
+    const std::vector<Case> cases{
+        {&basic,   "Microsoft.Xna.Framework.Graphics.BasicEffect",       false, false},
+        {&dual,    "Microsoft.Xna.Framework.Graphics.DualTextureEffect", true,  false},
+        {&skinned, "Microsoft.Xna.Framework.Graphics.SkinnedEffect",     false, true},
+    };
+    for (const Case& c : cases)
+    {
+        SCOPED_TRACE(c.typeName);
+        part->setEffectProperty(c.effect);
+        const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+            model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+        ASSERT_EQ(1u, captured.size()) << "the capture skipped a part it would have drawn";
+        const DrawParamsDump& d = captured.front();
+        SCOPED_TRACE(ToJson(d));
+
+        EXPECT_EQ(c.typeName, d.effectTypeName);
+        EXPECT_EQ(c.expectDualTexture, d.dualTexture);
+        EXPECT_EQ(c.expectSkinned, d.skinned);
+        EXPECT_FALSE(d.pbr) << "only the two PBR effects select the metallic-roughness shader";
+        // The matrices reach a non-PBR effect too -- the capture binds through IEffectMatrices,
+        // which every stock effect implements, not through any one effect's own setter.
+        ExpectFlatNear(std::vector<double>(d.world.begin(), d.world.end()), d.worldColMajor.data(),
+                       d.worldColMajor.size(), "world -> worldColMajor");
+        EXPECT_EQ("TriangleList", d.primitiveType);
+        EXPECT_GT(d.primitiveCount, 0);
+    }
+    EXPECT_NEAR(0.25f, [&] {
+        part->setEffectProperty(&basic);
+        return CaptureDrawParamsEXT(model, Matrix::getIdentityProperty(), TestView(),
+                                    TestProjection()).front().diffuseColor[0];
+    }(), kTolerance) << "BasicEffect's own DiffuseColor did not reach the captured block";
+
+    // Leave the model holding an effect it does not own for no longer than the test needs it.
+    part->setEffectProperty(nullptr);
+}
+
+// --- plan_gltf.md GLTF-377: fog is state no glTF file can ask for -----------------------------------
+
+// The PBR fragment program carries a fog term, because CNA's effects are XNA's and an XNA
+// application may turn fog on. glTF has no fog at all, so an imported draw that arrived with it
+// enabled would be shading no file asked for -- and, unlike a wrong factor, it would look
+// plausible. Asserted over every loadable fixture, on both the flag and the vector, because they
+// can disagree: a renderer that ignored the flag would still fog on a non-zero vector.
+TEST(GltfConformanceL6, NoImportedDrawArrivesWithFogEnabled)
+{
+    std::size_t checked = 0;
+    for (const std::string& id : LoadableFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        GraphicsDevice gd;
+        ContentManager cm(nullptr, CorpusDirectory().string());
+        cm.setGraphicsDevice(gd);
+        Model model = cm.Load<Model>(id);
+
+        for (const DrawParamsDump& d : CaptureDrawParamsEXT(
+                 model, Matrix::getIdentityProperty(), TestView(), TestProjection()))
+        {
+            SCOPED_TRACE(ToJson(d));
+            EXPECT_FALSE(d.fogEnabled) << "an imported draw turned fog on";
+            // All-zero is the true no-op: dot(position, 0) is 0, the fog factor saturates to 0 and
+            // the renderers' keep = 1 - factor leaves the fragment exactly as the BRDF left it.
+            for (std::size_t i = 0; i < d.fogVector.size(); ++i)
+            {
+                EXPECT_NEAR(0.0f, d.fogVector[i], kTolerance) << "fogVector[" << i << "]";
+            }
+            ++checked;
+        }
+    }
+    EXPECT_GT(checked, 20u) << "too few draws captured to call this a sweep";
+}
+
+// The control for the row above. "Fog is off" would also be satisfied by a capture that could not
+// see fog at all, or by an effect whose fog switch does nothing -- and either would make the sweep
+// a tautology. Turning fog on by hand, the way an XNA application would, must move both quantities.
+TEST(GltfDrawParamsOracleL6, TheFogCaptureCanActuallySeeFog)
+{
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-factor-only-gold");
+
+    auto* effect = dynamic_cast<Microsoft::Xna::Framework::Graphics::PbrEffect*>(
+        model.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, effect);
+    effect->setFogEnabledProperty(true);
+    effect->setFogColorProperty({0.1f, 0.2f, 0.3f});
+    effect->setFogStartProperty(1.0f);
+    effect->setFogEndProperty(20.0f);
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    EXPECT_TRUE(d.fogEnabled);
+    ExpectFlatNear({0.1, 0.2, 0.3}, d.fogColor.data(), d.fogColor.size(), "fogColor");
+    const float magnitude = std::fabs(d.fogVector[0]) + std::fabs(d.fogVector[1]) +
+                            std::fabs(d.fogVector[2]) + std::fabs(d.fogVector[3]);
+    EXPECT_GT(magnitude, 0.0f) << "an enabled fog produced an all-zero vector, which is a no-op";
 }

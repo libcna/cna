@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 69,
+  "distinctAssetCount": 70,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -20,7 +20,7 @@
     "topology": 8,
     "normals": 2,
     "transforms": 7,
-    "materials": 8,
+    "materials": 9,
     "textures": 3,
     "skinning": 10,
     "animation": 11,
@@ -736,6 +736,23 @@
         "normalTexture.scale",
         "occlusionTexture.strength",
         "texture view without a texture"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mat-alpha-mask-cutoff",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "alphaMode MASK",
+        "non-default alphaCutoff",
+        "alpha test reaches the shader",
+        "no texture maps"
       ],
       "auditFixture": null
     },
@@ -1981,6 +1998,31 @@
     },
     {
       "path": "lights-over-budget.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "mat-alpha-mask-cutoff.expected.json",
+      "bytes": 7740,
+      "sha256": "4240c150c87326ef8e6aa3af6bee677670ca6b9ece7c284b7ead86fc4da5eff9"
+    },
+    {
+      "path": "mat-alpha-mask-cutoff.glb",
+      "bytes": 980,
+      "sha256": "10081acb1f4d693d927cdaa37dcf29321f86f0da6b05e5228cbace3e908a2e30"
+    },
+    {
+      "path": "mat-alpha-mask-cutoff.gltf",
+      "bytes": 1770,
+      "sha256": "161f87c232dbb5774efca109c61dc1000f0b59b741bf8a99db59560064867aa5"
+    },
+    {
+      "path": "mat-alpha-mask-cutoff.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-alpha-mask-cutoff.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },

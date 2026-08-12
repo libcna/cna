@@ -195,6 +195,14 @@ namespace CnaTest::GltfOracle
         bool pbr = false;
         /** @brief `GpuDrawParams::skinned` -- the renderer selects the skinning shader. */
         bool skinned = false;
+        /**
+         * @brief `GpuDrawParams::dualTexture` -- the renderer selects the two-sampler shader.
+         *
+         * No glTF import produces a `DualTextureEffect`; it is captured because `GLTF-365` asks
+         * for every stock effect to be capturable, and "capturable" is only meaningful if the
+         * record carries the parameter that distinguishes that effect from the others.
+         */
+        bool dualTexture = false;
         /** @brief `GpuDrawParams::lightingEnabled`. */
         bool lightingEnabled = false;
         /**
@@ -209,6 +217,29 @@ namespace CnaTest::GltfOracle
         std::array<std::array<float, 3>, 3> lightDirections{};
         /** @brief The three lights' diffuse colours, zero for a light that is disabled. */
         std::array<std::array<float, 3>, 3> lightDiffuseColors{};
+        // --- §21.1 "Fog": state a glTF file cannot ask for and must not receive -------------------
+
+        /**
+         * @brief `GpuDrawParams::fogEnabled`. plan_gltf.md `GLTF-377`.
+         *
+         * glTF has no fog. The PBR shaders carry one anyway — `vFogFactor` and `uFogColor` are in
+         * the fragment program — because CNA's effects are XNA's, and an XNA application may turn
+         * fog on. What must never happen is an *import* leaving it on: nothing in the file asked
+         * for it, so a fogged glTF draw is a value that came from nowhere.
+         */
+        bool fogEnabled = false;
+        /** @brief `GpuDrawParams::fogColor`, meaningful only when @ref fogEnabled. */
+        std::array<float, 3> fogColor{};
+        /**
+         * @brief `GpuDrawParams::fogVector` — the view-space Z fog term the shaders dot with.
+         *
+         * All-zero is the true no-op: the dot product is then 0, the fog factor saturates to 0 and
+         * the renderers' `keep = 1 - factor` leaves the fragment untouched. That is a stronger
+         * statement than `fogEnabled == false`, because it holds whatever a renderer does with the
+         * flag.
+         */
+        std::array<float, 4> fogVector{};
+
         /** @brief `GpuDrawParams::textureEnabled`. */
         bool textureEnabled = false;
         /** @brief `GpuDrawParams::vertexColorEnabled`. */

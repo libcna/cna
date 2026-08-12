@@ -110,13 +110,31 @@ can delete. **Decision: one enum, declared here in `Microsoft::Xna::Framework::G
 one both the importer and the renderer already depend on; the data bag depends on the graphics
 module, not the reverse.
 
-**Compatibility.** Additive. New enum, new properties, defaults preserve current behaviour.
+**Where the carried/applied line now falls** (`GLTF-372`). Carrying these three and *applying* them
+are separate steps, and only one of the three has since crossed the line. The **`MASK` cutoff is
+applied**: it is fragment-program work — every PBR shader already evaluates a `uAlphaTest` vector
+and discards on it — not device state, so `PbrEffect`/`SkinnedPbrEffect` fill
+`GpuDrawParams::alphaTest` from `AlphaModeEXT` and the cutoff
+(`CNA::Internal::Graphics::AlphaTestVectorForAlphaModeEXT`, one mapping for both effects).
+`BLEND`'s compositing stays **carried only**, because it is `BlendState` plus a draw order the
+application owns — `GLTF-230` — and so does `OPAQUE`'s "alpha is ignored" rule for the same reason.
+An effect whose mode is not `Mask` therefore binds the never-discard `{0,0,1,1}` default, which is
+asserted over the whole corpus rather than only on the mask fixture: an implementation that wrote a
+reference for every material would cut holes in every opaque surface.
+
+**Compatibility.** Additive. New enum, new properties, defaults preserve current behaviour. Filling
+`alphaTest` changes a rendered result only for a material that declares `MASK`, which previously
+rendered as though it had declared `OPAQUE`.
 
 **Migration.** None.
 
 **Test.** `GLTF-228`/`GLTF-229`: `mat-factor-only-gold` carries `Blend`; a mask fixture carries
 `Mask` with its authored cutoff; both survive the `.cnj` round-trip; the defaults are asserted on a
-material that declares neither.
+material that declares neither. `GLTF-372`: `mat-alpha-mask-cutoff` authors a cutoff of `0.75` — not
+glTF's `0.5` default, and not the material's own `0.875` alpha — and
+`AMaskMaterialsCutoffReachesTheDrawsAlphaTestVector` asserts the captured vector against the
+manifest's own `gpuAlphaTest`, then evaluates the shader's discard expression at, just below and
+well above the cutoff so the sign convention is asserted as behaviour.
 
 ---
 
