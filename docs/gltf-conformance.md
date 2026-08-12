@@ -594,7 +594,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**67 of the 74** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**68 of the 75** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. The seven without one are the fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`); their manifests record
@@ -763,6 +763,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `sparse-position` | accessors | L1, L2, L3 | accessor.sparse; absent base bufferView; zero-initialised base array |
 | `sparse-indices` | accessors | L1, L2, L3 | accessor.sparse on indices; UNSIGNED_SHORT indices |
 | `sparse-interleaved-base` | accessors | L1, L2, L3, L4 | accessor.sparse; bufferView.byteStride; interleaved base array; tightly packed sparse values |
+| `mat3-padded` | accessors | L1, L2, L3 | MAT3 accessor; §3.6.2.4 column padding; unreferenced accessor |
 | `u8-idx` | component-types | L1, L2, L3 | UNSIGNED_BYTE indices |
 | `u32-idx` | component-types | L1, L2, L3 | UNSIGNED_INT indices; index width narrowing |
 | `non-indexed-triangles` | component-types | L1, L2, L3 | no indices accessor; implicit index range |

@@ -12,10 +12,10 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 74,
+  "distinctAssetCount": 75,
   "owningGroupCounts": {
     "container": 1,
-    "accessors": 4,
+    "accessors": 5,
     "component-types": 4,
     "topology": 8,
     "normals": 2,
@@ -338,6 +338,22 @@
         "bufferView.byteStride",
         "interleaved base array",
         "tightly packed sparse values"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mat3-padded",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "MAT3 accessor",
+        "\u00a73.6.2.4 column padding",
+        "unreferenced accessor"
       ],
       "auditFixture": null
     },
@@ -2321,6 +2337,31 @@
       "path": "mat-vertex-color-pbr.vb.bin",
       "bytes": 72,
       "sha256": "c6be0730d9234a8b9f6667f93969b2f04aee8a84d35794dc2a2a4c25c15e98d1"
+    },
+    {
+      "path": "mat3-padded.expected.json",
+      "bytes": 7274,
+      "sha256": "c06b0913bbf3fb2556ae347d273f651920805f4dbb5f404a19fc4e4d4cce13da"
+    },
+    {
+      "path": "mat3-padded.glb",
+      "bytes": 912,
+      "sha256": "470f6bb0cead20f2bb00441e8dd6769153bc89340be4d1757c74d5d529697192"
+    },
+    {
+      "path": "mat3-padded.gltf",
+      "bytes": 1634,
+      "sha256": "0271872d45cc1a39ddccec6b2cea32430689647c9359f5b1acca8ca3e269b0d8"
+    },
+    {
+      "path": "mat3-padded.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat3-padded.vb.bin",
+      "bytes": 144,
+      "sha256": "f9de2f9261a351eea66984930c69ac5a51a1dbdd2260b6c567163e535defb82d"
     },
     {
       "path": "mode-line-loop.expected.json",

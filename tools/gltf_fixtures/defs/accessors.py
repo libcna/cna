@@ -12,7 +12,8 @@ Specification: §3.6.2 ``accessors``, §3.6.2.3 ``sparse-accessors``, §3.6.2.4 
 
 from __future__ import annotations
 
-from ..builder import (FLOAT, TRIANGLES, UNSIGNED_SHORT, GltfBuilder, flatten, pack)
+from ..builder import (FLOAT, TRIANGLES, UNSIGNED_BYTE, UNSIGNED_SHORT, GltfBuilder, flatten,
+                       pack)
 from ..manifest import Defect, Fixture, l3_primitive, world_positions
 
 _INTERLEAVED_POSITIONS = [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 3.0, 0.0)]
@@ -288,4 +289,74 @@ def sparse_interleaved_base() -> Fixture:
     )
 
 
-FIXTURES = [interleaved_position_normal, sparse_position, sparse_indices, sparse_interleaved_base]
+#: The 3x3 matrix `mat3-padded` stores, in glTF's column-major order. Nine distinct non-zero values,
+#: because the failure this fixture exists to catch reads the PADDING as data: a reader that ignores
+#: §3.6.2.4's column alignment produces `1,2,3,0,4,5,6,0,7` from these bytes -- so every authored
+#: value must differ from 0 and from its neighbours for the wrong answer to be a *different* answer.
+_MAT3_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+
+def mat3_padded() -> Fixture:
+    """A ``MAT3`` accessor of ``UNSIGNED_BYTE`` with §3.6.2.4 column padding. Owns **`GLTF-058`**.
+
+    §3.6.2.4: each **column** of a matrix accessor starts on a 4-byte boundary, so a `MAT3` of
+    single-byte components stores 3 bytes of data plus 1 byte of padding per column -- 12 bytes per
+    element, not 9. Get that wrong and the decoded matrix is silently shifted by one component per
+    column, which is a plausible-looking matrix rather than an obvious error.
+
+    Nothing in CNA reads a `MAT2`/`MAT3` accessor today: the only matrix accessor the importer
+    consumes is `inverseBindMatrices`, which is `MAT4<FLOAT>` and needs no padding. That is exactly
+    why the fixture exists -- an unexercised rule is one that regresses without anyone noticing, and
+    the L2 sweep decodes **every** accessor a fixture declares, referenced or not.
+
+    The primitive beside it is an ordinary triangle so the asset still imports; the matrix accessor
+    is deliberately unreferenced, which is legal and is what keeps this fixture about the decode.
+    """
+    b = GltfBuilder("mat3-padded")
+    position = b.add_packed_accessor(usage="POSITION", values=_INTERLEAVED_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=_INTERLEAVED_NORMALS,
+                                   accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=[0, 1, 2],
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+
+    # Authored byte for byte rather than through a packing helper, because the padding IS the
+    # subject: three data bytes then one zero, per column. A helper that emitted the padding for us
+    # would be asserting its own arithmetic.
+    padded = bytes([_MAT3_VALUES[0], _MAT3_VALUES[1], _MAT3_VALUES[2], 0,
+                    _MAT3_VALUES[3], _MAT3_VALUES[4], _MAT3_VALUES[5], 0,
+                    _MAT3_VALUES[6], _MAT3_VALUES[7], _MAT3_VALUES[8], 0])
+    offset = b.append_bytes(padded, alignment=4)
+    view = b.add_buffer_view(offset, len(padded))
+    b.add_accessor(usage="unreferenced MAT3 (column padding)", component_type=UNSIGNED_BYTE,
+                   accessor_type="MAT3", count=1,
+                   expected=[float(v) for v in _MAT3_VALUES], buffer_view=view)
+
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="Mat3PaddedTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="mat3-padded", audit_fixture=None, owning_group="accessors",
+        description="A MAT3 accessor of UNSIGNED_BYTE, stored with §3.6.2.4's column padding: 3 "
+                    "data bytes plus 1 pad byte per column, 12 bytes per element rather than 9. No "
+                    "CNA path reads a MAT2/MAT3 accessor today -- inverseBindMatrices is "
+                    "MAT4<FLOAT> and needs no padding -- which is precisely why the rule needs a "
+                    "fixture: an unexercised rule regresses unnoticed, and a reader that ignored "
+                    "the padding would produce 1,2,3,0,4,5,6,0,7 from these bytes.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["MAT3 accessor", "§3.6.2.4 column padding", "unreferenced accessor"],
+        spec_anchors=["data-alignment", "accessor-data-types"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="Mat3PaddedTri", primitive=0, mode=TRIANGLES,
+            positions=_INTERLEAVED_POSITIONS, normals=_INTERLEAVED_NORMALS, indices=[0, 1, 2])]},
+        l4=world_positions(b, {mesh: list(_INTERLEAVED_POSITIONS)}),
+    )
+
+
+FIXTURES = [interleaved_position_normal, sparse_position, sparse_indices, sparse_interleaved_base,
+            mat3_padded]
