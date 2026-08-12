@@ -100,7 +100,7 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **200 files / 3260 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+Ratchet: **200 files / 3252 references** of direct SDL coupling outside the PLAT-3 allowlist, down
 from the 253 / 3641 baseline. Contract: 24 headers, 394 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
@@ -125,20 +125,20 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**92 ✅ · 12 🟨 · 46 ⬜ · 4 ⛔ · 1 ❌** across `plan_platform.md` — about **62 %** of the 149
+**93 ✅ · 12 🟨 · 47 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **62 %** of the 149
 actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
 - **Phase 1** (the contract) — done. 24 headers under `modules/platform/include/CNA/Platform/`.
 - **Phase 2** (SDL3 implementation) — largely done.
 - **Phase 3** (runtime) — `Game` owns the platform, timing and cursor migrated,
-  `GraphicsDeviceManager` SDL-free. PLAT-47/50/51 blocked, see §5.
+  `GraphicsDeviceManager` SDL-free. PLAT-47 is now unblocked; PLAT-50/51 remain blocked, see §5.
 - **Phase 4** (renderers) — PLAT-57's boundary decision and PLAT-59/60/61's common-interface cleanup
   are complete; implementation continues at PLAT-58/62. 46 identities remain in scope.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — four backends deleted, the scancode and keycode vocabularies defined.
-  PLAT-78c–f now carry every event detail with bridge-compatible semantics; PLAT-78 is unblocked
-  and is the next migration task.
+  `PlatformInputBridge` now consumes the complete event vocabulary with golden-equivalent state;
+  PLAT-47 and PLAT-77f are unblocked.
 - **Phase 6** (audio) — not started.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
@@ -224,9 +224,7 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 | Task | Blocked on | Why |
 |---|---|---|
-| PLAT-47 | PLAT-78 | `Game::PollEvents` hands every raw `SDL_Event` to the bridge before its own switch. Polling both queues would drain events twice. |
 | PLAT-50, PLAT-51 | PLAT-62 | `GameWindow` still wraps the `SDL_Window*` owned by `GraphicsDevice`. Until `GraphicsDevice` owns an `IPlatformWindow` there is no platform window for `GameWindow` to retain. |
-| PLAT-77f | PLAT-78 | `GetModStateEXT` is a live query while `KeyboardSnapshot` is per-frame; re-pointing only it would put keyboard state on two clocks. |
 | PLAT-102 | PLAT-50 | `DisplayInfo` takes a `GameWindow&` and calls `GetNativeSdlWindowEXT()`. Also needs a safe-area concept the contract lacks. |
 
 ---
@@ -293,9 +291,9 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **PLAT-78 event migration.** Replace the raw-event input bridge with a `PlatformEvent`
-   consumer while keeping its golden tests as the equivalence oracle. This then unlocks PLAT-47
-   and PLAT-77f without adding a second event drain.
+2. **PLAT-47 event loop.** Replace `Game`'s single raw SDL drain with the platform batch and feed
+   each event to `PlatformInputBridge` before handling quit, focus, resize, lifecycle and debug
+   keys. Delete the temporary raw-event adapter in the same task; never run two drains.
 
 ---
 

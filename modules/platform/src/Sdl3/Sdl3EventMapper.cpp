@@ -81,7 +81,9 @@ namespace CNA::Platform::Sdl3 {
                 key.scancode = ToScancode(source.key.scancode);
                 key.keycode = ToKeyCode(source.key.key);
                 key.modifiers = ToPlatformModifiers(source.key.mod);
-                key.pressed = source.key.down;
+                // The event type is authoritative. SDL normally mirrors it in `down`, but
+                // synthetic/injected events are allowed to leave that convenience field stale.
+                key.pressed = source.type == SDL_EVENT_KEY_DOWN;
                 key.repeat = source.key.repeat;
                 destination = key;
                 return true;
@@ -149,7 +151,7 @@ namespace CNA::Platform::Sdl3 {
                 MouseButtonEvent button;
                 button.window = static_cast<WindowId>(source.button.windowID);
                 button.button = source.button.button;
-                button.pressed = source.button.down;
+                button.pressed = source.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
                 button.clicks = source.button.clicks;
                 button.x = source.button.x;
                 button.y = source.button.y;
@@ -272,7 +274,7 @@ namespace CNA::Platform::Sdl3 {
                 ControllerButtonEvent button;
                 button.device = static_cast<DeviceId>(source.gbutton.which);
                 button.button = mappedButton.value();
-                button.pressed = source.gbutton.down;
+                button.pressed = source.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
                 destination = button;
                 return true;
             }

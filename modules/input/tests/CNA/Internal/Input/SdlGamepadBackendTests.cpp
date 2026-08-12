@@ -16,6 +16,7 @@
 #include "CNA/Input/GamePadConnectionState.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -27,6 +28,7 @@
 #include "FakeSdlGamepadBackend.hpp"
 
 using CNA::Internal::Input::InputManager;
+using CNA::Internal::Input::PlatformInputBridge;
 using CNA::Internal::Input::SdlInputBridge;
 using CNA::Internal::Input::SetSdlGamepadBackendForTests;
 using CNA::Internal::Input::test_support::FakeGamepadConfig;
@@ -103,6 +105,82 @@ TEST_F(FakeGamepadTest, PadConnectedBeforeFirstFrameBecomesVisible)
 
     EXPECT_TRUE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
     EXPECT_EQ(fake.openCount, 1);
+}
+
+TEST_F(FakeGamepadTest, PlatformEventsDriveConnectionButtonsAxesAndRemoval)
+{
+    using CNA::Platform::ControllerAxisEvent;
+    using CNA::Platform::ControllerButtonEvent;
+    using CNA::Platform::DeviceEvent;
+    using CNA::Platform::GamepadAxis;
+    using CNA::Platform::GamepadButton;
+    using CNA::Platform::InputDeviceKind;
+
+    fake.Register(10, FullyFeaturedGamepad());
+    PlatformInputBridge::ProcessEvent(DeviceEvent{10, InputDeviceKind::Gamepad, true});
+    ASSERT_TRUE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
+
+    struct ButtonCase
+    {
+        GamepadButton platform;
+        Buttons xna;
+    };
+    const ButtonCase buttons[] = {
+        {GamepadButton::A, Buttons::A},
+        {GamepadButton::B, Buttons::B},
+        {GamepadButton::X, Buttons::X},
+        {GamepadButton::Y, Buttons::Y},
+        {GamepadButton::Back, Buttons::Back},
+        {GamepadButton::Start, Buttons::Start},
+        {GamepadButton::LeftShoulder, Buttons::LeftShoulder},
+        {GamepadButton::RightShoulder, Buttons::RightShoulder},
+        {GamepadButton::LeftStick, Buttons::LeftStick},
+        {GamepadButton::RightStick, Buttons::RightStick},
+        {GamepadButton::DPadUp, Buttons::DPadUp},
+        {GamepadButton::DPadDown, Buttons::DPadDown},
+        {GamepadButton::DPadLeft, Buttons::DPadLeft},
+        {GamepadButton::DPadRight, Buttons::DPadRight},
+        {GamepadButton::BigButton, Buttons::BigButton},
+        {GamepadButton::Misc1, Buttons::Misc1EXT},
+        {GamepadButton::Paddle1, Buttons::Paddle1EXT},
+        {GamepadButton::Paddle2, Buttons::Paddle2EXT},
+        {GamepadButton::Paddle3, Buttons::Paddle3EXT},
+        {GamepadButton::Paddle4, Buttons::Paddle4EXT},
+        {GamepadButton::TouchPad, Buttons::TouchPadEXT},
+    };
+    for (const auto& button : buttons)
+    {
+        PlatformInputBridge::ProcessEvent(
+            ControllerButtonEvent{10, button.platform, true});
+        EXPECT_TRUE(GamePad::GetState(PlayerIndex::One).IsButtonDown(button.xna));
+        PlatformInputBridge::ProcessEvent(
+            ControllerButtonEvent{10, button.platform, false});
+        EXPECT_FALSE(GamePad::GetState(PlayerIndex::One).IsButtonDown(button.xna));
+    }
+
+    PlatformInputBridge::ProcessEvent(
+        ControllerAxisEvent{10, GamepadAxis::LeftThumbstickX, -0.25f});
+    PlatformInputBridge::ProcessEvent(
+        ControllerAxisEvent{10, GamepadAxis::LeftThumbstickY, 0.50f});
+    PlatformInputBridge::ProcessEvent(
+        ControllerAxisEvent{10, GamepadAxis::RightThumbstickX, 0.75f});
+    PlatformInputBridge::ProcessEvent(
+        ControllerAxisEvent{10, GamepadAxis::RightThumbstickY, -1.0f});
+    PlatformInputBridge::ProcessEvent(
+        ControllerAxisEvent{10, GamepadAxis::LeftTrigger, 0.40f});
+    PlatformInputBridge::ProcessEvent(
+        ControllerAxisEvent{10, GamepadAxis::RightTrigger, 0.80f});
+    const auto raw = InputManager::GetRawGamePadState(PlayerIndex::One);
+    EXPECT_FLOAT_EQ(raw.leftX, -0.25f);
+    EXPECT_FLOAT_EQ(raw.leftY, 0.50f);
+    EXPECT_FLOAT_EQ(raw.rightX, 0.75f);
+    EXPECT_FLOAT_EQ(raw.rightY, -1.0f);
+    EXPECT_FLOAT_EQ(raw.leftTrigger, 0.40f);
+    EXPECT_FLOAT_EQ(raw.rightTrigger, 0.80f);
+
+    PlatformInputBridge::ProcessEvent(DeviceEvent{10, InputDeviceKind::Gamepad, false});
+    EXPECT_FALSE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
+    EXPECT_EQ(fake.closeCount, 1);
 }
 
 TEST_F(FakeGamepadTest, DuplicateAddDoesNotLeakOrAllocateSecondSlot)

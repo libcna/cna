@@ -91,13 +91,13 @@ namespace CNA::Internal::Input
      *
      * Architecturally, this is event-driven rather than poll-driven: FNA's platform layer
      * (e.g. SDL3_FNAPlatform) re-queries SDL fresh on every `Get*State()` call, while this
-     * class only accumulates whatever `SdlInputBridge::ProcessEvent` has pushed in via
+     * class only accumulates whatever `PlatformInputBridge::ProcessEvent` has pushed in via
      * `Set*State()`. State returned by the `Get*State()` methods here is only as current as
      * the last `Game::Tick()` (which unconditionally pumps SDL events once per frame, before
      * `Update()`/`Draw()` run — see `Game::PollEvents()`).
      *
      * @note Thread safety: this state is unsynchronized on purpose. Input is a single-threaded
-     *       (game-loop-thread) API — writes come from `SdlInputBridge::ProcessEvent` during
+     *       (game-loop-thread) API — writes come from `PlatformInputBridge::ProcessEvent` during
      *       `Game::PollEvents()`, reads from game `Update()`/`Draw()`, all on the same thread
      *       (matching XNA/FNA and required by SDL's event model). See `docs/input-backend.md` §6.
      *       Do not call `Set*`/`Get*` from a background thread. No locking is added.

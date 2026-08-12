@@ -2,31 +2,25 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Input/InputDevices.hpp"
-#include "CNA/Internal/Input/SdlInputBridge.hpp"
-
-#include <SDL3/SDL.h>
+#include "CNA/Internal/Input/PlatformInputBridge.hpp"
 
 #include <cstdint>
 #include <vector>
 
 using CNA::Input::InputDevices;
-using CNA::Internal::Input::SdlInputBridge;
+using CNA::Internal::Input::PlatformInputBridge;
+using CNA::Platform::DeviceEvent;
+using CNA::Platform::InputDeviceKind;
 
 namespace
 {
-    SDL_Event mouseDeviceEvent(Uint32 type, SDL_MouseID which)
+    DeviceEvent mouseDeviceEvent(const bool connected, const std::uint32_t which)
     {
-        SDL_Event e{};
-        e.type = type;
-        e.mdevice.which = which;
-        return e;
+        return DeviceEvent{which, InputDeviceKind::Mouse, connected};
     }
-    SDL_Event keyboardDeviceEvent(Uint32 type, SDL_KeyboardID which)
+    DeviceEvent keyboardDeviceEvent(const bool connected, const std::uint32_t which)
     {
-        SDL_Event e{};
-        e.type = type;
-        e.kdevice.which = which;
-        return e;
+        return DeviceEvent{which, InputDeviceKind::Keyboard, connected};
     }
 
     class CnaInputDevicesHotplugTest : public ::testing::Test
@@ -44,8 +38,8 @@ TEST_F(CnaInputDevicesHotplugTest, MouseAddedAndRemovedFireWithDeviceId)
     InputDevices::MouseConnectedEXT += [&](std::uint32_t id) { connected.push_back(id); };
     InputDevices::MouseDisconnectedEXT += [&](std::uint32_t id) { disconnected.push_back(id); };
 
-    SdlInputBridge::ProcessEvent(mouseDeviceEvent(SDL_EVENT_MOUSE_ADDED, 42));
-    SdlInputBridge::ProcessEvent(mouseDeviceEvent(SDL_EVENT_MOUSE_REMOVED, 42));
+    PlatformInputBridge::ProcessEvent(mouseDeviceEvent(true, 42));
+    PlatformInputBridge::ProcessEvent(mouseDeviceEvent(false, 42));
 
     ASSERT_EQ(connected.size(), 1u);
     EXPECT_EQ(connected[0], 42u);
@@ -60,8 +54,8 @@ TEST_F(CnaInputDevicesHotplugTest, KeyboardAddedAndRemovedFireWithDeviceId)
     InputDevices::KeyboardConnectedEXT += [&](std::uint32_t id) { connected.push_back(id); };
     InputDevices::KeyboardDisconnectedEXT += [&](std::uint32_t id) { disconnected.push_back(id); };
 
-    SdlInputBridge::ProcessEvent(keyboardDeviceEvent(SDL_EVENT_KEYBOARD_ADDED, 7));
-    SdlInputBridge::ProcessEvent(keyboardDeviceEvent(SDL_EVENT_KEYBOARD_REMOVED, 7));
+    PlatformInputBridge::ProcessEvent(keyboardDeviceEvent(true, 7));
+    PlatformInputBridge::ProcessEvent(keyboardDeviceEvent(false, 7));
 
     ASSERT_EQ(connected.size(), 1u);
     EXPECT_EQ(connected[0], 7u);
@@ -76,11 +70,11 @@ TEST_F(CnaInputDevicesHotplugTest, MouseAndKeyboardEventsDoNotCrossFire)
     InputDevices::MouseConnectedEXT += [&](std::uint32_t) { ++mouseCalls; };
     InputDevices::KeyboardConnectedEXT += [&](std::uint32_t) { ++keyboardCalls; };
 
-    SdlInputBridge::ProcessEvent(mouseDeviceEvent(SDL_EVENT_MOUSE_ADDED, 1));
+    PlatformInputBridge::ProcessEvent(mouseDeviceEvent(true, 1));
     EXPECT_EQ(mouseCalls, 1);
     EXPECT_EQ(keyboardCalls, 0);
 
-    SdlInputBridge::ProcessEvent(keyboardDeviceEvent(SDL_EVENT_KEYBOARD_ADDED, 2));
+    PlatformInputBridge::ProcessEvent(keyboardDeviceEvent(true, 2));
     EXPECT_EQ(mouseCalls, 1);
     EXPECT_EQ(keyboardCalls, 1);
 }

@@ -32,7 +32,10 @@ namespace CNA::Internal::Input
     {
     public:
         /**
-         * @brief Processes one SDL event and propagates relevant changes to InputManager.
+         * @brief Temporary raw-event adapter used by Game until PLAT-47 migrates its event loop.
+         *
+         * Input events are converted to `PlatformEvent` and delegated to `PlatformInputBridge`;
+         * this entry point owns no input-state behaviour and is removed with the raw SDL loop.
          */
         static void ProcessEvent(const SDL_Event& event);
 

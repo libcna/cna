@@ -13,6 +13,7 @@
 #include "CNA/Input/JoystickState.hpp"
 #include "CNA/Input/Joysticks.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Internal/Input/SdlJoystickBackend.hpp"
 #include "Microsoft/Xna/Framework/Point.hpp"
@@ -27,6 +28,7 @@ using CNA::Input::JoystickTypeEXT;
 using CNA::Input::Joysticks;
 using CNA::Input::PowerStateEXT;
 using CNA::Internal::Input::InputManager;
+using CNA::Internal::Input::PlatformInputBridge;
 using CNA::Internal::Input::SdlInputBridge;
 using CNA::Internal::Input::SetSdlJoystickBackendForTests;
 using CNA::Internal::Input::test_support::FakeJoystickConfig;
@@ -91,7 +93,8 @@ TEST_F(FakeJoystickTest, AddedOpensHandleAndAppearsInEnumeration)
     fake.Register(10, FlightStickConfig());
     EXPECT_TRUE(Joysticks::GetJoysticksEXT().empty());
 
-    SdlInputBridge::ProcessEvent(addedEvent(10));
+    PlatformInputBridge::ProcessEvent(CNA::Platform::DeviceEvent{
+        10, CNA::Platform::InputDeviceKind::Joystick, true});
 
     EXPECT_EQ(fake.openCount, 1);
     const auto list = Joysticks::GetJoysticksEXT();

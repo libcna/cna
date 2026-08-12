@@ -117,6 +117,25 @@ TEST(Sdl3EventMapperTests, KeyUpIsNotAPress)
     EXPECT_FALSE(std::get<KeyEvent>(mapped).pressed);
 }
 
+TEST(Sdl3EventMapperTests, EventTypeWinsOverStaleNativeDownFields)
+{
+    SDL_Event key = MakeEvent(SDL_EVENT_KEY_DOWN);
+    key.key.down = false;
+    SDL_Event mouse = MakeEvent(SDL_EVENT_MOUSE_BUTTON_DOWN);
+    mouse.button.down = false;
+    SDL_Event gamepad = MakeEvent(SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+    gamepad.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    gamepad.gbutton.down = false;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(key, mapped));
+    EXPECT_TRUE(std::get<KeyEvent>(mapped).pressed);
+    ASSERT_TRUE(MapSdlEvent(mouse, mapped));
+    EXPECT_TRUE(std::get<MouseButtonEvent>(mapped).pressed);
+    ASSERT_TRUE(MapSdlEvent(gamepad, mapped));
+    EXPECT_TRUE(std::get<ControllerButtonEvent>(mapped).pressed);
+}
+
 TEST(Sdl3EventMapperTests, TextInputCarriesItsText)
 {
     SDL_Event source = MakeEvent(SDL_EVENT_TEXT_INPUT);

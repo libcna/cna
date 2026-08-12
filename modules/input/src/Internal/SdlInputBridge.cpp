@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Internal/Input/PlatformInputBridge.hpp"
 
 #include "CNA/Input/InputDevices.hpp"
 #include "CNA/Input/Joysticks.hpp"
@@ -14,6 +15,10 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
+#if defined(CNA_PLATFORM_SDL3)
+#include "../../../platform/src/Sdl3/Sdl3EventMapper.hpp"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -22,6 +27,7 @@
 #include <string>
 #include <array>
 #include <optional>
+#include <type_traits>
 #include <unordered_map>
 
 namespace
@@ -458,9 +464,9 @@ namespace
         return static_cast<Uint16>(clamped * 0xFFFF);
     }
 
-    std::unordered_map<SDL_FingerID, int>& get_finger_id_to_touch_id_map()
+    std::unordered_map<std::uint64_t, int>& get_finger_id_to_touch_id_map()
     {
-        static std::unordered_map<SDL_FingerID, int> fingerIdToTouchId;
+        static std::unordered_map<std::uint64_t, int> fingerIdToTouchId;
         return fingerIdToTouchId;
     }
 
@@ -470,7 +476,7 @@ namespace
         return nextTouchId;
     }
 
-    int get_or_create_touch_id(const SDL_FingerID fingerId)
+    int get_or_create_touch_id(const std::uint64_t fingerId)
     {
         auto& fingerIdToTouchId = get_finger_id_to_touch_id_map();
         const auto existing = fingerIdToTouchId.find(fingerId);
@@ -485,7 +491,7 @@ namespace
         return touchId;
     }
 
-    std::optional<int> try_get_touch_id(const SDL_FingerID fingerId)
+    std::optional<int> try_get_touch_id(const std::uint64_t fingerId)
     {
         const auto& fingerIdToTouchId = get_finger_id_to_touch_id_map();
         const auto existing = fingerIdToTouchId.find(fingerId);
@@ -496,7 +502,7 @@ namespace
         return existing->second;
     }
 
-    void release_touch_id_mapping(const SDL_FingerID fingerId)
+    void release_touch_id_mapping(const std::uint64_t fingerId)
     {
         auto& fingerIdToTouchId = get_finger_id_to_touch_id_map();
         fingerIdToTouchId.erase(fingerId);
@@ -506,8 +512,12 @@ namespace
     /// When SDL_SetRenderLogicalPresentation is active (letterbox on Android),
     /// this maps physical coords into the game's virtual coordinate space.
     /// Falls back to the raw coords if no renderer is available.
-    Microsoft::Xna::Framework::Vector2 to_logical_position(SDL_Window* window, float windowX, float windowY)
+    Microsoft::Xna::Framework::Vector2 to_logical_position(
+        const CNA::Platform::WindowId windowId, const float windowX, const float windowY)
     {
+        SDL_Window* window = windowId != 0
+                                 ? SDL_GetWindowFromID(static_cast<SDL_WindowID>(windowId))
+                                 : SDL_GetMouseFocus();
         if (window != nullptr)
         {
             // SDL_Renderer path: use SDL's built-in logical-presentation transform.
@@ -536,12 +546,13 @@ namespace
     // INPUT-TOUCH-024: touch-state coord basis. Scales the normalized SDL coord by the SDL window size
     // then maps to logical space; the gesture path scales by DisplayWidth/Height (linear, FNA-matching).
     // Both target the logical space; they differ only inside letterbox bars (accepted).
-    Microsoft::Xna::Framework::Vector2 to_touch_pixel_position(const SDL_TouchFingerEvent& touchEvent)
+    Microsoft::Xna::Framework::Vector2 to_touch_pixel_position(
+        const CNA::Platform::WindowId windowId, const float normalizedX, const float normalizedY)
     {
         SDL_Window* window = nullptr;
-        if (touchEvent.windowID != 0)
+        if (windowId != 0)
         {
-            window = SDL_GetWindowFromID(touchEvent.windowID);
+            window = SDL_GetWindowFromID(static_cast<SDL_WindowID>(windowId));
         }
         if (window == nullptr)
         {
@@ -555,10 +566,19 @@ namespace
         {
             SDL_GetWindowSize(window, &winW, &winH);
         }
-        const float windowX = touchEvent.x * static_cast<float>(winW);
-        const float windowY = touchEvent.y * static_cast<float>(winH);
+        const float windowX = normalizedX * static_cast<float>(winW);
+        const float windowY = normalizedY * static_cast<float>(winH);
 
-        return to_logical_position(window, windowX, windowY);
+        return to_logical_position(windowId, windowX, windowY);
+    }
+
+    Microsoft::Xna::Framework::Vector2 to_touch_pixel_position(
+        const SDL_TouchFingerEvent& touchEvent)
+    {
+        return to_touch_pixel_position(
+            static_cast<CNA::Platform::WindowId>(touchEvent.windowID),
+            touchEvent.x,
+            touchEvent.y);
     }
 
     std::optional<Microsoft::Xna::Framework::Input::Keys> try_convert_sdl_key(const SDL_Keycode keycode)
@@ -706,7 +726,8 @@ namespace
     /// FNA's INTERNAL_scanMap (SDL3_FNAPlatform.cs:2490-2618). Used only in scancode mode
     /// (FNA_KEYBOARD_USE_SCANCODES=1), where the physical key position is reported instead of
     /// the character the current keyboard layout produces there.
-    std::optional<Microsoft::Xna::Framework::Input::Keys> try_convert_sdl_scancode(const SDL_Scancode scancode)
+    std::optional<Microsoft::Xna::Framework::Input::Keys> try_convert_sdl_scancode(
+        const std::uint16_t scancode)
     {
         using Microsoft::Xna::Framework::Input::Keys;
         switch (scancode)
@@ -1612,20 +1633,287 @@ namespace CNA::Internal::Input
         SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
     }
 
+    void PlatformInputBridge::ProcessEvent(const CNA::Platform::PlatformEvent& event)
+    {
+        using namespace CNA::Platform;
+
+        std::visit([](const auto& platformEvent)
+        {
+            using Event = std::decay_t<decltype(platformEvent)>;
+
+            if constexpr (std::is_same_v<Event, MouseMotionEvent>)
+            {
+                const auto position = to_logical_position(
+                    platformEvent.window, platformEvent.x, platformEvent.y);
+                InputManager::SetMousePosition(static_cast<int>(position.X), static_cast<int>(position.Y));
+                InputManager::AddMouseRelativeDelta(platformEvent.deltaX, platformEvent.deltaY);
+            }
+            else if constexpr (std::is_same_v<Event, MouseButtonEvent>)
+            {
+                const auto state = platformEvent.pressed ? ButtonState::Pressed : ButtonState::Released;
+                switch (platformEvent.button)
+                {
+                case 1: InputManager::SetMouseButtonState(MouseButton::Left, state); break;
+                case 2: InputManager::SetMouseButtonState(MouseButton::Middle, state); break;
+                case 3: InputManager::SetMouseButtonState(MouseButton::Right, state); break;
+                case 4: InputManager::SetMouseButtonState(MouseButton::XButton1, state); break;
+                case 5: InputManager::SetMouseButtonState(MouseButton::XButton2, state); break;
+                default: break;
+                }
+
+                const auto position = to_logical_position(
+                    platformEvent.window, platformEvent.x, platformEvent.y);
+                InputManager::SetMousePosition(static_cast<int>(position.X), static_cast<int>(position.Y));
+
+                if (platformEvent.pressed && platformEvent.button >= 1)
+                {
+                    Microsoft::Xna::Framework::Input::Mouse::INTERNAL_onClicked(
+                        static_cast<int>(platformEvent.button - 1));
+                }
+            }
+            else if constexpr (std::is_same_v<Event, MouseWheelEvent>)
+            {
+                InputManager::AddScrollWheelDelta(static_cast<int>(platformEvent.y) * 120);
+                InputManager::AddHorizontalScrollWheelDelta(static_cast<int>(platformEvent.x) * 120);
+            }
+            else if constexpr (std::is_same_v<Event, DeviceEvent>)
+            {
+                if (platformEvent.kind == InputDeviceKind::Mouse)
+                {
+                    if (platformEvent.connected)
+                        CNA::Input::InputDevices::MouseConnectedEXT.Invoke(platformEvent.device);
+                    else
+                        CNA::Input::InputDevices::MouseDisconnectedEXT.Invoke(platformEvent.device);
+                }
+                else if (platformEvent.kind == InputDeviceKind::Keyboard)
+                {
+                    if (platformEvent.connected)
+                        CNA::Input::InputDevices::KeyboardConnectedEXT.Invoke(platformEvent.device);
+                    else
+                        CNA::Input::InputDevices::KeyboardDisconnectedEXT.Invoke(platformEvent.device);
+                }
+                else if (platformEvent.kind == InputDeviceKind::Gamepad)
+                {
+                    const auto device = platformEvent.device;
+                    auto& gamepadToPlayerIndex = get_gamepad_to_player_index_map();
+                    if (platformEvent.connected)
+                    {
+                        if (!sdl_gamepad_backend().IsGamepad(device) ||
+                            gamepadToPlayerIndex.contains(device))
+                        {
+                            return;
+                        }
+                        const auto freeSlot = try_find_free_gamepad_slot();
+                        if (!freeSlot.has_value())
+                            return;
+                        auto* gamepad = sdl_gamepad_backend().OpenGamepad(device);
+                        if (gamepad == nullptr)
+                            return;
+                        const PlayerIndex playerIndex = slot_to_player_index(freeSlot.value());
+                        get_opened_gamepads()[freeSlot.value()] = gamepad;
+                        gamepadToPlayerIndex[device] = playerIndex;
+                        InputManager::SetGamePadConnection(playerIndex, true);
+                    }
+                    else
+                    {
+                        const auto playerIndex = try_get_player_index_for_gamepad_id(device);
+                        if (!playerIndex.has_value())
+                            return;
+                        if (const auto slot = try_get_slot_for_player_index(playerIndex.value());
+                            slot.has_value())
+                        {
+                            auto& opened = get_opened_gamepads()[slot.value()];
+                            if (opened != nullptr)
+                            {
+                                sdl_gamepad_backend().CloseGamepad(opened);
+                                opened = nullptr;
+                            }
+                        }
+                        gamepadToPlayerIndex.erase(device);
+                        InputManager::SetGamePadConnection(playerIndex.value(), false);
+                    }
+                }
+                else if (platformEvent.kind == InputDeviceKind::Joystick)
+                {
+                    const auto device = platformEvent.device;
+                    auto& opened = get_opened_joysticks();
+                    if (platformEvent.connected)
+                    {
+                        if (opened.contains(device))
+                            return;
+                        auto* joystick = sdl_joystick_backend().OpenJoystick(device);
+                        if (joystick == nullptr)
+                            return;
+                        opened[device] = joystick;
+                        CNA::Input::Joysticks::ConnectedEXT.Invoke(platformEvent.device);
+                    }
+                    else
+                    {
+                        const auto item = opened.find(device);
+                        if (item == opened.end())
+                            return;
+                        sdl_joystick_backend().CloseJoystick(item->second);
+                        opened.erase(item);
+                        CNA::Input::Joysticks::DisconnectedEXT.Invoke(platformEvent.device);
+                    }
+                }
+            }
+            else if constexpr (std::is_same_v<Event, KeyEvent>)
+            {
+                const auto key = use_scancode_mode()
+                                     ? try_convert_sdl_scancode(
+                                           static_cast<std::uint16_t>(platformEvent.scancode))
+                                     : std::optional<Keys>(
+                                           static_cast<Keys>(platformEvent.keycode));
+                if (!key.has_value() || key.value() == Keys::None)
+                    return;
+
+                const bool isRepeat = platformEvent.pressed && platformEvent.repeat;
+                if (!isRepeat)
+                    InputManager::SetKeyState(key.value(), platformEvent.pressed);
+
+                if (platformEvent.pressed)
+                    handle_text_input_key_down(key.value(), isRepeat);
+                else
+                    handle_text_input_key_up(key.value());
+            }
+            else if constexpr (std::is_same_v<Event, TextInputEvent>)
+            {
+                if (g_textInputSuppress)
+                    return;
+                decode_utf8_to_utf16(platformEvent.text.c_str(), [](const charcs codeUnit)
+                {
+                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(codeUnit);
+                });
+            }
+            else if constexpr (std::is_same_v<Event, TextEditingEvent>)
+            {
+                if (!platformEvent.text.empty())
+                {
+                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditing(
+                        platformEvent.text, platformEvent.cursor, platformEvent.selectionLength);
+                }
+                else
+                {
+                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditing(
+                        std::string(), 0, 0);
+                }
+            }
+            else if constexpr (std::is_same_v<Event, TextEditingCandidatesEvent>)
+            {
+                Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditingCandidates(
+                    platformEvent.candidates, platformEvent.selectedCandidate,
+                    platformEvent.horizontal);
+            }
+            else if constexpr (std::is_same_v<Event, TouchEvent>)
+            {
+                const auto fingerId = platformEvent.fingerId;
+                const bool released = platformEvent.kind == TouchEventKind::Up ||
+                                      platformEvent.kind == TouchEventKind::Cancelled;
+                const auto state = platformEvent.kind == TouchEventKind::Down
+                                       ? TouchLocationState::Pressed
+                                       : released ? TouchLocationState::Released
+                                                  : TouchLocationState::Moved;
+                if (platformEvent.kind == TouchEventKind::Down)
+                {
+                    Microsoft::Xna::Framework::Input::Touch::TouchPanel::setTouchDeviceExistsProperty(true);
+                }
+                const int touchId = released
+                                        ? try_get_touch_id(fingerId).value_or(
+                                              get_or_create_touch_id(fingerId))
+                                        : get_or_create_touch_id(fingerId);
+                InputManager::SetTouchState(
+                    touchId, state,
+                    to_touch_pixel_position(platformEvent.window, platformEvent.x, platformEvent.y),
+                    platformEvent.pressure);
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
+                    touchId, state, platformEvent.x, platformEvent.y,
+                    platformEvent.kind == TouchEventKind::Motion ? platformEvent.deltaX : 0.0f,
+                    platformEvent.kind == TouchEventKind::Motion ? platformEvent.deltaY : 0.0f);
+                if (released)
+                    release_touch_id_mapping(fingerId);
+            }
+            else if constexpr (std::is_same_v<Event, ControllerButtonEvent>)
+            {
+                const auto playerIndex = try_get_player_index_for_gamepad_id(
+                    platformEvent.device);
+                if (!playerIndex.has_value())
+                    return;
+
+                GamePadButton button = GamePadButton::A;
+                switch (platformEvent.button)
+                {
+                case GamepadButton::A: button = GamePadButton::A; break;
+                case GamepadButton::B: button = GamePadButton::B; break;
+                case GamepadButton::X: button = GamePadButton::X; break;
+                case GamepadButton::Y: button = GamePadButton::Y; break;
+                case GamepadButton::Back: button = GamePadButton::Back; break;
+                case GamepadButton::Start: button = GamePadButton::Start; break;
+                case GamepadButton::LeftShoulder: button = GamePadButton::LeftShoulder; break;
+                case GamepadButton::RightShoulder: button = GamePadButton::RightShoulder; break;
+                case GamepadButton::LeftStick: button = GamePadButton::LeftStick; break;
+                case GamepadButton::RightStick: button = GamePadButton::RightStick; break;
+                case GamepadButton::DPadUp: button = GamePadButton::DPadUp; break;
+                case GamepadButton::DPadDown: button = GamePadButton::DPadDown; break;
+                case GamepadButton::DPadLeft: button = GamePadButton::DPadLeft; break;
+                case GamepadButton::DPadRight: button = GamePadButton::DPadRight; break;
+                case GamepadButton::BigButton: button = GamePadButton::BigButton; break;
+                case GamepadButton::Misc1: button = GamePadButton::Misc1EXT; break;
+                case GamepadButton::Paddle1: button = GamePadButton::Paddle1EXT; break;
+                case GamepadButton::Paddle2: button = GamePadButton::Paddle2EXT; break;
+                case GamepadButton::Paddle3: button = GamePadButton::Paddle3EXT; break;
+                case GamepadButton::Paddle4: button = GamePadButton::Paddle4EXT; break;
+                case GamepadButton::TouchPad: button = GamePadButton::TouchPadEXT; break;
+                }
+                InputManager::SetGamePadButtonState(
+                    playerIndex.value(), button,
+                    platformEvent.pressed ? ButtonState::Pressed : ButtonState::Released);
+            }
+            else if constexpr (std::is_same_v<Event, ControllerAxisEvent>)
+            {
+                const auto playerIndex = try_get_player_index_for_gamepad_id(
+                    platformEvent.device);
+                if (!playerIndex.has_value())
+                    return;
+
+                GamePadAxis axis = GamePadAxis::LeftThumbstickX;
+                switch (platformEvent.axis)
+                {
+                case GamepadAxis::LeftThumbstickX: axis = GamePadAxis::LeftThumbstickX; break;
+                case GamepadAxis::LeftThumbstickY: axis = GamePadAxis::LeftThumbstickY; break;
+                case GamepadAxis::RightThumbstickX: axis = GamePadAxis::RightThumbstickX; break;
+                case GamepadAxis::RightThumbstickY: axis = GamePadAxis::RightThumbstickY; break;
+                case GamepadAxis::LeftTrigger: axis = GamePadAxis::LeftTrigger; break;
+                case GamepadAxis::RightTrigger: axis = GamePadAxis::RightTrigger; break;
+                }
+                InputManager::SetGamePadAxisValue(playerIndex.value(), axis, platformEvent.value);
+            }
+        }, event);
+    }
+
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)
     {
         // SDL_INIT_VIDEO does not init the gamepad subsystem; do it lazily on first event so
         // gamepad add/remove/axis/button events flow (and already-connected pads are enumerated).
         EnsureGamepadSubsystemInitialized();
 
+#if defined(CNA_PLATFORM_SDL3)
+        CNA::Platform::PlatformEvent platformEvent;
+        if (CNA::Platform::Sdl3::MapSdlEvent(event, platformEvent))
+        {
+            PlatformInputBridge::ProcessEvent(platformEvent);
+        }
+        return;
+#else
+        // Temporary fallback until PLAT-47 removes this raw event entry point from every platform
+        // configuration. SDL3 production already takes the platform-event path above.
         switch (event.type)
         {
         case SDL_EVENT_MOUSE_MOTION:
             {
-                SDL_Window* win = (event.motion.windowID != 0)
-                                      ? SDL_GetWindowFromID(event.motion.windowID)
-                                      : SDL_GetMouseFocus();
-                const auto pos = to_logical_position(win, event.motion.x, event.motion.y);
+                const auto pos = to_logical_position(
+                    static_cast<CNA::Platform::WindowId>(event.motion.windowID),
+                    event.motion.x, event.motion.y);
                 InputManager::SetMousePosition(static_cast<int>(pos.X), static_cast<int>(pos.Y));
                 InputManager::AddMouseRelativeDelta(event.motion.xrel, event.motion.yrel);
                 break;
@@ -1659,13 +1947,10 @@ namespace CNA::Internal::Input
                     break;
                 }
 
-                {
-                    SDL_Window* win = (event.button.windowID != 0)
-                                          ? SDL_GetWindowFromID(event.button.windowID)
-                                          : SDL_GetMouseFocus();
-                    const auto pos = to_logical_position(win, event.button.x, event.button.y);
-                    InputManager::SetMousePosition(static_cast<int>(pos.X), static_cast<int>(pos.Y));
-                }
+                const auto pos = to_logical_position(
+                    static_cast<CNA::Platform::WindowId>(event.button.windowID),
+                    event.button.x, event.button.y);
+                InputManager::SetMousePosition(static_cast<int>(pos.X), static_cast<int>(pos.Y));
 
                 if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
                 {
@@ -2073,5 +2358,6 @@ namespace CNA::Internal::Input
         default:
             break;
         }
+#endif
     }
 }
