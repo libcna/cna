@@ -1911,6 +1911,16 @@ namespace CNA::Internal::GltfImport
         // ComputeTangentsEXT's own doc comment for the algorithm and its documented divergence
         // from full MikkTSpace) when absent, exactly as the glTF spec itself recommends.
         std::vector<Vector4> tangents;
+        // plan_gltf.md GLTF-086: only strides 48 and 68 have a tangent slot, and those are exactly
+        // the PBR layouts -- so a file that authored a tangent basis for any other primitive has it
+        // dropped. It cannot be carried: there is nowhere to put it. Reported instead, which is the
+        // other outcome GLTF-086's acceptance allows, because a file that went to the trouble of
+        // authoring tangents did so for a reason.
+        if (!out.usePbr &&
+            cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0) != nullptr)
+        {
+            out.droppedTangentForStrideEXT = true;
+        }
         if (out.usePbr)
         {
             const cgltf_accessor* tangentAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0);

@@ -381,6 +381,17 @@ namespace CNA::Internal::GltfImport
          * than left for a reader to deduce from a stride.
          */
         bool droppedNormalForStrideEXT = false;
+        /**
+         * @brief True when the file authors `TANGENT` but the chosen vertex layout has no tangent
+         * slot, so it was discarded.
+         *
+         * plan_gltf.md `GLTF-086`. Only strides 48 and 68 carry a tangent, and those are exactly
+         * the PBR layouts — so an authored tangent basis on any other primitive is dropped. It
+         * cannot be *carried*: there is nowhere to put it. `GLTF-086`'s acceptance allows the other
+         * outcome, reported, and this is it. Worth reporting rather than shrugging at, because a
+         * file that went to the trouble of authoring tangents did so for a reason.
+         */
+        bool droppedTangentForStrideEXT = false;
         /** @brief True when this mesh should be imported through DualTextureEffect (CNB-72/73). */
         bool useDualTexture = false;
         /** @brief The material's base-color texture image, or nullptr if none. */

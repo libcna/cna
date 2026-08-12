@@ -406,6 +406,50 @@ imported textured part ends up with the sampler its file declared" is not. `GLTF
 
 ---
 
+### 1.9 A second UV channel — `GLTF-181`, and the shape of every "new stride" refusal
+
+**Problem.** Each of a glTF material's five texture references independently selects its own
+`TEXCOORD` set. CNA's PBR effects sample all five from **one** shared channel — the one the base
+colour names — so a material whose maps disagree renders some of them from the wrong set. It has
+been *detected* since CNB-97 (`MeshOut::pbrUv2Mismatch`) and, until now, reported only by the
+offline tool: the runtime path was silently wrong on exactly the same file.
+
+**Decision: the single-channel limit stands, and is reported on both paths.** What supporting a
+second channel actually costs, since `GLTF-181` asks for it in those terms:
+
+* **Vertex stride.** A second `vec2` takes the unskinned PBR layout from 48 to **56** and the
+  skinned one from 68 to **76**. 56 is *already taken* — it is the skinned+coloured layout — so
+  this is not an additive change but a collision in the exact dispatch space
+  `CNA/Internal/Graphics/VertexDeclarationFidelity.hpp` exists to police. Resolving it means either
+  renumbering an existing layout or abandoning stride-keyed dispatch.
+* **Shader.** A second attribute, a second varying, and per-map channel selection — five maps × two
+  sets — so either five uniforms or a bitfield, in both PBR programs.
+* **Renderers.** An input layout and a shader variant on each, the same blast radius that decided
+  §1.7 against colour-space option A.
+
+Against that: **no corpus asset uses a second UV set**, and CNA already knows when one is present.
+The honest trade is to keep the limit and make it loud, which is what §1.5, §1.6 and `GLTF-241`
+each concluded in their own way — a limitation that names itself is a different thing from a bug.
+
+**No API change.** The detection already exists; only the reporting moved.
+
+### 1.10 An authored tangent basis with nowhere to live — `GLTF-086`
+
+**Problem.** Only strides 48 and 68 carry a tangent, and those are exactly the PBR layouts. A file
+that authored `TANGENT` on any other primitive had it dropped in silence.
+
+**Decision: reported, because it cannot be carried.** Unlike the material properties `GLTF-219`
+ungated — which `MeshOut` could hold even when no effect consumed them — there is literally nowhere
+to put a tangent in a stride-32 vertex. `MeshOut::droppedTangentForStrideEXT` names it and both
+loaders log it, matching `GLTF-241`'s treatment of the dropped normal.
+
+Worth reporting rather than shrugging at: a file that went to the trouble of authoring tangents did
+so for a reason, and the reason is usually a normal map the material also declares.
+
+**No API change.** A new `MeshOut` field, which is `CNA::Internal` and not public surface.
+
+---
+
 ## 2. Reviewed and deferred
 
 ### 2.1 `PbrEffect::NormalScale`, `OcclusionStrength` — `GLTF-224`, `GLTF-225`

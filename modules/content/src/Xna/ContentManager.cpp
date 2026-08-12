@@ -2230,6 +2230,28 @@ namespace Microsoft::Xna::Framework::Content
                             "imported through BasicEffect with its vertex colours; the material's "
                             "factors and maps are not applied (GLTF-241).");
                     }
+                    // plan_gltf.md GLTF-086: an authored tangent basis with nowhere to live.
+                    if (meshOut.droppedTangentForStrideEXT)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' authors TANGENT, but only the PBR vertex layouts (strides 48 and 68) "
+                            "have a tangent slot and this primitive uses stride " +
+                            std::to_string(meshOut.stride) +
+                            ", so the authored tangent basis is discarded (GLTF-086).");
+                    }
+                    // plan_gltf.md GLTF-181: CNA's PBR effects sample every map from ONE shared UV
+                    // channel. A material whose maps disagree renders some of them from the wrong
+                    // set -- detected since CNB-97 but, until now, reported only by the offline
+                    // tool, so the runtime path was silently wrong on exactly the same file.
+                    if (meshOut.pbrUv2Mismatch)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' has material maps referencing different TEXCOORD sets. CNA samples "
+                            "every map from one shared UV channel, so the maps that disagree are "
+                            "sampled from the wrong set (GLTF-181, a documented limit).");
+                    }
                     if (meshOut.droppedNormalForStrideEXT)
                     {
                         CNA::Logger::Warn(
