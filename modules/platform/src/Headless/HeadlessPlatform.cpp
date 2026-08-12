@@ -185,6 +185,7 @@ namespace CNA::Platform::Headless {
     IPlatformKeyboard* HeadlessPlatform::GetKeyboard() { return nullptr; }
     IPlatformMouse* HeadlessPlatform::GetMouse() { return nullptr; }
     IPlatformGamepad* HeadlessPlatform::GetGamepad() { return nullptr; }
+    IPlatformJoystick* HeadlessPlatform::GetJoystick() { return nullptr; }
     IPlatformTextInput* HeadlessPlatform::GetTextInput() { return nullptr; }
     IPlatformSensors* HeadlessPlatform::GetSensors() { return nullptr; }
     IPlatformHaptics* HeadlessPlatform::GetHaptics() { return nullptr; }

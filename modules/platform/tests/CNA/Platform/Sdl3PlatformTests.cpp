@@ -148,6 +148,7 @@ TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
 
     // Wired in this phase.
     EXPECT_TRUE(capabilities.gamepad);
+    EXPECT_TRUE(capabilities.joystick);
     EXPECT_TRUE(capabilities.textInput);
 
     EXPECT_TRUE(capabilities.sensors);

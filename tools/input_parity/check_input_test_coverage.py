@@ -50,7 +50,6 @@ KNOWN_COVERED_ELSEWHERE = {
     # `<TypeName>\w*Test` prefix match never fires. Confirmed real coverage exists for every one of
     # these before adding the exemption (not just a name collision at the same file).
     "ISdlHapticBackend": "SdlHapticBackendTests.cpp (FakeHapticTest) via the FakeSdlHapticBackend seam",
-    "ISdlJoystickBackend": "SdlJoystickBackendTests.cpp (FakeJoystickTest) via the FakeSdlJoystickBackend seam",
     "ISystemDeviceBackend": "InputDevicesTests.cpp (CnaInputDevicesTest) / TouchEdgeCaseTests.cpp (TouchCapabilitiesEnumerationTest) via FakeSystemDeviceBackend",
     "ISystemMouseBackend": "MouseGlobalTests.cpp (MouseGlobalEXTTest) via a fake system-mouse-backend seam",
     "ISystemPowerBackend": "PowerTests.cpp (CnaInputPowerTest) via a fake system-power-backend seam",

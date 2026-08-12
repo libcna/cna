@@ -6,9 +6,6 @@
 #include <string>
 #include <vector>
 
-#include "CNA/Input/JoystickCapabilities.hpp"
-#include "CNA/Input/JoystickInfo.hpp"
-#include "CNA/Input/JoystickState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 
 namespace CNA::Internal::Input
@@ -29,21 +26,6 @@ namespace CNA::Internal::Input
          * remaining keyboard/touch native-shaped tests.
          */
         static void ProcessEvent(const SDL_Event& event);
-
-        /** @brief CNAEXT/EXT: enumerates the connected raw joysticks (id/name/type). */
-        static std::vector<CNA::Input::JoystickInfoEXT> GetJoysticks();
-
-        /** @brief CNAEXT/EXT: static hardware shape/identity of a raw joystick; default if not connected. */
-        static CNA::Input::JoystickCapabilitiesEXT GetJoystickCapabilities(std::uint32_t id);
-
-        /** @brief CNAEXT/EXT: current axis/button/hat/trackball state of a raw joystick; all-empty if not connected. */
-        static CNA::Input::JoystickStateEXT GetJoystickState(std::uint32_t id);
-
-        /**
-         * @brief Internal (not public CNA::Input API): the raw SDL handle for an opened joystick, so
-         *        N-013 Haptics can call `SDL_OpenHapticFromJoystick` on it. nullptr if not connected.
-         */
-        static SDL_Joystick* GetOpenedJoystickHandle(std::uint32_t id);
 
         /**
          * @brief Translates a US-layout Keys value to the Keys value the current keyboard

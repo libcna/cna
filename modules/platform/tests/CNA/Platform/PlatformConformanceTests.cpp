@@ -64,6 +64,7 @@ TEST_P(PlatformConformance, EveryServiceIsNullExactlyWhenItsCapabilityIsFalse)
     // ExactKeyboardState is false, and cell-quantised mouse input while PixelAccurateMouse is
     // false. Those are usable services whose approximation callers can inspect explicitly.
     EXPECT_EQ(platform_->GetGamepad() != nullptr, capabilities_.gamepad) << "gamepad";
+    EXPECT_EQ(platform_->GetJoystick() != nullptr, capabilities_.joystick) << "joystick";
     EXPECT_EQ(platform_->GetTextInput() != nullptr, capabilities_.textInput) << "textInput";
     EXPECT_EQ(platform_->GetSensors() != nullptr, capabilities_.sensors) << "sensors";
     EXPECT_EQ(platform_->GetHaptics() != nullptr, capabilities_.haptics) << "haptics";

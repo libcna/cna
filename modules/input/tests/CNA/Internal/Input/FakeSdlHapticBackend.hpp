@@ -58,6 +58,7 @@ namespace CNA::Internal::Input::test_support
         int lastAutocenter = -1;
         int pauseCalls = 0;
         int resumeCalls = 0;
+        CNA::Platform::DeviceId lastJoystickId = 0;
         SDL_HapticEffect lastCreatedEffect{};
         SDL_HapticEffect lastUpdatedEffect{};
         // Real SDL copies an effect's Custom sample data synchronously during Create/UpdateHapticEffect
@@ -91,9 +92,10 @@ namespace CNA::Internal::Input::test_support
             return MakeDevice(it->second);
         }
 
-        SDL_Haptic* OpenHapticFromJoystick(SDL_Joystick* joystick) override
+        SDL_Haptic* OpenHapticFromJoystick(const CNA::Platform::DeviceId joystickId) override
         {
-            if (joystick == nullptr || joystickConfig.openFails)
+            lastJoystickId = joystickId;
+            if (joystickId == 0 || joystickConfig.openFails)
                 return nullptr;
             return MakeDevice(joystickConfig);
         }
@@ -105,9 +107,10 @@ namespace CNA::Internal::Input::test_support
             return MakeDevice(mouseConfig);
         }
 
-        bool IsJoystickHaptic(SDL_Joystick* joystick) override
+        bool IsJoystickHaptic(const CNA::Platform::DeviceId joystickId) override
         {
-            return joystick != nullptr && joystickIsHaptic;
+            lastJoystickId = joystickId;
+            return joystickId != 0 && joystickIsHaptic;
         }
 
         bool IsMouseHaptic() override

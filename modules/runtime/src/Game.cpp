@@ -201,7 +201,7 @@ namespace Microsoft::Xna::Framework
           graphicsDeviceManager_(nullptr),
           currentAdapter_(nullptr),
           hasInitialized_(false),
-          gamepadSubsystemAcquired_(false),
+          controllerSubsystemAcquired_(false),
           suppressDraw_(false),
           isDisposed_(false),
           forceElapsedTimeToZero_(false),
@@ -744,10 +744,10 @@ namespace Microsoft::Xna::Framework
 
         // This is an unmanaged platform reference owned by Game itself, so the destructor's
         // Dispose(false) path must release it just as surely as an explicit Dispose().
-        if (gamepadSubsystemAcquired_)
+        if (controllerSubsystemAcquired_)
         {
             platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Gamepad);
-            gamepadSubsystemAcquired_ = false;
+            controllerSubsystemAcquired_ = false;
         }
 
         isDisposed_ = true;
@@ -774,10 +774,10 @@ namespace Microsoft::Xna::Framework
         // The game owns this subsystem reference, but not its implementation. SDL3 maps it to
         // SDL_INIT_GAMEPAD; a future platform can make it a no-op or provide a different lifetime.
         // Acquiring before the first event pump makes already-connected pads visible in frame one.
-        if (platform_->GetGamepad() != nullptr)
+        if (platform_->GetGamepad() != nullptr || platform_->GetJoystick() != nullptr)
         {
             platform_->AcquireSubsystem(CNA::Platform::PlatformSubsystem::Gamepad);
-            gamepadSubsystemAcquired_ = true;
+            controllerSubsystemAcquired_ = true;
         }
 
         Initialize();
@@ -1089,6 +1089,10 @@ namespace Microsoft::Xna::Framework
         if (CNA::Platform::IPlatformGamepad* gamepad = platform_->GetGamepad())
         {
             gamepad->Update();
+        }
+        if (CNA::Platform::IPlatformJoystick* joystick = platform_->GetJoystick())
+        {
+            joystick->Update();
         }
     }
 

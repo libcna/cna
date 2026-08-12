@@ -51,7 +51,6 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 |------|--------|-----------------|-----------|------|
 | `GestureDetector` | `include/CNA/Internal/Input/GestureDetector.hpp` | yes | 4 |  |
 | `ISdlHapticBackend` | `include/CNA/Internal/Input/SdlHapticBackend.hpp` | no | 0 | covered via SdlHapticBackendTests.cpp (FakeHapticTest) via the FakeSdlHapticBackend seam |
-| `ISdlJoystickBackend` | `include/CNA/Internal/Input/SdlJoystickBackend.hpp` | no | 1 | covered via SdlJoystickBackendTests.cpp (FakeJoystickTest) via the FakeSdlJoystickBackend seam |
 | `ISystemDeviceBackend` | `include/CNA/Internal/Input/SystemDeviceBackend.hpp` | no | 2 | covered via InputDevicesTests.cpp (CnaInputDevicesTest) / TouchEdgeCaseTests.cpp (TouchCapabilitiesEnumerationTest) via FakeSystemDeviceBackend |
 | `ISystemMouseBackend` | `include/CNA/Internal/Input/SystemMouseBackend.hpp` | no | 1 | covered via MouseGlobalTests.cpp (MouseGlobalEXTTest) via a fake system-mouse-backend seam |
 | `ISystemPowerBackend` | `include/CNA/Internal/Input/SystemPowerBackend.hpp` | no | 1 | covered via PowerTests.cpp (CnaInputPowerTest) via a fake system-power-backend seam |

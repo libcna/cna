@@ -3,6 +3,7 @@
 #include "Sdl3InputServices.hpp"
 
 #include "Sdl3GamepadControls.hpp"
+#include "Sdl3JoystickControls.hpp"
 #include "Sdl3KeyCodes.hpp"
 #include "Sdl3Modifiers.hpp"
 
@@ -701,6 +702,178 @@ namespace CNA::Platform::Sdl3 {
         }
         return SDL_GetGamepadTouchpadFinger(gamepad, touchpad, fingerIndex, &finger.down,
                                             &finger.x, &finger.y, &finger.pressure);
+    }
+
+    // --- raw joystick (PLAT-83) --------------------------------------------------------------
+
+    Sdl3Joystick::~Sdl3Joystick() { CloseAll(); }
+
+    void Sdl3Joystick::Open(const DeviceId id)
+    {
+        if (id == 0 || id > std::numeric_limits<SDL_JoystickID>::max() || devices_.contains(id))
+        {
+            return;
+        }
+
+        SDL_Joystick* joystick = SDL_OpenJoystick(static_cast<SDL_JoystickID>(id));
+        if (joystick == nullptr)
+        {
+            return;
+        }
+
+        Device device;
+        device.handle = joystick;
+        device.info.id = id;
+        device.info.name = CopySdlString(SDL_GetJoystickName(joystick));
+        device.info.kind = ToJoystickKind(SDL_GetJoystickType(joystick));
+
+        JoystickCapabilities& caps = device.capabilities;
+        caps.connected = true;
+        caps.axisCount = std::max(SDL_GetNumJoystickAxes(joystick), 0);
+        caps.buttonCount = std::max(SDL_GetNumJoystickButtons(joystick), 0);
+        caps.hatCount = std::max(SDL_GetNumJoystickHats(joystick), 0);
+        caps.ballCount = std::max(SDL_GetNumJoystickBalls(joystick), 0);
+        caps.kind = device.info.kind;
+        caps.name = device.info.name;
+        char guid[33]{};
+        SDL_GUIDToString(SDL_GetJoystickGUID(joystick), guid, sizeof(guid));
+        caps.guid = guid;
+
+        device.snapshot.axes.resize(static_cast<std::size_t>(caps.axisCount));
+        device.snapshot.buttons.resize(static_cast<std::size_t>(caps.buttonCount));
+        device.snapshot.hats.resize(static_cast<std::size_t>(caps.hatCount));
+        device.snapshot.balls.resize(static_cast<std::size_t>(caps.ballCount));
+        devices_.emplace(id, std::move(device));
+    }
+
+    void Sdl3Joystick::Close(const DeviceId id)
+    {
+        const auto item = devices_.find(id);
+        if (item == devices_.end())
+        {
+            return;
+        }
+        SDL_CloseJoystick(static_cast<SDL_Joystick*>(item->second.handle));
+        devices_.erase(item);
+    }
+
+    void Sdl3Joystick::CloseAll()
+    {
+        for (auto& [id, device] : devices_)
+        {
+            (void)id;
+            SDL_CloseJoystick(static_cast<SDL_Joystick*>(device.handle));
+        }
+        devices_.clear();
+    }
+
+    void Sdl3Joystick::Poll(Device& device)
+    {
+        auto* joystick = static_cast<SDL_Joystick*>(device.handle);
+        JoystickSnapshot& state = device.snapshot;
+        for (int axis = 0; axis < device.capabilities.axisCount; ++axis)
+        {
+            state.axes[static_cast<std::size_t>(axis)] = SDL_GetJoystickAxis(joystick, axis);
+        }
+        for (int button = 0; button < device.capabilities.buttonCount; ++button)
+        {
+            state.buttons[static_cast<std::size_t>(button)] =
+                SDL_GetJoystickButton(joystick, button);
+        }
+        for (int hat = 0; hat < device.capabilities.hatCount; ++hat)
+        {
+            state.hats[static_cast<std::size_t>(hat)] =
+                ToJoystickHat(SDL_GetJoystickHat(joystick, hat));
+        }
+        for (int ball = 0; ball < device.capabilities.ballCount; ++ball)
+        {
+            JoystickBallDelta& delta = state.balls[static_cast<std::size_t>(ball)];
+            delta = {};
+            (void)SDL_GetJoystickBall(joystick, ball, &delta.x, &delta.y);
+        }
+
+        int percent = -1;
+        device.capabilities.powerState =
+            ToJoystickPowerState(SDL_GetJoystickPowerInfo(joystick, &percent));
+        device.capabilities.powerPercent = percent;
+    }
+
+    void Sdl3Joystick::Update()
+    {
+        int count = 0;
+        SDL_JoystickID* ids = SDL_GetJoysticks(&count);
+
+        std::vector<DeviceId> missing;
+        for (const auto& [id, device] : devices_)
+        {
+            (void)device;
+            const bool present = ids != nullptr
+                && std::find(ids, ids + count, static_cast<SDL_JoystickID>(id)) != ids + count;
+            if (!present)
+            {
+                missing.push_back(id);
+            }
+        }
+        for (const DeviceId id : missing)
+        {
+            Close(id);
+        }
+        for (int index = 0; index < count; ++index)
+        {
+            Open(static_cast<DeviceId>(ids[index]));
+        }
+        SDL_free(ids);
+
+        for (auto& [id, device] : devices_)
+        {
+            (void)id;
+            Poll(device);
+        }
+    }
+
+    std::vector<JoystickInfo> Sdl3Joystick::GetJoysticks() const
+    {
+        std::vector<JoystickInfo> result;
+        result.reserve(devices_.size());
+        for (const auto& [id, device] : devices_)
+        {
+            (void)id;
+            result.push_back(device.info);
+        }
+        return result;
+    }
+
+    bool Sdl3Joystick::IsConnected(const DeviceId id) const
+    {
+        return devices_.contains(id);
+    }
+
+    JoystickCapabilities Sdl3Joystick::GetCapabilities(const DeviceId id) const
+    {
+        const auto item = devices_.find(id);
+        return item != devices_.end() ? item->second.capabilities : JoystickCapabilities{};
+    }
+
+    JoystickSnapshot Sdl3Joystick::GetSnapshot(const DeviceId id) const
+    {
+        const auto item = devices_.find(id);
+        return item != devices_.end() ? item->second.snapshot : JoystickSnapshot{};
+    }
+
+    void Sdl3Joystick::ObserveEvent(const DeviceEvent& event)
+    {
+        if (event.kind != InputDeviceKind::Joystick)
+        {
+            return;
+        }
+        if (event.connected)
+        {
+            Open(event.device);
+        }
+        else
+        {
+            Close(event.device);
+        }
     }
 
     // --- text input (PLAT-87) --------------------------------------------------------------------

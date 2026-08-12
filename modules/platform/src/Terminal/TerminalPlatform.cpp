@@ -343,6 +343,7 @@ namespace CNA::Platform::Terminal {
         return mouse_.get();
     }
     IPlatformGamepad* TerminalPlatform::GetGamepad() { return nullptr; }
+    IPlatformJoystick* TerminalPlatform::GetJoystick() { return nullptr; }
     IPlatformTextInput* TerminalPlatform::GetTextInput() { return nullptr; }
     IPlatformSensors* TerminalPlatform::GetSensors() { return nullptr; }
     IPlatformHaptics* TerminalPlatform::GetHaptics() { return nullptr; }

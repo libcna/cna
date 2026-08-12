@@ -100,6 +100,8 @@ namespace CNA::Platform::Headless {
         [[nodiscard]] IPlatformMouse* GetMouse() override;
         /** @brief Gets the gamepad service. @return Null; there are no gamepads. */
         [[nodiscard]] IPlatformGamepad* GetGamepad() override;
+        /** @brief Gets the raw joystick service. @return Null; there are no joysticks. */
+        [[nodiscard]] IPlatformJoystick* GetJoystick() override;
         /** @brief Gets the text input service. @return Null; there is no text input. */
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return Null; there are no sensors. */

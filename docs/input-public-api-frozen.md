@@ -30,7 +30,7 @@ than re-defining them. A member/type belongs to exactly one tier:
   `MouseCursor` as a whole, `KeyboardState::ToString`, value-struct default constructors, `FromButtonArray`).
   Tagged with the `CNAEXT` marker macro.
 - **INTERNAL** — `CNA::Internal::*` implementation (`SdlInputBridge`, `InputManager`, `GestureDetector`,
-  `ISdlJoystickBackend`, …). **Not public API**; must never appear in a public XNA header or signature
+  `ISdlHapticBackend`, …). **Not public API**; must never appear in a public XNA header or signature
   (enforced by the `PublicApiInputCompileTests` SDL/Internal-leak guard).
 
 ## Freeze scope

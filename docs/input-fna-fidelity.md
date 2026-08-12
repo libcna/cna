@@ -14,8 +14,8 @@ notes); those notices are intact and must not be removed.
 ## Architecture note (task 953)
 
 FNA is **poll-based per public call**: it re-reads device state when `GetState()` runs. CNA publishes
-input **once per frame**: keyboard and mouse are whole-device platform snapshots, while input areas
-not yet migrated in Phase 5 are accumulated from `PlatformEvent`. Public `Get*State()` reads the
+input **once per frame**: keyboard, mouse, mapped gamepads and raw joysticks are whole-device platform
+snapshots, while input areas not yet migrated in Phase 5 are accumulated from `PlatformEvent`. Public `Get*State()` reads the
 stored frame state, so two reads in one `Update()` cannot observe different native instants. The two
 models are behaviorally equivalent for normal game-loop use; the differences below are where they
 are not identical.

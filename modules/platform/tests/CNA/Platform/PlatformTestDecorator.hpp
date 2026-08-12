@@ -129,6 +129,8 @@ namespace CNA::Platform::Testing {
         [[nodiscard]] IPlatformMouse* GetMouse() override { return inner_->GetMouse(); }
         /** @brief Gets the inner gamepad service. @return The service, or null. */
         [[nodiscard]] IPlatformGamepad* GetGamepad() override { return inner_->GetGamepad(); }
+        /** @brief Gets the inner joystick service. @return The service, or null. */
+        [[nodiscard]] IPlatformJoystick* GetJoystick() override { return inner_->GetJoystick(); }
         /** @brief Gets the inner text input service. @return The service, or null. */
         [[nodiscard]] IPlatformTextInput* GetTextInput() override { return inner_->GetTextInput(); }
         /** @brief Gets the inner sensor service. @return The service, or null. */

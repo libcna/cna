@@ -200,3 +200,16 @@ each cell.
   Windows XInput `"xinput"` GUID + rumble/trigger-rumble/light-bar, Android/iOS depend on attached hardware /
   the SDL backend. Real-hardware actuation across vendors (Xbox/PS/Switch/generic/BT) is manual-gated
   (INPUT-GAMEPAD-035).
+
+### Raw joystick snapshots (PLAT-83)
+
+- **Raw and mapped views remain distinct.** A wheel/HOTAS can expose arbitrary device-ordered axes,
+  buttons, POV hats and trackballs through `IPlatformJoystick` even when SDL also maps the same
+  hardware into a four-slot `IPlatformGamepad`. Neither view derives its state from the other.
+- **One publish per frame.** `Game` acquires the shared gamepad/joystick subsystem before frame one,
+  drains native events, then calls `IPlatformJoystick::Update()` once. Public `Joysticks::GetStateEXT`
+  therefore cannot consume a trackball delta twice or observe axes from a different native instant
+  than buttons. Trackball deltas are zero when SDL reports no motion during that publication.
+- **Hotplug identity is platform-owned.** `JoystickInfo::id`, `DeviceEvent::device` and the haptic
+  joystick correlation use the same `DeviceId`. SDL3 maps its instance id at the native edge; no
+  public or platform header exposes `SDL_JoystickID` or `SDL_Joystick*`.

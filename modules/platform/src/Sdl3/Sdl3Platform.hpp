@@ -75,6 +75,8 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformMouse* GetMouse() override;
         /** @brief Gets the gamepad service. @return The SDL3 gamepad service; never null. */
         [[nodiscard]] IPlatformGamepad* GetGamepad() override;
+        /** @brief Gets the raw joystick service. @return The SDL3 joystick service; never null. */
+        [[nodiscard]] IPlatformJoystick* GetJoystick() override;
         /** @brief Gets the text input service. @return The SDL3 text input service; never null. */
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return The SDL3 sensor service; never null. */
@@ -123,6 +125,7 @@ namespace CNA::Platform::Sdl3 {
         Sdl3Keyboard keyboard_;
         Sdl3Mouse mouse_;
         Sdl3Gamepad gamepad_;
+        Sdl3Joystick joystick_;
         Sdl3TextInput textInput_;
         Sdl3Sensors sensors_;
         Sdl3Haptics haptics_;

@@ -7,6 +7,7 @@
 // genuinely needs hardware is left to the input parity suites in Phase 5.
 
 #include "../../../src/Sdl3/Sdl3InputServices.hpp"
+#include "../../../src/Sdl3/Sdl3JoystickControls.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
@@ -36,7 +37,40 @@ protected:
         platform_ = PlatformFactory::Create("SDL3");
     }
 
+    void TearDown() override
+    {
+        if (virtualJoystick_ != 0)
+        {
+            (void)SDL_DetachVirtualJoystick(virtualJoystick_);
+            platform_->GetJoystick()->Update();
+        }
+        if (gamepadSubsystemAcquired_)
+        {
+            platform_->ReleaseSubsystem(PlatformSubsystem::Gamepad);
+        }
+    }
+
+    SDL_JoystickID AttachVirtualFlightStick()
+    {
+        platform_->AcquireSubsystem(PlatformSubsystem::Gamepad);
+        gamepadSubsystemAcquired_ = true;
+
+        SDL_VirtualJoystickDesc description;
+        SDL_INIT_INTERFACE(&description);
+        description.type = SDL_JOYSTICK_TYPE_FLIGHT_STICK;
+        description.vendor_id = 0x1234;
+        description.product_id = 0x5678;
+        description.naxes = 2;
+        description.nbuttons = 2;
+        description.nhats = 1;
+        description.name = "CNA virtual flight stick";
+        virtualJoystick_ = SDL_AttachVirtualJoystick(&description);
+        return virtualJoystick_;
+    }
+
     std::unique_ptr<IPlatform> platform_;
+    SDL_JoystickID virtualJoystick_ = 0;
+    bool gamepadSubsystemAcquired_ = false;
 };
 
 TEST_F(Sdl3InputTest, EveryInputServiceIsPresentBecauseItsCapabilityIsTrue)
@@ -45,6 +79,7 @@ TEST_F(Sdl3InputTest, EveryInputServiceIsPresentBecauseItsCapabilityIsTrue)
     EXPECT_EQ(platform_->GetKeyboard() != nullptr, capabilities.exactKeyboardState);
     EXPECT_EQ(platform_->GetMouse() != nullptr, capabilities.pixelAccurateMouse);
     EXPECT_EQ(platform_->GetGamepad() != nullptr, capabilities.gamepad);
+    EXPECT_EQ(platform_->GetJoystick() != nullptr, capabilities.joystick);
     EXPECT_EQ(platform_->GetTextInput() != nullptr, capabilities.textInput);
 }
 
@@ -213,6 +248,121 @@ TEST_F(Sdl3InputTest, RepeatedUpdatesDoNotLeakGamepadHandles)
         platform_->GetGamepad()->Update();
     }
     SUCCEED();
+}
+
+// --- raw joystick -------------------------------------------------------------------------------
+
+TEST_F(Sdl3InputTest, RawJoystickUpdateAndUnknownQueriesAreSafeWithoutHardware)
+{
+    IPlatformJoystick* joystick = platform_->GetJoystick();
+    EXPECT_NO_THROW(joystick->Update());
+    EXPECT_FALSE(joystick->IsConnected(999));
+    EXPECT_FALSE(joystick->GetCapabilities(999).connected);
+    EXPECT_TRUE(joystick->GetSnapshot(999).axes.empty());
+}
+
+TEST_F(Sdl3InputTest, RepeatedRawJoystickUpdatesDoNotAccumulateDevices)
+{
+    IPlatformJoystick* joystick = platform_->GetJoystick();
+    joystick->Update();
+    const std::size_t count = joystick->GetJoysticks().size();
+    for (int i = 0; i < 50; ++i)
+    {
+        joystick->Update();
+    }
+    EXPECT_EQ(joystick->GetJoysticks().size(), count);
+}
+
+TEST_F(Sdl3InputTest, VirtualJoystickPublishesNativeAxesButtonsAndHat)
+{
+    const SDL_JoystickID id = AttachVirtualFlightStick();
+    ASSERT_NE(id, 0u) << SDL_GetError();
+
+    IPlatformJoystick* service = platform_->GetJoystick();
+    service->Update();
+    ASSERT_TRUE(service->IsConnected(id));
+
+    const JoystickCapabilities caps = service->GetCapabilities(id);
+    EXPECT_EQ(caps.axisCount, 2);
+    EXPECT_EQ(caps.buttonCount, 2);
+    EXPECT_EQ(caps.hatCount, 1);
+    EXPECT_EQ(caps.ballCount, 0);
+    EXPECT_EQ(caps.kind, JoystickKind::FlightStick);
+    EXPECT_EQ(caps.name, "CNA virtual flight stick");
+
+    SDL_Joystick* native = SDL_GetJoystickFromID(id);
+    ASSERT_NE(native, nullptr);
+    EXPECT_TRUE(SDL_SetJoystickVirtualAxis(native, 0, -12345));
+    EXPECT_TRUE(SDL_SetJoystickVirtualAxis(native, 1, 23456));
+    EXPECT_TRUE(SDL_SetJoystickVirtualButton(native, 0, true));
+    EXPECT_TRUE(SDL_SetJoystickVirtualHat(native, 0, SDL_HAT_RIGHTDOWN));
+    SDL_UpdateJoysticks();
+
+    service->Update();
+    const JoystickSnapshot first = service->GetSnapshot(id);
+    EXPECT_EQ(first.axes, (std::vector<std::int16_t>{-12345, 23456}));
+    EXPECT_EQ(first.buttons, (std::vector<bool>{true, false}));
+    EXPECT_EQ(first.hats, (std::vector<JoystickHat>{JoystickHat::RightDown}));
+    EXPECT_TRUE(first.balls.empty());
+}
+
+TEST_F(Sdl3InputTest, DetachedVirtualJoystickIsRetiredOnTheNextUpdate)
+{
+    const SDL_JoystickID id = AttachVirtualFlightStick();
+    ASSERT_NE(id, 0u) << SDL_GetError();
+
+    IPlatformJoystick* service = platform_->GetJoystick();
+    service->Update();
+    ASSERT_TRUE(service->IsConnected(id));
+
+    ASSERT_TRUE(SDL_DetachVirtualJoystick(id));
+    virtualJoystick_ = 0;
+    service->Update();
+
+    EXPECT_FALSE(service->IsConnected(id));
+    EXPECT_FALSE(service->GetCapabilities(id).connected);
+    EXPECT_TRUE(service->GetSnapshot(id).axes.empty());
+}
+
+TEST(Sdl3JoystickControlsTest, EveryNativeJoystickTypeMapsByName)
+{
+    using CNA::Platform::Sdl3::ToJoystickKind;
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_UNKNOWN), JoystickKind::Unknown);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_GAMEPAD), JoystickKind::Gamepad);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_WHEEL), JoystickKind::Wheel);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_ARCADE_STICK), JoystickKind::ArcadeStick);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_FLIGHT_STICK), JoystickKind::FlightStick);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_DANCE_PAD), JoystickKind::DancePad);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_GUITAR), JoystickKind::Guitar);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_DRUM_KIT), JoystickKind::DrumKit);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_ARCADE_PAD), JoystickKind::ArcadePad);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_THROTTLE), JoystickKind::Throttle);
+}
+
+TEST(Sdl3JoystickControlsTest, EveryNativeHatPositionMapsExactly)
+{
+    using CNA::Platform::Sdl3::ToJoystickHat;
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_CENTERED), JoystickHat::Centered);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_UP), JoystickHat::Up);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_RIGHT), JoystickHat::Right);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_DOWN), JoystickHat::Down);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_LEFT), JoystickHat::Left);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_RIGHTUP), JoystickHat::RightUp);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_RIGHTDOWN), JoystickHat::RightDown);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_LEFTUP), JoystickHat::LeftUp);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_LEFTDOWN), JoystickHat::LeftDown);
+    EXPECT_EQ(ToJoystickHat(0xFF), JoystickHat::Centered);
+}
+
+TEST(Sdl3JoystickControlsTest, NativePowerStatesMapWithoutAPlatformLeak)
+{
+    using CNA::Platform::Sdl3::ToJoystickPowerState;
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_ERROR), JoystickPowerState::Error);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_UNKNOWN), JoystickPowerState::Unknown);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_ON_BATTERY), JoystickPowerState::OnBattery);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_NO_BATTERY), JoystickPowerState::NoBattery);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_CHARGING), JoystickPowerState::Charging);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_CHARGED), JoystickPowerState::Charged);
 }
 
 // --- text input ------------------------------------------------------------------------------------

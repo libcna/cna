@@ -24,6 +24,7 @@ namespace CNA::Platform {
         static const std::string globalPointer = "GlobalPointer";
         static const std::string inputDeviceEnumeration = "InputDeviceEnumeration";
         static const std::string gamepad = "Gamepad";
+        static const std::string joystick = "Joystick";
         static const std::string gamepadRumble = "GamepadRumble";
         static const std::string gamepadSensors = "GamepadSensors";
         static const std::string haptics = "Haptics";
@@ -57,6 +58,7 @@ namespace CNA::Platform {
             case PlatformCapability::GlobalPointer: return globalPointer;
             case PlatformCapability::InputDeviceEnumeration: return inputDeviceEnumeration;
             case PlatformCapability::Gamepad: return gamepad;
+            case PlatformCapability::Joystick: return joystick;
             case PlatformCapability::GamepadRumble: return gamepadRumble;
             case PlatformCapability::GamepadSensors: return gamepadSensors;
             case PlatformCapability::Haptics: return haptics;

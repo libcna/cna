@@ -3,14 +3,17 @@
 
 #include <SDL3/SDL.h>
 
+#include "CNA/Platform/PlatformEvent.hpp"
+
 #include <string>
 #include <vector>
 
 // Internal (CNA) seam over the SDL3 haptic (force-feedback) C API used by CNA::Input::Haptics /
 // HapticDevice.
 //
-// Unlike IPlatformGamepad/ISdlJoystickBackend, this seam has no hot-plug lifecycle owned by
-// SdlInputBridge: a HapticDevice is opened and closed explicitly by the caller (RAII).
+// Unlike IPlatformGamepad/IPlatformJoystick, this seam retains SDL's full effect structures: a
+// HapticDevice is opened and closed explicitly by the caller (RAII). Joystick correlation uses a
+// CNA DeviceId, so no SDL_Joystick pointer crosses from the platform service into this seam.
 //
 // This exists ONLY so haptic runtime behavior (enumeration, capabilities, effect building, rumble)
 // can be unit-tested without real force-feedback hardware: tests inject a fake implementation. It is
@@ -38,12 +41,12 @@ namespace CNA::Internal::Input
 
         /** @brief Opens the haptic device for the instance id, or nullptr on failure (SDL_OpenHaptic). */
         virtual SDL_Haptic* OpenHaptic(SDL_HapticID instanceId) = 0;
-        /** @brief Opens the haptic device backing a joystick, or nullptr (SDL_OpenHapticFromJoystick). */
-        virtual SDL_Haptic* OpenHapticFromJoystick(SDL_Joystick* joystick) = 0;
+        /** @brief Opens the haptic device backing a joystick id, or nullptr. */
+        virtual SDL_Haptic* OpenHapticFromJoystick(CNA::Platform::DeviceId joystickId) = 0;
         /** @brief Opens the default mouse's haptic device, or nullptr (SDL_OpenHapticFromMouse). */
         virtual SDL_Haptic* OpenHapticFromMouse() = 0;
-        /** @brief Whether a joystick has haptic capability (SDL_IsJoystickHaptic). */
-        virtual bool IsJoystickHaptic(SDL_Joystick* joystick) = 0;
+        /** @brief Whether a connected joystick id has haptic capability. */
+        virtual bool IsJoystickHaptic(CNA::Platform::DeviceId joystickId) = 0;
         /** @brief Whether the default mouse has haptic capability (SDL_IsMouseHaptic). */
         virtual bool IsMouseHaptic() = 0;
         /** @brief Closes an opened haptic device handle (SDL_CloseHaptic). */

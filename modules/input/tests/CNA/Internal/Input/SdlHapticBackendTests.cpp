@@ -18,11 +18,9 @@
 #include "CNA/Input/Haptics.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlHapticBackend.hpp"
-#include "CNA/Internal/Input/SdlInputBridge.hpp"
-#include "CNA/Internal/Input/SdlJoystickBackend.hpp"
+#include "CNA/Platform/CannedJoystick.hpp"
 
 #include "FakeSdlHapticBackend.hpp"
-#include "FakeSdlJoystickBackend.hpp"
 
 using CNA::Input::HapticCapabilitiesEXT;
 using CNA::Input::HapticDevice;
@@ -34,19 +32,21 @@ using CNA::Input::HapticFeatureEXT;
 using CNA::Input::HapticInfoEXT;
 using CNA::Input::Haptics;
 using CNA::Internal::Input::InputManager;
-using CNA::Internal::Input::SdlInputBridge;
 using CNA::Internal::Input::SetSdlHapticBackendForTests;
-using CNA::Internal::Input::SetSdlJoystickBackendForTests;
 using CNA::Internal::Input::test_support::FakeHapticConfig;
-using CNA::Internal::Input::test_support::FakeJoystickConfig;
 using CNA::Internal::Input::test_support::FakeSdlHapticBackend;
-using CNA::Internal::Input::test_support::FakeSdlJoystickBackend;
+using CNA::Platform::JoystickInfo;
+using CNA::Platform::JoystickKind;
+using CNA::Platform::Testing::CannedJoystickPlatform;
+using CNA::Platform::Testing::ScopedCurrentPlatform;
 
 namespace
 {
     struct FakeHapticTest : ::testing::Test
     {
         FakeSdlHapticBackend fake;
+        CannedJoystickPlatform platform;
+        ScopedCurrentPlatform installed{platform};
 
         void SetUp() override
         {
@@ -529,14 +529,7 @@ TEST_F(FakeHapticTest, GainAutocenterPauseResumeAreSafeFalseWhenClosed)
 
 TEST_F(FakeHapticTest, OpenFromJoystickEXTOpensHapticForAConnectedJoystick)
 {
-    FakeSdlJoystickBackend joystickFake;
-    SetSdlJoystickBackendForTests(&joystickFake);
-    joystickFake.Register(10, FakeJoystickConfig{});
-
-    SDL_Event added{};
-    added.type = SDL_EVENT_JOYSTICK_ADDED;
-    added.jdevice.which = 10;
-    SdlInputBridge::ProcessEvent(added);
+    platform.joystick.Connect(JoystickInfo{10, "Wheel", JoystickKind::Wheel}, {});
 
     FakeHapticConfig cfg = WheelConfig();
     fake.joystickConfig = cfg;
@@ -544,8 +537,7 @@ TEST_F(FakeHapticTest, OpenFromJoystickEXTOpensHapticForAConnectedJoystick)
     HapticDevice device = Haptics::OpenFromJoystickEXT(10);
     EXPECT_TRUE(device.IsOpenEXT());
     EXPECT_EQ(device.GetNameEXT(), "Test Wheel");
-
-    SetSdlJoystickBackendForTests(nullptr);
+    EXPECT_EQ(fake.lastJoystickId, 10u);
 }
 
 TEST_F(FakeHapticTest, OpenFromJoystickEXTFailsForUnconnectedJoystick)
@@ -559,19 +551,11 @@ TEST_F(FakeHapticTest, IsJoystickHapticEXTForwardsAndIsFalseWhenDisconnected)
 {
     EXPECT_FALSE(Haptics::IsJoystickHapticEXT(999)) << "no such joystick connected";
 
-    FakeSdlJoystickBackend joystickFake;
-    SetSdlJoystickBackendForTests(&joystickFake);
-    joystickFake.Register(10, FakeJoystickConfig{});
-
-    SDL_Event added{};
-    added.type = SDL_EVENT_JOYSTICK_ADDED;
-    added.jdevice.which = 10;
-    SdlInputBridge::ProcessEvent(added);
+    platform.joystick.Connect(JoystickInfo{10, "Wheel", JoystickKind::Wheel}, {});
 
     fake.joystickIsHaptic = true;
     EXPECT_TRUE(Haptics::IsJoystickHapticEXT(10));
-
-    SetSdlJoystickBackendForTests(nullptr);
+    EXPECT_EQ(fake.lastJoystickId, 10u);
 }
 
 TEST_F(FakeHapticTest, OpenFromMouseEXTAndIsMouseHapticEXTForwardToBackend)

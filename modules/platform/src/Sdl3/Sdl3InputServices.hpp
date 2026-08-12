@@ -3,11 +3,13 @@
 
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
 #include "CNA/Platform/Input/IPlatformInputDevices.hpp"
+#include "CNA/Platform/Input/IPlatformJoystick.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/Input/IPlatformTextInput.hpp"
 
 #include <array>
+#include <map>
 #include <vector>
 
 namespace CNA::Platform::Sdl3 {
@@ -174,6 +176,44 @@ namespace CNA::Platform::Sdl3 {
         std::array<GamepadSnapshot, GamepadSlotCount> snapshots_{};
         std::array<GamepadCapabilities, GamepadSlotCount> capabilities_{};
         std::array<GamepadInfo, GamepadSlotCount> infos_{};
+    };
+
+    /** @brief SDL3-backed raw, unmapped joystick snapshots. */
+    class Sdl3Joystick final : public IPlatformJoystick
+    {
+    public:
+        /** @brief Closes every joystick this service opened. */
+        ~Sdl3Joystick() override;
+
+        /** @brief Reconciles attached ids and publishes one snapshot per device. */
+        void Update() override;
+        /** @brief Gets connected devices in ascending id order. */
+        [[nodiscard]] std::vector<JoystickInfo> GetJoysticks() const override;
+        /** @brief Gets whether an id currently has an opened handle. */
+        [[nodiscard]] bool IsConnected(DeviceId id) const override;
+        /** @brief Gets a device's cached shape and power state. */
+        [[nodiscard]] JoystickCapabilities GetCapabilities(DeviceId id) const override;
+        /** @brief Gets a device's last frame-stable raw state. */
+        [[nodiscard]] JoystickSnapshot GetSnapshot(DeviceId id) const override;
+
+        /** @brief Applies one mapped joystick hotplug event before it reaches consumers. */
+        void ObserveEvent(const DeviceEvent& event);
+
+    private:
+        struct Device
+        {
+            void* handle = nullptr;
+            JoystickInfo info;
+            JoystickCapabilities capabilities;
+            JoystickSnapshot snapshot;
+        };
+
+        void Open(DeviceId id);
+        void Close(DeviceId id);
+        void CloseAll();
+        void Poll(Device& device);
+
+        std::map<DeviceId, Device> devices_;
     };
 
     /** @brief SDL3-backed text input and IME control. */

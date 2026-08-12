@@ -143,6 +143,8 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] IPlatformMouse* GetMouse() override;
         /** @brief Gets the gamepad service. @return Null; no gamepad channel exists through a TTY. */
         [[nodiscard]] IPlatformGamepad* GetGamepad() override;
+        /** @brief Gets the joystick service. @return Null; no joystick channel exists through a TTY. */
+        [[nodiscard]] IPlatformJoystick* GetJoystick() override;
         /** @brief Gets the text input service. @return Null; text input is not delivered separately. */
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return Null; a terminal exposes no sensors. */

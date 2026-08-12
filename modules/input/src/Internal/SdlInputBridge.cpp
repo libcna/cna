@@ -6,7 +6,7 @@
 #include "CNA/Input/Joysticks.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
-#include "CNA/Internal/Input/SdlJoystickBackend.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
@@ -18,10 +18,12 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <optional>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
@@ -190,19 +192,13 @@ namespace
         }
     }
 
-    // CNAEXT/EXT (input_noxna.md N-007): every connected raw joystick, opened for as long as it stays
-    // connected. Mapped gamepads are handled independently by IPlatformGamepad.
-    std::unordered_map<SDL_JoystickID, SDL_Joystick*>& get_opened_joysticks()
+    // Tracks which platform joystick lifecycle events have reached the public CNAEXT event. The
+    // platform service owns native handles; this set only suppresses duplicate add and unknown
+    // remove notifications, preserving the public event semantics without a second device store.
+    std::unordered_set<CNA::Platform::DeviceId>& get_announced_joysticks()
     {
-        static std::unordered_map<SDL_JoystickID, SDL_Joystick*> openedJoysticks;
-        return openedJoysticks;
-    }
-
-    SDL_Joystick* find_opened_joystick(const std::uint32_t id)
-    {
-        auto& opened = get_opened_joysticks();
-        const auto it = opened.find(static_cast<SDL_JoystickID>(id));
-        return it != opened.end() ? it->second : nullptr;
+        static std::unordered_set<CNA::Platform::DeviceId> announced;
+        return announced;
     }
 
     std::unordered_map<std::uint64_t, int>& get_finger_id_to_touch_id_map()
@@ -760,138 +756,6 @@ namespace
 
 namespace CNA::Internal::Input
 {
-    static CNA::Input::PowerStateEXT sdl_power_state_to_ext(const SDL_PowerState state)
-    {
-        using CNA::Input::PowerStateEXT;
-        switch (state)
-        {
-            case SDL_POWERSTATE_ON_BATTERY: return PowerStateEXT::OnBattery;
-            case SDL_POWERSTATE_NO_BATTERY: return PowerStateEXT::NoBattery;
-            case SDL_POWERSTATE_CHARGING:   return PowerStateEXT::Charging;
-            case SDL_POWERSTATE_CHARGED:    return PowerStateEXT::Charged;
-            case SDL_POWERSTATE_UNKNOWN:    return PowerStateEXT::Unknown;
-            case SDL_POWERSTATE_ERROR:
-            default:                        return PowerStateEXT::Error;
-        }
-    }
-
-    // CNAEXT/EXT (input_noxna.md N-007): SDL_JoystickType -> the raw-joystick CNA::Input enum.
-    static CNA::Input::JoystickTypeEXT sdl_joystick_type_to_ext(SDL_JoystickType t)
-    {
-        using CNA::Input::JoystickTypeEXT;
-        switch (t)
-        {
-        case SDL_JOYSTICK_TYPE_GAMEPAD:      return JoystickTypeEXT::Gamepad;
-        case SDL_JOYSTICK_TYPE_WHEEL:        return JoystickTypeEXT::Wheel;
-        case SDL_JOYSTICK_TYPE_ARCADE_STICK: return JoystickTypeEXT::ArcadeStick;
-        case SDL_JOYSTICK_TYPE_FLIGHT_STICK: return JoystickTypeEXT::FlightStick;
-        case SDL_JOYSTICK_TYPE_DANCE_PAD:    return JoystickTypeEXT::DancePad;
-        case SDL_JOYSTICK_TYPE_GUITAR:       return JoystickTypeEXT::Guitar;
-        case SDL_JOYSTICK_TYPE_DRUM_KIT:     return JoystickTypeEXT::DrumKit;
-        case SDL_JOYSTICK_TYPE_ARCADE_PAD:   return JoystickTypeEXT::ArcadePad;
-        case SDL_JOYSTICK_TYPE_THROTTLE:     return JoystickTypeEXT::Throttle;
-        default:                             return JoystickTypeEXT::Unknown;
-        }
-    }
-
-    // CNAEXT/EXT (input_noxna.md N-007): SDL's SDL_HAT_* bitmask -> the 9-value hat-position enum.
-    static CNA::Input::JoystickHatPositionEXT sdl_hat_to_ext(const Uint8 hat)
-    {
-        using CNA::Input::JoystickHatPositionEXT;
-        switch (hat)
-        {
-        case SDL_HAT_UP:        return JoystickHatPositionEXT::Up;
-        case SDL_HAT_RIGHT:     return JoystickHatPositionEXT::Right;
-        case SDL_HAT_DOWN:      return JoystickHatPositionEXT::Down;
-        case SDL_HAT_LEFT:      return JoystickHatPositionEXT::Left;
-        case SDL_HAT_RIGHTUP:   return JoystickHatPositionEXT::RightUp;
-        case SDL_HAT_RIGHTDOWN: return JoystickHatPositionEXT::RightDown;
-        case SDL_HAT_LEFTUP:    return JoystickHatPositionEXT::LeftUp;
-        case SDL_HAT_LEFTDOWN:  return JoystickHatPositionEXT::LeftDown;
-        default:                return JoystickHatPositionEXT::Centered;
-        }
-    }
-
-    std::vector<CNA::Input::JoystickInfoEXT> SdlInputBridge::GetJoysticks()
-    {
-        std::vector<CNA::Input::JoystickInfoEXT> result;
-        for (const auto& [id, joystick] : get_opened_joysticks())
-        {
-            CNA::Input::JoystickInfoEXT info;
-            info.id = static_cast<std::uint32_t>(id);
-            info.name = sdl_joystick_backend().GetJoystickName(joystick);
-            info.type = sdl_joystick_type_to_ext(sdl_joystick_backend().GetJoystickType(joystick));
-            result.push_back(std::move(info));
-        }
-        return result;
-    }
-
-    CNA::Input::JoystickCapabilitiesEXT SdlInputBridge::GetJoystickCapabilities(const std::uint32_t id)
-    {
-        SDL_Joystick* joystick = find_opened_joystick(id);
-        if (joystick == nullptr)
-            return CNA::Input::JoystickCapabilitiesEXT{};
-
-        CNA::Input::JoystickCapabilitiesEXT caps;
-        caps.isConnected = true;
-        caps.axisCount = sdl_joystick_backend().GetNumJoystickAxes(joystick);
-        caps.buttonCount = sdl_joystick_backend().GetNumJoystickButtons(joystick);
-        caps.hatCount = sdl_joystick_backend().GetNumJoystickHats(joystick);
-        caps.ballCount = sdl_joystick_backend().GetNumJoystickBalls(joystick);
-        caps.type = sdl_joystick_type_to_ext(sdl_joystick_backend().GetJoystickType(joystick));
-        caps.name = sdl_joystick_backend().GetJoystickName(joystick);
-        caps.guid = sdl_joystick_backend().GetJoystickGUID(joystick);
-
-        int percent = -1;
-        caps.powerState = sdl_power_state_to_ext(sdl_joystick_backend().GetJoystickPowerInfo(joystick, &percent));
-        caps.powerPercent = percent;
-
-        return caps;
-    }
-
-    CNA::Input::JoystickStateEXT SdlInputBridge::GetJoystickState(const std::uint32_t id)
-    {
-        CNA::Input::JoystickStateEXT state;
-
-        SDL_Joystick* joystick = find_opened_joystick(id);
-        if (joystick == nullptr)
-            return state;
-
-        auto& backend = sdl_joystick_backend();
-
-        const int axisCount = backend.GetNumJoystickAxes(joystick);
-        state.axes.reserve(static_cast<std::size_t>(std::max(axisCount, 0)));
-        for (int axis = 0; axis < axisCount; ++axis)
-            state.axes.push_back(backend.GetJoystickAxis(joystick, axis));
-
-        const int buttonCount = backend.GetNumJoystickButtons(joystick);
-        state.buttons.reserve(static_cast<std::size_t>(std::max(buttonCount, 0)));
-        for (int button = 0; button < buttonCount; ++button)
-            state.buttons.push_back(backend.GetJoystickButton(joystick, button));
-
-        const int hatCount = backend.GetNumJoystickHats(joystick);
-        state.hats.reserve(static_cast<std::size_t>(std::max(hatCount, 0)));
-        for (int hat = 0; hat < hatCount; ++hat)
-            state.hats.push_back(sdl_hat_to_ext(backend.GetJoystickHat(joystick, hat)));
-
-        const int ballCount = backend.GetNumJoystickBalls(joystick);
-        state.balls.reserve(static_cast<std::size_t>(std::max(ballCount, 0)));
-        for (int ball = 0; ball < ballCount; ++ball)
-        {
-            int dx = 0;
-            int dy = 0;
-            backend.GetJoystickBall(joystick, ball, &dx, &dy);
-            state.balls.emplace_back(dx, dy);
-        }
-
-        return state;
-    }
-
-    SDL_Joystick* SdlInputBridge::GetOpenedJoystickHandle(const std::uint32_t id)
-    {
-        return find_opened_joystick(id);
-    }
-
     Microsoft::Xna::Framework::Input::Keys SdlInputBridge::GetKeyFromScancode(
         const Microsoft::Xna::Framework::Input::Keys scancode
     )
@@ -968,9 +832,7 @@ namespace CNA::Internal::Input
         get_finger_id_to_touch_id_map().clear();
         get_next_touch_id() = 1;
         g_scancodeModeTestOverride = std::nullopt;
-        // Drop the independent raw-joystick test registry (N-007) and restore its SDL backend.
-        get_opened_joysticks().clear();
-        SetSdlJoystickBackendForTests(nullptr);
+        get_announced_joysticks().clear();
     }
 
     void PlatformInputBridge::ProcessEvent(const CNA::Platform::PlatformEvent& event)
@@ -1035,25 +897,30 @@ namespace CNA::Internal::Input
                 else if (platformEvent.kind == InputDeviceKind::Joystick)
                 {
                     const auto device = platformEvent.device;
-                    auto& opened = get_opened_joysticks();
+                    if (device > std::numeric_limits<std::uint32_t>::max())
+                    {
+                        return;
+                    }
+                    auto& announced = get_announced_joysticks();
                     if (platformEvent.connected)
                     {
-                        if (opened.contains(device))
+                        IPlatformJoystick* joysticks = GetCurrentPlatform().GetJoystick();
+                        if (joysticks == nullptr || !joysticks->IsConnected(device)
+                            || !announced.insert(device).second)
+                        {
                             return;
-                        auto* joystick = sdl_joystick_backend().OpenJoystick(device);
-                        if (joystick == nullptr)
-                            return;
-                        opened[device] = joystick;
-                        CNA::Input::Joysticks::ConnectedEXT.Invoke(platformEvent.device);
+                        }
+                        CNA::Input::Joysticks::ConnectedEXT.Invoke(
+                            static_cast<std::uint32_t>(device));
                     }
                     else
                     {
-                        const auto item = opened.find(device);
-                        if (item == opened.end())
+                        if (announced.erase(device) == 0)
+                        {
                             return;
-                        sdl_joystick_backend().CloseJoystick(item->second);
-                        opened.erase(item);
-                        CNA::Input::Joysticks::DisconnectedEXT.Invoke(platformEvent.device);
+                        }
+                        CNA::Input::Joysticks::DisconnectedEXT.Invoke(
+                            static_cast<std::uint32_t>(device));
                     }
                 }
             }
@@ -1440,44 +1307,6 @@ namespace CNA::Internal::Input
                     0.0f
                 );
                 release_touch_id_mapping(event.tfinger.fingerID);
-                break;
-            }
-        // CNAEXT/EXT (input_noxna.md N-007): raw joystick hot-plug, routed to CNA::Input::Joysticks.
-        // Every connected joystick is opened here, including devices SDL maps as a gamepad, so
-        // raw axis/button/hat/trackball state stays independent of IPlatformGamepad polling.
-        // Axis/button/hat/ball motion events need no handling: SDL's own event pump already updates
-        // its internal joystick-state cache (that's what SDL_GetJoystickAxis/Button/Hat/Ball read),
-        // so GetJoystickState can poll live values on demand.
-        case SDL_EVENT_JOYSTICK_ADDED:
-            {
-                auto& opened = get_opened_joysticks();
-                if (opened.contains(event.jdevice.which))
-                {
-                    break;
-                }
-
-                SDL_Joystick* joystick = sdl_joystick_backend().OpenJoystick(event.jdevice.which);
-                if (joystick == nullptr)
-                {
-                    break;
-                }
-
-                opened[event.jdevice.which] = joystick;
-                CNA::Input::Joysticks::ConnectedEXT.Invoke(static_cast<std::uint32_t>(event.jdevice.which));
-                break;
-            }
-        case SDL_EVENT_JOYSTICK_REMOVED:
-            {
-                auto& opened = get_opened_joysticks();
-                const auto it = opened.find(event.jdevice.which);
-                if (it == opened.end())
-                {
-                    break;
-                }
-
-                sdl_joystick_backend().CloseJoystick(it->second);
-                opened.erase(it);
-                CNA::Input::Joysticks::DisconnectedEXT.Invoke(static_cast<std::uint32_t>(event.jdevice.which));
                 break;
             }
         default:

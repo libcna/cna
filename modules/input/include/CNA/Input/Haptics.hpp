@@ -45,7 +45,7 @@ namespace CNA::Input
          * The common case for wheels/HOTAS setups: pair with `CNA::Input::Joysticks`'s enumeration to
          * find the joystick id first.
          *
-         * @param joystickId The SDL joystick instance id (from `Joysticks::GetJoysticksEXT()`).
+         * @param joystickId The platform device id from `Joysticks::GetJoysticksEXT()`.
          * @return The opened device; `IsOpenEXT()` is false if the joystick is not connected, has no
          *         haptic capability, or opening failed.
          */
@@ -60,7 +60,7 @@ namespace CNA::Input
 
         /**
          * @brief Returns true if the given connected raw joystick has haptic capability.
-         * @param joystickId The SDL joystick instance id.
+         * @param joystickId The platform device id reported by raw-joystick enumeration.
          */
         CNAEXT [[nodiscard]] static bool IsJoystickHapticEXT(std::uint32_t joystickId);
 

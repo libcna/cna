@@ -74,6 +74,8 @@ namespace CNA::Platform {
         InputDeviceEnumeration,
         /** @brief Gamepads can be enumerated and read. */
         Gamepad,
+        /** @brief Raw, unmapped joysticks can be enumerated and read. */
+        Joystick,
         /** @brief Connected gamepads can rumble. */
         GamepadRumble,
         /** @brief Connected gamepads expose motion sensors. */

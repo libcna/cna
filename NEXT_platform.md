@@ -292,12 +292,12 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **Phase 5 input continuation.** PLAT-82 is complete: public `GamePad`, all optional EXT features,
-   four-slot lifecycle and mapping tests cross `IPlatformGamepad`; the duplicate SDL backend and
-   `InputManager` mapped-gamepad store are gone. Continue with **PLAT-83**, the genuinely distinct
-   raw-joystick surface (unmapped axes, hats and balls), while preserving its haptic-device handoff.
-   The raw SDL event adapter remains test-only compatibility until PLAT-90 retires the remaining
-   native-shaped keyboard/touch doubles; no production caller remains.
+2. **Phase 5 input continuation.** PLAT-83 is complete: raw axes/buttons/hats/balls cross the new
+   `IPlatformJoystick`, the duplicate backend/store are gone, and haptic correlation carries only
+   a CNA `DeviceId` with SDL's required handle lifetime retained inside the native backend. Continue
+   with **PLAT-84**, re-pointing the standalone rumble subset of `Haptics`/`HapticDevice` at the
+   existing platform service without weakening the richer effect-model seam. The raw SDL event
+   adapter remains test-only compatibility until PLAT-90 retires keyboard/touch native doubles.
 
 ---
 

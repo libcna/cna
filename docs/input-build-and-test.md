@@ -97,7 +97,8 @@ The **SDL** dependency is the `third_party/SDL` git submodule (`libsdl-org/SDL`)
 `release-3.4.0` tag on SDL `main`, self-reporting as SDL **3.5.0** (in-development). It is **not** a tagged
 release; the nearest **stable release tags** are the `release-3.4.x` line (latest **`release-3.4.8`**).
 
-**Minimum SDL3 API relied upon:** standard SDL3 gamepad (`SDL_Gamepad*` + hotplug events), keyboard
+**Minimum SDL3 API relied upon:** standard SDL3 gamepad and raw joystick APIs (including hotplug,
+axes/buttons/hats/trackballs and joystick-to-haptic correlation), keyboard
 (scancode/keycode), mouse (relative mode, warp), touch (`SDL_EVENT_FINGER_*`), text-input, and gamepad
 sensor/rumble/trigger-rumble — all present since SDL **3.2 / 3.4.0**, so a `release-3.4.x` build has
 everything the input layer uses.

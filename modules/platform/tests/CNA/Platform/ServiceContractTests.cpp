@@ -3,6 +3,7 @@
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include "CNA/Platform/Input/IPlatformJoystick.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/Input/IPlatformSensors.hpp"
 #include "CNA/Platform/Input/IPlatformTextInput.hpp"
@@ -23,6 +24,7 @@ TEST(ServiceContractTests, EveryServiceInterfaceHasAVirtualDestructor)
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformKeyboard>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformMouse>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformGamepad>);
+    EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformJoystick>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformTextInput>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformSensors>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformClipboard>);
@@ -37,6 +39,7 @@ TEST(ServiceContractTests, EveryServiceInterfaceIsAbstract)
     EXPECT_TRUE(std::is_abstract_v<IPlatformKeyboard>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformMouse>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformGamepad>);
+    EXPECT_TRUE(std::is_abstract_v<IPlatformJoystick>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformTextInput>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformSensors>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformClipboard>);
@@ -65,6 +68,12 @@ TEST(InputSnapshotTests, SnapshotsDefaultToNothingHeld)
     EXPECT_TRUE(std::all_of(gamepad.axes.begin(), gamepad.axes.end(),
                             [](const float value) { return value == 0.0f; }));
     EXPECT_EQ(gamepad.packetNumber, 0u);
+
+    const JoystickSnapshot joystick;
+    EXPECT_TRUE(joystick.axes.empty());
+    EXPECT_TRUE(joystick.buttons.empty());
+    EXPECT_TRUE(joystick.hats.empty());
+    EXPECT_TRUE(joystick.balls.empty());
 }
 
 TEST(InputSnapshotTests, KeyboardSnapshotIsAWholeKeyboardNotAPerKeyQuery)

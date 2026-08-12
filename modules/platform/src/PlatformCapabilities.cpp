@@ -29,6 +29,7 @@ namespace CNA::Platform {
             case PlatformCapability::InputDeviceEnumeration:
                 return capabilities.inputDeviceEnumeration;
             case PlatformCapability::Gamepad: return capabilities.gamepad;
+            case PlatformCapability::Joystick: return capabilities.joystick;
             case PlatformCapability::GamepadRumble: return capabilities.gamepadRumble;
             case PlatformCapability::GamepadSensors: return capabilities.gamepadSensors;
             case PlatformCapability::Haptics: return capabilities.haptics;
@@ -65,6 +66,7 @@ namespace CNA::Platform {
             PlatformCapability::GlobalPointer,
             PlatformCapability::InputDeviceEnumeration,
             PlatformCapability::Gamepad,
+            PlatformCapability::Joystick,
             PlatformCapability::GamepadRumble,
             PlatformCapability::GamepadSensors,
             PlatformCapability::Haptics,

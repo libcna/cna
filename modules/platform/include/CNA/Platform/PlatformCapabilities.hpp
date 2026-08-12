@@ -61,6 +61,8 @@ namespace CNA::Platform {
         bool inputDeviceEnumeration = false;
         /** @brief Gamepads can be enumerated and read. */
         bool gamepad = false;
+        /** @brief Raw, unmapped joysticks can be enumerated and read. */
+        bool joystick = false;
         /** @brief Connected gamepads can rumble. */
         bool gamepadRumble = false;
         /** @brief Connected gamepads expose motion sensors. */

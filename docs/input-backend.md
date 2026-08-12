@@ -33,22 +33,23 @@ IPlatform::PollEvents(batch)  (Game::PollEvents(), once per frame from Game::Tic
       → Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_On*(...)   // text input / editing
       → Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(...)
           → CNA::Internal::Input::GestureDetector::On{Pressed,Moved,Released}(...)
-  → IPlatformKeyboard::Update() / IPlatformMouse::Update() / IPlatformGamepad::Update()
-  → Keyboard/Mouse/GamePad/TouchPanel::GetState()   // read by game code each frame
+  → IPlatformKeyboard/Mouse/Gamepad/Joystick::Update()
+  → Keyboard/Mouse/GamePad/Joysticks/TouchPanel state // read by game code each frame
   → Microsoft::Xna::Framework::FrameworkDispatcher::Update()
       → TouchPanel::Update() → GestureDetector::OnUpdate()   // Hold/Flick timing gestures
 ```
 
-Three classes define the current event/state boundary:
+The current event/state boundary is split deliberately by device shape:
 
 - **`CNA::Internal::Input::PlatformInputBridge`**
   (`include/CNA/Internal/Input/PlatformInputBridge.hpp`) — the single production event funnel.
   It consumes CNA's SDL-free `PlatformEvent` vocabulary; native translation is performed once by
   the selected `IPlatform` implementation before the event reaches `Game`.
-- **`CNA::Internal::Input::SdlInputBridge`** retains raw-joystick queries and a few
-  keyboard/touch compatibility helpers. Its raw `ProcessEvent` overload is only an adapter for
+- **`CNA::Internal::Input::SdlInputBridge`** retains keyboard/touch compatibility helpers. Its
+  raw `ProcessEvent` overload is only an adapter for
   legacy SDL-shaped tests and delegates to the platform bridge in an SDL3 build; production
-  `Game` no longer calls it. PLAT-82 removed its mapped-gamepad queries and handle ownership.
+  `Game` no longer calls it. PLAT-82/83 removed its mapped-gamepad and raw-joystick queries and
+  native handle ownership.
 - **`CNA::Internal::Input::InputManager`** (`include/CNA/Internal/Input/InputManager.hpp`,
   `src/Input/Internal/InputManager.cpp`) — accumulates per-device state pushed by
   `PlatformInputBridge` (`Set*State`/`Add*Delta` methods) and hands back state objects for input
@@ -59,6 +60,9 @@ Three classes define the current event/state boundary:
   snapshots, cached capabilities/identity and all mapped-controller actuators. Public
   `GamePad::GetState(playerIndex, deadZoneMode)` projects one raw platform snapshot through the
   requested dead-zone mode; `InputManager` no longer contains any mapped-gamepad state.
+- **`CNA::Platform::IPlatformJoystick`** owns the genuinely unmapped view: arbitrary axes,
+  buttons, POV hats and trackballs addressed by the same `DeviceId` carried by hotplug events.
+  `Game` publishes it once after each event drain; public `Joysticks` only projects that snapshot.
 
 Gesture handling adds another internal class:
 
@@ -95,7 +99,7 @@ An SDL event the mapper does not recognise is intentionally omitted from the pla
 | `SDL_EVENT_GAMEPAD_ADDED` / `_REMOVED` | Mapped for general device notification, but mapped-gamepad ownership is reconciled by `IPlatformGamepad::Update()` after the event drain | `Sdl3Gamepad` preserves existing slots, closes vanished handles and assigns new devices to the first free `PlayerIndex` slot |
 | `SDL_EVENT_GAMEPAD_BUTTON_DOWN` / `_UP` | The event is mapped but does not mutate a second store; `Sdl3Gamepad::Update()` polls the complete held-button mask once per frame | `GamePadState.Buttons`/`.DPad` read one immutable platform snapshot |
 | `SDL_EVENT_GAMEPAD_AXIS_MOTION` | The event is mapped but state is polled with the same CNA-owned axis helper; stick Y is inverted and triggers normalised at the SDL edge | `GamePadState.ThumbSticks`/`.Triggers`; the requested dead zone is applied by public `GamePad::GetState` |
-| `SDL_EVENT_JOYSTICK_ADDED` / `_REMOVED` | none (bypasses `InputManager` — separate `get_opened_joysticks()` handle map) | `CNA::Input::Joysticks::ConnectedEXT`/`DisconnectedEXT.Invoke(deviceId)` — the raw-joystick CNAEXT extension, distinct from `GamePad`'s XNA-mapped view of the same physical device (P7-017/029/P8-013) |
+| `SDL_EVENT_JOYSTICK_ADDED` / `_REMOVED` | `Sdl3Joystick` opens/closes the raw device before the platform batch reaches the input bridge; a small SDL-free announced-id set suppresses duplicate add and unknown remove notifications | `CNA::Input::Joysticks::ConnectedEXT`/`DisconnectedEXT.Invoke(deviceId)` plus one immutable raw snapshot per frame; distinct from `GamePad`'s mapped view of the same physical device |
 
 **Intentionally unhandled event types (P8-012/014, confirmed 2026-07-17):**
 - `SDL_EVENT_GAMEPAD_REMAPPED` — FNA itself has no handler for this event either (confirmed: zero

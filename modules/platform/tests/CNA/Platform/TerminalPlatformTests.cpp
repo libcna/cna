@@ -189,9 +189,11 @@ TEST(TerminalPlatformTest, HasNoGamepadHapticOrSensorChannel)
     const PlatformCapabilities capabilities = platform->GetCapabilities();
 
     EXPECT_FALSE(capabilities.gamepad);
+    EXPECT_FALSE(capabilities.joystick);
     EXPECT_FALSE(capabilities.haptics);
     EXPECT_FALSE(capabilities.sensors);
     EXPECT_EQ(platform->GetGamepad(), nullptr);
+    EXPECT_EQ(platform->GetJoystick(), nullptr);
     EXPECT_EQ(platform->GetHaptics(), nullptr);
     EXPECT_EQ(platform->GetSensors(), nullptr);
 }

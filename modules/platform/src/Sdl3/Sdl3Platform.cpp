@@ -102,6 +102,7 @@ namespace CNA::Platform::Sdl3 {
         capabilities.relativeMouse = true;
         capabilities.cursorShapes = true;
         capabilities.gamepad = true;
+        capabilities.joystick = true;
         capabilities.gamepadRumble = true;
         capabilities.gamepadSensors = true;
         capabilities.textInput = true;
@@ -216,6 +217,10 @@ namespace CNA::Platform::Sdl3 {
             if (MapSdlEvent(event, translated))
             {
                 mouse_.ObserveEvent(translated);
+                if (const auto* device = std::get_if<DeviceEvent>(&translated))
+                {
+                    joystick_.ObserveEvent(*device);
+                }
                 destination.push_back(translated);
             }
         }
@@ -244,6 +249,7 @@ namespace CNA::Platform::Sdl3 {
     IPlatformKeyboard* Sdl3Platform::GetKeyboard() { return &keyboard_; }
     IPlatformMouse* Sdl3Platform::GetMouse() { return &mouse_; }
     IPlatformGamepad* Sdl3Platform::GetGamepad() { return &gamepad_; }
+    IPlatformJoystick* Sdl3Platform::GetJoystick() { return &joystick_; }
     IPlatformTextInput* Sdl3Platform::GetTextInput() { return &textInput_; }
     IPlatformSensors* Sdl3Platform::GetSensors() { return &sensors_; }
     IPlatformHaptics* Sdl3Platform::GetHaptics() { return &haptics_; }

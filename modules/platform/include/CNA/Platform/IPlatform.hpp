@@ -9,6 +9,7 @@
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
 #include "CNA/Platform/Input/IPlatformHaptics.hpp"
 #include "CNA/Platform/Input/IPlatformInputDevices.hpp"
+#include "CNA/Platform/Input/IPlatformJoystick.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/Input/IPlatformSensors.hpp"
@@ -209,6 +210,13 @@ namespace CNA::Platform {
          * @return The service, or null when this platform reports no `Gamepad` capability.
          */
         [[nodiscard]] virtual IPlatformGamepad* GetGamepad() = 0;
+
+        /**
+         * @brief Gets the raw joystick service.
+         *
+         * @return The service, or null when this platform reports no `Joystick` capability.
+         */
+        [[nodiscard]] virtual IPlatformJoystick* GetJoystick() = 0;
 
         /**
          * @brief Gets the text input service.

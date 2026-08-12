@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Input/SdlHapticBackend.hpp"
 
+#include <limits>
+#include <unordered_map>
+
 namespace CNA::Internal::Input
 {
     namespace
@@ -30,17 +33,52 @@ namespace CNA::Internal::Input
             {
                 return SDL_OpenHaptic(instanceId);
             }
-            SDL_Haptic* OpenHapticFromJoystick(SDL_Joystick* joystick) override
+            SDL_Haptic* OpenHapticFromJoystick(const CNA::Platform::DeviceId joystickId) override
             {
-                return SDL_OpenHapticFromJoystick(joystick);
+                if (joystickId == 0
+                    || joystickId > std::numeric_limits<SDL_JoystickID>::max())
+                {
+                    return nullptr;
+                }
+                SDL_Joystick* joystick = SDL_OpenJoystick(
+                    static_cast<SDL_JoystickID>(joystickId));
+                if (joystick == nullptr)
+                {
+                    return nullptr;
+                }
+                SDL_Haptic* haptic = SDL_OpenHapticFromJoystick(joystick);
+                if (haptic == nullptr)
+                {
+                    SDL_CloseJoystick(joystick);
+                    return nullptr;
+                }
+
+                // SDL requires the haptic handle to be closed before the joystick it came from.
+                // Retain this extra joystick reference until CloseHaptic rather than leaking a
+                // native pointer through the platform contract.
+                joystickOwners_.emplace(haptic, joystick);
+                return haptic;
             }
             SDL_Haptic* OpenHapticFromMouse() override
             {
                 return SDL_OpenHapticFromMouse();
             }
-            bool IsJoystickHaptic(SDL_Joystick* joystick) override
+            bool IsJoystickHaptic(const CNA::Platform::DeviceId joystickId) override
             {
-                return SDL_IsJoystickHaptic(joystick);
+                if (joystickId == 0
+                    || joystickId > std::numeric_limits<SDL_JoystickID>::max())
+                {
+                    return false;
+                }
+                SDL_Joystick* joystick = SDL_OpenJoystick(
+                    static_cast<SDL_JoystickID>(joystickId));
+                if (joystick == nullptr)
+                {
+                    return false;
+                }
+                const bool result = SDL_IsJoystickHaptic(joystick);
+                SDL_CloseJoystick(joystick);
+                return result;
             }
             bool IsMouseHaptic() override
             {
@@ -48,7 +86,14 @@ namespace CNA::Internal::Input
             }
             void CloseHaptic(SDL_Haptic* haptic) override
             {
+                const auto owner = joystickOwners_.find(haptic);
+                SDL_Joystick* joystick = owner != joystickOwners_.end() ? owner->second : nullptr;
                 SDL_CloseHaptic(haptic);
+                if (joystick != nullptr)
+                {
+                    SDL_CloseJoystick(joystick);
+                    joystickOwners_.erase(owner);
+                }
             }
             std::string GetHapticName(SDL_Haptic* haptic) override
             {
@@ -135,6 +180,9 @@ namespace CNA::Internal::Input
             {
                 return SDL_ResumeHaptic(haptic);
             }
+
+        private:
+            std::unordered_multimap<SDL_Haptic*, SDL_Joystick*> joystickOwners_;
         };
 
         RealSdlHapticBackend g_realBackend;

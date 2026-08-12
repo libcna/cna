@@ -62,7 +62,7 @@ Three facts follow, and all three matter:
 | `SystemKeyboardBackend` | **Deleted** | One method, `GetModState()`. `KeyboardSnapshot::modifiers` already carries it, computed once per frame instead of on demand. |
 | `SystemMouseBackend` | **Deleted after a contract addition** | `CaptureMouse` / `GetGlobalMouseState` / `WarpMouseGlobal` have **no counterpart** in `IPlatformMouse`, which is window-scoped throughout. See §4. |
 | `SystemDeviceBackend` | **Deleted after a contract addition** | `GetMice` / `GetKeyboards` / `GetTouchDevices` have no counterpart. See §4. |
-| `SdlJoystickBackend` | **Replaced** by an `IPlatformJoystick` contract | The raw-joystick path is genuinely distinct from `IPlatformGamepad`'s mapped-controller view: hats, balls and un-mapped axes have nowhere to go in a `GamepadSnapshot`. PLAT-83. |
+| `SdlJoystickBackend` | **Deleted; replaced by `IPlatformJoystick`** | PLAT-83 moved arbitrary raw axes/buttons/hats/balls into frame snapshots, while `Sdl3Joystick` alone owns native handles. The same physical controller can still appear independently through the mapped gamepad view. |
 | `SdlGamepadBackend` | **Replaced** by `IPlatformGamepad`, extended | 33 methods against `IPlatformGamepad`'s 5. See §3 — most of the gap is real capability, not redundancy. |
 | `SdlHapticBackend` | **Survives, for now** | 28 methods covering the full effect model. `IPlatformHaptics` (PLAT-84) covers rumble only. See §5. |
 
@@ -150,20 +150,13 @@ That signature was why **PLAT-47 depended on PLAT-78**: running raw and platform
 would have drained one native queue twice. The completed path maps once, drains once, and feeds
 every event to the input bridge before the runtime handles quit/focus/resize/lifecycle behavior.
 
-**A raw SDL handle crosses between two seams.** `CnaExt/Haptics.cpp` calls
-`SdlInputBridge::GetOpenedJoystickHandle(id)` — which returns a raw `SDL_Joystick*` from the
-bridge's public surface — and feeds it straight into
-`sdl_haptic_backend().OpenHapticFromJoystick(joystick)`:
-
-```cpp
-SDL_Joystick* joystick = SdlInputBridge::GetOpenedJoystickHandle(joystickId);
-return HapticDevice(sdl_haptic_backend().OpenHapticFromJoystick(joystick));
-```
-
-Migrating the joystick seam and the haptic seam independently breaks this: the moment the bridge
-stops handing out `SDL_Joystick*`, the haptic path has no way to name the device it wants. The
-replacement is an opaque device identifier that both sides agree on, and it has to land in the
-same change as the joystick migration, not after it.
+**The raw SDL handle handoff was removed with PLAT-83.** `Haptics::OpenFromJoystickEXT` now checks
+the platform-neutral `IPlatformJoystick` using its `DeviceId`, then gives only that id to the
+surviving full-effect haptic seam. The real SDL haptic backend opens its own joystick reference and
+keeps it associated with the returned haptic handle. `CloseHaptic` closes the haptic first and that
+joystick reference second, exactly as SDL requires; neither `SdlInputBridge` nor a public/platform
+header exposes `SDL_Joystick*`. This had to land in the joystick migration because deleting the old
+handle store first would otherwise have broken `OpenFromJoystickEXT` between commits.
 
 ---
 
@@ -175,7 +168,7 @@ same change as the joystick migration, not after it.
    event loop (**PLAT-47**, complete).
 3. The four deletions (§2), each re-pointing its XNA-side caller at the platform service.
 4. `SdlGamepadBackend` replacement (**complete, PLAT-82**), followed by the distinct
-   `SdlJoystickBackend` replacement (PLAT-83).
+   `SdlJoystickBackend` replacement (**complete, PLAT-83**).
 5. `SdlHapticBackend`'s effect model, on its own design decision.
 
 The two renderer examples that call `InputManager::SetKeyState` directly

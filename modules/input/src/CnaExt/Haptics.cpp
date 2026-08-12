@@ -2,7 +2,8 @@
 #include "CNA/Input/Haptics.hpp"
 
 #include "CNA/Internal/Input/SdlHapticBackend.hpp"
-#include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/Input/IPlatformJoystick.hpp"
 
 #include <utility>
 
@@ -29,10 +30,12 @@ namespace CNA::Input
 
     HapticDevice Haptics::OpenFromJoystickEXT(const std::uint32_t joystickId)
     {
-        SDL_Joystick* joystick = CNA::Internal::Input::SdlInputBridge::GetOpenedJoystickHandle(joystickId);
-        if (joystick == nullptr)
+        CNA::Platform::IPlatformJoystick* joysticks =
+            CNA::Platform::GetCurrentPlatform().GetJoystick();
+        if (joysticks == nullptr || !joysticks->IsConnected(joystickId))
             return HapticDevice(nullptr);
-        return HapticDevice(CNA::Internal::Input::sdl_haptic_backend().OpenHapticFromJoystick(joystick));
+        return HapticDevice(
+            CNA::Internal::Input::sdl_haptic_backend().OpenHapticFromJoystick(joystickId));
     }
 
     HapticDevice Haptics::OpenFromMouseEXT()
@@ -42,8 +45,10 @@ namespace CNA::Input
 
     bool Haptics::IsJoystickHapticEXT(const std::uint32_t joystickId)
     {
-        SDL_Joystick* joystick = CNA::Internal::Input::SdlInputBridge::GetOpenedJoystickHandle(joystickId);
-        return joystick != nullptr && CNA::Internal::Input::sdl_haptic_backend().IsJoystickHaptic(joystick);
+        CNA::Platform::IPlatformJoystick* joysticks =
+            CNA::Platform::GetCurrentPlatform().GetJoystick();
+        return joysticks != nullptr && joysticks->IsConnected(joystickId)
+            && CNA::Internal::Input::sdl_haptic_backend().IsJoystickHaptic(joystickId);
     }
 
     bool Haptics::IsMouseHapticEXT()
