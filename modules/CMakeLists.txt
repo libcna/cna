@@ -139,6 +139,7 @@ target_link_libraries(CNA INTERFACE
         cna_graphics_core
         cna_core
         cna_math
+        cna_platform
         cna_build_flags
         ${RENDERER_TARGET}
 )
