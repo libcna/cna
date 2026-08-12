@@ -223,6 +223,15 @@ namespace Microsoft::Xna::Framework::Graphics
         System::Object* tag_ = nullptr;
         std::shared_ptr<void> ownedResources_;
 
-        static std::vector<Matrix> sharedDrawBoneMatrices_;
+        // Deviation from FNA, deliberate and behaviour-preserving (plan_gltf.md GLTF-444).
+        // FNA's Model.Draw shares one static Matrix[] across every Model in the process. It is
+        // pure scratch -- CopyAbsoluteBoneTransformsTo overwrites it in full at the top of every
+        // Draw and nothing reads it afterwards -- so no state is carried between calls and one
+        // buffer per thread is observably identical to one per process for any single-threaded
+        // caller. What it removes is the race: two threads drawing different models resize and
+        // rewrite the same vector, and a resize while another thread holds a reference into it is
+        // a use-after-free, not merely a wrong matrix. The cost is one vector per thread that has
+        // ever drawn a model.
+        static thread_local std::vector<Matrix> sharedDrawBoneMatrices_;
     };
 }

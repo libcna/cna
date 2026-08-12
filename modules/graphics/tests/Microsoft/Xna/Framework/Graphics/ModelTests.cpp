@@ -6,14 +6,21 @@
 // nullptr is safe here, matching the established ModelMeshTests.cpp/ModelMeshCollectionTests.cpp
 // convention of never touching a real GraphicsDevice for pure-data tests.
 
+#include <atomic>
 #include <gtest/gtest.h>
+#include <memory>
 #include <stdexcept>
+#include <string>
+#include <thread>
 #include <vector>
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -267,4 +274,117 @@ TEST(ModelTest, FiveArgConstructorEmptyBonesLeavesRootNullEvenWithDefaultIndex)
     Model model(nullptr, {}, {}, {});
 
     EXPECT_EQ(model.getRootProperty(), nullptr);
+}
+
+// --- plan_gltf.md GLTF-444: Model::Draw's shared bone scratch buffer ----------------------------
+//
+// FNA's Model.Draw shares one static Matrix[] across every Model in the process. Two threads
+// drawing different models both resize and rewrite it, and a resize while another thread holds a
+// reference into it is a use-after-free -- not merely a wrong matrix. CNA makes the buffer
+// thread_local, which is observably identical for any single-threaded caller (it is pure scratch,
+// fully overwritten at the top of every Draw and never read afterwards) and removes the race.
+//
+// The assertion has to read a value that PASSED THROUGH the buffer, or it proves nothing: an
+// earlier draft of this test read the bone transforms back with CopyAbsoluteBoneTransformsTo,
+// which reads `bones_` directly and never touches the scratch at all -- it passed just as happily
+// with the shared static in place. The only value Draw pushes through the buffer is the effect's
+// World matrix, so that is what is checked here.
+//
+// The two bone counts differ by a large factor on purpose, so a shared buffer would reallocate on
+// nearly every alternation between the two thread groups rather than settling at one size. That
+// is what makes this a real probe under ASan rather than a hopeful one.
+
+TEST(ModelTest, ConcurrentDrawsOnDifferentModelsDoNotShareTheBoneScratchBuffer)
+{
+    GraphicsDevice device;
+
+    constexpr int kThreads = 4;
+    constexpr int kIterations = 400;
+
+    // Everything is built on this thread, before any of them start: constructing an Effect touches
+    // the device, and a race there would be a different bug wearing this test's clothes.
+    struct PerThread
+    {
+        std::vector<ModelBone> boneStorage;
+        std::vector<ModelBone*> bones;
+        std::unique_ptr<BasicEffect> effect;
+        std::unique_ptr<ModelMeshPart> part;
+        std::unique_ptr<ModelMesh> mesh;
+        std::unique_ptr<Model> model;
+        float offset = 0.0f;
+        int boneIndex = 0;
+    };
+
+    std::vector<std::unique_ptr<PerThread>> fixtures;
+    for (int t = 0; t < kThreads; ++t)
+    {
+        auto fixture = std::make_unique<PerThread>();
+        // Threads 0 and 2 get a 2-bone model; 1 and 3 get a 150-bone one, so a shared buffer would
+        // be resized back and forth between the two sizes for the whole run.
+        const int boneCount = (t % 2 == 0) ? 2 : 150;
+        fixture->offset = static_cast<float>(t + 1) * 1000.0f;
+        // The LAST bone, so a leaked buffer from the 2-bone model would also be too short for the
+        // 150-bone one's parent-bone index and not merely hold the wrong value.
+        fixture->boneIndex = boneCount - 1;
+
+        fixture->boneStorage.reserve(static_cast<std::size_t>(boneCount));
+        for (int i = 0; i < boneCount; ++i)
+        {
+            fixture->boneStorage.emplace_back(i, "B" + std::to_string(i));
+        }
+        for (int i = 0; i < boneCount; ++i)
+        {
+            // Flat hierarchy: a bone's absolute transform is its own, so the expected World needs
+            // no traversal and the test stays about the buffer rather than about bones.
+            fixture->boneStorage[static_cast<std::size_t>(i)].setTransformProperty(
+                Matrix::CreateTranslation(fixture->offset + static_cast<float>(i), 0.0f, 0.0f));
+            fixture->bones.push_back(&fixture->boneStorage[static_cast<std::size_t>(i)]);
+        }
+
+        fixture->effect = std::make_unique<BasicEffect>(device);
+        // primitiveCount 0, so ModelMesh::Draw skips the part entirely and no vertex buffer, index
+        // buffer or device work is involved -- Model::Draw's matrix binding is all that runs.
+        fixture->part = std::make_unique<ModelMeshPart>(nullptr, nullptr, 0, 0, 0, 0);
+        fixture->mesh = std::make_unique<ModelMesh>(nullptr, std::vector<ModelMeshPart*>{
+            fixture->part.get()});
+        fixture->part->setEffectProperty(fixture->effect.get());
+        fixture->mesh->setParentBoneProperty(
+            fixture->bones[static_cast<std::size_t>(fixture->boneIndex)]);
+        fixture->model = std::make_unique<Model>(nullptr, fixture->bones,
+                                                  std::vector<ModelMesh*>{fixture->mesh.get()});
+        fixtures.push_back(std::move(fixture));
+    }
+
+    std::atomic<bool> mismatch{false};
+    std::atomic<int> ready{0};
+    std::vector<std::thread> threads;
+    threads.reserve(kThreads);
+
+    for (int t = 0; t < kThreads; ++t)
+    {
+        threads.emplace_back([&fixtures, &mismatch, &ready, t] {
+            PerThread& fixture = *fixtures[static_cast<std::size_t>(t)];
+            const float expected = fixture.offset + static_cast<float>(fixture.boneIndex);
+
+            ready.fetch_add(1);
+            while (ready.load() < kThreads) { std::this_thread::yield(); }
+
+            for (int iteration = 0; iteration < kIterations; ++iteration)
+            {
+                fixture.model->Draw(Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty());
+                // Draw pushes sharedDrawBoneMatrices_[parentBoneIndex] * world into the effect's
+                // World. With one buffer per process, another thread's transforms land here.
+                if (fixture.effect->getWorldProperty().M41 != expected)
+                {
+                    mismatch.store(true);
+                }
+            }
+        });
+    }
+
+    for (std::thread& thread : threads) { thread.join(); }
+    EXPECT_FALSE(mismatch.load())
+        << "an effect was bound with another thread's bone transform -- Model::Draw's scratch "
+           "buffer is shared across threads again (plan_gltf.md GLTF-444)";
 }

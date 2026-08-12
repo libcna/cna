@@ -60,7 +60,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         cameras_ = std::move(value);
     }
-    std::vector<Matrix> Model::sharedDrawBoneMatrices_;
+    thread_local std::vector<Matrix> Model::sharedDrawBoneMatrices_;
 
     Model::Model(GraphicsDevice* /*graphicsDevice*/,
                  std::vector<ModelBone*> bones,
