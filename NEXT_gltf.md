@@ -10,10 +10,10 @@ session needs to start work without re-deriving the state.
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
 - **Working document:** `plan_gltf.md`, 460 numbered rows. **358 closed (`✔` 237, `✅` 121),
-  84 `⬜` remaining**, plus `GLTF-388`'s and `GLTF-449`'s new `✅/⬜` partials, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
-  implementation owed), 3 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-093`, `252`,
-  `265`, `289`, `449`; `GLTF-064`/`067`/`068` were completed on 2026-08-12), 2 `🐛` (open: `GLTF-157`, `421`), and 1 `⛔` (`GLTF-009`,
-  blocked by this environment).
+  84 `⬜` remaining.** The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+  implementation owed), 4 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-093`, `252`,
+  `265`, `289`, `388`, `449`), 2 `🐛` (open: `GLTF-157`, `421`), and 2 `⛔` (`GLTF-009` and
+  `GLTF-439`, each blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
   (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
   `partially-remediated`: `GLTF-241`, whose residue is owned by `GLTF-238`.
@@ -31,9 +31,11 @@ have nothing to do with the code.
 B=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-tests
 export CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache CCACHE_MAXSIZE=30G
 cmake --build "$B" --target CnaTests -j3     # -j3 is the ceiling in openeggbert/CLAUDE.md
-ctest --test-dir "$B" -L gltf-conformance    # the 9-rung ladder
-"$B"/CnaTests                                # the whole suite, from the ROOT
+ctest --test-dir "$B" -L gltf-conformance     # the 10-rung ladder
+"$B"/CnaTests                                 # the whole suite, from the ROOT
+"$B"/CnaTests --gtest_filter='*Gltf*'         # every glTF suite -- note the LEADING star
 scripts/regenerate-gltf-goldens.sh --check    # the corpus, against its own generator
+scripts/regenerate-gltf-goldens.sh --determinism
 ```
 
 Expected as of this writing:
@@ -74,7 +76,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='Gltf*'     # 417 passed, 15 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 437 passed, 23 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -150,47 +152,76 @@ These are not style preferences; they are what made the campaign find things.
 
 ## What is blocked in this environment, and why
 
-45 of the 141 remaining rows cannot be finished here. Do not mark them done, and do not
-work around them by weakening their acceptance.
+**45 of the 84 remaining rows cannot be finished here.** Do not mark them done, and do not work
+around them by weakening their acceptance. Recounted 2026-08-12: `HEADLESS` was added as a second
+renderer, which moved several rows out of the "second renderer" bucket, and `GLTF-404`/`GLTF-419`
+turned out not to need CI at all.
 
 | Blocker | Rows | Note |
 |---|---|---|
-| **L7 / rendered image** | 17 — `GLTF-016`, `175`, `176`, `182`, `189`, `213`, `218`, `235`, `244`, `264`, `268`, `384`–`386`, … | Needs a renderer with a real 3D pipeline. The environment builds `STUB`. `GLTF-235`'s BRDF spot-checks are here because the BRDF exists only inside per-renderer shader source strings — it is not callable from C++. |
-| **second renderer** | 6 — `GLTF-158`, `160`, `168`, `234`, `373`, `398` | Differential validation needs `OPENGLES3`/`VULKAN` built and running. |
-| **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. |
-| **`cna-gltf-viewer` repo** | 7 — `GLTF-128`, `323`, `342`, `425`, `427`, `430`, `431` | A separate repository, not attached to this session. |
-| **third-party assets** | 3 — `GLTF-013`, `341`, `407` | Needs pinned external sample models. |
-| **CI** | 4 — `GLTF-019`, `399`, `404`, `420` | Needs the CI configuration, not reachable from here. |
+| **L7 / rendered image** | 17 — `GLTF-016`, `175`, `176`, `182`, `189`, `213`, `218`, `230`, `235`, `244`, `264`, `268`, `340`, `386`, `387`, `390`, `397` | Needs a renderer with a real 3D pipeline. This environment builds `STUB` and `HEADLESS`, neither of which rasterises. `GLTF-235`'s BRDF spot-checks are here because the BRDF exists only inside per-renderer shader source strings — it is not callable from C++. |
+| **second/third renderer** | 10 — `GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs the comparison; `OPENGLES3`/`VULKAN` need sibling checkouts and a GPU. `GLTF-017`/`382`/`383`/`388` were closable *because* `HEADLESS` builds here. |
+| **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
+| **`cna-gltf-viewer` repo** | 11 — `GLTF-128`, `323`, `342`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
+| **third-party assets** | 6 — `GLTF-013`, `014`, `018`, `341`, `405`–`407`, `411` | Needs pinned, licence-reviewed external sample models. |
+| **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
+| **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |
 
-The remaining **96 are doable in this environment.**
+The remaining **~39 are doable in this environment.**
 
 ## Suggested next clusters
 
 Ordered by value, not by number. Each is a coherent unit with its own tests and one commit.
+Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is superseded.
 
-1. **`GLTF-236` + `GLTF-237` — the material data model.** The largest structural row left.
-   `MeshOut` carries loose material fields; `CNAEXT.md` sketches a `PbrMaterial` carrier. Gated by
-   `GLTF-025`, so it needs a `docs/gltf-api-change-review.md` §1 entry first. `GLTF-244` (material
-   L6/L7 regression) and several Phase 18 rows sit behind it.
-2. ~~**`GLTF-034` + `GLTF-035` — the structured import report.**~~ **Both rows now state their own
-   deferral** (2026-08-12): every drop `GLTF-035` lists already has its report entry and its
-   fixture; what is missing is one structured object to read them from, and the review gate
-   deferred that surface *for want of a consumer* — which is `GLTF-431`, in the viewer's own
-   repository. Do not implement it here without either a consumer in this repository or an
-   explicit decision to revisit the gate.
-3. **Phase 18 effect-boundary rows** — `GLTF-365`, `367`, `368`, `370`–`372`, `377`, `380`–`383`.
-   Most are assertable at L6 through `CaptureDrawParamsEXT` on `STUB`, which is how `GLTF-267` and
-   the lighting rows were done. Check each row for whether it truly needs a renderer before
-   classifying it as blocked.
-4. **`GLTF-343` + `GLTF-344` — `KHR_materials_ior` / `_specular`.** Both are `F0` plumbing and share
-   a shader change; the registry already classifies them `PARSED_BUT_IGNORED` with that reason.
-5. **`GLTF-039` + `GLTF-040` — overflow checks and a container fuzz seed.** `GLTF-102`'s attribute
-   fuzz is the template: seeded, valid-by-construction, asserting a property rather than absence of
-   a crash.
-6. **Phase 23 documentation rows** — `GLTF-445`–`GLTF-457`. Cheap, and several are already
-   *substantially* true (`docs/gltf-conventions.md` and `docs/gltf-conformance.md` have grown
-   throughout); each row wants a specific check rather than new prose. `GLTF-448` (rewrite
-   `CNAEXT.md` §3.2 to match reality) is the one with real risk of being stale.
+1. **Phase 21 viewer rows are the largest *blocked* group and the only path to `GLTF-458`.**
+   `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
+   without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —
+   that is the single most useful thing to tell whoever asks why the milestone is still open.
+2. **`GLTF-236` + `GLTF-237` — the material data model.** The largest structural row left here.
+   `MeshOut` carries loose material fields; `CNAEXT.md` §5.5 sketches a `PbrMaterial` carrier.
+   Note the distinction the review gate turns on: a **`CNA::Graphics::PbrMaterial`** is new public
+   API and needs a `docs/gltf-api-change-review.md` §1 entry first; a purely **internal** grouping
+   inside `CNA::Internal::GltfImport` does not, and would be churn without a behavioural change.
+   Decide which one the row actually wants before writing any of it.
+3. **`GLTF-343` + `GLTF-344` — `KHR_materials_ior` / `_specular`.** Both are `F0` plumbing sharing
+   one shader change. **Read this first:** the shader half cannot be verified here — EasyGL needs
+   sibling `../easy-gl` and `../meta-gl` checkouts, and `GLTF-157`'s lesson is that an unverified
+   renderer change is not a fix. A defensible split is import + effect + `GpuDrawParams` with an
+   analytic L6 check, leaving the shader to a session that can run it, but say so in the row.
+4. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
+   `apt-get install libdraco-dev` — the *cheapest* unblock on the list if the owner allows it, and
+   it turns eight blocked rows into ordinary work.
+5. **Second-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
+   `398`). `scripts/gltf-renderer-parity.sh` already does the comparison; what is missing is a
+   third and fourth renderer to point it at. `OPENGLES3`/`VULKAN` need checkouts and a GPU.
+6. **`GLTF-399` — the 135-asset corpus.** 75 exist. Everything around it is now mechanical: the
+   generator, `--fixture-table` for the inventory row, the size budget, the determinism check and
+   the per-asset exemption rule. Adding fixtures is the one task that scales without new
+   machinery, and `docs/gltf-conformance.md` §3.7 is the guide.
+
+**Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to
+add a fixture and when a document belongs inline instead — both were learned the expensive way.
+
+## What the 2026-08-12 session found (read this before trusting a green run)
+
+Three of the four findings came from **running something that had never run**, which is worth more
+than any single fix:
+
+- **`RuntimeGltfModelTest` was outside every gate.** Its name does not begin with `Gltf`, so the
+  ladder's suite check, its CTest registration and the sanitizer job's `--gtest_filter='Gltf*'` all
+  missed it. Four of its cases had been failing since `GLTF-215` on any renderer with a 3D pipeline;
+  `STUB` skips them, so a green run said nothing. **The filter is `*Gltf*` now — keep the leading
+  star.**
+- **`cgltf_validate` walked bytes before CNA's alignment check refused them.** Found by the new
+  container fuzz under UBSan. Fixed by ordering: the metadata-only checks (alignment, then span
+  arithmetic) now run *before* `cgltf_validate`, so it only ever walks bytes something has vouched
+  for.
+- **Two allocator escapes.** An accessor with no `bufferView` (§3.6.2.1 reads it as zeros, so
+  *nothing in the file bounds its count*) and a `reserve` firing before any decode both surfaced as
+  `std::length_error` from inside the allocator. Both refuse by name now.
+- **`ContentManager` already caches**, so `GLTF-433`'s premise ("re-parsed on every call") was
+  wrong. Two `Load`s of one name return the *same instance* — mutating one mutates "both".
 
 ## Defects found and fixed outside plan rows
 
@@ -211,12 +242,14 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 |---|---|
 | `plan_gltf.md` | The 460-row campaign record. Each closed row carries its own evidence. |
 | `tools/gltf_fixtures/` | The corpus generator. Edit here, never the assets. |
-| `tests/assets/gltf/` | Generated corpus: 69 assets, 338 files, including `manifest.json`'s defect ledger. |
+| `tests/assets/gltf/` | Generated corpus: **75 assets, 364 files**, including `manifest.json`'s defect ledger. Never edited by hand. |
 | `modules/content/src/GltfImport/GltfImportCore.cpp` | The importer. Extraction, skeletons, clips, lights, cameras, the extension registry, the stride table. |
 | `modules/content/src/Xna/ContentManager.cpp` | The runtime `.gltf` loader **and** the `.cnj` reader. Both must agree; several tests assert exactly that. |
 | `tools/gltf_to_cnj/gltf_to_cnj.cpp` | The offline converter — the second loader. |
 | `modules/content/tests/CNA/Internal/GltfImport/` | Every `Gltf*` suite, plus the oracles. |
-| `cmake/UnitTests.cmake` | `CNA_GLTF_CONFORMANCE_RUNGS` — the ladder's single source of truth. |
+| `cmake/UnitTests.cmake` | `CNA_GLTF_CONFORMANCE_RUNGS` — the ladder's single source of truth (10 rungs since the `Perf` one joined). |
+| `scripts/regenerate-gltf-goldens.sh` | Regenerate the corpus, verify it, decode any binary golden that moved, and (`--determinism`) prove two processes emit the same bytes. |
+| `scripts/gltf-renderer-parity.sh` | Compare two build directories; fails on any L1–L5 difference, tolerates only `SKIPPED`-vs-`OK`. |
 | `docs/gltf-conventions.md` | Every decision with a rationale: transforms, mirroring, colour space, effect selection, lighting, animation, extensions. |
 | `docs/gltf-performance.md` | Phase 22's measurements and the decision each led to — the parse/cache costs, the 4× unpack ceiling, the 2× morph duplication, the occlusion codec. Reproduce with `--gtest_filter='GltfPerformance.*' --gtest_output=xml:`. |
 | `docs/gltf-limitations.md` | The inverse: what cannot be carried, what is approximated, and the report field that names each loss. Its §1 is generated from the extension registry and its report fields are checked against the header — see `GltfLimitationsDoc`. |
