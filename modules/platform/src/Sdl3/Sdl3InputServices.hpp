@@ -7,6 +7,7 @@
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/Input/IPlatformTextInput.hpp"
 
+#include <array>
 #include <vector>
 
 namespace CNA::Platform::Sdl3 {
@@ -107,7 +108,7 @@ namespace CNA::Platform::Sdl3 {
         /** @brief Closes every gamepad this service opened. */
         ~Sdl3Gamepad() override;
 
-        /** @brief Rescans connected devices and refreshes every snapshot. */
+        /** @brief Reconciles stable player slots and refreshes every snapshot. */
         void Update() override;
         /** @brief Gets the number of slots. @return The slot count. */
         [[nodiscard]] int GetCount() const override;
@@ -123,6 +124,10 @@ namespace CNA::Platform::Sdl3 {
          * @return The name, or empty when the slot is empty.
          */
         [[nodiscard]] std::string GetName(int index) const override;
+        /** @brief Gets one slot's cached capabilities. @param index Slot. @return Capabilities. */
+        [[nodiscard]] const GamepadCapabilities& GetCapabilities(int index) const override;
+        /** @brief Gets one slot's cached identity. @param index Slot. @return Identity. */
+        [[nodiscard]] const GamepadInfo& GetInfo(int index) const override;
         /**
          * @brief Starts rumble on a device.
          * @param index The slot to rumble.
@@ -133,12 +138,42 @@ namespace CNA::Platform::Sdl3 {
          */
         bool SetRumble(int index, float lowFrequency, float highFrequency,
                        std::uint32_t durationMilliseconds) override;
+        /** @brief Starts trigger rumble. */
+        bool SetTriggerRumble(int index, float left, float right,
+                              std::uint32_t durationMilliseconds) override;
+        /** @brief Sets the RGB light bar. */
+        bool SetLightBar(int index, std::uint8_t red, std::uint8_t green,
+                         std::uint8_t blue) override;
+        /** @brief Reads a pad-local motion sensor. */
+        [[nodiscard]] bool TryGetSensor(int index, GamepadSensor sensor,
+                                        GamepadSensorReading& reading) override;
+        /** @brief Gets the native player indicator. */
+        [[nodiscard]] int GetPlayerIndex(int index) const override;
+        /** @brief Sets the native player indicator. */
+        bool SetPlayerIndex(int index, int playerIndex) override;
+        /** @brief Gets battery state. */
+        [[nodiscard]] GamepadPowerInfo GetPowerInfo(int index) const override;
+        /** @brief Gets a face-button glyph label. */
+        [[nodiscard]] GamepadButtonLabel GetButtonLabel(int index,
+                                                        GamepadButton button) const override;
+        /** @brief Gets the touchpad count. */
+        [[nodiscard]] int GetTouchpadCount(int index) const override;
+        /** @brief Gets one touchpad's finger count. */
+        [[nodiscard]] int GetTouchpadFingerCount(int index, int touchpad) const override;
+        /** @brief Reads one touchpad contact. */
+        [[nodiscard]] bool TryGetTouchpadFinger(int index, int touchpad, int fingerIndex,
+                                                GamepadTouchpadFinger& finger) const override;
 
     private:
         void CloseAll();
+        void CloseSlot(std::size_t slot);
+        [[nodiscard]] void* GetHandle(int index) const;
 
-        std::vector<void*> handles_;
-        std::vector<GamepadSnapshot> snapshots_;
+        std::array<void*, GamepadSlotCount> handles_{};
+        std::array<DeviceId, GamepadSlotCount> deviceIds_{};
+        std::array<GamepadSnapshot, GamepadSlotCount> snapshots_{};
+        std::array<GamepadCapabilities, GamepadSlotCount> capabilities_{};
+        std::array<GamepadInfo, GamepadSlotCount> infos_{};
     };
 
     /** @brief SDL3-backed text input and IME control. */

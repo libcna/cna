@@ -355,88 +355,205 @@ namespace CNA::Platform::Sdl3 {
 
     // --- gamepad (PLAT-82) ---------------------------------------------------------------------
 
+    namespace {
+        std::string CopySdlString(const char* value)
+        {
+            return value != nullptr ? std::string(value) : std::string();
+        }
+
+        bool SamePublishedState(const GamepadSnapshot& left, const GamepadSnapshot& right)
+        {
+            return left.connected == right.connected
+                && left.buttons == right.buttons
+                && left.axes == right.axes;
+        }
+
+    } // namespace
+
     Sdl3Gamepad::~Sdl3Gamepad() { CloseAll(); }
 
     void Sdl3Gamepad::CloseAll()
     {
-        for (void* handle : handles_)
+        for (std::size_t slot = 0; slot < handles_.size(); ++slot)
         {
-            if (handle != nullptr)
-            {
-                SDL_CloseGamepad(static_cast<SDL_Gamepad*>(handle));
-            }
+            CloseSlot(slot);
         }
-        handles_.clear();
+    }
+
+    void Sdl3Gamepad::CloseSlot(const std::size_t slot)
+    {
+        if (handles_[slot] != nullptr)
+        {
+            SDL_CloseGamepad(static_cast<SDL_Gamepad*>(handles_[slot]));
+        }
+        handles_[slot] = nullptr;
+        deviceIds_[slot] = 0;
+        snapshots_[slot] = {};
+        capabilities_[slot] = {};
+        infos_[slot] = {};
+    }
+
+    void* Sdl3Gamepad::GetHandle(const int index) const
+    {
+        if (index < 0 || index >= GamepadSlotCount)
+        {
+            return nullptr;
+        }
+        return handles_[static_cast<std::size_t>(index)];
     }
 
     void Sdl3Gamepad::Update()
     {
-        CloseAll();
-        snapshots_.clear();
-
         int count = 0;
         SDL_JoystickID* ids = SDL_GetGamepads(&count);
-        if (ids == nullptr)
+
+        // Preserve a device's slot and handle while it remains connected. Reopening all devices
+        // every frame loses player assignment, interrupts effects and makes packet numbers refer
+        // to list order rather than a controller. First retire only ids that disappeared.
+        for (std::size_t slot = 0; slot < handles_.size(); ++slot)
         {
-            return;
+            if (deviceIds_[slot] == 0)
+            {
+                continue;
+            }
+            const bool stillPresent = ids != nullptr
+                && std::find(ids, ids + count, static_cast<SDL_JoystickID>(deviceIds_[slot]))
+                    != ids + count;
+            if (!stillPresent)
+            {
+                CloseSlot(slot);
+            }
         }
 
-        handles_.reserve(static_cast<std::size_t>(count));
-        snapshots_.reserve(static_cast<std::size_t>(count));
-
+        // Assign newly connected devices to the first free XNA slot. More than four mapped pads
+        // remain visible to SDL's raw joystick API, but cannot be named by PlayerIndex.
         for (int i = 0; i < count; ++i)
         {
-            SDL_Gamepad* gamepad = SDL_OpenGamepad(ids[i]);
-            handles_.push_back(gamepad);
-
-            GamepadSnapshot snapshot;
-            snapshot.connected = gamepad != nullptr;
-            if (gamepad != nullptr)
+            const DeviceId id = static_cast<DeviceId>(ids[i]);
+            const bool alreadyAssigned = std::find(deviceIds_.begin(), deviceIds_.end(), id)
+                != deviceIds_.end();
+            if (alreadyAssigned)
             {
-                for (int button = 0; button < SDL_GAMEPAD_BUTTON_COUNT; ++button)
-                {
-                    const auto mappedButton = ToGamepadButton(static_cast<SDL_GamepadButton>(button));
-                    if (mappedButton.has_value() &&
-                        SDL_GetGamepadButton(gamepad, static_cast<SDL_GamepadButton>(button)))
-                    {
-                        snapshot.buttons |= static_cast<std::uint32_t>(mappedButton.value());
-                    }
-                }
+                continue;
+            }
 
-                for (int axis = 0; axis < SDL_GAMEPAD_AXIS_COUNT; ++axis)
+            const auto freeSlot = std::find(deviceIds_.begin(), deviceIds_.end(), DeviceId{0});
+            if (freeSlot == deviceIds_.end())
+            {
+                break;
+            }
+            SDL_Gamepad* gamepad = SDL_OpenGamepad(ids[i]);
+            if (gamepad == nullptr)
+            {
+                continue;
+            }
+
+            const std::size_t slot = static_cast<std::size_t>(freeSlot - deviceIds_.begin());
+            deviceIds_[slot] = id;
+            handles_[slot] = gamepad;
+
+            GamepadCapabilities& caps = capabilities_[slot];
+            caps = {};
+            caps.connected = true;
+            if (SDL_Joystick* joystick = SDL_GetGamepadJoystick(gamepad))
+            {
+                caps.kind = ToGamepadKind(SDL_GetJoystickType(joystick));
+            }
+            for (int button = 0; button < SDL_GAMEPAD_BUTTON_COUNT; ++button)
+            {
+                const auto mapped = ToGamepadButton(static_cast<SDL_GamepadButton>(button));
+                if (mapped.has_value()
+                    && SDL_GamepadHasButton(gamepad, static_cast<SDL_GamepadButton>(button)))
                 {
-                    const auto mappedAxis = ToGamepadAxis(static_cast<SDL_GamepadAxis>(axis));
-                    if (!mappedAxis.has_value())
-                    {
-                        continue;
-                    }
-                    const Sint16 raw = SDL_GetGamepadAxis(gamepad, static_cast<SDL_GamepadAxis>(axis));
-                    const float value = NormalizeGamepadAxis(mappedAxis.value(), raw);
-                    if (mappedAxis.value() == GamepadAxis::LeftTrigger ||
-                        mappedAxis.value() == GamepadAxis::RightTrigger)
-                    {
-                        snapshot.triggers.push_back(value);
-                    }
-                    else
-                    {
-                        snapshot.axes.push_back(value);
-                    }
+                    caps.buttons |= static_cast<std::uint32_t>(*mapped);
                 }
             }
-            snapshots_.push_back(std::move(snapshot));
+            for (int axis = 0; axis < SDL_GAMEPAD_AXIS_COUNT; ++axis)
+            {
+                const auto mapped = ToGamepadAxis(static_cast<SDL_GamepadAxis>(axis));
+                if (mapped.has_value()
+                    && SDL_GamepadHasAxis(gamepad, static_cast<SDL_GamepadAxis>(axis)))
+                {
+                    caps.axes |= GamepadAxisBit(*mapped);
+                }
+            }
+            const SDL_PropertiesID properties = SDL_GetGamepadProperties(gamepad);
+            caps.rumble = properties != 0
+                && SDL_GetBooleanProperty(properties, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
+            caps.triggerRumble = properties != 0
+                && SDL_GetBooleanProperty(properties,
+                                          SDL_PROP_GAMEPAD_CAP_TRIGGER_RUMBLE_BOOLEAN, false);
+            caps.lightBar = properties != 0
+                && SDL_GetBooleanProperty(properties, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false);
+            caps.touchpad = SDL_GetNumGamepadTouchpads(gamepad) > 0;
+            caps.gyroscope = SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO);
+            caps.accelerometer = SDL_GamepadHasSensor(gamepad, SDL_SENSOR_ACCEL);
+
+            GamepadInfo& info = infos_[slot];
+            info.name = CopySdlString(SDL_GetGamepadName(gamepad));
+            info.path = CopySdlString(SDL_GetGamepadPath(gamepad));
+            info.serial = CopySdlString(SDL_GetGamepadSerial(gamepad));
+            info.vendor = SDL_GetGamepadVendor(gamepad);
+            info.product = SDL_GetGamepadProduct(gamepad);
+            info.firmwareVersion = SDL_GetGamepadFirmwareVersion(gamepad);
+            info.steamHandle = SDL_GetGamepadSteamHandle(gamepad);
+            info.model = ToGamepadModel(SDL_GetGamepadType(gamepad));
         }
 
         SDL_free(ids);
+
+        // Poll each stable slot into a fixed six-axis array. A missing native axis stays zero at
+        // its own index; it can no longer shift every following value as the old vectors did.
+        for (std::size_t slot = 0; slot < handles_.size(); ++slot)
+        {
+            auto* gamepad = static_cast<SDL_Gamepad*>(handles_[slot]);
+            if (gamepad == nullptr)
+            {
+                continue;
+            }
+
+            GamepadSnapshot next;
+            next.connected = true;
+            for (int button = 0; button < SDL_GAMEPAD_BUTTON_COUNT; ++button)
+            {
+                const auto mapped = ToGamepadButton(static_cast<SDL_GamepadButton>(button));
+                if (mapped.has_value()
+                    && SDL_GetGamepadButton(gamepad, static_cast<SDL_GamepadButton>(button)))
+                {
+                    next.buttons |= static_cast<std::uint32_t>(*mapped);
+                }
+            }
+            for (int axis = 0; axis < SDL_GAMEPAD_AXIS_COUNT; ++axis)
+            {
+                const auto mapped = ToGamepadAxis(static_cast<SDL_GamepadAxis>(axis));
+                if (!mapped.has_value())
+                {
+                    continue;
+                }
+                next.axes[static_cast<std::size_t>(*mapped)] = NormalizeGamepadAxis(
+                    *mapped, SDL_GetGamepadAxis(gamepad, static_cast<SDL_GamepadAxis>(axis)));
+            }
+
+            const GamepadSnapshot& previous = snapshots_[slot];
+            next.packetNumber = previous.packetNumber;
+            if (!SamePublishedState(next, previous))
+            {
+                ++next.packetNumber;
+            }
+            snapshots_[slot] = next;
+            infos_[slot].connectionState =
+                ToGamepadConnectionState(SDL_GetGamepadConnectionState(gamepad));
+        }
     }
 
-    int Sdl3Gamepad::GetCount() const { return static_cast<int>(snapshots_.size()); }
+    int Sdl3Gamepad::GetCount() const { return GamepadSlotCount; }
 
     const GamepadSnapshot& Sdl3Gamepad::GetSnapshot(const int index) const
     {
         // Polling an empty or out-of-range slot is ordinary control flow -- XNA games read all
         // four player indices unconditionally -- so it reports not-connected instead of throwing.
         static const GamepadSnapshot disconnected;
-        if (index < 0 || index >= static_cast<int>(snapshots_.size()))
+        if (index < 0 || index >= GamepadSlotCount)
         {
             return disconnected;
         }
@@ -445,29 +562,145 @@ namespace CNA::Platform::Sdl3 {
 
     std::string Sdl3Gamepad::GetName(const int index) const
     {
-        if (index < 0 || index >= static_cast<int>(handles_.size()) || handles_[static_cast<std::size_t>(index)] == nullptr)
-        {
-            return {};
-        }
-        const char* name = SDL_GetGamepadName(static_cast<SDL_Gamepad*>(handles_[static_cast<std::size_t>(index)]));
-        return name != nullptr ? std::string(name) : std::string();
+        return GetInfo(index).name;
+    }
+
+    const GamepadCapabilities& Sdl3Gamepad::GetCapabilities(const int index) const
+    {
+        static const GamepadCapabilities empty;
+        return index >= 0 && index < GamepadSlotCount
+            ? capabilities_[static_cast<std::size_t>(index)] : empty;
+    }
+
+    const GamepadInfo& Sdl3Gamepad::GetInfo(const int index) const
+    {
+        static const GamepadInfo empty;
+        return index >= 0 && index < GamepadSlotCount
+            ? infos_[static_cast<std::size_t>(index)] : empty;
     }
 
     bool Sdl3Gamepad::SetRumble(const int index, const float lowFrequency, const float highFrequency,
                                 const std::uint32_t durationMilliseconds)
     {
-        if (index < 0 || index >= static_cast<int>(handles_.size()) || handles_[static_cast<std::size_t>(index)] == nullptr)
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        if (gamepad == nullptr)
         {
             return false;
         }
+        return SDL_RumbleGamepad(gamepad, NormalizeGamepadMotorLevel(lowFrequency),
+                                 NormalizeGamepadMotorLevel(highFrequency),
+                                 durationMilliseconds);
+    }
 
-        const auto scale = [](const float value) {
-            const float clamped = value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
-            return static_cast<Uint16>(clamped * 65535.0f);
-        };
+    bool Sdl3Gamepad::SetTriggerRumble(const int index, const float left, const float right,
+                                       const std::uint32_t durationMilliseconds)
+    {
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        return gamepad != nullptr
+            && SDL_RumbleGamepadTriggers(gamepad, NormalizeGamepadMotorLevel(left),
+                                         NormalizeGamepadMotorLevel(right),
+                                         durationMilliseconds);
+    }
 
-        return SDL_RumbleGamepad(static_cast<SDL_Gamepad*>(handles_[static_cast<std::size_t>(index)]),
-                                 scale(lowFrequency), scale(highFrequency), durationMilliseconds);
+    bool Sdl3Gamepad::SetLightBar(const int index, const std::uint8_t red,
+                                  const std::uint8_t green, const std::uint8_t blue)
+    {
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        return gamepad != nullptr && SDL_SetGamepadLED(gamepad, red, green, blue);
+    }
+
+    bool Sdl3Gamepad::TryGetSensor(const int index, const GamepadSensor sensor,
+                                   GamepadSensorReading& reading)
+    {
+        reading = {};
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        if (gamepad == nullptr)
+        {
+            return false;
+        }
+        const SDL_SensorType type = sensor == GamepadSensor::Gyroscope
+            ? SDL_SENSOR_GYRO : SDL_SENSOR_ACCEL;
+        if (!SDL_GamepadHasSensor(gamepad, type))
+        {
+            return false;
+        }
+        if (!SDL_GamepadSensorEnabled(gamepad, type)
+            && !SDL_SetGamepadSensorEnabled(gamepad, type, true))
+        {
+            return false;
+        }
+        float values[3]{};
+        if (!SDL_GetGamepadSensorData(gamepad, type, values, 3))
+        {
+            return false;
+        }
+        reading = {values[0], values[1], values[2]};
+        return true;
+    }
+
+    int Sdl3Gamepad::GetPlayerIndex(const int index) const
+    {
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        return gamepad != nullptr ? SDL_GetGamepadPlayerIndex(gamepad) : -1;
+    }
+
+    bool Sdl3Gamepad::SetPlayerIndex(const int index, const int playerIndex)
+    {
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        return gamepad != nullptr && SDL_SetGamepadPlayerIndex(gamepad, playerIndex);
+    }
+
+    GamepadPowerInfo Sdl3Gamepad::GetPowerInfo(const int index) const
+    {
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        if (gamepad == nullptr)
+        {
+            return {GamepadPowerState::Error, -1};
+        }
+        int percent = -1;
+        return {ToGamepadPowerState(SDL_GetGamepadPowerInfo(gamepad, &percent)), percent};
+    }
+
+    GamepadButtonLabel Sdl3Gamepad::GetButtonLabel(const int index,
+                                                   const GamepadButton button) const
+    {
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        const auto mapped = ToSdlGamepadButton(button);
+        return gamepad != nullptr && mapped.has_value()
+            ? ToGamepadButtonLabel(SDL_GetGamepadButtonLabel(gamepad, *mapped))
+            : GamepadButtonLabel::Unknown;
+    }
+
+    int Sdl3Gamepad::GetTouchpadCount(const int index) const
+    {
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        return gamepad != nullptr ? SDL_GetNumGamepadTouchpads(gamepad) : 0;
+    }
+
+    int Sdl3Gamepad::GetTouchpadFingerCount(const int index, const int touchpad) const
+    {
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        if (gamepad == nullptr || touchpad < 0 || touchpad >= SDL_GetNumGamepadTouchpads(gamepad))
+        {
+            return 0;
+        }
+        return SDL_GetNumGamepadTouchpadFingers(gamepad, touchpad);
+    }
+
+    bool Sdl3Gamepad::TryGetTouchpadFinger(const int index, const int touchpad,
+                                           const int fingerIndex,
+                                           GamepadTouchpadFinger& finger) const
+    {
+        finger = {};
+        auto* gamepad = static_cast<SDL_Gamepad*>(GetHandle(index));
+        if (gamepad == nullptr || touchpad < 0 || fingerIndex < 0
+            || touchpad >= SDL_GetNumGamepadTouchpads(gamepad)
+            || fingerIndex >= SDL_GetNumGamepadTouchpadFingers(gamepad, touchpad))
+        {
+            return false;
+        }
+        return SDL_GetGamepadTouchpadFinger(gamepad, touchpad, fingerIndex, &finger.down,
+                                            &finger.x, &finger.y, &finger.pressure);
     }
 
     // --- text input (PLAT-87) --------------------------------------------------------------------

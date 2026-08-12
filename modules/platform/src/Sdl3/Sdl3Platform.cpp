@@ -103,6 +103,7 @@ namespace CNA::Platform::Sdl3 {
         capabilities.cursorShapes = true;
         capabilities.gamepad = true;
         capabilities.gamepadRumble = true;
+        capabilities.gamepadSensors = true;
         capabilities.textInput = true;
         capabilities.ime = true;
         capabilities.sensors = true;
@@ -113,7 +114,6 @@ namespace CNA::Platform::Sdl3 {
         capabilities.nativeFileDialog = true;
 
         // Still unwired. Each flips true in the task that wires its accessor, not before.
-        //   capabilities.gamepadSensors      PLAT-82 (gyro/accel on the pad itself)
         //   capabilities.tray                PLAT-105
         //   capabilities.camera              PLAT-106
 

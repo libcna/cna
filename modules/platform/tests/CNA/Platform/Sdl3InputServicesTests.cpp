@@ -144,7 +144,7 @@ TEST_F(Sdl3InputTest, RelativeModeRefusesWithNoFocusedWindow)
 TEST_F(Sdl3InputTest, GamepadUpdateIsSafeWithNoDevicesAndNoSubsystem)
 {
     EXPECT_NO_THROW(platform_->GetGamepad()->Update());
-    EXPECT_GE(platform_->GetGamepad()->GetCount(), 0);
+    EXPECT_EQ(platform_->GetGamepad()->GetCount(), GamepadSlotCount);
 }
 
 TEST_F(Sdl3InputTest, AnEmptySlotReportsDisconnectedRatherThanThrowing)
@@ -159,6 +159,8 @@ TEST_F(Sdl3InputTest, AnEmptySlotReportsDisconnectedRatherThanThrowing)
         {
             EXPECT_FALSE(snapshot.connected) << "index " << index;
             EXPECT_EQ(snapshot.buttons, 0u);
+            EXPECT_EQ(snapshot.axes.size(), GamepadAxisCount);
+            EXPECT_EQ(snapshot.packetNumber, 0u);
         }
     }
 }
@@ -168,6 +170,30 @@ TEST_F(Sdl3InputTest, NamingAndRumblingAnAbsentPadAreSafeNoOps)
     platform_->GetGamepad()->Update();
     EXPECT_TRUE(platform_->GetGamepad()->GetName(99).empty());
     EXPECT_FALSE(platform_->GetGamepad()->SetRumble(99, 1.0f, 1.0f, 100));
+}
+
+TEST_F(Sdl3InputTest, OptionalGamepadFeaturesRefuseAnAbsentSlot)
+{
+    IPlatformGamepad* gamepad = platform_->GetGamepad();
+    gamepad->Update();
+
+    EXPECT_FALSE(gamepad->GetCapabilities(99).connected);
+    EXPECT_TRUE(gamepad->GetInfo(99).name.empty());
+    EXPECT_FALSE(gamepad->SetTriggerRumble(99, 1.0f, 1.0f, 100));
+    EXPECT_FALSE(gamepad->SetLightBar(99, 1, 2, 3));
+    GamepadSensorReading reading{1.0f, 2.0f, 3.0f};
+    EXPECT_FALSE(gamepad->TryGetSensor(99, GamepadSensor::Gyroscope, reading));
+    EXPECT_FLOAT_EQ(reading.x, 0.0f);
+    EXPECT_EQ(gamepad->GetPlayerIndex(99), -1);
+    EXPECT_FALSE(gamepad->SetPlayerIndex(99, 2));
+    EXPECT_EQ(gamepad->GetPowerInfo(99).state, GamepadPowerState::Error);
+    EXPECT_EQ(gamepad->GetButtonLabel(99, GamepadButton::A), GamepadButtonLabel::Unknown);
+    EXPECT_EQ(gamepad->GetTouchpadCount(99), 0);
+    EXPECT_EQ(gamepad->GetTouchpadFingerCount(99, 0), 0);
+    GamepadTouchpadFinger finger{true, 1.0f, 1.0f, 1.0f};
+    EXPECT_FALSE(gamepad->TryGetTouchpadFinger(99, 0, 0, finger));
+    EXPECT_FALSE(finger.down);
+    EXPECT_FLOAT_EQ(finger.pressure, 0.0f);
 }
 
 TEST_F(Sdl3InputTest, RumbleStrengthOutOfRangeIsClampedNotWrapped)
@@ -180,9 +206,8 @@ TEST_F(Sdl3InputTest, RumbleStrengthOutOfRangeIsClampedNotWrapped)
 
 TEST_F(Sdl3InputTest, RepeatedUpdatesDoNotLeakGamepadHandles)
 {
-    // Update() reopens every device; without closing the previous handles this leaks one set per
-    // frame. Detectable here only as "does not crash or exhaust handles", but the ASan build in
-    // CI turns a genuine leak into a failure.
+    // A connected id keeps one handle and one player slot; disappeared ids are closed. With no
+    // devices, repeated reconciliation must remain allocation- and handle-stable.
     for (int i = 0; i < 50; ++i)
     {
         platform_->GetGamepad()->Update();

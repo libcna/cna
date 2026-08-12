@@ -8,6 +8,7 @@
 // for that (PLAT-3).
 
 #include "../../../src/Sdl3/Sdl3EventMapper.hpp"
+#include "../../../src/Sdl3/Sdl3GamepadControls.hpp"
 #include "../../../src/Sdl3/Sdl3Scancodes.hpp"
 
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
@@ -15,12 +16,14 @@
 #include <SDL3/SDL.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <string>
 
 namespace {
 
 using namespace CNA::Platform;
 using CNA::Platform::Sdl3::MapSdlEvent;
+using namespace CNA::Platform::Sdl3;
 
 SDL_Event MakeEvent(const SDL_EventType type)
 {
@@ -482,6 +485,8 @@ TEST(Sdl3EventMapperTests, EverySupportedGamepadButtonMapsToCnaVocabulary)
         EXPECT_EQ(button.device, 73u);
         EXPECT_EQ(button.button, testCase.expected);
         EXPECT_TRUE(button.pressed);
+        ASSERT_TRUE(ToSdlGamepadButton(testCase.expected).has_value());
+        EXPECT_EQ(*ToSdlGamepadButton(testCase.expected), testCase.sdl);
     }
 }
 
@@ -498,6 +503,65 @@ TEST(Sdl3EventMapperTests, UnknownGamepadControlsAreNotLeakedAsRawIndices)
     button.gbutton.button = static_cast<Uint8>(SDL_GAMEPAD_BUTTON_COUNT);
     EXPECT_FALSE(MapSdlEvent(button, mapped));
     EXPECT_EQ(GetEventTypeName(mapped), "WindowEvent");
+}
+
+TEST(Sdl3EventMapperTests, GamepadDeviceMetadataUsesOnlyContractEnums)
+{
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_GAMEPAD), GamepadKind::Gamepad);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_WHEEL), GamepadKind::Wheel);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_ARCADE_STICK), GamepadKind::ArcadeStick);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_FLIGHT_STICK), GamepadKind::FlightStick);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_DANCE_PAD), GamepadKind::DancePad);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_GUITAR), GamepadKind::Guitar);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_DRUM_KIT), GamepadKind::DrumKit);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_ARCADE_PAD), GamepadKind::BigButtonPad);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_UNKNOWN), GamepadKind::Unknown);
+
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_XBOX360), GamepadModel::Xbox360);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_XBOXONE), GamepadModel::XboxOne);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_PS4), GamepadModel::PlayStation4);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_PS5), GamepadModel::PlayStation5);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO),
+              GamepadModel::NintendoSwitchPro);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_UNKNOWN), GamepadModel::Unknown);
+
+    EXPECT_EQ(ToGamepadConnectionState(SDL_JOYSTICK_CONNECTION_WIRED),
+              GamepadConnectionState::Wired);
+    EXPECT_EQ(ToGamepadConnectionState(SDL_JOYSTICK_CONNECTION_WIRELESS),
+              GamepadConnectionState::Wireless);
+    EXPECT_EQ(ToGamepadConnectionState(SDL_JOYSTICK_CONNECTION_UNKNOWN),
+              GamepadConnectionState::Unknown);
+}
+
+TEST(Sdl3EventMapperTests, GamepadPowerAndGlyphMappingsAreExhaustive)
+{
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_UNKNOWN), GamepadPowerState::Unknown);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_ERROR), GamepadPowerState::Error);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_ON_BATTERY), GamepadPowerState::OnBattery);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_CHARGING), GamepadPowerState::Charging);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_CHARGED), GamepadPowerState::Charged);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_NO_BATTERY), GamepadPowerState::NoBattery);
+
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_A), GamepadButtonLabel::A);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_B), GamepadButtonLabel::B);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_X), GamepadButtonLabel::X);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_Y), GamepadButtonLabel::Y);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_CROSS), GamepadButtonLabel::Cross);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_CIRCLE), GamepadButtonLabel::Circle);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_SQUARE), GamepadButtonLabel::Square);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE), GamepadButtonLabel::Triangle);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN), GamepadButtonLabel::Unknown);
+}
+
+TEST(Sdl3EventMapperTests, GamepadMotorStrengthClampsAndTreatsNanAsOff)
+{
+    EXPECT_EQ(NormalizeGamepadMotorLevel(-1.0f), 0u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(0.0f), 0u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(0.5f), 32767u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(1.0f), 65535u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(2.0f), 65535u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(std::numeric_limits<float>::infinity()), 65535u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(std::numeric_limits<float>::quiet_NaN()), 0u);
 }
 
 // --- lifecycle and quit (PLAT-37) ---------------------------------------------------------------------

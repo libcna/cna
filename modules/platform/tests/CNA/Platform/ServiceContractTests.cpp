@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <type_traits>
 
 namespace {
@@ -61,7 +62,9 @@ TEST(InputSnapshotTests, SnapshotsDefaultToNothingHeld)
     const GamepadSnapshot gamepad;
     EXPECT_FALSE(gamepad.connected);
     EXPECT_EQ(gamepad.buttons, 0u);
-    EXPECT_TRUE(gamepad.axes.empty());
+    EXPECT_TRUE(std::all_of(gamepad.axes.begin(), gamepad.axes.end(),
+                            [](const float value) { return value == 0.0f; }));
+    EXPECT_EQ(gamepad.packetNumber, 0u);
 }
 
 TEST(InputSnapshotTests, KeyboardSnapshotIsAWholeKeyboardNotAPerKeyQuery)
