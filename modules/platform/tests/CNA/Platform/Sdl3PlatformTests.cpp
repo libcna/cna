@@ -122,29 +122,34 @@ TEST_F(Sdl3PlatformTest, FactoryProducesTheSdl3Platform)
 TEST_F(Sdl3PlatformTest, ReportsTheCapabilitiesSdl3ActuallyHas)
 {
     const PlatformCapabilities capabilities = platform_->GetCapabilities();
-    // The two capabilities that exist specifically because a terminal cannot provide them.
-    EXPECT_TRUE(capabilities.exactKeyboardState);
-    EXPECT_TRUE(capabilities.pixelAccurateMouse);
     EXPECT_TRUE(capabilities.nativeWindowHandle);
     EXPECT_TRUE(capabilities.multipleWindows);
+    EXPECT_TRUE(capabilities.highDpi);
+
+    // exactKeyboardState and pixelAccurateMouse -- the two capabilities that exist because a
+    // terminal cannot provide them -- stay false until PLAT-79/80 wire the keyboard and mouse
+    // services. SDL3 can do both; the contract's rule is that a capability describes what is
+    // reachable now, not what the library is capable of.
+    EXPECT_FALSE(capabilities.exactKeyboardState) << "flips true in PLAT-79";
+    EXPECT_FALSE(capabilities.pixelAccurateMouse) << "flips true in PLAT-80";
 }
 
-TEST_F(Sdl3PlatformTest, HostIndependentCapabilitiesAreAllSupported)
+TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
 {
-    // SDL3 supports everything the contract currently defines EXCEPT what depends on facilities
-    // the host may lack. Asserting all 26 unconditionally was wrong and this test said so once
-    // vulkanSurface became honest: a machine with no Vulkan loader must report false, or the
-    // capability model's promise -- true means the calls work -- stops holding.
+    // Not "SDL3 can do everything": a capability is true only once its service accessor returns
+    // something. The conformance suite found the earlier, aspirational version advertising
+    // gamepad and text input while their accessors returned null.
     const PlatformCapabilities capabilities = platform_->GetCapabilities();
 
-    for (const PlatformCapability capability : AllCapabilities())
-    {
-        if (capability == PlatformCapability::VulkanSurface)
-        {
-            continue;  // host-dependent; covered by the agreement check below
-        }
-        EXPECT_TRUE(Supports(capabilities, capability)) << ToString(capability);
-    }
+    EXPECT_TRUE(capabilities.multipleWindows);
+    EXPECT_TRUE(capabilities.nativeWindowHandle);
+    EXPECT_TRUE(capabilities.surfacePresentation);
+    EXPECT_TRUE(capabilities.clipboard);
+
+    // Phase 5/7 services are not wired yet, so their capabilities must still read false.
+    EXPECT_FALSE(capabilities.gamepad) << "flips true in PLAT-82";
+    EXPECT_FALSE(capabilities.textInput) << "flips true in PLAT-87";
+    EXPECT_FALSE(capabilities.sensors) << "flips true in PLAT-85";
 }
 
 TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)

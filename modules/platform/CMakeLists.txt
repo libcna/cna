@@ -9,11 +9,17 @@
 # (src/Sdl3/, src/Headless/, src/Terminal/) added as those phases land.
 file(GLOB CNA_PLATFORM_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
-# Exactly one implementation is compiled, chosen by CNA_PLATFORM (cmake/PlatformSelection.cmake).
+# The selected implementation, chosen by CNA_PLATFORM (cmake/PlatformSelection.cmake).
 if(CNA_PLATFORM STREQUAL "SDL3")
     file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Sdl3/*.cpp")
     list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
 endif()
+
+# Headless is ALWAYS compiled, whatever CNA_PLATFORM says. The conformance suite (PLAT-116) needs
+# two implementations live in one process to be worth anything, and this one costs nothing to
+# carry: it links no third-party library at all.
+file(GLOB CNA_PLATFORM_HEADLESS_SOURCES CONFIGURE_DEPENDS "src/Headless/*.cpp")
+list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_HEADLESS_SOURCES})
 cna_add_module(cna_platform Platform ${CNA_PLATFORM_SOURCES})
 cna_link_sharp_runtime(cna_platform PUBLIC Core.Base)
 

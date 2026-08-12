@@ -4,6 +4,8 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 
+#include "Headless/HeadlessPlatform.hpp"
+
 #if defined(CNA_PLATFORM_SDL3)
 #  include "Sdl3/Sdl3Platform.hpp"
 #endif
@@ -36,8 +38,15 @@ namespace CNA::Platform {
         }
 #endif
 
-        // Remaining implementations register here as their phases land: HeadlessPlatform
-        // (PLAT-113), TerminalPlatform (PLAT-130). An unknown name refuses rather than
+        // Always available -- see the module's CMakeLists for why it is not gated on
+        // CNA_PLATFORM.
+        if (name == "Headless")
+        {
+            return std::make_unique<Headless::HeadlessPlatform>();
+        }
+
+        // Remaining implementations register here as their phases land: TerminalPlatform
+        // (PLAT-130). An unknown name refuses rather than
         // returning null or a do-nothing stub, which would let a caller believe it had a
         // working platform.
         throw PlatformException(
@@ -59,6 +68,7 @@ namespace CNA::Platform {
 #if defined(CNA_PLATFORM_SDL3)
         available.emplace_back("SDL3");
 #endif
+        available.emplace_back("Headless");
         return available;
     }
 

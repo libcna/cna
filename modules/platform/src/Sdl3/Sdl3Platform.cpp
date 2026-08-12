@@ -72,6 +72,14 @@ namespace CNA::Platform::Sdl3 {
     PlatformCapabilities Sdl3Platform::GetCapabilities() const
     {
         PlatformCapabilities capabilities;
+
+        // A capability is true only when the service behind it is actually wired up. SDL3 can do
+        // all of these in principle, but the contract's rule is that a service is null exactly
+        // when its capability is false -- so advertising one whose accessor still returns null
+        // would break the very promise callers use to decide whether to ask. The conformance
+        // suite caught exactly that and is why this list is conservative rather than aspirational.
+
+        // Windowing and presentation: implemented.
         capabilities.multipleWindows = true;
         capabilities.highDpi = true;
         capabilities.multipleDisplays = true;
@@ -80,26 +88,30 @@ namespace CNA::Platform::Sdl3 {
         capabilities.surfacePresentation = true;
         capabilities.openGlContext = true;
         capabilities.vulkanSurface = HostHasVulkan();
+
+        // System services: implemented.
         capabilities.clipboard = true;
-        capabilities.textInput = true;
-        capabilities.ime = true;
-        // SDL delivers real key-release events and true pixel coordinates -- the two properties
-        // the terminal platform cannot provide, and the reason both are capabilities at all.
-        capabilities.exactKeyboardState = true;
-        capabilities.pixelAccurateMouse = true;
-        capabilities.relativeMouse = true;
-        capabilities.cursorShapes = true;
-        capabilities.gamepad = true;
-        capabilities.gamepadRumble = true;
-        capabilities.gamepadSensors = true;
-        capabilities.haptics = true;
-        capabilities.sensors = true;
         capabilities.powerInfo = true;
-        capabilities.messageBox = true;
-        capabilities.nativeFileDialog = true;
-        capabilities.tray = true;
-        capabilities.camera = true;
         capabilities.managedEntrypoint = true;
+
+        // Input services land in Phase 5 (PLAT-79..87) and the remaining dialog/tray/camera
+        // services in Phase 7 (PLAT-103..106). Each flips true in the task that wires its
+        // accessor, not before.
+        //   capabilities.exactKeyboardState  PLAT-79
+        //   capabilities.pixelAccurateMouse  PLAT-80
+        //   capabilities.relativeMouse       PLAT-80
+        //   capabilities.cursorShapes        PLAT-81
+        //   capabilities.gamepad             PLAT-82
+        //   capabilities.gamepadRumble       PLAT-82
+        //   capabilities.gamepadSensors      PLAT-82
+        //   capabilities.haptics             PLAT-84
+        //   capabilities.sensors             PLAT-85
+        //   capabilities.textInput / ime     PLAT-87
+        //   capabilities.messageBox          PLAT-103
+        //   capabilities.nativeFileDialog    PLAT-104
+        //   capabilities.tray                PLAT-105
+        //   capabilities.camera              PLAT-106
+
         return capabilities;
     }
 
