@@ -4,6 +4,7 @@
 #include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 
 #include "TerminalAnsiWriter.hpp"
+#include "TerminalFrameBudget.hpp"
 #include "TerminalFrameGrid.hpp"
 #include "TerminalSession.hpp"
 
@@ -122,6 +123,39 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] TerminalSize GetGridSize() const;
 
         /**
+         * @brief Gets how many frames have been dropped because the terminal could not keep up.
+         *
+         * A number worth surfacing rather than hiding: dropping frames is the correct behaviour on
+         * a slow link, but a caller seeing a low frame rate deserves to know whether the terminal
+         * or the game is the reason.
+         *
+         * @return The count of dropped frames since this presenter was created.
+         */
+        [[nodiscard]] int GetDroppedFrameCount() const { return droppedFrames_; }
+
+        /**
+         * @brief Gets the write throughput the frame budget currently believes in.
+         *
+         * @return Bytes per second, or zero before any frame has been written.
+         */
+        [[nodiscard]] double GetMeasuredBytesPerSecond() const
+        {
+            return budget_.GetMeasuredBytesPerSecond();
+        }
+
+        /**
+         * @brief Overrides the measured throughput.
+         *
+         * For tests, which cannot make a pseudo-terminal slow.
+         *
+         * @param bytesPerSecond The rate to assume; zero restores "unmeasured".
+         */
+        void SetBytesPerSecondForTesting(double bytesPerSecond)
+        {
+            budget_.SetBytesPerSecondForTesting(bytesPerSecond);
+        }
+
+        /**
          * @brief Gets how many cells the most recent present actually redrew.
          *
          * The measure PLAT-133 exists to move. A still picture should redraw nothing at all; a
@@ -158,8 +192,11 @@ namespace CNA::Platform::Terminal {
         TerminalGrid onScreen_;
         bool haveScreenContents_ = false;
 
+        TerminalFrameBudget budget_;
+
         std::string lastFrame_;
         int lastRedrawnCells_ = 0;
+        int droppedFrames_ = 0;
     };
 
 } // namespace CNA::Platform::Terminal

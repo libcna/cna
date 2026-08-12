@@ -69,7 +69,7 @@ driver themselves, scoped by `--gtest_filter`, which is why they pass.
 
 | Variant | Result |
 |---|---|
-| `cmake-build-debug` | **5762 passed, 0 failed** |
+| `cmake-build-debug` | **5812 passed, 0 failed** |
 | `cmake-build-headless` | **5655 passed, 0 failed** |
 | `cmake-build-devices` | **6471 passed, 0 failed** |
 | `cmake-build-terminal` | **6315 passed, 0 failed** |
@@ -117,7 +117,8 @@ for one later:
 
 ## 3. Where the campaign stands
 
-71 ✅ · 12 🟨 · 66 ⬜ · 5 ⛔ · 1 ❌ across `plan_platform.md`.
+**79 ✅ · 12 🟨 · 58 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **53 %** of the 149
+actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
 - **Phase 1** (the contract) — done. 24 headers under `modules/platform/include/CNA/Platform/`.
@@ -132,8 +133,10 @@ for one later:
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
-- **Phase 10** (terminal) — PLAT-129 (spike), PLAT-130 (skeleton + selection) and PLAT-131
-  (session lifecycle + restoration) done. The
+- **Phase 10** (terminal) — **8 of 13 done**: PLAT-129 (spike), 130 (skeleton + selection), 131
+  (session lifecycle + restoration), 132 (surface presenter), 133 (damage tracking), 134 (colour
+  ladder, landed with 132), 135 (frame budget), 136 (`SIGWINCH`). **Remaining: PLAT-137, 138, 139,
+  140, 141** — see §7. The
   conformance suite already runs green against `Terminal` as a third implementation, so PLAT-141's
   claim holds for the surface that exists today; the row stays open until the capabilities it is
   meant to cover are actually turned on.
@@ -175,6 +178,19 @@ would also pass if the pty quietly reset itself between spawns, or if the echo c
 read false. So the harness has a sixth mode, `leak`, which takes the terminal over and calls
 `_exit()`: no destructor, no `atexit`, no signal handler, genuinely unrecoverable. Its assertions
 are the inverse of the others'. That mode is what makes the other five mean something.
+
+**A pseudo-terminal's buffer is a few kilobytes, and a full truecolor frame is tens.** A test that
+presents a frame to a pty nobody is reading does not fail — it **deadlocks**, because the write
+waits for a reader that is the same thread. `PseudoTerminalDrain` in
+`modules/platform/tests/CNA/Platform/PseudoTerminalHarness.hpp` exists for that and nothing else.
+Any new terminal test that presents a full frame needs one.
+
+**A median beat an exponential average, and the tests are what showed it.** The frame budget has
+two demands that pull against each other: one slow write must not throttle a fast terminal, and a
+link that really degraded must be believed within a few frames. An EMA has one weight controlling
+both, and the first honest attempt failed its own convergence test — 100 MB/s smoothed toward
+10 KB/s over ten frames was still reporting 5.6 MB/s. A median of the last five ignores an outlier
+entirely and follows a sustained change as soon as it fills half the window.
 
 **Twenty-one conformance tests matched no ctest filter and had never run.** `PlatformWindowConformance`
 — the window half of PLAT-116's suite — was invisible to `CnaPlatformTests`, whose filter token
@@ -242,22 +258,47 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-132** (`TerminalSurfacePresenter`).
-   Three things are already built and should be *used*, not re-derived:
-   - **`TerminalSession`** (PLAT-131) takes the terminal over and gives it back on every exit
-     path. It is deliberately not wired into `TerminalPlatform` yet: **PLAT-132 is what starts
-     it**, when it creates the presenter. Do not start it from `AcquireSubsystem(Video)` — the
-     conformance suite acquires video in a real process, so that would hijack the terminal of
-     anyone running the test binary from a shell.
-   - **`TerminalCapabilityProbe`** (PLAT-129/130) answers colour depth and the Kitty question,
-     driven under a real pseudo-terminal.
-   - **`QuantizeFrameToGrid()`, `AsciiCell`, `AsciiGrid` and the `" .:-=+*#%@"` ramp**
-     (`modules/graphics-ext/`) are the RGBA→glyph transform, already written and tested. Reusing
-     them is the reason this phase is cheap.
+1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-137**. Eight of thirteen rows are done
+   (129–136); five remain: **137, 138, 139, 140, 141**.
 
-   Its value beyond the feature is unchanged: an implementation with a genuinely different output
-   model stresses the contract far harder than `HeadlessPlatform`, which implements everything by
-   doing nothing. Every capability gap found so far came from making a real caller work.
+   **What already exists, and must be used rather than re-derived.** Everything is under
+   `modules/platform/src/Terminal/`:
+
+   | File | What it does |
+   |---|---|
+   | `TerminalCapabilityProbe.*` | Detects tty-ness, colour depth and the **Kitty keyboard protocol**. Takes its descriptors as parameters so it is testable under a pty. `hasKittyKeyboard` is the flag PLAT-137 vs PLAT-138 turns on. |
+   | `TerminalSession.*` | Takes the terminal over (raw mode, alternate screen, hidden cursor, optional SGR-1006 mouse) and gives it back on **every** exit path. `TerminalSessionOptions::mouseReporting` is already wired and defaults false — **PLAT-139 turns it on**, it does not need writing. |
+   | `TerminalFrameGrid.*` | RGBA → glyph grid. `TerminalCell` has `operator==` for the diff. |
+   | `TerminalAnsiWriter.*` | Grid → ANSI, all four colour rungs, full frame and diff. |
+   | `TerminalFrameBudget.*` | Median-of-five measured throughput; drops frames rather than blocking. |
+   | `TerminalResizeWatcher.*` | `SIGWINCH` → a flag → a `WindowEvent` at poll time. |
+   | `TerminalSurfacePresenter.*` | Ties them together and **owns the session**. |
+
+   **The one structural decision PLAT-137/138/139 have to respect.** The session starts when the
+   *presenter* is created and not before — not at platform construction, not at
+   `AcquireSubsystem(Video)`. Both of those happen in processes that merely *have* a platform, the
+   conformance suite included, and taking over the terminal of whoever ran the test binary would
+   be a hostile surprise. Keyboard and mouse input therefore need the session too, which means
+   either reading input through the presenter's session or giving `TerminalPlatform` a way to
+   start one on demand for input-only use. **Decide that before writing PLAT-137**, because both
+   137 and 139 depend on it.
+
+   **Testing terminal code in CI.** This environment has no terminal: output is redirected, so
+   `isatty` is false and every interesting path refuses. Two mechanisms already exist and both
+   should be reused:
+   - `PseudoTerminalHarness.hpp` (in `modules/platform/tests/CNA/Platform/`, on `CnaTests`'
+     include path) — `PseudoTerminal`, `PseudoTerminalDrain`, `RunUnderPseudoTerminal`.
+   - Spawned harnesses under `tools/platform/` for anything that insists on the process's own
+     standard descriptors, registered in `cmake/Harnesses.cmake` and given to `CnaTests` as a
+     compile definition in `cmake/UnitTests.cmake`. **Adding one of those definitions rebuilds
+     every test TU**, so expect a long build.
+
+   A test that skips in CI is a test that never runs. This campaign has already been bitten by
+   exactly that once, and both terminal harnesses exist to avoid repeating it.
+
+   **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
+   `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
+
 2. **Phase 4, narrow slice.** PLAT-57's written decision, then PLAT-59/60/61 — the
    `IGraphicsRenderer` interface changes that the PLAT-3 audit says free STUB/HEADLESS/SOFTWARE/
    PORTABLEGL with no per-renderer work. Anything needing an absent dependency is marked

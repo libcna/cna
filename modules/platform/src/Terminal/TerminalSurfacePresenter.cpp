@@ -9,10 +9,19 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 
 namespace CNA::Platform::Terminal {
 
     namespace {
+
+        std::uint64_t NowNanoseconds()
+        {
+            return static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch())
+                    .count());
+        }
 
         /// How much taller a character cell is than it is wide.
         ///
@@ -169,6 +178,34 @@ namespace CNA::Platform::Terminal {
             lastRedrawnCells_ = grid_.columns * grid_.rows;
         }
 
+        if (lastFrame_.empty())
+        {
+            // Nothing changed, so nothing to send and nothing to charge for. Swapping the grids
+            // below is still correct: they are identical.
+            grid_.cells.swap(onScreen_.cells);
+            onScreen_.columns = grid_.columns;
+            onScreen_.rows = grid_.rows;
+            haveScreenContents_ = true;
+            return;
+        }
+
+        // A full redraw is exempt. It happens on the first frame and after a resize, and both are
+        // states where the screen is *wrong* rather than merely stale -- dropping it would leave
+        // the terminal showing nothing, or showing the previous size's picture, until something
+        // else forced a redraw. Dropping a diff is safe precisely because it is a diff.
+        const bool mustSend = !haveScreenContents_;
+        if (!mustSend && !budget_.CanAfford(lastFrame_.size(), NowNanoseconds()))
+        {
+            // Dropped, not queued. The record of what is on screen is left untouched, so the next
+            // frame's diff covers everything that changed since the last frame actually drawn --
+            // which is the only reason dropping is safe at all.
+            ++droppedFrames_;
+            lastFrame_.clear();
+            lastRedrawnCells_ = 0;
+            return;
+        }
+
+        const std::uint64_t writeStarted = NowNanoseconds();
         std::size_t written = 0;
         while (written < lastFrame_.size())
         {
@@ -185,6 +222,10 @@ namespace CNA::Platform::Terminal {
             }
             written += static_cast<std::size_t>(count);
         }
+        // How long the write took is the measurement: a write that blocked reveals the link's
+        // real throughput, and one that returned at once reveals there is no constraint worth
+        // modelling.
+        budget_.ObserveWrite(lastFrame_.size(), NowNanoseconds() - writeStarted);
 
         // Swapped, not copied: the grid just drawn becomes the screen's contents and the old one
         // becomes next frame's scratch, so a steady-state frame allocates nothing.

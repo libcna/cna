@@ -23,7 +23,9 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <string>
+#include <thread>
 
 extern char** environ;
 
@@ -143,6 +145,61 @@ namespace CNA::Platform::TestSupport {
     private:
         int controller_ = -1;
         int device_ = -1;
+    };
+
+    /**
+     * @brief Keeps reading a pseudo-terminal so that writing to it never blocks.
+     *
+     * A pty's buffer is a few kilobytes. A truecolor full-screen frame is tens, so a test that
+     * presents one to a terminal nobody is reading **deadlocks**: the write fills the buffer and
+     * waits for a reader that is the same thread. This is not a hypothetical — it is how the
+     * frame-budget tests first behaved, and the symptom is a hang rather than a failure, which is
+     * considerably worse to diagnose.
+     *
+     * Nothing here inspects what it reads. A test that needs the bytes should use
+     * PseudoTerminal::DrainOutput() instead; this exists purely so the writer can make progress.
+     */
+    class PseudoTerminalDrain
+    {
+    public:
+        /**
+         * @brief Starts draining.
+         *
+         * @param controller The controller end to read from.
+         */
+        explicit PseudoTerminalDrain(const int controller)
+            : thread_([this, controller] {
+                char buffer[4096];
+                while (!stop_.load())
+                {
+                    pollfd waiting{};
+                    waiting.fd = controller;
+                    waiting.events = POLLIN;
+                    if (poll(&waiting, 1, 20) <= 0)
+                    {
+                        continue;
+                    }
+                    if (read(controller, buffer, sizeof(buffer)) <= 0)
+                    {
+                        return;
+                    }
+                }
+            })
+        {
+        }
+
+        ~PseudoTerminalDrain()
+        {
+            stop_.store(true);
+            thread_.join();
+        }
+
+        PseudoTerminalDrain(const PseudoTerminalDrain&) = delete;
+        PseudoTerminalDrain& operator=(const PseudoTerminalDrain&) = delete;
+
+    private:
+        std::atomic<bool> stop_{false};
+        std::thread thread_;
     };
 
     /** @brief What running a harness under a pseudo-terminal produced. */
