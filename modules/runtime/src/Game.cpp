@@ -2,10 +2,12 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 
+#include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
 #include <SDL3/SDL.h>
@@ -17,6 +19,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -28,6 +31,11 @@
 
 namespace Microsoft::Xna::Framework
 {
+    struct Game::PlatformEventBatch
+    {
+        std::vector<CNA::Platform::PlatformEvent> events;
+    };
+
     namespace
     {
         void InitAudio()
@@ -174,6 +182,7 @@ namespace Microsoft::Xna::Framework
 
     Game::Game()
         : platform_(CreateAndInstallPlatform()),
+          eventBatch_(std::make_unique<PlatformEventBatch>()),
           Components_(),
           GraphicsDevice_(),
           Content_(),
@@ -763,8 +772,8 @@ namespace Microsoft::Xna::Framework
         // before the first event pump and before the first Update() (via both Run() and
         // RunOneFrame()). This makes gamepads that were already connected before the first frame get
         // enumerated by SDL (which queues SDL_EVENT_GAMEPAD_ADDED for each), so they are visible to
-        // GamePad::GetState from frame one. SdlInputBridge::ProcessEvent still calls this lazily as a
-        // defensive fallback for any host that pumps events without going through Game's loop.
+        // GamePad::GetState from frame one. The SDL-backed input services retain a lazy fallback
+        // for callers that use them without going through Game's loop.
         CNA::Internal::Input::SdlInputBridge::EnsureGamepadSubsystemInitialized();
 
         Initialize();
@@ -997,56 +1006,68 @@ namespace Microsoft::Xna::Framework
 
     void Game::PollEvents()
     {
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
+        std::vector<CNA::Platform::PlatformEvent>& events = eventBatch_->events;
+        platform_->PollEvents(events);
+
+        for (const CNA::Platform::PlatformEvent& event : events)
         {
-            CNA::Internal::Input::SdlInputBridge::ProcessEvent(event);
+            // Input observes every mapped event first. In particular, Exit() below must not stop
+            // the rest of this batch from reaching the input state machine (PLAT-6 finding 4).
+            CNA::Internal::Input::PlatformInputBridge::ProcessEvent(event);
 
-            switch (event.type)
+            std::visit([this](const auto& platformEvent)
             {
-                case SDL_EVENT_QUIT:
-                    Exit();
-                    break;
+                using Event = std::decay_t<decltype(platformEvent)>;
 
-                case SDL_EVENT_KEY_DOWN:
-                    if (!event.key.repeat)
+                if constexpr (std::is_same_v<Event, CNA::Platform::QuitEvent>)
+                {
+                    Exit();
+                }
+                else if constexpr (std::is_same_v<Event, CNA::Platform::KeyEvent>)
+                {
+                    if (platformEvent.pressed && !platformEvent.repeat)
                     {
-                        if (event.key.key == SDLK_F9)
+                        if (platformEvent.keycode == CNA::Platform::KeyCode::F9)
                             GraphicsDevice_.GetRenderer().DebugSimulateContextLoss();
-                        else if (event.key.key == SDLK_F10)
+                        else if (platformEvent.keycode == CNA::Platform::KeyCode::F10)
                             GraphicsDevice_.GetRenderer().DebugRestoreContext();
                     }
-                    break;
-
-                case SDL_EVENT_WINDOW_RESIZED:
-                case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-                    Window_.updateFromSDL();
-                    break;
-
-                case SDL_EVENT_WILL_ENTER_BACKGROUND:
-                    setIsActiveProperty(false);
-                    break;
-
-                case SDL_EVENT_DID_ENTER_FOREGROUND:
-                    setIsActiveProperty(true);
-                    break;
-
-                // Desktop focus switch (e.g. Alt-Tab), as opposed to the mobile-style
-                // background/foreground events above. Matches FNA's SDL3 platform loop, which sets
-                // game.IsActive = false/true on these same two events
-                // (SDL3_FNAPlatform.cs:1006-1037). Keyboard/mouse state is intentionally NOT
-                // cleared here — see DEC-15 in docs/input-fna-fidelity.md.
-                case SDL_EVENT_WINDOW_FOCUS_LOST:
-                    setIsActiveProperty(false);
-                    break;
-
-                case SDL_EVENT_WINDOW_FOCUS_GAINED:
-                    setIsActiveProperty(true);
-                    break;
-
-                default:
-                    break;
-            }
+                }
+                else if constexpr (std::is_same_v<Event, CNA::Platform::WindowEvent>)
+                {
+                    // Deliberately do not filter by window id and do not consume the size payload:
+                    // both details are observable legacy behaviour captured by PLAT-6.
+                    switch (platformEvent.kind)
+                    {
+                    case CNA::Platform::WindowEventKind::Resized:
+                    case CNA::Platform::WindowEventKind::PixelSizeChanged:
+                        Window_.updateFromSDL();
+                        break;
+                    case CNA::Platform::WindowEventKind::FocusLost:
+                        setIsActiveProperty(false);
+                        break;
+                    case CNA::Platform::WindowEventKind::FocusGained:
+                        setIsActiveProperty(true);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                else if constexpr (std::is_same_v<Event, CNA::Platform::AppLifecycleEvent>)
+                {
+                    switch (platformEvent.kind)
+                    {
+                    case CNA::Platform::AppLifecycleKind::WillEnterBackground:
+                        setIsActiveProperty(false);
+                        break;
+                    case CNA::Platform::AppLifecycleKind::DidEnterForeground:
+                        setIsActiveProperty(true);
+                        break;
+                    case CNA::Platform::AppLifecycleKind::LowMemory:
+                        break;
+                    }
+                }
+            }, event);
         }
     }
 

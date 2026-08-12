@@ -1905,8 +1905,8 @@ namespace CNA::Internal::Input
         }
         return;
 #else
-        // Temporary fallback until PLAT-47 removes this raw event entry point from every platform
-        // configuration. SDL3 production already takes the platform-event path above.
+        // Compatibility fallback for legacy native-event tests in non-SDL3 configurations.
+        // Production Game event delivery no longer reaches this entry point (PLAT-47).
         switch (event.type)
         {
         case SDL_EVENT_MOUSE_MOTION:

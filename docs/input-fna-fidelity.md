@@ -15,11 +15,11 @@ notes); those notices are intact and must not be removed.
 
 FNA is **poll-based**: each frame it re-reads the full device state from SDL
 (`SDL_GetKeyboardState`, `SDL_GetGamepad*`, `SDL_GetTouchFingers`, …). CNA is **event-driven**:
-`SdlInputBridge::ProcessEvent` translates each SDL event and mutates `InputManager`'s accumulated
-state; `Get*State()` reads that snapshot. Input state is therefore updated **at the moment each SDL
-event is processed** (during the host's event pump), not sampled once per frame. The two models are
-behaviorally equivalent for well-formed SDL event streams; the differences below are where they are
-not exactly identical.
+the selected `IPlatform` translates native input into `PlatformEvent`, then
+`PlatformInputBridge::ProcessEvent` mutates `InputManager`'s accumulated state; `Get*State()` reads
+that snapshot. Input state is therefore updated **at the moment each platform event is processed**
+(during the host's event pump), not sampled once per frame. The two models are behaviorally
+equivalent for well-formed event streams; the differences below are where they are not identical.
 
 ---
 

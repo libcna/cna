@@ -32,10 +32,12 @@ namespace CNA::Internal::Input
     {
     public:
         /**
-         * @brief Temporary raw-event adapter used by Game until PLAT-47 migrates its event loop.
+         * @brief Compatibility adapter for legacy SDL-shaped input tests.
          *
          * Input events are converted to `PlatformEvent` and delegated to `PlatformInputBridge`;
-         * this entry point owns no input-state behaviour and is removed with the raw SDL loop.
+         * this entry point owns no production input-state behaviour. `Game` consumes
+         * `PlatformEvent` directly; the adapter remains only while PLAT-90 retires the old native
+         * test doubles.
          */
         static void ProcessEvent(const SDL_Event& event);
 
@@ -47,7 +49,8 @@ namespace CNA::Internal::Input
          * invisible to GamePad::GetState. Idempotent (ref-counted by SDL); safe to call repeatedly.
          * Initializing the subsystem makes SDL enumerate already-connected pads and queue
          * SDL_EVENT_GAMEPAD_ADDED for each, so pads connected before the first frame become visible.
-         * ProcessEvent() calls this lazily on first use; startup code may also call it explicitly.
+         * The compatibility ProcessEvent() adapter calls this lazily on first use; startup code
+         * also calls it explicitly.
          */
         static void EnsureGamepadSubsystemInitialized();
 

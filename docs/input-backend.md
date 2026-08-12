@@ -23,11 +23,12 @@ Describes how CNA wires SDL3 input events to the `Microsoft::Xna::Framework::Inp
 
 ## 1. Overview
 
-Real input behavior flows through one internal bridge and one internal state accumulator:
+Real input behavior flows through one platform event batch, one internal bridge and one internal
+state accumulator:
 
 ```
-SDL_PollEvent  (Game::PollEvents(), called once per frame from Game::Tick())
-  → CNA::Internal::Input::SdlInputBridge::ProcessEvent(event)   // switch on event.type
+IPlatform::PollEvents(batch)  (Game::PollEvents(), once per frame from Game::Tick())
+  → CNA::Internal::Input::PlatformInputBridge::ProcessEvent(event) // visit PlatformEvent
       → CNA::Internal::Input::InputManager::Set*State(...)      // keyboard / mouse / gamepad / touch snapshot
       → Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_On*(...)   // text input / editing
       → Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(...)
@@ -37,19 +38,19 @@ SDL_PollEvent  (Game::PollEvents(), called once per frame from Game::Tick())
       → TouchPanel::Update() → GestureDetector::OnUpdate()   // Hold/Flick timing gestures
 ```
 
-Two classes do the work:
+Three classes define the current event/state boundary:
 
-- **`CNA::Internal::Input::SdlInputBridge`** (`include/CNA/Internal/Input/SdlInputBridge.hpp`,
-  `src/Input/Internal/SdlInputBridge.cpp`) — the single SDL event funnel. `ProcessEvent`
-  is the *only* place that reads an `SDL_Event`; do not add a second event path. It also
-  exposes public static query methods that XNA-layer classes call into directly (not through
-  the event stream): `SetVibration`, `SetTriggerVibration`, `SetLightBar`, `GetGUID`, `GetGyro`,
-  `GetAccelerometer`, `GetCapabilities`, `GetKeyFromScancode`. This dual role — event funnel
-  plus query surface — is intentional; adding a query method here is fine, adding a second
-  event-processing entry point is not.
+- **`CNA::Internal::Input::PlatformInputBridge`**
+  (`include/CNA/Internal/Input/PlatformInputBridge.hpp`) — the single production event funnel.
+  It consumes CNA's SDL-free `PlatformEvent` vocabulary; native translation is performed once by
+  the selected `IPlatform` implementation before the event reaches `Game`.
+- **`CNA::Internal::Input::SdlInputBridge`** retains the still-unmigrated SDL device/query
+  services (`SetVibration`, `GetGUID`, capability queries, etc.). Its raw `ProcessEvent` overload
+  is only a compatibility adapter for legacy SDL-shaped tests and delegates to the platform bridge
+  in an SDL3 build; production `Game` no longer calls it.
 - **`CNA::Internal::Input::InputManager`** (`include/CNA/Internal/Input/InputManager.hpp`,
   `src/Input/Internal/InputManager.cpp`) — accumulates per-device state pushed by
-  `SdlInputBridge` (`Set*State`/`Add*Delta` methods) and hands back immutable XNA state-object
+  `PlatformInputBridge` (`Set*State`/`Add*Delta` methods) and hands back immutable XNA state-object
   snapshots (`Get*State` methods: `GetMouseState`, `GetKeyboardState`, `GetTouchState`,
   `GetGamePadState`, `GetRawGamePadState`). `GamePad::GetState(playerIndex, deadZoneMode)` calls
   `GetRawGamePadState` and applies dead-zone processing itself at the XNA layer, since the same
@@ -67,11 +68,11 @@ Touch additionally has a third internal class:
 
 ---
 
-## 2. SDL3 event → XNA state mapping
+## 2. SDL3 event → PlatformEvent → XNA state mapping
 
-Every case in `SdlInputBridge::ProcessEvent`'s `switch (event.type)`. This is the complete list;
-if an `SDL_Event` type isn't in this table, CNA does not currently handle it (falls through to
-the `default: break;` case).
+`Sdl3EventMapper` first translates the native event into the contract vocabulary; then
+`PlatformInputBridge` applies the mapped alternative. This table describes that end-to-end path.
+An SDL event the mapper does not recognise is intentionally omitted from the platform batch.
 
 | SDL event | InputManager / TouchPanel call | XNA-visible effect |
 |---|---|---|
@@ -128,12 +129,13 @@ every input device:
 - **FNA** re-queries the platform layer fresh on every `Get*State()` call. `Keyboard.GetState()`,
   `Mouse.GetState()`, `GamePad.GetState()`, and `TouchPanel.GetState()` all call into
   `SDL3_FNAPlatform` methods that ask SDL for current state *at call time*.
-- **CNA** is event-driven. `SdlInputBridge::ProcessEvent` accumulates whatever SDL delivers into
-  `InputManager`'s (or `TouchPanel`'s) internal fields as events arrive; `Get*State()` methods
-  just read back that accumulated state — they never touch SDL themselves.
+- **CNA** is event-driven. `PlatformInputBridge::ProcessEvent` accumulates whatever the selected
+  platform delivers into `InputManager`'s (or `TouchPanel`'s) internal fields as events arrive;
+  `Get*State()` methods just read back that accumulated state — they never touch SDL themselves.
 
 What keeps CNA's accumulated state current: `Game::Tick()` (`Game.cpp`) unconditionally calls
-`PollEvents()` → `SDL_PollEvent` → `SdlInputBridge::ProcessEvent` exactly once per frame, before
+`PollEvents()` → `IPlatform::PollEvents(batch)` → `PlatformInputBridge::ProcessEvent` exactly once
+per frame, before
 `Update()`/`Draw()` run, on every code path that reaches a frame (`Run()`→`RunLoop()`→`Tick()`,
 `RunOneFrame()`→`Tick()`, and the Emscripten main-loop callback all funnel through this). As long
 as that per-frame pump keeps happening, the practical behavior is indistinguishable from FNA's
@@ -297,7 +299,7 @@ there is no `mutex`/`atomic`/`thread` anywhere under `src/Input/Internal/` or
 `src/Input/Xna/`). That is deliberate and safe because every access happens on
 one thread:
 
-- **Writes** flow from `Game::PollEvents()` → `SdlInputBridge::ProcessEvent` → `InputManager::Set*`
+- **Writes** flow from `Game::PollEvents()` → `PlatformInputBridge::ProcessEvent` → `InputManager::Set*`
   / `TouchPanel::INTERNAL_onTouchEvent`. `PollEvents()` is called from `Game::Tick()`, on the
   thread that runs the game loop.
 - **Reads** flow from game code calling `Keyboard/Mouse/GamePad/TouchPanel::GetState()` in

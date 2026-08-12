@@ -135,18 +135,20 @@ deleting a feature CNA already ships. Neither is acceptable as a side effect of 
 
 ## 6. The two things that must be done together
 
-**`SdlInputBridge` is the whole job.** It is the only consumer that both fans out to three seams
+**`SdlInputBridge` was the whole event-migration job.** It was the only consumer that both fanned
+out to three seams
 (58 gamepad calls, 13 joystick, 1 keyboard) *and* bypasses them with direct SDL calls of its own:
 subsystem init/quit, window and coordinate mapping, gamepad capability properties, keyboard
 name/scancode translation. It also owns every mapping table — `SDL_SCANCODE_*` ↔ XNA `Keys`,
 `SDL_GAMEPAD_BUTTON_*`, `SDL_GAMEPAD_AXIS_*`, `SDL_JOYSTICK_TYPE_*`, `SDL_POWERSTATE_*`,
-`SDL_KMOD_*`, `SDL_HAT_*`. And its entry point is `ProcessEvent(const SDL_Event&)`, whose single
-production caller is `modules/runtime/src/Game.cpp`.
+`SDL_KMOD_*`, `SDL_HAT_*`. PLAT-78 moved the event-state behavior to
+`PlatformInputBridge::ProcessEvent(const PlatformEvent&)`; PLAT-47 then moved the single production
+caller in `Game.cpp` to `IPlatform::PollEvents(batch)`. The raw SDL overload now exists only as a
+compatibility adapter for legacy tests.
 
-That signature is why **PLAT-47 is blocked on PLAT-78**. `Game::PollEvents` hands every raw
-`SDL_Event` to the bridge before its own switch sees it, so the game loop cannot stop polling SDL
-until the bridge consumes `PlatformEvent`. Running both loops would drain the queue twice and lose
-half the events to whichever ran first.
+That signature was why **PLAT-47 depended on PLAT-78**: running raw and platform loops together
+would have drained one native queue twice. The completed path maps once, drains once, and feeds
+every event to the input bridge before the runtime handles quit/focus/resize/lifecycle behavior.
 
 **A raw SDL handle crosses between two seams.** `CnaExt/Haptics.cpp` calls
 `SdlInputBridge::GetOpenedJoystickHandle(id)` — which returns a raw `SDL_Joystick*` from the
@@ -169,8 +171,8 @@ same change as the joystick migration, not after it.
 
 1. Contract additions first (§3, §4) — each as its own task, each refusable by a second
    implementation.
-2. `SdlInputBridge` → `PlatformEvent` (**PLAT-78**), including the joystick/haptic handle break
-   from §6. This is the largest single piece and it unblocks PLAT-47.
+2. `SdlInputBridge` → `PlatformEvent` (**PLAT-78**, complete), followed by `Game`'s platform-batch
+   event loop (**PLAT-47**, complete).
 3. The four deletions (§2), each re-pointing its XNA-side caller at the platform service.
 4. `SdlGamepadBackend` and `SdlJoystickBackend` replacement.
 5. `SdlHapticBackend`'s effect model, on its own design decision.

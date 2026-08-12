@@ -349,11 +349,14 @@ namespace Microsoft::Xna::Framework
         virtual void Dispose(bool disposing);
 
     private:
+        struct PlatformEventBatch;
+
         // Declared before every other member, and therefore constructed first and destroyed last.
         // The graphics device, the window and the content manager may all reach the platform
         // during their own construction or teardown, so the platform's lifetime has to strictly
         // contain theirs. Member order is the only thing that guarantees that.
         std::unique_ptr<CNA::Platform::IPlatform> platform_;
+        std::unique_ptr<PlatformEventBatch> eventBatch_;
 
         GameComponentCollection Components_;
         Graphics::GraphicsDevice GraphicsDevice_;

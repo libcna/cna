@@ -48,6 +48,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Platform/PlatformFactory.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -239,6 +240,15 @@ namespace
 
 TEST(GameEventSemanticsGoldenTest, ObservableEventSemanticsMatchTheCapturedBaseline)
 {
+    // This script enters through SDL_PushEvent, so only the SDL3 implementation can observe it.
+    // HEADLESS and TERMINAL exercise their event pumps in the platform conformance suite; treating
+    // their intentionally empty native queues as a runtime semantic mismatch would be a false
+    // failure after PLAT-47 moved Game onto the selected platform's PollEvents implementation.
+    if (CNA::Platform::PlatformFactory::GetDefaultName() != "SDL3")
+    {
+        GTEST_SKIP() << "The native SDL event transcript applies to the SDL3 platform build.";
+    }
+
     if (!VideoSubsystemAvailable())
     {
         GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
