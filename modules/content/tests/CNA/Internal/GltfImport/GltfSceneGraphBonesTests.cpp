@@ -41,7 +41,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
@@ -50,6 +52,11 @@
 
 using CnaTest::GltfOracle::CorpusDirectory;
 using CnaTest::GltfOracle::LoadedFixture;
+using CnaTest::GltfOracle::Member;
+using CnaTest::GltfOracle::NumberOr;
+using CnaTest::GltfOracle::Numbers;
+using CnaTest::GltfOracle::Path;
+using CnaTest::GltfOracle::StringOr;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -613,4 +620,84 @@ TEST(GltfDrawTopology, ATriangleListPartIsUnchangedByTheTopologyWork)
     const Microsoft::Xna::Framework::Graphics::ModelMeshPart bare;
     EXPECT_EQ(Microsoft::Xna::Framework::Graphics::PrimitiveType::TriangleList,
               bare.getPrimitiveTypeEXTProperty());
+}
+
+// --- GLTF-228 / GLTF-229 / GLTF-231: the material's alpha and sidedness state -------------------
+
+TEST(GltfMaterialState, EveryAuthoredMaterialPropertyReachesTheEffect)
+{
+    // D7's fixture, end to end through the real loader. The audit's finding was "zero material
+    // fields emitted": a gold factor-only material became a white BasicEffect and not one authored
+    // property survived. Every one of them is asserted here against the fixture's own spec-derived
+    // expectation rather than numbers re-typed into this test.
+    using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
+    using Microsoft::Xna::Framework::Graphics::PbrEffect;
+
+    const LoadedFixture fixture("mat-factor-only-gold");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& expected = Member(
+        Path(fixture.Expected(), "l3.primitives").arrayValue.at(0), "material");
+    ASSERT_EQ(CNA::Internal::JsonType::Object, expected.type);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-factor-only-gold");
+    ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+
+    auto* pbr = dynamic_cast<PbrEffect*>(
+        model.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, pbr) << "a factor-only metallic-roughness material did not select PbrEffect "
+                               "-- GLTF-215's rule was reverted";
+
+    // GLTF-216: the base colour, split across DiffuseColor and Alpha exactly as PbrEffect models it.
+    const std::vector<double> baseColor = Numbers(Member(expected, "baseColorFactor"));
+    ASSERT_EQ(4u, baseColor.size());
+    EXPECT_NEAR(baseColor[0], static_cast<double>(pbr->getDiffuseColorProperty().X), 1e-5);
+    EXPECT_NEAR(baseColor[1], static_cast<double>(pbr->getDiffuseColorProperty().Y), 1e-5);
+    EXPECT_NEAR(baseColor[2], static_cast<double>(pbr->getDiffuseColorProperty().Z), 1e-5);
+    EXPECT_NEAR(baseColor[3], static_cast<double>(pbr->getAlphaProperty()), 1e-5);
+
+    // GLTF-219 / GLTF-221: the scalar factors, no longer gated on a texture map being present.
+    EXPECT_NEAR(NumberOr(expected, "metallicFactor", -1),
+                static_cast<double>(pbr->getMetallicFactorProperty()), 1e-5);
+    EXPECT_NEAR(NumberOr(expected, "roughnessFactor", -1),
+                static_cast<double>(pbr->getRoughnessFactorProperty()), 1e-5);
+
+    // GLTF-228 / GLTF-229 / GLTF-231: the alpha and sidedness state, which had no home at all.
+    EXPECT_EQ("BLEND", StringOr(expected, "alphaMode", "")) << "the fixture stopped authoring BLEND";
+    EXPECT_EQ(AlphaModeEXT::Blend, pbr->getAlphaModeEXTProperty());
+    EXPECT_NEAR(NumberOr(expected, "alphaCutoff", -1),
+                static_cast<double>(pbr->getAlphaCutoffEXTProperty()), 1e-5);
+    EXPECT_TRUE(pbr->getDoubleSidedEXTProperty())
+        << "the material asks for both faces and the flag did not survive import";
+}
+
+TEST(GltfMaterialState, AMaterialThatDeclaresNothingGetsGltfsOwnDefaults)
+{
+    // The converse, and the one that stops the defaults drifting: a primitive with no material at
+    // all is glTF's default material, which is opaque, single-sided, cutoff 0.5 and white.
+    using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
+    using Microsoft::Xna::Framework::Graphics::PbrEffect;
+
+    const LoadedFixture fixture("xf-identity");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ASSERT_EQ(0u, static_cast<std::size_t>(fixture.Data().materials_count))
+        << "this fixture is supposed to declare no material at all";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("xf-identity");
+
+    auto* pbr = dynamic_cast<PbrEffect*>(
+        model.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, pbr) << "glTF's default material is metallic-roughness (GLTF-217)";
+
+    EXPECT_EQ(AlphaModeEXT::Opaque, pbr->getAlphaModeEXTProperty());
+    EXPECT_NEAR(0.5, static_cast<double>(pbr->getAlphaCutoffEXTProperty()), 1e-6);
+    EXPECT_FALSE(pbr->getDoubleSidedEXTProperty());
+    EXPECT_NEAR(1.0, static_cast<double>(pbr->getAlphaProperty()), 1e-6);
+    EXPECT_NEAR(1.0, static_cast<double>(pbr->getMetallicFactorProperty()), 1e-6);
+    EXPECT_NEAR(1.0, static_cast<double>(pbr->getRoughnessFactorProperty()), 1e-6);
 }

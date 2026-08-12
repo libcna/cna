@@ -257,6 +257,16 @@ namespace Microsoft::Xna::Framework::Graphics
     Vector3 SkinnedPbrEffect::getEmissiveFactorProperty() const { return emissiveFactor_; }
     void    SkinnedPbrEffect::setEmissiveFactorProperty(const Vector3& v) { emissiveFactor_ = v; }
 
+    // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Plain carried state: nothing here touches the
+    // device, and the renderer reads it through FillGpuDrawParams like every other material value.
+    AlphaModeEXT SkinnedPbrEffect::getAlphaModeEXTProperty() const { return alphaMode_; }
+    void SkinnedPbrEffect::setAlphaModeEXTProperty(AlphaModeEXT v) { alphaMode_ = v; }
+    float SkinnedPbrEffect::getAlphaCutoffEXTProperty() const { return alphaCutoff_; }
+    void SkinnedPbrEffect::setAlphaCutoffEXTProperty(float v) { alphaCutoff_ = v; }
+    bool SkinnedPbrEffect::getDoubleSidedEXTProperty() const { return doubleSided_; }
+    void SkinnedPbrEffect::setDoubleSidedEXTProperty(bool v) { doubleSided_ = v; }
+
+
     int  SkinnedPbrEffect::getWeightsPerVertexProperty() const { return weightsPerVertex_; }
     void SkinnedPbrEffect::setWeightsPerVertexProperty(int v)
     {

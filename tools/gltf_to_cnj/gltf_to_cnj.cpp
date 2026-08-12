@@ -211,6 +211,10 @@ namespace
             // plan_gltf.md GLTF-216: baseColorFactor, carried as PbrEffect's own DiffuseColor
             // (RGB) and Alpha (A), which the .cnj reader already consumes for every effect.
             Vector4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
+            // plan_gltf.md GLTF-228/GLTF-229/GLTF-231: the material's alpha and sidedness state.
+            std::string alphaMode = "OPAQUE";
+            float alphaCutoff = 0.5f;
+            bool doubleSided = false;
             // Morph target CLI/.cnj serialization: morphFile is the binary sidecar path (empty =
             // no morph targets on this primitive), morphWeights are the default blend weights, and
             // morphWeightTrack (optional) is the "weights" animation channel, if any.
@@ -387,6 +391,9 @@ namespace
                 entry.emissiveFactor = meshOut.emissiveFactor;
                 entry.baseColorFactor = meshOut.baseColorFactor;
                 entry.primitiveTopology = PrimitiveTopologyName(meshOut.topology);
+                entry.alphaMode = AlphaModeEXTName(meshOut.alphaMode);
+                entry.alphaCutoff = meshOut.alphaCutoff;
+                entry.doubleSided = meshOut.doubleSided;
                 entry.vertexColorEnabled = meshOut.colored;
                 entry.morphFile = morphFile;
                 entry.morphWeights = morphWeights;
@@ -561,6 +568,11 @@ namespace
                      << ", \"diffuseColor\": [" << e.baseColorFactor.X << ", " << e.baseColorFactor.Y
                      << ", " << e.baseColorFactor.Z << "]"
                      << ", \"alpha\": " << e.baseColorFactor.W;
+                // Written only when not the glTF default, so an ordinary opaque material's .cnj is
+                // byte-identical to what it was before GLTF-228.
+                if (e.alphaMode != "OPAQUE") { json << ", \"alphaMode\": \"" << e.alphaMode << "\""; }
+                if (e.alphaCutoff != 0.5f)   { json << ", \"alphaCutoff\": " << e.alphaCutoff; }
+                if (e.doubleSided)           { json << ", \"doubleSided\": true"; }
             }
             if (!e.morphFile.empty())
             {

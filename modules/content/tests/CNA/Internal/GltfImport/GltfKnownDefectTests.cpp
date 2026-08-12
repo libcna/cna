@@ -253,84 +253,13 @@ TEST(GltfKnownDefect, D6_RigidNodeAnimationIsImportedButNotYetSerialised)
 
 // --- D7: factor-only PBR material ------------------------------------------------------------------
 
-TEST(GltfKnownDefect, D7_FactorOnlyPbrMaterialKeepsItsFactorsButNotItsAlphaState)
-{
-    // Owned by GLTF-215/216/217/219/221 (landed) and GLTF-228/229/231 (outstanding).
-    //
-    // The claim has moved on with the code. The material is no longer downgraded and its factors
-    // are no longer lost; what is still lost is the alpha and sidedness state, which has nowhere
-    // to go -- MeshOut has no field for it and PbrEffect has no parameter for it.
-    const LoadedFixture fixture("mat-factor-only-gold");
-    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-    const JsonValue& defect = DefectRecord(fixture, "D7");
-    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D7"));
-    const JsonValue& actualRecord = CurrentActual(defect);
+// --- D7: material state --------------------------------------------------------------------------
+//
+// REMEDIATED by GLTF-215 -> GLTF-216/217/219/221 -> GLTF-228/229/231. There is deliberately no
+// known-defect test here any more: with the record marked fixed and its divergentFields empty,
+// GltfConformanceL3 asserts mat-factor-only-gold's material in full, so any of it regressing fails
+// an ordinary green test. GltfMaterialState carries the end-to-end assertions.
 
-    // The file authors a real, non-default material with no texture map of any kind.
-    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().materials_count));
-    const cgltf_material& material = fixture.Data().materials[0];
-    ASSERT_NE(0, material.has_pbr_metallic_roughness);
-    EXPECT_NE(cgltf_alpha_mode_opaque, material.alpha_mode);
-    EXPECT_NE(0, material.double_sided);
-
-    const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
-    ASSERT_EQ(1u, extracted.size());
-    ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
-    const MeshOutDump& dump = extracted[0].dump;
-    const JsonValue& expectedMaterial =
-        Member(Path(fixture.Expected(), "l3.primitives").arrayValue.at(0), "material");
-    ASSERT_EQ(JsonType::Object, expectedMaterial.type);
-
-    // GLTF-215: the material MODEL now selects the effect, so a factor-only metallic-roughness
-    // material reaches PbrEffect -- with no map of any kind, which is exactly what it could never
-    // do before. GLTF-216's stride follows from that.
-    EXPECT_TRUE(dump.usePbr)
-        << "a factor-only material is downgraded again -- GLTF-215's rule was reverted";
-    EXPECT_EQ(BoolOr(actualRecord, "usePbr", false), dump.usePbr);
-    EXPECT_EQ(static_cast<int>(NumberOr(actualRecord, "stride", -1)), dump.stride);
-    EXPECT_FALSE(dump.hasBaseColorImage) << "the fixture authors no texture at all";
-
-    // Every authored FACTOR now survives, compared against the fixture's own spec-derived
-    // expectation rather than against a number re-typed here.
-    const std::vector<double> expectedBaseColor = Numbers(Member(expectedMaterial, "baseColorFactor"));
-    ASSERT_EQ(4u, expectedBaseColor.size());
-    for (std::size_t c = 0; c < 4; ++c)
-    {
-        EXPECT_NEAR(expectedBaseColor[c], static_cast<double>(dump.baseColorFactor[c]), kTolerance)
-            << "baseColorFactor[" << c << "] -- GLTF-216";
-    }
-    EXPECT_NEAR(NumberOr(expectedMaterial, "metallicFactor", -1),
-                static_cast<double>(dump.metallicFactor), kTolerance) << "GLTF-219";
-    EXPECT_NEAR(NumberOr(expectedMaterial, "roughnessFactor", -1),
-                static_cast<double>(dump.roughnessFactor), kTolerance) << "GLTF-219";
-    const std::vector<double> expectedEmissive = Numbers(Member(expectedMaterial, "emissiveFactor"));
-    ASSERT_EQ(3u, expectedEmissive.size());
-    for (std::size_t c = 0; c < 3; ++c)
-    {
-        EXPECT_NEAR(expectedEmissive[c], static_cast<double>(dump.emissiveFactor[c]), kTolerance)
-            << "emissiveFactor[" << c << "] -- GLTF-221";
-    }
-
-    // ...and the ledger agrees with the code about which fields those are, in both directions, so
-    // the record cannot drift away from what the test actually measured.
-    const std::vector<std::string> carried = Strings(Member(actualRecord, "carriedFields"));
-    EXPECT_NE(carried.end(), std::find(carried.begin(), carried.end(), "baseColorFactor"));
-    const std::vector<std::string> lost = Strings(Member(actualRecord, "lostFields"));
-    EXPECT_EQ(lost.end(), std::find(lost.begin(), lost.end(), "baseColorFactor"));
-
-    // What remains: MeshOut has no field for the alpha and sidedness state at all, so there is
-    // nothing to read back here -- its absence IS the defect, and it stays named until
-    // GLTF-228/229/231 give it somewhere to live.
-    for (const char* field : {"alphaMode", "alphaCutoff", "doubleSided"})
-    {
-        EXPECT_NE(lost.end(), std::find(lost.begin(), lost.end(), field))
-            << field << " is no longer recorded as lost -- if it now survives, update D7's record";
-    }
-    const std::vector<std::string> remaining = Strings(Member(defect, "remainingTasks"));
-    EXPECT_NE(remaining.end(), std::find(remaining.begin(), remaining.end(), "GLTF-228"))
-        << "D7 no longer names GLTF-228 as outstanding; if alphaMode landed, mark the defect fixed "
-           "in tools/gltf_fixtures and delete this test";
-}
 
 // --- D8: the skin ancestor chain ---------------------------------------------------------------------
 
@@ -351,12 +280,12 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
     // documented but unproven, which is exactly the failure mode this batch exists to remove. The
     // converse matters just as much: a defect the corpus records as remediated must NOT still have
     // a "still broken" test here, or the file would start lying about the state of the code.
-    const std::set<std::string> open = {"D6", "D7"};
+    const std::set<std::string> open = {"D6"};
     // Remediated defects, and the task that closed each. Their records stay in the corpus as
     // regression witnesses and their fixtures are asserted by the ordinary conformance suites.
     const std::map<std::string, std::string> remediated = {
         {"D1", "GLTF-114"}, {"D2", "GLTF-114"}, {"D3", "GLTF-114"}, {"D4", "GLTF-063"},
-        {"D5", "GLTF-073"}, {"D8", "GLTF-247"}};
+        {"D5", "GLTF-073"}, {"D7", "GLTF-228"}, {"D8", "GLTF-247"}};
 
     const JsonValue& ledger = Member(CorpusManifest(), "defectLedger");
     ASSERT_EQ(JsonType::Array, ledger.type);

@@ -2246,6 +2246,10 @@ namespace Microsoft::Xna::Framework::Content
                                                                     meshOut.baseColorFactor.Y,
                                                                     meshOut.baseColorFactor.Z));
                             pbrFx->setAlphaProperty(meshOut.baseColorFactor.W);
+                            // plan_gltf.md GLTF-228/GLTF-229/GLTF-231.
+                            pbrFx->setAlphaModeEXTProperty(meshOut.alphaMode);
+                            pbrFx->setAlphaCutoffEXTProperty(meshOut.alphaCutoff);
+                            pbrFx->setDoubleSidedEXTProperty(meshOut.doubleSided);
                         }
                         else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get()))
                         {
@@ -2266,6 +2270,9 @@ namespace Microsoft::Xna::Framework::Content
                                                                           meshOut.baseColorFactor.Y,
                                                                           meshOut.baseColorFactor.Z));
                             skinnedPbrFx->setAlphaProperty(meshOut.baseColorFactor.W);
+                            skinnedPbrFx->setAlphaModeEXTProperty(meshOut.alphaMode);
+                            skinnedPbrFx->setAlphaCutoffEXTProperty(meshOut.alphaCutoff);
+                            skinnedPbrFx->setDoubleSidedEXTProperty(meshOut.doubleSided);
                         }
                     }
 
@@ -2504,6 +2511,13 @@ namespace Microsoft::Xna::Framework::Content
                             const float metallicFactor  = JsonFloat(mg, "metallicFactor", 1.0f);
                             const float roughnessFactor = JsonFloat(mg, "roughnessFactor", 1.0f);
                             const auto emissiveFactorArr = JsonFloatArray3(mg, FindKeyArray(mg, "emissiveFactor"));
+                            // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Absent from a .cnj written
+                            // before them, whose defaults are glTF's own -- so an older asset loads
+                            // as the opaque, single-sided material it could only ever have been.
+                            const auto alphaMode = CNA::Internal::GltfImport::AlphaModeEXTFromName(
+                                ExtractJsonStringField(mg, "alphaMode"));
+                            const float alphaCutoff = JsonFloat(mg, "alphaCutoff", 0.5f);
+                            const bool doubleSided = JsonBool(mg, "doubleSided", false);
                             // Morph target CLI/.cnj serialization: "morphTargets" is the binary
                             // sidecar path (BuildMorphBytes' own format, see gltf_to_cnj.cpp),
                             // "morphWeights" the default blend weights, and "morphWeightTrack"
@@ -2813,6 +2827,9 @@ namespace Microsoft::Xna::Framework::Content
                                 pbrFx->setRoughnessFactorProperty(roughnessFactor);
                                 pbrFx->setEmissiveFactorProperty(Vector3(
                                     emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
+                                pbrFx->setAlphaModeEXTProperty(alphaMode);
+                                pbrFx->setAlphaCutoffEXTProperty(alphaCutoff);
+                                pbrFx->setDoubleSidedEXTProperty(doubleSided);
                             } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
                                 auto loadPbrMap = [&](const std::string& file,
                                                       const char* field) -> Graphics::Texture2D* {
@@ -2838,6 +2855,9 @@ namespace Microsoft::Xna::Framework::Content
                                 skinnedPbrFx->setRoughnessFactorProperty(roughnessFactor);
                                 skinnedPbrFx->setEmissiveFactorProperty(Vector3(
                                     emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
+                                skinnedPbrFx->setAlphaModeEXTProperty(alphaMode);
+                                skinnedPbrFx->setAlphaCutoffEXTProperty(alphaCutoff);
+                                skinnedPbrFx->setDoubleSidedEXTProperty(doubleSided);
                             }
 
                             // Task 1115 / CNB-67 (Phase 13C): a "vertexStride": 24

@@ -105,30 +105,36 @@ def mat_factor_only_gold() -> Fixture:
                     "parameter yet and is owned by GLTF-228/GLTF-229/GLTF-231.",
             owning_tasks=["GLTF-215", "GLTF-216", "GLTF-217", "GLTF-219", "GLTF-221",
                           "GLTF-228", "GLTF-229", "GLTF-231"],
-            closed_tasks=["GLTF-215", "GLTF-216", "GLTF-217", "GLTF-219", "GLTF-221"],
-            remaining_tasks=["GLTF-228", "GLTF-229", "GLTF-231"],
-            status="partially-remediated",
-            divergent_fields=["material"],
+            closed_tasks=["GLTF-215", "GLTF-216", "GLTF-217", "GLTF-219", "GLTF-221",
+                          "GLTF-228", "GLTF-229", "GLTF-231"],
+            remaining_tasks=[],
+            status="fixed",
+            divergent_fields=[],
             current_actual={
                 "usePbr": True,
                 "stride": 48,
                 "effect": "PbrEffect",
                 "carriedFields": ["baseColorFactor", "metallicFactor", "roughnessFactor",
-                                  "emissiveFactor"],
-                "lostFields": ["alphaMode", "alphaCutoff", "doubleSided"],
+                                  "emissiveFactor", "alphaMode", "alphaCutoff", "doubleSided"],
+                "lostFields": [],
                 "baseColorFactor": list(_BASE_COLOR_FACTOR),
                 "metallicFactor": _METALLIC_FACTOR,
                 "roughnessFactor": _ROUGHNESS_FACTOR,
                 "emissiveFactor": list(_EMISSIVE_FACTOR),
-                "note": "The material now selects PbrEffect and every authored FACTOR survives: "
-                        "the gold base colour reaches DiffuseColor with its 0.5 alpha, and the "
-                        "metallic/roughness/emissive factors are read for any metallic-roughness "
-                        "material rather than only one that also carried a map. The L5 golden is "
-                        "byte-exact at stride 48, which is what proves the switch rather than "
-                        "merely asserting it. What is still lost is the alpha and sidedness "
-                        "state: MeshOut has no field for alphaMode, alphaCutoff or doubleSided, "
-                        "and PbrEffect has no parameter to put them in -- GLTF-228/229/231 add "
-                        "both, behind the GLTF-025 API-change gate.",
+                "alphaMode": "BLEND",
+                "alphaCutoff": 0.5,
+                "doubleSided": True,
+                "note": "Not one material property is lost any more. The material selects "
+                        "PbrEffect; the gold base colour reaches DiffuseColor with its 0.5 alpha; "
+                        "the metallic/roughness/emissive factors are read for any "
+                        "metallic-roughness material rather than only one that carried a map; and "
+                        "the alpha and sidedness state reaches AlphaModeEXT/AlphaCutoff/"
+                        "DoubleSided on both PBR effects and through the .cnj. The L5 golden is "
+                        "byte-exact at stride 48, which is what proves the effect switch rather "
+                        "than merely asserting it. One boundary is deliberate and recorded in "
+                        "docs/gltf-api-change-review.md §1.4: doubleSided is CARRIED, not applied "
+                        "-- culling is a RasterizerState the application sets, and GLTF-230 owns "
+                        "making it automatic alongside blend state and draw ordering.",
             },
             prior_actual={
                 "usePbr": False,

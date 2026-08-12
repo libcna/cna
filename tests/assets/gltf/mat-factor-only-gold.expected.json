@@ -335,14 +335,8 @@
       "id": "D7",
       "summary": "A factor-only metallic-roughness material was downgraded to BasicEffect and NOT ONE material property survived. The selection rule asked which texture MAPS were present (`normalImage || metallicRoughnessImage`), so a material with every PBR factor and no map could never select PbrEffect -- and because the factor assignments sat behind that same guard, even the fields MeshOut could carry were left at their defaults. GLTF-215 replaced the rule with the material MODEL the file declares, GLTF-217 gave a primitive with no material glTF's own default (which IS metallic-roughness), GLTF-216 added baseColorFactor and carried it to PbrEffect's DiffuseColor/Alpha, and GLTF-219/GLTF-221 ungated the scalar factors. The alpha and sidedness state -- alphaMode, alphaCutoff, doubleSided -- has no MeshOut field or effect parameter yet and is owned by GLTF-228/GLTF-229/GLTF-231.",
       "firstDivergentLayer": "L3",
-      "divergentFields": [
-        "material"
-      ],
-      "divergentFieldsByLayer": {
-        "L3": [
-          "material"
-        ]
-      },
+      "divergentFields": [],
+      "divergentFieldsByLayer": {},
       "owner": "GLTF-MATERIAL",
       "owningTasks": [
         "GLTF-215",
@@ -359,14 +353,13 @@
         "GLTF-216",
         "GLTF-217",
         "GLTF-219",
-        "GLTF-221"
-      ],
-      "remainingTasks": [
+        "GLTF-221",
         "GLTF-228",
         "GLTF-229",
         "GLTF-231"
       ],
-      "status": "partially-remediated",
+      "remainingTasks": [],
+      "status": "fixed",
       "currentActual": {
         "usePbr": true,
         "stride": 48,
@@ -375,13 +368,12 @@
           "baseColorFactor",
           "metallicFactor",
           "roughnessFactor",
-          "emissiveFactor"
-        ],
-        "lostFields": [
+          "emissiveFactor",
           "alphaMode",
           "alphaCutoff",
           "doubleSided"
         ],
+        "lostFields": [],
         "baseColorFactor": [
           1.0,
           0.72,
@@ -395,7 +387,10 @@
           0.1,
           0.0
         ],
-        "note": "The material now selects PbrEffect and every authored FACTOR survives: the gold base colour reaches DiffuseColor with its 0.5 alpha, and the metallic/roughness/emissive factors are read for any metallic-roughness material rather than only one that also carried a map. The L5 golden is byte-exact at stride 48, which is what proves the switch rather than merely asserting it. What is still lost is the alpha and sidedness state: MeshOut has no field for alphaMode, alphaCutoff or doubleSided, and PbrEffect has no parameter to put them in -- GLTF-228/229/231 add both, behind the GLTF-025 API-change gate."
+        "alphaMode": "BLEND",
+        "alphaCutoff": 0.5,
+        "doubleSided": true,
+        "note": "Not one material property is lost any more. The material selects PbrEffect; the gold base colour reaches DiffuseColor with its 0.5 alpha; the metallic/roughness/emissive factors are read for any metallic-roughness material rather than only one that carried a map; and the alpha and sidedness state reaches AlphaModeEXT/AlphaCutoff/DoubleSided on both PBR effects and through the .cnj. The L5 golden is byte-exact at stride 48, which is what proves the effect switch rather than merely asserting it. One boundary is deliberate and recorded in docs/gltf-api-change-review.md \u00a71.4: doubleSided is CARRIED, not applied -- culling is a RasterizerState the application sets, and GLTF-230 owns making it automatic alongside blend state and draw ordering."
       },
       "priorActual": {
         "usePbr": false,

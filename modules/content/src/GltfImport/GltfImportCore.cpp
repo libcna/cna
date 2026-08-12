@@ -1337,6 +1337,26 @@ namespace CNA::Internal::GltfImport
             "triangle-list equivalent.");
     }
 
+    const char* AlphaModeEXTName(Microsoft::Xna::Framework::Graphics::AlphaModeEXT mode)
+    {
+        using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
+        switch (mode)
+        {
+            case AlphaModeEXT::Mask:  return "MASK";
+            case AlphaModeEXT::Blend: return "BLEND";
+            case AlphaModeEXT::Opaque: break;
+        }
+        return "OPAQUE";
+    }
+
+    Microsoft::Xna::Framework::Graphics::AlphaModeEXT AlphaModeEXTFromName(const std::string& name)
+    {
+        using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
+        if (name == "MASK")  { return AlphaModeEXT::Mask; }
+        if (name == "BLEND") { return AlphaModeEXT::Blend; }
+        return AlphaModeEXT::Opaque;
+    }
+
     PrimitiveTopology PrimitiveTopologyFromName(const std::string& name)
     {
         for (int mode = 0; mode <= 6; ++mode)
@@ -1567,6 +1587,20 @@ namespace CNA::Internal::GltfImport
         }
         if (prim.material)
         {
+            // plan_gltf.md GLTF-228/GLTF-229/GLTF-231: the alpha and sidedness state, read for any
+            // material rather than only a PBR-selected one. These are the last three fields of the
+            // factor-only material D7 recorded as entirely lost.
+            using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
+            switch (prim.material->alpha_mode)
+            {
+                case cgltf_alpha_mode_mask:  out.alphaMode = AlphaModeEXT::Mask;  break;
+                case cgltf_alpha_mode_blend: out.alphaMode = AlphaModeEXT::Blend; break;
+                case cgltf_alpha_mode_opaque:
+                default:                     out.alphaMode = AlphaModeEXT::Opaque; break;
+            }
+            out.alphaCutoff = prim.material->alpha_cutoff;
+            out.doubleSided = prim.material->double_sided != 0;
+
             // CNB-97 (Phase 14H): KHR_materials_emissive_strength extends EmissiveFactor's own
             // [0,1] range with a multiplier (real HDR-authored content routinely uses > 1), before
             // the emissive texture (if any) is applied -- glTF's own spec order.

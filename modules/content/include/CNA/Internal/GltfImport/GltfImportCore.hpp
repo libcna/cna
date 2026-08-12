@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -259,6 +260,19 @@ namespace CNA::Internal::GltfImport
         float roughnessFactor = 1.0f;
         /** @brief The material's emissive factor (glTF default black/zero). */
         Microsoft::Xna::Framework::Vector3 emissiveFactor;
+        /**
+         * @brief The material's alpha-coverage mode (glTF default `OPAQUE`).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-228`). `MeshOut` had no field for this
+         * at all, which was the last part of defect D7: an `alphaMode BLEND` material imported as
+         * opaque with nothing anywhere recording that it had asked not to be.
+         */
+        Microsoft::Xna::Framework::Graphics::AlphaModeEXT alphaMode =
+            Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Opaque;
+        /** @brief The alpha threshold a `Mask` material is cut at (glTF default 0.5, `GLTF-229`). */
+        float alphaCutoff = 0.5f;
+        /** @brief Whether the material asks for its back faces to be drawn (`GLTF-231`). */
+        bool doubleSided = false;
         /**
          * @brief True when `usePbr` is true and at least one present PBR map (normal,
          * metallic-roughness, emissive, or occlusion) references a different glTF TEXCOORD set
@@ -673,6 +687,28 @@ namespace CNA::Internal::GltfImport
      * @return The matching topology, or `Triangles` when the name is unknown.
      */
     PrimitiveTopology PrimitiveTopologyFromName(const std::string& name);
+
+    /**
+     * @brief glTF's own spelling of an alpha mode, e.g. "BLEND" (`GLTF-228`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. The specification's names, so a `.cnj` field is
+     * readable against the glTF file it came from without a lookup table.
+     *
+     * @param mode The alpha mode to name.
+     * @return "OPAQUE", "MASK" or "BLEND".
+     */
+    const char* AlphaModeEXTName(Microsoft::Xna::Framework::Graphics::AlphaModeEXT mode);
+
+    /**
+     * @brief Parses an alpha mode from its glTF name; unknown or empty yields `Opaque`.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. `Opaque` is both glTF's default and what a `.cnj`
+     * written before `GLTF-228` means by omitting the field, so an older asset is unaffected.
+     *
+     * @param name The glTF spelling.
+     * @return The matching mode, or `Opaque`.
+     */
+    Microsoft::Xna::Framework::Graphics::AlphaModeEXT AlphaModeEXTFromName(const std::string& name);
 
     /**
      * @brief The XNA `PrimitiveType` a decoded glTF topology is drawn with.

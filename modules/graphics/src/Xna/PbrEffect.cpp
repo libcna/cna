@@ -243,6 +243,16 @@ namespace Microsoft::Xna::Framework::Graphics
     Vector3 PbrEffect::getEmissiveFactorProperty() const { return emissiveFactor_; }
     void    PbrEffect::setEmissiveFactorProperty(const Vector3& v) { emissiveFactor_ = v; }
 
+    // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Plain carried state: nothing here touches the
+    // device, and the renderer reads it through FillGpuDrawParams like every other material value.
+    AlphaModeEXT PbrEffect::getAlphaModeEXTProperty() const { return alphaMode_; }
+    void PbrEffect::setAlphaModeEXTProperty(AlphaModeEXT v) { alphaMode_ = v; }
+    float PbrEffect::getAlphaCutoffEXTProperty() const { return alphaCutoff_; }
+    void PbrEffect::setAlphaCutoffEXTProperty(float v) { alphaCutoff_ = v; }
+    bool PbrEffect::getDoubleSidedEXTProperty() const { return doubleSided_; }
+    void PbrEffect::setDoubleSidedEXTProperty(bool v) { doubleSided_ = v; }
+
+
     void PbrEffect::OnApply()
     {
         if ((dirtyFlags_ & DirtyWorldViewProj) != 0)

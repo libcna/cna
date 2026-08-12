@@ -198,15 +198,14 @@
         "GLTF-216",
         "GLTF-217",
         "GLTF-219",
-        "GLTF-221"
-      ],
-      "remainingTasks": [
+        "GLTF-221",
         "GLTF-228",
         "GLTF-229",
         "GLTF-231"
       ],
+      "remainingTasks": [],
       "firstDivergentLayer": "L3",
-      "status": "partially-remediated",
+      "status": "fixed",
       "fixtures": [
         "mat-factor-only-gold"
       ]
@@ -713,8 +712,8 @@
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 11089,
-      "sha256": "1b186828dbc699896c5087286cd101b70e0371fb01a099c0ccd0568f576be91f"
+      "bytes": 11215,
+      "sha256": "2d5b91f186385a5791841d2352532b253d88629525c3d2773f93fa974484c113"
     },
     {
       "path": "mat-factor-only-gold.glb",

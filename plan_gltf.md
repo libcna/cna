@@ -1881,8 +1881,13 @@ warns instead, which is the one genuinely advisory case. This also unblocks `GLT
 segment glTF leaves implicit in the mode, and the rest as themselves — each reaching its
 `ModelMeshPart` with a real `PrimitiveType` and a §12.3 primitive count.
 
-**Every defect from the original audit is now fixed or partially remediated.** D1–D5 and D8 are
-`fixed`; D6 and D7 are `partially-remediated` with their remaining tasks named. No renderer and
+**P0-K — the material's alpha and sidedness state**: `GLTF-228`, `GLTF-229`, `GLTF-231`.
+**D7 is `fixed`** — not one authored material property is lost any more. One boundary is
+deliberate and recorded: `doubleSided` is *carried*, not *applied*; `GLTF-230` owns making culling
+follow it, at L7.
+
+**Seven of the eight audit defects are `fixed`.** Only **D6** remains `partially-remediated`, on its
+serialisation half alone (`GLTF-294`). No renderer and
 no `cna-gltf-viewer` work has been started.
 
 **Lighting fallback policy (CNAEXT), decided with `GLTF-215`.** Sending every untextured primitive
@@ -2237,10 +2242,10 @@ numerically at L4.*
 | GLTF-225 | `occlusionTexture.strength` | 🐛 | GLTF-025 | Never read. **Accept:** new `PbrEffect::OcclusionStrength`; `mat-occlusion-strength` correct at L7. |
 | GLTF-226 | Occlusion channel is `.r` | ✅ | GLTF-225 | Shader reads `.r`. **Accept:** locked with a three-distinct-channel fixture. |
 | GLTF-227 | Normal-map decode `rgb*2−1` in TBN | ✅ | GLTF-175 | **Accept:** locked at L7. |
-| GLTF-228 | **`alphaMode`** | 🐛 | GLTF-025 | Never read; `PbrEffect` has `uAlphaTest` but nothing configures it. **Accept:** CNAEXT `AlphaModeEXT` (`Opaque`/`Mask`/`Blend`); all three fixtures correct at L7. |
-| GLTF-229 | `alphaCutoff` | 🐛 | GLTF-228 | Default 0.5. **Accept:** `alpha-mask` cuts exactly at the manifest threshold. |
+| GLTF-228 | **`alphaMode`** | ✔ | GLTF-025 | Never read; `PbrEffect` has `uAlphaTest` but nothing configures it. **Accept:** CNAEXT `AlphaModeEXT` (`Opaque`/`Mask`/`Blend`); all three fixtures correct at L7. **Landed** behind the gate (`docs/gltf-api-change-review.md` §1.3), which chose the shape: `AlphaModeEXT` (`Opaque`/`Mask`/`Blend`) declared **once**, in `Microsoft::Xna::Framework::Graphics` rather than on an effect, so `CNAEXT.md` §5.5's separately-sketched `PbrMaterial::AlphaMode` binds to the same type instead of becoming a second enum with a conversion function. Carried on `MeshOut`, through the `.cnj` (written only when not `OPAQUE`, so an ordinary material's `.cnj` is unchanged) and onto both PBR effects. The L7 half of the acceptance criterion waits on `GLTF-009`. |
+| GLTF-229 | `alphaCutoff` | ✔ | GLTF-228 | Default 0.5. **Accept:** `alpha-mask` cuts exactly at the manifest threshold. **Landed:** default `0.5`, carried end-to-end alongside `alphaMode`. Kept even when the mode is not `Mask`, because a material that switches modes must not lose the threshold it authored. |
 | GLTF-230 | `BLEND` needs blend state and draw ordering | ⬜ | GLTF-228 | **Accept:** `alpha-blend` composites correctly; ordering policy documented (CNA does not sort by default). |
-| GLTF-231 | `doubleSided` | 🐛 | GLTF-025 | Never read. **Accept:** `double-sided` renders both faces; a single-sided fixture culls back faces. |
+| GLTF-231 | `doubleSided` | ✔ | GLTF-025 | Never read. **Accept:** `double-sided` renders both faces; a single-sided fixture culls back faces. **Landed as carried state, deliberately not as applied state** (gate §1.4). The flag survives import, the `.cnj` and both effects. **Applying** it is a `RasterizerState::CullMode` change, which in XNA is per-draw device state the application sets — having `Model::Draw` mutate it as a side effect would surprise every XNA caller and collides with `GLTF-230`'s blend-state and draw-ordering work, whose acceptance is an L7 comparison. Recording that boundary is what stops the flag looking implemented while nothing honours it. |
 | GLTF-232 | `doubleSided` interacts with negative-scale winding | ⬜ | GLTF-231, GLTF-116 | **Accept:** a mirrored single-sided fixture still shows its front face. |
 | GLTF-233 | Metallic-roughness channel semantics | ✅ | GLTF-220 | Shader reads `.g` roughness, `.b` metallic — correct per spec. **Accept:** locked with a three-distinct-value fixture. |
 | GLTF-234 | Channel semantics on every renderer | ⬜ | GLTF-233 | **Accept:** the same fixture passes on `OPENGLES3` and `VULKAN`; a swapped G/B would fail. |

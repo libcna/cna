@@ -5,6 +5,7 @@
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectFog.hpp"
@@ -204,6 +205,52 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setEmissiveFactorProperty(const Vector3& value);
 
         /**
+         * @brief Gets how this material's alpha channel is interpreted (glTF §3.9.4).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `AlphaModeEXT::Opaque`, glTF's
+         * own default, so an effect nobody configures behaves exactly as it did before this
+         * existed.
+         *
+         * @return The alpha-coverage mode.
+         */
+        CNAEXT [[nodiscard]] AlphaModeEXT getAlphaModeEXTProperty() const;
+        /** @brief Sets how this material's alpha channel is interpreted. @param value The mode. */
+        CNAEXT void setAlphaModeEXTProperty(AlphaModeEXT value);
+
+        /**
+         * @brief Gets the alpha threshold a `Mask` material is cut at (glTF §3.9.4).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `0.5`, glTF's own default.
+         * Meaningful only when @ref getAlphaModeEXTProperty is `AlphaModeEXT::Mask`; it is carried
+         * regardless, because a material that switches modes must not lose the threshold it
+         * authored.
+         *
+         * @return The alpha cutoff.
+         */
+        CNAEXT [[nodiscard]] float getAlphaCutoffEXTProperty() const;
+        /** @brief Sets the alpha threshold a `Mask` material is cut at. @param value The cutoff. */
+        CNAEXT void setAlphaCutoffEXTProperty(float value);
+
+        /**
+         * @brief Gets whether this material's back faces are drawn (glTF §3.9.5).
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. Defaults to `false`, matching both glTF's
+         * own default and XNA's `CullCounterClockwise`.
+         *
+         * **This is carried state, not applied state.** Culling is a `RasterizerState` the
+         * application sets per draw, and having `Model::Draw` mutate device state as a side effect
+         * would surprise every XNA caller (`docs/gltf-api-change-review.md` §1.4). An application
+         * that wants glTF's sidedness honoured reads this and sets `RasterizerState::CullNone`
+         * itself; `GLTF-230` owns making that automatic alongside blend state and draw ordering.
+         *
+         * @return True when the material asks for both faces to be drawn.
+         */
+        CNAEXT [[nodiscard]] bool getDoubleSidedEXTProperty() const;
+        /** @brief Sets whether this material's back faces are drawn. @param value True for both. */
+        CNAEXT void setDoubleSidedEXTProperty(bool value);
+
+
+        /**
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
          * Populates all 5 texture slots, base color/metallic/roughness/emissive factors,
@@ -255,6 +302,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         float fogStart_ = 0.0f;
         float fogEnd_   = 1.0f;
+
+
+        // plan_gltf.md GLTF-228/GLTF-229/GLTF-231: glTF's material-level alpha and sidedness state.
+        AlphaModeEXT alphaMode_ = AlphaModeEXT::Opaque;
+        float        alphaCutoff_ = 0.5f;
+        bool         doubleSided_ = false;
 
         int dirtyFlags_;
     };
