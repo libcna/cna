@@ -822,6 +822,44 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
+     * @brief What one primitive's morph targets turned into (plan_gltf.md `GLTF-291`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API, and internal for the same reason
+     * @ref NodeGraphReportEXT is: `GLTF-034`'s public report is deferred by the `GLTF-025` gate.
+     *
+     * A morph target may carry any subset of `POSITION`, `NORMAL` and `TANGENT` deltas (§3.7.2.2),
+     * and a target missing one is not an error — it simply does not move that stream. But a
+     * *normal-mapped* surface whose targets carry positions and no tangents deforms with a
+     * rest-pose tangent basis, which lights wrongly and looks like a material bug, so the counts
+     * are worth having rather than inferring from a silently unchanged buffer.
+     */
+    struct MorphReportEXT
+    {
+        /** @brief Morph targets the primitive declares. */
+        int targetCount = 0;
+        /** @brief Targets carrying no `POSITION` deltas. */
+        int targetsWithoutPositions = 0;
+        /** @brief Targets carrying no `NORMAL` deltas. */
+        int targetsWithoutNormals = 0;
+        /** @brief Targets carrying no `TANGENT` deltas. */
+        int targetsWithoutTangents = 0;
+        /** @brief True when the mesh's own default weights are not all zero, so the rest pose is morphed. */
+        bool hasNonZeroDefaultWeights = false;
+    };
+
+    /**
+     * @brief Summarises one extracted primitive's morph targets and its applied default weights.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param mesh The extracted primitive.
+     * @param defaultWeights The default weights the loader is about to apply.
+     * @return The counts described by @ref MorphReportEXT.
+     */
+    MorphReportEXT BuildMorphReportEXT(const MeshOut& mesh,
+                                       const std::vector<float>& defaultWeights);
+
+    /**
      * @brief Summarises an already-built scene graph and its mesh placements.
      *
      * @note CNAEXT — not part of the XNA 4.0 API.

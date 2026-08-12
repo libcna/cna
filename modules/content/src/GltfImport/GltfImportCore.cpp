@@ -2622,6 +2622,20 @@ namespace CNA::Internal::GltfImport
         // normal mapping, so a morphed PBR surface kept its rest-pose tangent basis while its
         // positions and normals moved -- normal mapping then lit the deformed surface with the
         // undeformed basis.
+        // plan_gltf.md GLTF-290: the same sanity bound the .cnj reader has applied since CNB-83.
+        // The two paths load the same content and had different limits: a target count the offline
+        // reader refuses as impossible was accepted here and then allocated, one delta array per
+        // target, from a number the file chose. Refusing at the same threshold on both paths is
+        // what makes the limit a property of CNA rather than of whichever loader was used.
+        constexpr cgltf_size kMaxSaneTargetCount = 100000;
+        if (prim.targets_count > kMaxSaneTargetCount)
+        {
+            throw std::runtime_error(
+                "Primitive '" + name + "' declares " + std::to_string(prim.targets_count) +
+                " morph targets, above the " + std::to_string(kMaxSaneTargetCount) +
+                " CNA accepts on either load path.");
+        }
+
         out.morphPositionDeltas.resize(prim.targets_count);
         out.morphNormalDeltas.resize(prim.targets_count);
         out.morphTangentDeltas.resize(prim.targets_count);
@@ -2923,6 +2937,29 @@ namespace CNA::Internal::GltfImport
     std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data)
     {
         return CollectMeshGroups(data, BuildSceneGraph(data));
+    }
+
+    MorphReportEXT BuildMorphReportEXT(const MeshOut& mesh,
+                                        const std::vector<float>& defaultWeights)
+    {
+        MorphReportEXT report;
+        report.targetCount = static_cast<int>(mesh.morphPositionDeltas.size());
+        for (std::size_t t = 0; t < mesh.morphPositionDeltas.size(); ++t)
+        {
+            if (mesh.morphPositionDeltas[t].empty()) { ++report.targetsWithoutPositions; }
+            if (t >= mesh.morphNormalDeltas.size() || mesh.morphNormalDeltas[t].empty())
+            {
+                ++report.targetsWithoutNormals;
+            }
+            if (t >= mesh.morphTangentDeltas.size() || mesh.morphTangentDeltas[t].empty())
+            {
+                ++report.targetsWithoutTangents;
+            }
+        }
+        report.hasNonZeroDefaultWeights =
+            std::any_of(defaultWeights.begin(), defaultWeights.end(),
+                        [](float w) { return w != 0.0f; });
+        return report;
     }
 
     NodeGraphReportEXT BuildNodeGraphReportEXT(const SceneGraphOut& scene,

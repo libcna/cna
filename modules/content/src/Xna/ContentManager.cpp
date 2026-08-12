@@ -2623,6 +2623,37 @@ namespace Microsoft::Xna::Framework::Content
                         }
                         // GLTF-281: the instancing node's own weights win over the mesh's.
                         morph->Weights = GetMeshDefaultWeights(mesh, targetCount, instance.node);
+
+                        // plan_gltf.md GLTF-291: what the targets actually carry. A target missing
+                        // a delta kind is legal (§3.7.2.2) and simply does not move that stream --
+                        // but a normal-mapped surface whose targets carry positions and no
+                        // tangents deforms with a rest-pose tangent basis, which lights wrongly
+                        // and reads as a material bug. Reported rather than inferred from a
+                        // buffer that silently did not change.
+                        const MorphReportEXT morphReport =
+                            BuildMorphReportEXT(meshOut, morph->Weights);
+                        CNA::Logger::Debug(
+                            "glTF file '" + path + "': primitive '" + meshOut.name + "' has " +
+                            std::to_string(morphReport.targetCount) + " morph target(s); " +
+                            std::to_string(morphReport.targetsWithoutPositions) +
+                            " carry no position deltas, " +
+                            std::to_string(morphReport.targetsWithoutNormals) + " no normal and " +
+                            std::to_string(morphReport.targetsWithoutTangents) +
+                            " no tangent deltas. Default weights are " +
+                            (morphReport.hasNonZeroDefaultWeights ? "non-zero, so the rest pose is "
+                                                                     "already morphed."
+                                                                  : "all zero."));
+                        if (morphReport.targetsWithoutTangents == morphReport.targetCount &&
+                            morphReport.targetsWithoutPositions < morphReport.targetCount &&
+                            meshOut.usePbr)
+                        {
+                            CNA::Logger::Warn(
+                                "glTF file '" + path + "': primitive '" + meshOut.name +
+                                "' morphs its positions but no target carries TANGENT deltas, and "
+                                "its material is normal-mapped. The deformed surface keeps its "
+                                "rest-pose tangent basis, so normal mapping lights it with the "
+                                "undeformed one (GLTF-279/GLTF-291).");
+                        }
                         if (auto weightTrack = ExtractMorphWeightTrack(data, mesh, targetCount))
                         {
                             morph->WeightTrack.Keys.reserve(weightTrack->keys.size());

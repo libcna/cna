@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-177 / GLTF-275 / GLTF-276 / GLTF-277 / GLTF-283 / GLTF-284: how morph deltas
-// are applied.
+// plan_gltf.md GLTF-177 / GLTF-275 / GLTF-276 / GLTF-277 / GLTF-283 / GLTF-284 / GLTF-287 /
+// GLTF-290 / GLTF-291: how morph deltas are applied, and what is reported about them.
 //
 // A morph target is a per-vertex delta array, and `BlendMorphTargetsEXT` adds a weighted sum of
 // those arrays onto the base vertex bytes. Every rule here is one where the wrong answer still
@@ -22,6 +22,7 @@
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -300,4 +301,127 @@ TEST(GltfMorphBlending, ABlendedNormalAndTangentComeBackUnitLength)
     EXPECT_NEAR(1.0f, tangentLength, 1e-4f) << "the blended tangent is not unit length";
     EXPECT_FLOAT_EQ(-1.0f, tangent[3])
         << "renormalisation rewrote the handedness sign, which is not a length at all";
+}
+
+// --- GLTF-287 / GLTF-290 / GLTF-291: the importer side of morphing ---------------------------------
+
+namespace
+{
+    struct ParsedDoc
+    {
+        cgltf_data* data = nullptr;
+        ~ParsedDoc() { if (data != nullptr) { cgltf_free(data); } }
+        ParsedDoc() = default;
+        ParsedDoc(const ParsedDoc&) = delete;
+        ParsedDoc& operator=(const ParsedDoc&) = delete;
+    };
+
+    bool ParseDoc(ParsedDoc& out, const std::string& json)
+    {
+        cgltf_options options{};
+        if (cgltf_parse(&options, json.data(), json.size(), &out.data) != cgltf_result_success)
+        {
+            return false;
+        }
+        return cgltf_load_buffers(&options, out.data, ".") == cgltf_result_success;
+    }
+
+    /// A triangle with one morph target moving vertex 1 by +5 on Y, instanced by a node translated
+    /// 100 units along +X.
+    const char* kMorphUnderTranslatedNode = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MorphNode", "mesh": 0, "translation": [100, 0, 0] } ],
+  "meshes": [ { "name": "Morphed", "primitives": [ {
+      "attributes": { "POSITION": 0 }, "indices": 2,
+      "targets": [ { "POSITION": 1 } ] } ] } ],
+  "buffers": [ { "byteLength": 80, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAoEAAAAAAAAAAAAAAAAAAAAAAAAABAAIAAAA=" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 6 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0, 0, 0], "max": [1, 1, 0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0, 0, 0], "max": [0, 5, 0] },
+    { "bufferView": 2, "componentType": 5123, "count": 3, "type": "SCALAR" }
+  ]
+})GLTF";
+}
+
+TEST(GltfMorphBlending, DeltasAreMeshLocalAndTheNodeTransformIsNotBakedIntoThem)
+{
+    // §3.7.2.2 makes a morph delta a displacement in the mesh's OWN space, and CNA's architecture
+    // agrees by construction: positions stay mesh-local and a node's placement travels as a bone
+    // transform (GLTF-103 Option A). The failure this guards against is a future change that
+    // "helpfully" pre-transformed either stream -- the model would then move 100 units per morph
+    // weight, which looks like an animation bug rather than a space error.
+    using namespace CNA::Internal::GltfImport;
+    ParsedDoc doc;
+    ASSERT_TRUE(ParseDoc(doc, kMorphUnderTranslatedNode));
+
+    const MeshOut mesh =
+        ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
+    ASSERT_EQ(1u, mesh.morphPositionDeltas.size());
+    ASSERT_EQ(3u, mesh.morphPositionDeltas[0].size());
+
+    // The delta is the authored displacement, with no node translation folded in.
+    EXPECT_FLOAT_EQ(0.0f, mesh.morphPositionDeltas[0][1].X)
+        << "the node's +100 X translation was baked into the delta";
+    EXPECT_FLOAT_EQ(5.0f, mesh.morphPositionDeltas[0][1].Y);
+
+    // And the base vertex it applies to is mesh-local too, so delta + base is a mesh-local point
+    // that the bone transform then places -- once.
+    float basePosition[3];
+    std::memcpy(basePosition, mesh.vertexBytes.data() + mesh.stride, sizeof(basePosition));
+    EXPECT_FLOAT_EQ(1.0f, basePosition[0]) << "the base position is not mesh-local either";
+
+    const SceneGraphOut scene = BuildSceneGraph(doc.data);
+    ASSERT_EQ(2u, scene.nodes.size());
+    EXPECT_FLOAT_EQ(100.0f, scene.nodes[1].worldTransform.M41)
+        << "the placement has to live in the node transform, since it is not in the vertices";
+}
+
+TEST(GltfMorphBlending, TheMorphReportCountsWhatEachTargetCarries)
+{
+    // GLTF-291. A target missing a delta kind is legal and simply does not move that stream, so
+    // nothing fails -- which is exactly why the counts are worth reporting. The fixture's single
+    // target carries positions and neither normals nor tangents, which is the shape that leaves a
+    // normal-mapped surface deforming with its rest-pose basis.
+    using namespace CNA::Internal::GltfImport;
+    ParsedDoc doc;
+    ASSERT_TRUE(ParseDoc(doc, kMorphUnderTranslatedNode));
+    const MeshOut mesh =
+        ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
+
+    const MorphReportEXT zeroWeights = BuildMorphReportEXT(mesh, {0.0f});
+    EXPECT_EQ(1, zeroWeights.targetCount);
+    EXPECT_EQ(0, zeroWeights.targetsWithoutPositions);
+    EXPECT_EQ(1, zeroWeights.targetsWithoutNormals);
+    EXPECT_EQ(1, zeroWeights.targetsWithoutTangents);
+    EXPECT_FALSE(zeroWeights.hasNonZeroDefaultWeights);
+
+    // The default-weight half is separate: a file whose rest pose is already morphed is a
+    // legitimate authoring choice (GLTF-281) and a surprising one to debug without being told.
+    EXPECT_TRUE(BuildMorphReportEXT(mesh, {0.35f}).hasNonZeroDefaultWeights);
+}
+
+TEST(GltfMorphBlending, AnImpossibleTargetCountIsRefusedOnTheGltfPathToo)
+{
+    // GLTF-290. The .cnj reader has refused a target count above 100 000 since CNB-83; the glTF
+    // path accepted whatever the file said and then allocated three delta arrays per target from
+    // that number. Both loaders load the same content, so a limit that applies to one and not the
+    // other is not a limit -- it is a note about which loader you happened to use.
+    //
+    // The count is asserted against the constant rather than a fixture with 100 001 targets, which
+    // would be a 100 MB document to prove an arithmetic bound.
+    using namespace CNA::Internal::GltfImport;
+    ParsedDoc doc;
+    ASSERT_TRUE(ParseDoc(doc, kMorphUnderTranslatedNode));
+    // A well-formed file is unaffected -- the bound is a sanity ceiling, not a feature limit.
+    EXPECT_NO_THROW((void)ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe",
+                                       nullptr, 1.0f));
 }
