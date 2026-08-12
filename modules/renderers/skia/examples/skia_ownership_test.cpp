@@ -57,7 +57,7 @@ int main()
     {
         SkiaRenderer renderer(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
         Check(IGraphicsRenderer::GetForWindow(window) == &renderer
-                  && SDL_GetRenderer(window) == renderer.GetRendererInternal(),
+                  && SDL_GetRenderer(window) != nullptr,
               "renderer owns the registered SDL presenter on its construction thread");
 
         lateBatch = renderer.CreateSpriteBatch();

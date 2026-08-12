@@ -55,8 +55,6 @@ namespace CNA::Internal::Renderers::DirectX11
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
 
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 

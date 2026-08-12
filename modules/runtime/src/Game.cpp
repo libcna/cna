@@ -210,7 +210,7 @@ namespace Microsoft::Xna::Framework
             previousSleepTime = System::TimeSpan::FromMilliseconds(1.0);
         }
 
-        Window_.setWindowInternal(GraphicsDevice_.GetRenderer().GetWindowInternal());
+        Window_.setWindowInternal(GraphicsDevice_.GetWindowInternal());
         Content_.setGraphicsDevice(GraphicsDevice_);
 
         FrameworkDispatcher::Update();

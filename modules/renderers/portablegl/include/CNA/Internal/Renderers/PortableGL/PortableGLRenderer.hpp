@@ -295,7 +295,7 @@ namespace CNA::Internal::Renderers::PortableGL
      * PortableGL graphics renderer -- a genuine CPU software OpenGL 3.x-ish renderer built on
      * `rswinkle/PortableGL` (https://github.com/rswinkle/PortableGL, MIT licensed, single C99
      * header). Same architectural shape as the Headless/Software renderers -- no window, no GPU
-     * library, `Present()` is a no-op, `GetWindowInternal()`/`GetRendererInternal()` return null,
+     * library, `Present()` is a no-op, no native window or SDL renderer exists,
      * and pixel truth is exposed via `ReadBackbuffer()` -- but unlike Software's hand-rolled
      * rasterizer, the actual rasterization/shading pipeline is delegated to real PortableGL API
      * calls (`glGenBuffers`/`glBufferData`/`glVertexAttribPointer`, `pglCreateProgram` with real C
@@ -384,11 +384,6 @@ namespace CNA::Internal::Renderers::PortableGL
          * @return `DepthFormat::Depth24Stencil8`'s ordinal, always.
          */
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
-
-        /** @brief Always null: this renderer needs no window. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return nullptr; }
-        /** @brief Always null: this renderer needs no SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         /**
          * @brief Creates a real PortableGL texture object from @p data.

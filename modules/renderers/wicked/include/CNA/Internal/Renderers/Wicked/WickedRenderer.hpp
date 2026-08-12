@@ -996,10 +996,6 @@ namespace CNA::Internal::Renderers::Wicked
          */
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
-        /** @brief The SDL window this renderer presents to. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Always null — this renderer never creates an SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
         /**
          * @brief Reads rendered scene-target pixels back into @p pixels as RGBA8.
          * @param x      Left edge, in logical pixels.

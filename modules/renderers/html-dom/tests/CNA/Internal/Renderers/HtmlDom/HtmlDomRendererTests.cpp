@@ -577,8 +577,6 @@ TEST_F(HtmlDom3DSurfaceTest, CapabilityQueriesReportTheTwoDimensionalBoundaryUpF
     EXPECT_FALSE(renderer.SupportsCapability(CNA::GraphicsCapability::Instancing));
     EXPECT_FALSE(renderer.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput));
     EXPECT_FALSE(renderer.SupportsCapability(CNA::GraphicsCapability::WireFrame));
-    EXPECT_EQ(renderer.GetRendererInternal(), nullptr);
-    EXPECT_EQ(renderer.GetWindowInternal(), FakeWindow());
 }
 
 // plan_html_dom.md HTMLDOM-117: GraphicsCapability::AdditiveBlending is the one capability this

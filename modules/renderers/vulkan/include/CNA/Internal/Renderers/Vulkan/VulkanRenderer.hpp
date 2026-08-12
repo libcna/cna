@@ -1223,8 +1223,6 @@ namespace CNA::Internal::Renderers::Vulkan
             return static_cast<int>(commandBuffers_.size());
         }
 
-        SDL_Window*  GetWindowInternal()   const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer>         CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer>     CreateSpriteBatch() override;

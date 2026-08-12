@@ -1433,18 +1433,6 @@ namespace CNA::Internal::Renderers::Sokol
                                       float& windowX, float& windowY) const override;
 
         /**
-         * @brief Returns the SDL window this renderer renders into.
-         * @return The window; never null for a successfully constructed renderer.
-         */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override;
-
-        /**
-         * @brief Returns null; this renderer does not use SDL_Renderer.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override;
-
-        /**
          * @brief Creates a sokol_gfx-backed 2D texture.
          * @param data Decoded RGBA8 source image.
          * @return The new texture renderer.

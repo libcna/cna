@@ -122,8 +122,6 @@ namespace CNA::Internal::Renderers::Stub
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override {}
 
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return nullptr; }
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

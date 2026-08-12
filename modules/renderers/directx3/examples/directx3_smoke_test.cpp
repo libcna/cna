@@ -10,7 +10,7 @@
 // QueryInterface(IID_IDirectDraw2) fails, so every check below only ever runs against a genuine
 // v2 object -- no separate "did the upgrade happen" CTest is needed on top of that.
 //
-// Check A -- GetWindowInternal() returns a real, non-null window (DIRECTX3 needs a genuine Win32 HWND,
+// Check A -- GameWindow handle returns a real, non-null window (DIRECTX3 needs a genuine Win32 HWND,
 //   obtained from it via SDL_PROP_WINDOW_WIN32_HWND_POINTER, design decision 3).
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color
 //   (RGB and alpha), read from DIRECTX3's own Lockable shadow-backbuffer surface (design decision 4).
@@ -59,7 +59,7 @@ protected:
         auto& renderer = static_cast<DirectX3Renderer&>(dev.GetRenderer());
 
         // Check A: real window.
-        check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DIRECTX3 renderer");
+        check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GraphicsDevice has a real window under the DIRECTX3 renderer");
 
         // Check B: real, correct pixel readback after Clear(), via the shadow-backbuffer surface,
         // including the alpha channel.

@@ -524,8 +524,6 @@ namespace CNA::Internal::Renderers::OpenGLES1
         bool TransformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const override;
 
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

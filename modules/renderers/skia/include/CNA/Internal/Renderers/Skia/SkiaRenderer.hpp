@@ -58,8 +58,6 @@ namespace CNA::Internal::Renderers::Skia
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
 
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return renderer_; }
         /// Returns bounded live-resource counters for raster-renderer diagnostics and debug tests.
         CNAEXT [[nodiscard]] SkiaResourceStats GetResourceStatsEXT() const noexcept
         {

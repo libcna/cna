@@ -523,8 +523,6 @@ namespace CNA::Internal::Renderers::Direct2D
                                       float& windowX, float& windowY) const override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

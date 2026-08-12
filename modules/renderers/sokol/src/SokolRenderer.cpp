@@ -3125,10 +3125,6 @@ namespace CNA::Internal::Renderers::Sokol
         return true;
     }
 
-    SDL_Window* SokolRenderer::GetWindowInternal() const { return window_; }
-
-    SDL_Renderer* SokolRenderer::GetRendererInternal() const { return nullptr; }
-
     // ---------------------------------------------------------------------------------------
     // SokolRenderer -- resource creation
     // ---------------------------------------------------------------------------------------

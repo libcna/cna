@@ -152,19 +152,6 @@ namespace CNA::Internal::Renderers::Metal
          */
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         /**
-         * @brief Returns the SDL window used to create the Metal view.
-         *
-         * @return The non-owning SDL window pointer.
-         */
-        SDL_Window* GetWindowInternal() const override;
-        /**
-         * @brief Returns null because this renderer does not use SDL_Renderer.
-         *
-         * @return Always null.
-         */
-        SDL_Renderer* GetRendererInternal() const override;
-
-        /**
          * @brief Creates an RGBA8 Metal Texture2D renderer resource.
          *
          * @param data Initial dimensions and RGBA8 pixel data.

@@ -75,8 +75,6 @@ namespace CNA::Internal::Renderers::DirectX9
         DirectX9Renderer& operator=(const DirectX9Renderer&) = delete;
 
         // ---- IGraphicsRenderer: pure virtual, real (trivial bookkeeping; no device needed) ----
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;

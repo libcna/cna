@@ -79,11 +79,9 @@ namespace CNA::Internal::Renderers::DirectX5
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
-        SDL_Window* GetWindowInternal() const override;
         // No real IDirectDraw-owned SDL_Renderer exists here at all (this renderer never creates
         // one, unlike SDL_RENDERER) -- always nullptr, same as every other non-SDL_Renderer-based
         // renderer.
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
         // A real letterbox scale+offset transform (uniform scale to fit, centered), recomputed from
         // the real physical SDL_Window size on every call -- shares the exact math Present() itself
         // uses (ComputeLetterbox), so these two are always consistent with what's actually on

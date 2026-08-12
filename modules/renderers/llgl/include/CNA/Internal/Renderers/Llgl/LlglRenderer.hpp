@@ -1274,12 +1274,6 @@ namespace CNA::Internal::Renderers::Llgl
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
 
-        /** @brief Returns the SDL window this renderer presents to. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-
-        /** @brief Returns null: this renderer does not use SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
-
         /**
          * @brief Creates a 2D texture from RGBA8 pixels.
          *

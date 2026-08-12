@@ -592,8 +592,6 @@ namespace CNA::Internal::Renderers::Headless
          */
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
-        SDL_Window* GetWindowInternal() const override { return nullptr; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

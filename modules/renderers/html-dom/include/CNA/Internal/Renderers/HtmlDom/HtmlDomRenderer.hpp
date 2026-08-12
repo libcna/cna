@@ -132,12 +132,6 @@ namespace CNA::Internal::Renderers::HtmlDom
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
 
-        /** @brief Returns the SDL window this renderer draws over. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-
-        /** @brief Always null -- no `SDL_Renderer` exists on this renderer, as on EASYGL. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
-
         /** @brief Always reports DepthFormat::None; no HTML DOM target owns depth/stencil storage. */
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int /*requestedFormat*/) const override
         {

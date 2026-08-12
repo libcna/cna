@@ -947,8 +947,6 @@ namespace CNA::Internal::Renderers::Bgfx
         {
         } // no-op: Bgfx has no logical presentation
         void SetSwapInterval(int interval) override;
-        SDL_Window* GetWindowInternal() const override { return window; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

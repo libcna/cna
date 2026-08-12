@@ -40,7 +40,6 @@
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
 struct SDL_Window;
-struct SDL_Renderer;
 
 namespace Microsoft::Xna::Framework
 {
@@ -1234,7 +1233,6 @@ namespace Microsoft::Xna::Framework::Graphics
             int numVertices, const IndexT* indexData, int indexOffset, int primitiveCount,
             const VertexDeclaration& vertexDeclaration);
 
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const;
         [[nodiscard]] SDL_Window* GetWindowInternal() const;
 
         void createOrAttachWindow();

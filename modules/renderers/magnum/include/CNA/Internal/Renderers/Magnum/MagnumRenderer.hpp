@@ -118,11 +118,6 @@ namespace CNA::Internal::Renderers::Magnum
          */
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
-        /** @brief The SDL window this renderer renders into; never owned. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Always null: this renderer renders through OpenGL, not SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
-
         /**
          * @brief Creates a 2D texture from CPU pixels.
          *

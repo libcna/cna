@@ -1107,10 +1107,8 @@ TEST_F(SvgDom3DSurfaceTest, SetViewportRecordsTheFullRectWithoutThrowing)
     renderer.SetViewport(0, 0, 800, 480, 0.0f, 1.0f);
 }
 
-TEST_F(SvgDom3DSurfaceTest, WindowAndRendererInternalAccessorsAreHonest)
+TEST_F(SvgDom3DSurfaceTest, AppliedDepthStencilFormatReportsNoDepthStorage)
 {
-    EXPECT_EQ(renderer.GetWindowInternal(), FakeWindow());
-    EXPECT_EQ(renderer.GetRendererInternal(), nullptr);
     EXPECT_EQ(renderer.GetAppliedDepthStencilFormatEXT(3), 0);
 }
 

@@ -29,7 +29,6 @@
 #include "CNA/GraphicsCapability.hpp"
 
 struct SDL_Window;
-struct SDL_Renderer;
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
 
@@ -1404,10 +1403,6 @@ namespace CNA::Internal::Renderers
         /// to place the OS cursor correctly on a scaled/letterboxed window.
         virtual bool TransformLogicalToWindow(float logX, float logY,
                                               float& windowX, float& windowY) const { return false; }
-        // TODO: SDL dependency should be abstracted later
-        virtual SDL_Window* GetWindowInternal() const = 0;
-        virtual SDL_Renderer* GetRendererInternal() const = 0;
-
         virtual std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) = 0;
         virtual std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() = 0;
 

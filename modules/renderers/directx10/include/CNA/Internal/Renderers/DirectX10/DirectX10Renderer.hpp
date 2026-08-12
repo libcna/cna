@@ -75,8 +75,6 @@ namespace CNA::Internal::Renderers::DirectX10
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
-        SDL_Window* GetWindowInternal() const override;
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         // ---- IGraphicsRenderer: textures and render targets (real ID3D10Texture2D) ----
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;

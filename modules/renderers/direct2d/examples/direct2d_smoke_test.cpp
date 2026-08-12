@@ -65,7 +65,8 @@ protected:
         done_ = true;
         auto& device = getGraphicsDeviceProperty();
         auto& renderer = static_cast<CNA::Internal::Renderers::Direct2D::Direct2DRenderer&>(device.GetRenderer());
-        bool passed = renderer.GetWindowInternal() != nullptr && renderer.GetRendererInternal() == nullptr;
+        auto* window = reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
+        bool passed = window != nullptr && SDL_GetRenderer(window) == nullptr;
 
         device.Clear(Color(12, 34, 56, 255));
         Color clearPixel(0, 0, 0, 0);

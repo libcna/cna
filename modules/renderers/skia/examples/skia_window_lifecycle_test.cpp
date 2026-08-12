@@ -74,7 +74,7 @@ int main()
         int initialOutputWidth = 0;
         int initialOutputHeight = 0;
         const bool initialOutput = SDL_GetRenderOutputSize(
-            renderer.GetRendererInternal(), &initialOutputWidth, &initialOutputHeight);
+            SDL_GetRenderer(window), &initialOutputWidth, &initialOutputHeight);
         int logicalWidth = 0;
         int logicalHeight = 0;
         renderer.GetViewportSize(logicalWidth, logicalHeight);
@@ -163,7 +163,7 @@ int main()
 
             int outputWidth = 0;
             int outputHeight = 0;
-            if (!SDL_GetRenderOutputSize(renderer.GetRendererInternal(), &outputWidth, &outputHeight)
+            if (!SDL_GetRenderOutputSize(SDL_GetRenderer(window), &outputWidth, &outputHeight)
                 || outputWidth <= 0 || outputHeight <= 0)
             {
                 everyResizeMatched = false;

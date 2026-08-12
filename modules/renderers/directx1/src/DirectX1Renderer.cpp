@@ -744,11 +744,6 @@ namespace CNA::Internal::Renderers::DirectX1
         // bookkeeping stays consistent with what the game requested.
     }
 
-    SDL_Window* DirectX1Renderer::GetWindowInternal() const
-    {
-        return impl_->window;
-    }
-
     bool DirectX1Renderer::TransformWindowToLogical(float windowX, float windowY,
                                                        float& logX, float& logY) const
     {

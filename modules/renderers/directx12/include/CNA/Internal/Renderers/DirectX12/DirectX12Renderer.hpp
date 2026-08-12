@@ -79,8 +79,6 @@ namespace CNA::Internal::Renderers::DirectX12
         /// renderer state applied at the next Present(), not a direct D3D12 API call ahead of time.
         void SetSwapInterval(int interval) override;
 
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         /// DX-111 (closing env_map3d): real D3D12TextureCubeRenderer, no longer the inherited

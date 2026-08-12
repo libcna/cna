@@ -519,8 +519,6 @@ namespace CNA::Internal::Renderers::OpenGL4
         /// limitation EasyGLRenderer already has).
         [[nodiscard]] int GetMultiSampleCount() const override { return msaaSampleCount_; }
 
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         /**
          * @brief Answers every current GraphicsCapability member explicitly.

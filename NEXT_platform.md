@@ -100,7 +100,7 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **206 files / 3329 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+Ratchet: **200 files / 3225 references** of direct SDL coupling outside the PLAT-3 allowlist, down
 from the 253 / 3641 baseline. Contract: 24 headers, 383 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
@@ -125,7 +125,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**86 ✅ · 12 🟨 · 51 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **58 %** of the 149
+**87 ✅ · 12 🟨 · 50 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **58 %** of the 149
 actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -133,8 +133,8 @@ actionable rows done, counting partials.
 - **Phase 2** (SDL3 implementation) — largely done.
 - **Phase 3** (runtime) — `Game` owns the platform, timing and cursor migrated,
   `GraphicsDeviceManager` SDL-free. PLAT-47/50/51 blocked, see §5.
-- **Phase 4** (renderers) — PLAT-57's boundary decision and PLAT-60's common texture-interface
-  cleanup are complete; implementation continues at PLAT-59/61. 46 identities remain in scope.
+- **Phase 4** (renderers) — PLAT-57's boundary decision and PLAT-59/60's common-interface cleanup
+  are complete; implementation continues at PLAT-58/61/62. 46 identities remain in scope.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — four backends deleted, the scancode and keycode vocabularies defined.
   PLAT-78 blocked on four contract gaps, see §5.

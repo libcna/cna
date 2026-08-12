@@ -165,8 +165,6 @@ namespace CNA::Internal::Renderers::SdlRenderer
         // requested MultiSampleCount without throwing (logging once per request), always
         // reporting back 0 (the real, device-clamped maximum on this renderer).
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
-        SDL_Window* GetWindowInternal() const override { return window; }
-        SDL_Renderer* GetRendererInternal() const override { return renderer; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

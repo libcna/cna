@@ -113,8 +113,9 @@ primitive, vertex, pixel or input event.
 
 - PLAT-58 replaces `GraphicsRendererCreateArgs::SDL_Window*` with `RendererSurfaceInfo` and the
   applicable narrow service. Window creation itself moves to the platform in PLAT-62.
-- PLAT-59 removes common `GetWindowInternal()` and `GetRendererInternal()`; SDL-only access, where
-  genuinely required, belongs to an SDL-specific interface.
+- PLAT-59 removed common `GetWindowInternal()` and `GetRendererInternal()`. The complete call-site
+  audit found no runtime consumer for `SDL_Renderer*`; tests that need an SDL presenter query their
+  already-known SDL window inside the SDL-dependent renderer module instead.
 - PLAT-60 removes `SDL_Texture*` from `ITextureRenderer`; it is not part of this boundary.
 - PLAT-61 keys the registry by `WindowId`, matching both this snapshot and `PlatformEvent`.
 - PLAT-66 restates coordinate conversion in logical window coordinates using the authoritative

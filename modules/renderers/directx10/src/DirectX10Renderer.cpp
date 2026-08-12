@@ -1098,7 +1098,6 @@ namespace CNA::Internal::Renderers::DirectX10
         impl_->presentationMode = static_cast<CnaPresentationMode>(mode);
     }
 
-    SDL_Window* DirectX10Renderer::GetWindowInternal() const { return impl_->window; }
 
     std::unique_ptr<ITextureRenderer> DirectX10Renderer::CreateTexture(const ImageData& data)
     {

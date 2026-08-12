@@ -3245,7 +3245,6 @@ void MetalRenderer::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixels)
         "GraphicsDevice::GetBackBufferData: Metal backbuffer readback is disabled because the "
         "historical macOS test run returned clear-color-only data after real draws.");
 }
-SDL_Window* MetalRenderer::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalRenderer::GetRendererInternal()const{return nullptr;}
 std::unique_ptr<ITextureRenderer> MetalRenderer::CreateTexture(const ImageData& d)
 {
     impl_->throwPendingCommandFailure();

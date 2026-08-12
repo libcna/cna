@@ -2255,14 +2255,9 @@ namespace Microsoft::Xna::Framework::Graphics
         UpdateViewportFromWindow();
     }
 
-    SDL_Renderer* GraphicsDevice::GetRendererInternal() const
-    {
-        return renderer_ != nullptr ? renderer_->GetRendererInternal() : nullptr;
-    }
-
     SDL_Window* GraphicsDevice::GetWindowInternal() const
     {
-        return renderer_ != nullptr ? renderer_->GetWindowInternal() : window_;
+        return window_;
     }
 
     void GraphicsDevice::createOrAttachWindow()

@@ -818,15 +818,10 @@ namespace CNA::Internal::Renderers::FreeDirect
             static_cast<int>(impl_->presentationMode)};
     }
 
-    SDL_Window* FreeDirectRenderer::GetWindowInternal() const
-    {
-        return impl_->window;
-    }
-
     // DX3-68: real letterbox scale+offset transform between physical window pixels and logical
     // (virtual) game pixels. free-direct's own PresentPrimary hardcodes
-    // SDL_LOGICAL_PRESENTATION_LETTERBOX against its internal SDL_Renderer (never exposed to CNA,
-    // GetRendererInternal() always returns nullptr) -- this independently recomputes the exact
+    // SDL_LOGICAL_PRESENTATION_LETTERBOX against its internal SDL_Renderer (never exposed to CNA)
+    // -- this independently recomputes the exact
     // same letterbox math (uniform scale to fit, centered, black bars on the non-fitting axis)
     // from the real physical SDL_Window size queried directly, so it stays correct without ever
     // needing access to free-direct's own internal renderer state.

@@ -2020,11 +2020,6 @@ namespace CNA::Internal::Renderers::Glide
         impl_->ApplyEffectiveClipWindow();
     }
 
-    SDL_Window* GlideRenderer::GetWindowInternal() const
-    {
-        return impl_->window;
-    }
-
     std::unique_ptr<ITextureRenderer> GlideRenderer::CreateTexture(const ImageData& data)
     {
         return std::make_unique<GlideTextureRenderer>(*this, data);

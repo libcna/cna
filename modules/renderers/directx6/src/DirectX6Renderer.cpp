@@ -1038,11 +1038,6 @@ namespace CNA::Internal::Renderers::DirectX6
         // bookkeeping stays consistent with what the game requested.
     }
 
-    SDL_Window* DirectX6Renderer::GetWindowInternal() const
-    {
-        return impl_->window;
-    }
-
     bool DirectX6Renderer::TransformWindowToLogical(float windowX, float windowY,
                                                        float& logX, float& logY) const
     {

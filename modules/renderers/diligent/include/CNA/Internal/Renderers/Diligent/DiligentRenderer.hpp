@@ -954,11 +954,6 @@ namespace CNA::Internal::Renderers::Diligent
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
 
-        /** @brief Returns the SDL window this renderer renders into. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Returns nothing: this renderer never creates an SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
-
         /**
          * @brief Creates a GPU texture from CPU pixels.
          * @param data Source image, RGBA8.

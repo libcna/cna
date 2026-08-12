@@ -23,10 +23,9 @@ Every renderer family is placed in exactly one bucket, from measured usage:
   cpu-presentation  Rasterises on the CPU and uses SDL_Renderer purely to get finished pixels onto
                     the window. NOT an SDL renderer by identity. Needs a platform presentation
                     service; see the note this tool prints.
-  interface-leak    Names SDL_Renderer/SDL_Window only to satisfy IGraphicsRenderer's
-                    GetRendererInternal()/GetWindowInternal(), which are themselves marked
-                    "TODO: SDL dependency should be abstracted later". Freed by PLAT-59 alone,
-                    with no per-renderer work. PLAT-60 already removed the texture leak.
+  interface-leak    Names only a bare SDL_Window type inherited from the common creation or
+                    registry boundary, without using a window service. This bucket is expected to
+                    stay empty after PLAT-59; PLAT-58/PLAT-61 remove the remaining common types.
   migratable        Uses only platform services (native handle, GL context, Vulkan surface,
                     window, events). Freed by its Phase 4 task.
 
@@ -61,11 +60,10 @@ from sdl_inventory import scan  # noqa: E402
 SDL_NATIVE = frozenset({"sdl-renderer", "sdl-gpu"})
 
 # Renderers allowlisted because the third-party library they wrap links SDL3 itself. CNA's own
-# sources here are effectively SDL-free already -- fna3d's 14 references and freedirect's 24 are
-# almost entirely comments plus the SDL-typed IGraphicsRenderer overrides. free-direct creates and
-# owns an internal SDL_Renderer that CNA never sees (its CMakeLists resolves SDL3::SDL3 from CNA's
-# vendored targets), and FNA3D links SDL3 upstream the same way. Migrating CNA code cannot remove
-# either dependency, which is precisely why they are a separate verdict from sdl-native.
+# sources here contain only small integration seams. Free-direct creates and owns an internal
+# SDL_Renderer that CNA never sees (its CMakeLists resolves SDL3::SDL3 from CNA's vendored targets),
+# and FNA3D links SDL3 upstream the same way. Migrating CNA code cannot remove either dependency,
+# which is precisely why they are a separate verdict from sdl-native.
 SDL_UPSTREAM = frozenset({"fna3d", "freedirect"})
 
 # SDL_Renderer calls that mean "put my finished CPU pixels on the screen" rather than "render with
@@ -95,8 +93,8 @@ PRESENTATION_CALLS = frozenset(
     }
 )
 
-# Types that IGraphicsRenderer's still-SDL-typed methods force every renderer to name.
-INTERFACE_LEAK_TYPES = frozenset({"SDL_Renderer", "SDL_Texture", "SDL_Window"})
+# The one SDL type still present in common renderer creation/registry plumbing after PLAT-59/60.
+INTERFACE_LEAK_TYPES = frozenset({"SDL_Window"})
 
 VERDICT_ORDER = ["sdl-native", "sdl-upstream", "cpu-presentation", "interface-leak", "migratable", "sdl-free"]
 
@@ -185,10 +183,9 @@ def audit(repo_root: Path) -> tuple[list[dict[str, object]], dict[str, str]]:
         code_sdl_specific = {s for s in code_symbols if classify_symbol(s)[0] == "sdl-renderer-specific"}
         presentation = code_sdl_specific & PRESENTATION_CALLS
 
-        # A real service need is any call into a platform area. SDL_Window/SDL_Renderer/SDL_Texture
-        # named as bare *types* do not count: every renderer is forced to name them by
-        # IGraphicsRenderer's SDL-typed methods, so counting them would make every family look
-        # like it needs the platform, and the leak-only families would be invisible.
+        # A real service need is any call into a platform area. SDL_Window named as a bare type does
+        # not count while the common creation and registry plumbing still carries it; service calls
+        # distinguish a real window dependency from a temporary common-boundary leak.
         service_areas = {"native-handle", "gl-vulkan-interop", "event", "display", "filesystem", "timing", "window"}
         real_service_symbols = {
             s for s in code_symbols
@@ -245,7 +242,7 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
         "sdl-native": "Identity **is** an SDL3 API. Permanently allowlisted.",
         "sdl-upstream": "Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason.",
         "cpu-presentation": "CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service.",
-        "interface-leak": "Names SDL types only to satisfy `IGraphicsRenderer`'s SDL-typed methods. Freed by PLAT-59/PLAT-60 alone.",
+        "interface-leak": "Names only the common boundary's bare SDL_Window type. Freed by PLAT-58/PLAT-61.",
         "migratable": "Uses platform services only (native handle, GL/Vulkan, window, events).",
         "sdl-free": "No SDL references at all.",
     }
@@ -288,16 +285,21 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
         "   window** is a genuine platform capability (SDL2 has it, SDL 1.2 has it as a software\n"
         "   surface, Win32 has `StretchDIBits`), so it belongs in the contract.\n\n"
     )
-    out.write(
-        f"3. **{len(leaks)} renderers are coupled only by the interface itself:** "
-        + ", ".join(f"`{f}`" for f in leaks)
-        + ".\n   Their entire remaining SDL surface is naming `SDL_Renderer`/`SDL_Window` to satisfy\n"
-        "   `IGraphicsRenderer::GetRendererInternal()`/`GetWindowInternal()` — the two common\n"
-        "   methods still marked *\"TODO: SDL dependency should be abstracted later\"*.\n"
-        "   `STUB` and `HEADLESS` do no rendering at all and still appear SDL-coupled. They need no\n"
-        "   per-renderer migration work: PLAT-59 frees all four at once; PLAT-60 removed the\n"
-        "   already-unused `SDL_Texture*` method.\n"
-    )
+    if leaks:
+        out.write(
+            f"3. **{len(leaks)} renderers are coupled only by the remaining common boundary:** "
+            + ", ".join(f"`{f}`" for f in leaks)
+            + ".\n   They name only the bare `SDL_Window` type still carried by renderer creation or\n"
+            "   the registry, without calling a window service. PLAT-58/PLAT-61 remove that last\n"
+            "   common-boundary type.\n"
+        )
+    else:
+        out.write(
+            "3. **PLAT-59 closed the interface-only renderer coupling.** `HEADLESS`, `PORTABLEGL`,\n"
+            "   `SOFTWARE` and `STUB` are now SDL-free. `IGraphicsRenderer` exposes neither native\n"
+            "   window/renderer getter and no longer names `SDL_Renderer`; PLAT-60 had already\n"
+            "   removed its `SDL_Texture*` method.\n"
+        )
 
     return out.getvalue()
 

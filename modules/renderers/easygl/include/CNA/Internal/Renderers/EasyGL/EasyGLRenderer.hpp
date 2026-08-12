@@ -803,8 +803,6 @@ namespace CNA::Internal::Renderers::EasyGL
         // already-applied value, ignoring the request). GetMultiSampleCount() reports that real
         // value honestly instead of falling back to the interface default of 0.
         [[nodiscard]] int GetMultiSampleCount() const override { return sampleCount_ > 1 ? sampleCount_ : 0; }
-        SDL_Window* GetWindowInternal() const override { return window; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

@@ -3,8 +3,8 @@
 // window, a real LLGL render system (whichever module the runtime selection picked), a real swap
 // chain, and a real 60-frame Clear()+Present() loop.
 //
-// Check A -- GetWindowInternal() returns the real SDL window.
-// Check B -- GetRendererInternal() is null; this renderer never creates an SDL_Renderer.
+// Check A -- GameWindow handle returns the real SDL window.
+// Check B -- SDL_GetRenderer(window) is null; this renderer never creates an SDL_Renderer.
 // Check C -- GetViewportSize() reports the logical resolution that was requested.
 // Check D -- the loaded module is one that actually draws, and names itself.
 // Check E -- VertexBuffer.SetData()/GetVertexCount() round-trips the exact count uploaded.
@@ -65,8 +65,8 @@ protected:
 
         if (frame_ == 1)
         {
-            check(renderer.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
-            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GameWindow handle returns a real window");
+            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr, "SDL_GetRenderer(window) is null (no SDL_Renderer)");
 
             int width = 0;
             int height = 0;

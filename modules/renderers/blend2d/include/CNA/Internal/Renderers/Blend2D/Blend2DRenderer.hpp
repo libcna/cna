@@ -278,8 +278,6 @@ namespace CNA::Internal::Renderers::Blend2D
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
 
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return presentRenderer_; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

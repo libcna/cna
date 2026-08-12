@@ -1011,11 +1011,6 @@ namespace CNA::Internal::Renderers::DirectX5
         // bookkeeping stays consistent with what the game requested.
     }
 
-    SDL_Window* DirectX5Renderer::GetWindowInternal() const
-    {
-        return impl_->window;
-    }
-
     bool DirectX5Renderer::TransformWindowToLogical(float windowX, float windowY,
                                                        float& logX, float& logY) const
     {

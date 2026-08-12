@@ -458,10 +458,6 @@ namespace CNA::Internal::Renderers::DirectX8
         impl_->presentationMode = static_cast<CnaPresentationMode>(mode);
     }
 
-    SDL_Window* DirectX8Renderer::GetWindowInternal() const
-    {
-        return impl_->window;
-    }
 
     // ---- Textures and render targets: real Direct3D8 resources (design decision 7) ----
     // Never named outside this .cpp (only returned polymorphically as ITextureRenderer/

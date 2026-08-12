@@ -49,7 +49,7 @@ namespace
             renderer.ReadBackbuffer(0, 0, 1, 1, pixel.data());
             renderer.Present();
             usable = IGraphicsRenderer::GetForWindow(window) == &renderer
-                && SDL_GetRenderer(window) == renderer.GetRendererInternal()
+                && SDL_GetRenderer(window) != nullptr
                 && pixel == std::array<std::uint8_t, 4>{255, 0, 0, 255};
         }
         return usable && IGraphicsRenderer::GetForWindow(window) == nullptr

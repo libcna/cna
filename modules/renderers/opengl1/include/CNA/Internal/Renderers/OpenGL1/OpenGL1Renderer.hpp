@@ -127,7 +127,6 @@ public: explicit OpenGL1Renderer(const GraphicsRendererCreateArgs&);~OpenGL1Rend
  // already the honest answer, matching EasyGL's own established behavior for the same reason.
  [[nodiscard]] int GetMultiSampleCount()const override{return multiSampleCount_;}
  void ReadBackbuffer(int,int,int,int,uint8_t*)override;
- SDL_Window* GetWindowInternal()const override{return window_;} SDL_Renderer* GetRendererInternal()const override{return nullptr;}
  std::unique_ptr<ITextureRenderer>CreateTexture(const ImageData&)override;std::unique_ptr<ISpriteBatchRenderer>CreateSpriteBatch()override;
  std::unique_ptr<IRenderTargetRenderer>CreateRenderTarget2D(int,int,int,bool,bool,int)override;void SetRenderTarget2D(IRenderTargetRenderer*)override;
  std::unique_ptr<ITextureCubeRenderer>CreateTextureCube(int,bool,int)override;

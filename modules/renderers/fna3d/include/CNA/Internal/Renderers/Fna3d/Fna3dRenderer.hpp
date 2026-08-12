@@ -916,11 +916,6 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] bool TransformLogicalToWindow(float logX, float logY, float& windowX,
                                                     float& windowY) const override;
 
-        /** @brief The SDL window FNA3D presents into. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Always null: FNA3D owns no SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
-
         /**
          * @brief Reads the back buffer's rendered pixels for a region.
          * @param x      Left edge in logical pixels.

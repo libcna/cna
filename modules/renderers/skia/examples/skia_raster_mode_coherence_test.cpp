@@ -83,7 +83,7 @@ int main()
               "runtime diagnostic describes the actual alpha, sample and filtering policy");
         Check(HasExactCapabilities(renderer),
               "runtime capabilities agree with the raster diagnostic and transfer-only Texture3D");
-        Check(SDL_GetRenderer(window) == renderer.GetRendererInternal(),
+        Check(SDL_GetRenderer(window) != nullptr,
               "the SDL renderer is presentation-only and remains owned by the Skia renderer");
 
         // Components are chosen so conversion through 8-bit premultiplied storage round-trips
@@ -101,7 +101,7 @@ int main()
               "presentation recovery preserves the CPU-owned premultiplied raster pixels");
         Check(HasExactCapabilities(renderer) && renderer.GetStartupDiagnosticEXT() == report,
               "recovery cannot change mode, capabilities or the immutable diagnostic");
-        Check(SDL_GetRenderer(window) == renderer.GetRendererInternal(),
+        Check(SDL_GetRenderer(window) != nullptr,
               "recovery rebuilds only the owned SDL presenter and does not switch Skia modes");
     }
 

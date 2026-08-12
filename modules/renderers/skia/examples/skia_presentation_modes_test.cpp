@@ -35,13 +35,13 @@ namespace
         return std::fabs(actual - expected) <= tolerance;
     }
 
-    [[nodiscard]] bool QuerySizes(SkiaRenderer& renderer,
+    [[nodiscard]] bool QuerySizes(SDL_Window* window,
                                   int& windowWidth, int& windowHeight,
                                   int& outputWidth, int& outputHeight)
     {
-        SDL_GetWindowSize(renderer.GetWindowInternal(), &windowWidth, &windowHeight);
+        SDL_GetWindowSize(window, &windowWidth, &windowHeight);
         return windowWidth > 0 && windowHeight > 0
-            && SDL_GetRenderOutputSize(renderer.GetRendererInternal(), &outputWidth, &outputHeight)
+            && SDL_GetRenderOutputSize(SDL_GetRenderer(window), &outputWidth, &outputHeight)
             && outputWidth > 0 && outputHeight > 0;
     }
 
@@ -123,7 +123,7 @@ int main()
         int windowHeight = 0;
         int outputWidth = 0;
         int outputHeight = 0;
-        Check(QuerySizes(renderer, windowWidth, windowHeight, outputWidth, outputHeight),
+        Check(QuerySizes(window, windowWidth, windowHeight, outputWidth, outputHeight),
               "SDL reports positive window and renderer-output dimensions");
 
         const float outputToWindowX = static_cast<float>(windowWidth) / outputWidth;
@@ -177,7 +177,7 @@ int main()
             int currentWindowHeight = 0;
             SDL_GetWindowSize(window, &currentWindowWidth, &currentWindowHeight);
             if (currentWindowWidth == resizedWindowWidth && currentWindowHeight == windowHeight
-                && SDL_GetRenderOutputSize(renderer.GetRendererInternal(),
+                && SDL_GetRenderOutputSize(SDL_GetRenderer(window),
                                            &resizedOutputWidth, &resizedOutputHeight)
                 && resizedOutputWidth > 0 && resizedOutputHeight > 0
                 && resizedOutputWidth != outputWidth)
