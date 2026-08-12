@@ -1005,7 +1005,7 @@ namespace CNA::Platform::Terminal {
         snapshot_.pressedKeys.reserve(pressed_.size());
         for (const KeyCode key : pressed_)
         {
-            snapshot_.pressedKeys.push_back(static_cast<std::uint32_t>(key));
+            snapshot_.pressedKeys.push_back(key);
         }
 
         snapshot_.modifiers = lockModifiers_;

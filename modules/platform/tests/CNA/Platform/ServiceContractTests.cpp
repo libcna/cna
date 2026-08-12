@@ -70,7 +70,7 @@ TEST(InputSnapshotTests, KeyboardSnapshotIsAWholeKeyboardNotAPerKeyQuery)
     // structure, not become thousands of platform calls. The shape of the contract is what
     // enforces that -- there is deliberately no IsKeyDown(key) on the interface.
     KeyboardSnapshot snapshot;
-    snapshot.pressedKeys = {65, 66, 67};
+    snapshot.pressedKeys = {KeyCode::A, KeyCode::B, KeyCode::C};
     EXPECT_EQ(snapshot.pressedKeys.size(), 3u);
 }
 

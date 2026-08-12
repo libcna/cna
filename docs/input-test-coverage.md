@@ -56,7 +56,6 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `ISdlHapticBackend` | `include/CNA/Internal/Input/SdlHapticBackend.hpp` | no | 0 | covered via SdlHapticBackendTests.cpp (FakeHapticTest) via the FakeSdlHapticBackend seam |
 | `ISdlJoystickBackend` | `include/CNA/Internal/Input/SdlJoystickBackend.hpp` | no | 1 | covered via SdlJoystickBackendTests.cpp (FakeJoystickTest) via the FakeSdlJoystickBackend seam |
 | `ISystemDeviceBackend` | `include/CNA/Internal/Input/SystemDeviceBackend.hpp` | no | 2 | covered via InputDevicesTests.cpp (CnaInputDevicesTest) / TouchEdgeCaseTests.cpp (TouchCapabilitiesEnumerationTest) via FakeSystemDeviceBackend |
-| `ISystemKeyboardBackend` | `include/CNA/Internal/Input/SystemKeyboardBackend.hpp` | no | 1 | covered via KeyboardModStateTests.cpp (KeyboardModStateEXTTest) via a fake system-keyboard-backend seam |
 | `ISystemMouseBackend` | `include/CNA/Internal/Input/SystemMouseBackend.hpp` | no | 1 | covered via MouseGlobalTests.cpp (MouseGlobalEXTTest) via a fake system-mouse-backend seam |
 | `ISystemPowerBackend` | `include/CNA/Internal/Input/SystemPowerBackend.hpp` | no | 1 | covered via PowerTests.cpp (CnaInputPowerTest) via a fake system-power-backend seam |
 | `ISystemSensorBackend` | `include/CNA/Internal/Input/SystemSensorBackend.hpp` | no | 1 | covered via SensorsTests.cpp (CnaInputSensorsTest) via a fake system-sensor-backend seam |
@@ -64,4 +63,3 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `MouseButton` | `include/CNA/Internal/Input/InputManager.hpp` | no | 2 | covered via SdlInputBridgeMouseTests / InputManager (internal enum) |
 | `RawGamePadState` | `include/CNA/Internal/Input/InputManager.hpp` | no | 0 | covered via SdlGamepadBackendTests.cpp via InputManager::GetRawGamePadState (bound as auto) |
 | `SdlInputBridge` | `include/CNA/Internal/Input/SdlInputBridge.hpp` | yes | 16 |  |
-

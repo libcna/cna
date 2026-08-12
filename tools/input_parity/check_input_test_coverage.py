@@ -49,7 +49,7 @@ KNOWN_COVERED_ELSEWHERE = {
     # GetRawGamePadState(...) is asserted in SdlGamepadBackendTests.cpp (leftY etc.); the return value is
     # bound with `auto`, so the type name never appears literally, but the struct is exercised.
     "RawGamePadState": "SdlGamepadBackendTests.cpp via InputManager::GetRawGamePadState (bound as auto)",
-    # INP-AUD-audit (2026-07-16): these 7 interfaces are each exercised through a dedicated
+    # INP-AUD-audit (2026-07-16): these legacy interfaces are exercised through a dedicated
     # fake-backend-driven suite, same as ISdlGamepadBackend above -- but the suite is named after the
     # concrete Fake*/CnaInput* type, not the "I"-prefixed interface, so suite_re's literal
     # `<TypeName>\w*Test` prefix match never fires. Confirmed real coverage exists for every one of
@@ -57,7 +57,6 @@ KNOWN_COVERED_ELSEWHERE = {
     "ISdlHapticBackend": "SdlHapticBackendTests.cpp (FakeHapticTest) via the FakeSdlHapticBackend seam",
     "ISdlJoystickBackend": "SdlJoystickBackendTests.cpp (FakeJoystickTest) via the FakeSdlJoystickBackend seam",
     "ISystemDeviceBackend": "InputDevicesTests.cpp (CnaInputDevicesTest) / TouchEdgeCaseTests.cpp (TouchCapabilitiesEnumerationTest) via FakeSystemDeviceBackend",
-    "ISystemKeyboardBackend": "KeyboardModStateTests.cpp (KeyboardModStateEXTTest) via a fake system-keyboard-backend seam",
     "ISystemMouseBackend": "MouseGlobalTests.cpp (MouseGlobalEXTTest) via a fake system-mouse-backend seam",
     "ISystemPowerBackend": "PowerTests.cpp (CnaInputPowerTest) via a fake system-power-backend seam",
     "ISystemSensorBackend": "SensorsTests.cpp (CnaInputSensorsTest) via a fake system-sensor-backend seam",

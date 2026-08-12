@@ -23,16 +23,17 @@ Describes how CNA wires SDL3 input events to the `Microsoft::Xna::Framework::Inp
 
 ## 1. Overview
 
-Real input behavior flows through one platform event batch, one internal bridge and one internal
-state accumulator:
+Real input behavior flows through one platform event batch. Event-driven devices feed the shared
+accumulator; whole-device services publish one frame snapshot:
 
 ```
 IPlatform::PollEvents(batch)  (Game::PollEvents(), once per frame from Game::Tick())
   → CNA::Internal::Input::PlatformInputBridge::ProcessEvent(event) // visit PlatformEvent
-      → CNA::Internal::Input::InputManager::Set*State(...)      // keyboard / mouse / gamepad / touch snapshot
+      → CNA::Internal::Input::InputManager::Set*State(...)      // mouse / gamepad / touch + text-control key state
       → Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_On*(...)   // text input / editing
       → Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(...)
           → CNA::Internal::Input::GestureDetector::On{Pressed,Moved,Released}(...)
+  → IPlatformKeyboard::Update()                                 // one whole-keyboard snapshot
   → Keyboard/Mouse/GamePad/TouchPanel::GetState()   // read by game code each frame
   → Microsoft::Xna::Framework::FrameworkDispatcher::Update()
       → TouchPanel::Update() → GestureDetector::OnUpdate()   // Hold/Flick timing gestures
@@ -50,13 +51,14 @@ Three classes define the current event/state boundary:
   in an SDL3 build; production `Game` no longer calls it.
 - **`CNA::Internal::Input::InputManager`** (`include/CNA/Internal/Input/InputManager.hpp`,
   `src/Input/Internal/InputManager.cpp`) — accumulates per-device state pushed by
-  `PlatformInputBridge` (`Set*State`/`Add*Delta` methods) and hands back immutable XNA state-object
-  snapshots (`Get*State` methods: `GetMouseState`, `GetKeyboardState`, `GetTouchState`,
-  `GetGamePadState`, `GetRawGamePadState`). `GamePad::GetState(playerIndex, deadZoneMode)` calls
+  `PlatformInputBridge` (`Set*State`/`Add*Delta` methods) and hands back immutable state objects for
+  the event-driven devices. Its keyboard set remains an internal part of control-character text
+  synthesis and bridge tests; public `Keyboard::GetState()` reads `IPlatformKeyboard` instead.
+  `GamePad::GetState(playerIndex, deadZoneMode)` calls
   `GetRawGamePadState` and applies dead-zone processing itself at the XNA layer, since the same
   raw state can be read back through three different `GamePadDeadZone` modes.
 
-Touch additionally has a third internal class:
+Gesture handling adds another internal class:
 
 - **`CNA::Internal::Input::GestureDetector`** (`include/CNA/Internal/Input/GestureDetector.hpp`,
   `src/Input/Internal/GestureDetector.cpp`) — a ported gesture-recognition state machine
@@ -81,7 +83,7 @@ An SDL event the mapper does not recognise is intentionally omitted from the pla
 | `SDL_EVENT_MOUSE_WHEEL` | `AddScrollWheelDelta(wheel.y * 120)` | `Mouse::GetState().ScrollWheelValue` (cumulative, XNA units of 120 per notch) |
 | `SDL_EVENT_MOUSE_ADDED` / `_REMOVED` | none (bypasses `InputManager`) | `CNA::Input::InputDevices::MouseConnectedEXT`/`MouseDisconnectedEXT.Invoke(event.mdevice.which)` — CNAEXT hotplug notification only |
 | `SDL_EVENT_KEYBOARD_ADDED` / `_REMOVED` | none (bypasses `InputManager`) | `CNA::Input::InputDevices::KeyboardConnectedEXT`/`KeyboardDisconnectedEXT.Invoke(event.kdevice.which)` — CNAEXT hotplug notification only |
-| `SDL_EVENT_KEY_DOWN` / `_UP` | `SetKeyState(key, pressed)` (skipped on key-repeat — state is already set); also drives control-character `TextInput` synthesis (`handle_text_input_key_down/up`) | `Keyboard::GetState().IsKeyDown/Up`; `Keys` resolved via `try_convert_sdl_scancode` (scancode mode) or `try_convert_sdl_key` (default mode) — see §4 |
+| `SDL_EVENT_KEY_DOWN` / `_UP` | Updates the bridge's internal control-key state and drives control-character `TextInput` synthesis (`handle_text_input_key_down/up`) | Public held-key state is published once after the event drain by `IPlatformKeyboard::Update()`; the SDL3 service converts native keycodes into `KeyCode`, while Terminal publishes its decoded `KeyCode` set |
 | `SDL_EVENT_TEXT_INPUT` | none (bypasses `InputManager`) | `event.text.text` (UTF-8) is decoded to UTF-16 code units (`decode_utf8_to_utf16`) and each is dispatched via `TextInputEXT::INTERNAL_OnTextInput(charcs)` — one UTF-16 code unit per call, astral code points as surrogate pairs, matching FNA's `Encoding.UTF8.GetChars`; suppressed while a synthesized Ctrl+V paste is in flight |
 | `SDL_EVENT_TEXT_EDITING` | none | `TextInputEXT::INTERNAL_OnTextEditing(text, start, length)` — empty/null composition maps to `("", 0, 0)` |
 | `SDL_EVENT_TEXT_EDITING_CANDIDATES` | none | `TextInputEXT::INTERNAL_OnTextEditingCandidates(candidates, selected, horizontal)` — CNAEXT IME candidate-list extension; null candidates dispatch as an empty list |
@@ -121,21 +123,20 @@ directly through `SdlInputBridge`'s public static methods (`SetVibration`, `SetL
 
 ---
 
-## 3. Event-driven vs. FNA's poll-driven model
+## 3. Frame snapshots and event accumulators vs. FNA's per-call polling
 
-This is the single biggest architectural deviation from FNA, and it applies uniformly across
-every input device:
+This is the single biggest architectural deviation from FNA:
 
 - **FNA** re-queries the platform layer fresh on every `Get*State()` call. `Keyboard.GetState()`,
   `Mouse.GetState()`, `GamePad.GetState()`, and `TouchPanel.GetState()` all call into
   `SDL3_FNAPlatform` methods that ask SDL for current state *at call time*.
-- **CNA** is event-driven. `PlatformInputBridge::ProcessEvent` accumulates whatever the selected
-  platform delivers into `InputManager`'s (or `TouchPanel`'s) internal fields as events arrive;
-  `Get*State()` methods just read back that accumulated state — they never touch SDL themselves.
+- **CNA** publishes input once per frame. Keyboard is a whole-device platform snapshot;
+  mouse/gamepad/touch are still accumulated from `PlatformEvent` while their Phase 5 migrations
+  remain. Public `Get*State()` methods read those stored values and never poll a native API.
 
 What keeps CNA's accumulated state current: `Game::Tick()` (`Game.cpp`) unconditionally calls
-`PollEvents()` → `IPlatform::PollEvents(batch)` → `PlatformInputBridge::ProcessEvent` exactly once
-per frame, before
+`PollEvents()` → `IPlatform::PollEvents(batch)` → `PlatformInputBridge::ProcessEvent`, followed by
+`IPlatformKeyboard::Update()`, exactly once per frame before
 `Update()`/`Draw()` run, on every code path that reaches a frame (`Run()`→`RunLoop()`→`Tick()`,
 `RunOneFrame()`→`Tick()`, and the Emscripten main-loop callback all funnel through this). As long
 as that per-frame pump keeps happening, the practical behavior is indistinguishable from FNA's
@@ -169,7 +170,9 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
 
 ### Keyboard
 
-- `Keyboard::GetState()` is a straight read of `InputManager`'s accumulated key-state set.
+- `Keyboard::GetState()` converts the most recent `IPlatformKeyboard` snapshot into an XNA
+  `KeyboardState`; `GetModStateEXT()` converts the modifier mask from that same snapshot. Neither
+  call updates the service, so repeated reads inside one frame cannot observe different clocks.
 - `Keyboard::GetKeyFromScancodeEXT` has two modes, matching FNA's `UseScancodes` switch: default
   mode round-trips a US-layout `Keys` value through `SDL_GetKeyFromScancode` and back to
   translate for the *current* keyboard layout; scancode mode (`FNA_KEYBOARD_USE_SCANCODES=1`,
@@ -299,9 +302,9 @@ there is no `mutex`/`atomic`/`thread` anywhere under `src/Input/Internal/` or
 `src/Input/Xna/`). That is deliberate and safe because every access happens on
 one thread:
 
-- **Writes** flow from `Game::PollEvents()` → `PlatformInputBridge::ProcessEvent` → `InputManager::Set*`
-  / `TouchPanel::INTERNAL_onTouchEvent`. `PollEvents()` is called from `Game::Tick()`, on the
-  thread that runs the game loop.
+- **Writes** flow from `Game::PollEvents()` through `PlatformInputBridge` into event accumulators,
+  followed by one `IPlatformKeyboard::Update()` into the whole-keyboard snapshot. `PollEvents()` is
+  called from `Game::Tick()`, on the thread that runs the game loop.
 - **Reads** flow from game code calling `Keyboard/Mouse/GamePad/TouchPanel::GetState()` in
   `Update()`/`Draw()`, which the same loop invokes on that same thread.
 

@@ -100,7 +100,7 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **200 files / 3241 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+Ratchet: **197 files / 3224 references** of direct SDL coupling outside the PLAT-3 allowlist, down
 from the 253 / 3641 baseline. Contract: 24 headers, 394 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
@@ -125,7 +125,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**95 ✅ · 12 🟨 · 45 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **64 %** of the 149
+**97 ✅ · 11 🟨 · 44 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **65 %** of the 149
 actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -137,9 +137,9 @@ actionable rows done, counting partials.
 - **Phase 4** (renderers) — PLAT-57's boundary decision and PLAT-59/60/61's common-interface cleanup
   are complete; implementation continues at PLAT-58/62. 46 identities remain in scope.
   See §6 for why most cannot be built here.
-- **Phase 5** (input) — four backends deleted, the scancode and keycode vocabularies defined.
-  `PlatformInputBridge` consumes the complete event vocabulary with golden-equivalent state and is
-  now the production `Game` path; PLAT-77f is unblocked.
+- **Phase 5** (input) — five redundant backends are deleted; `Keyboard` now consumes the typed,
+  once-per-frame platform snapshot and modifiers share its clock. `PlatformInputBridge` consumes
+  the complete event vocabulary with golden-equivalent state and is the production `Game` path.
 - **Phase 6** (audio) — not started.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
@@ -292,10 +292,11 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **Phase 5 input continuation.** PLAT-47 and PLAT-55 are complete. Take PLAT-77f: migrate
-   keyboard snapshot and live modifier state together before deleting
-   `SystemKeyboardBackend`. The raw SDL event adapter is test-only compatibility until PLAT-90
-   retires the legacy native doubles; no production caller remains.
+2. **Phase 5 input continuation.** PLAT-77f/79 are complete: keys and modifiers now share one
+   typed frame snapshot and `SystemKeyboardBackend` is gone. Continue with PLAT-80, re-pointing
+   public mouse state at `IPlatformMouse` while preserving relative-delta drain semantics. The raw
+   SDL event adapter remains test-only compatibility until PLAT-90 retires the legacy native
+   doubles; no production caller remains.
 
 ---
 

@@ -20,7 +20,6 @@
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
-#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
@@ -30,13 +29,19 @@ using CNA::Internal::Input::PlatformInputBridge;
 using CNA::Internal::Input::SdlInputBridge;
 using namespace CNA::Platform;
 using Microsoft::Xna::Framework::Input::ButtonState;
-using Microsoft::Xna::Framework::Input::Keyboard;
 using Microsoft::Xna::Framework::Input::Keys;
 using Microsoft::Xna::Framework::Input::Mouse;
 using namespace Microsoft::Xna::Framework::Input::Touch;
 
 namespace
 {
+    // The golden script targets PlatformInputBridge's accumulator. The public Keyboard surface
+    // intentionally reads the platform's frame snapshot after PLAT-79.
+    struct Keyboard
+    {
+        static auto GetState() { return InputManager::GetKeyboardState(); }
+    };
+
     constexpr int DisplaySize = 1000;
 
     PlatformEvent keyEvent(const bool pressed, const Keys key)

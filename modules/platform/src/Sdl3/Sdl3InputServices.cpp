@@ -3,12 +3,15 @@
 #include "Sdl3InputServices.hpp"
 
 #include "Sdl3GamepadControls.hpp"
+#include "Sdl3KeyCodes.hpp"
 #include "Sdl3Modifiers.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "Sdl3Window.hpp"
 
 #include <SDL3/SDL.h>
+
+#include <array>
 
 namespace CNA::Platform::Sdl3 {
 
@@ -48,6 +51,7 @@ namespace CNA::Platform::Sdl3 {
     {
         snapshot_.pressedKeys.clear();
         snapshot_.modifiers = ToPlatformModifiers(SDL_GetModState());
+        std::array<bool, 256> seen{};
 
         int count = 0;
         const bool* keys = SDL_GetKeyboardState(&count);
@@ -65,11 +69,22 @@ namespace CNA::Platform::Sdl3 {
             {
                 continue;
             }
-            // Reported as a layout-dependent keycode, which is what XNA's Keys values are; the
-            // scancode is the physical position and is carried on KeyEvent instead.
-            const SDL_Keycode keycode =
+            // Translate SDL's mostly-Unicode keycodes into the contract's virtual-key vocabulary;
+            // the scancode is the physical position and is carried on KeyEvent instead.
+            const SDL_Keycode nativeKeycode =
                 SDL_GetKeyFromScancode(static_cast<SDL_Scancode>(scancode), SDL_KMOD_NONE, false);
-            snapshot_.pressedKeys.push_back(static_cast<std::uint32_t>(keycode));
+            const KeyCode keycode = ToKeyCode(nativeKeycode);
+            if (keycode == KeyCode::None)
+            {
+                continue;
+            }
+
+            const std::uint32_t value = static_cast<std::uint32_t>(keycode);
+            if (value < seen.size() && !seen[value])
+            {
+                seen[value] = true;
+                snapshot_.pressedKeys.push_back(keycode);
+            }
         }
     }
 

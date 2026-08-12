@@ -4,7 +4,10 @@
 //
 // try_convert_sdl_key / try_convert_sdl_scancode are file-local to SdlInputBridge.cpp, so they are
 // exercised through synthetic SDL_EVENT_KEY_DOWN events driven into SdlInputBridge::ProcessEvent
-// (the real path), reading the result back via Keyboard::GetState(). Scancode mode is normally
+// (the real path), reading the bridge's accumulator back through InputManager. The public
+// Keyboard surface moved to the platform's once-per-frame snapshot in PLAT-79, so using it here
+// would test a different source than the synthetic event was intended to exercise. Scancode mode
+// is normally
 // gated by the process-cached FNA_KEYBOARD_USE_SCANCODES env var; SdlInputBridge exposes
 // SetScancodeModeForTests/ClearScancodeModeForTests so both modes can be exercised in one binary.
 
@@ -19,11 +22,20 @@
 
 using CNA::Internal::Input::InputManager;
 using CNA::Internal::Input::SdlInputBridge;
-using Microsoft::Xna::Framework::Input::Keyboard;
 using Microsoft::Xna::Framework::Input::Keys;
 
 namespace
 {
+    // Keeps the assertions compact while naming the state source these bridge tests own.
+    struct Keyboard
+    {
+        static auto GetState() { return InputManager::GetKeyboardState(); }
+        static Keys GetKeyFromScancodeEXT(const Keys key)
+        {
+            return Microsoft::Xna::Framework::Input::Keyboard::GetKeyFromScancodeEXT(key);
+        }
+    };
+
     class SdlInputBridgeKeyboardTest : public ::testing::Test
     {
     protected:

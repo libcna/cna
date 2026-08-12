@@ -31,8 +31,8 @@ using CNA::Platform::TestSupport::PseudoTerminal;
 
 bool HasPressedKey(const KeyboardSnapshot& snapshot, const KeyCode key)
 {
-    return std::find(snapshot.pressedKeys.begin(), snapshot.pressedKeys.end(),
-                     static_cast<std::uint32_t>(key)) != snapshot.pressedKeys.end();
+    return std::find(snapshot.pressedKeys.begin(), snapshot.pressedKeys.end(), key) !=
+           snapshot.pressedKeys.end();
 }
 
 void Send(const PseudoTerminal& pty, const std::string& bytes)

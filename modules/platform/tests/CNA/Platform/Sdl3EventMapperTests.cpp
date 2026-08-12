@@ -10,6 +10,8 @@
 #include "../../../src/Sdl3/Sdl3EventMapper.hpp"
 #include "../../../src/Sdl3/Sdl3Scancodes.hpp"
 
+#include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+
 #include <SDL3/SDL.h>
 #include <gtest/gtest.h>
 
@@ -100,11 +102,45 @@ TEST(Sdl3EventMapperTests, KeyDownCarriesScancodeKeycodeModifiersAndRepeat)
     EXPECT_EQ(key.window, 7u);
     EXPECT_EQ(key.scancode, Scancode::A);
     EXPECT_EQ(key.keycode, KeyCode::A);
-    EXPECT_EQ(key.modifiers, static_cast<std::uint16_t>(SDL_KMOD_LSHIFT));
+    EXPECT_EQ(key.modifiers, static_cast<std::uint16_t>(KeyModifier::Shift));
     EXPECT_TRUE(key.pressed);
     // Repeat must survive the mapping: a platform without real key-release synthesises releases
     // from repeat timing, so losing this flag would break that path silently.
     EXPECT_TRUE(key.repeat);
+}
+
+TEST(Sdl3EventMapperTests, EveryNativeModifierMapsToTheContractLayout)
+{
+    struct Case
+    {
+        SDL_Keymod native;
+        KeyModifier expected;
+    };
+    constexpr Case cases[] = {
+        {SDL_KMOD_LSHIFT, KeyModifier::Shift},
+        {SDL_KMOD_RSHIFT, KeyModifier::Shift},
+        {SDL_KMOD_LCTRL, KeyModifier::Control},
+        {SDL_KMOD_RCTRL, KeyModifier::Control},
+        {SDL_KMOD_LALT, KeyModifier::Alt},
+        {SDL_KMOD_RALT, KeyModifier::Alt},
+        {SDL_KMOD_LGUI, KeyModifier::Gui},
+        {SDL_KMOD_RGUI, KeyModifier::Gui},
+        {SDL_KMOD_CAPS, KeyModifier::CapsLock},
+        {SDL_KMOD_NUM, KeyModifier::NumLock},
+        {SDL_KMOD_SCROLL, KeyModifier::ScrollLock},
+        {SDL_KMOD_MODE, KeyModifier::Mode},
+    };
+
+    for (const Case& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(SDL_EVENT_KEY_DOWN);
+        source.key.mod = testCase.native;
+
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped));
+        EXPECT_EQ(std::get<KeyEvent>(mapped).modifiers,
+                  static_cast<std::uint16_t>(testCase.expected));
+    }
 }
 
 TEST(Sdl3EventMapperTests, KeyUpIsNotAPress)

@@ -13,13 +13,12 @@ notes); those notices are intact and must not be removed.
 
 ## Architecture note (task 953)
 
-FNA is **poll-based**: each frame it re-reads the full device state from SDL
-(`SDL_GetKeyboardState`, `SDL_GetGamepad*`, `SDL_GetTouchFingers`, …). CNA is **event-driven**:
-the selected `IPlatform` translates native input into `PlatformEvent`, then
-`PlatformInputBridge::ProcessEvent` mutates `InputManager`'s accumulated state; `Get*State()` reads
-that snapshot. Input state is therefore updated **at the moment each platform event is processed**
-(during the host's event pump), not sampled once per frame. The two models are behaviorally
-equivalent for well-formed event streams; the differences below are where they are not identical.
+FNA is **poll-based per public call**: it re-reads device state when `GetState()` runs. CNA publishes
+input **once per frame**: keyboard is a whole-device `IPlatformKeyboard` snapshot, while input areas
+not yet migrated in Phase 5 are accumulated from `PlatformEvent`. Public `Get*State()` reads the
+stored frame state, so two reads in one `Update()` cannot observe different native instants. The two
+models are behaviorally equivalent for normal game-loop use; the differences below are where they
+are not identical.
 
 ---
 
@@ -181,8 +180,8 @@ byte-identical to FNA. Pinned by `StickAxisNormalizationMatchesFnaDivisor`.
   - **Startup invariant:** `Game::DoInitialize()` calls it explicitly **once**, right after the
     graphics device is created and **before the first event pump and the first `Update()`** (both
     `Game::Run()` and `Game::RunOneFrame()` funnel through `DoInitialize()`). So a pad connected
-    before frame one is enumerated by SDL from the start. `SdlInputBridge::ProcessEvent()` also calls
-    it lazily as a **defensive fallback** for any host that pumps SDL events without Game's loop.
+    before frame one is enumerated by SDL from the start. The legacy raw-event compatibility adapter
+    also calls it lazily for native-shaped tests; production event delivery uses the platform batch.
 - **`GetCapabilities` cancelled active rumble**: it probed rumble support with
   `SDL_RumbleGamepad(0,0,0)` (which *stops* vibration). Now it reads non-mutating capability
   properties (`SDL_PROP_GAMEPAD_CAP_*`), so reading capabilities no longer cancels a game's

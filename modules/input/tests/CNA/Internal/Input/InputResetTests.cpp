@@ -10,7 +10,6 @@
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
-#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
@@ -26,11 +25,19 @@
 using CNA::Internal::Input::InputManager;
 using SharpRuntime::charcs;
 using Microsoft::Xna::Framework::Vector2;
-using Microsoft::Xna::Framework::Input::Keyboard;
 using Microsoft::Xna::Framework::Input::Keys;
 using Microsoft::Xna::Framework::Input::Mouse;
 using Microsoft::Xna::Framework::Input::TextInputEXT;
 using namespace Microsoft::Xna::Framework::Input::Touch;
+
+namespace
+{
+    // ResetAllForTests owns InputManager state; the public Keyboard now owns a platform snapshot.
+    struct Keyboard
+    {
+        static auto GetState() { return InputManager::GetKeyboardState(); }
+    };
+}
 
 TEST(InputResetAllForTests, ClearsAccumulatedInputManagerState)
 {

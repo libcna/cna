@@ -1069,6 +1069,14 @@ namespace Microsoft::Xna::Framework
                 }
             }, event);
         }
+
+        // Snapshot services advance once per frame, after the native queue has been pumped and
+        // before Update()/Draw() can read them. Keyboard::GetState() and GetModStateEXT() both
+        // read this same stored snapshot, so keys and modifiers cannot observe different clocks.
+        if (CNA::Platform::IPlatformKeyboard* keyboard = platform_->GetKeyboard())
+        {
+            keyboard->Update();
+        }
     }
 
     void Game::OnComponentAdded(System::Object* sender, const GameComponentCollectionEventArgs& args)

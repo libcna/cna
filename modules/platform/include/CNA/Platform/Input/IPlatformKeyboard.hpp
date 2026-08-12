@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Platform/Input/KeyCode.hpp"
+
 #include <cstdint>
 #include <vector>
 
@@ -63,8 +65,8 @@ namespace CNA::Platform {
      */
     struct KeyboardSnapshot
     {
-        /** @brief Virtual key codes currently held, matching `Microsoft::Xna::Framework::Input::Keys`. */
-        std::vector<std::uint32_t> pressedKeys;
+        /** @brief Virtual key codes currently held; never `KeyCode::None`. */
+        std::vector<KeyCode> pressedKeys;
         /**
          * @brief Modifier keys held or latched, as a bitmask of `KeyModifier` values.
          *

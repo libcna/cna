@@ -12,7 +12,6 @@
 #include "CNA/Input/JoystickCapabilities.hpp"
 #include "CNA/Input/JoystickInfo.hpp"
 #include "CNA/Input/JoystickState.hpp"
-#include "CNA/Input/KeyModifiers.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
@@ -250,9 +249,6 @@ namespace CNA::Internal::Input
         static Microsoft::Xna::Framework::Input::Keys GetKeyFromScancode(
             Microsoft::Xna::Framework::Input::Keys scancode
         );
-
-        /** @brief CNAEXT/EXT: the currently active keyboard modifier/lock keys (SDL_GetModState). */
-        static CNA::Input::KeyModifiersEXT GetModState();
 
         /** @brief CNAEXT/EXT: the physical (layout-independent) name of a key, or "" if it has none. */
         static std::string GetScancodeName(Microsoft::Xna::Framework::Input::Keys key);

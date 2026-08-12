@@ -8,7 +8,6 @@
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlGamepadBackend.hpp"
 #include "CNA/Internal/Input/SdlJoystickBackend.hpp"
-#include "CNA/Internal/Input/SystemKeyboardBackend.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
@@ -1514,22 +1513,6 @@ namespace CNA::Internal::Input
 
         const SDL_Keycode sym = SDL_GetKeyFromScancode(*sdlScancode, SDL_KMOD_NONE, true);
         return try_convert_sdl_key(sym).value_or(Keys::None);
-    }
-
-    CNA::Input::KeyModifiersEXT SdlInputBridge::GetModState()
-    {
-        using CNA::Input::KeyModifiersEXT;
-        const SDL_Keymod mod = system_keyboard_backend().GetModState();
-        KeyModifiersEXT result = KeyModifiersEXT::None;
-        if (mod & SDL_KMOD_SHIFT)  result |= KeyModifiersEXT::Shift;   // KMOD_SHIFT = LSHIFT | RSHIFT
-        if (mod & SDL_KMOD_CTRL)   result |= KeyModifiersEXT::Ctrl;    // KMOD_CTRL  = LCTRL | RCTRL
-        if (mod & SDL_KMOD_ALT)    result |= KeyModifiersEXT::Alt;     // KMOD_ALT   = LALT | RALT
-        if (mod & SDL_KMOD_GUI)    result |= KeyModifiersEXT::Gui;     // KMOD_GUI   = LGUI | RGUI
-        if (mod & SDL_KMOD_CAPS)   result |= KeyModifiersEXT::Caps;
-        if (mod & SDL_KMOD_NUM)    result |= KeyModifiersEXT::Num;
-        if (mod & SDL_KMOD_SCROLL) result |= KeyModifiersEXT::Scroll;
-        if (mod & SDL_KMOD_MODE)   result |= KeyModifiersEXT::Mode;
-        return result;
     }
 
     std::string SdlInputBridge::GetScancodeName(const Microsoft::Xna::Framework::Input::Keys key)
