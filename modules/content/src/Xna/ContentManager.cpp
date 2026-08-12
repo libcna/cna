@@ -1740,6 +1740,28 @@ namespace Microsoft::Xna::Framework::Content
             // part's own Tag property (one entry per part that has morph targets, not per Model).
             std::vector<std::unique_ptr<Graphics::MorphTargetDataEXT>> morphOwners;
         };
+        // plan_gltf.md GLTF-037. `std::vector<std::uint8_t>::data()` is only guaranteed to be
+        // aligned for a byte, so casting it to `const std::uint32_t*` and dereferencing is a
+        // misaligned load -- undefined behaviour by the standard, an outright fault on targets
+        // without unaligned access, and exactly the class of finding GLTF-036's sanitizer job
+        // exists to catch. In practice the allocator returns a suitably aligned block and the code
+        // "worked", which is what let it stand.
+        //
+        // memcpy into a properly typed vector has no such requirement, the compiler lowers it to
+        // the same loads on targets where they are legal, and it happens once per mesh part at
+        // load time rather than per frame -- so there is no cost worth weighing against removing
+        // undefined behaviour.
+        template <typename TIndex>
+        std::vector<TIndex> IndicesFromBytes(const std::vector<std::uint8_t>& bytes, int count)
+        {
+            std::vector<TIndex> indices(static_cast<std::size_t>(std::max(count, 0)));
+            if (!indices.empty())
+            {
+                std::memcpy(indices.data(), bytes.data(), indices.size() * sizeof(TIndex));
+            }
+            return indices;
+        }
+
 
         // Task 927: `stride` is always one of XNA's own "clean" (tightly packed, no vtable) sizes
         // -- 16/20/24/32/52/56 -- since every offline conversion tool (and, since CNB-70, the
@@ -2278,9 +2300,13 @@ namespace Microsoft::Xna::Framework::Content
                                                 : Graphics::IndexElementSize::SixteenBits,
                         numIndices, Graphics::BufferUsage::None);
                     if (meshOut.use32BitIndices) {
-                        ib->SetData(reinterpret_cast<const std::uint32_t*>(meshOut.indexBytes.data()), numIndices);
+                        const std::vector<std::uint32_t> indices =
+                            IndicesFromBytes<std::uint32_t>(meshOut.indexBytes, numIndices);
+                        ib->SetData(indices.data(), numIndices);
                     } else {
-                        ib->SetData(reinterpret_cast<const std::uint16_t*>(meshOut.indexBytes.data()), numIndices);
+                        const std::vector<std::uint16_t> indices =
+                            IndicesFromBytes<std::uint16_t>(meshOut.indexBytes, numIndices);
+                        ib->SetData(indices.data(), numIndices);
                     }
 
                     auto part = std::make_unique<Graphics::ModelMeshPart>(
@@ -2988,11 +3014,13 @@ namespace Microsoft::Xna::Framework::Content
                                                 : Graphics::IndexElementSize::SixteenBits,
                                 numIndices, Graphics::BufferUsage::None);
                             if (use32BitIndices) {
-                                ib->SetData(reinterpret_cast<const std::uint32_t*>(
-                                    idxBytes.data()), numIndices);
+                                const std::vector<std::uint32_t> indices =
+                                    IndicesFromBytes<std::uint32_t>(idxBytes, numIndices);
+                                ib->SetData(indices.data(), numIndices);
                             } else {
-                                ib->SetData(reinterpret_cast<const std::uint16_t*>(
-                                    idxBytes.data()), numIndices);
+                                const std::vector<std::uint16_t> indices =
+                                    IndicesFromBytes<std::uint16_t>(idxBytes, numIndices);
+                                ib->SetData(indices.data(), numIndices);
                             }
 
                             auto part = std::make_unique<Graphics::ModelMeshPart>(
@@ -3451,7 +3479,8 @@ namespace Microsoft::Xna::Framework::Content
                                             / static_cast<int>(sizeof(std::uint16_t));
                     const int primCount   = numIndices / 3;
 
-                    const auto* indexData = reinterpret_cast<const std::uint16_t*>(idxBytes.data());
+                    const std::vector<std::uint16_t> indexData =
+                        IndicesFromBytes<std::uint16_t>(idxBytes, numIndices);
                     for (int i = 0; i < numIndices; ++i)
                     {
                         if (static_cast<int>(indexData[i]) >= numVertices)
@@ -3467,7 +3496,7 @@ namespace Microsoft::Xna::Framework::Content
                     vb->SetDataRaw(vertBytes.data(), numVertices, stride);
 
                     auto ib = std::make_unique<Graphics::IndexBuffer>(device, numIndices);
-                    ib->SetData(indexData, numIndices);
+                    ib->SetData(indexData.data(), numIndices);
 
                     auto part = std::make_unique<Graphics::ModelMeshPart>(
                         vb.get(), ib.get(), numVertices, primCount, 0, 0);
