@@ -2671,6 +2671,23 @@ namespace Microsoft::Xna::Framework::Content
                             (skinReport.hasDeclaredSkeletonRoot ? "declared." : "not declared."));
                     }
 
+                    // plan_gltf.md GLTF-082: a topology conversion, reported rather than silent.
+                    // A strip or fan becomes a triangle list at import, which is a rewrite of the
+                    // index list -- so the triangle a consumer draws is not at the index the file
+                    // put it at, and anything mapping a picked triangle or a debug index back to
+                    // the source primitive is off without knowing. Debug rather than a warning:
+                    // the conversion is exact and loses nothing, unlike every warning above it.
+                    if (meshOut.sourceTopology != meshOut.topology)
+                    {
+                        CNA::Logger::Debug(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' declares " + PrimitiveTopologyName(meshOut.sourceTopology) +
+                            " and was converted to " +
+                            PrimitiveTopologyName(meshOut.topology) +
+                            " at import; the index list is rewritten and the vertex order is not "
+                            "(GLTF-081/GLTF-082).");
+                    }
+
                     // plan_gltf.md GLTF-095/GLTF-257: influence sets past the first. The dropped
                     // share is what says whether it matters -- a fifth influence weighted 0.002 is
                     // exporter noise and one weighted 0.4 is a visibly different pose.

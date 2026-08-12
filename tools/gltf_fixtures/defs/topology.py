@@ -260,5 +260,86 @@ def mode_line_loop() -> Fixture:
         features=["primitive.mode = LINE_LOOP", "line topology", "implicit closing segment"])
 
 
+#: `mode-triangle-strip-morph`'s morph deltas, one per strip vertex and all four distinct. Distinct
+#: is the point: a delta array read at the wrong index still produces a morphed mesh, so identical
+#: deltas would make a reordering indistinguishable from correctness.
+_STRIP_MORPH_DELTAS = [(0.0, 0.0, 1.0), (0.0, 0.0, 2.0), (0.0, 0.0, 3.0), (0.0, 0.0, 4.0)]
+
+
+def mode_triangle_strip_morph() -> Fixture:
+    """A ``TRIANGLE_STRIP`` primitive that also carries a morph target. Owns **GLTF-081**.
+
+    Converting a strip to a triangle list rewrites the **index** list -- ``[0,1,2,3]`` becomes
+    ``[0,1,2, 2,1,3]`` -- and morph deltas are addressed **per vertex**, by position in the target
+    accessor. So the conversion is only safe if it leaves the vertex order completely alone, and
+    this fixture is where that becomes an assertion rather than an assumption.
+
+    The failure it guards against is not a crash. A conversion that also compacted or reordered
+    vertices -- de-duplicating the strip's shared corners is the obvious temptation, since vertices
+    1 and 2 appear in both triangles -- would still produce a mesh, still produce a morph, and
+    apply every delta to the wrong vertex. The result deforms plausibly and wrongly.
+
+    Each delta moves its vertex a different distance along +Z, so the morphed shape is a staircase
+    whose steps say which vertex received which delta. A permutation of them is visible as a
+    different staircase, not as a subtly different surface.
+    """
+    b = GltfBuilder("mode-triangle-strip-morph")
+    position = b.add_packed_accessor(usage="POSITION", values=QUAD_STRIP_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    target_position = b.add_packed_accessor(usage="morph POSITION delta",
+                                            values=_STRIP_MORPH_DELTAS,
+                                            accessor_type="VEC3", with_bounds=True)
+    indices = b.add_packed_accessor(usage="indices", values=[0, 1, 2, 3], accessor_type="SCALAR",
+                                    component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position},
+        "indices": indices,
+        "targets": [{"POSITION": target_position}],
+        "mode": TRIANGLE_STRIP,
+    }], name="MorphedStripQuad", weights=[1.0])
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    fully_morphed = [
+        [p[0] + d[0], p[1] + d[1], p[2] + d[2]]
+        for p, d in zip(QUAD_STRIP_POSITIONS, _STRIP_MORPH_DELTAS)
+    ]
+    l4 = world_positions(b, {mesh: list(QUAD_STRIP_POSITIONS)})
+    l4["topologyMorph"] = {
+        "sourceTopology": "TRIANGLE_STRIP",
+        "importedTopology": "TRIANGLES",
+        "authoredIndices": [0, 1, 2, 3],
+        "convertedIndices": [0, 1, 2, 2, 1, 3],
+        "vertexCount": len(QUAD_STRIP_POSITIONS),
+        "vertexOrderUnchanged": True,
+        "morphDeltas": [list(d) for d in _STRIP_MORPH_DELTAS],
+        "fullyMorphedPositions": fully_morphed,
+        "rule": "Converting a strip rewrites the INDEX list and must leave the VERTEX order "
+                "alone, because morph deltas are addressed per vertex by position in the target "
+                "accessor. De-duplicating the strip's shared corners -- vertices 1 and 2 appear in "
+                "both triangles -- would still produce a mesh and a morph, with every delta on the "
+                "wrong vertex: a plausible deformation of the wrong shape.",
+        "discriminationRule": "The four deltas are all different, so a permutation is a different "
+                              "staircase rather than a subtly different surface. Identical deltas "
+                              "would make a reordering indistinguishable from correctness.",
+    }
+    return Fixture(
+        id="mode-triangle-strip-morph", audit_fixture=None, owning_group="topology",
+        description="A TRIANGLE_STRIP quad carrying a morph target with a distinct delta per "
+                    "vertex. The strip-to-list conversion rewrites the index list; the vertex "
+                    "order it must not touch is exactly what the per-vertex deltas are addressed "
+                    "by.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["primitive.mode = TRIANGLE_STRIP", "morph target", "strip -> list conversion",
+                  "per-vertex delta addressing"],
+        spec_anchors=["meshes-overview", "morph-targets"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="MorphedStripQuad", primitive=0, mode=TRIANGLE_STRIP,
+            positions=QUAD_STRIP_POSITIONS, indices=[0, 1, 2, 3])]},
+        l4=l4,
+    )
+
+
 FIXTURES = [mode_points, mode_lines, mode_line_loop, mode_line_strip, mode_triangles,
-            mode_triangle_strip, mode_triangle_fan]
+            mode_triangle_strip, mode_triangle_strip_morph, mode_triangle_fan]

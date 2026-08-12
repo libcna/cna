@@ -472,3 +472,83 @@ TEST(GltfPrimitiveTopology, DracoIsRefusedForEveryModeItCannotEncode)
     // fall through.
     EXPECT_EQ(7u, std::size(triangleModes) + std::size(nonTriangleModes));
 }
+
+// --- GLTF-081 / GLTF-082: conversion must not disturb the vertices, and must say it happened ----
+
+TEST(GltfPrimitiveTopology, ConvertingAStripRewritesTheIndicesAndLeavesTheVertexOrderAlone)
+{
+    // Morph deltas are addressed per VERTEX, by position in the target accessor, while the strip
+    // conversion rewrites the INDEX list. The two only coexist if the conversion leaves the vertex
+    // order completely alone -- and the tempting optimisation is exactly the one that breaks it:
+    // vertices 1 and 2 appear in both of a four-index strip's triangles, so de-duplicating or
+    // compacting would still produce a mesh, still produce a morph, and put every delta on the
+    // wrong vertex. A plausible deformation of the wrong shape, with nothing to indicate it.
+    using namespace CNA::Internal::GltfImport;
+
+    const CnaTest::GltfOracle::LoadedFixture fixture("mode-triangle-strip-morph");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& expected =
+        CnaTest::GltfOracle::Path(fixture.Expected(), "l4.topologyMorph");
+
+    const cgltf_data& data = fixture.Data();
+    const MeshOut out = ExtractMesh(&data, data.meshes[0].primitives[0], "probe", nullptr, 1.0f);
+
+    EXPECT_EQ(PrimitiveTopology::TriangleStrip, out.sourceTopology);
+    EXPECT_EQ(PrimitiveTopology::Triangles, out.topology);
+
+    // The vertex COUNT is the first half of "order unchanged": a compaction would shrink it.
+    const auto expectedVertexCount =
+        static_cast<std::size_t>(CnaTest::GltfOracle::NumberOr(expected, "vertexCount", -1.0));
+    ASSERT_GT(out.stride, 0);
+    EXPECT_EQ(expectedVertexCount, out.vertexBytes.size() / static_cast<std::size_t>(out.stride));
+
+    ASSERT_EQ(expectedVertexCount * static_cast<std::size_t>(out.stride), out.vertexBytes.size());
+
+    // The morph deltas must line up with those same vertices, one for one.
+    ASSERT_EQ(1u, out.morphPositionDeltas.size());
+    EXPECT_EQ(expectedVertexCount, out.morphPositionDeltas[0].size())
+        << "the delta count no longer matches the vertex count, so the conversion changed one of "
+           "them -- and the two are addressed by the same index";
+
+    const std::vector<CNA::Internal::JsonValue>& deltas =
+        CnaTest::GltfOracle::Member(expected, "morphDeltas").arrayValue;
+    ASSERT_EQ(expectedVertexCount, deltas.size());
+    for (std::size_t v = 0; v < deltas.size(); ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<double> d = CnaTest::GltfOracle::Numbers(deltas[v]);
+        ASSERT_EQ(3u, d.size());
+        // Each delta is a different distance along +Z, so a permutation is a different staircase
+        // rather than a subtly different surface.
+        EXPECT_NEAR(static_cast<float>(d[2]), out.morphPositionDeltas[0][v].Z, 1e-5f)
+            << "delta " << v << " landed on the wrong vertex";
+    }
+}
+
+TEST(GltfPrimitiveTopology, AConvertedPrimitiveRecordsBothTopologiesSoTheRewriteIsVisible)
+{
+    // GLTF-082. The conversion is exact and loses nothing, but it does renumber: the triangle a
+    // consumer draws is not at the index the file put it at, so anything mapping a picked triangle
+    // or a debug index back to the source primitive is wrong without knowing. Recording both
+    // topologies is what makes that knowable, and the assertion is that they DIFFER for a
+    // converted primitive and AGREE for one that was already a list.
+    using namespace CNA::Internal::GltfImport;
+
+    struct Case { const char* id; PrimitiveTopology source; bool converted; };
+    for (const Case& c : {Case{"mode-triangle-strip", PrimitiveTopology::TriangleStrip, true},
+                          Case{"mode-triangle-fan", PrimitiveTopology::TriangleFan, true},
+                          Case{"mode-triangles", PrimitiveTopology::Triangles, false},
+                          Case{"mode-lines", PrimitiveTopology::Lines, false}})
+    {
+        SCOPED_TRACE(c.id);
+        const CnaTest::GltfOracle::LoadedFixture fixture(c.id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const cgltf_data& data = fixture.Data();
+        const MeshOut out = ExtractMesh(&data, data.meshes[0].primitives[0], "probe", nullptr, 1.0f);
+
+        EXPECT_EQ(c.source, out.sourceTopology) << "the declared mode was not preserved";
+        EXPECT_EQ(c.converted, out.sourceTopology != out.topology)
+            << "sourceTopology != topology is the signal a consumer reads to know the index list "
+               "was rewritten; it must be true exactly when it was";
+    }
+}

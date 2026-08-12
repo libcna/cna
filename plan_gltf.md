@@ -962,22 +962,31 @@ loss, `ContentManager::Unload`) rather than changing it.
 
 | glTF field | Spec default | CNA import | CNA effect | Status |
 |---|---|---|---|---|
-| `pbrMetallicRoughness.baseColorFactor` | `[1,1,1,1]` | **not read** | `PbrEffect::DiffuseColor` + `Alpha` exist and are wired to the shader | 🐛 `GLTF-216` |
+| `pbrMetallicRoughness.baseColorFactor` | `[1,1,1,1]` | ✅ | `PbrEffect::DiffuseColor` + `Alpha` | ✅ `GLTF-216` |
 | `baseColorTexture` | — | ✅ (honours its own `texCoord`) | `PbrEffect::Texture` | ✅ |
 | `baseColorTexture.texCoord` | 0 | ✅ used to choose the single baked UV set | — | ✅ |
-| `metallicFactor` | 1.0 | ✅ (only when `usePbr`) | `MetallicFactor` | ⚠ gated |
-| `roughnessFactor` | 1.0 | ✅ (only when `usePbr`) | `RoughnessFactor` | ⚠ gated |
+| `metallicFactor` | 1.0 | ✅ for any metallic-roughness material | `MetallicFactor` | ✅ `GLTF-219` |
+| `roughnessFactor` | 1.0 | ✅ for any metallic-roughness material | `RoughnessFactor` | ✅ `GLTF-219` |
 | `metallicRoughnessTexture` | — | ✅ | `MetallicRoughnessMap`; shader reads **G = roughness, B = metallic** ✅ | ✅ |
 | `normalTexture` | — | ✅ | `NormalMap`; flat-normal fallback when unbound (EasyGL) | ✅ |
-| `normalTexture.scale` | 1.0 | **not read** | no parameter exists | 🐛 `GLTF-224` |
+| `normalTexture.scale` | 1.0 | ✅ | `NormalScaleEXT` | ✅ `GLTF-224` |
 | `occlusionTexture` | — | ✅ | `OcclusionMap`; shader reads **R** ✅ | ✅ |
-| `occlusionTexture.strength` | 1.0 | **not read** | no parameter exists | 🐛 `GLTF-225` |
+| `occlusionTexture.strength` | 1.0 | ✅ | `OcclusionStrengthEXT` | ✅ `GLTF-225` |
 | `emissiveTexture` | — | ✅ | `EmissiveMap` | ✅ |
-| `emissiveFactor` | `[0,0,0]` | ✅ (only when `usePbr`) | `EmissiveFactor` | ⚠ gated |
-| `alphaMode` | `OPAQUE` | **not read** | `AlphaTestEffect` exists; `PbrEffect` has `uAlphaTest` but it is never configured | 🐛 `GLTF-228` |
-| `alphaCutoff` | 0.5 | **not read** | — | 🐛 `GLTF-229` |
-| `doubleSided` | `false` | **not read** | `RasterizerState` is caller-owned | 🐛 `GLTF-231` |
-| no material at all | default metallic-roughness material | falls to `BasicEffect` white | — | 🐛 `GLTF-217` |
+| `emissiveFactor` | `[0,0,0]` | ✅ for any metallic-roughness material | `EmissiveFactor` | ✅ `GLTF-221` |
+| `alphaMode` | `OPAQUE` | ✅ | `AlphaModeEXT` (carried; blend state is per-draw and caller-owned) | ✅ `GLTF-228` |
+| `alphaCutoff` | 0.5 | ✅ | `AlphaCutoffEXT` | ✅ `GLTF-229` |
+| `doubleSided` | `false` | ✅ | `DoubleSidedEXT` (carried; `RasterizerState` is caller-owned — `GLTF-231`'s boundary) | ✅ `GLTF-231` |
+| no material at all | default metallic-roughness material | ✅ metallic-roughness with defaults | `PbrEffect` | ✅ `GLTF-217` |
+| `KHR_materials_unlit` | — | ✅ | `BasicEffect` with lighting off | ✅ `GLTF-337` |
+| `KHR_materials_pbrSpecularGlossiness` | — | ✅ converted to metallic-roughness | `PbrEffect`; `specularFactor` dropped and reported | ⚠ approximated `GLTF-349` |
+| `KHR_materials_emissive_strength` | 1.0 | ✅ on the PBR path | multiplied into `EmissiveFactor` | ⚠ PBR only `GLTF-222` |
+| `KHR_texture_transform` | — | ✅ baked into the shared UV channel | — | ⚠ one transform per primitive `GLTF-184` |
+| `COLOR_0` **and** a metallic-roughness material | — | ⚠ imported through `BasicEffect`, material dropped | `BasicEffect` | ⚠ reported `GLTF-241` |
+
+Every row this table once marked 🐛 has since been closed; the two ⚠ rows that remain are named
+approximations with a report entry each, not gaps. `GLTF-236` is what would replace the loose
+`MeshOut` fields behind these rows with a single carrier.
 
 ### 13.2 Channel semantics — verified
 
@@ -2108,8 +2117,8 @@ primitive mode is ever silently reinterpreted; indices decode exactly.*
 | GLTF-078 | Primitive-count helper for every topology | ✔ | GLTF-072 | All three loaders hardcode `numIndices / 3`. **Accept:** one shared helper; §12.3 table asserted at L5. **Landed:** `PrimitiveCountForTopology` implements §12.3's table once, and the loaders' hardcoded `numIndices / 3` is gone from the glTF paths. Stated independently in C++ and in the generator on purpose — a count that agreed with itself but not with the specification would pass either alone. A run too short for one primitive yields `0`, never a negative count, which is where `n-1` and `n-2` could have underflowed. The legacy `SkinnedModel` `.cnj` reader keeps its own `/3`: that format has no topology field and only ever held triangles. |
 | GLTF-079 | Degenerate/empty primitive handling | ✅ | GLTF-072 | Zero indices, or an index count not divisible by the topology's stride. **Accept:** deterministic behaviour, reported. **Decided here:** the incomplete tail is dropped and counted in `MeshOut::droppedIncompleteIndicesEXT`, which `ContentManager` logs — reading the remainder as a further primitive walks off the end of the run, and dropping it silently leaves a model missing a face with nothing to point at. Per mode: a multiple of 3 for `TRIANGLES`, of 2 for `LINES`, and a strip/fan/loop shorter than one primitive becomes empty. `cgltf_validate` checks none of this. Four `GltfIndexForm` cases: the trim, the zero-drop control, the odd `LINES` count, and the too-short strip. |
 | GLTF-080 | Topology + Draco interaction | ✔ | GLTF-072 | Draco always decodes to triangles. **Accept:** a Draco primitive declaring a non-triangle mode is rejected or documented. **Established, and refused.** Draco's mesh encoder is a *triangle* encoder — a decoded `draco::Mesh` carries a face list and nothing else — so a primitive declaring `KHR_draco_mesh_compression` together with a line or point mode is a contradiction the file cannot mean. It is refused, **before decoding**, so the diagnostic names the contradiction rather than some later symptom of it, and **independently of whether the build has libdraco**: the file is self-contradictory either way. Asserted as a **partition** rather than a list — the three triangle modes are exactly what Draco can encode and the four others exactly what it cannot, and the two sets are asserted to be all seven — so the rule has no gap for a mode to fall through. `ProducesTriangles` moved into the header as part of this: two rules now share that partition (`GLTF-072`'s conversion and this refusal), and a file-local copy is how the two would drift. No fixture: the corpus has no Draco asset and building one needs libdraco at *generation* time. |
-| GLTF-081 | Topology + morph interaction | ⬜ | GLTF-072 | Deltas are per-vertex, so topology conversion must not reorder vertices. **Accept:** asserted for `mode-triangle-strip` + morph. |
-| GLTF-082 | Report every topology conversion in the import report | ⬜ | GLTF-035, GLTF-072 | **Accept:** conversions are visible, not silent. |
+| GLTF-081 | Topology + morph interaction | ✅ | GLTF-072 | Deltas are per-vertex, so topology conversion must not reorder vertices. **Accept:** asserted for `mode-triangle-strip` + morph. **`mode-triangle-strip-morph`.** The conversion rewrites the **index** list (`[0,1,2,3]` → `[0,1,2, 2,1,3]`) while morph deltas are addressed **per vertex**, by position in the target accessor — so the two only coexist if the vertex order is left completely alone. The failure guarded against is not a crash but the obvious optimisation: vertices 1 and 2 appear in both of a four-index strip's triangles, so de-duplicating or compacting them would still produce a mesh, still produce a morph, and put every delta on the wrong vertex — a plausible deformation of the wrong shape. Asserted on the vertex count, the delta count, and each delta's landing vertex; the four deltas move different distances along +Z so a permutation is a different staircase rather than a subtly different surface, which identical deltas would have made indistinguishable from correctness. |
+| GLTF-082 | Report every topology conversion in the import report | ✅ | GLTF-035, GLTF-072 | **Accept:** conversions are visible, not silent. **`MeshOut` already carried both topologies and neither loader said anything about them.** Now reported per primitive, at **debug** rather than warning severity — deliberately, because unlike every other report in that block the conversion is *exact* and loses nothing. What it does do is renumber: the triangle a consumer draws is not at the index the file put it at, so anything mapping a picked triangle or a debug index back to the source primitive is wrong without knowing. `sourceTopology != topology` is the signal, and a test asserts it is true exactly when a conversion happened — for a strip and a fan, and not for an already-listed primitive or a line primitive that is not converted at all. |
 
 ---
 

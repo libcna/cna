@@ -12,12 +12,12 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 67,
+  "distinctAssetCount": 68,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
     "component-types": 2,
-    "topology": 7,
+    "topology": 8,
     "normals": 1,
     "transforms": 7,
     "materials": 8,
@@ -479,6 +479,25 @@
         "strip -> list conversion"
       ],
       "auditFixture": "f4"
+    },
+    {
+      "id": "mode-triangle-strip-morph",
+      "owningGroup": "topology",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "primitive.mode = TRIANGLE_STRIP",
+        "morph target",
+        "strip -> list conversion",
+        "per-vertex delta addressing"
+      ],
+      "auditFixture": null
     },
     {
       "id": "mode-triangle-fan",
@@ -2271,6 +2290,31 @@
       "path": "mode-triangle-fan.vb.bin",
       "bytes": 192,
       "sha256": "5ccd0044c315c3e47e8436a68058677dd5c2775b0e6a5aaa43c66bbe779a43c6"
+    },
+    {
+      "path": "mode-triangle-strip-morph.expected.json",
+      "bytes": 8339,
+      "sha256": "24ae90945a7e7513b8acee2d90c67c53b74f201f43273d14a0554b2fc46acfec"
+    },
+    {
+      "path": "mode-triangle-strip-morph.glb",
+      "bytes": 892,
+      "sha256": "7b73cb6da5a86aa3fe4d746a92ee29fbf16193053eba9b7b1d1f2b29ac629395"
+    },
+    {
+      "path": "mode-triangle-strip-morph.gltf",
+      "bytes": 1702,
+      "sha256": "f33e1051843d394fa6523cc418d14b7250a02d8b790a48948ab9f9a431becb33"
+    },
+    {
+      "path": "mode-triangle-strip-morph.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "mode-triangle-strip-morph.vb.bin",
+      "bytes": 192,
+      "sha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43"
     },
     {
       "path": "mode-triangle-strip.expected.json",
