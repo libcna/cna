@@ -47,6 +47,12 @@ STRIDE_LAYOUTS: dict[int, list[tuple[str, int, int]]] = {
 
 #: What ExtractMesh writes into a slot whose attribute the source file does not author. These are
 #: CNA's own choices, not the specification's, and they are recorded here rather than assumed.
+#: The normal a vertex gets when the L3 record states none. plan_gltf.md GLTF-173: since the
+#: importer now COMPUTES a flat normal for a primitive that authors none, this constant is only
+#: still correct for the fixtures it applies to because every one of them is a planar CCW triangle
+#: whose own face normal is exactly (0,0,1). A fixture that is not planar must state its computed
+#: normals in its own L3 record -- `normal-absent` does, which is what makes it the fixture that
+#: can tell the computed normal from the fabricated one.
 DEFAULT_NORMAL = (0.0, 0.0, 1.0)
 DEFAULT_TEXCOORD = (0.0, 0.0)
 

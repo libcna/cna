@@ -2310,6 +2310,21 @@ namespace Microsoft::Xna::Framework::Content
                             ". That map is not applied; the primitive draws as though it had none "
                             "(GLTF-200).");
                     }
+                    // plan_gltf.md GLTF-173: normals CNA derived rather than the file authoring
+                    // them. Only reported when the derivation had to approximate -- a faceted mesh
+                    // whose author already split its edges gets exact flat normals, and saying so
+                    // on every such import would be noise nobody reads.
+                    if (meshOut.smoothedNormalVertexCountEXT > 0)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' authors no NORMAL, so normals were computed per §3.7.2.1 -- but " +
+                            std::to_string(meshOut.smoothedNormalVertexCountEXT) +
+                            " vertex/vertices are shared between faces of different orientation. "
+                            "Flat shading would duplicate those vertices once per face, which this "
+                            "importer does not do, so they received the area-weighted average "
+                            "instead and that edge will look smooth rather than sharp (GLTF-173).");
+                    }
                     // plan_gltf.md GLTF-095/GLTF-257: influence sets past the first. The dropped
                     // share is what says whether it matters -- a fifth influence weighted 0.002 is
                     // exporter noise and one weighted 0.4 is a visibly different pose.

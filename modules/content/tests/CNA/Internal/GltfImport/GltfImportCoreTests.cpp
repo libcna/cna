@@ -10,6 +10,7 @@
 // has no matching test either).
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -19,6 +20,7 @@
 #include <string>
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 using namespace CNA::Internal::GltfImport;
 
@@ -758,4 +760,173 @@ TEST(GltfImportCoreTest, ExtractPunctualLightsEXTCapsAtThreeLights)
     EXPECT_EQ(lights.size(), 3u); // capped, not all 4 -- matches every CNA stock effect's own MaxLights=3.
 
     cgltf_free(data);
+}
+
+// --- plan_gltf.md GLTF-173: normals for a primitive that authors none ---------------------------
+
+namespace
+{
+    /// A single-primitive document over the given positions and indices, with no NORMAL attribute.
+    /// Positions are written as a base64 data: URI so the fixture needs no sidecar.
+    std::string NormalLessDocument(const std::vector<float>& positions,
+                                    const std::vector<std::uint16_t>& indices)
+    {
+        std::vector<std::uint8_t> buffer;
+        for (const float value : positions)
+        {
+            std::uint8_t bytes[4];
+            std::memcpy(bytes, &value, 4);
+            buffer.insert(buffer.end(), bytes, bytes + 4);
+        }
+        const std::size_t indexOffset = buffer.size();
+        for (const std::uint16_t value : indices)
+        {
+            buffer.push_back(static_cast<std::uint8_t>(value & 0xFF));
+            buffer.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFF));
+        }
+        while (buffer.size() % 4 != 0) { buffer.push_back(0); }
+
+        static const char* kAlphabet =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string base64;
+        for (std::size_t i = 0; i < buffer.size(); i += 3)
+        {
+            const std::uint32_t chunk =
+                (static_cast<std::uint32_t>(buffer[i]) << 16) |
+                (i + 1 < buffer.size() ? static_cast<std::uint32_t>(buffer[i + 1]) << 8 : 0u) |
+                (i + 2 < buffer.size() ? static_cast<std::uint32_t>(buffer[i + 2]) : 0u);
+            base64 += kAlphabet[(chunk >> 18) & 0x3F];
+            base64 += kAlphabet[(chunk >> 12) & 0x3F];
+            base64 += (i + 1 < buffer.size()) ? kAlphabet[(chunk >> 6) & 0x3F] : '=';
+            base64 += (i + 2 < buffer.size()) ? kAlphabet[chunk & 0x3F] : '=';
+        }
+
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0 }, "indices": 1, "mode": 4
+  } ] } ],
+  "buffers": [ { "byteLength": )GLTF") + std::to_string(buffer.size()) +
+               R"GLTF(, "uri": "data:application/octet-stream;base64,)GLTF" + base64 + R"GLTF(" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": )GLTF" + std::to_string(indexOffset) + R"GLTF( },
+    { "buffer": 0, "byteOffset": )GLTF" + std::to_string(indexOffset) +
+               R"GLTF(, "byteLength": )GLTF" + std::to_string(indices.size() * 2) + R"GLTF( }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": )GLTF" +
+               std::to_string(positions.size() / 3) + R"GLTF(, "type": "VEC3" },
+    { "bufferView": 1, "componentType": 5123, "count": )GLTF" +
+               std::to_string(indices.size()) + R"GLTF(, "type": "SCALAR" }
+  ]
+})GLTF";
+    }
+
+    MeshOut ExtractNormalLess(const std::vector<float>& positions,
+                              const std::vector<std::uint16_t>& indices)
+    {
+        const std::string json = NormalLessDocument(positions, indices);
+        cgltf_options options{};
+        cgltf_data* data = nullptr;
+        EXPECT_EQ(cgltf_result_success, cgltf_parse(&options, json.data(), json.size(), &data));
+        if (data == nullptr) { return MeshOut{}; }
+        EXPECT_EQ(cgltf_result_success, cgltf_load_buffers(&options, data, "."));
+        MeshOut out = ExtractMesh(data, data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
+        cgltf_free(data);
+        return out;
+    }
+
+    /// The Normal element of a packed vertex, read through the canonical stride table rather than
+    /// a hardcoded offset -- the lesson of GLTF-278.
+    std::array<float, 3> NormalOfVertex(const MeshOut& mesh, std::size_t vertex)
+    {
+        const CNA::Internal::Graphics::InferredVertexLayout layout =
+            CNA::Internal::Graphics::InferredLayoutForStride(
+                mesh.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+        EXPECT_TRUE(layout.known) << "stride " << mesh.stride << " is not in the canonical table";
+        int offset = -1;
+        for (std::size_t i = 0; layout.known && i < layout.count; ++i)
+        {
+            if (layout.elements[i].usage ==
+                    Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal &&
+                layout.elements[i].usageIndex == 0)
+            {
+                offset = layout.elements[i].offset;
+            }
+        }
+        EXPECT_GE(offset, 0);
+        std::array<float, 3> normal{};
+        if (offset >= 0)
+        {
+            std::memcpy(normal.data(),
+                        mesh.vertexBytes.data() +
+                            vertex * static_cast<std::size_t>(mesh.stride) +
+                            static_cast<std::size_t>(offset),
+                        sizeof(normal));
+        }
+        return normal;
+    }
+}
+
+TEST(GltfImportCoreTest, AbsentNormalsAreComputedFromTheFaceRatherThanFabricatedAsPlusZ)
+{
+    // §3.7.2.1 makes calculating flat normals a MUST. CNA wrote (0,0,1) on every vertex instead --
+    // a surface facing +Z regardless of where it points. The triangle is tilted out of the XY plane
+    // precisely so the two answers differ: cross((1,0,0),(0,1,1)) = (0,-1,1).
+    const MeshOut mesh = ExtractNormalLess({0, 0, 0, 1, 0, 0, 0, 1, 1}, {0, 1, 2});
+    ASSERT_EQ(3u, mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride));
+    EXPECT_TRUE(mesh.generatedNormalsEXT);
+    EXPECT_EQ(0u, mesh.smoothedNormalVertexCountEXT)
+        << "one triangle shares no vertex, so the flat normal is exact and nothing was averaged";
+
+    const float invSqrt2 = 1.0f / std::sqrt(2.0f);
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::array<float, 3> normal = NormalOfVertex(mesh, v);
+        EXPECT_NEAR(0.0f, normal[0], 1e-5f);
+        EXPECT_NEAR(-invSqrt2, normal[1], 1e-5f);
+        EXPECT_NEAR(invSqrt2, normal[2], 1e-5f);
+    }
+}
+
+TEST(GltfImportCoreTest, AnAuthoredPlanarTriangleStillGetsExactlyPlusZ)
+{
+    // The control, and the reason the rest of the corpus did not move: a planar CCW triangle's own
+    // face normal IS (0,0,1), so every other normal-less fixture reads identically under the old
+    // behaviour and the new one. Without this test that agreement looks like the change not having
+    // taken effect.
+    const MeshOut mesh = ExtractNormalLess({0, 0, 0, 1, 0, 0, 0, 1, 0}, {0, 1, 2});
+    EXPECT_TRUE(mesh.generatedNormalsEXT);
+    const std::array<float, 3> normal = NormalOfVertex(mesh, 0);
+    EXPECT_NEAR(0.0f, normal[0], 1e-6f);
+    EXPECT_NEAR(0.0f, normal[1], 1e-6f);
+    EXPECT_NEAR(1.0f, normal[2], 1e-6f);
+}
+
+TEST(GltfImportCoreTest, AVertexSharedAcrossFacesOfDifferentOrientationIsCountedAsApproximated)
+{
+    // Two triangles folded along the shared edge (2,3): the first lies in the XY plane, the second
+    // rises out of it. Vertices 2 and 3 belong to both, and flat shading would need each of them
+    // duplicated once per face -- which changes the vertex count and every per-vertex stream, so
+    // this extraction cannot express it. They get the area-weighted average, and the point of this
+    // test is that the approximation is COUNTED rather than assumed.
+    const MeshOut mesh = ExtractNormalLess(
+        {0, 0, 0,   1, 0, 0,   1, 1, 0,   0, 1, 0,   0, 2, 1,   1, 2, 1},
+        {0, 1, 2,  0, 2, 3,  3, 2, 4,  2, 5, 4});
+    EXPECT_TRUE(mesh.generatedNormalsEXT);
+    EXPECT_GT(mesh.smoothedNormalVertexCountEXT, 0u)
+        << "the fold's shared vertices were treated as if flat shading had been achieved";
+    EXPECT_LT(mesh.smoothedNormalVertexCountEXT, 6u)
+        << "only the shared vertices are approximated -- a count of every vertex would mean the "
+           "disagreement test is not discriminating at all";
+
+    // Vertex 0 belongs only to the two coplanar triangles, so its normal is exact.
+    const std::array<float, 3> flat = NormalOfVertex(mesh, 0);
+    EXPECT_NEAR(0.0f, flat[0], 1e-5f);
+    EXPECT_NEAR(0.0f, flat[1], 1e-5f);
+    EXPECT_NEAR(1.0f, flat[2], 1e-5f);
 }

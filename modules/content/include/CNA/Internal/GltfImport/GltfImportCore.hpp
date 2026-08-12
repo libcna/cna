@@ -427,6 +427,29 @@ namespace CNA::Internal::GltfImport
          */
         std::size_t extraInfluenceSetsEXT = 0;
         /**
+         * @brief True when the primitive authored no `NORMAL` and CNA computed one (`GLTF-173`).
+         *
+         * §3.7.2.1 requires a reader to calculate flat normals for a primitive without `NORMAL`.
+         * CNA used to write a fabricated `(0,0,1)` for every vertex instead — a surface facing +Z
+         * regardless of where it actually points — so a model lit from any other direction was
+         * uniformly and silently wrong. This says the normals in `vertexBytes` are derived rather
+         * than authored, which is worth knowing when comparing against another renderer.
+         */
+        bool generatedNormalsEXT = false;
+        /**
+         * @brief How many generated normals are averaged rather than truly flat (`GLTF-173`).
+         *
+         * Flat shading gives a vertex one normal *per face*, so a vertex shared between faces of
+         * different orientation must be duplicated once per face. Duplication changes the vertex
+         * count and every per-vertex stream including morph deltas, and this extraction produces
+         * one vertex array — so such a vertex instead receives the area-weighted average of its
+         * faces' normals, and is counted here.
+         *
+         * Zero for the case that matters most: a faceted mesh whose author already split its edges
+         * gets exact flat normals, because no vertex is shared across differing faces.
+         */
+        std::size_t smoothedNormalVertexCountEXT = 0;
+        /**
          * @brief The largest share of a single vertex's total influence that set truncation
          * discarded, in [0,1].
          *

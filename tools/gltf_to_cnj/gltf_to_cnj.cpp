@@ -267,6 +267,19 @@ namespace
                         "data (CNA currently samples every PBR map from one shared UV channel).");
                 }
 
+                // plan_gltf.md GLTF-173: computed normals that had to be averaged rather than
+                // truly flat, because a vertex is shared between faces of different orientation.
+                if (meshOut.smoothedNormalVertexCountEXT > 0)
+                {
+                    warnings.push_back(
+                        "Primitive '" + partName + "' authors no NORMAL, so normals were computed "
+                        "per glTF 3.7.2.1; " +
+                        std::to_string(meshOut.smoothedNormalVertexCountEXT) +
+                        " vertex/vertices are shared between faces of different orientation and "
+                        "received the area-weighted average instead of a true flat normal, so "
+                        "those edges will look smooth rather than sharp.");
+                }
+
                 // plan_gltf.md GLTF-095/GLTF-257: influence sets past the first are dropped,
                 // because XNA's BlendIndices/BlendWeight carry exactly four.
                 if (meshOut.extraInfluenceSetsEXT > 0)

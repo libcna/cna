@@ -2035,8 +2035,87 @@ namespace CNA::Internal::GltfImport
         {
             out.droppedNormalForStrideEXT = true;
         }
-        const std::vector<float> normals = (normAcc && strideHasNormalSlot)
+        std::vector<float> normals = (normAcc && strideHasNormalSlot)
             ? unpackSemantic(cgltf_attribute_type_normal, 0, normAcc, 3, "NORMAL") : std::vector<float>();
+
+        // plan_gltf.md GLTF-173. §3.7.2.1: "When normals are not specified, client implementations
+        // MUST calculate flat normals." CNA wrote a fabricated (0,0,1) for every vertex instead --
+        // a surface facing +Z regardless of where it actually points, so a model lit from any other
+        // direction was uniformly, silently wrong.
+        //
+        // What is computed here is the AREA-WEIGHTED VERTEX NORMAL: each triangle contributes its
+        // own face normal, scaled by twice its area (the un-normalized cross product), to each of
+        // its three vertices. For a mesh where no vertex is shared between faces of different
+        // orientation -- which includes every faceted mesh whose author already split its edges --
+        // that IS the flat normal, exactly. Where a vertex IS shared across differing faces, true
+        // flat shading needs that vertex duplicated once per face, and duplication would change the
+        // vertex count and every per-vertex stream including morph deltas; this extraction produces
+        // one vertex array and cannot express it. Those vertices get the averaged normal and are
+        // COUNTED, so the approximation is visible rather than assumed.
+        //
+        // Only for topologies that have faces at all. A point or line primitive has no surface, so
+        // there is no normal to compute and the packing loop's own placeholder stands.
+        if (normals.empty() && strideHasNormalSlot && ProducesTriangles(sourceTopology) &&
+            !positions.empty() && indices.size() >= 3)
+        {
+            const std::size_t vertices = positions.size() / 3;
+            std::vector<Vector3> accumulated(vertices);
+            // -1 = untouched, -2 = shared across differing faces, otherwise the first face index.
+            std::vector<int> firstFace(vertices, -1);
+            std::vector<Vector3> faceNormal;
+            faceNormal.reserve(indices.size() / 3);
+
+            for (std::size_t f = 0; f + 2 < indices.size(); f += 3)
+            {
+                const std::uint32_t i0 = indices[f], i1 = indices[f + 1], i2 = indices[f + 2];
+                if (i0 >= vertices || i1 >= vertices || i2 >= vertices) { continue; }
+                const auto at = [&](std::uint32_t i) {
+                    const std::size_t o = static_cast<std::size_t>(i) * 3;
+                    return Vector3(positions[o], positions[o + 1], positions[o + 2]);
+                };
+                const Vector3 a = at(i0), b = at(i1), c = at(i2);
+                // Un-normalized on purpose: its length is twice the triangle's area, which is the
+                // weight a large face should carry over a sliver sharing the same vertex.
+                const Vector3 weighted = Vector3::Cross(b - a, c - a);
+                const int face = static_cast<int>(faceNormal.size());
+                faceNormal.push_back(weighted);
+
+                for (const std::uint32_t index : {i0, i1, i2})
+                {
+                    accumulated[index] = accumulated[index] + weighted;
+                    int& first = firstFace[index];
+                    if (first == -1) { first = face; }
+                    else if (first >= 0)
+                    {
+                        const Vector3& other = faceNormal[static_cast<std::size_t>(first)];
+                        const float lenProduct = other.Length() * weighted.Length();
+                        // Degenerate faces have no orientation to disagree with.
+                        if (lenProduct > 1e-12f &&
+                            Vector3::Dot(other, weighted) / lenProduct < 0.99999f)
+                        {
+                            first = -2;
+                        }
+                    }
+                }
+            }
+
+            normals.resize(vertices * 3);
+            for (std::size_t v = 0; v < vertices; ++v)
+            {
+                Vector3 n = accumulated[v];
+                const float length = n.Length();
+                // A vertex touched by no face, or only by degenerate ones, has no computable
+                // normal. glTF's own default up for such a case does not exist, so the packing
+                // loop's placeholder is the honest answer and is reproduced here.
+                n = (length > 1e-12f) ? Vector3(n.X / length, n.Y / length, n.Z / length)
+                                      : Vector3(0.0f, 0.0f, 1.0f);
+                normals[v * 3] = n.X;
+                normals[v * 3 + 1] = n.Y;
+                normals[v * 3 + 2] = n.Z;
+                if (firstFace[v] == -2) { ++out.smoothedNormalVertexCountEXT; }
+            }
+            out.generatedNormalsEXT = true;
+        }
         std::vector<float> uvs = uvAcc
             ? unpackSemantic(cgltf_attribute_type_texcoord, texcoordIndex, uvAcc, 2, "TEXCOORD") : std::vector<float>();
         // CNB-97 (Phase 14H): KHR_texture_transform, applied to the shared UV channel baked into

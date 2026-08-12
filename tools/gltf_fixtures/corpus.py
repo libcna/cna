@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from . import GENERATOR_VERSION, SPEC_PIN
 from .defs import (accessors, animation, cameras, component_types, container, materials,
-                   robustness, scenes, skinning, topology, transforms)
+                   normals, robustness, scenes, skinning, topology, transforms)
 from .manifest import OPEN_DEFECT_STATUSES, Fixture, dumps
 
 #: Owning groups in a fixed order, so the emitted manifest is deterministic. The order follows
@@ -23,6 +23,7 @@ _GROUP_MODULES: list[tuple[str, Any]] = [
     ("accessors", accessors),
     ("component-types", component_types),
     ("topology", topology),
+    ("normals", normals),
     ("transforms", transforms),
     ("materials", materials),
     ("skinning", skinning),

@@ -12,12 +12,13 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 42,
+  "distinctAssetCount": 43,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
     "component-types": 2,
     "topology": 7,
+    "normals": 1,
     "transforms": 5,
     "materials": 4,
     "skinning": 7,
@@ -491,6 +492,23 @@
       "features": [
         "primitive.mode = TRIANGLE_FAN",
         "fan -> list conversion"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "normal-absent",
+      "owningGroup": "normals",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "absent NORMAL",
+        "computed flat normals",
+        "non-planar triangle"
       ],
       "auditFixture": null
     },
@@ -1488,6 +1506,31 @@
       "path": "morph-node-weights-override.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "normal-absent.expected.json",
+      "bytes": 5935,
+      "sha256": "19feb33d555a9e6bdc70b14e7625a1ccdc0da6bbbecc8a3663bd54a301f542af"
+    },
+    {
+      "path": "normal-absent.glb",
+      "bytes": 632,
+      "sha256": "bfc7dbae60999a861c86f99c1ce7b12e6fa141e81a41ff85d4fa28d26a7a4548"
+    },
+    {
+      "path": "normal-absent.gltf",
+      "bytes": 1171,
+      "sha256": "c0eb9d95e8463d6c1db2ce296346eaa209e3513d0c421e4578682a3c07848298"
+    },
+    {
+      "path": "normal-absent.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "normal-absent.vb.bin",
+      "bytes": 144,
+      "sha256": "202793412e9c1e5d70a3f54878468a1e3fa66b079e12a05b82847b4ae3ccc9ef"
     },
     {
       "path": "normalized-u8-color.expected.json",
