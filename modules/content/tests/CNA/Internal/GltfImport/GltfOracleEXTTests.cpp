@@ -215,13 +215,27 @@ TEST(GltfOracleEXT, EvaluateWorldPositionsEXTAgreesWithCgltfOnEveryFixture)
 {
     // The oracle composes node transforms itself rather than delegating, so that it is a genuine
     // second opinion. This test is what keeps that independence honest.
+    //
+    // A fixture the importer refuses has no world geometry to agree about, and the oracle is an
+    // oracle for conforming files only: `bad-accessor-count-overflow` declares 2**62 elements, so
+    // decoding its POSITION accessor at all is an allocation no reader should attempt. Such a
+    // fixture is allowed to throw here -- its refusal is asserted in full by
+    // GltfContainerValidation -- and everything else must both evaluate and self-check.
+    std::size_t evaluated = 0;
     for (const std::string& id : CorpusFixtureIds())
     {
         SCOPED_TRACE(id);
         const LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        if (IsRejectionFixture(fixture.Expected()))
+        {
+            try { (void)EvaluateWorldPositionsEXT(fixture.Data()); } catch (const std::exception&) {}
+            continue;
+        }
         EXPECT_TRUE(EvaluateWorldPositionsEXT(fixture.Data()).selfCheckPassed);
+        ++evaluated;
     }
+    EXPECT_GT(evaluated, 50u) << "the sweep has shrunk -- it no longer covers the corpus";
 }
 
 TEST(GltfOracleEXT, EvaluateWorldPositionsEXTDoesNotAlterProductionBehaviour)

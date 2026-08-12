@@ -209,6 +209,29 @@ namespace CNA::Internal::GltfImport
             }
         }
 
+        // The last byte an accessor-like walk touches: offset + (count-1)*stride + elementSize,
+        // computed so that an overflow throws instead of wrapping into a small, plausible span
+        // that would then pass the bounds check (plan_gltf.md §8.1).
+        std::size_t RequiredSpan(std::size_t byteOffset, std::size_t count, std::size_t stride,
+                                  std::size_t elementSize, const std::string& context)
+        {
+            if (count == 0) { return byteOffset; }
+            constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+            if (stride != 0 && (count - 1) > kMax / stride)
+            {
+                throw std::runtime_error("Accessor '" + context + "' declares a byte span that "
+                                          "overflows: count " + std::to_string(count) +
+                                          " at stride " + std::to_string(stride) + ".");
+            }
+            const std::size_t walk = (count - 1) * stride;
+            if (walk > kMax - elementSize || byteOffset > kMax - walk - elementSize)
+            {
+                throw std::runtime_error("Accessor '" + context + "' declares a byte span that "
+                                          "overflows its own byteOffset.");
+            }
+            return byteOffset + walk + elementSize;
+        }
+
         // Unpacks an entire accessor to floats in one call. Unlike per-element
         // cgltf_accessor_read_float, cgltf_accessor_unpack_floats correctly resolves sparse
         // accessors (base values overlaid with sparse overrides) -- read_float rejects sparse
@@ -222,6 +245,33 @@ namespace CNA::Internal::GltfImport
                 throw std::runtime_error(
                     std::string("Accessor '") + context + "' has " + std::to_string(actualComponents) +
                     " components per element, expected " + std::to_string(expectedComponents) + ".");
+            }
+            // plan_gltf.md GLTF-039. The span guard again, at the point of allocation.
+            // `ValidateGltfEXT` runs it first on every production load, but `ExtractMesh` is
+            // reachable without it -- the conformance harness and the offline converter both call
+            // the extraction path directly -- and an accessor whose declared count wraps its own
+            // span otherwise surfaces as `std::length_error: cannot create std::vector larger than
+            // max_size()`, thrown from inside the allocator, naming neither the file nor the
+            // accessor nor what is wrong with it.
+            if (accessor->buffer_view != nullptr)
+            {
+                const std::size_t elementSize =
+                    cgltf_calc_size(accessor->type, accessor->component_type);
+                const std::size_t stride = accessor->stride != 0
+                    ? static_cast<std::size_t>(accessor->stride) : elementSize;
+                const std::size_t span = RequiredSpan(static_cast<std::size_t>(accessor->offset),
+                                                       static_cast<std::size_t>(accessor->count),
+                                                       stride, elementSize, context);
+                if (span > static_cast<std::size_t>(accessor->buffer_view->size))
+                {
+                    throw std::runtime_error(
+                        std::string("Accessor '") + context + "' declares " +
+                        std::to_string(static_cast<std::size_t>(accessor->count)) +
+                        " elements, which read " + std::to_string(span) +
+                        " bytes from a bufferView of " +
+                        std::to_string(static_cast<std::size_t>(accessor->buffer_view->size)) +
+                        " bytes.");
+                }
             }
             std::vector<float> out(static_cast<std::size_t>(accessor->count) *
                                     static_cast<std::size_t>(expectedComponents));
@@ -303,28 +353,6 @@ namespace CNA::Internal::GltfImport
             }
         }
 
-        // The last byte an accessor-like walk touches: offset + (count-1)*stride + elementSize,
-        // computed so that an overflow throws instead of wrapping into a small, plausible span
-        // that would then pass the bounds check (plan_gltf.md §8.1).
-        std::size_t RequiredSpan(std::size_t byteOffset, std::size_t count, std::size_t stride,
-                                  std::size_t elementSize, const std::string& context)
-        {
-            if (count == 0) { return byteOffset; }
-            constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
-            if (stride != 0 && (count - 1) > kMax / stride)
-            {
-                throw std::runtime_error("Accessor '" + context + "' declares a byte span that "
-                                          "overflows: count " + std::to_string(count) +
-                                          " at stride " + std::to_string(stride) + ".");
-            }
-            const std::size_t walk = (count - 1) * stride;
-            if (walk > kMax - elementSize || byteOffset > kMax - walk - elementSize)
-            {
-                throw std::runtime_error("Accessor '" + context + "' declares a byte span that "
-                                          "overflows its own byteOffset.");
-            }
-            return byteOffset + walk + elementSize;
-        }
 
         // Decodes a whole index accessor to uint32, resolving `sparse` overrides (§3.6.2.3) and
         // bounds-checking every read against the owning bufferView. Never returns a value it could
@@ -3604,6 +3632,107 @@ namespace CNA::Internal::GltfImport
                 " (cgltf_validate code " + std::to_string(static_cast<int>(validation)) +
                 "). Decoding it could read outside the file's own buffers, so it is rejected "
                 "rather than imported.");
+        }
+
+        // (1a) GLTF-039. The same spans cgltf_validate just checked, recomputed so that an
+        // *overflow* is an error rather than a smaller number.
+        //
+        // cgltf computes `offset + stride * (count - 1) + elementSize` in `cgltf_size`, and
+        // `offset + size` for a bufferView, both in unsigned arithmetic that wraps silently. A
+        // file declaring `"count": 6148914691236517206` on a VEC3<float> accessor makes
+        // `stride * (count - 1)` wrap to a small value, so the comparison against the bufferView's
+        // size *passes* -- the file is admitted, and every later read walks off the end of the
+        // buffer using the enormous count the file actually asked for. The wrap is what makes it
+        // dangerous: an unchecked-but-honest 2^62 would simply fail the bounds check.
+        //
+        // `RequiredSpan` is the same arithmetic with each step guarded, and it is what the index
+        // decode path already uses (§8.1); this brings every accessor in the file under it,
+        // including the two sparse arrays, before anything reads a byte. Rejection, for the same
+        // reason as (1): a wrapped span is not a file CNA can decode at all.
+        {
+            // Unquoted, because `RequiredSpan` quotes whatever it is handed; the throws below
+            // quote it themselves so every message in this block reads the same way.
+            const auto describe = [&sourceName](cgltf_size index, const char* what) {
+                return sourceName + " accessor " + std::to_string(index) + " (" + what + ")";
+            };
+            for (cgltf_size i = 0; i < data->accessors_count; ++i)
+            {
+                const cgltf_accessor& accessor = data->accessors[i];
+                const cgltf_size elementSize =
+                    cgltf_calc_size(accessor.type, accessor.component_type);
+                if (accessor.buffer_view != nullptr)
+                {
+                    const std::size_t span = RequiredSpan(
+                        static_cast<std::size_t>(accessor.offset),
+                        static_cast<std::size_t>(accessor.count),
+                        static_cast<std::size_t>(accessor.stride != 0 ? accessor.stride
+                                                                       : elementSize),
+                        static_cast<std::size_t>(elementSize), describe(i, "base"));
+                    if (span > static_cast<std::size_t>(accessor.buffer_view->size))
+                    {
+                        throw std::runtime_error(
+                            "Accessor '" + describe(i, "base") + "' reads " + std::to_string(span) +
+                            " bytes from a bufferView of " +
+                            std::to_string(static_cast<std::size_t>(accessor.buffer_view->size)) +
+                            " bytes.");
+                    }
+                }
+                if (accessor.is_sparse == 0) { continue; }
+                const cgltf_accessor_sparse& sparse = accessor.sparse;
+                const std::size_t sparseCount = static_cast<std::size_t>(sparse.count);
+                if (sparse.indices_buffer_view != nullptr)
+                {
+                    const std::size_t indexSize =
+                        static_cast<std::size_t>(cgltf_component_size(sparse.indices_component_type));
+                    // §3.6.2.3: both sparse arrays are tightly packed, so the element size is the
+                    // stride -- never the base accessor's, which may be interleaved.
+                    const std::size_t span = RequiredSpan(
+                        static_cast<std::size_t>(sparse.indices_byte_offset), sparseCount,
+                        indexSize, indexSize, describe(i, "sparse indices"));
+                    if (span > static_cast<std::size_t>(sparse.indices_buffer_view->size))
+                    {
+                        throw std::runtime_error("Accessor '" + describe(i, "sparse indices") +
+                                                  "' reads past its own bufferView.");
+                    }
+                }
+                if (sparse.values_buffer_view != nullptr)
+                {
+                    const std::size_t span = RequiredSpan(
+                        static_cast<std::size_t>(sparse.values_byte_offset), sparseCount,
+                        static_cast<std::size_t>(elementSize),
+                        static_cast<std::size_t>(elementSize), describe(i, "sparse values"));
+                    if (span > static_cast<std::size_t>(sparse.values_buffer_view->size))
+                    {
+                        throw std::runtime_error("Accessor '" + describe(i, "sparse values") +
+                                                  "' reads past its own bufferView.");
+                    }
+                }
+            }
+            // The same wrap one level down: a bufferView whose `byteOffset + byteLength` exceeds
+            // `SIZE_MAX` wraps into a range that fits inside its buffer, so cgltf's own
+            // `offset + size <= buffer->size` test passes on a view that starts past the end.
+            //
+            // No .gltf file can reach this today, and the corpus deliberately holds no fixture for
+            // it: cgltf parses every integer through `atoll`, so a JSON value above `LLONG_MAX`
+            // saturates, and two saturated values still sum to `2^64 - 2`. It is asserted directly
+            // instead -- `GltfContainerRobustness.ValidationRejectsABufferViewWhoseRangeWraps`
+            // hands `ValidateGltfEXT` a `cgltf_data` built in the test -- because the guard's job
+            // is to make the *computation* safe rather than to trust one parser's limits, and a
+            // check nothing exercises is a check that has already stopped working.
+            for (cgltf_size i = 0; i < data->buffer_views_count; ++i)
+            {
+                const cgltf_buffer_view& view = data->buffer_views[i];
+                const std::size_t offset = static_cast<std::size_t>(view.offset);
+                const std::size_t size = static_cast<std::size_t>(view.size);
+                if (offset > std::numeric_limits<std::size_t>::max() - size)
+                {
+                    throw std::runtime_error(
+                        "'" + sourceName + "' bufferView " + std::to_string(i) +
+                        " declares byteOffset " + std::to_string(offset) + " and byteLength " +
+                        std::to_string(size) + ", whose sum overflows. The file is rejected rather "
+                        "than imported: the wrapped range would pass every later bounds check.");
+                }
+            }
         }
 
         // (1b) GLTF-036 / §3.6.2.4 data alignment. cgltf_validate does NOT check this, and the

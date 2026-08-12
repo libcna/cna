@@ -262,6 +262,76 @@ def skin_joint_index_padding() -> Fixture:
     )
 
 
+#: The element count `bad-accessor-count-overflow` declares. 2**62 + 1 is chosen so the span
+#: arithmetic wraps to *nothing*: a tightly packed VEC3<float> has a 12-byte stride, and
+#: 12 * (2**62) is exactly 3 * 2**64, which is 0 in `size_t`. The declared span therefore collapses
+#: to `byteOffset + elementSize` -- 12 bytes -- and passes every bounds check in sight while the
+#: accessor still asks for 4.6 * 10**18 elements. A merely enormous count would simply fail the
+#: bounds check; this one has to be caught by the arithmetic itself.
+_OVERFLOWING_COUNT = 2**62 + 1
+
+
+def bad_accessor_count_overflow() -> Fixture:
+    """A POSITION accessor whose count makes its own byte span **wrap**. Proves **`GLTF-039`**.
+
+    `cgltf_validate` computes ``offset + stride * (count - 1) + elementSize`` in unsigned
+    arithmetic that wraps silently, so this file passes structural validation: the wrapped span is
+    12 bytes, which fits the bufferView. Nothing after that point re-checks the count, and the
+    decode path would allocate and walk 2**62 elements from a 36-byte view.
+
+    The fixture exists because the difference between "rejected" and "admitted" here is one
+    unsigned multiply, and no other fixture in the corpus can tell the two apart -- an accessor
+    that is merely too long (``bad-accessor-out-of-bounds``) is caught by the bounds check that
+    this one slips through.
+    """
+    b = GltfBuilder("bad-accessor-count-overflow")
+    # Packed honestly -- three real vertices -- and then described with a count no buffer could
+    # ever back. The bytes stay readable, so what is under test is unambiguously the arithmetic.
+    packed = pack(flatten(TRIANGLE_POSITIONS), FLOAT)
+    offset = b.append_bytes(packed, alignment=4)
+    view = b.add_buffer_view(offset, len(packed))
+    position = b.add_accessor(
+        usage="POSITION", component_type=FLOAT, accessor_type="VEC3", count=3,
+        expected=flatten(TRIANGLE_POSITIONS), buffer_view=view,
+        min_=[0.0, 0.0, 0.0], max_=[1.0, 1.0, 0.0], declared_count=_OVERFLOWING_COUNT)
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="OverflowTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="bad-accessor-count-overflow", audit_fixture=None, owning_group="robustness",
+        description="A POSITION accessor declaring 2**62 + 1 elements over a 36-byte bufferView. "
+                    "At a 12-byte stride the span computation wraps to 12 bytes, so every bounds "
+                    "check that computes it in size_t -- including cgltf_validate's -- reports the "
+                    "file as sound. Only arithmetic that checks for the overflow can refuse it.",
+        builder=b, validated_layers=["L1"],
+        features=["accessor count overflow", "size_t wrap", "structural validation",
+                  "import rejection"],
+        spec_anchors=["accessors"],
+        l3={"primitives": []},
+        l4={},
+        l5=l5_unsupported("The asset is rejected at validation, so no buffers are produced.",
+                          ["GLTF-039"]),
+        rejection={
+            "stage": "validation",
+            "task": "GLTF-039",
+            "errorContains": ["overflows", "bad-accessor-count-overflow"],
+            "declaredCount": _OVERFLOWING_COUNT,
+            "wrappedSpanBytes": 12,
+            "note": "The wrap is what makes this dangerous rather than merely wrong: an honest "
+                    "2**62 would fail the bounds check on the first comparison. cgltf computes "
+                    "the same expression and cannot see it, so the check has to be CNA's own -- "
+                    "and it runs before anything reads a byte.",
+        },
+    )
+
+
 def bad_animation_input_order() -> Fixture:
     """An animation sampler whose input times go **backwards**. Proves **`GLTF-313`**.
 
@@ -347,5 +417,6 @@ def bad_animation_input_order() -> Fixture:
     )
 
 
-FIXTURES = [bad_accessor_out_of_bounds, accessor_count_mismatch, skin_joint_index_out_of_range,
+FIXTURES = [bad_accessor_out_of_bounds, bad_accessor_count_overflow, accessor_count_mismatch,
+            skin_joint_index_out_of_range,
             skin_joint_index_padding, bad_animation_input_order]

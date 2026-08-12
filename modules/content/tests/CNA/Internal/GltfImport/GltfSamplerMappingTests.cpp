@@ -190,18 +190,41 @@ TEST(GltfSamplerMapping, AttributeCountAgreementCoversEveryDeclaredStreamNotJust
 
     // The converse: every other corpus fixture extracts cleanly, so the check is not simply
     // refusing anything with more than one attribute.
+    //
+    // Which fixtures are exempt is read from the manifest rather than listed here. A hardcoded
+    // pair of ids was silently wrong the moment a third malformed fixture was added, and it says
+    // nothing about WHY those two are exempt; `rejection` says exactly that, and cannot be
+    // forgotten. A rejection fixture is still extracted -- it must not crash on malformed input --
+    // only its refusal is allowed, and the suite that owns the refusal asserts its message.
     std::size_t extracted = 0;
+    std::size_t refusedFixtures = 0;
     for (const std::string& id : CnaTest::GltfOracle::CorpusFixtureIds())
     {
-        if (id == "accessor-count-mismatch" || id == "bad-accessor-out-of-bounds") { continue; }
         const CnaTest::GltfOracle::LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const bool mayRefuse = CnaTest::GltfOracle::IsRejectionFixture(fixture.Expected());
         const cgltf_data& data = fixture.Data();
         for (cgltf_size m = 0; m < data.meshes_count; ++m)
         {
             for (cgltf_size pi = 0; pi < data.meshes[m].primitives_count; ++pi)
             {
                 SCOPED_TRACE(id + " mesh " + std::to_string(m) + " primitive " + std::to_string(pi));
+                if (mayRefuse)
+                {
+                    try
+                    {
+                        (void)CNA::Internal::GltfImport::ExtractMesh(
+                            &data, data.meshes[m].primitives[pi], "probe", nullptr, 1.0f);
+                    }
+                    catch (const std::runtime_error&)
+                    {
+                        // Named and deliberate. Anything else escapes and fails the test, which is
+                        // what keeps "malformed input is refused" from covering "malformed input
+                        // throws whatever the allocator felt like".
+                        ++refusedFixtures;
+                    }
+                    continue;
+                }
                 EXPECT_NO_THROW({
                     (void)CNA::Internal::GltfImport::ExtractMesh(
                         &data, data.meshes[m].primitives[pi], "probe", nullptr, 1.0f);
@@ -211,6 +234,9 @@ TEST(GltfSamplerMapping, AttributeCountAgreementCoversEveryDeclaredStreamNotJust
         }
     }
     EXPECT_GT(extracted, 0u);
+    EXPECT_GT(refusedFixtures, 0u)
+        << "no malformed fixture was refused at extraction, so the exemption above is covering "
+           "nothing";
 }
 
 // --- plan_gltf.md GLTF-214: vertex colours are linear, and stay that way ---------------------------

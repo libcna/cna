@@ -324,7 +324,8 @@ class GltfBuilder:
                      expected: Sequence[float], buffer_view: int | None,
                      byte_offset: int = 0, normalized: bool = False,
                      min_: Sequence[float] | None = None, max_: Sequence[float] | None = None,
-                     sparse: dict[str, Any] | None = None) -> int:
+                     sparse: dict[str, Any] | None = None,
+                     declared_count: int | None = None) -> int:
         """Adds an accessor whose bytes some caller has already placed in the buffer.
 
         Use this when the accessor's storage is the thing under test -- interleaving, a non-zero
@@ -344,6 +345,10 @@ class GltfBuilder:
         :param min_: the authored ``min`` bound, if any.
         :param max_: the authored ``max`` bound, if any.
         :param sparse: the authored ``sparse`` block, if any.
+        :param declared_count: the count to WRITE into the file, when it must differ from the
+            honest ``count`` the expectation is built from. Only a malformed fixture wants this --
+            a count no buffer could back is the lie under test (``GLTF-039``) -- so the two are
+            kept separate rather than letting a bad count silently define the expectation.
         :return: the new accessor's index.
         """
         components = ACCESSOR_TYPE_COMPONENTS[accessor_type]
@@ -352,8 +357,10 @@ class GltfBuilder:
                 f"{self.name}: {usage} declares {count} x {accessor_type} "
                 f"({count * components} components) but the expectation carries {len(expected)}")
 
-        accessor: dict[str, Any] = {"componentType": component_type, "count": count,
-                                    "type": accessor_type}
+        accessor: dict[str, Any] = {
+            "componentType": component_type,
+            "count": count if declared_count is None else declared_count,
+            "type": accessor_type}
         if buffer_view is not None:
             accessor["bufferView"] = buffer_view
             if byte_offset:
@@ -388,6 +395,10 @@ class GltfBuilder:
             "bufferViewByteStride": view.get("byteStride") if view is not None else None,
             "values": values,
         })
+        # Recorded only when the file LIES about its count, so a malformed fixture states the
+        # number under test while every honest fixture's expectation stays exactly as it was.
+        if declared_count is not None and declared_count != count:
+            self.accessor_records[-1]["declaredCount"] = declared_count
         return len(self._accessors) - 1
 
     def add_packed_accessor(self, *, usage: str, values: Sequence[Any], accessor_type: str,

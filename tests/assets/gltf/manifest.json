@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 70,
+  "distinctAssetCount": 71,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -27,7 +27,7 @@
     "cameras": 5,
     "lights": 2,
     "scenes": 1,
-    "robustness": 5
+    "robustness": 6
   },
   "promotedAuditFixtures": {
     "f1": "xf-shared-mesh",
@@ -1420,6 +1420,21 @@
       "auditFixture": null
     },
     {
+      "id": "bad-accessor-count-overflow",
+      "owningGroup": "robustness",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1"
+      ],
+      "features": [
+        "accessor count overflow",
+        "size_t wrap",
+        "structural validation",
+        "import rejection"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "accessor-count-mismatch",
       "owningGroup": "robustness",
       "referencingGroups": [],
@@ -1745,6 +1760,21 @@
       "path": "anim-weights-path.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "bad-accessor-count-overflow.expected.json",
+      "bytes": 3435,
+      "sha256": "4951fc13f8bbc6af02a0a7074bb900621f66928455449132cd40a1d0ec75b0ba"
+    },
+    {
+      "path": "bad-accessor-count-overflow.glb",
+      "bytes": 652,
+      "sha256": "48e9f80afb538906c9439b6fef41de01bdd964a213f74df5bd4b25612faec612"
+    },
+    {
+      "path": "bad-accessor-count-overflow.gltf",
+      "bytes": 1191,
+      "sha256": "28793de9906c5480156d2401025f88da53c3ef3ce2146fe03934f28aedbdbc4a"
     },
     {
       "path": "bad-accessor-out-of-bounds.expected.json",

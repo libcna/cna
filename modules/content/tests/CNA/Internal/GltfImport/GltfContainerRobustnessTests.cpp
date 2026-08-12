@@ -19,6 +19,7 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -242,6 +243,47 @@ TEST(GltfContainerRobustness, ABufferViewStartingPastTheEndOfItsBufferIsRefused)
     std::vector<std::string> warnings;
     EXPECT_THROW(ValidateGltfEXT(doc.data, "far-offset.gltf", warnings), std::runtime_error)
         << "a bufferView starting past the end of its buffer was accepted";
+}
+
+// plan_gltf.md GLTF-039. The offset test above is the reachable half of the same class; this is
+// the half no .gltf file can express, and it is asserted directly rather than left unexercised.
+//
+// cgltf parses every JSON integer through `atoll`, so a value above `LLONG_MAX` saturates and two
+// saturated values still sum to `2^64 - 2` -- a file cannot make `byteOffset + byteLength` wrap.
+// The guard is not about what one parser accepts, though: it is about the computation being safe
+// for any caller, and a check nothing exercises is a check that has already stopped working. So
+// the range is set on a parsed document, which is exactly the state ValidateGltfEXT is handed.
+TEST(GltfContainerRobustness, ValidationRejectsABufferViewWhoseRangeWraps)
+{
+    Parsed doc;
+    ASSERT_TRUE(ParseText(doc, R"GLTF({
+  "asset": { "version": "2.0" },
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+  "buffers": [ { "byteLength": 36, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" } ]
+})GLTF"));
+    std::vector<std::string> warnings;
+    // The control: as parsed, the document is sound, so a failure below is the wrap and not the
+    // file.
+    ASSERT_NO_THROW(ValidateGltfEXT(doc.data, "wrapping-view.gltf", warnings));
+
+    // 36 bytes starting 8 short of the address space: the sum is 28 in size_t, which is inside a
+    // 36-byte buffer, so every unchecked `offset + size <= buffer.size` test in existence passes.
+    doc.data->buffer_views[0].offset = std::numeric_limits<std::size_t>::max() - 8;
+    doc.data->buffer_views[0].size = 36;
+    try
+    {
+        ValidateGltfEXT(doc.data, "wrapping-view.gltf", warnings);
+        ADD_FAILURE() << "a bufferView whose byteOffset + byteLength wraps was accepted";
+    }
+    catch (const std::runtime_error& e)
+    {
+        EXPECT_NE(std::string::npos, std::string(e.what()).find("overflow"))
+            << "the refusal does not say what is wrong: " << e.what();
+    }
+    // Left in the wrapped state deliberately -- cgltf_free walks the buffers, not the views, so
+    // nothing here reads the range again.
 }
 
 // --- GLTF-048: two primitives sharing one bufferView ----------------------------------------------
