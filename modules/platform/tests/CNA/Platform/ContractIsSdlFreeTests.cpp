@@ -23,6 +23,7 @@
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/Input/IPlatformSensors.hpp"
+#include "CNA/Platform/Input/KeyCode.hpp"
 #include "CNA/Platform/Input/Scancode.hpp"
 #include "CNA/Platform/Input/IPlatformTextInput.hpp"
 #include "CNA/Platform/NativeWindowHandle.hpp"

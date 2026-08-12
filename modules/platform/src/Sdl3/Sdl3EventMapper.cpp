@@ -3,6 +3,7 @@
 #include "Sdl3EventMapper.hpp"
 
 #include "Sdl3Modifiers.hpp"
+#include "Sdl3KeyCodes.hpp"
 #include "Sdl3Scancodes.hpp"
 
 #include <SDL3/SDL.h>
@@ -75,7 +76,7 @@ namespace CNA::Platform::Sdl3 {
                 KeyEvent key;
                 key.window = static_cast<WindowId>(source.key.windowID);
                 key.scancode = ToScancode(source.key.scancode);
-                key.keycode = static_cast<std::uint32_t>(source.key.key);
+                key.keycode = ToKeyCode(source.key.key);
                 key.modifiers = ToPlatformModifiers(source.key.mod);
                 key.pressed = source.key.down;
                 key.repeat = source.key.repeat;

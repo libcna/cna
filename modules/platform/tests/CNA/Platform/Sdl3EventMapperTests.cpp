@@ -99,7 +99,7 @@ TEST(Sdl3EventMapperTests, KeyDownCarriesScancodeKeycodeModifiersAndRepeat)
     const auto& key = std::get<KeyEvent>(mapped);
     EXPECT_EQ(key.window, 7u);
     EXPECT_EQ(key.scancode, Scancode::A);
-    EXPECT_EQ(key.keycode, static_cast<std::uint32_t>(SDLK_A));
+    EXPECT_EQ(key.keycode, KeyCode::A);
     EXPECT_EQ(key.modifiers, static_cast<std::uint16_t>(SDL_KMOD_LSHIFT));
     EXPECT_TRUE(key.pressed);
     // Repeat must survive the mapping: a platform without real key-release synthesises releases

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Platform/Input/KeyCode.hpp"
 #include "CNA/Platform/Input/Scancode.hpp"
 
 #include <cstdint>
@@ -82,8 +83,13 @@ namespace CNA::Platform {
          * the platform cannot classify the key.
          */
         Scancode scancode = Scancode::Unknown;
-        /** @brief Layout-dependent virtual key code, matching `Microsoft::Xna::Framework::Input::Keys`. */
-        std::uint32_t keycode = 0;
+        /**
+         * @brief Layout-dependent virtual key: what the key means on the user's layout.
+         *
+         * A text field wants this rather than `scancode` — on a French keyboard the key where a
+         * US keyboard has Q produces A. `None` when the platform names no virtual key for it.
+         */
+        KeyCode keycode = KeyCode::None;
         /**
          * @brief Modifier keys held at the time of the event, as a bitmask of `KeyModifier`
          * values — the same layout as `KeyboardSnapshot::modifiers`.
