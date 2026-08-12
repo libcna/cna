@@ -68,8 +68,8 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1123** |
-| Files referencing SDL (all) | **582** |
-| Production files (`src/` + `include/`) referencing SDL | **259** |
+| Files referencing SDL (all) | **581** |
+| Production files (`src/` + `include/`) referencing SDL | **258** |
 | …of which are renderer production files | **116** |
 | Test/example files referencing SDL | **323** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
@@ -79,10 +79,10 @@ Production SDL surface per module (`src/` + `include/` only):
 
 | Module | Files | Dominant concern |
 |---|---:|---|
-| `modules/input` | 39 | keyboard, mouse, gamepad, joystick, haptic, sensor, touch, text input |
+| `modules/input` | 37 | keyboard, mouse, gamepad, joystick, haptic, sensor, touch, text input |
 | `modules/devices-ext` | 30 | clipboard, message box, file dialog, tray, camera, locale, power, display, URL |
+| `modules/platform` | 18 | - |
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
-| `modules/platform` | 17 | - |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
 | `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
@@ -433,6 +433,7 @@ re-points that seam at the platform contract rather than inventing a new one.
 | PLAT-77d | Delete `SystemMouseBackend` and `SystemDeviceBackend` | ✅ | Deletions two and three of PLAT-77's four. `Mouse::{SetCaptureEXT,GetGlobalPositionEXT,WarpGlobalEXT}` read `IPlatformMouse`'s PLAT-77a calls; `InputDevices::{GetMice,GetKeyboards,GetTouchDevices}EXT` and `TouchPanel::GetCapabilities`'s touch probe read `IPlatformInputDevices`. Two contract corrections fell out of *using* what PLAT-77b had just added: `InputDeviceKind` had **no `Touch`** — so the touch-device list, which is what `TouchPanel` actually probes with, could not be served at all — and `DeviceId` was **32 bits while touch identifiers are genuinely 64**, so it was widened. One width now holds keyboard, mouse, joystick and touch ids losslessly, which is what makes the shared-vocabulary claim between `DeviceEvent` and enumeration true rather than merely intended. `GetGlobalPositionEXT` now **zeroes its outputs itself**: the old SDL call always wrote both, while `TryGetGlobalPosition` leaves them untouched on false, so without this a caller's stale coordinates would pass through as a real reading. |
 | PLAT-77e | Define the contract's modifier-key layout | ✅ | **Contract defect found while trying to migrate `SystemKeyboardBackend`.** `KeyboardSnapshot::modifiers` and `KeyEvent::modifiers` were bare `std::uint16_t` fields documented only as "bitmask of modifier keys held" — and the SDL3 implementation was passing `SDL_GetModState()` **straight through**. That compiles, runs, and is silently wrong on a second implementation, whose native bits mean something else; a terminal platform author had literally nothing to translate *into*. Adds `KeyModifier` with CNA's own bits plus `HasModifier()`, documents both fields in terms of it, and translates in SDL3. Left/right are deliberately **not** distinguished: XNA has no sided modifiers and no CNA consumer reads one, so reporting the side would be information nothing can use and every implementation would have to invent bits for. The translation is one shared helper across the snapshot and the event mapper on purpose — a caller compares a key event's modifiers against the frame's snapshot, and two independent translations are how those quietly stop agreeing. |
 | PLAT-77f | Delete `SystemKeyboardBackend` | ⛔ **blocked on PLAT-78** | Its one method backs `Keyboard::GetModStateEXT()`, a **live** query, while `KeyboardSnapshot` is per-frame. More decisively, CNA's `Keyboard::GetState()` reads `InputManager` (event-accumulated via the bridge), not a platform snapshot — so re-pointing only the modifier query would put keyboard state on two different clocks. It goes with the bridge. |
+| PLAT-77g | Delete `SystemSensorBackend` | ✅ | The last of PLAT-77's four deletions. `CNA::Input::Sensors` reads `IPlatformSensors`. Two contract extensions were needed and both came from the caller: `SensorKind` had **two values against `SensorTypeEXT`'s seven** — collapsing a dual-sensor device's two accelerometers would have made one unreachable — so it gained `Unknown` and the four sided variants; and enumeration moved onto `IPlatformSensors` as `GetSensors()` returning `SensorInfo{id, kind, name}`, because `IPlatformInputDevices` reports id and name only and *what each sensor measures* is the thing a caller enumerating sensors actually needs. `IsAvailable(Unknown)` reports **false**: `Unknown` is a classification, not a request, and reporting true would let a caller `Start()` something the type lookup cannot find. The absent-sensor case is detected with `IsAvailable` **before** `Start()` rather than by catching its refusal — a game polling motion on a desktop would otherwise take an exception every frame. |
 | PLAT-90 | Retire the `FakeSdl*Backend` doubles | 🟨 | Replaced by fakes implementing the platform input interfaces. Fewer, sharper doubles is the measurable outcome; the tests they serve keep their coverage. |
 
 ---

@@ -16,10 +16,29 @@ namespace CNA::Platform::Sdl3 {
         {
             switch (kind)
             {
-                case SensorKind::Accelerometer: return SDL_SENSOR_ACCEL;
-                case SensorKind::Gyroscope:     return SDL_SENSOR_GYRO;
+                case SensorKind::Accelerometer:      return SDL_SENSOR_ACCEL;
+                case SensorKind::Gyroscope:          return SDL_SENSOR_GYRO;
+                case SensorKind::AccelerometerLeft:  return SDL_SENSOR_ACCEL_L;
+                case SensorKind::GyroscopeLeft:      return SDL_SENSOR_GYRO_L;
+                case SensorKind::AccelerometerRight: return SDL_SENSOR_ACCEL_R;
+                case SensorKind::GyroscopeRight:     return SDL_SENSOR_GYRO_R;
+                case SensorKind::Unknown:            return SDL_SENSOR_UNKNOWN;
             }
             return SDL_SENSOR_UNKNOWN;
+        }
+
+        SensorKind ToSensorKind(const SDL_SensorType type)
+        {
+            switch (type)
+            {
+                case SDL_SENSOR_ACCEL:   return SensorKind::Accelerometer;
+                case SDL_SENSOR_GYRO:    return SensorKind::Gyroscope;
+                case SDL_SENSOR_ACCEL_L: return SensorKind::AccelerometerLeft;
+                case SDL_SENSOR_GYRO_L:  return SensorKind::GyroscopeLeft;
+                case SDL_SENSOR_ACCEL_R: return SensorKind::AccelerometerRight;
+                case SDL_SENSOR_GYRO_R:  return SensorKind::GyroscopeRight;
+                default:                 return SensorKind::Unknown;
+            }
         }
 
         /// Finds the first connected sensor of a type. Returns 0 when none is present -- SDL uses
@@ -62,7 +81,37 @@ namespace CNA::Platform::Sdl3 {
         }
     }
 
-    bool Sdl3Sensors::IsAvailable(const SensorKind kind) const { return FindSensor(kind) != 0; }
+    std::vector<SensorInfo> Sdl3Sensors::GetSensors() const
+    {
+        int count = 0;
+        SDL_SensorID* ids = SDL_GetSensors(&count);
+        if (ids == nullptr)
+        {
+            return {};
+        }
+
+        std::vector<SensorInfo> sensors;
+        sensors.reserve(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i)
+        {
+            SensorInfo info;
+            info.id = static_cast<std::uint64_t>(ids[i]);
+            info.kind = ToSensorKind(SDL_GetSensorTypeForID(ids[i]));
+            const char* name = SDL_GetSensorNameForID(ids[i]);
+            info.name = name != nullptr ? std::string(name) : std::string();
+            sensors.push_back(std::move(info));
+        }
+        SDL_free(ids);
+        return sensors;
+    }
+
+    bool Sdl3Sensors::IsAvailable(const SensorKind kind) const
+    {
+        // Unknown is a classification, not a request: a caller asking whether an unclassifiable
+        // sensor is present is asking a question with no answer, and reporting true would let it
+        // then Start() something the type lookup cannot find.
+        return kind != SensorKind::Unknown && FindSensor(kind) != 0;
+    }
 
     void Sdl3Sensors::Start(const SensorKind kind)
     {

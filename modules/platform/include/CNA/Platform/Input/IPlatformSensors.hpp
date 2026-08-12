@@ -2,6 +2,8 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace CNA::Platform {
 
@@ -18,13 +20,42 @@ namespace CNA::Platform {
         std::uint64_t timestampNanoseconds = 0;
     };
 
-    /** @brief Which sensor a reading came from. */
+    /**
+     * @brief Which sensor a reading came from.
+     *
+     * The sided variants exist because dual-sensor devices are real — a controller with a motion
+     * unit in each half reports two accelerometers, and collapsing them would make one of the two
+     * unreachable. `Unknown` covers a sensor the platform enumerates but cannot classify, which
+     * is a normal answer rather than an error: the device is there, and a caller listing sensors
+     * should see it.
+     */
     enum class SensorKind
     {
+        /** @brief The platform enumerated a sensor but could not classify it. */
+        Unknown,
         /** @brief Linear acceleration, including gravity, in m/s². */
         Accelerometer,
         /** @brief Angular velocity in radians per second. */
-        Gyroscope
+        Gyroscope,
+        /** @brief Left-side accelerometer on a dual-sensor device. */
+        AccelerometerLeft,
+        /** @brief Left-side gyroscope on a dual-sensor device. */
+        GyroscopeLeft,
+        /** @brief Right-side accelerometer on a dual-sensor device. */
+        AccelerometerRight,
+        /** @brief Right-side gyroscope on a dual-sensor device. */
+        GyroscopeRight
+    };
+
+    /** @brief One enumerated sensor. */
+    struct SensorInfo
+    {
+        /** @brief Identifies the sensor while it stays connected; matches `DeviceEvent::device`. */
+        std::uint64_t id = 0;
+        /** @brief What the sensor measures. */
+        SensorKind kind = SensorKind::Unknown;
+        /** @brief The sensor's human-readable name, or empty when the platform reports none. */
+        std::string name;
     };
 
     /**
@@ -42,6 +73,17 @@ namespace CNA::Platform {
         virtual ~IPlatformSensors() = default;
 
         /**
+         * @brief Lists every sensor the device exposes.
+         *
+         * Separate from `IPlatformInputDevices::GetDevices(Sensor)`, which reports id and name
+         * only: what a caller enumerating sensors actually needs is *what each one measures*, and
+         * that vocabulary lives here.
+         *
+         * @return The attached sensors, in no guaranteed order; empty when none are present.
+         */
+        [[nodiscard]] virtual std::vector<SensorInfo> GetSensors() const = 0;
+
+        /**
          * @brief Gets whether a sensor is present.
          *
          * @param kind Which sensor.
@@ -51,6 +93,11 @@ namespace CNA::Platform {
 
         /**
          * @brief Begins delivering readings for a sensor.
+         *
+         * Starting an already-started sensor is a **no-op, not an error**. It is deliberately not
+         * promised to be *free*, though: an implementation may legitimately re-open the device,
+         * and some sensors take a noticeable moment to begin streaming. A caller that reads every
+         * frame should therefore track its own started state rather than starting each time.
          *
          * @param kind Which sensor.
          * @throws PlatformNotSupportedException If the platform reports no `Sensors` capability.

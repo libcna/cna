@@ -1,66 +1,85 @@
 // SPDX-License-Identifier: MS-PL
+//
+// PLAT-77g: CNA::Input::Sensors reads the platform, not SDL.
+//
+// The canned readings used to come from an injected `ISystemSensorBackend`; they now come through
+// `IPlatformSensors`. CI has no accelerometer and no gyroscope, so scripting the answer is the
+// only way these paths are exercised at all — what changed is which seam does the scripting.
+
 #include <gtest/gtest.h>
 
 #include "CNA/Input/Sensors.hpp"
-#include "CNA/Internal/Input/SystemSensorBackend.hpp"
+#include "CNA/Platform/CannedSensors.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
-#include <map>
+#include <memory>
 #include <vector>
 
 using CNA::Input::Sensors;
 using CNA::Input::SensorInfoEXT;
 using CNA::Input::SensorTypeEXT;
-using CNA::Internal::Input::ISystemSensorBackend;
-using CNA::Internal::Input::SetSystemSensorBackendForTests;
+using CNA::Platform::SensorInfo;
+using CNA::Platform::SensorKind;
+using CNA::Platform::SensorReading;
+using CNA::Platform::Testing::CannedSensorPlatform;
+using CNA::Platform::Testing::ScopedCurrentPlatform;
 using Microsoft::Xna::Framework::Vector3;
 
 namespace
 {
-    // A fake sensor source, so Sensors is exercised deterministically (CI has no motion sensors).
-    class FakeSystemSensorBackend final : public ISystemSensorBackend
-    {
-    public:
-        std::vector<SensorInfoEXT> sensors;
-        std::map<SensorTypeEXT, Vector3> samples; // present type -> its canned reading
-
-        std::vector<SensorInfoEXT> GetSensors() override { return sensors; }
-
-        bool ReadSensor(SensorTypeEXT type, Vector3& out) override
-        {
-            const auto it = samples.find(type);
-            if (it == samples.end())
-                return false;
-            out = it->second;
-            return true;
-        }
-    };
-
     class CnaInputSensorsTest : public ::testing::Test
     {
     protected:
-        FakeSystemSensorBackend fake;
-        void SetUp() override { SetSystemSensorBackendForTests(&fake); }
-        void TearDown() override { SetSystemSensorBackendForTests(nullptr); }
+        CannedSensorPlatform platform;
+        std::unique_ptr<ScopedCurrentPlatform> installed;
+
+        void SetUp() override { installed = std::make_unique<ScopedCurrentPlatform>(platform); }
+        void TearDown() override { installed.reset(); }
     };
 }
 
-TEST_F(CnaInputSensorsTest, EnumerationForwardsSensorList)
+TEST_F(CnaInputSensorsTest, EnumerationForwardsSensorListWithTypes)
 {
-    fake.sensors = {
-        {1, "Accelerometer", SensorTypeEXT::Accelerometer},
-        {2, "Gyroscope", SensorTypeEXT::Gyroscope},
-    };
+    platform.Canned().SetEnumeration({
+        SensorInfo{1, SensorKind::Accelerometer, "Accelerometer"},
+        SensorInfo{2, SensorKind::Gyroscope, "Gyroscope"},
+    });
+
     const auto list = Sensors::GetSensorsEXT();
     ASSERT_EQ(list.size(), 2u);
     EXPECT_EQ(list[0], (SensorInfoEXT{1, "Accelerometer", SensorTypeEXT::Accelerometer}));
     EXPECT_EQ(list[1].type, SensorTypeEXT::Gyroscope);
 }
 
+TEST_F(CnaInputSensorsTest, EveryPlatformSensorKindMapsToItsExtensionCounterpart)
+{
+    // The sided variants are the reason the contract's SensorKind grew beyond two values:
+    // collapsing a dual-sensor device's two accelerometers would make one of them unreachable.
+    platform.Canned().SetEnumeration({
+        SensorInfo{1, SensorKind::Accelerometer, "a"},
+        SensorInfo{2, SensorKind::Gyroscope, "b"},
+        SensorInfo{3, SensorKind::AccelerometerLeft, "c"},
+        SensorInfo{4, SensorKind::GyroscopeLeft, "d"},
+        SensorInfo{5, SensorKind::AccelerometerRight, "e"},
+        SensorInfo{6, SensorKind::GyroscopeRight, "f"},
+        SensorInfo{7, SensorKind::Unknown, "g"},
+    });
+
+    const auto list = Sensors::GetSensorsEXT();
+    ASSERT_EQ(list.size(), 7u);
+    EXPECT_EQ(list[0].type, SensorTypeEXT::Accelerometer);
+    EXPECT_EQ(list[1].type, SensorTypeEXT::Gyroscope);
+    EXPECT_EQ(list[2].type, SensorTypeEXT::AccelerometerLeft);
+    EXPECT_EQ(list[3].type, SensorTypeEXT::GyroscopeLeft);
+    EXPECT_EQ(list[4].type, SensorTypeEXT::AccelerometerRight);
+    EXPECT_EQ(list[5].type, SensorTypeEXT::GyroscopeRight);
+    EXPECT_EQ(list[6].type, SensorTypeEXT::Unknown);
+}
+
 TEST_F(CnaInputSensorsTest, AccelerometerAndGyroReadTheirSamplesWhenPresent)
 {
-    fake.samples[SensorTypeEXT::Accelerometer] = Vector3(0.0f, 9.81f, 0.0f);
-    fake.samples[SensorTypeEXT::Gyroscope] = Vector3(0.1f, -0.2f, 0.3f);
+    platform.Canned().Set(SensorKind::Accelerometer, SensorReading{0.0f, 9.81f, 0.0f, 0});
+    platform.Canned().Set(SensorKind::Gyroscope, SensorReading{0.1f, -0.2f, 0.3f, 0});
 
     Vector3 accel;
     ASSERT_TRUE(Sensors::GetAccelerometerEXT(accel));
@@ -73,11 +92,55 @@ TEST_F(CnaInputSensorsTest, AccelerometerAndGyroReadTheirSamplesWhenPresent)
 
 TEST_F(CnaInputSensorsTest, ReadsReturnFalseWhenSensorAbsent)
 {
-    // No samples registered -> both readers report "no such sensor".
     Vector3 v(1.0f, 2.0f, 3.0f);
     EXPECT_FALSE(Sensors::GetAccelerometerEXT(v));
     EXPECT_FALSE(Sensors::GetGyroscopeEXT(v));
     EXPECT_EQ(v, Vector3(1.0f, 2.0f, 3.0f)) << "out-param left untouched when no sensor is read";
+}
+
+TEST_F(CnaInputSensorsTest, AnAbsentSensorIsRefusedBeforeStartingRatherThanThrowing)
+{
+    // The platform's Start() throws for a sensor the device does not have. These accessors report
+    // "no such sensor" with a false, as they always have, so an absent accelerometer must be
+    // detected before the start rather than caught after it -- a game polling motion on a desktop
+    // would otherwise take an exception every frame.
+    platform.Canned().Set(SensorKind::Gyroscope, SensorReading{});
+
+    Vector3 v;
+    EXPECT_NO_THROW((void)Sensors::GetAccelerometerEXT(v));
+    EXPECT_FALSE(Sensors::GetAccelerometerEXT(v));
+    EXPECT_EQ(platform.Canned().StartCount(SensorKind::Accelerometer), 0);
+}
+
+TEST_F(CnaInputSensorsTest, RepeatedReadsKeepWorkingAndStayStateless)
+{
+    // These accessors look stateless to their caller and start the sensor on every read. Caching
+    // "already started" would need an identity for the service, and the only one available is its
+    // address -- which a destroyed platform hands back to the next one, so the cache would claim
+    // a sensor was started on a service that has never seen it. This test exists because that
+    // cache was written, and the suite caught it: the same test passed alone and failed in the
+    // group, on a recycled address.
+    platform.Canned().Set(SensorKind::Accelerometer, SensorReading{1.0f, 2.0f, 3.0f, 0});
+
+    Vector3 v;
+    for (int i = 0; i < 5; ++i)
+    {
+        ASSERT_TRUE(Sensors::GetAccelerometerEXT(v)) << "read " << i;
+        EXPECT_EQ(v, Vector3(1.0f, 2.0f, 3.0f)) << "read " << i;
+    }
+    EXPECT_GE(platform.Canned().StartCount(SensorKind::Accelerometer), 1);
+}
+
+TEST_F(CnaInputSensorsTest, EnumerationIsEmptyWhenThePlatformHasNoSensorService)
+{
+    // HEADLESS returns null from GetSensors(). The old backend was always present, so this branch
+    // did not exist before the migration and has to be covered now.
+    installed.reset();
+    EXPECT_NO_THROW((void)Sensors::GetSensorsEXT());
+
+    Vector3 v;
+    EXPECT_NO_THROW((void)Sensors::GetAccelerometerEXT(v));
+    EXPECT_NO_THROW((void)Sensors::GetGyroscopeEXT(v));
 }
 
 TEST(CnaInputSensorInfoEXTTest, EqualityComparesIdNameAndType)

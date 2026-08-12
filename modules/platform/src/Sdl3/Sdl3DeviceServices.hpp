@@ -17,6 +17,11 @@ namespace CNA::Platform::Sdl3 {
         ~Sdl3Sensors() override;
 
         /**
+         * @brief Lists every sensor the device exposes.
+         * @return The attached sensors; empty when none are present.
+         */
+        [[nodiscard]] std::vector<SensorInfo> GetSensors() const override;
+        /**
          * @brief Gets whether a sensor is present.
          * @param kind Which sensor.
          * @return True if the device exposes it.
