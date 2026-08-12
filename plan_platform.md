@@ -265,11 +265,13 @@ renderers/{sdl-renderer,sdl-gpu,fna3d} ──▶ SDL3   (allowlisted, by design)
 | 7 | PLAT-100 … PLAT-112 | System services (devices, storage, content, media) | 13 |
 | 8 | PLAT-113 … PLAT-119 | `HeadlessPlatform` + conformance suite | 7 |
 | 9 | PLAT-120 … PLAT-126 | Gates, performance, documentation, CI | 7 |
+| 10 | PLAT-129 … PLAT-141 | `TerminalPlatform` (optional, after Phase 8) | 13 |
 | — | §12 | Possible future implementations (**not in scope**) | 0 |
 
-**Total: 128 task IDs — 127 active, 1 cut (PLAT-45).** IDs are never renumbered and are never
+**Total: 141 task IDs — 140 active, 1 cut (PLAT-45).** IDs are never renumbered and are never
 reused: a cut task keeps its ID and records why, and a task added after the plan was written gets
-the next free ID and sits in its logical phase (PLAT-127/PLAT-128, added by PLAT-3's audit).
+the next free ID and sits in its logical phase (PLAT-127/PLAT-128 from PLAT-3's audit;
+PLAT-129–141 from the terminal-platform analysis).
 
 ---
 
@@ -499,6 +501,41 @@ every capability-refusal path that a limited platform would.
 
 ---
 
+## Phase 10 — `TerminalPlatform` (optional, gated on Phase 8)
+
+Feasibility established in [`docs/platform-terminal-analysis.md`](docs/platform-terminal-analysis.md).
+**Verdict: yes for output and mouse, qualified for keyboard, no for gamepad** — and no new renderer
+is needed, because a terminal is another consumer of `IPlatformSurfacePresenter` (PLAT-127).
+
+Why it belongs in this plan rather than §12: it is the strongest available proof that the contract
+is not SDL-shaped. `HeadlessPlatform` implements every method by doing nothing, so a contract built
+entirely around SDL3's assumptions would still pass it. A terminal has a real output device with a
+different model (cells, not pixels), real input with a different model (byte streams, not key
+state), and a capability profile that is mostly `false`. If the contract survives it, it is real.
+
+**Sequencing is deliberate: this phase runs *after* Phase 8, never before.** Written before the
+contract has been proven against `Sdl3Platform` and the conformance suite, a terminal
+implementation would shape the contract around terminal quirks — the mirror image of the
+SDL3-shaped mistake this whole plan exists to avoid.
+
+| ID | Task | Status | Acceptance criteria / Notes |
+|---|---|---|---|
+| PLAT-129 | Terminal capability spike | ⬜ | Before any implementation: detect at runtime what the host terminal actually supports — truecolor vs 256 vs 16, SGR mouse (`?1006`), the Kitty keyboard protocol's report-event-types flag, OSC 52 clipboard. **Assume nothing**; emulator support is real but partial and evolving. Output is a detection routine plus a recorded matrix for the terminals available here. |
+| PLAT-130 | `TerminalPlatform` skeleton + `CNA_PLATFORM=TERMINAL` | ⬜ | Module layout under `modules/platform/src/Terminal/`, selectable like `SDL3`/`HEADLESS`. Links no SDL. |
+| PLAT-131 | Terminal lifecycle and state restoration | ⬜ | `tcsetattr` raw mode, alternate screen buffer, hidden cursor, mouse reporting — each with guaranteed restoration on normal exit, `SIGINT`/`SIGTERM`/`SIGHUP`, unhandled exception **and** abort. A crash that leaves the user with no echo and an invisible cursor is a hostile bug, so this is its own task and its own test, not a corner of PLAT-130. |
+| PLAT-132 | `TerminalSurfacePresenter` | ⬜ | Implements PLAT-127 by feeding the RGBA buffer to the existing `QuantizeFrameToGrid()` (`modules/graphics-ext/`) and emitting ANSI. The reuse is the point: the RGBA→glyph-grid transform, `AsciiCell`, `AsciiGrid` and the `" .:-=+*#%@"` ramp are already written and tested. |
+| PLAT-133 | Damage tracking and run-length SGR | ⬜ | **Mandatory, not an optimisation.** A naive 120×40 truecolor frame is ~96 KB; at 60 fps that is ~5.8 MB/s, which is fine on a local pty and hopeless over SSH. Diff against the previous grid, emit only changed cells, and only emit an SGR change when the colour actually differs. |
+| PLAT-134 | Colour degradation ladder | ⬜ | truecolor → 256 → 16 → monochrome, chosen by PLAT-129's detection. `AsciiQuantizeMode` already provides `Color`/`BlackWhite`. |
+| PLAT-135 | Frame budget | ⬜ | Cap bytes per frame; drop refresh rate rather than blocking on a slow terminal. A frame *budget*, not a frame *rate*, is the right contract over a link of unknown speed. |
+| PLAT-136 | Terminal window + `SIGWINCH` | ⬜ | The viewport is the window: client bounds = `columns × cellWidth` by `rows × cellHeight`. `SIGWINCH` maps onto the existing `PlatformEvent` window-resized path, so `GameWindow`/`GraphicsDeviceManager` need no terminal-specific code. Default cell aspect 1:2 or output is vertically squashed by half. |
+| PLAT-137 | Keyboard: Kitty protocol path | ⬜ | With the report-event-types flag, press/repeat/release are distinct and `KeyboardState` is **exact**, genuinely equivalent to SDL3. Report `supportsExactKeyboardState = true`. |
+| PLAT-138 | Keyboard: synthetic key-up fallback | ⬜ | Without release events, mark down on receipt and clear after a timeout past the auto-repeat interval. This is an **approximation and must be reported as one** (`supportsExactKeyboardState = false`): a key reads held for tens of ms after release, the initial repeat delay makes a held key stutter unless bridged, and the repeat rate is an unqueryable user setting. Silently papering over this would defeat the capability model. |
+| PLAT-139 | Mouse via SGR 1006 | ⬜ | Press, release, motion, wheel. Coordinates arrive in **cells, not pixels**, so positions quantise to the cell size; report `supportsPixelAccurateMouse = false` rather than implying a precision that is not there. |
+| PLAT-140 | Terminal capability profile + refusals | ⬜ | No gamepad/haptic/sensor channel exists through a TTY — `GamePad::GetState()` reports not-connected. No native window handle: add `NativeWindowSystem::Terminal` with null pointers so every GPU renderer refuses deterministically at selection instead of crashing on it. Only CPU renderers are selectable (`SOFTWARE`, `SKIA`, `BLEND2D`, `PORTABLEGL`, `HEADLESS`, `STUB`). Logging must never reach `stdout` — it would corrupt the frame, which makes PLAT-53's sink destination a correctness matter. Refuse cleanly when `stdout` is not a TTY. |
+| PLAT-141 | Run the conformance suite against `TerminalPlatform` | ⬜ | PLAT-116's suite passes against a third implementation. This is the row that pays for the whole phase: it is what demonstrates the contract is genuinely implementation-neutral rather than SDL3 with extra steps. |
+
+---
+
 ## 10. Risks
 
 | Risk | Mitigation |
@@ -545,6 +582,7 @@ need its own plan file.
 | `Sdl12Platform` | Genuinely historical systems. SDL 1.2 is deprecated upstream (last release 1.2.15) and would be CNA-owned indefinitely. | Limited profile: basic window, keyboard/mouse, old joystick API, timing, basic audio, GL or software surface, basic fullscreen. Clipboard, text input, gamepad, HiDPI largely unsupported — declared unsupported, never emulated with unsafe hacks. | Future — not started |
 | `Win32Platform` | A native platform with no SDL at all, pairing naturally with the `GDI` and `DIRECTX*` renderers. | Windows-only; no cross-platform pretence. | Future — not started |
 | `EmscriptenPlatform` | A direct browser platform for the web renderers. | Web-shaped: no multiple windows, no native dialogs. | Future — not started |
+| `TerminalPlatform` | Runs a game in a TTY — over SSH, in CI, in `tmux`, on any machine with no display server. **Not listed here as future work: it was analysed and promoted to Phase 10**, because it is the strongest available proof the contract is not SDL-shaped. | Cells not pixels; mouse at cell granularity; exact keyboard only under the Kitty protocol; no gamepad. | **Analysed — Phase 10** |
 | Separate gamepad module | If a second implementation shows the capability model cannot express the SDL1-joystick vs SDL2-GameController vs SDL3-Gamepad gap (design decision 8), the gamepad seam is split out then — on evidence, not in advance. | — | Future — revisit after a second implementation exists |
 | Audio implementations (OpenAL, WASAPI, ALSA) | The audio contract (Phase 6) is separate precisely so these need no matching platform implementation. | — | Future — not started |
 | `sdl2-compat` / `sdl12-compat` as test configurations | Useful to shake out API-generation assumptions, but they run on SDL3/SDL2 underneath and therefore reach **no** new operating system. They are a test configuration, never a substitute for a real implementation. | — | Future — not started |
