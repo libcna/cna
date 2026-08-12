@@ -74,10 +74,11 @@ driver themselves, scoped by `--gtest_filter`, which is why they pass.
 | `cmake-build-devices` | **6471 passed, 0 failed** |
 | `cmake-build-terminal` | **6315 passed, 0 failed** |
 
-PLAT-140's focused capability/native-handle/logger/conformance matrix passes with **94 passed / 2
-skipped** in `cmake-build-debug`, and **77 passed / 1 skipped** in each of
-`cmake-build-headless` and `cmake-build-terminal` (only environment/configuration skips). The
-registered `CnaPlatformWindowTests` + `CnaPlatformTests` also pass; in a restricted sandbox set
+PLAT-141's final conformance run mechanically lists **25 cases per implementation** (18 general +
+7 window). The default build runs all three implementations: **74 of 75 passed**, with the only
+skip being the intentionally inapplicable unsupported-capability case for SDL3. The HEADLESS- and
+TERMINAL-selected builds each run Headless + Terminal and pass **50 of 50**. The registered
+`CnaPlatformWindowTests` + `CnaPlatformTests` also pass; in a restricted sandbox set
 `XDG_DATA_HOME` to a writable `/tmp` path so the preferences-path write test measures the service
 rather than the sandbox's read-only home directory.
 
@@ -124,7 +125,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**83 ✅ · 12 🟨 · 54 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **56 %** of the 149
+**84 ✅ · 12 🟨 · 53 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **56 %** of the 149
 actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -140,14 +141,11 @@ actionable rows done, counting partials.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
-- **Phase 10** (terminal) — **12 of 13 done**: PLAT-129 (spike), 130 (skeleton + selection), 131
+- **Phase 10** (terminal) — **all 13 done**: PLAT-129 (spike), 130 (skeleton + selection), 131
   (session lifecycle + restoration), 132 (surface presenter), 133 (damage tracking), 134 (colour
   ladder, landed with 132), 135 (frame budget), 136 (`SIGWINCH`), 137 (exact Kitty keyboard),
-  138 (synthetic keyboard fallback), 139 (SGR-1006 mouse), 140 (capability/refusal profile).
-  **Remaining: PLAT-141** — see §7. The
-  conformance suite already runs green against `Terminal` as a third implementation, so PLAT-141's
-  claim holds for the surface that exists today; the row stays open until the capabilities it is
-  meant to cover are actually turned on.
+  138 (synthetic keyboard fallback), 139 (SGR-1006 mouse), 140 (capability/refusal profile), 141
+  (full conformance closure). The phase is complete.
 
 ---
 
@@ -266,10 +264,12 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-141**. Twelve of thirteen rows are done
-   (129–140); only the final conformance closure remains.
+1. **Phase 4, narrow slice.** PLAT-57's written decision, then PLAT-59/60/61 — the
+   `IGraphicsRenderer` interface changes that the PLAT-3 audit says free STUB/HEADLESS/SOFTWARE/
+   PORTABLEGL with no per-renderer work. Anything needing an absent dependency is marked
+   blocked-on-toolchain with the missing library named.
 
-   **What already exists, and must be used rather than re-derived.** Everything is under
+   **Completed Phase 10 reference.** Everything is under
    `modules/platform/src/Terminal/`:
 
    | File | What it does |
@@ -287,8 +287,8 @@ each, zero difference). The round trip is now checked before it is trusted.
    platform construction and owns the process's single session only while a presenter, keyboard
    or mouse lease exists. Changing the set of users rebuilds the immutable signal-safe restoration
    record with the union of their modes; the presenter watches a generation counter and forces a
-   full redraw if that rebuild invalidated the alternate screen. PLAT-141 must now run and record
-   the complete implementation-neutral conformance surface against this finished profile.
+   full redraw if that rebuild invalidated the alternate screen. PLAT-141 records all 25 general
+   and window cases for Terminal, completing the phase.
 
    **Testing terminal code in CI.** This environment has no terminal: output is redirected, so
    `isatty` is false and every interesting path refuses. Two mechanisms already exist and both
@@ -306,11 +306,7 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **Phase 4, narrow slice.** PLAT-57's written decision, then PLAT-59/60/61 — the
-   `IGraphicsRenderer` interface changes that the PLAT-3 audit says free STUB/HEADLESS/SOFTWARE/
-   PORTABLEGL with no per-renderer work. Anything needing an absent dependency is marked
-   blocked-on-toolchain with the missing library named.
-3. **PLAT-78c–f** where in-repo evidence decides the answer.
+2. **PLAT-78c–f** where in-repo evidence decides the answer.
 
 ---
 
