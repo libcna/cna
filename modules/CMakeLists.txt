@@ -92,6 +92,9 @@ set(CNA_GRAPHICS_EXAMPLES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/graphics/examples")
 # not-yet-defined target names at generate time, so cycles and forward references are fine.
 add_subdirectory(core)
 add_subdirectory(math)
+# The platform contract (plan_platform.md): composed before the subsystems that will consume
+# it, so the read order matches the dependency direction even though CMake does not require it.
+add_subdirectory(platform)
 add_subdirectory(graphics)
 add_subdirectory(input)
 add_subdirectory(audio)
@@ -151,7 +154,7 @@ target_link_libraries(CNA INTERFACE
 # moved into their owning modules (module-examples campaign): a module may own
 # modules/<name>/examples/, and example TUs outside every declared module still fail.
 set(_cna_framework_modules
-    core math runtime graphics input audio media content storage
+    core math platform runtime graphics input audio media content storage
     devices devices-ext graphics-ext gamer-services net)
 set(_cna_renderer_modules
     bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6
