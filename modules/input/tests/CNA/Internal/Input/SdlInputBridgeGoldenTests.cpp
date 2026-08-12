@@ -21,7 +21,6 @@
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
-#include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 using CNA::Internal::Input::InputManager;
@@ -30,7 +29,6 @@ using CNA::Internal::Input::SdlInputBridge;
 using namespace CNA::Platform;
 using Microsoft::Xna::Framework::Input::ButtonState;
 using Microsoft::Xna::Framework::Input::Keys;
-using Microsoft::Xna::Framework::Input::Mouse;
 using namespace Microsoft::Xna::Framework::Input::Touch;
 
 namespace
@@ -40,6 +38,11 @@ namespace
     struct Keyboard
     {
         static auto GetState() { return InputManager::GetKeyboardState(); }
+    };
+
+    struct Mouse
+    {
+        static auto GetState() { return InputManager::GetMouseState(); }
     };
 
     constexpr int DisplaySize = 1000;

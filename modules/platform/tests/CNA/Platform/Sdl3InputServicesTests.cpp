@@ -6,6 +6,8 @@
 // snapshot shape, refusal behaviour, range normalisation and lifetime safety. Behaviour that
 // genuinely needs hardware is left to the input parity suites in Phase 5.
 
+#include "../../../src/Sdl3/Sdl3InputServices.hpp"
+
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
@@ -84,9 +86,32 @@ TEST_F(Sdl3InputTest, MouseSnapshotStartsWithNothingHeld)
 TEST_F(Sdl3InputTest, MouseUpdateIsSafeAndButtonMaskStaysInCnasOwnBitOrder)
 {
     EXPECT_NO_THROW(platform_->GetMouse()->Update());
-    // Only the three defined bits may ever be set; SDL's own mask uses a different, 1-based
+    // Only the five defined bits may ever be set; SDL's own mask uses a different, 1-based
     // button numbering, and leaking it would make every consumer depend on that detail.
-    EXPECT_EQ(platform_->GetMouse()->GetSnapshot().buttons & ~0x07, 0);
+    EXPECT_EQ(platform_->GetMouse()->GetSnapshot().buttons & ~0x1F, 0);
+}
+
+TEST(Sdl3MouseTest, WheelEventsAccumulateInXnaUnitsAndTruncateBeforeScaling)
+{
+    CNA::Platform::Sdl3::Sdl3Mouse mouse;
+    mouse.ObserveEvent(MouseWheelEvent{17, 1.9f, -2.1f});
+
+    const MouseSnapshot& snapshot = mouse.GetSnapshot();
+    EXPECT_EQ(snapshot.window, 17u);
+    EXPECT_EQ(snapshot.scrollX, 120);
+    EXPECT_EQ(snapshot.scrollY, -240);
+}
+
+TEST_F(Sdl3InputTest, PositionWithNoWindowIsRecordedWithoutANativeWarp)
+{
+    EXPECT_NO_THROW(platform_->GetMouse()->SetPosition(0, 12, 34));
+    EXPECT_EQ(platform_->GetMouse()->GetSnapshot().x, 12);
+    EXPECT_EQ(platform_->GetMouse()->GetSnapshot().y, 34);
+}
+
+TEST_F(Sdl3InputTest, PositionRefusesAnUnknownNonZeroWindowId)
+{
+    EXPECT_THROW(platform_->GetMouse()->SetPosition(0xFFFFFFFFu, 12, 34), PlatformException);
 }
 
 TEST_F(Sdl3InputTest, CursorVisibilityCallsAreSafe)
@@ -99,7 +124,7 @@ TEST_F(Sdl3InputTest, RelativeModeRefusesWithNoFocusedWindow)
 {
     // SDL3 scopes relative mode to a window. With nothing focused there is nothing to capture,
     // so the request is refused rather than silently doing nothing and reporting success.
-    EXPECT_THROW(platform_->GetMouse()->SetRelativeMode(true), PlatformException);
+    EXPECT_THROW(platform_->GetMouse()->SetRelativeMode(0, true), PlatformException);
     EXPECT_FALSE(platform_->GetMouse()->IsRelativeMode());
 }
 
@@ -194,7 +219,6 @@ TEST_F(Sdl3InputTest, TextInputRefusesAWindowItDidNotCreate)
 
     ForeignWindow foreign;
     EXPECT_THROW(platform_->GetTextInput()->Start(foreign), PlatformException);
-    EXPECT_THROW(platform_->GetMouse()->SetPosition(foreign, 0, 0), PlatformException);
 }
 
 } // namespace

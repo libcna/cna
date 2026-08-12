@@ -23,15 +23,17 @@ namespace CNA::Platform::Terminal {
         void Update() override;
         /** @brief Gets the most recent cell-quantised snapshot. @return The snapshot. */
         [[nodiscard]] const MouseSnapshot& GetSnapshot() const override;
+        /** @brief Relative mode is unavailable. @return Zero displacement. */
+        [[nodiscard]] MouseDelta ConsumeRelativeDelta() override;
 
         /**
          * @brief Refuses pointer warping, which SGR-1006 cannot express.
-         * @param window The terminal window.
+         * @param window The terminal window id.
          * @param x Requested client x.
          * @param y Requested client y.
          * @throws PlatformException Always.
          */
-        void SetPosition(IPlatformWindow& window, int x, int y) override;
+        void SetPosition(WindowId window, int x, int y) override;
 
         /**
          * @brief Refuses pointer visibility control, which terminal protocols do not expose.
@@ -49,10 +51,11 @@ namespace CNA::Platform::Terminal {
 
         /**
          * @brief Refuses relative pointer mode.
+         * @param window The terminal window id.
          * @param enabled The requested state.
          * @throws PlatformNotSupportedException Always; `RelativeMouse` is false.
          */
-        void SetRelativeMode(bool enabled) override;
+        void SetRelativeMode(WindowId window, bool enabled) override;
         /** @brief Reports that relative mode is unavailable. @return False. */
         [[nodiscard]] bool IsRelativeMode() const override;
 

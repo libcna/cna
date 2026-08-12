@@ -84,10 +84,11 @@ namespace CNA::Internal::Input
     /**
      * @brief Internal CNA input state manager.
      *
-     * Keeps current input state and provides snapshots for the public
-     * XNA-like API.
+     * Keeps event-accumulated compatibility state for the legacy raw bridge plus the gamepad and
+     * touch paths that have not yet completed their platform-service migrations. Public keyboard
+     * and mouse state read `IPlatformKeyboard`/`IPlatformMouse` instead.
      *
-     * Currently supports Mouse, basic Keyboard, basic TouchPanel and basic GamePad state.
+     * Currently stores Mouse, basic Keyboard, basic TouchPanel and basic GamePad state.
      *
      * Architecturally, this is event-driven rather than poll-driven: FNA's platform layer
      * (e.g. SDL3_FNAPlatform) re-queries SDL fresh on every `Get*State()` call, while this

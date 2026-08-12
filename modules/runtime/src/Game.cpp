@@ -1071,11 +1071,16 @@ namespace Microsoft::Xna::Framework
         }
 
         // Snapshot services advance once per frame, after the native queue has been pumped and
-        // before Update()/Draw() can read them. Keyboard::GetState() and GetModStateEXT() both
-        // read this same stored snapshot, so keys and modifiers cannot observe different clocks.
+        // before Update()/Draw() can read them. Keyboard keys/modifiers share one clock; mouse
+        // absolute state/buttons share another. Relative mouse displacement remains consume-on-read
+        // inside that service to preserve FNA's deliberate draining semantics.
         if (CNA::Platform::IPlatformKeyboard* keyboard = platform_->GetKeyboard())
         {
             keyboard->Update();
+        }
+        if (CNA::Platform::IPlatformMouse* mouse = platform_->GetMouse())
+        {
+            mouse->Update();
         }
     }
 

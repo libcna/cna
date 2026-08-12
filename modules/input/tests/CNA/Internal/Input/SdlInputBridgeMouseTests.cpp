@@ -18,10 +18,18 @@
 using CNA::Internal::Input::InputManager;
 using CNA::Internal::Input::SdlInputBridge;
 using Microsoft::Xna::Framework::Input::ButtonState;
-using Microsoft::Xna::Framework::Input::Mouse;
+using PublicMouse = Microsoft::Xna::Framework::Input::Mouse;
 
 namespace
 {
+    // These tests inject the legacy SDL-shaped bridge directly, so their state assertions must
+    // inspect its InputManager accumulator. The public Mouse reads IPlatformMouse after PLAT-80.
+    struct Mouse
+    {
+        static auto GetState() { return InputManager::GetMouseState(); }
+        inline static auto& ClickedEXT = PublicMouse::ClickedEXT;
+    };
+
     SDL_Event mouseButtonEvent(const Uint32 type, const Uint8 button)
     {
         SDL_Event e{};

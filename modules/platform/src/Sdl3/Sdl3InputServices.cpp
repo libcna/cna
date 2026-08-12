@@ -11,7 +11,9 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <array>
+#include <limits>
 
 namespace CNA::Platform::Sdl3 {
 
@@ -40,6 +42,16 @@ namespace CNA::Platform::Sdl3 {
                 case SystemCursor::Pointer:    return SDL_SYSTEM_CURSOR_POINTER;
             }
             return SDL_SYSTEM_CURSOR_DEFAULT;
+        }
+
+        void AccumulateWheel(int& total, const float notches)
+        {
+            const long long delta = static_cast<long long>(static_cast<int>(notches)) * 120;
+            const long long next = static_cast<long long>(total) + delta;
+            total = static_cast<int>(std::clamp(
+                next,
+                static_cast<long long>(std::numeric_limits<int>::min()),
+                static_cast<long long>(std::numeric_limits<int>::max())));
         }
 
     } // namespace
@@ -108,6 +120,11 @@ namespace CNA::Platform::Sdl3 {
         float y = 0.0f;
         const SDL_MouseButtonFlags buttons = SDL_GetMouseState(&x, &y);
 
+        if (SDL_Window* focused = SDL_GetMouseFocus())
+        {
+            snapshot_.window = SDL_GetWindowID(focused);
+        }
+
         snapshot_.x = static_cast<int>(x);
         snapshot_.y = static_cast<int>(y);
 
@@ -118,18 +135,68 @@ namespace CNA::Platform::Sdl3 {
         if ((buttons & SDL_BUTTON_LMASK) != 0) { mask |= 0x01; }
         if ((buttons & SDL_BUTTON_MMASK) != 0) { mask |= 0x02; }
         if ((buttons & SDL_BUTTON_RMASK) != 0) { mask |= 0x04; }
+        if ((buttons & SDL_BUTTON_X1MASK) != 0) { mask |= 0x08; }
+        if ((buttons & SDL_BUTTON_X2MASK) != 0) { mask |= 0x10; }
         snapshot_.buttons = mask;
 
-        // Scroll is event-driven, not pollable: it accumulates from MouseWheelEvent, so Update()
-        // deliberately leaves it alone rather than resetting it to zero every frame.
+        if (relativeMode_)
+        {
+            float deltaX = 0.0f;
+            float deltaY = 0.0f;
+            (void)SDL_GetRelativeMouseState(&deltaX, &deltaY);
+            relativeDeltaX_ += deltaX;
+            relativeDeltaY_ += deltaY;
+        }
+
+        // Scroll is event-driven, not pollable. ObserveEvent() accumulates it, so Update()
+        // deliberately leaves both wheel totals alone rather than resetting them each frame.
     }
 
     const MouseSnapshot& Sdl3Mouse::GetSnapshot() const { return snapshot_; }
 
-    void Sdl3Mouse::SetPosition(IPlatformWindow& window, const int x, const int y)
+    MouseDelta Sdl3Mouse::ConsumeRelativeDelta()
     {
-        Sdl3Window& sdlWindow = RequireSdl3Window(window, "Mouse::SetPosition");
-        SDL_WarpMouseInWindow(sdlWindow.GetSdlWindow(), static_cast<float>(x), static_cast<float>(y));
+        if (!relativeMode_)
+        {
+            return {};
+        }
+
+        const MouseDelta result{static_cast<int>(relativeDeltaX_),
+                                static_cast<int>(relativeDeltaY_)};
+        relativeDeltaX_ = 0.0f;
+        relativeDeltaY_ = 0.0f;
+        return result;
+    }
+
+    void Sdl3Mouse::ObserveEvent(const PlatformEvent& event)
+    {
+        const auto* wheel = std::get_if<MouseWheelEvent>(&event);
+        if (wheel == nullptr)
+        {
+            return;
+        }
+
+        snapshot_.window = wheel->window;
+        AccumulateWheel(snapshot_.scrollX, wheel->x);
+        AccumulateWheel(snapshot_.scrollY, wheel->y);
+    }
+
+    void Sdl3Mouse::SetPosition(const WindowId window, const int x, const int y)
+    {
+        snapshot_.window = window;
+        snapshot_.x = x;
+        snapshot_.y = y;
+
+        if (window == 0)
+        {
+            return;
+        }
+        SDL_Window* nativeWindow = SDL_GetWindowFromID(window);
+        if (nativeWindow == nullptr)
+        {
+            throw PlatformException("Mouse::SetPosition", "window id is not owned by SDL3");
+        }
+        SDL_WarpMouseInWindow(nativeWindow, static_cast<float>(x), static_cast<float>(y));
     }
 
     void Sdl3Mouse::SetCursorVisible(const bool visible)
@@ -163,19 +230,28 @@ namespace CNA::Platform::Sdl3 {
         activeCursor_ = created;
     }
 
-    void Sdl3Mouse::SetRelativeMode(const bool enabled)
+    void Sdl3Mouse::SetRelativeMode(const WindowId window, const bool enabled)
     {
-        // SDL3 scopes relative mode to a window. With no window focused there is nothing to
-        // capture, so the request is recorded and refused rather than silently ignored.
-        SDL_Window* focused = SDL_GetKeyboardFocus();
-        if (focused == nullptr)
+        // SDL3 scopes relative mode to a window. With no associated window there is nothing to
+        // capture, so the request is refused rather than silently reporting success.
+        SDL_Window* target = window != 0 ? SDL_GetWindowFromID(window) : nullptr;
+        if (target == nullptr)
         {
-            throw PlatformException("Mouse::SetRelativeMode", "no focused window to capture");
+            throw PlatformException("Mouse::SetRelativeMode", "no valid window to capture");
         }
-        if (!SDL_SetWindowRelativeMouseMode(focused, enabled))
+        if (!SDL_SetWindowRelativeMouseMode(target, enabled))
         {
             throw PlatformException("Mouse::SetRelativeMode", SDL_GetError());
         }
+
+        // Flush native and stored displacement on every transition. Otherwise movement that
+        // occurred before capture would leak into the first relative GetState() result.
+        float ignoredX = 0.0f;
+        float ignoredY = 0.0f;
+        (void)SDL_GetRelativeMouseState(&ignoredX, &ignoredY);
+        relativeDeltaX_ = 0.0f;
+        relativeDeltaY_ = 0.0f;
+        snapshot_.window = window;
         relativeMode_ = enabled;
     }
 

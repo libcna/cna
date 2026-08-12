@@ -916,14 +916,14 @@ namespace CNA::Platform::Terminal {
         }
 
         const auto addStep = [](int& accumulator, const int step) {
-            if ((step > 0 && accumulator < std::numeric_limits<int>::max()) ||
-                (step < 0 && accumulator > std::numeric_limits<int>::min()))
-            {
-                accumulator += step;
-            }
+            const long long next = static_cast<long long>(accumulator) + step;
+            accumulator = static_cast<int>(std::clamp(
+                next,
+                static_cast<long long>(std::numeric_limits<int>::min()),
+                static_cast<long long>(std::numeric_limits<int>::max())));
         };
-        addStep(mouseSnapshot_.scrollX, report.wheelX);
-        addStep(mouseSnapshot_.scrollY, report.wheelY);
+        addStep(mouseSnapshot_.scrollX, report.wheelX * 120);
+        addStep(mouseSnapshot_.scrollY, report.wheelY * 120);
         MouseWheelEvent wheel;
         wheel.x = static_cast<float>(report.wheelX);
         wheel.y = static_cast<float>(report.wheelY);

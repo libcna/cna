@@ -131,7 +131,7 @@ TEST(InputResetAllForTests, ClearsAccumulatedMouseButtonsPositionAndWheel)
     InputManager::SetMousePosition(50, 60);
     InputManager::AddScrollWheelDelta(240);
     {
-        const auto before = Mouse::GetState();
+        const auto before = InputManager::GetMouseState();
         ASSERT_EQ(before.getLeftButtonProperty(), ButtonState::Pressed);
         ASSERT_EQ(before.getXProperty(), 50);
         ASSERT_EQ(before.getYProperty(), 60);
@@ -140,7 +140,7 @@ TEST(InputResetAllForTests, ClearsAccumulatedMouseButtonsPositionAndWheel)
 
     InputManager::ResetAllForTests();
 
-    const auto after = Mouse::GetState();
+    const auto after = InputManager::GetMouseState();
     EXPECT_EQ(after.getLeftButtonProperty(),    ButtonState::Released);
     EXPECT_EQ(after.getXButton2Property(),      ButtonState::Released);
     EXPECT_EQ(after.getRightButtonProperty(),   ButtonState::Released);

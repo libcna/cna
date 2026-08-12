@@ -20,7 +20,6 @@
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
-#include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
@@ -137,7 +136,7 @@ TEST_F(SdlInputBridgeFuzzTest, RandomEventStreamNeverCrashesAndStateStaysReadabl
 
         // Every public snapshot must remain readable regardless of the event stream.
         ASSERT_NO_THROW((void)Keyboard::GetState());
-        ASSERT_NO_THROW((void)Mouse::GetState());
+        ASSERT_NO_THROW((void)InputManager::GetMouseState());
         ASSERT_NO_THROW((void)Touch::TouchPanel::GetState());
         ASSERT_NO_THROW((void)GamePad::GetState(PlayerIndex::One));
 

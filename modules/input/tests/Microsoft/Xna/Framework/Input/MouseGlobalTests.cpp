@@ -71,7 +71,11 @@ namespace
         {
             return inner_ != nullptr ? inner_->GetSnapshot() : fallback_;
         }
-        void SetPosition(CNA::Platform::IPlatformWindow& window, const int x, const int y) override
+        [[nodiscard]] CNA::Platform::MouseDelta ConsumeRelativeDelta() override
+        {
+            return inner_ != nullptr ? inner_->ConsumeRelativeDelta() : CNA::Platform::MouseDelta{};
+        }
+        void SetPosition(const CNA::Platform::WindowId window, const int x, const int y) override
         {
             if (inner_ != nullptr) inner_->SetPosition(window, x, y);
         }
@@ -83,9 +87,9 @@ namespace
         {
             if (inner_ != nullptr) inner_->SetCursor(cursor);
         }
-        void SetRelativeMode(const bool enabled) override
+        void SetRelativeMode(const CNA::Platform::WindowId window, const bool enabled) override
         {
-            if (inner_ != nullptr) inner_->SetRelativeMode(enabled);
+            if (inner_ != nullptr) inner_->SetRelativeMode(window, enabled);
         }
         [[nodiscard]] bool IsRelativeMode() const override
         {

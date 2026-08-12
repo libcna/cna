@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -19,6 +20,7 @@
 #include <SDL3/SDL.h>
 
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Platform/CannedMouse.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -50,6 +52,25 @@ namespace
         Mouse::setWindowHandleProperty(0);
         Mouse::ClickedEXT   = nullptr;
     }
+
+    class MousePlatformInputTest : public ::testing::Test
+    {
+    protected:
+        CNA::Platform::Testing::CannedMousePlatform platform;
+        std::unique_ptr<CNA::Platform::Testing::ScopedCurrentPlatform> installed;
+
+        void SetUp() override
+        {
+            ResetMouseState();
+            installed = std::make_unique<CNA::Platform::Testing::ScopedCurrentPlatform>(platform);
+        }
+
+        void TearDown() override
+        {
+            Mouse::ResetForTests();
+            installed.reset();
+        }
+    };
 }
 
 // ===========================================================================
@@ -210,53 +231,74 @@ TEST(MouseStateTest, ToStringFormatsMultiplePressedButtonsInLeftRightMiddleXButt
 // Mouse
 // ===========================================================================
 
-TEST(MouseTest, GetStateReflectsPositionAndButtonsFromInputManager)
+TEST_F(MousePlatformInputTest, GetStateReflectsPublishedPositionAndAllFiveButtons)
 {
-    ResetMouseState();
-
-    CNA::Internal::Input::InputManager::SetMousePosition(15, 25);
-    CNA::Internal::Input::InputManager::SetMouseButtonState(
-        CNA::Internal::Input::MouseButton::Left, ButtonState::Pressed);
-    CNA::Internal::Input::InputManager::SetMouseButtonState(
-        CNA::Internal::Input::MouseButton::XButton2, ButtonState::Pressed);
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.x = 15;
+    snapshot.y = 25;
+    snapshot.buttons = 0x01 | 0x02 | 0x04 | 0x08 | 0x10;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
 
     const auto state = Mouse::GetState();
 
     EXPECT_EQ(state.getXProperty(), 15);
     EXPECT_EQ(state.getYProperty(), 25);
     EXPECT_EQ(state.getLeftButtonProperty(), ButtonState::Pressed);
-    EXPECT_EQ(state.getRightButtonProperty(), ButtonState::Released);
+    EXPECT_EQ(state.getMiddleButtonProperty(), ButtonState::Pressed);
+    EXPECT_EQ(state.getRightButtonProperty(), ButtonState::Pressed);
+    EXPECT_EQ(state.getXButton1Property(), ButtonState::Pressed);
     EXPECT_EQ(state.getXButton2Property(), ButtonState::Pressed);
-
-    ResetMouseState();
 }
 
-TEST(MouseTest, GetStateReflectsScrollWheelDelta)
+TEST_F(MousePlatformInputTest, GetStateReflectsBothCumulativeWheelAxes)
 {
-    ResetMouseState();
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.scrollX = -240;
+    snapshot.scrollY = 360;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
 
-    // ScrollWheelValue is cumulative for the process lifetime (matches XNA), so assert on the
-    // delta rather than an absolute value.
-    const int before = Mouse::GetState().getScrollWheelValueProperty();
-    CNA::Internal::Input::InputManager::AddScrollWheelDelta(120);
-    const int after = Mouse::GetState().getScrollWheelValueProperty();
-
-    EXPECT_EQ(after - before, 120);
-
-    ResetMouseState();
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getScrollWheelValueProperty(), 360);
+    EXPECT_EQ(state.getHorizontalScrollWheelValueEXTProperty(), -240);
 }
 
-TEST(MouseTest, SetPositionUpdatesGetState)
+TEST_F(MousePlatformInputTest, SetPositionUsesTheSnapshotWindowAndUpdatesGetState)
 {
-    ResetMouseState();
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = 27;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
 
     Mouse::SetPosition(42, 84);
     const auto state = Mouse::GetState();
 
+    EXPECT_EQ(platform.Canned().PositionCalls(), 1);
+    EXPECT_EQ(platform.Canned().LastPositionWindow(), 27u);
     EXPECT_EQ(state.getXProperty(), 42);
     EXPECT_EQ(state.getYProperty(), 84);
+}
 
-    ResetMouseState();
+TEST_F(MousePlatformInputTest, GetStateDoesNotAdvanceThePlatformFrame)
+{
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.x = 3;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
+    ASSERT_EQ(platform.Canned().UpdateCount(), 1);
+
+    EXPECT_EQ(Mouse::GetState().getXProperty(), 3);
+    EXPECT_EQ(Mouse::GetState().getXProperty(), 3);
+    EXPECT_EQ(platform.Canned().UpdateCount(), 1);
+}
+
+TEST_F(MousePlatformInputTest, MissingMouseServiceReturnsRestState)
+{
+    platform.SetMouseAvailable(false);
+
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state, MouseState());
 }
 
 TEST(MouseTest, InternalOnClickedFiresClickedEXTWithButtonIndex)
@@ -320,22 +362,22 @@ TEST(MouseTest, InternalOnClickedIsSafeWithNoSubscriber)
     ResetMouseState();
 }
 
-TEST(MouseTest, GetIsRelativeMouseModeEXTDefaultsToFalseWithNoWindow)
+TEST_F(MousePlatformInputTest, GetIsRelativeMouseModeEXTDefaultsToFalse)
 {
-    ResetMouseState();
-
     EXPECT_FALSE(Mouse::getIsRelativeMouseModeEXTProperty());
-
-    ResetMouseState();
 }
 
-TEST(MouseTest, RelativeModeAccumulatesDeltaAndDrainsOnRead)
+TEST_F(MousePlatformInputTest, RelativeModeAccumulatesDeltaAndDrainsOnRead)
 {
-    ResetMouseState();
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = 9;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
+    Mouse::setIsRelativeMouseModeEXTProperty(true);
 
-    CNA::Internal::Input::InputManager::SetMouseRelativeMode(true);
-    CNA::Internal::Input::InputManager::AddMouseRelativeDelta(3.0f, -4.0f);
-    CNA::Internal::Input::InputManager::AddMouseRelativeDelta(1.0f, 1.0f);
+    platform.Canned().AddPendingRelativeDelta(3.0f, -4.0f);
+    platform.Canned().AddPendingRelativeDelta(1.0f, 1.0f);
+    platform.Canned().Update();
 
     const auto first = Mouse::GetState();
     EXPECT_EQ(first.getXProperty(), 4);
@@ -346,8 +388,6 @@ TEST(MouseTest, RelativeModeAccumulatesDeltaAndDrainsOnRead)
     const auto second = Mouse::GetState();
     EXPECT_EQ(second.getXProperty(), 0);
     EXPECT_EQ(second.getYProperty(), 0);
-
-    ResetMouseState();
 }
 
 TEST(MouseTest, IsRelativeMouseModeEXTRoundTripsThroughRealWindow)
@@ -379,89 +419,46 @@ TEST(MouseTest, IsRelativeMouseModeEXTRoundTripsThroughRealWindow)
     ResetMouseState();
 }
 
-// DEC-14: the public setter keeps InputManager's relative-mode flag in sync with SDL, so there is no
-// cache desync reachable through CNA's own API — after setIsRelativeMouseModeEXTProperty(true), GetState
-// reports accumulated relative deltas.
-TEST(MouseTest, SetIsRelativeMouseModeEXTSyncsInputManagerDeltaHandling)
+TEST_F(MousePlatformInputTest, SetIsRelativeMouseModeEXTUsesTheAssociatedPlatformWindow)
 {
-    ResetMouseState();
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = 11;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
 
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-    SDL_Window* window = SDL_CreateWindow("MouseInputTests", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!window)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
-    Mouse::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
-
-    Mouse::setIsRelativeMouseModeEXTProperty(true); // also enables InputManager's relative mode
-    CNA::Internal::Input::InputManager::AddMouseRelativeDelta(5.0f, 6.0f);
-
-    const auto state = Mouse::GetState();
-    EXPECT_EQ(state.getXProperty(), 5);
-    EXPECT_EQ(state.getYProperty(), 6);
-
+    Mouse::setIsRelativeMouseModeEXTProperty(true);
+    EXPECT_TRUE(Mouse::getIsRelativeMouseModeEXTProperty());
+    EXPECT_EQ(platform.Canned().RelativeModeCalls(), 1);
+    EXPECT_EQ(platform.Canned().LastRelativeWindow(), 11u);
     Mouse::setIsRelativeMouseModeEXTProperty(false);
-    Mouse::setWindowHandleProperty(0);
-    SDL_DestroyWindow(window);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
-    ResetMouseState();
+    EXPECT_FALSE(Mouse::getIsRelativeMouseModeEXTProperty());
+    EXPECT_EQ(platform.Canned().RelativeModeCalls(), 2);
 }
 
-TEST(MouseTest, SetPositionIsNoOpWhenRelativeModeEnabled)
+TEST_F(MousePlatformInputTest, SetPositionIsNoOpWhenRelativeModeEnabled)
 {
-    ResetMouseState();
-
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    SDL_Window* window = SDL_CreateWindow("MouseInputTests2", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!window)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
-
-    Mouse::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
-    CNA::Internal::Input::InputManager::SetMousePosition(7, 7);
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = 13;
+    snapshot.x = 7;
+    snapshot.y = 7;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
 
     Mouse::setIsRelativeMouseModeEXTProperty(true);
     Mouse::SetPosition(99, 99); // must be a no-op while relative mode is on (Mouse.cs:106-110)
-    Mouse::setIsRelativeMouseModeEXTProperty(false);
 
-    const auto state = Mouse::GetState();
-    EXPECT_EQ(state.getXProperty(), 7);
-    EXPECT_EQ(state.getYProperty(), 7);
-
-    SDL_DestroyWindow(window);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
-    ResetMouseState();
+    EXPECT_EQ(platform.Canned().PositionCalls(), 0);
 }
 
-TEST(MouseTest, SetRelativeMouseModeIsSafeNoOpWithNoWindow)
+TEST_F(MousePlatformInputTest, SetRelativeMouseModeIsSafeNoOpWithNoWindow)
 {
-    // Task 802: with no published handle and no focused window, resolve_mouse_window() returns
-    // null; the setter must no-op (not pass a null window to SDL) and the getter must report false.
-    ResetMouseState();
-
     EXPECT_NO_THROW(Mouse::setIsRelativeMouseModeEXTProperty(true));
     EXPECT_FALSE(Mouse::getIsRelativeMouseModeEXTProperty());
-
-    ResetMouseState();
+    EXPECT_EQ(platform.Canned().RelativeModeCalls(), 0);
 }
 
-TEST(MouseTest, SetPositionIsSafeAndUpdatesInternalStateWithNoWindow)
+TEST_F(MousePlatformInputTest, SetPositionIsSafeAndUpdatesSnapshotWithNoWindow)
 {
-    // P3-001: with no published handle and no focused window, resolve_mouse_window() returns null.
-    // SetPosition must NOT hand a null window to SDL_WarpMouseInWindow (undefined), yet must still
-    // update the internal position so GetState() reflects the requested logical coordinate.
-    ResetMouseState();
     ASSERT_EQ(Mouse::getWindowHandleProperty(), 0u);
 
     EXPECT_NO_THROW(Mouse::SetPosition(123, 456));
@@ -475,8 +472,6 @@ TEST(MouseTest, SetPositionIsSafeAndUpdatesInternalStateWithNoWindow)
     EXPECT_NO_THROW(Mouse::SetPosition(1 << 20, 1 << 20));
     EXPECT_EQ(Mouse::GetState().getXProperty(), 1 << 20);
     EXPECT_EQ(Mouse::GetState().getYProperty(), 1 << 20);
-
-    ResetMouseState();
 }
 
 TEST(MouseTest, SetCursorIsSafeNoOpForDisposedCursor)

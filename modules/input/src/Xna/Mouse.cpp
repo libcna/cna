@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
-#include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include <SDL3/SDL.h>
 
 namespace
 {
+    [[nodiscard]] CNA::Platform::WindowId window_id(SDL_Window* window)
+    {
+        return window != nullptr ? SDL_GetWindowID(window) : 0;
+    }
+
     /// Resolves the window Mouse operates on: the published WindowHandle if set,
     /// otherwise the currently focused window (matches the fallback pattern used
     /// throughout SdlInputBridge.cpp).
@@ -47,7 +52,7 @@ namespace
         }
 
         if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(
-                SDL_GetWindowID(window)))
+                window_id(window)))
         {
             float wx = logX, wy = logY;
             if (renderer->TransformLogicalToWindow(logX, logY, wx, wy))
@@ -57,11 +62,61 @@ namespace
             }
         }
     }
+
+    /// Converts the platform contract's window-client coordinates back into the logical game
+    /// coordinates MouseState exposes. This is the inverse of logical_to_window above.
+    void window_to_logical(SDL_Window* window, const CNA::Platform::WindowId windowId,
+                           const float windowX, const float windowY, float& outX, float& outY)
+    {
+        outX = windowX;
+        outY = windowY;
+
+        if (window != nullptr)
+        {
+            if (SDL_Renderer* renderer = SDL_GetRenderer(window))
+            {
+                float logicalX = windowX;
+                float logicalY = windowY;
+                if (SDL_RenderCoordinatesFromWindow(
+                        renderer, windowX, windowY, &logicalX, &logicalY))
+                {
+                    outX = logicalX;
+                    outY = logicalY;
+                    return;
+                }
+            }
+        }
+
+        if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(windowId))
+        {
+            float logicalX = windowX;
+            float logicalY = windowY;
+            if (renderer->TransformWindowToLogical(windowX, windowY, logicalX, logicalY))
+            {
+                outX = logicalX;
+                outY = logicalY;
+            }
+        }
+    }
+
+    [[nodiscard]] CNA::Platform::IPlatformMouse* CurrentMouse()
+    {
+        return CNA::Platform::GetCurrentPlatform().GetMouse();
+    }
+
+    [[nodiscard]] Microsoft::Xna::Framework::Input::ButtonState Button(
+        const std::uint8_t buttons, const std::uint8_t bit)
+    {
+        return (buttons & bit) != 0
+            ? Microsoft::Xna::Framework::Input::ButtonState::Pressed
+            : Microsoft::Xna::Framework::Input::ButtonState::Released;
+    }
 }
 
 namespace Microsoft::Xna::Framework::Input
 {
-    std::uintptr_t           Mouse::windowHandle_           = 0;
+    std::uintptr_t Mouse::windowHandle_ = 0;
+    std::uint32_t Mouse::windowId_ = 0;
     // DEC-06: ClickedEXT is multicast (MulticastAction<int>), matching FNA's Action<int>.
     System::MulticastAction<int> Mouse::ClickedEXT;
 
@@ -73,20 +128,49 @@ namespace Microsoft::Xna::Framework::Input
     void Mouse::setWindowHandleProperty(const std::uintptr_t value)
     {
         windowHandle_ = value;
+        windowId_ = window_id(reinterpret_cast<SDL_Window*>(value));
     }
 
-    // Coordinate model: FNA scales GetState()/SetPosition by a fixed INTERNAL_WindowWidth/Height
-    // <-> INTERNAL_BackBufferWidth/Height ratio (its "faux-backbuffer"). CNA solves the equivalent
-    // window<->logical problem more generally through the graphics backend: SdlInputBridge's
-    // to_logical_position() converts stored positions window->logical (so GetState() returns
-    // logical coords), and SetPosition() below converts the caller's logical coords back to window
-    // space via logical_to_window() before warping (plan.md a-0001). FNA's separate
-    // INTERNAL_MouseWheel accumulator has no CNA equivalent field: InputManager::AddScrollWheelDelta
-    // already accumulates ScrollWheelValue cumulatively.
+    // Coordinate model: IPlatformMouse owns a window-client snapshot. The public XNA surface maps
+    // that through the active renderer into logical game coordinates, and SetPosition performs the
+    // exact inverse before handing the target back to the platform. Wheel totals already use XNA's
+    // cumulative 120-unit convention in the contract.
 
     MouseState Mouse::GetState()
     {
-        return CNA::Internal::Input::InputManager::GetMouseState();
+        CNA::Platform::IPlatformMouse* mouse = CurrentMouse();
+        if (mouse == nullptr)
+        {
+            return MouseState();
+        }
+
+        const CNA::Platform::MouseSnapshot& snapshot = mouse->GetSnapshot();
+        int x = snapshot.x;
+        int y = snapshot.y;
+        if (mouse->IsRelativeMode())
+        {
+            const CNA::Platform::MouseDelta delta = mouse->ConsumeRelativeDelta();
+            x = delta.x;
+            y = delta.y;
+        }
+        else
+        {
+            float logicalX = static_cast<float>(snapshot.x);
+            float logicalY = static_cast<float>(snapshot.y);
+            SDL_Window* nativeWindow = resolve_mouse_window(windowHandle_);
+            const CNA::Platform::WindowId window = windowId_ != 0 ? windowId_ : snapshot.window;
+            window_to_logical(nativeWindow, window, logicalX, logicalY, logicalX, logicalY);
+            x = static_cast<int>(logicalX);
+            y = static_cast<int>(logicalY);
+        }
+
+        return MouseState(x, y, snapshot.scrollY,
+                          Button(snapshot.buttons, 0x01),
+                          Button(snapshot.buttons, 0x02),
+                          Button(snapshot.buttons, 0x04),
+                          Button(snapshot.buttons, 0x08),
+                          Button(snapshot.buttons, 0x10),
+                          snapshot.scrollX);
     }
 
     void Mouse::SetPosition(int x, int y)
@@ -97,23 +181,23 @@ namespace Microsoft::Xna::Framework::Input
             return;
         }
 
-        // Keep GetState() reporting the logical position the caller set...
-        CNA::Internal::Input::InputManager::SetMousePosition(x, y);
-
-        // ...but warp the OS cursor in window space: convert logical -> window so the cursor lands
-        // at the correct physical pixel on a scaled/letterboxed window (a-0001).
-        // Guard the same way getIsRelativeMouseModeEXTProperty/setIsRelativeMouseModeEXTProperty do:
-        // if there is no window (no published handle and no focused window), never hand SDL a null
-        // window — SDL_WarpMouseInWindow(NULL, ...) is undefined/implementation-dependent. Internal
-        // state was already updated above, so GetState() still reflects the requested position.
-        SDL_Window* window = resolve_mouse_window(windowHandle_);
-        if (window == nullptr)
+        CNA::Platform::IPlatformMouse* mouse = CurrentMouse();
+        if (mouse == nullptr)
         {
             return;
         }
-        float windowX, windowY;
+
+        // Convert logical -> window so the cursor lands at the correct physical pixel on a
+        // scaled/letterboxed window. A zero WindowId asks the service to record the position but
+        // not hand a native API an invalid window.
+        SDL_Window* window = resolve_mouse_window(windowHandle_);
+        float windowX = static_cast<float>(x);
+        float windowY = static_cast<float>(y);
         logical_to_window(window, static_cast<float>(x), static_cast<float>(y), windowX, windowY);
-        SDL_WarpMouseInWindow(window, windowX, windowY);
+        const CNA::Platform::WindowId target = windowId_ != 0
+            ? windowId_
+            : mouse->GetSnapshot().window;
+        mouse->SetPosition(target, static_cast<int>(windowX), static_cast<int>(windowY));
     }
 
     void Mouse::SetCursor(MouseCursor& cursor)
@@ -133,28 +217,26 @@ namespace Microsoft::Xna::Framework::Input
 
     bool Mouse::getIsRelativeMouseModeEXTProperty()
     {
-        // Safe with no window: SDL's behavior with a null window is undefined, so report false.
-        SDL_Window* window = resolve_mouse_window(windowHandle_);
-        if (window == nullptr)
-        {
-            return false;
-        }
-        // DEC-14: read SDL live at the API boundary (no cache); InputManager keeps its own flag,
-        // written by the setter, to gate relative-delta accumulation without depending on SDL.
-        return SDL_GetWindowRelativeMouseMode(window);
+        CNA::Platform::IPlatformMouse* mouse = CurrentMouse();
+        return mouse != nullptr && mouse->IsRelativeMode();
     }
 
     void Mouse::setIsRelativeMouseModeEXTProperty(const bool value)
     {
-        // Safe with no window: no-op rather than passing a null window to SDL. Without a window
-        // there are no motion events to accumulate, so the InputManager mode is left untouched too.
-        SDL_Window* window = resolve_mouse_window(windowHandle_);
-        if (window == nullptr)
+        CNA::Platform::IPlatformMouse* mouse = CurrentMouse();
+        if (mouse == nullptr)
         {
             return;
         }
-        SDL_SetWindowRelativeMouseMode(window, value);
-        CNA::Internal::Input::InputManager::SetMouseRelativeMode(value);
+
+        const CNA::Platform::WindowId target = windowId_ != 0
+            ? windowId_
+            : mouse->GetSnapshot().window;
+        if (target == 0)
+        {
+            return;
+        }
+        mouse->SetRelativeMode(target, value);
     }
 
     bool Mouse::SetCaptureEXT(const bool enabled)
@@ -202,6 +284,7 @@ namespace Microsoft::Xna::Framework::Input
     void Mouse::ResetForTests()
     {
         windowHandle_ = 0;
+        windowId_ = 0;
         ClickedEXT    = nullptr;
     }
 }

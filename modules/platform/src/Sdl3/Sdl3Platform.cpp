@@ -215,6 +215,7 @@ namespace CNA::Platform::Sdl3 {
         {
             if (MapSdlEvent(event, translated))
             {
+                mouse_.ObserveEvent(translated);
                 destination.push_back(translated);
             }
         }

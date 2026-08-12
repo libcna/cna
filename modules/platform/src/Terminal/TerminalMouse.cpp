@@ -22,7 +22,9 @@ namespace CNA::Platform::Terminal {
         return decoder_->GetMouseSnapshot();
     }
 
-    void TerminalMouse::SetPosition(IPlatformWindow& window, const int x, const int y)
+    MouseDelta TerminalMouse::ConsumeRelativeDelta() { return {}; }
+
+    void TerminalMouse::SetPosition(const WindowId window, const int x, const int y)
     {
         (void)window;
         (void)x;
@@ -44,8 +46,9 @@ namespace CNA::Platform::Terminal {
         throw PlatformNotSupportedException(PlatformCapability::CursorShapes, "Terminal");
     }
 
-    void TerminalMouse::SetRelativeMode(const bool enabled)
+    void TerminalMouse::SetRelativeMode(const WindowId window, const bool enabled)
     {
+        (void)window;
         (void)enabled;
         throw PlatformNotSupportedException(PlatformCapability::RelativeMouse, "Terminal");
     }

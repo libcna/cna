@@ -1,25 +1,41 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Platform/PlatformEvent.hpp"
+
 #include <cstdint>
 
 namespace CNA::Platform {
 
-    class IPlatformWindow;
-
     /** @brief A mouse snapshot taken at one instant. */
     struct MouseSnapshot
     {
+        /** @brief Window whose client coordinates x/y use; zero when there is no associated window. */
+        WindowId window = 0;
         /** @brief Pointer x in client coordinates of the focused window. */
         int x = 0;
         /** @brief Pointer y in client coordinates of the focused window. */
         int y = 0;
-        /** @brief Accumulated horizontal scroll. */
+        /** @brief Accumulated horizontal scroll in XNA units (120 per whole notch). */
         int scrollX = 0;
-        /** @brief Accumulated vertical scroll. */
+        /** @brief Accumulated vertical scroll in XNA units (120 per whole notch). */
         int scrollY = 0;
-        /** @brief Bitmask of held buttons; bit 0 is left, bit 1 middle, bit 2 right. */
+        /**
+         * @brief Bitmask of held buttons.
+         *
+         * Bits 0..4 are left, middle, right, X1 and X2 respectively. No native button mask may
+         * pass through this field.
+         */
         std::uint8_t buttons = 0;
+    };
+
+    /** @brief Relative pointer motion accumulated since the previous public read. */
+    struct MouseDelta
+    {
+        /** @brief Horizontal displacement. */
+        int x = 0;
+        /** @brief Vertical displacement. */
+        int y = 0;
     };
 
     /** @brief A cursor shape the platform can display. */
@@ -54,7 +70,12 @@ namespace CNA::Platform {
         /** @brief Destroys the service. */
         virtual ~IPlatformMouse() = default;
 
-        /** @brief Updates the snapshot from the platform's current state. */
+        /**
+         * @brief Updates pollable state and relative displacement after the frame's event pump.
+         *
+         * Wheel totals may be event-fed by the implementation because native APIs do not expose
+         * them as pollable state; Update must preserve those cumulative totals.
+         */
         virtual void Update() = 0;
 
         /**
@@ -65,13 +86,24 @@ namespace CNA::Platform {
         [[nodiscard]] virtual const MouseSnapshot& GetSnapshot() const = 0;
 
         /**
+         * @brief Returns and clears accumulated relative motion.
+         *
+         * Absolute position, buttons and wheel remain ordinary frame snapshots. Relative mode is
+         * the deliberate exception: FNA/XNA-compatible callers consume displacement on each
+         * `Mouse::GetState()` read, so a second read with no intervening motion returns (0, 0).
+         *
+         * @return Motion accumulated since the previous call, or zero while relative mode is off.
+         */
+        [[nodiscard]] virtual MouseDelta ConsumeRelativeDelta() = 0;
+
+        /**
          * @brief Warps the pointer to a position within a window.
          *
-         * @param window The window to position within.
+         * @param window The window to position within; zero records the position without warping.
          * @param x Target x in client coordinates.
          * @param y Target y in client coordinates.
          */
-        virtual void SetPosition(IPlatformWindow& window, int x, int y) = 0;
+        virtual void SetPosition(WindowId window, int x, int y) = 0;
 
         /**
          * @brief Sets whether the cursor is visible.
@@ -91,10 +123,11 @@ namespace CNA::Platform {
         /**
          * @brief Enables or disables relative (pointer-locked) mode.
          *
+         * @param window The window to capture; zero when no window is available.
          * @param enabled True to capture the pointer and report motion deltas only.
          * @throws PlatformNotSupportedException If the platform reports no `RelativeMouse` capability.
          */
-        virtual void SetRelativeMode(bool enabled) = 0;
+        virtual void SetRelativeMode(WindowId window, bool enabled) = 0;
 
         /**
          * @brief Gets whether relative mode is active.

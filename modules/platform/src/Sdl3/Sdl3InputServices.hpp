@@ -41,19 +41,27 @@ namespace CNA::Platform::Sdl3 {
         void Update() override;
         /** @brief Gets the most recent snapshot. @return State as of the last Update(). */
         [[nodiscard]] const MouseSnapshot& GetSnapshot() const override;
+        /** @brief Returns and clears relative displacement. @return Pending displacement. */
+        [[nodiscard]] MouseDelta ConsumeRelativeDelta() override;
+        /** @brief Accumulates event-only mouse state such as wheel movement. @param event Event. */
+        void ObserveEvent(const PlatformEvent& event);
         /**
          * @brief Warps the pointer within a window.
-         * @param window The window to position within.
+         * @param window The window id to position within, or zero.
          * @param x Target x in client coordinates.
          * @param y Target y in client coordinates.
          */
-        void SetPosition(IPlatformWindow& window, int x, int y) override;
+        void SetPosition(WindowId window, int x, int y) override;
         /** @brief Shows or hides the cursor. @param visible True to show it. */
         void SetCursorVisible(bool visible) override;
         /** @brief Sets the cursor shape. @param cursor The shape to display. */
         void SetCursor(SystemCursor cursor) override;
-        /** @brief Enables or disables pointer lock. @param enabled True to capture the pointer. */
-        void SetRelativeMode(bool enabled) override;
+        /**
+         * @brief Enables or disables pointer lock.
+         * @param window The window to capture.
+         * @param enabled True to capture the pointer.
+         */
+        void SetRelativeMode(WindowId window, bool enabled) override;
         /** @brief Gets whether pointer lock is active. @return True if captured. */
         [[nodiscard]] bool IsRelativeMode() const override;
         /**
@@ -82,6 +90,8 @@ namespace CNA::Platform::Sdl3 {
 
     private:
         MouseSnapshot snapshot_;
+        float relativeDeltaX_ = 0.0f;
+        float relativeDeltaY_ = 0.0f;
         void* activeCursor_ = nullptr;
         bool relativeMode_ = false;
     };

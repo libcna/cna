@@ -40,10 +40,9 @@ namespace CNA::Internal::Input
             ButtonState XButton1 = ButtonState::Released;
             ButtonState XButton2 = ButtonState::Released;
 
-            // FNA extension: while true, GetMouseState() reports X/Y as the
-            // accumulated pointer delta since the last GetMouseState() call (drained
-            // to 0 on read) instead of the absolute cursor position, matching FNA's
-            // SDL_GetRelativeMouseState-backed GetMouseState() in relative mode.
+            // Legacy raw-bridge compatibility accumulator. Public Mouse uses
+            // IPlatformMouse::ConsumeRelativeDelta after PLAT-80, but the SDL-shaped bridge tests
+            // keep this state until PLAT-90 retires that adapter.
             bool RelativeMode = false;
             float RelativeDeltaX = 0.0f;
             float RelativeDeltaY = 0.0f;

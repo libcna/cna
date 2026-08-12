@@ -104,7 +104,7 @@ TEST(TerminalMouseTest, SnapshotAndEventsUseNominalCellSizedClientCoordinates)
     EXPECT_EQ(snapshot.y, 64) << "row five is zero-based 4 * nominal 16 pixels";
     EXPECT_EQ(snapshot.buttons, 0u);
     EXPECT_EQ(snapshot.scrollX, 0);
-    EXPECT_EQ(snapshot.scrollY, 1);
+    EXPECT_EQ(snapshot.scrollY, 120);
 
     std::vector<PlatformEvent> events;
     decoder->DrainEvents(events, 42);
@@ -175,7 +175,7 @@ TEST(TerminalMouseTest, UnsupportedPointerControlsRefuseDeterministically)
     {
         EXPECT_EQ(error.GetCapability(), PlatformCapability::CursorShapes);
     }
-    EXPECT_THROW(mouse.SetRelativeMode(true), PlatformNotSupportedException);
+    EXPECT_THROW(mouse.SetRelativeMode(1, true), PlatformNotSupportedException);
     EXPECT_FALSE(mouse.IsRelativeMode());
     EXPECT_THROW((void)mouse.SetCapture(true), PlatformNotSupportedException);
 

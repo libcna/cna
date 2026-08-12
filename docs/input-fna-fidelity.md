@@ -14,7 +14,7 @@ notes); those notices are intact and must not be removed.
 ## Architecture note (task 953)
 
 FNA is **poll-based per public call**: it re-reads device state when `GetState()` runs. CNA publishes
-input **once per frame**: keyboard is a whole-device `IPlatformKeyboard` snapshot, while input areas
+input **once per frame**: keyboard and mouse are whole-device platform snapshots, while input areas
 not yet migrated in Phase 5 are accumulated from `PlatformEvent`. Public `Get*State()` reads the
 stored frame state, so two reads in one `Update()` cannot observe different native instants. The two
 models are behaviorally equivalent for normal game-loop use; the differences below are where they
@@ -142,15 +142,11 @@ self-move-assignment guard now covered by a regression test.
 - **`ClickedEXT` is multicast (DEC-06, fixed 2026-07-05):** now a `System::MulticastAction<int>` matching
   FNA's `public static Action<int>` — `+=` adds subscribers, `=` replaces, `= nullptr` clears. (Was a
   single `std::function`; the second-subscriber-lost gap is closed.)
-- **Relative-mode cache (DEC-14, accepted 2026-07-05):** the public
-  `Mouse::getIsRelativeMouseModeEXTProperty()` reads SDL **live** (`SDL_GetWindowRelativeMouseMode`),
-  matching FNA — there is no cache at the API boundary. Separately, the SDL-agnostic `InputManager` keeps
-  its own `RelativeMode` flag to gate relative-delta accumulation/draining in `GetMouseState`; because
-  `InputManager` must not depend on SDL, that flag is written by `Mouse::setIsRelativeMouseModeEXTProperty`
-  (which updates SDL **and** `InputManager` together) rather than read from SDL. It cannot diverge through
-  CNA's own API; it would only desync if a caller toggled SDL relative mode *directly*, bypassing the CNA
-  setter — which is out of contract. Accepted as-is (having `InputManager` read SDL would break the
-  input-layer/SDL boundary). The live round-trip and the delta behaviour are both tested.
+- **Relative-mode service state (DEC-14, migrated by PLAT-80):** the public getter and setter use
+  `IPlatformMouse`; SDL3 keeps the mode next to native window capture and Terminal refuses it
+  through the capability contract. `Update()` collects native displacement after the event pump,
+  while `ConsumeRelativeDelta()` drains it on each public `GetState()` call. That preserves FNA's
+  unusual consume-on-read behaviour without keeping a second public-path cache in `InputManager`.
 
 ---
 

@@ -70,11 +70,11 @@ Four deletions, two replacements, one extension, one survivor. The four deletion
 this migration should end with *fewer* abstractions than it started with, not the same number
 wearing new names.
 
-`InputManager` is untouched by all of this. It is a pure in-process state store that makes **no
-SDL calls at all** — the only SDL symbol it reaches at runtime is an `SDL_Log` inside an
-`#ifdef __ANDROID__` diagnostic, and its header has zero SDL symbols. It is the destination the
-bridge writes into and the XNA layer reads from, and it stays exactly as it is. Removing its
-unnecessary `#include <SDL3/SDL.h>` is a one-line change with no design content.
+`InputManager` remains a pure in-process state store that makes **no SDL calls at all** — the only
+SDL symbol it reaches at runtime is an `SDL_Log` inside an `#ifdef __ANDROID__` diagnostic, and its
+header has zero SDL symbols. The compatibility bridge still writes its keyboard/mouse state there,
+but the public `Keyboard` and `Mouse` surfaces now read whole-device platform snapshots; gamepad and
+touch continue to use the store until their own Phase 5 rows land.
 
 ---
 
