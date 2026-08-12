@@ -1872,12 +1872,20 @@ real occlusion map. **D7 is `partially-remediated`**: the alpha and sidedness st
 `fixed`; D5, D6 and D7 are `partially-remediated` with their remaining tasks named. No renderer and
 no `cna-gltf-viewer` work has been started.
 
-> **Open risk, recorded rather than resolved.** `GLTF-215` sends every untextured primitive through
-> `PbrEffect`, whose `AmbientLightColor` defaults to `(0,0,0)`. A scene with no punctual lights that
-> previously rendered lit-white through `BasicEffect` will now render dark. That is spec-correct
-> import behaviour and is *not* visible at L3 or L5, which are the only layers that currently
-> exist — so it is stated here rather than asserted. `GLTF-009`'s image oracle is what would catch
-> it, and a default-lighting policy for a light-less PBR scene is worth deciding alongside it.
+**Lighting fallback policy (CNAEXT), decided with `GLTF-215`.** Sending every untextured primitive
+through `PbrEffect` exposed a gap the old rule hid: `PbrEffect::AmbientLightColor` defaults to
+`(0,0,0)` with all three directional slots disabled, and glTF does not require a scene to declare
+any light — most authored assets do not, because lighting is normally the viewer's business. A
+light-less file would therefore render black: a faithful reading of "no lights" and a useless one
+for anybody importing a model to look at it.
+
+The policy: **a file that declares no light at all gets the effect's own `EnableDefaultLighting()`
+rig** — the same three-light arrangement real XNA applies and that `BasicEffect` users already
+expect. It is one-sided by construction (`if (lights.empty())`), so it can never override or dim an
+asset that authored its own lights. `GltfLightingPolicy.AFileThatDeclaresNoLightGetsTheDefaultLightingRig`
+pins it; the authored-lights half is covered by the existing `KHR_lights_punctual` tool test, which
+needs a 3D renderer. This is a CNA import decision, not a specification rule, and is recorded here
+so it reads as a choice rather than an accident.
 
 Every phase declares its **primary owner** from §6; a task whose owner differs names it inline.
 Dependencies are the *minimum* set — a task also inherits its phase's entry condition, **except for

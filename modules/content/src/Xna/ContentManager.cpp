@@ -1825,9 +1825,28 @@ namespace Microsoft::Xna::Framework::Content
         // slot beyond lights.size() is left at the effect's own default (disabled).
         void ApplyPunctualLightsEXT(Graphics::Effect& fx, const std::vector<CNA::Internal::GltfImport::LightOut>& lights)
         {
-            if (lights.empty()) { return; }
             auto* lit = dynamic_cast<Graphics::IEffectLights*>(&fx);
             if (!lit) { return; }
+
+            // plan_gltf.md GLTF-215 fallback policy (CNAEXT). glTF does not require a scene to
+            // declare any light, and most authored assets do not: lighting is normally the
+            // viewer's business. That was harmless while an untextured mesh imported through
+            // BasicEffect, whose own defaults are visible. Once GLTF-215 made metallic-roughness
+            // the selection rule, the same mesh reaches PbrEffect, whose AmbientLightColor
+            // defaults to (0,0,0) and whose three directional slots start disabled -- so a
+            // light-less file would render black, which is a faithful reading of "no lights" and
+            // a useless one for anybody importing a model to look at it.
+            //
+            // A file that declares no light at all therefore gets the effect's own
+            // EnableDefaultLighting() rig -- the same three-light arrangement real XNA applies,
+            // and the same one BasicEffect users already expect. This is a CNA import policy, not
+            // a specification rule: it applies only when the file expresses no lighting intent,
+            // so it can never override or dim an asset that authored its own lights.
+            if (lights.empty())
+            {
+                lit->EnableDefaultLighting();
+                return;
+            }
 
             Graphics::DirectionalLight* slots[3] = {
                 &lit->getDirectionalLight0Property(),

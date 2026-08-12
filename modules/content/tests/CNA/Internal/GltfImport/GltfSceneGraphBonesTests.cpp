@@ -41,8 +41,12 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 
 using CnaTest::GltfOracle::CorpusDirectory;
 using CnaTest::GltfOracle::LoadedFixture;
@@ -495,4 +499,49 @@ TEST(GltfRigidAnimation, RigidAndSkinnedExtractionAgreeOnTheSameChannelData)
     // meaning is unchanged by the new field.
     ClipOut defaultConstructed;
     EXPECT_EQ(ClipTargetSpace::JointPalette, defaultConstructed.targetSpace);
+}
+
+// --- GLTF-215's lighting fallback policy --------------------------------------------------------
+
+TEST(GltfLightingPolicy, AFileThatDeclaresNoLightGetsTheDefaultLightingRig)
+{
+    // glTF does not require a scene to declare any light, and most authored assets do not --
+    // lighting is normally the viewer's business. That was harmless while an untextured mesh
+    // imported through BasicEffect, whose defaults are visible. GLTF-215 made metallic-roughness
+    // the selection rule, so the same mesh now reaches PbrEffect, whose AmbientLightColor defaults
+    // to (0,0,0) with all three directional slots disabled: a light-less file would render black.
+    //
+    // The policy is that a file expressing NO lighting intent gets the effect's own
+    // EnableDefaultLighting() rig. This test is what stops that being lost silently -- it would
+    // fail as an unlit black surface nobody could see in a numerical layer.
+    const LoadedFixture fixture("xf-identity");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ASSERT_EQ(0u, static_cast<std::size_t>(fixture.Data().extensions_used_count))
+        << "this fixture is supposed to declare no lighting extension at all";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("xf-identity");
+    ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+
+    Microsoft::Xna::Framework::Graphics::Effect* fx =
+        model.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty();
+    ASSERT_NE(nullptr, fx);
+    auto* lit = dynamic_cast<Microsoft::Xna::Framework::Graphics::IEffectLights*>(fx);
+    ASSERT_NE(nullptr, lit) << "the selected effect carries no lighting interface at all";
+
+    EXPECT_TRUE(lit->getDirectionalLight0Property().getEnabledProperty())
+        << "a light-less glTF file imported with every light disabled -- it would render black";
+
+    // The ambient term must not be left at PbrEffect's own (0,0,0) either: with only directional
+    // light, anything facing away from the key light is still unlit.
+    const Microsoft::Xna::Framework::Vector3 ambient = lit->getAmbientLightColorProperty();
+    EXPECT_GT(ambient.X + ambient.Y + ambient.Z, 0.0f)
+        << "ambient is still black, so back faces stay unlit";
+
+    // The converse -- that a file which DOES author lights keeps them rather than being overridden
+    // by this rig -- is covered by GltfToCnjToolTest's own KHR_lights_punctual case, which needs a
+    // renderer with a 3D pipeline and is skipped under STUB. The policy is deliberately one-sided
+    // in the code (`if (lights.empty())`), so the authored path is untouched by construction.
 }

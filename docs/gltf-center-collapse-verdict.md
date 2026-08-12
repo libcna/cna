@@ -353,12 +353,15 @@ every other content path.
 `GLTF-228`/`GLTF-229`/`GLTF-231`, which sit behind `GLTF-025` — the API-change gate whose own
 acceptance requires the design recorded *before* implementation.
 
-**An open risk this change introduces, stated rather than asserted.** Every untextured primitive now
-goes through `PbrEffect`, whose `AmbientLightColor` defaults to `(0,0,0)`. A light-less scene that
-previously rendered lit-white through `BasicEffect` will render dark. That is spec-correct *import*
-behaviour, and it is invisible at L3 and L5 — the only layers that exist today — so no test here can
-catch it. `GLTF-009`'s image oracle is what would, and a default-lighting policy for a light-less PBR
-scene is worth deciding alongside it.
+**A gap this change exposed, and the policy that closes it.** Every untextured primitive now goes
+through `PbrEffect`, whose `AmbientLightColor` defaults to `(0,0,0)` with all three directional slots
+disabled — so a file declaring no light at all would render black. glTF does not require a scene to
+declare lights, and most authored assets do not. The import therefore applies the effect's own
+`EnableDefaultLighting()` rig **only** when the file expresses no lighting intent, so an asset that
+authored its own lights is never overridden or dimmed. It is a CNA import policy rather than a
+specification rule, and is pinned by
+`GltfLightingPolicy.AFileThatDeclaresNoLightGetsTheDefaultLightingRig` — a numerical assertion on the
+effect's own light state, since the visual consequence is invisible until `GLTF-009` exists.
 
 **Not a collapse mechanism** — geometry was always correct; shading was wrong.
 
