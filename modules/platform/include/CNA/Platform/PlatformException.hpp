@@ -67,6 +67,21 @@ namespace CNA::Platform {
          */
         [[nodiscard]] const std::string& GetDetail() const;
 
+    protected:
+        /**
+         * @brief Creates an exception from an already-composed message.
+         *
+         * For subclasses whose message is a complete sentence rather than an operation name.
+         * Without this, a refusal would read `"CNA::Platform: CNA::Platform: X does not support
+         * Y failed"` -- the base composing a second time around a sentence that already reads as
+         * one.
+         *
+         * @param composedMessage The full message, used verbatim.
+         * @param operation The operation name, for GetOperation().
+         */
+        PlatformException(const std::string& composedMessage, const std::string& operation,
+                          int /*composedTag*/);
+
     private:
         std::string operation_;
         std::string detail_;

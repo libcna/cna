@@ -8,6 +8,7 @@
 #include "Sdl3Window.hpp"
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 
 namespace CNA::Platform::Sdl3 {
 
@@ -27,6 +28,15 @@ namespace CNA::Platform::Sdl3 {
                 case PlatformSubsystem::Sensor:  return SDL_INIT_SENSOR;
             }
             return SDL_INIT_VIDEO;
+        }
+
+        /// Whether this host has a Vulkan loader at all. Probed once: a capability that claims
+        /// Vulkan works on a machine with no loader would break the model's central promise --
+        /// true means the calls succeed, false means they refuse.
+        bool HostHasVulkan()
+        {
+            static const bool available = SDL_Vulkan_LoadLibrary(nullptr);
+            return available;
         }
 
         std::string LastSdlError()
@@ -69,7 +79,7 @@ namespace CNA::Platform::Sdl3 {
         capabilities.nativeWindowHandle = true;
         capabilities.surfacePresentation = true;
         capabilities.openGlContext = true;
-        capabilities.vulkanSurface = true;
+        capabilities.vulkanSurface = HostHasVulkan();
         capabilities.clipboard = true;
         capabilities.textInput = true;
         capabilities.ime = true;
@@ -223,14 +233,23 @@ namespace CNA::Platform::Sdl3 {
     IPlatformDialogs* Sdl3Platform::GetDialogs() { return nullptr; }
     IPlatformFileSystem* Sdl3Platform::GetFileSystem() { return &fileSystem_; }
     IPlatformSystemInfo* Sdl3Platform::GetSystemInfo() { return &systemInfo_; }
-    IPlatformGlContext* Sdl3Platform::GetGlContext() { return nullptr; }
-    IPlatformVulkanSurface* Sdl3Platform::GetVulkanSurface() { return nullptr; }
-
-    std::unique_ptr<IPlatformSurfacePresenter> Sdl3Platform::CreateSurfacePresenter(IPlatformWindow&)
+    IPlatformGlContext* Sdl3Platform::GetGlContext() { return &glContext_; }
+    IPlatformVulkanSurface* Sdl3Platform::GetVulkanSurface()
     {
-        // PLAT-128.
-        throw PlatformException("CreateSurfacePresenter",
-                                "Sdl3SurfacePresenter is not implemented yet (PLAT-128)");
+        // Null exactly when the capability is false. Handing back a service that would refuse
+        // every call would break the rule a caller relies on to decide whether to ask at all.
+        return HostHasVulkan() ? &vulkanSurface_ : nullptr;
+    }
+
+    std::unique_ptr<IPlatformSurfacePresenter> Sdl3Platform::CreateSurfacePresenter(IPlatformWindow& window)
+    {
+        auto* sdlWindow = dynamic_cast<Sdl3Window*>(&window);
+        if (sdlWindow == nullptr)
+        {
+            throw PlatformException("CreateSurfacePresenter",
+                                    "window was not created by the SDL3 platform");
+        }
+        return std::make_unique<Sdl3SurfacePresenter>(*sdlWindow);
     }
 
 } // namespace CNA::Platform::Sdl3

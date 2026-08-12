@@ -417,7 +417,7 @@ if(CNA_BUILD_TESTS)
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
     # another suite usually has, so these skip there and would otherwise contribute no coverage
     # at all. Running them as their own ctest, in their own process, is what makes them real.
-    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*
+    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
     # The rest of the platform contract is display-independent by construction, so it runs

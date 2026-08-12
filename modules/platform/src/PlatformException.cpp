@@ -35,6 +35,13 @@ namespace CNA::Platform {
     {
     }
 
+    PlatformException::PlatformException(const std::string& composedMessage,
+                                         const std::string& operation, int)
+        : std::runtime_error(composedMessage)
+        , operation_(operation)
+    {
+    }
+
     const std::string& PlatformException::GetOperation() const
     {
         return operation_;
@@ -47,9 +54,9 @@ namespace CNA::Platform {
 
     PlatformNotSupportedException::PlatformNotSupportedException(
         const PlatformCapability capability, const std::string& platformName)
-        // The base carries the composed sentence as its operation so what() reads naturally;
+        // Uses the composed-message constructor so the sentence is not wrapped a second time;
         // GetCapability() is the machine-readable half a caller or test should branch on.
-        : PlatformException(ComposeRefusal(capability, platformName))
+        : PlatformException(ComposeRefusal(capability, platformName), ToString(capability), 0)
         , capability_(capability)
     {
     }

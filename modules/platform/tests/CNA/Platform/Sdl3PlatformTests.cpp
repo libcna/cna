@@ -129,21 +129,30 @@ TEST_F(Sdl3PlatformTest, ReportsTheCapabilitiesSdl3ActuallyHas)
     EXPECT_TRUE(capabilities.multipleWindows);
 }
 
-TEST_F(Sdl3PlatformTest, EveryCapabilityIsAnsweredExplicitly)
+TEST_F(Sdl3PlatformTest, HostIndependentCapabilitiesAreAllSupported)
 {
-    // Sdl3 answers all 26; a capability added later without being answered here would silently
-    // read as unsupported, which is the failure the enum/struct pair exists to make visible.
+    // SDL3 supports everything the contract currently defines EXCEPT what depends on facilities
+    // the host may lack. Asserting all 26 unconditionally was wrong and this test said so once
+    // vulkanSurface became honest: a machine with no Vulkan loader must report false, or the
+    // capability model's promise -- true means the calls work -- stops holding.
     const PlatformCapabilities capabilities = platform_->GetCapabilities();
-    int supported = 0;
+
     for (const PlatformCapability capability : AllCapabilities())
     {
-        if (Supports(capabilities, capability))
+        if (capability == PlatformCapability::VulkanSurface)
         {
-            ++supported;
+            continue;  // host-dependent; covered by the agreement check below
         }
+        EXPECT_TRUE(Supports(capabilities, capability)) << ToString(capability);
     }
-    EXPECT_EQ(supported, static_cast<int>(AllCapabilities().size()))
-        << "SDL3 is expected to support every currently-defined capability";
+}
+
+TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)
+{
+    // The contract's rule: a service is null exactly when its capability is false. Advertising
+    // Vulkan on a machine with no loader would hand a caller a service that refuses every call.
+    const PlatformCapabilities capabilities = platform_->GetCapabilities();
+    EXPECT_EQ(platform_->GetVulkanSurface() != nullptr, capabilities.vulkanSurface);
 }
 
 // --- subsystem lifecycle (PLAT-29) --------------------------------------------------------------

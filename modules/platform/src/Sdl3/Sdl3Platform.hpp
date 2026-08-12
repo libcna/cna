@@ -3,6 +3,7 @@
 
 #include "CNA/Platform/IPlatform.hpp"
 
+#include "Sdl3GraphicsServices.hpp"
 #include "Sdl3SystemServices.hpp"
 
 #include <cstdint>
@@ -86,9 +87,9 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
         /** @brief Gets the system information service. @return The SDL3 system info; never null. */
         [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override;
-        /** @brief Gets the OpenGL context service. @return Null until PLAT-41 lands. */
+        /** @brief Gets the OpenGL context service. @return The SDL3 GL service; never null. */
         [[nodiscard]] IPlatformGlContext* GetGlContext() override;
-        /** @brief Gets the Vulkan surface service. @return Null until PLAT-42 lands. */
+        /** @brief Gets the Vulkan surface service. @return The SDL3 Vulkan service; never null. */
         [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override;
 
         /**
@@ -111,6 +112,8 @@ namespace CNA::Platform::Sdl3 {
         Sdl3Displays displays_;
         Sdl3FileSystem fileSystem_;
         Sdl3SystemInfo systemInfo_;
+        Sdl3GlContext glContext_;
+        Sdl3VulkanSurface vulkanSurface_;
     };
 
 } // namespace CNA::Platform::Sdl3

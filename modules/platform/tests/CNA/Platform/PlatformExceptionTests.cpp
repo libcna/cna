@@ -67,6 +67,18 @@ TEST(PlatformNotSupportedExceptionTests, ExposesTheCapabilityMachineReadably)
     EXPECT_EQ(exception.GetCapability(), PlatformCapability::Gamepad);
 }
 
+TEST(PlatformNotSupportedExceptionTests, MessageIsNotComposedTwice)
+{
+    // A refusal reads as a complete sentence already. Routing it through the operation-plus-
+    // detail constructor produced "CNA::Platform: CNA::Platform: SDL3 does not support
+    // VulkanSurface failed" -- found in a real test failure message, not by inspection.
+    const PlatformNotSupportedException exception(PlatformCapability::VulkanSurface, "SDL3");
+    const std::string what = exception.what();
+
+    EXPECT_EQ(what.find("CNA::Platform:"), what.rfind("CNA::Platform:")) << what;
+    EXPECT_EQ(what.find(" failed"), std::string::npos) << what;
+}
+
 TEST(PlatformNotSupportedExceptionTests, IsCatchableAsPlatformException)
 {
     try
