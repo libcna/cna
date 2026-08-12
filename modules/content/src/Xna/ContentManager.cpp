@@ -2274,6 +2274,22 @@ namespace Microsoft::Xna::Framework::Content
             {
                 const MeshInstanceOut& instance = *entry.instance;
                 const cgltf_mesh* mesh = instance.mesh;
+                // plan_gltf.md GLTF-116/GLTF-117: a mirroring placement. §3.7.4 asks for the
+                // winding to be reversed at draw time; CNA carries the fact rather than applying
+                // it, for the same reason GLTF-231 carries `doubleSided` -- the cull mode is
+                // per-draw device state an XNA application owns, and reversing the shared index
+                // buffer instead would break the unmirrored placements of the same mesh.
+                if (instance.mirroredEXT)
+                {
+                    CNA::Logger::Warn(
+                        "glTF file '" + path + "': node '" +
+                        (instance.node != nullptr && instance.node->name != nullptr
+                             ? instance.node->name : "<unnamed>") +
+                        "' places its mesh with a mirroring transform (negative world "
+                        "determinant). CNA does not reverse the triangle winding for it, so this "
+                        "placement's front faces are back-facing under the default cull mode "
+                        "(GLTF-116, a documented limit).");
+                }
                 for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
                 {
                     const std::string partName = mesh->name

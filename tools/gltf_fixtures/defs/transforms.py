@@ -238,4 +238,66 @@ def xf_scale_nonuniform() -> Fixture:
     )
 
 
-FIXTURES = [xf_identity, xf_shared_mesh, xf_parent_child, xf_matrix_node, xf_scale_nonuniform]
+def xf_negative_scale() -> Fixture:
+    """§11.4's mirroring rung -- a node whose transform has a negative determinant.
+
+    A negative scale is the one transform that changes something no world matrix multiplication
+    expresses: the triangle's *facing*. Positions mirror the way any other affine transform moves
+    them, so an importer that only ever asks "where does this vertex land" passes every position
+    assertion here while rendering the model inside-out. §3.7.4 requires the winding order to be
+    reversed when the node's global transform determinant is negative; the transform is not baked
+    into the vertices (GLTF-103 Option A), so the reversal cannot live in the index buffer of a
+    mesh that may also be instanced unmirrored -- it is a per-draw raster decision.
+    """
+    b = GltfBuilder("xf-negative-scale")
+    mesh = _carrier_triangle(b, "MirroredTri")
+    node = b.add_node(name="MirroredNode", mesh=mesh, scale=[-1, 1, 1])
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="xf-negative-scale", audit_fixture=None, owning_group="transforms",
+        description="A single node scaled [-1,1,1], carrying the carrier triangle. Positions "
+                    "mirror across the YZ plane; the determinant of the world 3x3 is -1, which "
+                    "per §3.7.4 means the triangle's winding must be reversed at draw time for "
+                    "its front face to stay front-facing.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["node.scale negative", "mirroring", "winding order"], spec_anchors=_SPEC,
+        l3=_l3(mesh, "MirroredTri"),
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+def xf_mirror_child() -> Fixture:
+    """Mirroring composed through a hierarchy -- two mirrors cancel, one does not.
+
+    The file carries three placements of one mesh so a single fixture states the whole rule: an
+    unmirrored root, a mirrored child of it, and a mirrored child of *that*. The determinant sign
+    is multiplicative, so the third placement is unmirrored again. An implementation that tested
+    only the instancing node's own scale -- the obvious shortcut -- gets the deepest one wrong,
+    and gets it wrong in the direction that renders geometry inside-out with no other symptom.
+    """
+    b = GltfBuilder("xf-mirror-child")
+    mesh = _carrier_triangle(b, "HandednessTri")
+    grandchild = b.add_node(name="MirroredTwice", mesh=mesh, scale=[-1, 1, 1],
+                            translation=[0, 4, 0])
+    child = b.add_node(name="MirroredOnce", mesh=mesh, scale=[-1, 1, 1], translation=[0, 2, 0],
+                       children=[grandchild])
+    root = b.add_node(name="Unmirrored", mesh=mesh, children=[child])
+    b.add_scene([root], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="xf-mirror-child", audit_fixture=None, owning_group="transforms",
+        description="One mesh instanced three times down a chain: an unmirrored root, a child "
+                    "scaled [-1,1,1], and a grandchild scaled [-1,1,1] again. The composed "
+                    "determinants are +1, -1 and +1 -- mirroring is a property of the composed "
+                    "world transform, never of the instancing node's own scale.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        referencing_groups=["scenes"],
+        features=["mirroring", "hierarchical composition", "mesh instancing"], spec_anchors=_SPEC,
+        l3=_l3(mesh, "HandednessTri"),
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+FIXTURES = [xf_identity, xf_shared_mesh, xf_parent_child, xf_matrix_node, xf_scale_nonuniform,
+            xf_negative_scale, xf_mirror_child]

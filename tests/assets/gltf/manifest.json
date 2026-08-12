@@ -12,14 +12,14 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 43,
+  "distinctAssetCount": 45,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
     "component-types": 2,
     "topology": 7,
     "normals": 1,
-    "transforms": 5,
+    "transforms": 7,
     "materials": 4,
     "skinning": 7,
     "animation": 3,
@@ -594,6 +594,42 @@
         "node.scale non-uniform",
         "normal matrix",
         "inverse-transpose normal transform"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-negative-scale",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node.scale negative",
+        "mirroring",
+        "winding order"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-mirror-child",
+      "owningGroup": "transforms",
+      "referencingGroups": [
+        "scenes"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "mirroring",
+        "hierarchical composition",
+        "mesh instancing"
       ],
       "auditFixture": null
     },
@@ -1944,6 +1980,56 @@
     },
     {
       "path": "xf-matrix-node.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "xf-mirror-child.expected.json",
+      "bytes": 7853,
+      "sha256": "77a724ea19faf53ff13377be258424ea11c55440ca86529cad90aec82b55bdb7"
+    },
+    {
+      "path": "xf-mirror-child.glb",
+      "bytes": 968,
+      "sha256": "212638cf339302a50a91a8e748a52202960d53aa509d3839d257567d3f6b97c1"
+    },
+    {
+      "path": "xf-mirror-child.gltf",
+      "bytes": 1876,
+      "sha256": "9925639b1beadd55ce969730f0f9523da0dd2faa46c51d62f9432cbb967042ba"
+    },
+    {
+      "path": "xf-mirror-child.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-mirror-child.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "xf-negative-scale.expected.json",
+      "bytes": 6426,
+      "sha256": "cfbf850676c78548574ac7046a0b8dde3aad30ef9f5eb90544a0036544848eec"
+    },
+    {
+      "path": "xf-negative-scale.glb",
+      "bytes": 812,
+      "sha256": "1c3843fbc689d33001e696dec5203eaf2261b5d89c775d01b408972fecf29864"
+    },
+    {
+      "path": "xf-negative-scale.gltf",
+      "bytes": 1492,
+      "sha256": "48c43380d1b4f7be22584dd14d49a937f4fd39f6bdfcea67b46b47f66d3305fe"
+    },
+    {
+      "path": "xf-negative-scale.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-negative-scale.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },

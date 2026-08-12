@@ -463,6 +463,20 @@ namespace CNA::Internal::GltfImport
             return result;
         }
 
+        // The determinant of a transform's linear (3x3) part. Its SIGN is the whole question for
+        // GLTF-116: negative means the transform mirrors, so the triangle winding a renderer sees
+        // is the reverse of the one the file authored. The translation row is excluded because it
+        // has no bearing on handedness -- for the affine matrices produced here the 4x4
+        // determinant happens to agree, but only as long as the last column stays (0,0,0,1), and
+        // relying on that would make an unrelated future change silently answer a different
+        // question.
+        float Determinant3x3(const Matrix& m)
+        {
+            return m.M11 * (m.M22 * m.M33 - m.M23 * m.M32)
+                 - m.M12 * (m.M21 * m.M33 - m.M23 * m.M31)
+                 + m.M13 * (m.M21 * m.M32 - m.M22 * m.M31);
+        }
+
         // A fully unpacked (and therefore sparse-accessor-safe) animation channel: sample times
         // plus the flattened value array (componentsPerValue floats per sample; 3x samples for
         // CUBICSPLINE, only the middle "value" third of each triplet is ever read).
@@ -2829,6 +2843,12 @@ namespace CNA::Internal::GltfImport
             instance.sceneNodeIndex = placed->second;
             instance.worldTransform = scene.nodes[static_cast<std::size_t>(placed->second)].worldTransform;
             instance.skinned = node.skin != nullptr;
+            // GLTF-116/GLTF-117: mirroring is a property of the COMPOSED transform. The 3x3
+            // determinant is the whole test -- an odd number of mirroring ancestors flips the
+            // handedness, an even number restores it, and the node's own scale says nothing on its
+            // own. A skinned instance is deliberately measured the same way even though its node
+            // transform is ignored for placement, so the flag never silently means two things.
+            instance.mirroredEXT = Determinant3x3(instance.worldTransform) < 0.0f;
 
             auto it = indexOfSkin.find(node.skin);
             if (it == indexOfSkin.end())

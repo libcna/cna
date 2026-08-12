@@ -744,6 +744,23 @@ namespace CNA::Internal::GltfImport
          * drops) is plan_gltf.md GLTF-245/GLTF-247/GLTF-260, not this type.
          */
         bool skinned = false;
+        /**
+         * @brief True when this placement's composed world transform mirrors the geometry.
+         *
+         * plan_gltf.md `GLTF-116`/`GLTF-117`. The determinant of the world 3×3 is negative, so
+         * §3.7.4 requires the triangle winding to be reversed for the primitive's front faces to
+         * stay front-facing. The property belongs to the **composed** transform, never to the
+         * instancing node's own scale: an odd number of mirroring ancestors mirrors, an even
+         * number does not.
+         *
+         * It is recorded per instance rather than applied to the index buffer, because vertex
+         * positions stay mesh-local (`GLTF-103` Option A) — one mesh may be instanced by both a
+         * mirrored and an unmirrored node, and those two draws share one index buffer. Reversing
+         * it at import would fix one placement by breaking the other. Applying it is a per-draw
+         * `RasterizerState::CullMode` decision, the same boundary `GLTF-231` drew for
+         * `doubleSided`.
+         */
+        bool mirroredEXT = false;
     };
 
     /** @brief A group of glTF mesh instances sharing the same skin (or no skin at all). */
