@@ -132,6 +132,12 @@ include(cmake/PlatformSelection.cmake)
 # only until PLAT-121 flips it strict; skips itself cleanly with no Python 3 present.
 include(cmake/PlatformRatchet.cmake)
 
+# Hot-path lint (plan_platform.md PLAT-9): rejects platform calls inside per-pixel,
+# per-vertex, per-fragment, per-sample and per-event loops, per design decision 4. A hard
+# error rather than a warning like the ratchet above: this one starts at zero violations
+# and every regression is a single deliberate line with an obvious fix or an annotation.
+include(cmake/PlatformHotPathLint.cmake)
+
 # Example and test registrations live inside the module tree (modules/<name>/examples/,
 # modules/renderers/<family>/examples/): testing must be enabled before the modules are
 # composed so their subdirectory add_test() registrations take effect.
