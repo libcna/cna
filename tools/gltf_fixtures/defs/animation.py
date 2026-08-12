@@ -110,30 +110,33 @@ def anim_rigid_node() -> Fixture:
             # weight-vector validation task and has nothing to do with rigid animation; the real
             # owner is GLTF-293 (plan_gltf.md §29 Phase 14), with GLTF-294 unifying playback.
             owning_tasks=["GLTF-103", "GLTF-113", "GLTF-114", "GLTF-293", "GLTF-294"],
-            closed_tasks=["GLTF-103", "GLTF-113", "GLTF-114", "GLTF-293"],
-            remaining_tasks=["GLTF-294"],
-            status="partially-remediated",
-            divergent_fields=["animation"],
+            closed_tasks=["GLTF-103", "GLTF-113", "GLTF-114", "GLTF-293", "GLTF-294"],
+            remaining_tasks=[],
+            status="fixed",
+            divergent_fields=[],
             current_actual={
                 "importedClipCount": 1,
                 "importedTrackCount": 1,
                 "clipTargetSpace": "SceneNode",
                 "warningEmitted": True,
                 "clipExtractionGatedOnSkin": False,
-                "serialisedToCnj": False,
+                "serialisedToCnj": True,
+                "playable": True,
                 "note": "ExtractSceneNodeClips resolves the rotation channel against the scene "
                         "graph and yields one clip, 'Spin', with one track on the SpinningMesh "
                         "node's own bone -- identity at t=0 and a quarter turn about +Z at t=1, "
                         "with the scale components filled from the node's bind pose rather than "
                         "from zero. Both original mechanisms are gone: extraction is no longer "
                         "gated on a skin, and a non-joint target resolves instead of being "
-                        "skipped. What remains is serialisation: a scene-node clip's boneIndex is "
-                        "a sceneNodeIndex, and the .cnj clip schema has no field distinguishing "
-                        "that from a joint-palette slot (§15.1.2), so writing one would let a "
-                        "reader apply it as a palette index -- a fresh silent corruption in place "
-                        "of the old one. The converter therefore reports the clip by name and "
-                        "track count instead of dropping it. GLTF-294 adds the field and the "
-                        "unified playback path.",
+                        "skipped. GLTF-294 then gave the clip a target space it declares in the "
+                        ".cnj, a ModelAnimationsEXT container on the unskinned model's Tag, and "
+                        "ApplyClipToBonesEXT to pose the bones from it -- which refuses a "
+                        "joint-palette clip outright, because applying palette indices to "
+                        "Model::Bones would pose the wrong bones with no symptom but wrong "
+                        "motion. One boundary is recorded rather than resolved: Model::Tag holds "
+                        "one object, so a file with BOTH a skin and rigid node animation has "
+                        "nowhere to put the rigid clips and the importer reports that by name "
+                        "(GLTF-295).",
             },
             prior_actual={
                 "importedClipCount": 0,

@@ -28,6 +28,7 @@
 // exactly once; until it lands, D8 keeps that half open.
 
 #include <filesystem>
+#include <stdexcept>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <string>
@@ -700,4 +701,106 @@ TEST(GltfMaterialState, AMaterialThatDeclaresNothingGetsGltfsOwnDefaults)
     EXPECT_NEAR(1.0, static_cast<double>(pbr->getAlphaProperty()), 1e-6);
     EXPECT_NEAR(1.0, static_cast<double>(pbr->getMetallicFactorProperty()), 1e-6);
     EXPECT_NEAR(1.0, static_cast<double>(pbr->getRoughnessFactorProperty()), 1e-6);
+}
+
+// --- GLTF-294: a rigid clip survives to the model and poses it ---------------------------------
+
+TEST(GltfRigidAnimation, AnUnskinnedAnimatedModelCarriesItsClipsOnItsTag)
+{
+    // The reader half of D6. Before GLTF-294 the .cnj "animations" array was parsed only inside
+    // the skeleton branch, so an unskinned model's clips were read by nobody -- and before
+    // GLTF-293 there were none to read.
+    using Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT;
+    using Microsoft::Xna::Framework::Graphics::ModelAnimationsEXT;
+
+    const LoadedFixture fixture("anim-rigid-node");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ASSERT_EQ(0u, static_cast<std::size_t>(fixture.Data().skins_count))
+        << "this fixture is supposed to have no skin at all";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("anim-rigid-node");
+
+    auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
+    ASSERT_NE(nullptr, animations) << "the model carries no rigid clips -- D6 is back";
+    ASSERT_EQ(1u, animations->Clips.size());
+    ASSERT_TRUE(animations->Clips.count("Spin") == 1) << "the clip lost its name";
+
+    const auto& clip = animations->Clips.at("Spin");
+    EXPECT_EQ(ClipTargetSpaceEXT::SceneNode, clip.TargetSpace)
+        << "a rigid clip that claimed a joint palette would pose the wrong bones";
+    ASSERT_EQ(1u, clip.Tracks.size());
+    EXPECT_NEAR(1.0, clip.Duration.getTotalSecondsProperty(), 1e-6);
+}
+
+TEST(GltfRigidAnimation, PosingTheModelRotatesTheAnimatedNodesBone)
+{
+    // The playable half, which is what "imported" has to mean to be worth anything. The fixture
+    // authors a quarter turn about +Z between t=0 and t=1, so the bone's transform must be the
+    // identity at the start and that rotation at the end.
+    using Microsoft::Xna::Framework::Graphics::ApplyClipToBonesEXT;
+    using Microsoft::Xna::Framework::Graphics::ModelAnimationsEXT;
+
+    const LoadedFixture fixture("anim-rigid-node");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("anim-rigid-node");
+    auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
+    ASSERT_NE(nullptr, animations);
+    const auto& clip = animations->Clips.at("Spin");
+    const int bone = clip.Tracks[0].BoneIndex;
+    ASSERT_GE(bone, 0);
+    ASSERT_LT(bone, model.getBonesProperty().getCountProperty());
+
+    // At t = 0 the node is at its rest rotation, which this fixture authors as the identity.
+    ApplyClipToBonesEXT(model, clip, System::TimeSpan::FromSeconds(0.0));
+    const Matrix atStart = model.getBonesProperty()[bone]->getTransformProperty();
+    ExpectMatrixNear(Matrix::getIdentityProperty(), atStart, "bone transform at t=0");
+
+    // At t = 1, a quarter turn about +Z: local +X maps onto +Y.
+    ApplyClipToBonesEXT(model, clip, System::TimeSpan::FromSeconds(1.0));
+    const Matrix atEnd = model.getBonesProperty()[bone]->getTransformProperty();
+    const Microsoft::Xna::Framework::Vector3 turned =
+        Microsoft::Xna::Framework::Vector3::Transform(
+            Microsoft::Xna::Framework::Vector3(1.0f, 0.0f, 0.0f), atEnd);
+    EXPECT_NEAR(0.0f, turned.X, kTolerance);
+    EXPECT_NEAR(1.0f, turned.Y, kTolerance) << "the node did not turn a quarter turn about +Z";
+    EXPECT_NEAR(0.0f, turned.Z, kTolerance);
+
+    // Halfway is halfway, not a step: an eighth turn puts +X on the diagonal.
+    ApplyClipToBonesEXT(model, clip, System::TimeSpan::FromSeconds(0.5));
+    const Microsoft::Xna::Framework::Vector3 halfway =
+        Microsoft::Xna::Framework::Vector3::Transform(
+            Microsoft::Xna::Framework::Vector3(1.0f, 0.0f, 0.0f),
+            model.getBonesProperty()[bone]->getTransformProperty());
+    EXPECT_NEAR(0.70710678f, halfway.X, 1e-4f);
+    EXPECT_NEAR(0.70710678f, halfway.Y, 1e-4f);
+}
+
+TEST(GltfRigidAnimation, APaletteClipIsRefusedRatherThanPosingTheWrongBones)
+{
+    // The reason AnimationClipEXT carries a target space at all. A joint-palette clip's indices
+    // name slots in a skin, not bones in a scene: applying them here would pose whichever bones
+    // happened to share those numbers, with no symptom but wrong motion.
+    using Microsoft::Xna::Framework::Graphics::AnimationClipEXT;
+    using Microsoft::Xna::Framework::Graphics::ApplyClipToBonesEXT;
+    using Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT;
+
+    const LoadedFixture fixture("xf-identity");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("xf-identity");
+
+    AnimationClipEXT palette;
+    palette.Duration = System::TimeSpan::FromSeconds(1.0);
+    EXPECT_EQ(ClipTargetSpaceEXT::JointPalette, palette.TargetSpace) << "the default moved";
+    EXPECT_THROW(ApplyClipToBonesEXT(model, palette, System::TimeSpan::FromSeconds(0.0)),
+                 std::invalid_argument);
 }

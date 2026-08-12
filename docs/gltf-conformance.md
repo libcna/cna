@@ -294,7 +294,7 @@ forensic audit, stop and investigate the contradiction.
 | **D1, D2, D3** | **`fixed`** | **`GLTF-103` → `GLTF-113` → `GLTF-114` → `GLTF-115`** | — |
 | **D4** | **`fixed`** | **`GLTF-063`** | — |
 | **D5** | **`fixed`** | **`GLTF-071`** → **`GLTF-072`** → **`GLTF-073`** / **`GLTF-076`** / **`GLTF-078`** | — |
-| **D6** | **`partially-remediated`** | **`GLTF-293`** (the clip is imported onto the node's own bone) | `GLTF-294` — carrying a scene-node clip through the `.cnj` and playing it |
+| **D6** | **`fixed`** | **`GLTF-293`** → **`GLTF-294`** | — |
 | **D7** | **`fixed`** | **`GLTF-215`** → `GLTF-216`/`217`/`219`/`221` → `GLTF-228`/`229`/`231` | — |
 | **D8** | **`fixed`** | **`GLTF-245` → `GLTF-247` → `GLTF-248` → `GLTF-260`** | — |
 
@@ -372,7 +372,9 @@ working directory, which is what CTest is configured to use. The suites are:
 | `GltfIndexDecode` | the sparse-safe, bounds-checked index reader and D4's regression witness (`GLTF-063`) |
 | `GltfPrimitiveTopology` | the seven-mode classification table, the never-reinterpret policy (`GLTF-071`), and the strip/fan → triangle-list conversion with its winding rule (`GLTF-072`) |
 | `GltfContainerValidation` | structural validation, `extensionsRequired` enforcement and the ignored-extension report, and the severity difference between them (`GLTF-021` … `GLTF-024`) |
-| `GltfRigidAnimation` | rigid (non-joint) node animation resolved against the scene graph (`GLTF-293`) |
+| `GltfRigidAnimation` | rigid (non-joint) node animation: resolved against the scene graph (`GLTF-293`), serialised, read back and posed (`GLTF-294`) |
+| `GltfMaterialState` | every authored material property reaching the effect, and glTF's defaults when none is declared (`GLTF-215` … `GLTF-231`) |
+| `GltfDrawTopology` | each primitive mode reaching its `ModelMeshPart` as a real `PrimitiveType` with a §12.3 count (`GLTF-073`/`GLTF-078`) |
 | `GltfLightingPolicy` | the default-lighting fallback for a file that declares no light (`GLTF-215`) |
 
 `GLTF-010` will collapse these into a single `ctest -L gltf-conformance` label once L6–L7 exist.

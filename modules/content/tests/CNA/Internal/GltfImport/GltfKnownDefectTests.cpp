@@ -18,14 +18,12 @@
 // itself is never deleted: a remediated defect stays in the corpus as the regression witness, and
 // the ledger test at the end of this file asserts both directions of that bookkeeping.
 //
-// Current state: D1, D2, D3 and D4 are FIXED (GLTF-113/114/115 and GLTF-063 respectively). D5 is
-// PARTIALLY REMEDIATED -- GLTF-071 landed, GLTF-072 still owns the topology conversion itself --
-// so its tests assert the new, explicitly rejected behaviour rather than the old silent
-// reinterpretation, and the audit's original measurement stays on record under priorActual.
-// D8 is FIXED too (GLTF-245/247/248/260), in a separate batch from D1-D3 and deliberately so:
-// the node-transform work only parked a skinned mesh on the identity root, and the joint
-// ancestry and mesh-space cancellation were resolved afterwards on their own fixtures.
-// D6 and D7 are untouched.
+// Current state: ALL EIGHT audit defects are FIXED, so this file contains no known-defect tests at
+// all -- only the ledger test at the end, which asserts the bookkeeping in both directions and is
+// what will catch the next defect being recorded without one. Each remediated defect's record stays
+// in the corpus as its regression witness, with the audit's original measurement under priorActual,
+// and its behaviour is asserted by ordinary green tests in the GltfConformance, GltfPrimitiveTopology,
+// GltfSkinSpaces, GltfRigidAnimation, GltfMaterialState and GltfDrawTopology suites.
 
 #include <algorithm>
 #include <cmath>
@@ -187,69 +185,13 @@ namespace
 
 // --- D6: rigid node animation ---------------------------------------------------------------------
 
-TEST(GltfKnownDefect, D6_RigidNodeAnimationIsImportedButNotYetSerialised)
-{
-    // Owned by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-293, with GLTF-294 still outstanding.
-    //
-    // The claim has moved on with the code. It is no longer "the animation disappears"; both
-    // mechanisms that made it disappear are gone. What is asserted now is the remaining, explicit
-    // limitation: the clip is extracted, correct and reported, and is not written to the .cnj
-    // because the clip schema cannot yet say which index space a track targets (§15.1.2).
-    using namespace CNA::Internal::GltfImport;
+// --- D6: rigid node animation ---------------------------------------------------------------------
+//
+// REMEDIATED by GLTF-103 -> GLTF-113 -> GLTF-114 -> GLTF-293 -> GLTF-294. There is deliberately no
+// known-defect test here any more: the clip is extracted, serialised, read back and playable, and
+// GltfRigidAnimation asserts all four ends of that. The record stays in the corpus as the
+// regression witness with the audit's original measurement under priorActual.
 
-    const LoadedFixture fixture("anim-rigid-node");
-    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-    const JsonValue& defect = DefectRecord(fixture, "D6");
-    ASSERT_NO_FATAL_FAILURE(RequireStillOpen(defect, "D6"));
-    const JsonValue& actualRecord = CurrentActual(defect);
-
-    // The file really does carry the animation, and really has no skin.
-    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().animations_count));
-    ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().animations[0].channels_count));
-    ASSERT_EQ(0u, static_cast<std::size_t>(fixture.Data().skins_count));
-
-    const std::vector<MeshGroup> groups = CollectMeshGroups(&fixture.Data());
-    ASSERT_EQ(1u, groups.size());
-    EXPECT_EQ(nullptr, groups[0].skin);
-    // Mechanism one is gone: extraction no longer depends on the group having a skin.
-    EXPECT_FALSE(BoolOr(actualRecord, "clipExtractionGatedOnSkin", true));
-
-    // Mechanism two is gone: a non-joint target resolves against the scene graph instead of being
-    // skipped, and the resulting track drives that node's own bone.
-    const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
-    std::vector<std::string> warnings;
-    const std::vector<ClipOut> clips =
-        ExtractSceneNodeClips(&fixture.Data(), scene, 1.0f, warnings);
-    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "importedClipCount", -1)),
-              clips.size());
-    std::size_t trackCount = 0;
-    for (const ClipOut& clip : clips)
-    {
-        trackCount += clip.tracks.size();
-        EXPECT_EQ(ClipTargetSpace::SceneNode, clip.targetSpace);
-    }
-    EXPECT_EQ(static_cast<std::size_t>(NumberOr(actualRecord, "importedTrackCount", -1)),
-              trackCount);
-    EXPECT_GT(trackCount, 0u) << "the rigid channel produced no track -- D6 has come back";
-
-    // The old joint-palette path still skips it, and that is correct rather than a bug: a file
-    // with no skin has no palette, so there is nothing there for the channel to target.
-    SkeletonResult emptySkeleton;
-    std::vector<std::string> paletteWarnings;
-    const std::vector<ClipOut> paletteClips =
-        ExtractClips(&fixture.Data(), emptySkeleton, 1.0f, paletteWarnings);
-    std::size_t paletteTracks = 0;
-    for (const ClipOut& clip : paletteClips) { paletteTracks += clip.tracks.size(); }
-    EXPECT_EQ(0u, paletteTracks);
-
-    // What remains, stated as the thing it is: the clip is reported, not dropped. The converter
-    // emits a warning naming it; serialisation waits for GLTF-294.
-    EXPECT_FALSE(BoolOr(actualRecord, "serialisedToCnj", true));
-    const std::vector<std::string> remaining = Strings(Member(defect, "remainingTasks"));
-    EXPECT_NE(remaining.end(), std::find(remaining.begin(), remaining.end(), "GLTF-294"))
-        << "D6 no longer names GLTF-294 as outstanding; if the .cnj carries rigid clips now, mark "
-           "the defect fixed in tools/gltf_fixtures and delete this test";
-}
 
 // --- D7: factor-only PBR material ------------------------------------------------------------------
 
@@ -280,12 +222,15 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
     // documented but unproven, which is exactly the failure mode this batch exists to remove. The
     // converse matters just as much: a defect the corpus records as remediated must NOT still have
     // a "still broken" test here, or the file would start lying about the state of the code.
-    const std::set<std::string> open = {"D6"};
+    // Every audit defect is remediated. The set is deliberately left in place rather than
+    // deleted: it is what makes the "an open defect must have a test here" direction of the
+    // bookkeeping meaningful the moment a new defect is recorded.
+    const std::set<std::string> open = {};
     // Remediated defects, and the task that closed each. Their records stay in the corpus as
     // regression witnesses and their fixtures are asserted by the ordinary conformance suites.
     const std::map<std::string, std::string> remediated = {
         {"D1", "GLTF-114"}, {"D2", "GLTF-114"}, {"D3", "GLTF-114"}, {"D4", "GLTF-063"},
-        {"D5", "GLTF-073"}, {"D7", "GLTF-228"}, {"D8", "GLTF-247"}};
+        {"D5", "GLTF-073"}, {"D6", "GLTF-294"}, {"D7", "GLTF-228"}, {"D8", "GLTF-247"}};
 
     const JsonValue& ledger = Member(CorpusManifest(), "defectLedger");
     ASSERT_EQ(JsonType::Array, ledger.type);

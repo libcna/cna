@@ -152,6 +152,62 @@ import and the `.cnj`. The rendering half is `GLTF-230` at L7.
 
 ---
 
+### 1.5 A home for rigid (non-joint) animation clips — `GLTF-294`
+
+**Problem.** `GLTF-293` imports rigid node animation correctly, but the clip has nowhere to be
+stored or played. `SkinningData::AnimationClips` is the only clip container that exists and its
+track indices are **palette** slots; a rigid clip's are **scene-node** indices (§15.1.2). Putting
+one in the other would let a reader apply a scene index as a palette slot — a silent corruption in
+place of the silent drop `GLTF-293` removed, which is exactly why the converter currently reports
+the clip instead of writing it.
+
+**Why not internal.** A clip has to be playable by the application. `Model::Tag` is where CNA
+already attaches per-model imported data (`SkinningData`, `MorphTargetDataEXT`), so this follows an
+established convention rather than inventing one.
+
+**Shape.**
+
+```cpp
+// Microsoft::Xna::Framework::Graphics
+/** @brief Which index space a clip's track bone indices are in. */
+CNAEXT enum class ClipTargetSpaceEXT { JointPalette, SceneNode };
+
+// on the existing AnimationClipEXT
+CNAEXT ClipTargetSpaceEXT TargetSpace = ClipTargetSpaceEXT::JointPalette;
+
+/** @brief Clips whose tracks drive a Model's own bones rather than a joint palette. */
+CNAEXT struct ModelAnimationsEXT : public System::Object
+{
+    CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
+    std::unordered_map<std::string, AnimationClipEXT> Clips;
+};
+
+/** @brief Poses a model's bones from a scene-node clip at a given time. */
+CNAEXT void ApplyClipToBonesEXT(Model& model, const AnimationClipEXT& clip,
+                                System::TimeSpan time);
+```
+
+`TargetSpace` on the clip is what makes the two spaces impossible to confuse: a container can hold
+either kind and every consumer can tell which it has. It defaults to `JointPalette`, so every clip
+that exists today keeps its meaning.
+
+**Compatibility.** Additive. A model with no rigid clips has no `ModelAnimationsEXT` and an
+untouched `Tag`.
+
+**Migration.** None.
+
+**A boundary this review names rather than hides.** `Model::Tag` holds one object, and a skinned
+model already uses it for `SkinningData`. A glTF file with **both** a skin and rigid node animation
+therefore has nowhere to put the rigid clips today. That is a real limitation, not an oversight: the
+alternatives are a breaking change to what `Tag` means, or a second attachment point, and neither is
+worth deciding for a case no fixture yet exercises. The importer **reports** it by name rather than
+dropping it silently, and the follow-up is `GLTF-295`.
+
+**Test.** `GLTF-294`: `anim-rigid-node` round-trips through the `.cnj` with its `targetSpace`, and
+posing the model at `t = 1` rotates the animated node's bone by the quarter turn the file authors.
+
+---
+
 ## 2. Reviewed and deferred
 
 ### 2.1 `PbrEffect::NormalScale`, `OcclusionStrength` — `GLTF-224`, `GLTF-225`

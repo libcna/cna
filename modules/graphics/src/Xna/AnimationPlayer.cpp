@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+
+#include <stdexcept>
+
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "System/ArgumentException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -168,4 +174,41 @@ namespace Microsoft::Xna::Framework::Graphics
                 skinningData_->InverseBindPose[static_cast<std::size_t>(i)] * worldTransforms_[static_cast<std::size_t>(i)];
         }
     }
+
+    const std::string& ModelAnimationsEXT::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.ModelAnimationsEXT";
+        return name;
+    }
+
+    void ApplyClipToBonesEXT(Model& model, const AnimationClip& clip, System::TimeSpan time)
+    {
+        // plan_gltf.md GLTF-294. Refusing a palette clip here is the whole reason
+        // AnimationClipEXT carries a target space at all: its indices name joint slots, and
+        // applying them to Model::Bones would pose the wrong bones with no symptom but wrong
+        // motion -- a silent corruption in place of the silent drop GLTF-293 removed.
+        if (clip.TargetSpace != ClipTargetSpaceEXT::SceneNode)
+        {
+            throw std::invalid_argument(
+                "ApplyClipToBonesEXT: this clip's tracks index a joint palette, not Model::Bones. "
+                "Play it through AnimationPlayer instead -- applying palette indices to bones "
+                "would pose the wrong bones silently.");
+        }
+
+        if (time < System::TimeSpan::Zero) { time = System::TimeSpan::Zero; }
+        if (time > clip.Duration) { time = clip.Duration; }
+
+        // The collection is const, but a bone it hands back is not: posing a model changes its
+        // bones' transforms, not which bones it has.
+        const ModelBoneCollection& bones = model.getBonesProperty();
+        for (const BoneTrackEXT& track : clip.Tracks)
+        {
+            if (track.Keys.empty()) { continue; }
+            if (track.BoneIndex < 0 || track.BoneIndex >= bones.getCountProperty()) { continue; }
+            // Only tracked bones are written. A clip animating one node of a large model must not
+            // reset every other bone to a pose it never mentioned.
+            bones[track.BoneIndex]->setTransformProperty(SampleTrack(track, time));
+        }
+    }
+
 }

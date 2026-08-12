@@ -1500,6 +1500,14 @@ namespace Microsoft::Xna::Framework::Content
 
                 Graphics::AnimationClipEXT clip;
                 clip.Duration = System::TimeSpan::FromSeconds(durationField->numberValue);
+                // plan_gltf.md GLTF-294: which index space this clip's track bone indices are in.
+                // Absent means JointPalette, which is what every clip written before this could
+                // only ever have been.
+                if (const JsonValue* space = root.FindMember("targetSpace");
+                    space != nullptr && space->IsString() && space->stringValue == "SceneNode")
+                {
+                    clip.TargetSpace = Graphics::ClipTargetSpaceEXT::SceneNode;
+                }
 
                 if (tracksField->type != JsonType::Array)
                 {
@@ -1723,6 +1731,10 @@ namespace Microsoft::Xna::Framework::Content
             // Task 941: owns the skeleton/animation-clip data attached to the returned Model's
             // own Tag property. Null for a rigid, non-skinned model with no skeleton.
             std::unique_ptr<Graphics::SkinningData>               skinningData;
+            // plan_gltf.md GLTF-294: owns the rigid (non-joint) animation clips attached to an
+            // UNSKINNED model's Tag. Null for a skinned model, whose Tag carries the skeleton --
+            // Tag holds one object, and that collision is a recorded limitation (GLTF-295).
+            std::unique_ptr<Graphics::ModelAnimationsEXT>         modelAnimations;
             // CNB-64/65 (Phase 13B): owns the morph-target data attached to each morphed mesh
             // part's own Tag property (one entry per part that has morph targets, not per Model).
             std::vector<std::unique_ptr<Graphics::MorphTargetDataEXT>> morphOwners;
@@ -2030,6 +2042,45 @@ namespace Microsoft::Xna::Framework::Content
 
                 res->skinningData = std::move(skinningData);
             }
+            else
+            {
+                // plan_gltf.md GLTF-294: rigid (non-joint) node animation. Only for an unskinned
+                // model -- a skinned one's Tag already carries the skeleton, and that collision is
+                // a recorded limitation rather than something to resolve silently (GLTF-295).
+                std::vector<std::string> clipWarnings;
+                const std::vector<ClipOut> rigidClips =
+                    ExtractSceneNodeClips(data, sceneGraph, 1.0f, clipWarnings);
+                for (const std::string& warning : clipWarnings) { CNA::Logger::Warn(warning); }
+                if (!rigidClips.empty())
+                {
+                    auto animations = std::make_unique<Graphics::ModelAnimationsEXT>();
+                    for (const ClipOut& clip : rigidClips)
+                    {
+                        Graphics::AnimationClipEXT outClip;
+                        outClip.Duration = System::TimeSpan::FromSeconds(clip.duration);
+                        outClip.TargetSpace = Graphics::ClipTargetSpaceEXT::SceneNode;
+                        outClip.Tracks.reserve(clip.tracks.size());
+                        for (const TrackOut& track : clip.tracks)
+                        {
+                            Graphics::BoneTrackEXT outTrack;
+                            outTrack.BoneIndex = track.boneIndex;
+                            outTrack.Keys.reserve(track.keys.size());
+                            for (const KeyframeOut& key : track.keys)
+                            {
+                                Graphics::KeyframeEXT outKey;
+                                outKey.Time = System::TimeSpan::FromSeconds(key.time);
+                                outKey.Translation = key.translation;
+                                outKey.Rotation = key.rotation;
+                                outKey.Scale = key.scale;
+                                outTrack.Keys.push_back(outKey);
+                            }
+                            outClip.Tracks.push_back(std::move(outTrack));
+                        }
+                        animations->Clips[clip.name] = std::move(outClip);
+                    }
+                    res->modelAnimations = std::move(animations);
+                }
+            }
 
             // Textures are decoded straight from the extracted in-memory bytes via MemoryStream --
             // no temporary files, unlike the offline CLI tool. Cached by cgltf_image* so a texture
@@ -2306,7 +2357,9 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::Model model(&device, std::move(boneRawPtrs), std::move(meshRawPtrs));
             model.setOwnedResources(res);
-            model.setTagProperty(res->skinningData.get());
+            // plan_gltf.md GLTF-294: an unskinned model's Tag carries its rigid clips instead.
+            if (res->skinningData)      { model.setTagProperty(res->skinningData.get()); }
+            else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
             return model;
         }
 
@@ -2460,6 +2513,33 @@ namespace Microsoft::Xna::Framework::Content
                     }
 
                     res->skinningData = std::move(skinningData);
+                }
+                else
+                {
+                    // plan_gltf.md GLTF-294: a .cnj with no skeleton may still carry rigid
+                    // (non-joint) clips, whose track indices are Model::Bones indices. Before
+                    // this, the "animations" array was read only inside the skeleton branch, so an
+                    // unskinned model's clips were parsed by nobody -- the reader half of D6.
+                    auto animations = std::make_unique<Graphics::ModelAnimationsEXT>();
+                    for (const std::string& ag : ParseFlatObjectArrayEXT(json, "animations"))
+                    {
+                        const std::string name     = ExtractJsonStringField(ag, "name");
+                        const std::string clipFile = ExtractJsonStringField(ag, "clip");
+                        if (name.empty() || clipFile.empty()) { continue; }
+                        Graphics::AnimationClipEXT clip = ReadAnimationClipRefEXT(
+                            ResolveRootRelativeSidecarPath(cm, path, "clip", clipFile), root, cm);
+                        if (clip.TargetSpace != Graphics::ClipTargetSpaceEXT::SceneNode)
+                        {
+                            // A palette clip on a model with no skeleton has nothing to index.
+                            // Saying so beats attaching it somewhere it would pose wrong bones.
+                            CNA::Logger::Warn(
+                                "Model '" + path + "' has no skeleton but its clip '" + name +
+                                "' targets a joint palette -- skipped.");
+                            continue;
+                        }
+                        animations->Clips[name] = std::move(clip);
+                    }
+                    if (!animations->Clips.empty()) { res->modelAnimations = std::move(animations); }
                 }
 
                 // CNB-97 (Phase 14H): KHR_lights_punctual, written by gltf_to_cnj.cpp as a
@@ -2899,7 +2979,9 @@ namespace Microsoft::Xna::Framework::Content
                 // convention -- game code retrieves it via
                 // static_cast<Graphics::SkinningData*>(model.getTagProperty()). Left null (Tag's
                 // own default) for a rigid, non-skinned .model.json with no "skeleton" field.
-                model.setTagProperty(res->skinningData.get());
+                // plan_gltf.md GLTF-294: an unskinned model's Tag carries its rigid clips instead.
+                if (res->skinningData)      { model.setTagProperty(res->skinningData.get()); }
+                else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
                 return model;
             }
         };

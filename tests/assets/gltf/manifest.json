@@ -168,13 +168,12 @@
         "GLTF-103",
         "GLTF-113",
         "GLTF-114",
-        "GLTF-293"
-      ],
-      "remainingTasks": [
+        "GLTF-293",
         "GLTF-294"
       ],
+      "remainingTasks": [],
       "firstDivergentLayer": "L4",
-      "status": "partially-remediated",
+      "status": "fixed",
       "fixtures": [
         "anim-rigid-node"
       ]
@@ -632,8 +631,8 @@
   "files": [
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 12654,
-      "sha256": "7b14724c2c658e267f9b979ce9e999e3637f06ffbc5baad50134446a36d671e8"
+      "bytes": 12684,
+      "sha256": "b836e63d1b6b34193bc4bd74101304a44d03911c1c367ce835589abc1b2fca29"
     },
     {
       "path": "anim-rigid-node.glb",

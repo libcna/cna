@@ -161,4 +161,53 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void RecomputeTransforms();
     };
+
+    class Model;
+
+    /**
+     * @brief Animation clips whose tracks drive a `Model`'s own bones rather than a joint palette.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-294`). Attached to
+     * `Model::Tag`, the same place `SkinningData` and `MorphTargetDataEXT` already live. This is
+     * rigid (non-joint) animation: a door, a turntable, a clock hand — motion glTF expresses by
+     * animating an ordinary scene node, which CNA silently dropped before `GLTF-293` because
+     * `ExtractClips` resolved every channel against a skin's joint set.
+     *
+     * Every clip here carries `ClipTargetSpaceEXT::SceneNode`, so a consumer that also handles
+     * palette clips can tell the two apart rather than having to know by context.
+     *
+     * @note `Model::Tag` holds one object, and a skinned model already uses it for `SkinningData`.
+     * A file with **both** a skin and rigid node animation therefore has nowhere to put these
+     * today; the importer reports that by name rather than dropping it (`GLTF-295`).
+     */
+    CNAEXT struct ModelAnimationsEXT : public System::Object
+    {
+        /** @brief Returns the fully-qualified .NET-style type name of this object. */
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
+
+        /** @brief Clips, keyed by clip name. */
+        std::unordered_map<std::string, AnimationClip> Clips;
+    };
+
+    /**
+     * @brief Poses a model's bones from a scene-node clip at a point in time.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-294`). Writes each track's
+     * interpolated local transform onto the `ModelBone` its index names, leaving every untracked
+     * bone at whatever transform it already has — so a clip animating one node of a large model
+     * does not disturb the rest. `Model::CopyAbsoluteBoneTransformsTo` then composes the hierarchy
+     * exactly as it does for a static model.
+     *
+     * Keyframes are interpolated the same way `AnimationPlayer` interpolates a palette clip:
+     * linearly in translation and scale, spherically in rotation, clamped at both ends.
+     *
+     * @param model The model whose bones are posed.
+     * @param clip The clip to evaluate; must carry `ClipTargetSpaceEXT::SceneNode`.
+     * @param time The time to evaluate at, clamped to `[0, clip.Duration]`.
+     * @throws std::invalid_argument if @p clip is not a scene-node clip, since applying a
+     * joint-palette clip's indices to `Model::Bones` would pose the wrong bones silently.
+     */
+    CNAEXT void ApplyClipToBonesEXT(Model& model, const AnimationClip& clip,
+                                    System::TimeSpan time);
+
 }

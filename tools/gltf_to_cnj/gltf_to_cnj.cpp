@@ -426,34 +426,50 @@ namespace
 
         struct ClipEntry { std::string name, cnjFile; };
         std::vector<ClipEntry> clipEntries;
+
+        // One writer for both clip kinds (plan_gltf.md GLTF-294). The joint-palette and scene-node
+        // paths differ only in which index space the tracks are in, and that difference is a field
+        // in the file rather than a second serialiser -- keeping two would let them drift, which is
+        // the shape of mistake this whole track has been about.
+        const auto writeClip = [&](const ClipOut& clip) -> std::string {
+            std::ostringstream json;
+            json << "{\n  \"cnjVersion\": 1,\n  \"type\": \"AnimationClip\",\n  \"duration\": "
+                 << clip.duration;
+            // Written only for a scene-node clip, so a joint-palette clip's .cnj is byte-identical
+            // to what it was before -- and an older file, which could only ever have been one,
+            // reads back as one.
+            if (clip.targetSpace == ClipTargetSpace::SceneNode)
+            {
+                json << ",\n  \"targetSpace\": \"SceneNode\"";
+            }
+            json << ",\n  \"tracks\": [\n";
+            for (std::size_t ti = 0; ti < clip.tracks.size(); ++ti)
+            {
+                const TrackOut& track = clip.tracks[ti];
+                json << "    { \"boneIndex\": " << track.boneIndex << ", \"keys\": [\n";
+                for (std::size_t ki = 0; ki < track.keys.size(); ++ki)
+                {
+                    const KeyframeOut& k = track.keys[ki];
+                    json << "      { \"time\": " << k.time
+                         << ", \"translation\": [" << k.translation.X << ", " << k.translation.Y << ", " << k.translation.Z << "]"
+                         << ", \"rotation\": [" << k.rotation.X << ", " << k.rotation.Y << ", " << k.rotation.Z << ", " << k.rotation.W << "]"
+                         << ", \"scale\": [" << k.scale.X << ", " << k.scale.Y << ", " << k.scale.Z << "] }"
+                         << (ki + 1 < track.keys.size() ? "," : "") << "\n";
+                }
+                json << "    ] }" << (ti + 1 < clip.tracks.size() ? "," : "") << "\n";
+            }
+            json << "  ]\n}\n";
+
+            const std::string cnjFile = outName + "_" + SanitizeForFilename(clip.name) + ".cnj";
+            WriteTextFile(outputDir / cnjFile, json.str());
+            return cnjFile;
+        };
+
         if (hasSkin)
         {
-            std::vector<ClipOut> clips = ExtractClips(data, skeleton, unitScale, warnings);
-            for (const ClipOut& clip : clips)
+            for (const ClipOut& clip : ExtractClips(data, skeleton, unitScale, warnings))
             {
-                std::ostringstream json;
-                json << "{\n  \"cnjVersion\": 1,\n  \"type\": \"AnimationClip\",\n  \"duration\": "
-                     << clip.duration << ",\n  \"tracks\": [\n";
-                for (std::size_t ti = 0; ti < clip.tracks.size(); ++ti)
-                {
-                    const TrackOut& track = clip.tracks[ti];
-                    json << "    { \"boneIndex\": " << track.boneIndex << ", \"keys\": [\n";
-                    for (std::size_t ki = 0; ki < track.keys.size(); ++ki)
-                    {
-                        const KeyframeOut& k = track.keys[ki];
-                        json << "      { \"time\": " << k.time
-                             << ", \"translation\": [" << k.translation.X << ", " << k.translation.Y << ", " << k.translation.Z << "]"
-                             << ", \"rotation\": [" << k.rotation.X << ", " << k.rotation.Y << ", " << k.rotation.Z << ", " << k.rotation.W << "]"
-                             << ", \"scale\": [" << k.scale.X << ", " << k.scale.Y << ", " << k.scale.Z << "] }"
-                             << (ki + 1 < track.keys.size() ? "," : "") << "\n";
-                    }
-                    json << "    ] }" << (ti + 1 < clip.tracks.size() ? "," : "") << "\n";
-                }
-                json << "  ]\n}\n";
-
-                const std::string cnjFile = outName + "_" + SanitizeForFilename(clip.name) + ".cnj";
-                WriteTextFile(outputDir / cnjFile, json.str());
-                clipEntries.push_back({clip.name, cnjFile});
+                clipEntries.push_back({clip.name, writeClip(clip)});
             }
         }
 
@@ -468,17 +484,21 @@ namespace
         // let a reader apply a scene-node index as a joint-palette slot -- a fresh silent
         // corruption in place of the old one. GLTF-294 adds that field and the unified playback
         // path; until then this is an explicit, named limitation rather than a disappearance.
+        for (const ClipOut& clip : ExtractSceneNodeClips(data, sceneGraph, unitScale, warnings))
         {
-            std::vector<ClipOut> rigidClips =
-                ExtractSceneNodeClips(data, sceneGraph, unitScale, warnings);
-            for (const ClipOut& clip : rigidClips)
+            // Model::Tag holds one object, and a skinned model already uses it for SkinningData.
+            // A file with both a skin and rigid node animation therefore has nowhere to put these
+            // (docs/gltf-api-change-review.md §1.5). Reported by name rather than dropped, which
+            // is the property D6 was really about.
+            if (hasSkin)
             {
                 warnings.push_back(
                     "Clip '" + clip.name + "' animates " + std::to_string(clip.tracks.size()) +
-                    " scene node(s) rather than skin joints. It is imported and correct, but is "
-                    "not written to the .cnj yet: the clip schema cannot yet say that a track "
-                    "targets a scene node rather than a joint palette slot (GLTF-294).");
+                    " scene node(s), but this model is skinned and its Tag already carries the "
+                    "skeleton, so the clip is not written (GLTF-295).");
+                continue;
             }
+            clipEntries.push_back({clip.name, writeClip(clip)});
         }
 
         std::ostringstream json;
