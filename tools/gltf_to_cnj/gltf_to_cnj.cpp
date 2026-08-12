@@ -210,6 +210,11 @@ namespace
         }
 
         struct MeshEntry {
+            // plan_gltf.md GLTF-141: the primitive's own name, traceable back to the glTF mesh it
+            // came from (and its primitive index when the mesh has several). The reader already
+            // read a "name" field for hand-written .model.json assets; this is the offline path
+            // finally writing one instead of leaving every imported mesh called "mesh".
+            std::string name;
             std::string vertFile, idxFile, textureFile, texture2File;
             int stride; std::string effect; bool vertexColorEnabled;
             // plan_gltf.md GLTF-073: the topology the index buffer is in, by its specification
@@ -237,13 +242,22 @@ namespace
             // node that instantiates this primitive's mesh -- 0 (the identity root) for a skinned
             // instance, whose own node transform glTF requires to be ignored.
             int parentBone = 0;
+            // plan_gltf.md GLTF-139: which ModelMesh this primitive is a part OF. The .cnj
+            // "meshes" array is per primitive and XNA's shape is one ModelMesh per mesh with one
+            // part per primitive, so consecutive entries sharing this value are one ModelMesh.
+            // Left -1 -- and then omitted from the JSON entirely -- for a single-primitive
+            // placement, whose entry is its own mesh either way; that keeps an ordinary asset's
+            // .cnj byte-identical to what it was before this field existed.
+            int partOfMesh = -1;
         };
         std::vector<MeshEntry> meshEntries;
 
         int meshCounter = 0;
+        int placementIndex = -1;
         for (const MeshInstanceOut& instance : group.instances)
         {
             const cgltf_mesh* mesh = instance.mesh;
+            ++placementIndex;
             for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
             {
                 const std::string partName = mesh->name
@@ -480,6 +494,10 @@ namespace
                 entry.morphWeights = morphWeights;
                 entry.morphWeightTrack = morphWeightTrack;
                 entry.parentBone = instance.skinned ? 0 : instance.sceneNodeIndex;
+                // GLTF-139: only a multi-primitive placement needs the grouping key; a
+                // single-primitive one is its own ModelMesh under either rule.
+                entry.partOfMesh = mesh->primitives_count > 1 ? placementIndex : -1;
+                entry.name = partName;
                 meshEntries.push_back(entry);
                 ++meshCounter;
             }
@@ -680,9 +698,13 @@ namespace
         for (std::size_t i = 0; i < meshEntries.size(); ++i)
         {
             const MeshEntry& e = meshEntries[i];
-            json << "    { \"vertices\": \"" << JsonEscape(e.vertFile) << "\", \"indices\": \"" << JsonEscape(e.idxFile)
+            json << "    { \"name\": \"" << JsonEscape(e.name) << "\""
+                 << ", \"vertices\": \"" << JsonEscape(e.vertFile) << "\", \"indices\": \"" << JsonEscape(e.idxFile)
                  << "\", \"vertexStride\": " << e.stride << ", \"effect\": \"" << e.effect << "\""
                  << ", \"parentBone\": " << e.parentBone;
+            // GLTF-139: written only for a multi-primitive placement, so every other asset's .cnj
+            // is byte-identical to what it was before the field existed.
+            if (e.partOfMesh >= 0) { json << ", \"partOfMesh\": " << e.partOfMesh; }
             if (!e.textureFile.empty()) { json << ", \"texture\": \"" << JsonEscape(e.textureFile) << "\""; }
             if (!e.texture2File.empty()) { json << ", \"texture2\": \"" << JsonEscape(e.texture2File) << "\""; }
             if (e.vertexColorEnabled) { json << ", \"vertexColorEnabled\": true"; }

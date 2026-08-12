@@ -2269,6 +2269,15 @@ namespace Microsoft::Xna::Framework::Content
                 }
             }
 
+            // How many placements each glTF mesh has, so a name only carries its node when the
+            // node is what distinguishes it (GLTF-141). Appending the node name unconditionally
+            // would rename every mesh in the ordinary one-placement file for no gain.
+            std::unordered_map<const cgltf_mesh*, int> instanceCountOfMesh;
+            for (const ImportableInstance& entry : importable)
+            {
+                ++instanceCountOfMesh[entry.instance->mesh];
+            }
+
             int meshCounter = 0;
             for (const ImportableInstance& entry : importable)
             {
@@ -2290,6 +2299,21 @@ namespace Microsoft::Xna::Framework::Content
                         "placement's front faces are back-facing under the default cull mode "
                         "(GLTF-116, a documented limit).");
                 }
+                // plan_gltf.md GLTF-139: XNA's shape is one ModelMesh per mesh with one
+                // ModelMeshPart per primitive, and this loop builds exactly that -- the parts are
+                // collected here and the mesh is created once, after them. A ModelMesh per
+                // PRIMITIVE (what this loader used to build) gives every primitive its own
+                // ParentBone and its own BoundingSphere, which is not what a caller iterating
+                // Model.Meshes expects and quietly makes a two-material object look like two
+                // objects.
+                std::vector<std::unique_ptr<Graphics::ModelMeshPart>> instanceParts;
+                std::vector<Graphics::ModelMeshPart*> instancePartPtrs;
+                // A ModelMeshPart registers its effect on the mesh that OWNS it, and it only
+                // learns its owner when that mesh is constructed around it. The parts here are
+                // built before their mesh exists, so the effect is held until afterwards --
+                // Model::Draw binds World/View/Projection through ModelMesh::Effects, and an
+                // effect assigned to an orphan part never reaches that collection at all.
+                std::vector<Graphics::Effect*> instanceEffects;
                 for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
                 {
                     const std::string partName = mesh->name
@@ -2553,22 +2577,6 @@ namespace Microsoft::Xna::Framework::Content
                         res->morphOwners.push_back(std::move(morph));
                     }
 
-                    const std::string& meshName = meshOut.name;
-                    auto meshObj = std::make_unique<Graphics::ModelMesh>(
-                        &device, meshName.empty() ? "mesh" : meshName,
-                        std::vector<Graphics::ModelMeshPart*>{partPtr});
-
-                    // plan_gltf.md GLTF-114: the mesh is parented to the bone of the node that
-                    // instantiates it, so Model::Draw composes the glTF world transform for free.
-                    // A skinned instance is parented to the identity root instead: glTF requires a
-                    // skinned mesh's own node transform to be ignored, because its joints already
-                    // place the geometry. Completing that rule -- the inverse(meshNodeWorld) term
-                    // and the joint ancestry BuildSkeleton still drops -- is GLTF-245/247/260, so
-                    // this is deliberately the conservative half, not a claim that skinning works.
-                    const std::size_t parentBoneIndex = instance.skinned
-                        ? 0u : static_cast<std::size_t>(instance.sceneNodeIndex);
-                    meshObj->setParentBoneProperty(boneRawPtrs[parentBoneIndex]);
-
                     std::shared_ptr<Graphics::Effect> fx;
                     // PBR + skinning combo: SkinnedPbrEffect is a separate class from both
                     // SkinnedEffect and PbrEffect (see that header's own doc comment), so it must
@@ -2679,15 +2687,63 @@ namespace Microsoft::Xna::Framework::Content
 
                     ApplyPunctualLightsEXT(*fx, punctualLights);
 
-                    partPtr->setEffectProperty(fx.get());
+                    instanceEffects.push_back(fx.get());
                     res->effectOwners.push_back(std::move(fx));
 
-                    meshRawPtrs.push_back(meshObj.get());
                     res->vbs.push_back(std::move(vb));
                     res->ibs.push_back(std::move(ib));
-                    res->partOwners.push_back(std::move(part));
-                    res->meshOwners.push_back(std::move(meshObj));
+                    instancePartPtrs.push_back(partPtr);
+                    instanceParts.push_back(std::move(part));
                     ++meshCounter;
+                }
+
+                // plan_gltf.md GLTF-139/GLTF-141: one ModelMesh per placement, named after the
+                // glTF mesh it instances and -- when the same mesh is placed by several nodes --
+                // after the placing node too, so a name traces back to the file rather than to a
+                // counter. An unnamed mesh falls back to its node's name before it falls back to
+                // an index, because a node is far more often named than a mesh is.
+                if (!instancePartPtrs.empty())
+                {
+                    const std::string gltfMeshName = mesh->name != nullptr ? mesh->name : "";
+                    const std::string nodeName =
+                        (instance.node != nullptr && instance.node->name != nullptr)
+                            ? instance.node->name : "";
+                    std::string meshName = gltfMeshName;
+                    if (meshName.empty()) { meshName = nodeName; }
+                    if (meshName.empty()) { meshName = "mesh" + std::to_string(meshRawPtrs.size()); }
+                    else if (!nodeName.empty() && nodeName != gltfMeshName &&
+                             instanceCountOfMesh[mesh] > 1)
+                    {
+                        meshName += "_" + nodeName;
+                    }
+
+                    auto meshObj = std::make_unique<Graphics::ModelMesh>(
+                        &device, meshName, instancePartPtrs);
+
+                    // Now that each part has an owner, the effects can be attached -- see the
+                    // declaration of instanceEffects above for why this is not done inline.
+                    for (std::size_t e = 0; e < instancePartPtrs.size(); ++e)
+                    {
+                        instancePartPtrs[e]->setEffectProperty(instanceEffects[e]);
+                    }
+
+                    // plan_gltf.md GLTF-114: the mesh is parented to the bone of the node that
+                    // instantiates it, so Model::Draw composes the glTF world transform for free.
+                    // A skinned instance is parented to the identity root instead: glTF requires a
+                    // skinned mesh's own node transform to be ignored, because its joints already
+                    // place the geometry. Completing that rule -- the inverse(meshNodeWorld) term
+                    // and the joint ancestry BuildSkeleton still drops -- is GLTF-245/247/260, so
+                    // this is deliberately the conservative half, not a claim that skinning works.
+                    const std::size_t parentBoneIndex = instance.skinned
+                        ? 0u : static_cast<std::size_t>(instance.sceneNodeIndex);
+                    meshObj->setParentBoneProperty(boneRawPtrs[parentBoneIndex]);
+
+                    meshRawPtrs.push_back(meshObj.get());
+                    for (std::unique_ptr<Graphics::ModelMeshPart>& part : instanceParts)
+                    {
+                        res->partOwners.push_back(std::move(part));
+                    }
+                    res->meshOwners.push_back(std::move(meshObj));
                 }
             }
 
@@ -2945,6 +3001,22 @@ namespace Microsoft::Xna::Framework::Content
                 }
 
                 // Meshes
+                //
+                // plan_gltf.md GLTF-139: one entry per primitive, grouped into one ModelMesh per
+                // placement by the optional "partOfMesh" field. Collected first and built after
+                // the loop, because a ModelMesh takes its whole part list at construction.
+                struct PendingCnjMesh
+                {
+                    std::string name;
+                    int group = -1;
+                    int parentBone = 0;
+                    std::vector<Graphics::ModelMeshPart*> parts;
+                    // Held until the mesh exists, for the same reason as the .gltf path above: a
+                    // part registers its effect on its owning mesh, and it has no owner yet.
+                    std::vector<Graphics::Effect*> effects;
+                };
+                std::vector<PendingCnjMesh> pendingMeshes;
+
                 const std::size_t mk = json.find("\"meshes\"");
                 if (mk != std::string::npos) {
                     const std::size_t ma = json.find('[', mk);
@@ -3146,9 +3218,29 @@ namespace Microsoft::Xna::Framework::Content
                                 res->morphOwners.push_back(std::move(morph));
                             }
 
-                            auto mesh = std::make_unique<Graphics::ModelMesh>(
-                                &device, meshName.empty() ? "mesh" : meshName,
-                                std::vector<Graphics::ModelMeshPart*>{partPtr});
+                            // plan_gltf.md GLTF-139: the .cnj "meshes" array is per PRIMITIVE, and
+                            // XNA's shape is one ModelMesh per mesh with one part per primitive.
+                            // An entry may therefore name the placement it belongs to
+                            // ("partOfMesh"), and consecutive entries sharing that value become
+                            // one ModelMesh here. The field is additive: a file without it -- every
+                            // cnjVersion-1 asset, every hand-written .model.json, and every
+                            // single-primitive mesh the tool still writes unchanged -- gets one
+                            // ModelMesh per entry exactly as before.
+                            const int partOfMesh = JsonInt(mg, "partOfMesh", -1);
+                            if (partOfMesh >= 0 && !pendingMeshes.empty() &&
+                                pendingMeshes.back().group == partOfMesh)
+                            {
+                                pendingMeshes.back().parts.push_back(partPtr);
+                            }
+                            else
+                            {
+                                PendingCnjMesh pending;
+                                pending.name = meshName.empty() ? "mesh" : meshName;
+                                pending.group = partOfMesh;
+                                pending.parentBone = JsonInt(mg, "parentBone", 0);
+                                pending.parts.push_back(partPtr);
+                                pendingMeshes.push_back(std::move(pending));
+                            }
 
                             // Task 937: give this mesh its own real ModelBone (a child of the
                             // model's Root, named after the mesh) instead of leaving ParentBone
@@ -3169,28 +3261,6 @@ namespace Microsoft::Xna::Framework::Content
                             // game code looks up a named bone per rigid part (e.g. SplitScreen/
                             // TankOnAHeightMap's wheel/turret/cannon/hatch lookups) via
                             // Model.Bones["PartName"].
-                            if (hasBoneHierarchy)
-                            {
-                                const int parentBone = JsonInt(mg, "parentBone", 0);
-                                if (parentBone < 0 || static_cast<std::size_t>(parentBone) >= boneRawPtrs.size())
-                                {
-                                    throw ContentLoadException(
-                                        "Model mesh names an out-of-range parentBone index ("
-                                            + std::to_string(parentBone) + "): " + path);
-                                }
-                                mesh->setParentBoneProperty(boneRawPtrs[static_cast<std::size_t>(parentBone)]);
-                            }
-                            else
-                            {
-                                auto meshBone = std::make_unique<Graphics::ModelBone>(
-                                    static_cast<int>(boneRawPtrs.size()),
-                                    meshName.empty() ? "mesh" : meshName);
-                                rootBone->AddChild(meshBone.get());
-                                mesh->setParentBoneProperty(meshBone.get());
-                                boneRawPtrs.push_back(meshBone.get());
-                                res->boneOwners.push_back(std::move(meshBone));
-                            }
-
                             // Load effect and register it in the mesh's effect collection.
                             std::shared_ptr<Graphics::Effect> fx;
                             if (effectStr.empty() || effectStr == "BasicEffect") {
@@ -3348,13 +3418,61 @@ namespace Microsoft::Xna::Framework::Content
 
                             ApplyPunctualLightsEXT(*fx, punctualLights);
 
-                            partPtr->setEffectProperty(fx.get());
+                            pendingMeshes.back().effects.push_back(fx.get());
                             res->effectOwners.push_back(std::move(fx));
 
-                            meshRawPtrs.push_back(mesh.get());
                             res->vbs.push_back(std::move(vb));
                             res->ibs.push_back(std::move(ib));
                             res->partOwners.push_back(std::move(part));
+                        }
+
+                        // The meshes themselves, once every part is built and grouped. Order is
+                        // the file's own entry order, which is what makes the two loaders'
+                        // Model.Meshes comparable at all (GLTF-130/GLTF-140).
+                        for (PendingCnjMesh& pending : pendingMeshes)
+                        {
+                            auto mesh = std::make_unique<Graphics::ModelMesh>(
+                                &device, pending.name, pending.parts);
+                            for (std::size_t e = 0; e < pending.parts.size(); ++e)
+                            {
+                                pending.parts[e]->setEffectProperty(pending.effects[e]);
+                            }
+
+                            // plan_gltf.md GLTF-114/GLTF-129: a cnjVersion-2 file already carries a
+                            // real bone per scene node, so the mesh is attached to the one its own
+                            // "parentBone" names -- that is what makes the offline path place
+                            // geometry where glTF says, instead of at the identity root.
+                            //
+                            // Without a hierarchy (cnjVersion 1, and every hand-written .model.json
+                            // asset) the previous behavior is preserved exactly: give this mesh its
+                            // own real ModelBone (a child of Root, named after the mesh) rather than
+                            // leaving ParentBone null -- Task 937, which unblocked samples whose own
+                            // game code looks up a named bone per rigid part (e.g. SplitScreen/
+                            // TankOnAHeightMap's wheel/turret/cannon/hatch lookups) via
+                            // Model.Bones["PartName"].
+                            if (hasBoneHierarchy)
+                            {
+                                if (pending.parentBone < 0 ||
+                                    static_cast<std::size_t>(pending.parentBone) >= boneRawPtrs.size())
+                                {
+                                    throw ContentLoadException(
+                                        "Model mesh names an out-of-range parentBone index ("
+                                            + std::to_string(pending.parentBone) + "): " + path);
+                                }
+                                mesh->setParentBoneProperty(
+                                    boneRawPtrs[static_cast<std::size_t>(pending.parentBone)]);
+                            }
+                            else
+                            {
+                                auto meshBone = std::make_unique<Graphics::ModelBone>(
+                                    static_cast<int>(boneRawPtrs.size()), pending.name);
+                                rootBone->AddChild(meshBone.get());
+                                mesh->setParentBoneProperty(meshBone.get());
+                                boneRawPtrs.push_back(meshBone.get());
+                                res->boneOwners.push_back(std::move(meshBone));
+                            }
+
+                            meshRawPtrs.push_back(mesh.get());
                             res->meshOwners.push_back(std::move(mesh));
                         }
                     }

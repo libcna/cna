@@ -1302,6 +1302,61 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnBasicEffect)
     EXPECT_TRUE(basicFx->VertexColorEnabled);
 }
 
+// plan_gltf.md GLTF-139/GLTF-130: the offline path has to produce the SAME Model shape as the
+// runtime one, or the two loaders disagree about what a mesh is. The .cnj "meshes" array is per
+// primitive, so a multi-primitive mesh carries a "partOfMesh" grouping key and the reader folds
+// those entries back into one ModelMesh with one part each.
+TEST(GltfToCnjToolTest, AMultiPrimitiveMeshRoundTripsAsOneModelMeshWithTwoParts)
+{
+    static const char* kTwoPrimitiveGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "TwoMaterialNode", "mesh": 0 } ],
+  "materials": [
+    { "name": "Red",  "pbrMetallicRoughness": { "baseColorFactor": [1, 0, 0, 1] } },
+    { "name": "Blue", "pbrMetallicRoughness": { "baseColorFactor": [0, 0, 1, 1] } }
+  ],
+  "meshes": [ { "name": "TwoMaterialMesh", "primitives": [
+    { "attributes": { "POSITION": 0 }, "material": 0 },
+    { "attributes": { "POSITION": 1 }, "material": 1 }
+  ] } ],
+  "buffers": [ { "byteLength": 72, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACgQAAAAAAAAAAAAADAQAAAAAAAAAAAAACgQAAAgD8AAAAA" } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [0, 0, 0], "max": [1, 1, 0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3",
+      "min": [5, 0, 0], "max": [6, 1, 0] }
+  ]
+})GLTF";
+
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+    WriteFile(gltfDir.path() / "two.gltf", kTwoPrimitiveGltf);
+    ASSERT_EQ(0, RunGltfToCnjTool((gltfDir.path() / "two.gltf").string(),
+                                   contentRoot.path().string(), "two"));
+
+    // The grouping key is in the file, and only because this mesh has more than one primitive.
+    std::ifstream cnj(contentRoot.path() / "two.cnj");
+    const std::string text((std::istreambuf_iterator<char>(cnj)), std::istreambuf_iterator<char>());
+    EXPECT_NE(std::string::npos, text.find("\"partOfMesh\""))
+        << "a multi-primitive mesh was written with no way to regroup its parts";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("two");
+    ASSERT_EQ(1, model.getMeshesProperty().getCountProperty())
+        << "the offline path produced a different Model shape from the runtime one";
+    EXPECT_EQ(2, model.getMeshesProperty()[0]->getMeshPartsProperty().getCountProperty());
+    EXPECT_EQ(2, model.getMeshesProperty()[0]->getEffectsProperty().getCountProperty())
+        << "the two materials collapsed, or an effect never registered on its owning mesh";
+}
+
 // plan_gltf.md GLTF-121: the node-hierarchy half of the same conversion.
 //
 // Before GLTF-114 the node translations were discarded outright, so there was nothing for
