@@ -226,6 +226,10 @@ class Fixture:
     #: L3 primitives, which is right for every asset CNA imports; a fixture CNA rejects sets it
     #: explicitly to ``l5.unsupported(...)`` naming what is blocking it.
     l5: dict[str, Any] | None = None
+    #: For a fixture the importer must **refuse**: which stage rejects it and what the diagnostic
+    #: has to name (`GLTF-021` … `GLTF-023`). A rejection fixture asserts the error, not the
+    #: geometry -- "it failed to load" is worthless unless the message says why.
+    rejection: dict[str, Any] | None = None
     defects: list[Defect] = field(default_factory=list)
 
     def l5_expectation(self) -> tuple[dict[str, Any], dict[str, bytes]]:
@@ -266,6 +270,7 @@ class Fixture:
             "l3": self.l3,
             "l4": self.l4,
             "l5": self.l5_expectation()[0],
+            "rejection": self.rejection,
             "defects": [d.record() for d in self.defects],
         }
         return _clean(doc)

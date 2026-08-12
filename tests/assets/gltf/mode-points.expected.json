@@ -208,6 +208,7 @@
     ],
     "parts": []
   },
+  "rejection": null,
   "defects": [
     {
       "id": "D5",

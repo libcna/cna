@@ -647,6 +647,12 @@ namespace
         }
 
         std::vector<std::string> warnings;
+
+        // plan_gltf.md GLTF-021..GLTF-024: structural validation, extensionsRequired enforcement
+        // and an ignored-extension report, before anything is decoded. Deliberately after
+        // cgltf_load_buffers, because the sparse index-bound check needs buffer data to run at all.
+        ValidateGltfEXT(data, opts.inputPath.string(), warnings);
+
         // plan_gltf.md GLTF-113: build the node graph once and share it across every group, so
         // each group's emitted "bones" array indexes the same scene-node identity space.
         const SceneGraphOut sceneGraph = BuildSceneGraph(data);

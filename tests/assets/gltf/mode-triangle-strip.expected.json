@@ -283,6 +283,7 @@
       }
     ]
   },
+  "rejection": null,
   "defects": [
     {
       "id": "D5",

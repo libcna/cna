@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "System/IServiceProvider.hpp"
+#include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
@@ -1903,6 +1904,26 @@ namespace Microsoft::Xna::Framework::Content
                 throw ContentLoadException(
                     "Unsupported glTF asset.version '" + std::string(data->asset.version) +
                     "' in '" + path + "' -- only glTF 2.0 is supported.");
+            }
+
+            // plan_gltf.md GLTF-021..GLTF-024: structural validation, extensionsRequired
+            // enforcement and an ignored-extension report, before a single byte is decoded. A
+            // failure here is a rejection rather than a warning because every constraint
+            // cgltf_validate checks is one whose violation would read outside the file's buffers.
+            {
+                std::vector<std::string> validationWarnings;
+                try
+                {
+                    ValidateGltfEXT(data, path, validationWarnings);
+                }
+                catch (const std::exception& e)
+                {
+                    throw ContentLoadException(e.what());
+                }
+                for (const std::string& warning : validationWarnings)
+                {
+                    CNA::Logger::Warn(warning);
+                }
             }
 
             // plan_gltf.md GLTF-113/GLTF-114 (Phase 5): the default scene's node graph, flattened

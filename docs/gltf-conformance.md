@@ -371,6 +371,9 @@ working directory, which is what CTest is configured to use. The suites are:
 | `GltfAccessorDecodeLock` | the verified-correct attribute decode path (`GLTF-041`) |
 | `GltfIndexDecode` | the sparse-safe, bounds-checked index reader and D4's regression witness (`GLTF-063`) |
 | `GltfPrimitiveTopology` | the seven-mode classification table, the never-reinterpret policy (`GLTF-071`), and the strip/fan → triangle-list conversion with its winding rule (`GLTF-072`) |
+| `GltfContainerValidation` | structural validation, `extensionsRequired` enforcement and the ignored-extension report, and the severity difference between them (`GLTF-021` … `GLTF-024`) |
+| `GltfRigidAnimation` | rigid (non-joint) node animation resolved against the scene graph (`GLTF-293`) |
+| `GltfLightingPolicy` | the default-lighting fallback for a file that declares no light (`GLTF-215`) |
 
 `GLTF-010` will collapse these into a single `ctest -L gltf-conformance` label once L6–L7 exist.
 

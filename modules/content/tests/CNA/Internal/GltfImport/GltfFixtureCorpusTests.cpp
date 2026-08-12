@@ -101,6 +101,17 @@ namespace
         return Path(fixture.Expected(), "l3.primitives");
     }
 
+    /// True for a fixture the importer is required to REFUSE (GLTF-021/GLTF-023).
+    ///
+    /// Such a fixture has no L3 semantic mesh and no L4 world geometry, because a conforming
+    /// reader never gets that far -- the rejection itself is the expectation, and
+    /// `GltfContainerValidation` owns asserting it, including that the diagnostic names the cause.
+    /// Skipping it here is not a suppression: nothing about it is left unchecked.
+    bool IsRejectionFixture(const JsonValue& expected)
+    {
+        return Member(expected, "rejection").type == JsonType::Object;
+    }
+
     /// The extracted primitive matching a (mesh, primitive) pair, or nullptr when the import path
     /// produced none -- which is itself a meaningful answer for an exclusion fixture.
     const ExtractedPrimitive* FindExtracted(const std::vector<ExtractedPrimitive>& extracted,
@@ -397,6 +408,9 @@ TEST(GltfConformanceL2, DecodedAccessorsMatchTheManifest)
         SCOPED_TRACE(id);
         const LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        // A fixture the importer must refuse has no expectation at this layer at all; the refusal
+        // is asserted in full by GltfContainerValidation.
+        if (IsRejectionFixture(fixture.Expected())) { continue; }
 
         const JsonValue& accessors = Path(fixture.Expected(), "l2.accessors");
         ASSERT_EQ(JsonType::Array, accessors.type);
@@ -449,6 +463,9 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
         SCOPED_TRACE(id);
         const LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        // A fixture the importer must refuse has no expectation at this layer at all; the refusal
+        // is asserted in full by GltfContainerValidation.
+        if (IsRejectionFixture(fixture.Expected())) { continue; }
 
         const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
         const JsonValue& primitives = ExpectedPrimitives(fixture);
@@ -613,6 +630,9 @@ TEST(GltfConformanceL4, ExpectedWorldPositionsMatchTheManifest)
         SCOPED_TRACE(id);
         const LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        // A fixture the importer must refuse has no expectation at this layer at all; the refusal
+        // is asserted in full by GltfContainerValidation.
+        if (IsRejectionFixture(fixture.Expected())) { continue; }
 
         const WorldPositions expectedWorld = EvaluateWorldPositionsEXT(fixture.Data());
         EXPECT_TRUE(expectedWorld.selfCheckPassed)
@@ -664,6 +684,9 @@ TEST(GltfConformanceL4, CnaWorldPositionsMatchTheExpectedGeometry)
         SCOPED_TRACE(id);
         const LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        // A fixture the importer must refuse has no expectation at this layer at all; the refusal
+        // is asserted in full by GltfContainerValidation.
+        if (IsRejectionFixture(fixture.Expected())) { continue; }
         // A defect that stops a primitive being imported at all contributes no world geometry
         // either, which is why such a record declares its L4 fields as well as its L3 ones. The
         // fixture's L4 expectation is untouched -- it is simply not reachable while it is open.

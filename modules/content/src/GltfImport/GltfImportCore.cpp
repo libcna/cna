@@ -1952,6 +1952,79 @@ namespace CNA::Internal::GltfImport
         return CollectMeshGroups(data, BuildSceneGraph(data));
     }
 
+    bool IsGltfExtensionSupportedEXT(const std::string& extension)
+    {
+        // Only what the importer actually implements the semantics of. Detecting an extension so
+        // it cannot mis-select an effect is NOT implementing it: KHR_materials_unlit and
+        // KHR_materials_pbrSpecularGlossiness are both read by ExtractMesh to keep such a material
+        // off the metallic-roughness path (GLTF-215), yet an unlit surface still goes through a
+        // lit effect and the specular-glossiness parameters are dropped, so a file that *requires*
+        // either is asking for something CNA cannot deliver.
+        if (extension == "KHR_texture_transform") { return true; }
+        if (extension == "KHR_materials_emissive_strength") { return true; }
+        if (extension == "KHR_lights_punctual") { return true; }
+#ifdef CNA_DRACO_AVAILABLE
+        if (extension == "KHR_draco_mesh_compression") { return true; }
+#endif
+        return false;
+    }
+
+    void ValidateGltfEXT(const cgltf_data* data, const std::string& sourceName,
+                         std::vector<std::string>& warnings)
+    {
+        if (data == nullptr) { throw std::runtime_error("'" + sourceName + "' produced no glTF data."); }
+
+        // (1) GLTF-021/GLTF-022. Every constraint cgltf_validate checks is one whose violation
+        // makes decoding unsafe or meaningless -- an accessor reaching past its bufferView, a
+        // bufferView past its buffer, a sparse index outside the accessor's own range, attribute
+        // counts disagreeing within a primitive, an undefined component or primitive type. It
+        // checks nothing outside that class, so there is no "cosmetic" violation to downgrade to a
+        // warning and the severity policy is simply: failure rejects.
+        const cgltf_result validation = cgltf_validate(const_cast<cgltf_data*>(data));
+        if (validation != cgltf_result_success)
+        {
+            const char* reason = validation == cgltf_result_data_too_short
+                ? "a buffer, bufferView or accessor range extends past the data backing it"
+                : "a structural constraint of the glTF object model is violated";
+            throw std::runtime_error(
+                "'" + sourceName + "' fails glTF structural validation: " + std::string(reason) +
+                " (cgltf_validate code " + std::to_string(static_cast<int>(validation)) +
+                "). Decoding it could read outside the file's own buffers, so it is rejected "
+                "rather than imported.");
+        }
+
+        // (2) GLTF-023. The author declared the file cannot be interpreted correctly without these.
+        for (cgltf_size i = 0; i < data->extensions_required_count; ++i)
+        {
+            const char* name = data->extensions_required[i];
+            if (name == nullptr) { continue; }
+            if (!IsGltfExtensionSupportedEXT(name))
+            {
+                throw std::runtime_error(
+                    "'" + sourceName + "' lists '" + name + "' in extensionsRequired, which CNA "
+                    "does not implement. The file declares it cannot be interpreted correctly "
+                    "without that extension, so importing it would produce geometry or shading "
+                    "its author already said would be wrong.");
+            }
+        }
+
+        // (3) GLTF-024. extensionsUsed is by definition optional, so an unimplemented entry is
+        // reported and the import continues -- but it is never silent, because "loaded fine" and
+        // "loaded as authored" are different claims.
+        for (cgltf_size i = 0; i < data->extensions_used_count; ++i)
+        {
+            const char* name = data->extensions_used[i];
+            if (name == nullptr) { continue; }
+            if (!IsGltfExtensionSupportedEXT(name))
+            {
+                warnings.push_back(
+                    "'" + sourceName + "' uses extension '" + std::string(name) + "', which CNA "
+                    "does not implement -- it is ignored, so anything it contributes is absent "
+                    "from the import.");
+            }
+        }
+    }
+
     std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data)
     {
         std::vector<LightOut> result;

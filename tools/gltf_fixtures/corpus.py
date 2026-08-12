@@ -12,13 +12,14 @@ import hashlib
 from typing import Any, Callable
 
 from . import GENERATOR_VERSION, SPEC_PIN
-from .defs import (accessors, animation, component_types, materials, scenes, skinning, topology,
-                   transforms)
+from .defs import (accessors, animation, component_types, container, materials, robustness, scenes,
+                   skinning, topology, transforms)
 from .manifest import OPEN_DEFECT_STATUSES, Fixture, dumps
 
 #: Owning groups in a fixed order, so the emitted manifest is deterministic. The order follows
 #: the oracle ladder -- container and accessor concerns first, then semantics, then composition.
 _GROUP_MODULES: list[tuple[str, Any]] = [
+    ("container", container),
     ("accessors", accessors),
     ("component-types", component_types),
     ("topology", topology),
@@ -27,6 +28,7 @@ _GROUP_MODULES: list[tuple[str, Any]] = [
     ("skinning", skinning),
     ("animation", animation),
     ("scenes", scenes),
+    ("robustness", robustness),
 ]
 
 

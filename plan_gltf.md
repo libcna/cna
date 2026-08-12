@@ -1533,8 +1533,9 @@ same asset in another container, not another asset.
 > cross-referenced ladders were re-counted and the counts here now match them exactly: transforms
 > 17 (§11.4), skinning 13 (§15.4), morph 13 (§16.3), animation 10 (§17.2, excluding the
 > morph-owned `anim-weights-*`), and the remaining groups enumerated in full below. The generated
-> corpus stands at **21** assets today (`GLTF-072` completed the topology group's seven);
-> `GLTF-399` completes the rest.
+> corpus stands at **23** assets today (`GLTF-072` completed the topology group's seven;
+> `GLTF-021`/`GLTF-023` added the first container and robustness fixtures); `GLTF-399` completes
+> the rest.
 
 | Group | Count | Assets |
 |---|---|---|
@@ -1868,6 +1869,12 @@ real occlusion map. **D7 is `partially-remediated`**: the alpha and sidedness st
 `alphaCutoff`, `doubleSided`) still has no `MeshOut` field and no effect parameter, and is owned by
 `GLTF-228`/`GLTF-229`/`GLTF-231` behind the `GLTF-025` API-change gate.
 
+**P0-I — container validation**: `GLTF-021`, `GLTF-022`, `GLTF-023`, `GLTF-024`. `cgltf_validate()`
+had zero occurrences in production code and `extensionsRequired` was never read, so a malformed file
+decoded whatever was adjacent in memory and a file declaring an unimplemented required extension
+imported silently and wrongly. Both now reject with a named cause; an unimplemented *used* extension
+warns instead, which is the one genuinely advisory case. This also unblocks `GLTF-025`.
+
 **Every defect from the original audit is now at least partially remediated.** D1–D4 and D8 are
 `fixed`; D5, D6 and D7 are `partially-remediated` with their remaining tasks named. No renderer and
 no `cna-gltf-viewer` work has been started.
@@ -1933,10 +1940,10 @@ column of these tables.
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-021 | Call `cgltf_validate()` on both load paths | 🐛 | GLTF-010 | **0 occurrences** in production code today. **Accept:** validation runs and its failure is surfaced as `ContentLoadException` / a CLI error naming the violated constraint. |
-| GLTF-022 | Decide the policy for validation failures (reject vs warn) | ⬜ | GLTF-021 | Some real assets fail strict validation. **Accept:** a documented severity table; hard rejection only for constraints that make decoding unsafe. |
-| GLTF-023 | Enforce `extensionsRequired` | 🐛 | GLTF-021 | Never checked; an unsupported *required* extension imports silently and wrongly. **Accept:** `gltf-required-extension-unsupported` fixture errors with the extension name. |
-| GLTF-024 | Report `extensionsUsed` entries CNA ignores | ⬜ | GLTF-023 | **Accept:** the import report lists every ignored extension. |
+| GLTF-021 | Call `cgltf_validate()` on both load paths | ✔ | GLTF-010 | **0 occurrences** in production code today. **Accept:** validation runs and its failure is surfaced as `ContentLoadException` / a CLI error naming the violated constraint. **Landed:** `ValidateGltfEXT` runs on both load paths, immediately after `cgltf_load_buffers` — deliberately after, because the sparse index-bound check needs buffer data to run at all. A failure surfaces as `ContentLoadException` on the runtime path and a named CLI error on the offline one, saying which class of constraint was violated rather than only a numeric code. `bad-accessor-out-of-bounds` proves it fires: a POSITION accessor reaching 12 bytes past its own `bufferView`. |
+| GLTF-022 | Decide the policy for validation failures (reject vs warn) | ✔ | GLTF-021 | Some real assets fail strict validation. **Accept:** a documented severity table; hard rejection only for constraints that make decoding unsafe. **Decided, from what cgltf actually checks rather than from taste.** Its entire check set is decoding-safety constraints: an accessor past its `bufferView`, a `bufferView` past its buffer, a sparse index outside the accessor's range, attribute counts disagreeing within a primitive, an undefined component or primitive type. There is no cosmetic violation in that set to downgrade, so the severity table has one row: **`cgltf_validate` failure rejects**. The genuinely advisory case is a different check — an unimplemented `extensionsUsed` entry — and that warns (`GLTF-024`), which is what makes the distinction real rather than nominal. |
+| GLTF-023 | Enforce `extensionsRequired` | ✔ | GLTF-021 | Never checked; an unsupported *required* extension imports silently and wrongly. **Accept:** `gltf-required-extension-unsupported` fixture errors with the extension name. **Landed:** an `extensionsRequired` entry CNA does not implement rejects the import with the extension named. `IsGltfExtensionSupportedEXT` draws the line at **implemented**, not **noticed**: `KHR_materials_unlit` and `KHR_materials_pbrSpecularGlossiness` are both read by `ExtractMesh` to keep such a material off the metallic-roughness path (`GLTF-215`), yet an unlit surface still goes through a lit effect and the specular-glossiness parameters are dropped — so a file *requiring* either is rejected. `KHR_draco_mesh_compression` is supported only in a build with libdraco, so the answer is build-dependent rather than a fixed list. Fixture: `gltf-required-extension-unsupported`. |
+| GLTF-024 | Report `extensionsUsed` entries CNA ignores | ✔ | GLTF-023 | **Accept:** the import report lists every ignored extension. **Landed:** every unimplemented `extensionsUsed` entry produces a warning naming it, on both paths — the runtime one through `CNA::Logger::Warn`, the offline one in the tool's own warning list. The import continues, because `extensionsUsed` is advisory by definition; but it is never silent, since "loaded fine" and "loaded as authored" are different claims. |
 | GLTF-025 | Public/CNAEXT API-change review checkpoint | ⬜ | GLTF-024 | Gate for every §25 row. **Accept:** each proposed member has problem, shape, compatibility, migration and test recorded before implementation. |
 | GLTF-026 | GLB container fixtures: chunk order, padding, alignment | ⬜ | GLTF-003 | `glb-basic`, `glb-bin-chunk-padding`. **Accept:** L1 assertions on chunk headers; `.glb` and `.gltf` twins produce identical L3 output. |
 | GLTF-027 | Malformed GLB: bad magic, bad chunk length, truncated | ⬜ | GLTF-026 | `bad-glb-chunk-length`. **Accept:** deterministic error, no read past the buffer under ASan. |

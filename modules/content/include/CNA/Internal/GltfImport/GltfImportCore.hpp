@@ -724,6 +724,55 @@ namespace CNA::Internal::GltfImport
     std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data);
 
     /**
+     * @brief Whether CNA's importer implements the semantics of a glTF extension by name.
+     *
+     * "Implements" is stricter than "notices". `KHR_materials_unlit` and
+     * `KHR_materials_pbrSpecularGlossiness` are both *detected* — they exclude a material from the
+     * metallic-roughness path so it cannot be mis-shaded as PBR (`GLTF-215`) — but neither is
+     * **implemented**: an unlit material still goes through a lit effect, and the
+     * specular-glossiness parameters are dropped. A file that lists either in `extensionsRequired`
+     * is asking for something CNA cannot deliver, so this returns false for them.
+     *
+     * `KHR_draco_mesh_compression` is supported only in a build configured with libdraco; the
+     * answer therefore depends on `CNA_DRACO_AVAILABLE` rather than being a fixed list.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param extension The extension's glTF name, e.g. "KHR_texture_transform".
+     * @return True when the importer honours that extension's semantics.
+     */
+    bool IsGltfExtensionSupportedEXT(const std::string& extension);
+
+    /**
+     * @brief Container-level validation, run once per file before anything is decoded
+     * (`GLTF-021` … `GLTF-024`).
+     *
+     * Three separate checks, in the order a reader must apply them:
+     *
+     * 1. **`cgltf_validate()`** — every structural constraint whose violation would make decoding
+     *    unsafe: an accessor reaching past its `bufferView`, a `bufferView` past its buffer, a
+     *    sparse index out of the accessor's own range, attribute counts that disagree within a
+     *    primitive, an undefined component or primitive type. cgltf checks nothing outside that
+     *    class, which is why failure here is always a **hard rejection** (`GLTF-022`): there is no
+     *    "cosmetic" violation in its check set to warn about instead.
+     * 2. **`extensionsRequired`** — an entry CNA does not implement is a hard rejection naming the
+     *    extension (`GLTF-023`). Importing such a file "successfully" produces geometry the author
+     *    explicitly said would be wrong without that extension.
+     * 3. **`extensionsUsed`** — an entry CNA does not implement is *reported*, not rejected
+     *    (`GLTF-024`): by definition the file is expected to load without it.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Call after `cgltf_load_buffers`, since the
+     * sparse index-bound check needs buffer data to run at all.
+     *
+     * @param data The parsed glTF file, with buffers already loaded.
+     * @param sourceName The file name or asset name, used in diagnostics.
+     * @param warnings Appended with one entry per ignored `extensionsUsed` extension.
+     * @throws std::runtime_error if validation fails, or a required extension is unsupported.
+     */
+    void ValidateGltfEXT(const cgltf_data* data, const std::string& sourceName,
+                         std::vector<std::string>& warnings);
+
+    /**
      * @brief Returns a mesh's default morph target weights (its own "weights" array), zero-filled
      * up to @p targetCount if the mesh's own array is shorter or absent.
      *

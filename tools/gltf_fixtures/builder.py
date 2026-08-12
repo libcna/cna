@@ -125,8 +125,9 @@ _GLB_CHUNK_BIN = 0x004E4942
 # Emission order is stated once, here, rather than relying on the order a fixture happens to build
 # its dictionaries in. A generated asset is a committed artefact whose diff must mean something.
 
-_TOP_LEVEL_ORDER = ["asset", "scene", "scenes", "nodes", "meshes", "materials", "skins",
-                    "animations", "accessors", "bufferViews", "buffers"]
+_TOP_LEVEL_ORDER = ["asset", "extensionsUsed", "extensionsRequired", "scene", "scenes", "nodes",
+                    "meshes", "materials", "skins", "animations", "accessors", "bufferViews",
+                    "buffers"]
 _NODE_ORDER = ["name", "mesh", "skin", "children", "translation", "rotation", "scale", "matrix"]
 _ACCESSOR_ORDER = ["bufferView", "byteOffset", "componentType", "normalized", "count", "type",
                    "max", "min", "sparse"]
@@ -237,6 +238,8 @@ class GltfBuilder:
         self._accessors: list[dict[str, Any]] = []
         self._buffer_views: list[dict[str, Any]] = []
         self._default_scene: int | None = None
+        self._extensions_used: list[str] = []
+        self._extensions_required: list[str] = []
         #: The L2 expectation: one decoded record per accessor, in accessor order.
         self.accessor_records: list[dict[str, Any]] = []
 
@@ -478,6 +481,23 @@ class GltfBuilder:
             raise ValueError(f"{self.name}: default scene {index} does not exist")
         self._default_scene = index
 
+    def declare_extensions(self, *, used: Sequence[str] = (),
+                           required: Sequence[str] = ()) -> None:
+        """Declares the asset's ``extensionsUsed`` / ``extensionsRequired`` (§3.12).
+
+        Anything in ``required`` is added to ``used`` if absent, because the specification requires
+        every required extension to also be listed as used, and a fixture that violated that would
+        be testing its own malformedness rather than the thing it is for.
+
+        :param used: extensions the asset uses; absent ones may be ignored by a reader.
+        :param required: extensions without which the asset cannot be interpreted correctly.
+        """
+        self._extensions_used = list(used)
+        self._extensions_required = list(required)
+        for name in self._extensions_required:
+            if name not in self._extensions_used:
+                self._extensions_used.append(name)
+
     def add_skin(self, skin: dict[str, Any]) -> int:
         """Adds a skin, authored as a glTF skin object.
 
@@ -516,6 +536,10 @@ class GltfBuilder:
         doc: dict[str, Any] = {
             "asset": {"version": "2.0", "generator": GENERATOR_NAME},
         }
+        if self._extensions_used:
+            doc["extensionsUsed"] = list(self._extensions_used)
+        if self._extensions_required:
+            doc["extensionsRequired"] = list(self._extensions_required)
         if self._default_scene is not None:
             doc["scene"] = self._default_scene
         doc["scenes"] = self._scenes
@@ -555,8 +579,8 @@ class GltfBuilder:
             "bufferViewCount": len(self._buffer_views),
             "bufferCount": 1,
             "bufferByteLength": len(self._buffer),
-            "extensionsUsed": [],
-            "extensionsRequired": [],
+            "extensionsUsed": list(self._extensions_used),
+            "extensionsRequired": list(self._extensions_required),
         }
 
     def to_gltf_text(self) -> str:

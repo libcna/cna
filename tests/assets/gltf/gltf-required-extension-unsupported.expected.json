@@ -1,6 +1,6 @@
 {
-  "id": "interleaved-position-normal",
-  "description": "POSITION and NORMAL interleaved at byteStride 24 in a bufferView at byteOffset 16, with NORMAL at accessor byteOffset 12. Verified correct on the campaign baseline -- GLTF-041 locks it so remediation cannot regress it.",
+  "id": "gltf-required-extension-unsupported",
+  "description": "A structurally valid asset whose extensionsRequired names an extension CNA does not implement. It must be rejected with that extension named: the file itself declares it cannot be interpreted correctly without it, so importing it would produce geometry or shading its author already said would be wrong.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -14,25 +14,22 @@
     "document": "docs/gltf-conformance.md"
   },
   "specAnchors": [
-    "accessors",
-    "data-alignment"
+    "specifying-extensions"
   ],
   "inventory": {
-    "id": "interleaved-position-normal",
-    "owningGroup": "accessors",
+    "id": "gltf-required-extension-unsupported",
+    "owningGroup": "container",
     "referencingGroups": [],
     "validatedLayers": [
       "L1",
-      "L2",
       "L3"
     ],
     "features": [
-      "bufferView.byteStride",
-      "bufferView.byteOffset",
-      "accessor.byteOffset",
-      "interleaved attributes"
+      "extensionsRequired",
+      "unsupported extension",
+      "import rejection"
     ],
-    "auditFixture": "f5"
+    "auditFixture": null
   },
   "l1": {
     "assetVersion": "2.0",
@@ -44,11 +41,15 @@
     "skinCount": 0,
     "animationCount": 0,
     "accessorCount": 3,
-    "bufferViewCount": 2,
+    "bufferViewCount": 3,
     "bufferCount": 1,
-    "bufferByteLength": 94,
-    "extensionsUsed": [],
-    "extensionsRequired": []
+    "bufferByteLength": 78,
+    "extensionsUsed": [
+      "KHR_materials_variants"
+    ],
+    "extensionsRequired": [
+      "KHR_materials_variants"
+    ]
   },
   "l2": {
     "accessors": [
@@ -64,17 +65,17 @@
         "sparse": false,
         "bufferView": 0,
         "byteOffset": 0,
-        "bufferViewByteOffset": 16,
-        "bufferViewByteStride": 24,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
         "values": [
           0.0,
           0.0,
           0.0,
-          2.0,
+          1.0,
           0.0,
           0.0,
           0.0,
-          3.0,
+          1.0,
           0.0
         ]
       },
@@ -88,10 +89,10 @@
         "componentsPerElement": 3,
         "normalized": false,
         "sparse": false,
-        "bufferView": 0,
-        "byteOffset": 12,
-        "bufferViewByteOffset": 16,
-        "bufferViewByteStride": 24,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
         "values": [
           0.0,
           0.0,
@@ -114,9 +115,9 @@
         "componentsPerElement": 1,
         "normalized": false,
         "sparse": false,
-        "bufferView": 1,
+        "bufferView": 2,
         "byteOffset": 0,
-        "bufferViewByteOffset": 88,
+        "bufferViewByteOffset": 72,
         "bufferViewByteStride": null,
         "values": [
           0,
@@ -130,7 +131,7 @@
     "primitives": [
       {
         "mesh": 0,
-        "meshName": "InterleavedTri",
+        "meshName": "RequiresExtension",
         "primitive": 0,
         "mode": 4,
         "modeName": "TRIANGLES",
@@ -143,13 +144,13 @@
             0.0
           ],
           [
-            2.0,
+            1.0,
             0.0,
             0.0
           ],
           [
             0.0,
-            3.0,
+            1.0,
             0.0
           ]
         ],
@@ -201,107 +202,23 @@
       }
     ]
   },
-  "l4": {
-    "instances": [
-      {
-        "node": 0,
-        "nodeName": "MeshNode",
-        "mesh": 0,
-        "parentNodePath": [],
-        "worldMatrixColumnMajor": [
-          1.0,
-          0.0,
-          0.0,
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          0.0,
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "worldPositions": [
-          [
-            0.0,
-            0.0,
-            0.0
-          ],
-          [
-            2.0,
-            0.0,
-            0.0
-          ],
-          [
-            0.0,
-            3.0,
-            0.0
-          ]
-        ]
-      }
-    ],
-    "worldBounds": {
-      "min": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "max": [
-        2.0,
-        3.0,
-        0.0
-      ]
-    }
-  },
+  "l4": {},
   "l5": {
-    "supported": true,
-    "parts": [
-      {
-        "mesh": 0,
-        "primitive": 0,
-        "stride": 48,
-        "vertexCount": 3,
-        "fields": [
-          {
-            "name": "Position",
-            "offset": 0,
-            "size": 12
-          },
-          {
-            "name": "Normal",
-            "offset": 12,
-            "size": 12
-          },
-          {
-            "name": "Tangent",
-            "offset": 24,
-            "size": 16
-          },
-          {
-            "name": "TextureCoordinate",
-            "offset": 40,
-            "size": 8
-          }
-        ],
-        "vertexBufferFile": "interleaved-position-normal.vb.bin",
-        "vertexBufferBytes": 144,
-        "vertexBufferSha256": "f9de2f9261a351eea66984930c69ac5a51a1dbdd2260b6c567163e535defb82d",
-        "indexElementSize": 2,
-        "indexCount": 3,
-        "indexBufferFile": "interleaved-position-normal.ib.bin",
-        "indexBufferBytes": 6,
-        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
-        "sourceTopology": "TRIANGLES",
-        "topology": "TRIANGLES",
-        "primitiveCount": 1
-      }
-    ]
+    "supported": false,
+    "reason": "The asset is rejected at validation, so no vertex or index buffer is produced. A golden would only arrive if CNA implemented the required extension.",
+    "blockedBy": [
+      "GLTF-023"
+    ],
+    "parts": []
   },
-  "rejection": null,
+  "rejection": {
+    "stage": "validation",
+    "task": "GLTF-023",
+    "errorContains": [
+      "KHR_materials_variants",
+      "extensionsRequired"
+    ],
+    "note": "The diagnostic must name the extension, because 'this file needs something you do not have' is only actionable if it says which something."
+  },
   "defects": []
 }

@@ -12,8 +12,9 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 21,
+  "distinctAssetCount": 23,
   "owningGroupCounts": {
+    "container": 1,
     "accessors": 3,
     "component-types": 2,
     "topology": 7,
@@ -21,7 +22,8 @@
     "materials": 1,
     "skinning": 2,
     "animation": 1,
-    "scenes": 1
+    "scenes": 1,
+    "robustness": 1
   },
   "promotedAuditFixtures": {
     "f1": "xf-shared-mesh",
@@ -236,6 +238,21 @@
     }
   ],
   "assets": [
+    {
+      "id": "gltf-required-extension-unsupported",
+      "owningGroup": "container",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L3"
+      ],
+      "features": [
+        "extensionsRequired",
+        "unsupported extension",
+        "import rejection"
+      ],
+      "auditFixture": null
+    },
     {
       "id": "interleaved-position-normal",
       "owningGroup": "accessors",
@@ -591,13 +608,27 @@
         "multiple scenes"
       ],
       "auditFixture": "f14"
+    },
+    {
+      "id": "bad-accessor-out-of-bounds",
+      "owningGroup": "robustness",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1"
+      ],
+      "features": [
+        "accessor beyond bufferView",
+        "structural validation",
+        "import rejection"
+      ],
+      "auditFixture": null
     }
   ],
   "files": [
     {
       "path": "anim-rigid-node.expected.json",
-      "bytes": 12602,
-      "sha256": "a9ac6558230a9d5f7fe6727047d65cae7f7ab18314f6dff1f0595ae8e1f267ed"
+      "bytes": 12623,
+      "sha256": "74c98164cbdbc4acf71e8e33da8ac3f98018d5492f6b907c4f379619b6150e5f"
     },
     {
       "path": "anim-rigid-node.glb",
@@ -620,9 +651,39 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "bad-accessor-out-of-bounds.expected.json",
+      "bytes": 3067,
+      "sha256": "6cb42076bae67ac778b886fb346824ffd18d3b26470a38c81f361924d4676757"
+    },
+    {
+      "path": "bad-accessor-out-of-bounds.glb",
+      "bytes": 636,
+      "sha256": "55ae4206273a762f8379e5f54db5c537811267eea5336b8ed3aefdfef1de2df7"
+    },
+    {
+      "path": "bad-accessor-out-of-bounds.gltf",
+      "bytes": 1174,
+      "sha256": "f7fef746ceec3f5404a00dc6efd95ae964b88249ba8a9e73f1fe8ece4a6724fc"
+    },
+    {
+      "path": "gltf-required-extension-unsupported.expected.json",
+      "bytes": 5076,
+      "sha256": "6b6610ce25f40863dce85df942aeca2189c1c8004a6ff200d7b21f58313bc8d4"
+    },
+    {
+      "path": "gltf-required-extension-unsupported.glb",
+      "bytes": 888,
+      "sha256": "61f0cb17238443d2659e44eff12124ed275eaacdddda0b5f63ca9d6e9d420410"
+    },
+    {
+      "path": "gltf-required-extension-unsupported.gltf",
+      "bytes": 1551,
+      "sha256": "0333a3dc1788d6d4f7902ce8dabe748804130b0421ed4c6dffaa7c7e2d710813"
+    },
+    {
       "path": "interleaved-position-normal.expected.json",
-      "bytes": 6393,
-      "sha256": "7f49c6f2827e6c28696eace54b1554705d0277c1022b630f3841b248e4f5222e"
+      "bytes": 6414,
+      "sha256": "7c69e7cf39bb20d7932e6cb6f6746e031b1997ecd33e395cb3b4f01f6aa9d074"
     },
     {
       "path": "interleaved-position-normal.glb",
@@ -646,8 +707,8 @@
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 11037,
-      "sha256": "82f982711a6a775167baf1cc7f906a949a99cdb476df1938333c4071f917927d"
+      "bytes": 11058,
+      "sha256": "870ed6a6dca5b9115ef61688cf1b9cb8378d9379d39018b54f6c52eee7474f16"
     },
     {
       "path": "mat-factor-only-gold.glb",
@@ -671,8 +732,8 @@
     },
     {
       "path": "mode-line-loop.expected.json",
-      "bytes": 6109,
-      "sha256": "ad06e34eedeb1996255fbe2fa895cea87e9fcf2bcf9bb08b76235895fb2e407b"
+      "bytes": 6130,
+      "sha256": "26869ae4adcedeb8302bacd36a60f7e8011c5d8bf0f3f3d541dab18a7f796b30"
     },
     {
       "path": "mode-line-loop.glb",
@@ -686,8 +747,8 @@
     },
     {
       "path": "mode-line-strip.expected.json",
-      "bytes": 6022,
-      "sha256": "4a6886079e43b878214bf3f98722c332f7088da59d2251a75973a94193b138ed"
+      "bytes": 6043,
+      "sha256": "14b8313dead9e3c67b67acd71c33f76ea15e771949124a3e6e7ac77d699da5da"
     },
     {
       "path": "mode-line-strip.glb",
@@ -701,8 +762,8 @@
     },
     {
       "path": "mode-lines.expected.json",
-      "bytes": 6000,
-      "sha256": "426f1c86fa70d8ad115dd2e1cb467fe8fb10bf281304660cf932d7d8e05fdf54"
+      "bytes": 6021,
+      "sha256": "d4748769fd6738d02461049879ae3696eff0be5ddc1ae2e36323177019a1625c"
     },
     {
       "path": "mode-lines.glb",
@@ -716,8 +777,8 @@
     },
     {
       "path": "mode-points.expected.json",
-      "bytes": 6385,
-      "sha256": "e93847577339935fc11b0965490a57c30de5a6f842d58a4d6f7cddaa5b5c4978"
+      "bytes": 6406,
+      "sha256": "695f6a9daa8565b50a53a5cfc3034c4721e6cc79bc4ccfae4876e7f5c6335d08"
     },
     {
       "path": "mode-points.glb",
@@ -731,8 +792,8 @@
     },
     {
       "path": "mode-triangle-fan.expected.json",
-      "bytes": 5864,
-      "sha256": "b2fdff900a527f4d4a54c1e2fc3726a29beec4647b6af707606205cd75295133"
+      "bytes": 5885,
+      "sha256": "e4cfa1f8b499ac7f4c38cf48c57b69bde2f25e7de667a2b73c93b3cea35f57ab"
     },
     {
       "path": "mode-triangle-fan.glb",
@@ -756,8 +817,8 @@
     },
     {
       "path": "mode-triangle-strip.expected.json",
-      "bytes": 8189,
-      "sha256": "d0a05b8064c861a5699b2e15de0439688733bcbf6cfaa88940544f4e684fae35"
+      "bytes": 8210,
+      "sha256": "7648d496db89149c8b74b01f6fd909c1914ea91260d66bdf6b3f4e194b3236a7"
     },
     {
       "path": "mode-triangle-strip.glb",
@@ -781,8 +842,8 @@
     },
     {
       "path": "mode-triangles.expected.json",
-      "bytes": 5938,
-      "sha256": "424e3f84d29aa9fedfe49f3077237cba9681d1981da7799ce17dc49fe2a88987"
+      "bytes": 5959,
+      "sha256": "a0d5903c2823155dd49480a0ce3b77bc0d4652d54920391f0d2e241ec477c2c8"
     },
     {
       "path": "mode-triangles.glb",
@@ -806,8 +867,8 @@
     },
     {
       "path": "normalized-u8-color.expected.json",
-      "bytes": 6403,
-      "sha256": "ccad44ce93206eb2a27a97c9a1bd0018d58f2c0006d3e20ae323f1b355cbc0dc"
+      "bytes": 6424,
+      "sha256": "8a311eb677f8d1e05d8a004cfd2f77d21b74da02d46794296d834b8f6b9e48df"
     },
     {
       "path": "normalized-u8-color.glb",
@@ -831,8 +892,8 @@
     },
     {
       "path": "scene-default-selection.expected.json",
-      "bytes": 7945,
-      "sha256": "5cf83c616be6cc76ebf3ec8c04f13a379ac76eb6d1179087b8a66578f8700e98"
+      "bytes": 7966,
+      "sha256": "eb3ec68aca80506c4480767fc732f21e2a72fb60e981930e5d557321cea6ec2f"
     },
     {
       "path": "scene-default-selection.glb",
@@ -856,8 +917,8 @@
     },
     {
       "path": "skin-armature-ancestor.expected.json",
-      "bytes": 12444,
-      "sha256": "7e94e5ab3c1aa78e86fa9beefe22c5d79369f0ed4d7d114c79e77ff6446eb1e8"
+      "bytes": 12465,
+      "sha256": "4c3bb419282e72830b96008227740454717775e3a10b8ee11563604c0ea49248"
     },
     {
       "path": "skin-armature-ancestor.glb",
@@ -881,8 +942,8 @@
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
-      "bytes": 10353,
-      "sha256": "f93c0df1c36375c812c290bb22ec288135ef9d417a59ce267ce6233ca154bf83"
+      "bytes": 10374,
+      "sha256": "597de2bf45425aa8bd1af6af8767b54acdcc0394392f85914a6de122459856e1"
     },
     {
       "path": "skin-mesh-node-transform.glb",
@@ -906,8 +967,8 @@
     },
     {
       "path": "sparse-indices.expected.json",
-      "bytes": 7538,
-      "sha256": "67ee2d2a1e603a1ad9a3c3a5784a500fad784b80508430ce78385083ba267f69"
+      "bytes": 7559,
+      "sha256": "d7b0279723be841d8aa0f607fbd471f3900e9fa3d32eea411d2a1dc7c9ff2a1e"
     },
     {
       "path": "sparse-indices.glb",
@@ -931,8 +992,8 @@
     },
     {
       "path": "sparse-position.expected.json",
-      "bytes": 5597,
-      "sha256": "5c250c738f5a94fc8f11a301acc2472bf96f1137e49100e35fc278bdf8db9366"
+      "bytes": 5618,
+      "sha256": "0e08ce50bc0d8b8576de5d30c5a0369492483186d0ea65cec4379f5507278315"
     },
     {
       "path": "sparse-position.glb",
@@ -956,8 +1017,8 @@
     },
     {
       "path": "u8-idx.expected.json",
-      "bytes": 6241,
-      "sha256": "0d6e311b24ba8a74399e6751c4291a95e627ee9dba51392de6fbd9ef11171050"
+      "bytes": 6262,
+      "sha256": "3aa12025627b1baa0c081f08b98228800a8818038059a42acfffa954b3e617b7"
     },
     {
       "path": "u8-idx.glb",
@@ -981,8 +1042,8 @@
     },
     {
       "path": "xf-identity.expected.json",
-      "bytes": 6201,
-      "sha256": "41128c45ce33aedb7c9fd3d0b774ce527f148b93302371546ad3631436a28e14"
+      "bytes": 6222,
+      "sha256": "74d7acc6b3c69fb1fdb4e63709c7d30f21293b98196117496aa63ab7dd68f00e"
     },
     {
       "path": "xf-identity.glb",
@@ -1006,8 +1067,8 @@
     },
     {
       "path": "xf-matrix-node.expected.json",
-      "bytes": 7831,
-      "sha256": "d07c111f22aa0be093989f9d733dc782149f7a5712876b95c6e478d80076a5b5"
+      "bytes": 7852,
+      "sha256": "ae11024e44627719826fe617fdac8053513f6bc8b42e96e988cfc2229d64fea9"
     },
     {
       "path": "xf-matrix-node.glb",
@@ -1031,8 +1092,8 @@
     },
     {
       "path": "xf-parent-child.expected.json",
-      "bytes": 7920,
-      "sha256": "26b2115e35532aa5c6d2f3ae3399b24b18a7a9dcaeaf7ae83b0c2cbe3407f002"
+      "bytes": 7941,
+      "sha256": "abd8017475ec8040f16aefe1e609241c10b6fc219e6df85cd4567fffdc63fbe1"
     },
     {
       "path": "xf-parent-child.glb",
@@ -1056,8 +1117,8 @@
     },
     {
       "path": "xf-shared-mesh.expected.json",
-      "bytes": 9150,
-      "sha256": "5aa2c73ea75126b96fddc4ce9da3e074a3e49758f00cdf1102f9279eb15e8e9d"
+      "bytes": 9171,
+      "sha256": "900b4dba730aa65584a48afb0a093f72ede377a32ff010f2dae58e7fb6991031"
     },
     {
       "path": "xf-shared-mesh.glb",

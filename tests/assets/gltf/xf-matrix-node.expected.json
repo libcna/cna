@@ -301,6 +301,7 @@
       }
     ]
   },
+  "rejection": null,
   "defects": [
     {
       "id": "D3",

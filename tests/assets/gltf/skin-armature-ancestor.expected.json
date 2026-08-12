@@ -502,6 +502,7 @@
       }
     ]
   },
+  "rejection": null,
   "defects": [
     {
       "id": "D8",
