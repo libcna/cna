@@ -1905,6 +1905,19 @@ namespace Microsoft::Xna::Framework::Content
             }
             struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
 
+            // plan_gltf.md GLTF-032/GLTF-198: refuse a file that names something outside its own
+            // directory, BEFORE cgltf_load_buffers -- that call resolves external buffer URIs
+            // itself and offers no hook to veto one, so the only place to stand is in front of it.
+            try
+            {
+                ValidateExternalUriContainmentEXT(data, fs::path(path).parent_path());
+            }
+            catch (const std::exception& e)
+            {
+                throw ContentLoadException(
+                    "glTF file '" + path + "' was rejected: " + e.what());
+            }
+
             parseResult = cgltf_load_buffers(&parseOptions, data, path.c_str());
             if (parseResult != cgltf_result_success)
             {

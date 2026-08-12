@@ -1137,6 +1137,65 @@ namespace CNA::Internal::GltfImport
                          std::vector<std::string>& warnings);
 
     /**
+     * @brief Resolves one external glTF URI against the asset's own directory, refusing anything
+     * that escapes it (`GLTF-032` / `GLTF-198`).
+     *
+     * A glTF file names its external buffers and images by relative URI, and the only sane reading
+     * of "relative" is *relative to the asset*. Nothing in the format stops an author -- or an
+     * attacker who can get a `.gltf` opened -- from writing `../../../../etc/passwd`, and joining
+     * that onto the asset directory resolves it happily. The refusal is deliberately not a warning:
+     * a file asking for something outside its own directory is not a file with a cosmetic problem.
+     *
+     * Four separate rejections, because they fail for four different reasons and a caller reading
+     * the message deserves to know which:
+     *
+     * 1. **A URI with a scheme** (`http:`, `file:`, …). CNA resolves relative file paths and
+     *    `data:` only; a network URI silently treated as a file name would look like a missing
+     *    file, which is a confusing way to say "unsupported".
+     * 2. **An absolute path**, which by definition ignores the asset directory entirely.
+     * 3. **A traversal that escapes**, checked lexically -- `a/../../b` escapes even though no
+     *    single component looks suspicious.
+     * 4. **A symlink that escapes**, checked again after resolving the existing prefix, because
+     *    lexical normalisation cannot see through a link.
+     *
+     * Containment is compared component by component, never as a string prefix: `/asset-evil` must
+     * not count as inside `/asset`.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param gltfDir The directory holding the `.gltf` file.
+     * @param uri The raw, still percent-encoded URI as authored in the file.
+     * @param what What the URI names, used in diagnostics, e.g. "buffer" or "image".
+     * @return The resolved path, guaranteed to be inside @p gltfDir.
+     * @throws std::runtime_error if the URI is unsupported, absolute, or escapes @p gltfDir.
+     */
+    std::filesystem::path ResolveExternalUriEXT(const std::filesystem::path& gltfDir,
+                                                const std::string& uri, const char* what);
+
+    /**
+     * @brief Applies `ResolveExternalUriEXT` to every external URI a parsed file declares
+     * (`GLTF-032` / `GLTF-198`).
+     *
+     * Buffers are read by `cgltf_load_buffers` itself, which resolves them the same way CNA would
+     * and offers no hook to veto one, so containment has to be decided **before** that call --
+     * hence a sweep over the parsed-but-not-yet-loaded file rather than a check at each read site.
+     * Images are checked here too so a traversal is refused up front rather than at the moment a
+     * texture happens to be needed.
+     *
+     * `data:` URIs and absent URIs (a GLB's own `BIN` chunk, a bufferView-backed image) carry no
+     * path and are skipped.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Call after `cgltf_parse_file` and **before**
+     * `cgltf_load_buffers`.
+     *
+     * @param data The parsed glTF file.
+     * @param gltfDir The directory holding the `.gltf` file.
+     * @throws std::runtime_error naming the offending URI if any of them escapes @p gltfDir.
+     */
+    void ValidateExternalUriContainmentEXT(const cgltf_data* data,
+                                           const std::filesystem::path& gltfDir);
+
+    /**
      * @brief Returns a mesh's default morph target weights (its own "weights" array), zero-filled
      * up to @p targetCount if the mesh's own array is shorter or absent.
      *

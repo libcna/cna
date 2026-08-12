@@ -1159,10 +1159,11 @@ namespace CNA::Internal::GltfImport
                 return result;
             }
 
-            std::vector<char> uriBuf(uri.begin(), uri.end());
-            uriBuf.push_back('\0');
-            cgltf_decode_uri(uriBuf.data());
-            const std::filesystem::path imgPath = gltfDir / uriBuf.data();
+            // plan_gltf.md GLTF-198: percent-decoding and containment together, so an image URI
+            // cannot reach outside the asset's directory. ContentManager already refused this file
+            // before a byte was read; this is the second gate, for the offline tool and for any
+            // caller that reaches ExtractImage without the up-front sweep.
+            const std::filesystem::path imgPath = ResolveExternalUriEXT(gltfDir, uri, "image");
             std::ifstream f(imgPath, std::ios::binary);
             if (!f) { throw std::runtime_error("Cannot open external image file: " + imgPath.string()); }
             ExtractedImage result;
@@ -2500,6 +2501,120 @@ namespace CNA::Internal::GltfImport
         if (extension == "KHR_draco_mesh_compression") { return true; }
 #endif
         return false;
+    }
+
+    std::filesystem::path ResolveExternalUriEXT(const std::filesystem::path& gltfDir,
+                                                const std::string& uri, const char* what)
+    {
+        namespace fs = std::filesystem;
+
+        const std::string subject = std::string(what) + " URI '" + uri + "'";
+
+        // A single-letter prefix is a Windows drive, not a scheme -- and it is an absolute
+        // reference on every platform, not only the one whose std::filesystem agrees. Rejecting it
+        // here rather than leaving it to (2) keeps the answer the same on Linux and Windows.
+        const std::size_t colon = uri.find(':');
+        if (colon == 1 && std::isalpha(static_cast<unsigned char>(uri.front())) != 0)
+        {
+            throw std::runtime_error(
+                "Refusing " + subject + ": it names a drive-absolute path, and a glTF file may "
+                "only reference files inside its own directory.");
+        }
+
+        // (1) A scheme means this is not a path relative to the asset at all. Checked on the raw
+        // URI, before percent-decoding, because `%68ttp:` is not a scheme and must not become one.
+        if (colon != std::string::npos && colon > 1)
+        {
+            const std::string scheme = uri.substr(0, colon);
+            const bool schemeLike = std::all_of(scheme.begin(), scheme.end(), [](unsigned char c) {
+                return std::isalnum(c) != 0 || c == '+' || c == '-' || c == '.';
+            });
+            if (schemeLike && (std::isalpha(static_cast<unsigned char>(scheme.front())) != 0))
+            {
+                throw std::runtime_error(
+                    "Refusing " + subject + ": CNA resolves only relative file paths and 'data:' "
+                    "URIs, and '" + scheme + ":' is neither.");
+            }
+        }
+
+        std::vector<char> decoded(uri.begin(), uri.end());
+        decoded.push_back('\0');
+        cgltf_decode_uri(decoded.data());
+        const fs::path relative(decoded.data());
+
+        // (2) An absolute path ignores the asset directory by construction, so containment is not
+        // even a question -- it is simply not the kind of reference glTF's relative URIs are.
+        if (relative.is_absolute() || relative.has_root_name())
+        {
+            throw std::runtime_error(
+                "Refusing " + subject + ": it is an absolute path, and a glTF file may only "
+                "reference files inside its own directory.");
+        }
+
+        // Component-wise, never a string prefix: '/asset-evil' must not read as inside '/asset'.
+        const auto contains = [](const fs::path& base, const fs::path& candidate) {
+            auto b = base.begin();
+            auto c = candidate.begin();
+            for (; b != base.end(); ++b, ++c)
+            {
+                if (c == candidate.end() || *c != *b) { return false; }
+            }
+            return true;
+        };
+
+        // (3) Lexical containment. 'a/../../b' escapes even though no single component does.
+        const fs::path lexicalBase = (gltfDir.empty() ? fs::path(".") : gltfDir).lexically_normal();
+        const fs::path lexical = (lexicalBase / relative).lexically_normal();
+        if (!contains(lexicalBase, lexical))
+        {
+            throw std::runtime_error(
+                "Refusing " + subject + ": it resolves outside the asset's own directory.");
+        }
+
+        // (4) The same question again after resolving symlinks in whatever part of the path
+        // already exists. weakly_canonical, not canonical: the target legitimately may not exist
+        // yet, and "missing file" is the caller's error to report, not this one's.
+        std::error_code ec;
+        const fs::path realBase = fs::weakly_canonical(lexicalBase, ec);
+        if (!ec)
+        {
+            const fs::path realPath = fs::weakly_canonical(lexical, ec);
+            if (!ec && !contains(realBase, realPath))
+            {
+                throw std::runtime_error(
+                    "Refusing " + subject + ": it resolves through a symbolic link to '" +
+                    realPath.string() + "', outside the asset's own directory.");
+            }
+        }
+
+        return lexical;
+    }
+
+    void ValidateExternalUriContainmentEXT(const cgltf_data* data,
+                                           const std::filesystem::path& gltfDir)
+    {
+        if (data == nullptr) { return; }
+
+        // An absent uri is a GLB's own BIN chunk or a bufferView-backed image -- no path involved.
+        // A data: URI carries its bytes inline, so there is nothing to resolve or contain.
+        const auto isExternal = [](const char* uri) {
+            return uri != nullptr && std::string(uri).rfind("data:", 0) != 0 && *uri != '\0';
+        };
+
+        for (cgltf_size i = 0; i < data->buffers_count; ++i)
+        {
+            if (isExternal(data->buffers[i].uri))
+            {
+                ResolveExternalUriEXT(gltfDir, data->buffers[i].uri, "buffer");
+            }
+        }
+        for (cgltf_size i = 0; i < data->images_count; ++i)
+        {
+            if (isExternal(data->images[i].uri))
+            {
+                ResolveExternalUriEXT(gltfDir, data->images[i].uri, "image");
+            }
+        }
     }
 
     void ValidateGltfEXT(const cgltf_data* data, const std::string& sourceName,

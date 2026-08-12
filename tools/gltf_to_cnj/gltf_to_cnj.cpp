@@ -679,6 +679,12 @@ namespace
         }
         struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
 
+        // plan_gltf.md GLTF-032/GLTF-198: refuse a file naming something outside its own
+        // directory, before cgltf_load_buffers resolves those URIs itself. The offline tool is if
+        // anything the more exposed of the two entry points -- it is what a build pipeline points
+        // at unattended assets with.
+        ValidateExternalUriContainmentEXT(data, opts.inputPath.parent_path());
+
         result = cgltf_load_buffers(&parseOptions, data, opts.inputPath.string().c_str());
         if (result != cgltf_result_success)
         {
