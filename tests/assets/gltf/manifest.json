@@ -12,11 +12,11 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 71,
+  "distinctAssetCount": 74,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
-    "component-types": 2,
+    "component-types": 4,
     "topology": 8,
     "normals": 2,
     "transforms": 7,
@@ -27,7 +27,7 @@
     "cameras": 5,
     "lights": 2,
     "scenes": 1,
-    "robustness": 6
+    "robustness": 7
   },
   "promotedAuditFixtures": {
     "f1": "xf-shared-mesh",
@@ -356,6 +356,41 @@
         "UNSIGNED_BYTE indices"
       ],
       "auditFixture": "f11"
+    },
+    {
+      "id": "u32-idx",
+      "owningGroup": "component-types",
+      "referencingGroups": [
+        "accessors"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "UNSIGNED_INT indices",
+        "index width narrowing"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "non-indexed-triangles",
+      "owningGroup": "component-types",
+      "referencingGroups": [
+        "accessors",
+        "topology"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "no indices accessor",
+        "implicit index range"
+      ],
+      "auditFixture": null
     },
     {
       "id": "normalized-u8-color",
@@ -1436,6 +1471,21 @@
       "auditFixture": null
     },
     {
+      "id": "bad-index-out-of-range",
+      "owningGroup": "robustness",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2"
+      ],
+      "features": [
+        "index beyond vertex count",
+        "index range validation",
+        "import rejection"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "accessor-count-mismatch",
       "owningGroup": "robustness",
       "referencingGroups": [],
@@ -1816,6 +1866,21 @@
       "path": "bad-animation-input-order.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "bad-index-out-of-range.expected.json",
+      "bytes": 4386,
+      "sha256": "b9a47f3e5d3324ec524d242d70a2907798ac91b5fe3619bfc8ac93bb562f662e"
+    },
+    {
+      "path": "bad-index-out-of-range.glb",
+      "bytes": 792,
+      "sha256": "0242485a17b6b44b9ce76254dbf080fac5d5f83e919a9d601e3d8a24eb9b9886"
+    },
+    {
+      "path": "bad-index-out-of-range.gltf",
+      "bytes": 1431,
+      "sha256": "0c256889e138a0e28ef3be7ae76bb875fd9c71c12eb96c77d2071a93ef2ece05"
     },
     {
       "path": "camera-animated-node.expected.json",
@@ -2483,6 +2548,31 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "non-indexed-triangles.expected.json",
+      "bytes": 6121,
+      "sha256": "bb74837c1bbef3bd7698c66f517e9af08d8329a6a25db46777a05dd2c310d881"
+    },
+    {
+      "path": "non-indexed-triangles.glb",
+      "bytes": 664,
+      "sha256": "80b5b87e2c40fa56db6491064ba18b6a0fed9b12d0a3797db4cb5726f169d0f3"
+    },
+    {
+      "path": "non-indexed-triangles.gltf",
+      "bytes": 1215,
+      "sha256": "475dc1e9b9c4995f48511285278278794c0f6685c349d906eab13297f2b6a1f4"
+    },
+    {
+      "path": "non-indexed-triangles.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "non-indexed-triangles.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "normal-absent.expected.json",
       "bytes": 6055,
       "sha256": "949944c1707f6c789d97534cf55f9405062c135088e06b1457bc1389494f4fc7"
@@ -3021,6 +3111,31 @@
       "path": "tex-texture-transform.vb.bin",
       "bytes": 192,
       "sha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5"
+    },
+    {
+      "path": "u32-idx.expected.json",
+      "bytes": 6605,
+      "sha256": "478fc0e0aaf367eda152d49d388f4dbab664077ad49de865b7d249817a455599"
+    },
+    {
+      "path": "u32-idx.glb",
+      "bytes": 796,
+      "sha256": "2b407bf83afcee741fb5847a6e2e7adb0470de29f6c0b5fb18cfe2e13542fd1b"
+    },
+    {
+      "path": "u32-idx.gltf",
+      "bytes": 1438,
+      "sha256": "820a69a893a8878be949da9c247d0340538448ca3e1b0a71cec4d3a7063167fb"
+    },
+    {
+      "path": "u32-idx.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "u32-idx.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "u8-idx.expected.json",

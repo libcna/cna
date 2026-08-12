@@ -479,10 +479,10 @@ produced them.
 
 ### 4.3 Coverage today
 
-**65 of the 71** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**67 of the 74** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
-width-selection rule. The six without one are the fixtures the importer must **refuse**
-(`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-261`/`GLTF-262`); their manifests record
+width-selection rule. The seven without one are the fixtures the importer must **refuse**
+(`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`); their manifests record
 `l5.supported = false` with a reason and the owning task, so the layer is visibly absent rather than
 quietly unasserted.
 
@@ -649,6 +649,8 @@ written for this document: two descriptions of the same fixture are two things t
 | `sparse-indices` | accessors | L1, L2, L3 | accessor.sparse on indices; UNSIGNED_SHORT indices |
 | `sparse-interleaved-base` | accessors | L1, L2, L3, L4 | accessor.sparse; bufferView.byteStride; interleaved base array; tightly packed sparse values |
 | `u8-idx` | component-types | L1, L2, L3 | UNSIGNED_BYTE indices |
+| `u32-idx` | component-types | L1, L2, L3 | UNSIGNED_INT indices; index width narrowing |
+| `non-indexed-triangles` | component-types | L1, L2, L3 | no indices accessor; implicit index range |
 | `normalized-u8-color` | component-types | L1, L2, L3 | normalized UNSIGNED_BYTE; COLOR_0 VEC4; vertex colour round-trip |
 | `mode-points` | topology | L1, L2, L3, L4, L5 | primitive.mode = POINTS; non-indexed primitive; implicit index range |
 | `mode-lines` | topology | L1, L2, L3, L4, L5 | primitive.mode = LINES; line topology |
@@ -710,11 +712,11 @@ written for this document: two descriptions of the same fixture are two things t
 | `scene-default-selection` | scenes | L1, L3, L4 | scene != 0; unreferenced decoy mesh; multiple scenes |
 | `bad-accessor-out-of-bounds` | robustness | L1 | accessor beyond bufferView; structural validation; import rejection |
 | `bad-accessor-count-overflow` | robustness | L1 | accessor count overflow; size_t wrap; structural validation; import rejection |
+| `bad-index-out-of-range` | robustness | L1, L2 | index beyond vertex count; index range validation; import rejection |
 | `accessor-count-mismatch` | robustness | L1, L2 | attribute count mismatch; per-primitive attribute agreement; import rejection |
 | `skin-joint-index-out-of-range` | robustness | L1, L2 | out-of-range JOINTS_0 index; weighted stray influence; import rejection |
 | `skin-joint-index-padding` | robustness | L1, L2, L3 | out-of-range JOINTS_0 index; zero-weight padding slot |
 | `bad-animation-input-order` | robustness | L1, L2 | non-monotonic sampler input; animation input ordering; import rejection |
-
-Six fixtures declare no L5 golden because the importer must **refuse** them, and a refusal has no
+Seven fixtures declare no L5 golden because the importer must **refuse** them, and a refusal has no
 buffers; their manifests say so explicitly (`l5.supported = false`) with the reason and the owning
 task, which is what keeps "no golden" distinguishable from "golden forgotten".

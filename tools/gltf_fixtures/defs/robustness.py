@@ -332,6 +332,72 @@ def bad_accessor_count_overflow() -> Fixture:
     )
 
 
+def bad_index_out_of_range() -> Fixture:
+    """An index addressing a vertex that does not exist. Closes **`GLTF-068`**'s missing fixture.
+
+    The production check landed with `GLTF-063` -- every decoded index is proved `< POSITION.count`
+    before `ComputeTangentsEXT` or the packing loop sees it -- but it was asserted only on an
+    accessor hand-authored inside a test, so nothing in the corpus exercised it and no corpus-wide
+    sweep could have noticed the check disappearing.
+
+    Why the check exists at all is the part worth authoring: CNA packs a 16-bit index buffer when
+    the vertex count fits, and `static_cast<uint16_t>` **truncates silently**. An index of 70000
+    into a 3-vertex primitive would arrive as 4464 -- still out of range, and still a wrong
+    triangle rather than an error. The authored value here is 7 against three vertices: small
+    enough that no truncation is involved, so what fails is the range check itself and not the
+    narrowing.
+    """
+    b = GltfBuilder("bad-index-out-of-range")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    # Honestly packed and honestly described -- the file is malformed only in what the third index
+    # points AT, which no structural check looks at: cgltf_validate bounds an index accessor
+    # against its own bufferView, never against the primitive's vertex count.
+    indices = b.add_packed_accessor(usage="indices", values=[0, 1, 7],
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="OutOfRangeTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="bad-index-out-of-range", audit_fixture=None, owning_group="robustness",
+        description="A triangle whose third index is 7 while the primitive has three vertices. "
+                    "cgltf_validate bounds an index accessor against its own bufferView and never "
+                    "against the vertex count, so this file is structurally sound and semantically "
+                    "impossible -- and the 16-bit packing path would have truncated a larger value "
+                    "into a plausible one instead of failing.",
+        builder=b, validated_layers=["L1", "L2"],
+        features=["index beyond vertex count", "index range validation", "import rejection"],
+        spec_anchors=["meshes-overview", "accessors"],
+        l3={"primitives": []},
+        l4={},
+        l5=l5_unsupported("The primitive is refused at extraction, so no buffers are produced.",
+                          ["GLTF-068"]),
+        rejection={
+            "stage": "extraction",
+            "task": "GLTF-068",
+            "errorContains": ["index 2 = 7", "only 3 vertices"],
+            "offendingIndex": 7,
+            "offendingPosition": 2,
+            "vertexCount": 3,
+            "note": "Asserted at EXTRACTION, which is where CNA's own check lives: the constraint "
+                    "is between an index accessor and a primitive's POSITION count, and the "
+                    "diagnostic names the offending value, its position in the index list and the "
+                    "vertex count -- 'an index is out of range' in a 200k-triangle mesh is not "
+                    "actionable. A full load refuses the file one layer earlier, because cgltf's "
+                    "own validator happens to bound an index accessor against the first "
+                    "attribute's count; that is defence in depth rather than the same check "
+                    "twice, and it is why the CNA-side one is exercised through ExtractMesh "
+                    "directly -- the L3 oracle and the offline converter both reach it that way.",
+        },
+    )
+
+
 def bad_animation_input_order() -> Fixture:
     """An animation sampler whose input times go **backwards**. Proves **`GLTF-313`**.
 
@@ -417,6 +483,6 @@ def bad_animation_input_order() -> Fixture:
     )
 
 
-FIXTURES = [bad_accessor_out_of_bounds, bad_accessor_count_overflow, accessor_count_mismatch,
-            skin_joint_index_out_of_range,
+FIXTURES = [bad_accessor_out_of_bounds, bad_accessor_count_overflow, bad_index_out_of_range,
+            accessor_count_mismatch, skin_joint_index_out_of_range,
             skin_joint_index_padding, bad_animation_input_order]
