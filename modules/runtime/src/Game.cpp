@@ -4,13 +4,20 @@
 
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Logger.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
 
 #include <algorithm>
+#include <iterator>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
@@ -84,6 +91,77 @@ namespace Microsoft::Xna::Framework
         {
             values.erase(std::remove(values.begin(), values.end(), value), values.end());
         }
+
+        /// Reads the currently installed platform without triggering the lazy creation
+        /// GetCurrentPlatform() performs when nothing is installed.
+        [[nodiscard]] CNA::Platform::IPlatform* InstalledPlatformOrNull()
+        {
+            return CNA::Platform::HasCurrentPlatform() ? &CNA::Platform::GetCurrentPlatform()
+                                                       : nullptr;
+        }
+
+        // Live games, in the order they installed themselves; the back entry is the one currently
+        // aimed at by the ambient accessor.
+        //
+        // A per-game "the platform I displaced" pointer looks simpler and is wrong: games are not
+        // guaranteed to be destroyed in reverse construction order, and a game that saved a
+        // predecessor which is destroyed first would restore a dangling pointer on its own way
+        // out. Keeping the order in one place lets a game remove itself from the middle, which is
+        // the case that actually goes wrong.
+        std::mutex& PlatformStackMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        std::vector<CNA::Platform::IPlatform*>& PlatformStack()
+        {
+            static std::vector<CNA::Platform::IPlatform*> stack;
+            return stack;
+        }
+
+        /// Creates the game's platform and installs it as the process-wide one in a single step.
+        ///
+        /// Doing both from a member initialiser rather than from the constructor body is what
+        /// makes the ordering guarantee real: every other member is constructed after this one,
+        /// so a graphics device or content manager that reaches for the ambient platform during
+        /// its own construction finds the game's instance rather than lazily creating a second.
+        [[nodiscard]] std::unique_ptr<CNA::Platform::IPlatform> CreateAndInstallPlatform()
+        {
+            std::unique_ptr<CNA::Platform::IPlatform> platform = CNA::Platform::PlatformFactory::Create();
+
+            {
+                const std::lock_guard<std::mutex> guard(PlatformStackMutex());
+                PlatformStack().push_back(platform.get());
+            }
+            CNA::Platform::SetCurrentPlatform(platform.get());
+            return platform;
+        }
+
+        /// Removes a game's platform from the stack and re-aims the ambient accessor at whatever
+        /// is left, which may be nothing.
+        void UninstallPlatform(CNA::Platform::IPlatform* platform)
+        {
+            CNA::Platform::IPlatform* successor = nullptr;
+            {
+                const std::lock_guard<std::mutex> guard(PlatformStackMutex());
+                std::vector<CNA::Platform::IPlatform*>& stack = PlatformStack();
+                const auto found = std::find(stack.rbegin(), stack.rend(), platform);
+                if (found != stack.rend())
+                {
+                    stack.erase(std::next(found).base());
+                }
+                successor = stack.empty() ? nullptr : stack.back();
+            }
+
+            // Only re-aim if this game is the one currently aimed at. Something outside Game may
+            // have installed its own platform (tests do), and a game going away is no reason to
+            // take that over.
+            if (InstalledPlatformOrNull() == platform)
+            {
+                CNA::Platform::SetCurrentPlatform(successor);
+            }
+        }
     }
 
     const System::TimeSpan Game::MaxElapsedTime = System::TimeSpan::FromMilliseconds(500.0);
@@ -95,7 +173,8 @@ namespace Microsoft::Xna::Framework
     }
 
     Game::Game()
-        : Components_(),
+        : platform_(CreateAndInstallPlatform()),
+          Components_(),
           GraphicsDevice_(),
           Content_(),
           Window_(),
@@ -142,6 +221,16 @@ namespace Microsoft::Xna::Framework
     {
         Dispose(false);
         ShutdownAudio();
+
+        // Hand the ambient installation back to whichever game is still alive, if any. This runs
+        // before platform_ is destroyed (members are destroyed after the body), so the accessor
+        // is never left aimed at a platform that has already gone away.
+        UninstallPlatform(platform_.get());
+    }
+
+    CNA::Platform::IPlatform& Game::GetPlatformEXT() const
+    {
+        return *platform_;
     }
 
     GameComponentCollection& Game::getComponentsProperty()

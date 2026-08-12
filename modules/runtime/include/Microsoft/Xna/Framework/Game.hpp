@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -30,6 +31,15 @@
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
+
+// Forward-declared rather than included: Game.hpp is included by every game, and the platform
+// contract is an implementation detail of how the loop is driven, not part of the XNA surface a
+// game writes against. The unique_ptr member below is why Game's destructor is defined out of
+// line.
+namespace CNA::Platform
+{
+    class IPlatform;
+}
 
 namespace Microsoft::Xna::Framework
 {
@@ -250,6 +260,20 @@ namespace Microsoft::Xna::Framework
          */
         [[nodiscard]] CNAEXT static double fpsToMillisecondsPerFrame(SharpRuntime::intcs framesPerSecond);
 
+        /**
+         * @brief Gets the platform this game runs on.
+         *
+         * The game owns exactly one platform instance, created when the game is constructed and
+         * destroyed with it. Subsystems that a `Game` owns reach the platform through here rather
+         * than through `CNA::Platform::GetCurrentPlatform()`: the ambient accessor exists for the
+         * static parts of the XNA API (`Keyboard::GetState`, `StorageDevice`) that genuinely
+         * cannot be handed a context, and using it where a context *is* available would make the
+         * dependency invisible.
+         *
+         * @return The platform, which lives as long as this game does.
+         */
+        CNAEXT [[nodiscard]] CNA::Platform::IPlatform& GetPlatformEXT() const;
+
         /** @brief Internal loop flag matching the FNA/XNA Game implementation shape. */
         CNAEXT bool RunApplication;
 
@@ -325,6 +349,12 @@ namespace Microsoft::Xna::Framework
         virtual void Dispose(bool disposing);
 
     private:
+        // Declared before every other member, and therefore constructed first and destroyed last.
+        // The graphics device, the window and the content manager may all reach the platform
+        // during their own construction or teardown, so the platform's lifetime has to strictly
+        // contain theirs. Member order is the only thing that guarantees that.
+        std::unique_ptr<CNA::Platform::IPlatform> platform_;
+
         GameComponentCollection Components_;
         Graphics::GraphicsDevice GraphicsDevice_;
         Content::ContentManager Content_;
