@@ -4,6 +4,7 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 
+#include "Sdl3EventMapper.hpp"
 #include "Sdl3Window.hpp"
 
 #include <SDL3/SDL.h>
@@ -177,16 +178,17 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::PollEvents(std::vector<PlatformEvent>& destination)
     {
-        // PLAT-33..38 map the SDL event taxonomy onto PlatformEvent. Until then the batch is
-        // drained and cleared so a caller never sees stale events from a previous frame.
+        // clear() keeps the vector's capacity, which is the whole reason the buffer belongs to
+        // the caller: a reused batch stops allocating after the first few frames.
         destination.clear();
 
         SDL_Event event;
+        PlatformEvent translated;
         while (SDL_PollEvent(&event))
         {
-            if (event.type == SDL_EVENT_QUIT)
+            if (MapSdlEvent(event, translated))
             {
-                destination.emplace_back(QuitEvent{});
+                destination.push_back(translated);
             }
         }
     }

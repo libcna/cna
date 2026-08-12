@@ -65,11 +65,11 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1112** |
-| Files referencing SDL (all) | **589** |
-| Production files (`src/` + `include/`) referencing SDL | **270** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1118** |
+| Files referencing SDL (all) | **592** |
+| Production files (`src/` + `include/`) referencing SDL | **272** |
 | …of which are renderer production files | **116** |
-| Test/example files referencing SDL | **319** |
+| Test/example files referencing SDL | **320** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
 | Renderer families reaching for `SDL_GL_*` directly | **11** |
 
@@ -82,7 +82,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
 | `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
-| `modules/platform` | 8 | - |
+| `modules/platform` | 10 | - |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
 | `modules/runtime` | 7 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
 | `modules/content` | 3 | `SDL_IOStream`-based readers, glTF import |
@@ -336,12 +336,12 @@ The first and, within this plan, only real implementation. It reproduces today's
 | PLAT-30 | `Sdl3Window` creation and destruction | ✅ | `WindowDescription` → `SDL_CreateWindow` flags. Creation-time-only properties (render intent → `SDL_WINDOW_OPENGL`/`VULKAN`/`METAL`, high-DPI, borderless, hidden, fullscreen) are set as flags; the genuinely post-creation ones (explicit position, min/max size, borderless-fullscreen mode) are applied after. `Sdl3Window` owns the `SDL_Window` and destroys it — the only place in the module that stores one. |
 | PLAT-31 | `Sdl3Window` geometry and state | ✅ | Title, client bounds, **`SDL_GetWindowSizeInPixels` for pixel size** (not the logical size — a renderer sizes its swapchain from this), display scale, resizable, bordered, fullscreen mode, show/hide/minimize/maximize/restore, `Sync`, focus and minimized queries, display name. `GetDisplayScale()` substitutes 1:1 when SDL returns `0.0f`, since a zero scale divides to infinity in any layout computation. |
 | PLAT-32 | Native handle extraction for all 7 properties | ✅ | All 7 `SDL_PROP_WINDOW_*` properties → `NativeWindowHandle`, keyed off `SDL_GetCurrentVideoDriver()` rather than probing which properties answer — probing would pick the first responder, and XWayland answers both X11 and Wayland queries. **X11's XID is read with `SDL_GetNumberProperty` into `windowId`**, never the pointer field. `dummy`/`offscreen` report `Headless`, which is what makes a GPU renderer refuse deterministically. Tests assert *self-consistency* for whatever system the host actually reports — so the same test is meaningful on X11, Wayland, Win32 or none — plus agreement between `HasNativeWindow()` and the typed accessors, handle stability across calls, and that `Describe()` prints no addresses. Systems this host cannot reach are exercised by their branch of that switch, not claimed as verified. |
-| PLAT-33 | Event pump: window events | ⬜ | Resize, pixel-size change, focus gained/lost, close, minimize/restore/maximize, move, display change, DPI change → `PlatformEvent`. Must match PLAT-6's golden capture. |
-| PLAT-34 | Event pump: keyboard and text input | ⬜ | Key down/up with the existing keycode/scancode mapping preserved, plus text input and IME events. |
-| PLAT-35 | Event pump: mouse and touch | ⬜ | Motion, buttons, wheel, relative mode, touch and gesture events. |
-| PLAT-36 | Event pump: gamepad, joystick, sensor | ⬜ | Add/remove/axis/button/sensor events, including the hotplug paths already covered by `InputDevicesHotplugTests`. |
-| PLAT-37 | Event pump: application lifecycle | ⬜ | `SDL_EVENT_WILL_ENTER_BACKGROUND` / `SDL_EVENT_DID_ENTER_FOREGROUND` and quit — currently handled inline in `Game.cpp`. |
-| PLAT-38 | Batched `PollEvents` with buffer reuse | ⬜ | Fills a caller-owned `std::vector`, reusing capacity across frames; no per-event allocation, no per-event virtual call. Design decision 4's concrete discharge. |
+| PLAT-33 | Event pump: window events | ✅ | All 11 `WindowEventKind` values mapped, with `windowID`/`data1`/`data2` carried through. `Resized` and `PixelSizeChanged` verified **distinct** — conflating them is how a renderer draws at the wrong scale under high DPI. Cross-check against PLAT-6's golden capture stays open until PLAT-6 lands. Original scope: | Resize, pixel-size change, focus gained/lost, close, minimize/restore/maximize, move, display change, DPI change → `PlatformEvent`. Must match PLAT-6's golden capture. |
+| PLAT-34 | Event pump: keyboard and text input | ✅ | Key down/up carrying scancode, keycode, modifiers, press state and **`repeat`** (losing that flag would silently break the synthetic key-up path a terminal needs); text input and IME composition with cursor/selection. A **null** `SDL_EVENT_TEXT_INPUT` text pointer is handled — dereferencing it would crash inside the event pump, the worst place for it. Original scope: | Key down/up with the existing keycode/scancode mapping preserved, plus text input and IME events. |
+| PLAT-35 | Event pump: mouse and touch | ✅ | Motion with position and delta, buttons with click count, wheel, and all four touch kinds with normalised coordinates passed through unscaled. **`SDL_MOUSEWHEEL_FLIPPED` is normalised at the mapping**, so every consumer sees one convention instead of each rediscovering the flag. Original scope: | Motion, buttons, wheel, relative mode, touch and gesture events. |
+| PLAT-36 | Event pump: gamepad, joystick, sensor | 🟨 | Gamepad/joystick/keyboard/mouse add+remove, gamepad axis and button mapped. Axis normalisation scales each half of SDL's asymmetric `[-32768, 32767]` range by its own magnitude — dividing the whole range by 32767 makes the extreme negative read `-1.00003`, which a clamp-free consumer carries into physics. **Sensor events not yet mapped** (they arrive with PLAT-85's sensor service); `InputDevicesHotplugTests` cross-check waits for Phase 5. Original scope: | Add/remove/axis/button/sensor events, including the hotplug paths already covered by `InputDevicesHotplugTests`. |
+| PLAT-37 | Event pump: application lifecycle | ✅ | `WillEnterBackground`, `DidEnterForeground`, `LowMemory` and quit — the transitions `Game.cpp` currently handles inline. Original scope: | `SDL_EVENT_WILL_ENTER_BACKGROUND` / `SDL_EVENT_DID_ENTER_FOREGROUND` and quit — currently handled inline in `Game.cpp`. |
+| PLAT-38 | Batched `PollEvents` with buffer reuse | ✅ | Fills the caller's vector via `clear()` (which keeps capacity, so a reused batch stops allocating after the first few frames) and one `MapSdlEvent` call per event — no per-event virtual dispatch. An unconsumed SDL event returns **false and leaves the destination untouched** rather than appending a default-constructed event; the variant's first alternative is `QuitEvent`, so the sloppy version would look like a real quit. Original scope: | Fills a caller-owned `std::vector`, reusing capacity across frames; no per-event allocation, no per-event virtual call. Design decision 4's concrete discharge. |
 | PLAT-39 | Timing implementation | ✅ | `SDL_GetPerformanceCounter`/`Frequency`, `SDL_GetTicks`, `SDL_Delay`. 4 tests against real SDL3: non-zero frequency (the game loop divides by it), counter advance, monotonic ticks, and that `Delay` actually waits — with a deliberately generous bound, since the assertion under test is *that* it waited, not that a scheduler is precise. |
 | PLAT-40 | `Sdl3PlatformCapabilities` | ✅ | All 26 capabilities answered explicitly; SDL3 supports every currently-defined one, asserted by enumerating `AllCapabilities()` rather than by spot checks, so a capability added later without being answered here shows up as a count mismatch. `exactKeyboardState` and `pixelAccurateMouse` are `true` — the two that exist precisely because a terminal cannot provide them. |
 | PLAT-41 | GL context service (SDL3) | ⬜ | Implements PLAT-22 over `SDL_GL_*`. Attribute setting must be verified against what the 11 GL renderer families currently request — a dropped attribute here is a silent rendering difference. |
