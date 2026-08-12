@@ -37,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
@@ -1825,6 +1826,30 @@ namespace Microsoft::Xna::Framework::Content
                 // PBR + skinning combo: VertexPositionNormalTangentTextureSkinned (SkinnedPbrEffect)
                 // -- raw byte upload for the same vtable-inflation reason as stride 48/52/56 above.
                 vb->SetDataRaw(vertBytes.data(), numVertices, 68);
+            }
+            else
+            {
+                // plan_gltf.md GLTF-157, the importer's half of it. There used to be no else: an
+                // unlisted stride fell out of the chain and the freshly constructed, EMPTY
+                // VertexBuffer was returned as though it had been filled. The mesh then drew from
+                // whatever the buffer object happened to contain, which is the same class of
+                // silent wrongness the renderer-side ApplyLayout fallback has.
+                //
+                // The canonical table is consulted rather than a second literal list, because a
+                // second list is exactly what went stale in GLTF-278. If a stride is not in the
+                // table no renderer can bind it either, so refusing here is refusing earlier, not
+                // refusing more.
+                const CNA::Internal::Graphics::InferredVertexLayout layout =
+                    CNA::Internal::Graphics::InferredLayoutForStride(
+                        stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+                throw ContentLoadException(
+                    "Vertex stride " + std::to_string(stride) +
+                    (layout.known
+                         ? " is in the canonical layout table but has no upload path here, so the "
+                           "vertex buffer would have been left empty."
+                         : " is not in the canonical vertex layout table, so no renderer can bind "
+                           "it and no upload path exists for it.") +
+                    " Refusing rather than returning an empty vertex buffer (GLTF-157).");
             }
             return vb;
         }
