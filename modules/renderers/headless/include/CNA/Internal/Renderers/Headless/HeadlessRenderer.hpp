@@ -188,6 +188,9 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
     private:
+        /// Unbinds every currently bound render target and forgets them.
+        void UnbindAllRenderTargets();
+
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         int capacity_ = 0;
@@ -286,6 +289,9 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] bool IsBound() const { return bound_; }
 
     private:
+        /// Unbinds every currently bound render target and forgets them.
+        void UnbindAllRenderTargets();
+
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         int width_ = 0;
@@ -310,6 +316,9 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
 
     private:
+        /// Unbinds every currently bound render target and forgets them.
+        void UnbindAllRenderTargets();
+
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         int size_ = 0;
@@ -364,6 +373,9 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] int Size() const { return size_; }
 
     private:
+        /// Unbinds every currently bound render target and forgets them.
+        void UnbindAllRenderTargets();
+
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         int size_ = 0;
@@ -410,6 +422,9 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] int Depth() const { return depth_; }
 
     private:
+        /// Unbinds every currently bound render target and forgets them.
+        void UnbindAllRenderTargets();
+
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         int width_ = 0, height_ = 0, depth_ = 0;
@@ -445,6 +460,9 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] bool IsBound() const { return bound_; }
 
     private:
+        /// Unbinds every currently bound render target and forgets them.
+        void UnbindAllRenderTargets();
+
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         bool compiled_ = false;
@@ -498,6 +516,9 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] bool IsBegun() const { return begun_; }
 
     private:
+        /// Unbinds every currently bound render target and forgets them.
+        void UnbindAllRenderTargets();
+
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         bool begun_ = false;
@@ -525,6 +546,9 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] int PixelCount() const override { return 1; }
 
     private:
+        /// Unbinds every currently bound render target and forgets them.
+        void UnbindAllRenderTargets();
+
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         bool active_ = false;
@@ -679,10 +703,16 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] const std::shared_ptr<HeadlessSharedState>& SharedState() const { return state_; }
 
     private:
+        /// Unbinds every currently bound render target and forgets them.
+        void UnbindAllRenderTargets();
+
         std::shared_ptr<HeadlessSharedState> state_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         float clearColor_[4] = {0, 0, 0, 1};
-        HeadlessRenderTargetRenderer* currentRenderTarget_ = nullptr;
+        // Every currently bound 2D render target, in binding order. A single pointer here is what
+        // made SetRenderTargets refuse more than one -- while SupportsCapability kept reporting
+        // MultipleRenderTargets as available, because Headless answers true by default.
+        std::vector<HeadlessRenderTargetRenderer*> boundRenderTargets_;
     };
 }
