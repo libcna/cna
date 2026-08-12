@@ -755,6 +755,77 @@ TEST(MatrixTest, DecomposeScaleMatrix)
     EXPECT_NEAR(scale.Z, 4.0f, kEps);
 }
 
+TEST(MatrixTest, DecomposeAxisAlignedQuarterTurnRecoversTheRotationRatherThanIdentity)
+{
+    // A quarter turn about Z has exact zeros in every row, so each row product is +/-0.0 -- and
+    // (-1) * 0 is NEGATIVE zero. Testing that with std::signbit (true for -0.0) flips the row's
+    // sign, making the normalised 3x3 a reflection rather than a rotation, and
+    // CreateFromRotationMatrix of a reflection is not a rotation at all: the quarter turn came
+    // back as the identity quaternion, so a node authored with a 90-degree rotation lost its
+    // orientation with no error anywhere. FNA's own guard is `Math.Sign(product) < 0`, and
+    // Math.Sign returns 0 for -0.0f, so FNA takes the +1 branch.
+    //
+    // Asserted for all three axes because the zero pattern differs per row, and one axis passing
+    // is exactly what made this look fine.
+    using Microsoft::Xna::Framework::Quaternion;
+    const std::pair<Quaternion, const char*> cases[] = {
+        {Quaternion::CreateFromAxisAngle(Vector3(1.0f, 0.0f, 0.0f), 1.57079633f), "about X"},
+        {Quaternion::CreateFromAxisAngle(Vector3(0.0f, 1.0f, 0.0f), 1.57079633f), "about Y"},
+        {Quaternion::CreateFromAxisAngle(Vector3(0.0f, 0.0f, 1.0f), 1.57079633f), "about Z"},
+    };
+
+    for (const auto& [expected, what] : cases)
+    {
+        SCOPED_TRACE(what);
+        Vector3 scale(0, 0, 0), translation(0, 0, 0);
+        Quaternion rotation = Quaternion::Identity;
+        const Matrix m = Matrix::CreateFromQuaternion(expected);
+        EXPECT_TRUE(m.Decompose(scale, rotation, translation));
+
+        // Unit scale, and POSITIVE on every axis: a negative component here is the sign flip
+        // itself, reported before the quaternion comparison so the cause is legible.
+        EXPECT_NEAR(1.0f, scale.X, kEps);
+        EXPECT_NEAR(1.0f, scale.Y, kEps);
+        EXPECT_NEAR(1.0f, scale.Z, kEps);
+
+        // q and -q are the same rotation, so compare on the sign-normalised form.
+        const float flip = (rotation.W * expected.W) < 0.0f ? -1.0f : 1.0f;
+        EXPECT_NEAR(expected.X, flip * rotation.X, 1e-5f);
+        EXPECT_NEAR(expected.Y, flip * rotation.Y, 1e-5f);
+        EXPECT_NEAR(expected.Z, flip * rotation.Z, 1e-5f);
+        EXPECT_NEAR(expected.W, flip * rotation.W, 1e-5f);
+    }
+}
+
+TEST(MatrixTest, DecomposeReportsPositiveScaleForAMirroredAffineTransform)
+{
+    // The boundary of the fix above, stated so nobody has to rediscover it.
+    //
+    // XNA's per-row sign heuristic multiplies the FOURTH column into each product -- M14, M24,
+    // M34 -- and those are zero in every affine transform. The product is therefore always zero
+    // for the matrices anyone actually decomposes, so the sign is always +1 and a mirrored
+    // transform decomposes to POSITIVE scales with the reflection folded into the quaternion.
+    // That is FNA's behaviour, not a CNA shortcut, and behaviour fidelity wins over the more
+    // obviously useful answer.
+    //
+    // The practical consequence: Decompose is not a mirroring test. Anything that needs to know
+    // whether a transform reverses handedness -- glTF's own winding rule among them -- must take
+    // the determinant of the 3x3 instead, which is unambiguous.
+    using Microsoft::Xna::Framework::Quaternion;
+    Vector3 scale(0, 0, 0), translation(0, 0, 0);
+    Quaternion rotation = Quaternion::Identity;
+
+    const Matrix m = Matrix::CreateScale(-2.0f, 3.0f, 4.0f) *
+                     Matrix::CreateFromAxisAngle(Vector3(0.0f, 1.0f, 0.0f), 0.7f);
+    EXPECT_TRUE(m.Decompose(scale, rotation, translation));
+    EXPECT_NEAR(2.0f, scale.X, 1e-4f);
+    EXPECT_NEAR(3.0f, scale.Y, 1e-4f);
+    EXPECT_NEAR(4.0f, scale.Z, 1e-4f);
+
+    // ...while the determinant does answer the question the scales cannot.
+    EXPECT_LT(m.Determinant(), 0.0f) << "the transform really does mirror";
+}
+
 // --- ToColumnMajor (CNAEXT) ---
 
 TEST(MatrixTest, ToColumnMajorIdentity)
