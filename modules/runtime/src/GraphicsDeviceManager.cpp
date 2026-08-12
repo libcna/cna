@@ -2,7 +2,8 @@
 
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
-#include <SDL3/SDL.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -16,18 +17,16 @@ namespace Microsoft::Xna::Framework
 {
     namespace
     {
-        // Matches FNA (SDL3_FNAPlatform.SupportsOrientations): only iOS and Android
+        // Matches FNA's SupportsOrientations: only iOS and Android
         // care about device orientation. On desktop platforms the back buffer keeps
         // the requested PreferredBackBufferWidth x Height verbatim (no landscape swap),
         // which is the XNA 4.0 / FNA desktop behaviour.
         bool platformSupportsOrientations()
         {
-            const char* platform = SDL_GetPlatform();
-            if (platform == nullptr)
-            {
-                return false;
-            }
-            const std::string name(platform);
+            // The ambient platform rather than the game's own: the default constructor has no
+            // game to ask, and this is a property of the process, not of a particular game.
+            const std::string name =
+                CNA::Platform::GetCurrentPlatform().GetSystemInfo()->GetPlatformName();
             return name == "iOS" || name == "Android";
         }
     }
@@ -474,7 +473,7 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::RankDevices(std::vector<GraphicsDeviceInformation>& foundDevices)
     {
-        // FNA throws NotImplementedException; CNA is a no-op (single SDL adapter, no ranking needed).
+        // FNA throws NotImplementedException; CNA is a no-op (single adapter, no ranking needed).
         (void)foundDevices;
     }
 
@@ -486,7 +485,7 @@ namespace Microsoft::Xna::Framework
         // Do NOT call ApplyChanges() here. ApplyChanges() would forward the
         // new physical window size as the virtual resolution, corrupting the
         // game's logical coordinate space and breaking scaling on all renderers.
-        // Each renderer queries SDL_GetWindowSize() dynamically every frame, so
+        // Each renderer queries the current window size dynamically every frame, so
         // no explicit notification is required — only the XNA Viewport needs
         // to be refreshed so scissor/viewport state stays coherent.
         if (graphicsDevice_ != nullptr)
@@ -586,16 +585,6 @@ namespace Microsoft::Xna::Framework
         game_->getServicesProperty().RemoveService<Graphics::IGraphicsDeviceService>();
     }
 
-    SDL_Window* GraphicsDeviceManager::tryGetSDLWindow() const
-    {
-        if (graphicsDevice_ == nullptr)
-        {
-            return nullptr;
-        }
-
-        return graphicsDevice_->GetWindowInternal();
-    }
-
     void GraphicsDeviceManager::applyToExistingRenderer(GraphicsDeviceInformation& gdi)
     {
         if (graphicsDevice_ == nullptr)
@@ -614,7 +603,7 @@ namespace Microsoft::Xna::Framework
         graphicsDevice_->SetGraphicsProfileEXT(gdi.getGraphicsProfileProperty());
 
         // The presentation/scaling mode must be applied before Reset()'s own
-        // SetVirtualResolution() call below -- SDL_Renderer's logical-presentation size
+        // SetVirtualResolution() call below -- the renderer's logical-presentation size
         // computation depends on which mode is already active, so setting the mode
         // afterward can leave a stale logical size computed under the previous mode.
         graphicsDevice_->SetPresentationMode(static_cast<int>(preferredPresentationMode_));

@@ -66,10 +66,10 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1121** |
-| Files referencing SDL (all) | **592** |
-| Production files (`src/` + `include/`) referencing SDL | **270** |
+| Files referencing SDL (all) | **591** |
+| Production files (`src/` + `include/`) referencing SDL | **268** |
 | …of which are renderer production files | **116** |
-| Test/example files referencing SDL | **322** |
+| Test/example files referencing SDL | **323** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
 | Renderer families reaching for `SDL_GL_*` directly | **11** |
 
@@ -84,9 +84,9 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
 | `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
-| `modules/runtime` | 5 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
 | `modules/content` | 3 | `SDL_IOStream`-based readers, glTF import |
 | `modules/gamer-services` | 3 | `Guide` overlay, local store |
+| `modules/runtime` | 3 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
 | `modules/core` | 1 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
 | `modules/graphics-ext` | 1 | ASCII post-process effect |
 | `modules/renderers/*` | 116 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (42 families) |
@@ -365,7 +365,7 @@ guarded by PLAT-6's golden capture.
 | PLAT-49 | Migrate `Game`'s cursor handling | ✅ | `SDL_ShowCursor`/`SDL_HideCursor` → `IPlatformMouse::SetCursorVisible`. Now **null-guarded**, which the SDL calls had no way to be: the mouse service is null exactly when the platform reports no pointer, so `IsMouseVisible` becomes a determinate no-op under HEADLESS (and later TERMINAL) instead of calling into a windowing system that is not there. The existing window guard is kept — cursor visibility is meaningless without a window. |
 | PLAT-50 | Migrate `GameWindow` to `IPlatformWindow` | ⬜ | Remove `struct SDL_Window;` from `GameWindow.hpp`; `window_`, `updateFromSDL()`, `refreshCachedSDLState()`, `queryClientBoundsFromSDL()`, `queryScreenDeviceNameFromSDL()` all re-point at the platform window. |
 | PLAT-51 | Replace `GameWindow::GetNativeSdlWindowEXT()` | ⬜ | The public `CNAEXT` accessor returning `SDL_Window*` is replaced by one returning `NativeWindowHandle`. This is a deliberate breaking change to a CNAEXT extension; per `CLAUDE.md`'s "no backward compatibility hacks", no alias is kept. Every in-repo caller is updated in the same task and the change is called out in the commit body. |
-| PLAT-52 | Migrate `GraphicsDeviceManager` | ⬜ | Remove `struct SDL_Window;` and `tryGetSDLWindow()` from the header; `SDL_GetPlatform`/`SDL_GetWindowSize` go through the platform. |
+| PLAT-52 | Migrate `GraphicsDeviceManager` | ✅ | **SDL-free, header and implementation.** `SDL_GetPlatform()` — the orientation decision, a call with nothing to do with graphics that nonetheless dragged the SDL header into a header every game includes — becomes `IPlatformSystemInfo::GetPlatformName()`, read from the *ambient* platform because the default constructor has no game to ask and this is a property of the process rather than of a game. `tryGetSDLWindow()` was **deleted rather than migrated**: it had zero callers in the entire repository, and porting dead code would have carried `struct SDL_Window;` forward for nothing. Five tests, deliberately written **without** the SDL video probe the rest of `GraphicsDeviceManagerTests.cpp` guards itself with — everything they check is decided before any window exists, which is the whole point. |
 | PLAT-53 | Migrate `Logger` | ✅ | `Logger` owns its own sink; `SetSink()`/`ResetSink()` replace `SDL_LogMessage`/`SDL_SetLogPriorities`. The default writes to **stderr, never stdout** — a terminal-hosted game draws its frame on stdout, so the destination is a correctness matter, not a preference. Removing SDL also removed a **hidden second gate**: SDL defaulted non-application categories like `RENDER` to a stricter threshold, so a `Warn` CNA's own `IsEnabled()` had allowed could still be discarded. There is now one gate, pinned by a test. The old tests asserted SDL's *process-wide priority state* — testing SDL, not CNA — and were rewritten against observable behaviour: 10 tests covering per-level delivery (SDL collapsed DEBUG/TRACE/EXPERIMENT onto one priority and could not tell them apart), category pass-through, conditional overloads and format. Original scope: | `modules/core/src/Logger.cpp`'s `SDL_Log` calls (4 there, 56 repo-wide) → CNA's own sink, or a platform log service. Prefer the former: logging does not need to be a platform capability. |
 | PLAT-54 | Resolve the entrypoint question | ✅ | `CNA/Entrypoint.hpp` → `modules/platform/include/CNA/Platform/Entrypoint.hpp`, re-keyed from renderer macros onto `CNA_PLATFORM_*`, and the dead `CNA_RENDERER_SDL` branch deleted rather than repaired. **Both `demo_devices` entry points now use it**, removing their direct `<SDL3/SDL_main.h>` includes and duplicated rationale — that was the row's acceptance criterion, since it turns a zero-consumer abstraction into a tested path. Exempted from PLAT-27's SDL-free probe with a documented reason (conditionally including `SDL_main.h` is its entire job) via a deliberately tiny `SDL_FREE_EXEMPT` list. Windows/`WinMain` remains unverified here — no Windows build available; recorded rather than assumed. Original scope: | PLAT-5 already decided it; this is the migration. Delete the dead `CNA_RENDERER_SDL` condition (never repaired — the renderer is the wrong axis now that renderer and platform are separate choices); re-key `Entrypoint.hpp` on `CNA_PLATFORM` and move it into `modules/platform` so `modules/core` stops including SDL headers; **convert both `demo_devices` entry points to actually use it**, which is what turns a zero-consumer abstraction into a tested path and is this row's acceptance criterion; scope the `SDL3::SDL3main` link to the SDL3 platform. Verify the Windows/`WinMain` path on a real Windows build rather than inferring it from Linux — the dead branch means no target has ever exercised it. |
 | PLAT-55 | Runtime golden-behavior verification | ⬜ | PLAT-6's captured event semantics reproduced by the migrated runtime, as an automated test rather than a manual check. This is the "prove behavioral equivalence without adding SDL2" step from `cnaplatform.md`'s implementation order. |
