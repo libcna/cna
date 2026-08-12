@@ -25,6 +25,9 @@ namespace CNA::Platform {
             case PlatformCapability::PixelAccurateMouse: return capabilities.pixelAccurateMouse;
             case PlatformCapability::RelativeMouse: return capabilities.relativeMouse;
             case PlatformCapability::CursorShapes: return capabilities.cursorShapes;
+            case PlatformCapability::GlobalPointer: return capabilities.globalPointer;
+            case PlatformCapability::InputDeviceEnumeration:
+                return capabilities.inputDeviceEnumeration;
             case PlatformCapability::Gamepad: return capabilities.gamepad;
             case PlatformCapability::GamepadRumble: return capabilities.gamepadRumble;
             case PlatformCapability::GamepadSensors: return capabilities.gamepadSensors;
@@ -59,6 +62,8 @@ namespace CNA::Platform {
             PlatformCapability::PixelAccurateMouse,
             PlatformCapability::RelativeMouse,
             PlatformCapability::CursorShapes,
+            PlatformCapability::GlobalPointer,
+            PlatformCapability::InputDeviceEnumeration,
             PlatformCapability::Gamepad,
             PlatformCapability::GamepadRumble,
             PlatformCapability::GamepadSensors,

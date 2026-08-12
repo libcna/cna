@@ -21,6 +21,8 @@ namespace CNA::Platform {
         static const std::string pixelAccurateMouse = "PixelAccurateMouse";
         static const std::string relativeMouse = "RelativeMouse";
         static const std::string cursorShapes = "CursorShapes";
+        static const std::string globalPointer = "GlobalPointer";
+        static const std::string inputDeviceEnumeration = "InputDeviceEnumeration";
         static const std::string gamepad = "Gamepad";
         static const std::string gamepadRumble = "GamepadRumble";
         static const std::string gamepadSensors = "GamepadSensors";
@@ -52,6 +54,8 @@ namespace CNA::Platform {
             case PlatformCapability::PixelAccurateMouse: return pixelAccurateMouse;
             case PlatformCapability::RelativeMouse: return relativeMouse;
             case PlatformCapability::CursorShapes: return cursorShapes;
+            case PlatformCapability::GlobalPointer: return globalPointer;
+            case PlatformCapability::InputDeviceEnumeration: return inputDeviceEnumeration;
             case PlatformCapability::Gamepad: return gamepad;
             case PlatformCapability::GamepadRumble: return gamepadRumble;
             case PlatformCapability::GamepadSensors: return gamepadSensors;

@@ -281,6 +281,7 @@ namespace CNA::Platform::Headless {
     IPlatformTextInput* HeadlessPlatform::GetTextInput() { return nullptr; }
     IPlatformSensors* HeadlessPlatform::GetSensors() { return nullptr; }
     IPlatformHaptics* HeadlessPlatform::GetHaptics() { return nullptr; }
+    IPlatformInputDevices* HeadlessPlatform::GetInputDevices() { return nullptr; }
     IPlatformClipboard* HeadlessPlatform::GetClipboard() { return nullptr; }
     IPlatformDisplays* HeadlessPlatform::GetDisplays() { return nullptr; }
     IPlatformDialogs* HeadlessPlatform::GetDialogs() { return nullptr; }

@@ -102,6 +102,52 @@ namespace CNA::Platform {
          * @return True if the pointer is captured.
          */
         [[nodiscard]] virtual bool IsRelativeMode() const = 0;
+
+        // --- Desktop-space pointer ---------------------------------------------------------
+        //
+        // Everything above is scoped to a window. These three are not, and the difference is
+        // what makes a drag survive the pointer leaving the window: a game tracking a slider
+        // keeps receiving positions while the button is held, even out over the desktop.
+        //
+        // Kept separate rather than folded into the window-scoped calls because a platform can
+        // genuinely have one and not the other. A terminal or a console has exactly one
+        // full-screen surface and no desktop to have coordinates in.
+
+        /**
+         * @brief Captures the pointer so motion is reported while it is outside any window.
+         *
+         * @param enabled True to capture, false to release.
+         * @return True if the platform accepted the change.
+         * @throws PlatformNotSupportedException If the platform reports no `GlobalPointer`
+         * capability.
+         */
+        virtual bool SetCapture(bool enabled) = 0;
+
+        /**
+         * @brief Reads the pointer position in desktop coordinates.
+         *
+         * A status rather than a throw when the position is unavailable: a pointer that has not
+         * moved yet, or a platform that only reports position while a window has focus, is an
+         * ordinary answer a caller branches on.
+         *
+         * @param x Receives the desktop x position; untouched when this returns false.
+         * @param y Receives the desktop y position; untouched when this returns false.
+         * @return True if a position was available.
+         * @throws PlatformNotSupportedException If the platform reports no `GlobalPointer`
+         * capability.
+         */
+        [[nodiscard]] virtual bool TryGetGlobalPosition(float& x, float& y) const = 0;
+
+        /**
+         * @brief Warps the pointer to a position in desktop coordinates.
+         *
+         * @param x Target desktop x.
+         * @param y Target desktop y.
+         * @return True if the platform accepted the warp.
+         * @throws PlatformNotSupportedException If the platform reports no `GlobalPointer`
+         * capability.
+         */
+        virtual bool SetGlobalPosition(float x, float y) = 0;
     };
 
 } // namespace CNA::Platform

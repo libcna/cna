@@ -81,6 +81,8 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformSensors* GetSensors() override;
         /** @brief Gets the haptics service. @return The SDL3 haptics service; never null. */
         [[nodiscard]] IPlatformHaptics* GetHaptics() override;
+        /** @brief Gets the input device enumeration service. @return The service; never null. */
+        [[nodiscard]] IPlatformInputDevices* GetInputDevices() override;
         /** @brief Gets the clipboard service. @return The SDL3 clipboard; never null. */
         [[nodiscard]] IPlatformClipboard* GetClipboard() override;
         /** @brief Gets the display service. @return The SDL3 display enumerator; never null. */
@@ -124,6 +126,7 @@ namespace CNA::Platform::Sdl3 {
         Sdl3TextInput textInput_;
         Sdl3Sensors sensors_;
         Sdl3Haptics haptics_;
+        Sdl3InputDevices inputDevices_;
     };
 
 } // namespace CNA::Platform::Sdl3

@@ -162,6 +162,32 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3Mouse::IsRelativeMode() const { return relativeMode_; }
 
+    bool Sdl3Mouse::SetCapture(const bool enabled) { return SDL_CaptureMouse(enabled); }
+
+    bool Sdl3Mouse::TryGetGlobalPosition(float& x, float& y) const
+    {
+        float globalX = 0.0f;
+        float globalY = 0.0f;
+        SDL_GetGlobalMouseState(&globalX, &globalY);
+
+        // SDL reports the position unconditionally and has no "unknown" answer, so the only way
+        // this can fail is with no video subsystem up -- in which case there is no desktop to
+        // have a position in. The out parameters stay untouched, as the contract promises.
+        if (SDL_WasInit(SDL_INIT_VIDEO) == 0)
+        {
+            return false;
+        }
+
+        x = globalX;
+        y = globalY;
+        return true;
+    }
+
+    bool Sdl3Mouse::SetGlobalPosition(const float x, const float y)
+    {
+        return SDL_WarpMouseGlobal(x, y);
+    }
+
     // --- gamepad (PLAT-82) ---------------------------------------------------------------------
 
     Sdl3Gamepad::~Sdl3Gamepad() { CloseAll(); }
@@ -300,6 +326,92 @@ namespace CNA::Platform::Sdl3 {
         Sdl3Window& sdlWindow = RequireSdl3Window(window, "TextInput::SetInputArea");
         const SDL_Rect rect{area.x, area.y, area.width, area.height};
         SDL_SetTextInputArea(sdlWindow.GetSdlWindow(), &rect, area.cursorOffset);
+    }
+
+    // --- input device enumeration (PLAT-77b) ----------------------------------------------------
+
+    namespace {
+
+        /// SDL's three enumeration calls have the same shape -- return a malloc'd id array and a
+        /// count -- but different element types and name lookups, so the shared part is the
+        /// ownership dance rather than the call itself.
+        template <typename TId, typename TEnumerate, typename TName>
+        std::vector<InputDeviceInfo> EnumerateDevices(const InputDeviceKind kind,
+                                                      TEnumerate enumerate, TName nameOf)
+        {
+            int count = 0;
+            TId* ids = enumerate(&count);
+            if (ids == nullptr)
+            {
+                return {};
+            }
+
+            std::vector<InputDeviceInfo> devices;
+            devices.reserve(static_cast<std::size_t>(count));
+            for (int i = 0; i < count; ++i)
+            {
+                InputDeviceInfo info;
+                info.id = static_cast<DeviceId>(ids[i]);
+                info.kind = kind;
+                const char* name = nameOf(ids[i]);
+                info.name = name != nullptr ? std::string(name) : std::string();
+                devices.push_back(std::move(info));
+            }
+            SDL_free(ids);
+            return devices;
+        }
+
+        template <typename TId, typename TEnumerate>
+        bool AnyDevice(TEnumerate enumerate)
+        {
+            int count = 0;
+            TId* ids = enumerate(&count);
+            if (ids == nullptr)
+            {
+                return false;
+            }
+            SDL_free(ids);
+            return count > 0;
+        }
+
+    } // namespace
+
+    std::vector<InputDeviceInfo> Sdl3InputDevices::GetDevices(const InputDeviceKind kind) const
+    {
+        switch (kind)
+        {
+            case InputDeviceKind::Keyboard:
+                return EnumerateDevices<SDL_KeyboardID>(kind, SDL_GetKeyboards,
+                                                        SDL_GetKeyboardNameForID);
+            case InputDeviceKind::Mouse:
+                return EnumerateDevices<SDL_MouseID>(kind, SDL_GetMice, SDL_GetMouseNameForID);
+            case InputDeviceKind::Gamepad:
+                return EnumerateDevices<SDL_JoystickID>(kind, SDL_GetGamepads,
+                                                        SDL_GetGamepadNameForID);
+            case InputDeviceKind::Joystick:
+                return EnumerateDevices<SDL_JoystickID>(kind, SDL_GetJoysticks,
+                                                        SDL_GetJoystickNameForID);
+            case InputDeviceKind::Haptic:
+                return EnumerateDevices<SDL_HapticID>(kind, SDL_GetHaptics,
+                                                      SDL_GetHapticNameForID);
+            case InputDeviceKind::Sensor:
+                return EnumerateDevices<SDL_SensorID>(kind, SDL_GetSensors, SDL_GetSensorNameForID);
+        }
+        return {};
+    }
+
+    bool Sdl3InputDevices::HasDevice(const InputDeviceKind kind) const
+    {
+        switch (kind)
+        {
+            case InputDeviceKind::Keyboard: return AnyDevice<SDL_KeyboardID>(SDL_GetKeyboards);
+            case InputDeviceKind::Mouse:    return AnyDevice<SDL_MouseID>(SDL_GetMice);
+            case InputDeviceKind::Gamepad:  return AnyDevice<SDL_JoystickID>(SDL_GetGamepads);
+            case InputDeviceKind::Joystick: return AnyDevice<SDL_JoystickID>(SDL_GetJoysticks);
+            case InputDeviceKind::Haptic:   return AnyDevice<SDL_HapticID>(SDL_GetHaptics);
+            case InputDeviceKind::Sensor:   return AnyDevice<SDL_SensorID>(SDL_GetSensors);
+        }
+        return false;
     }
 
 } // namespace CNA::Platform::Sdl3

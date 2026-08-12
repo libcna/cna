@@ -55,6 +55,10 @@ namespace CNA::Platform {
         bool relativeMouse = false;
         /** @brief System and custom cursor shapes can be set. */
         bool cursorShapes = false;
+        /** @brief The pointer can be read and moved in desktop coordinates, across windows. */
+        bool globalPointer = false;
+        /** @brief The currently connected input devices can be enumerated, not merely watched. */
+        bool inputDeviceEnumeration = false;
         /** @brief Gamepads can be enumerated and read. */
         bool gamepad = false;
         /** @brief Connected gamepads can rumble. */

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
+#include "CNA/Platform/Input/IPlatformInputDevices.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/Input/IPlatformTextInput.hpp"
@@ -55,6 +56,26 @@ namespace CNA::Platform::Sdl3 {
         void SetRelativeMode(bool enabled) override;
         /** @brief Gets whether pointer lock is active. @return True if captured. */
         [[nodiscard]] bool IsRelativeMode() const override;
+        /**
+         * @brief Captures the pointer so motion is reported outside any window.
+         * @param enabled True to capture.
+         * @return True if SDL accepted the change.
+         */
+        bool SetCapture(bool enabled) override;
+        /**
+         * @brief Reads the pointer position in desktop coordinates.
+         * @param x Receives desktop x; untouched on false.
+         * @param y Receives desktop y; untouched on false.
+         * @return True if a position was available.
+         */
+        [[nodiscard]] bool TryGetGlobalPosition(float& x, float& y) const override;
+        /**
+         * @brief Warps the pointer in desktop coordinates.
+         * @param x Target desktop x.
+         * @param y Target desktop y.
+         * @return True if SDL accepted the warp.
+         */
+        bool SetGlobalPosition(float x, float y) override;
 
         /** @brief Releases any cursor this service created. */
         ~Sdl3Mouse() override;
@@ -125,6 +146,24 @@ namespace CNA::Platform::Sdl3 {
 
     private:
         bool active_ = false;
+    };
+
+    /** @brief SDL3-backed enumeration of attached input devices. */
+    class Sdl3InputDevices final : public IPlatformInputDevices
+    {
+    public:
+        /**
+         * @brief Lists the attached devices of one class.
+         * @param kind Which class to list.
+         * @return The attached devices; empty when none are attached.
+         */
+        [[nodiscard]] std::vector<InputDeviceInfo> GetDevices(InputDeviceKind kind) const override;
+        /**
+         * @brief Gets whether at least one device of a class is attached.
+         * @param kind Which class to test for.
+         * @return True if at least one is attached.
+         */
+        [[nodiscard]] bool HasDevice(InputDeviceKind kind) const override;
     };
 
 } // namespace CNA::Platform::Sdl3

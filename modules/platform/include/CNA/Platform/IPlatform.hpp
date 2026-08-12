@@ -8,6 +8,7 @@
 #include "CNA/Platform/IPlatformWindow.hpp"
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
 #include "CNA/Platform/Input/IPlatformHaptics.hpp"
+#include "CNA/Platform/Input/IPlatformInputDevices.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/Input/IPlatformSensors.hpp"
@@ -229,6 +230,14 @@ namespace CNA::Platform {
          * @return The service, or null when this platform reports no `Haptics` capability.
          */
         [[nodiscard]] virtual IPlatformHaptics* GetHaptics() = 0;
+
+        /**
+         * @brief Gets the input device enumeration service.
+         *
+         * @return The service, or null when this platform reports no `InputDeviceEnumeration`
+         * capability.
+         */
+        [[nodiscard]] virtual IPlatformInputDevices* GetInputDevices() = 0;
 
         /**
          * @brief Gets the clipboard service.

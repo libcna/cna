@@ -56,6 +56,22 @@ namespace CNA::Platform {
         RelativeMouse,
         /** @brief System and custom cursor shapes can be set. */
         CursorShapes,
+        /**
+         * @brief The pointer can be read and moved in desktop coordinates, across windows.
+         *
+         * Distinct from the window-scoped pointer calls, which every windowing platform has.
+         * This is what makes a drag survive the pointer leaving the window, and a platform with
+         * exactly one full-screen surface — a terminal, a console — genuinely does not have it.
+         */
+        GlobalPointer,
+        /**
+         * @brief The currently connected input devices can be enumerated.
+         *
+         * Distinct from receiving `DeviceEvent`s, which report *changes*. A platform may deliver
+         * hot-plug events perfectly and still be unable to answer "what is attached right now",
+         * which is the question a touch-capability probe asks at startup.
+         */
+        InputDeviceEnumeration,
         /** @brief Gamepads can be enumerated and read. */
         Gamepad,
         /** @brief Connected gamepads can rumble. */
