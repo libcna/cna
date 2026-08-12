@@ -12,10 +12,10 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 38,
+  "distinctAssetCount": 39,
   "owningGroupCounts": {
     "container": 1,
-    "accessors": 3,
+    "accessors": 4,
     "component-types": 2,
     "topology": 7,
     "transforms": 5,
@@ -319,6 +319,24 @@
         "UNSIGNED_SHORT indices"
       ],
       "auditFixture": "f3"
+    },
+    {
+      "id": "sparse-interleaved-base",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "accessor.sparse",
+        "bufferView.byteStride",
+        "interleaved base array",
+        "tightly packed sparse values"
+      ],
+      "auditFixture": null
     },
     {
       "id": "u8-idx",
@@ -1648,6 +1666,31 @@
       "path": "sparse-indices.vb.bin",
       "bytes": 192,
       "sha256": "5ccd0044c315c3e47e8436a68058677dd5c2775b0e6a5aaa43c66bbe779a43c6"
+    },
+    {
+      "path": "sparse-interleaved-base.expected.json",
+      "bytes": 7269,
+      "sha256": "7bfc13b3a6f6f508e6c5558bb8282a3fe5ce9f76a44919face42001f7f56581d"
+    },
+    {
+      "path": "sparse-interleaved-base.glb",
+      "bytes": 1076,
+      "sha256": "61686d8297592b9f31c5384671cb4ed6f28eadb399e585300f9a6e23fff0e3f7"
+    },
+    {
+      "path": "sparse-interleaved-base.gltf",
+      "bytes": 1915,
+      "sha256": "96330bdc4b65bba32c29178f713ff0029717d0af8e7cd649de17c9281b922bfb"
+    },
+    {
+      "path": "sparse-interleaved-base.ib.bin",
+      "bytes": 12,
+      "sha256": "4a16b824acb5d55f3f9fcaca42323d856db13089fdde0166ae1699c89a2710b0"
+    },
+    {
+      "path": "sparse-interleaved-base.vb.bin",
+      "bytes": 192,
+      "sha256": "65f5a250253c250d3769bd08db71c1510bbc2a594880e6ea39fbc77f2519d207"
     },
     {
       "path": "sparse-position.expected.json",

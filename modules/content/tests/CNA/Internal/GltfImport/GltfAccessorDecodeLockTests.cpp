@@ -196,6 +196,93 @@ TEST(GltfAccessorDecodeLock, NonNormalizedJointIndicesStayIntegral)
     }
 }
 
+// --- GLTF-062: sparse values are tightly packed even over an interleaved base ---------------------
+
+TEST(GltfAccessorDecodeLock, SparseValuesAreTightlyPackedEvenWhenTheBaseBufferViewIsInterleaved)
+{
+    // plan_gltf.md GLTF-062. §3.6.2.3 gives a sparse accessor two independent strides: the base
+    // array is addressed at the base bufferView's byteStride, while the `values` array is its own
+    // bufferView and is always tightly packed. They differ only when the base is interleaved, so
+    // this fixture is the only place in the corpus where confusing them is observable at all.
+    const LoadedFixture fixture("sparse-interleaved-base");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ExpectDecodedEquals(fixture, "POSITION");
+    ExpectDecodedEquals(fixture, "NORMAL");
+
+    const AccessorDump position = DumpByUsage(fixture, "POSITION");
+    EXPECT_TRUE(position.sparse);
+    EXPECT_EQ(24, position.bufferViewByteStride)
+        << "the base view has to stay interleaved or the fixture proves nothing";
+
+    // The production path is the point of the exercise: ExtractMesh reaches this accessor only
+    // through UnpackAccessor, so this is what a game would actually get.
+    const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
+    ASSERT_EQ(1u, extracted.size());
+    ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
+    const std::vector<std::array<float, 3>>& positions = extracted[0].dump.positions;
+    ASSERT_EQ(4u, positions.size());
+    for (std::size_t v = 0; v < positions.size(); ++v)
+    {
+        for (std::size_t c = 0; c < 3; ++c)
+        {
+            EXPECT_NEAR(static_cast<double>(position.values[v * 3 + c]),
+                        static_cast<double>(positions[v][c]), kTolerance)
+                << "vertex " << v << " component " << c;
+        }
+    }
+}
+
+TEST(GltfAccessorDecodeLock, VendoredParserStillMisreadsSparseValuesAtTheBaseStride)
+{
+    // The witness for why both GltfImportCore::UnpackAccessor and DumpAccessorEXT carry their own
+    // sparse re-read. cgltf's `cgltf_accessor_unpack_floats` walks the values array with
+    // `reader_head += accessor->stride` -- the BASE stride -- while its own validator sizes that
+    // same array as `element_size * count`, tightly. The two disagree, and this pins which one is
+    // wrong so a future cgltf upgrade that fixes the reader fails here and retires both copies of
+    // the workaround rather than leaving them to rot.
+    const LoadedFixture fixture("sparse-interleaved-base");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& record = AccessorRecord(fixture, "POSITION");
+    ASSERT_EQ(JsonType::Object, record.type);
+    const auto index = static_cast<std::size_t>(NumberOr(record, "index", -1));
+    ASSERT_LT(index, static_cast<std::size_t>(fixture.Data().accessors_count));
+
+    std::vector<float> raw(12, 0.0f);
+    const cgltf_accessor& accessor = fixture.Data().accessors[index];
+    ASSERT_EQ(raw.size(),
+              cgltf_accessor_unpack_floats(&accessor, raw.data(), raw.size()));
+
+    const std::vector<double> spec = Numbers(Member(record, "values"));
+    ASSERT_EQ(raw.size(), spec.size());
+
+    // Override 0 lands at offset 0 under either rule, so the bug leaves it alone -- which is
+    // exactly why a corpus of tightly-packed sparse fixtures never caught this.
+    for (std::size_t c = 0; c < 3; ++c)
+    {
+        EXPECT_NEAR(spec[3 + c], static_cast<double>(raw[3 + c]), kTolerance)
+            << "the first override is correct even under the defect";
+    }
+
+    // Override 1 should read the values array's element 1 (byte 12) and instead reads byte 24 --
+    // element 2. So the second overridden vertex gets the *third* override's value verbatim.
+    for (std::size_t c = 0; c < 3; ++c)
+    {
+        EXPECT_NEAR(spec[9 + c], static_cast<double>(raw[6 + c]), kTolerance)
+            << "expected the vendored reader to place override 2's value on vertex 2; if this "
+               "fails, check whether the vendored cgltf was upgraded -- see plan_gltf.md GLTF-062";
+    }
+
+    // Override 2 reads past the values bufferView entirely, into whatever follows it in the
+    // buffer. The exact bytes are not the point; that it is not the authored value is.
+    double worst = 0.0;
+    for (std::size_t c = 0; c < 3; ++c)
+    {
+        worst = std::max(worst, std::abs(spec[9 + c] - static_cast<double>(raw[9 + c])));
+    }
+    EXPECT_GT(worst, kTolerance)
+        << "the third override should have been read from outside its own bufferView";
+}
+
 // --- The lock proper: production output must agree with the L2 dump -------------------------------
 
 TEST(GltfAccessorDecodeLock, ProductionExtractMeshAgreesWithTheL2DumpForEveryVerifiedFixture)

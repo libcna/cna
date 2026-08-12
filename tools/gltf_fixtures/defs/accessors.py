@@ -26,6 +26,18 @@ _QUAD_POSITIONS = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0,
 _SPARSE_INDEX_BASE = [0, 1, 2, 0, 2, 0]
 _SPARSE_INDEX_EXPECTED = [0, 1, 2, 0, 2, 3]
 
+#: The base array of ``sparse-interleaved-base``, stored interleaved with NORMAL at byteStride 24.
+#: Everything except element 0 is a sentinel that the sparse block must displace; the sentinel is
+#: far outside the accessor's authored bounds so a reader that misses an override produces a
+#: visibly broken quad rather than a subtly wrong one.
+_SPARSE_INTERLEAVED_BASE = [(0.0, 0.0, 0.0), (-9.0, -9.0, -9.0), (-9.0, -9.0, -9.0),
+                            (-9.0, -9.0, -9.0)]
+#: What a conforming reader must decode. The three overridden elements are pairwise distinct on
+#: purpose: a reader that walks the values array at the wrong stride lands on a *different
+#: override*, and that has to be distinguishable from landing on the right one.
+_SPARSE_INTERLEAVED_POSITIONS = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 3.0, 0.0), (0.0, 4.0, 0.0)]
+_SPARSE_INTERLEAVED_NORMALS = [(0.0, 0.0, 1.0)] * 4
+
 
 def interleaved_position_normal() -> Fixture:
     """f5 -- POSITION and NORMAL interleaved in one strided bufferView. **Verified correct.**
@@ -203,4 +215,77 @@ def sparse_indices() -> Fixture:
     )
 
 
-FIXTURES = [interleaved_position_normal, sparse_position, sparse_indices]
+def sparse_interleaved_base() -> Fixture:
+    """`GLTF-062` -- a sparse accessor whose **base** bufferView is interleaved.
+
+    §3.6.2.3 defines two independent strides. The *base* array is addressed with the base
+    bufferView's ``byteStride``; the sparse ``values`` array is its own bufferView and is always
+    **tightly packed**, so its element `i` sits at `i * elementSize`. An accessor that is both
+    sparse *and* strided is the only place those two numbers differ, which is why nothing else in
+    the corpus can catch a reader that confuses them.
+
+    The fixture is built so the confusion is unmissable: three overrides, base stride 24, element
+    size 12. Element 0 lands correctly under either rule; elements 1 and 2 do not.
+    """
+    b = GltfBuilder("sparse-interleaved-base")
+    override_indices = [1, 2, 3]
+    override_values = [_SPARSE_INTERLEAVED_POSITIONS[i] for i in override_indices]
+    idx_offset = b.append_bytes(pack(override_indices, UNSIGNED_SHORT), alignment=4)
+    idx_view = b.add_buffer_view(idx_offset, len(override_indices) * 2)
+    # Tightly packed, exactly as the specification requires -- 3 x VEC3<float> = 36 bytes, with no
+    # byteStride on the view. The interleaved base data is appended *after* it on purpose: a reader
+    # that walked this array at the base accessor's stride instead would run off the end of a
+    # trailing view, and the corpus should exercise the defect, not an allocator.
+    val_offset = b.append_bytes(pack(flatten(override_values), FLOAT), alignment=4)
+    val_view = b.add_buffer_view(val_offset, len(flatten(override_values)) * 4)
+
+    interleaved = b"".join(
+        pack(list(p) + list(n), FLOAT)
+        for p, n in zip(_SPARSE_INTERLEAVED_BASE, _SPARSE_INTERLEAVED_NORMALS))
+    base_offset = b.append_bytes(interleaved, alignment=4)
+    base_view = b.add_buffer_view(base_offset, len(interleaved), byte_stride=24)
+
+    position = b.add_accessor(
+        usage="POSITION", component_type=FLOAT, accessor_type="VEC3", count=4,
+        expected=flatten(_SPARSE_INTERLEAVED_POSITIONS), buffer_view=base_view, byte_offset=0,
+        min_=[0.0, 0.0, 0.0], max_=[2.0, 4.0, 0.0],
+        sparse={
+            "count": len(override_indices),
+            "indices": {"bufferView": idx_view, "byteOffset": 0, "componentType": UNSIGNED_SHORT},
+            "values": {"bufferView": val_view, "byteOffset": 0},
+        })
+    normal = b.add_accessor(usage="NORMAL", component_type=FLOAT, accessor_type="VEC3", count=4,
+                            expected=flatten(_SPARSE_INTERLEAVED_NORMALS),
+                            buffer_view=base_view, byte_offset=12)
+    indices = b.add_packed_accessor(usage="indices", values=[0, 1, 2, 0, 2, 3],
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="SparseInterleavedQuad")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="sparse-interleaved-base", owning_group="accessors",
+        description="A sparse POSITION accessor over an interleaved base bufferView (byteStride "
+                    "24, element size 12), with three overrides. The sparse values array is "
+                    "tightly packed per the specification, so a reader that addresses it at the "
+                    "base accessor's stride misplaces every override after the first. This is the "
+                    "regression witness for the vendored cgltf sparse-values stride bug that "
+                    "GLTF-062 works around; the base positions are deliberately far out of the "
+                    "authored bounds so a missed override cannot look plausible.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["accessor.sparse", "bufferView.byteStride", "interleaved base array",
+                  "tightly packed sparse values"],
+        spec_anchors=["sparse-accessors", "accessors", "data-alignment"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SparseInterleavedQuad", primitive=0, mode=TRIANGLES,
+            positions=_SPARSE_INTERLEAVED_POSITIONS, normals=_SPARSE_INTERLEAVED_NORMALS,
+            indices=[0, 1, 2, 0, 2, 3])]},
+        l4=world_positions(b, {mesh: list(_SPARSE_INTERLEAVED_POSITIONS)}),
+    )
+
+
+FIXTURES = [interleaved_position_normal, sparse_position, sparse_indices, sparse_interleaved_base]

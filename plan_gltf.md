@@ -628,7 +628,7 @@ check either condition. Result: `f3` decoded `[0,0,0,0,0,0]` for an expected `[0
 The fix is a CNA-side index reader that mirrors `UnpackAccessor`'s structure (`GLTF-063`): unpack the
 index accessor to `uint32` through a sparse-aware path, validating that every value is `< vertexCount`.
 
-### 9.3 Known sparse hazard in the vendored cgltf — INVESTIGATE
+### 9.3 Known sparse hazard in the vendored cgltf — CONFIRMED, worked around (`GLTF-062`)
 
 In `cgltf_accessor_unpack_floats`' second (sparse) pass:
 
@@ -640,9 +640,34 @@ for (...; reader_index < sparse->count; reader_index++, index_data += index_stri
 `accessor->stride` is the **base** accessor's stride, which equals `bufferView.byteStride` when the
 base data is interleaved. glTF §3.6.2.3 requires the sparse **values** array to be tightly packed
 (element size), independent of the base stride. For an accessor that is *both* interleaved *and*
-sparse, this reads the override values at the wrong offsets. `GLTF-062` builds exactly that fixture
-and decides between an upstream report, a documented CNA-side pre-check that rejects the combination,
-or a CNA-side sparse resolver.
+sparse, this reads the override values at the wrong offsets.
+
+`GLTF-062` built that fixture (`sparse-interleaved-base`) and **confirmed the bug**. The decisive
+evidence is that cgltf contradicts *itself*: its validator sizes the values bufferView as
+`element_size * sparse->count` — tightly — and then its reader walks the same array at
+`accessor->stride`. Both cannot be right, and the specification says the validator is.
+
+The resolution is a CNA-side sparse resolver, not a refusal: the file is perfectly legal glTF and
+rejecting it would be CNA punishing the asset for its parser's mistake. `ApplySparseOverridesTightly`
+re-applies the overrides at `i * elementSize` on top of whatever cgltf wrote, and runs after **every**
+`cgltf_accessor_unpack_floats` call in the importer — the attribute path via `UnpackAccessor` and the
+flat morph-weight animation output, which reads its accessor outside `UnpackAccessor`. It is a no-op
+unless `accessor->stride != elementSize`, so no ordinary asset takes a different path than before.
+
+Two consequences worth stating:
+
+* **The L2 oracle carried the bug too.** `DumpAccessorEXT` delegates decoding to cgltf precisely so
+  the oracle is not CNA judging itself — which means that for this one combination the oracle *was*
+  the defective component, and would have certified the wrong answer as "expected". The oracle now
+  restates §3.6.2.3's addressing independently (its own component reader, including §3.6.2.4's
+  `MAT2`/`MAT3` column padding). Both implementations are checked against the Python-generated
+  manifest, which is where the truth actually lives.
+* **The bug itself is pinned, not just fixed.**
+  `GltfAccessorDecodeLock.VendoredParserStillMisreadsSparseValuesAtTheBaseStride` asserts that raw
+  `cgltf_accessor_unpack_floats` still misplaces override 1 onto override 2's bytes. A cgltf upgrade
+  that fixes the reader fails that test, which is the signal to retire both copies of the workaround
+  rather than leave them to rot. Filing upstream is still worth doing and is not blocked by anything
+  here.
 
 ### 9.4 Cross-accessor consistency — UNCHECKED
 
@@ -1535,10 +1560,12 @@ same asset in another container, not another asset.
 > cross-referenced ladders were re-counted and the counts here now match them exactly: transforms
 > 17 (§11.4), skinning 13 (§15.4), morph 13 (§16.3), animation 10 (§17.2, excluding the
 > morph-owned `anim-weights-*`), and the remaining groups enumerated in full below. The generated
-> corpus stands at **38** assets today (`GLTF-072` completed the topology group's seven;
+> corpus stands at **39** assets today (`GLTF-072` completed the topology group's seven;
 > `GLTF-021`/`GLTF-023` added the first container and robustness fixtures; `GLTF-267` generated
-> §11.4's `xf-scale-nonuniform`, the corpus's first non-uniform node scale); `GLTF-399` completes
-> the rest.
+> §11.4's `xf-scale-nonuniform`, the corpus's first non-uniform node scale; `GLTF-062` generated
+> `sparse-interleaved-base`, which was planned in the accessor group's 13 all along and turned out
+> to be the only asset in the corpus that can observe §9.3's vendored-parser bug at all);
+> `GLTF-399` completes the rest.
 >
 > **A later, deliberate count change (`GLTF-137`).** The skinning group is **14** and the total
 > **136** — and that is not the correction above being undone. The correction removed a bump made
@@ -2031,7 +2058,7 @@ fixture; every address computation is bounds-checked.*
 | GLTF-059 | `MAT4` inverse-bind-matrix accessor fixture | ✅ | GLTF-041 | `f9` proved read correctness. **Accept:** locked at L2. |
 | GLTF-060 | Cross-attribute `count` consistency check | ✔ | GLTF-042 | `posAcc->count` drives indexing of every other stream; a shorter `NORMAL` accessor reads out of range. **Accept:** `accessor-count-mismatch` errors with a clear message; ASan clean. **Landed, and the fixture corrected the premise.** `cgltf_validate` *does* catch the disagreement (code 4), so both loaders already rejected such a file before extraction was reached — the task's assumption that it slipped through was wrong. The check is still not redundant: `ExtractMesh` is called **directly, without validation**, by the L3 oracle itself, and had no check of its own, so `POSITION`'s count drove the loop that indexes every other decoded stream and a short `NORMAL` was read past the end of its vector. The check turns that undefined behaviour into a named error for any caller. It runs over **every** attribute the primitive declares, not only the ones the chosen stride uses: an attribute CNA ignores today is still evidence the file is malformed. `accessor-count-mismatch` therefore records **two** refusals, and the rejection test now asserts both — a defence-in-depth check that quietly stopped working would otherwise be invisible behind the layer in front of it. |
 | GLTF-061 | Cross-check decoded bounds against `accessor.min`/`max` | ⬜ | GLTF-041 | Never read today. Would have caught D4 instantly. **Accept:** `accessor-minmax` warns on divergence via the import report. |
-| GLTF-062 | Sparse + interleaved base accessor | 🔬 | GLTF-047 | cgltf advances the sparse **values** pointer by `accessor->stride`; the spec says the values array is tightly packed. **Accept:** `sparse-interleaved-base` either decodes correctly or is rejected with a documented reason; upstream report filed if it is a cgltf bug. |
+| GLTF-062 | Sparse + interleaved base accessor | ✔ | GLTF-047 | **CONFIRMED cgltf bug** (§9.3): the reader walks the sparse **values** array at `accessor->stride` while cgltf's own validator sizes it tightly, so every override after the first is misplaced when the base view is interleaved. `sparse-interleaved-base` decodes correctly through `ApplySparseOverridesTightly`, applied after every unpack site in the importer; the oracle restates the same rule independently; `VendoredParserStillMisreadsSparseValuesAtTheBaseStride` pins the underlying defect so a cgltf upgrade retires the workaround. |
 
 ---
 

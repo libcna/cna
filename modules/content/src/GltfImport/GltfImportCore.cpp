@@ -103,6 +103,75 @@ namespace CNA::Internal::GltfImport
                 g[12], g[13], g[14], 1.0f);
         }
 
+        // plan_gltf.md GLTF-062: a CONFIRMED bug in the vendored parser, worked around here.
+        //
+        // §3.6.2.3 makes a sparse accessor's `values` array TIGHTLY PACKED -- its bufferView must
+        // not declare a byteStride at all. cgltf's reader walks it with
+        // `reader_head += accessor->stride` instead, which is the BASE bufferView's stride. For a
+        // tightly-packed base the two coincide and nothing is wrong, which is why this has never
+        // been noticed; but when the base view is INTERLEAVED, the stride is larger than one
+        // element and every sparse override after the first is read from the wrong offset. cgltf's
+        // own validator disagrees with its own reader here -- it sizes the values view as
+        // `element_size * count`, tightly.
+        //
+        // The result is silently wrong vertex data, so the overrides are re-read here with the
+        // packing the specification actually requires, on top of whatever cgltf already wrote.
+        // Only for the combination that is affected: a tightly-packed base is left alone entirely,
+        // which is every accessor in every asset that does not interleave a sparse attribute.
+        //
+        // This must run after EVERY cgltf_accessor_unpack_floats call in the importer, not just
+        // UnpackAccessor's -- hence a free function rather than a block inside one caller.
+        void ApplySparseOverridesTightly(const cgltf_accessor* accessor, float* out,
+                                         cgltf_size componentsPerElement, const char* context)
+        {
+            if (!accessor->is_sparse) { return; }
+            const cgltf_accessor_sparse& sparse = accessor->sparse;
+            const cgltf_size elementSize = cgltf_calc_size(accessor->type, accessor->component_type);
+            if (accessor->stride == elementSize || sparse.count == 0 ||
+                sparse.values_buffer_view == nullptr || sparse.indices_buffer_view == nullptr)
+            {
+                return;
+            }
+
+            const auto* values = static_cast<const std::uint8_t*>(
+                cgltf_buffer_view_data(sparse.values_buffer_view));
+            const auto* indices = static_cast<const std::uint8_t*>(
+                cgltf_buffer_view_data(sparse.indices_buffer_view));
+            if (values == nullptr || indices == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string("Sparse accessor '") + context +
+                    "' has an unreadable indices or values bufferView.");
+            }
+            values += sparse.values_byte_offset;
+            indices += sparse.indices_byte_offset;
+            const cgltf_size indexStride = cgltf_component_size(sparse.indices_component_type);
+
+            for (cgltf_size i = 0; i < sparse.count; ++i)
+            {
+                const cgltf_size writer = cgltf_component_read_index(
+                    indices + i * indexStride, sparse.indices_component_type);
+                if (writer >= accessor->count)
+                {
+                    throw std::runtime_error(
+                        std::string("Sparse accessor '") + context + "' override " +
+                        std::to_string(i) + " targets element " + std::to_string(writer) +
+                        ", past the accessor's own " + std::to_string(accessor->count) + ".");
+                }
+                // The one difference from cgltf: `i * elementSize`, tightly packed, rather than
+                // `i * accessor->stride`.
+                if (!cgltf_element_read_float(
+                        values + i * elementSize, accessor->type, accessor->component_type,
+                        accessor->normalized, out + writer * componentsPerElement,
+                        componentsPerElement))
+                {
+                    throw std::runtime_error(
+                        std::string("Failed to read sparse override ") + std::to_string(i) +
+                        " of accessor '" + context + "'.");
+                }
+            }
+        }
+
         // Unpacks an entire accessor to floats in one call. Unlike per-element
         // cgltf_accessor_read_float, cgltf_accessor_unpack_floats correctly resolves sparse
         // accessors (base values overlaid with sparse overrides) -- read_float rejects sparse
@@ -126,6 +195,7 @@ namespace CNA::Internal::GltfImport
                     std::string("Failed to unpack accessor '") + context +
                     "' (malformed data or an unsupported layout).");
             }
+            ApplySparseOverridesTightly(accessor, out.data(), expectedComponents, context);
             return out;
         }
 
@@ -2607,6 +2677,11 @@ namespace CNA::Internal::GltfImport
                 std::vector<float> flat(static_cast<std::size_t>(ch.sampler->output->count));
                 const cgltf_size unpacked =
                     cgltf_accessor_unpack_floats(ch.sampler->output, flat.data(), flat.size());
+                // Reading the accessor flat does not exempt it from GLTF-062: the sparse override
+                // rule is a property of the accessor's storage, not of how the caller groups the
+                // components afterwards. One SCALAR component per element here, by construction.
+                ApplySparseOverridesTightly(ch.sampler->output, flat.data(), 1,
+                                            "morph weight animation output");
                 if (unpacked != flat.size() ||
                     flat.size() != times.size() * targetCount * tripletStride)
                 {

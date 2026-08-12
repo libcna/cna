@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <limits>
@@ -50,6 +51,170 @@ namespace CnaTest::GltfOracle
                 }
             }
             return out + "\"";
+        }
+
+        /// glTF §3.6.2.2's component reader, restated on the oracle side (plan_gltf.md GLTF-062).
+        /// A normalized integer maps onto its unit range with the divisors the specification names
+        /// -- 255/127/65535/32767 -- and a signed value clamps at -1 rather than reaching -1.008.
+        float ReadFloatComponent(const std::uint8_t* p, cgltf_component_type type, bool normalized)
+        {
+            switch (type)
+            {
+                case cgltf_component_type_r_8:
+                {
+                    std::int8_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? std::max(static_cast<float>(v) / 127.0f, -1.0f)
+                                      : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_8u:
+                {
+                    std::uint8_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? static_cast<float>(v) / 255.0f : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_16:
+                {
+                    std::int16_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? std::max(static_cast<float>(v) / 32767.0f, -1.0f)
+                                      : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_16u:
+                {
+                    std::uint16_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? static_cast<float>(v) / 65535.0f : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_32u:
+                {
+                    std::uint32_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return normalized ? static_cast<float>(v) / 4294967295.0f
+                                      : static_cast<float>(v);
+                }
+                case cgltf_component_type_r_32f:
+                {
+                    float v = 0.0f;
+                    std::memcpy(&v, p, sizeof(v));
+                    return v;
+                }
+                default: return 0.0f;
+            }
+        }
+
+        /// The unsigned integer at `p`, for a sparse block's own index array (§3.6.2.3).
+        std::size_t ReadIndexComponent(const std::uint8_t* p, cgltf_component_type type)
+        {
+            switch (type)
+            {
+                case cgltf_component_type_r_8u:
+                {
+                    std::uint8_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return v;
+                }
+                case cgltf_component_type_r_16u:
+                {
+                    std::uint16_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return v;
+                }
+                case cgltf_component_type_r_32u:
+                {
+                    std::uint32_t v = 0;
+                    std::memcpy(&v, p, sizeof(v));
+                    return v;
+                }
+                default: return 0;
+            }
+        }
+
+        /// Byte offset of component `c` inside one element, per §3.6.2.4. Only ``MAT2``/``MAT3``
+        /// differ from plain `c * componentSize`: their columns are padded up to a 4-byte boundary.
+        std::size_t ComponentByteOffset(cgltf_type type, std::size_t componentSize, std::size_t c)
+        {
+            std::size_t rows = 0;
+            if (type == cgltf_type_mat2) { rows = 2; }
+            else if (type == cgltf_type_mat3) { rows = 3; }
+            else if (type == cgltf_type_mat4) { rows = 4; }
+            if (rows == 0) { return c * componentSize; }
+            const std::size_t columnBytes = ((rows * componentSize + 3) / 4) * 4;
+            return (c / rows) * columnBytes + (c % rows) * componentSize;
+        }
+
+        /// Decodes a whole accessor to floats, as `cgltf_accessor_unpack_floats` does but with
+        /// §3.6.2.3's sparse addressing rather than cgltf's (plan_gltf.md GLTF-062).
+        ///
+        /// The oracle normally delegates the decode to cgltf precisely so it is not CNA's importer
+        /// judging itself -- but for one combination cgltf is the component under test. A sparse
+        /// accessor's `values` array is tightly packed, while cgltf's reader walks it at the BASE
+        /// accessor's stride; the two coincide unless the base bufferView is interleaved. So the
+        /// specification's own addressing is restated here rather than inheriting the bug and
+        /// calling the result "expected". This is an independent restatement, not a call into CNA:
+        /// both this and `GltfImportCore::UnpackAccessor` are checked against the Python-generated
+        /// manifest, which is where the truth actually lives.
+        /// `GltfAccessorDecodeLock.VendoredParserStillMisreadsSparseValuesAtTheBaseStride` pins the
+        /// underlying bug, so a cgltf upgrade that fixes it retires both copies at once.
+        ///
+        /// :return: an empty string on success, or a description of what could not be decoded.
+        std::string UnpackAccessorFloats(const cgltf_accessor& accessor, std::vector<float>& values)
+        {
+            const std::size_t components = static_cast<std::size_t>(cgltf_num_components(accessor.type));
+            if (components == 0) { return "accessor has an invalid type"; }
+            values.assign(static_cast<std::size_t>(accessor.count) * components, 0.0f);
+            if (values.empty()) { return ""; }
+
+            const cgltf_size unpacked =
+                cgltf_accessor_unpack_floats(&accessor, values.data(), values.size());
+            if (unpacked != values.size())
+            {
+                return "cgltf_accessor_unpack_floats decoded " + std::to_string(unpacked) + " of " +
+                       std::to_string(values.size()) + " components";
+            }
+
+            if (accessor.is_sparse == 0) { return ""; }
+            const cgltf_accessor_sparse& sparse = accessor.sparse;
+            const cgltf_size elementSize = cgltf_calc_size(accessor.type, accessor.component_type);
+            if (accessor.stride == elementSize || sparse.count == 0 ||
+                sparse.values_buffer_view == nullptr || sparse.indices_buffer_view == nullptr)
+            {
+                return "";
+            }
+
+            const auto* valueBytes =
+                static_cast<const std::uint8_t*>(cgltf_buffer_view_data(sparse.values_buffer_view));
+            const auto* indexBytes =
+                static_cast<const std::uint8_t*>(cgltf_buffer_view_data(sparse.indices_buffer_view));
+            if (valueBytes == nullptr || indexBytes == nullptr)
+            {
+                return "sparse accessor has an unreadable indices or values bufferView";
+            }
+            valueBytes += sparse.values_byte_offset;
+            indexBytes += sparse.indices_byte_offset;
+
+            const cgltf_size indexStride = cgltf_component_size(sparse.indices_component_type);
+            const std::size_t componentSize =
+                static_cast<std::size_t>(cgltf_component_size(accessor.component_type));
+            for (cgltf_size i = 0; i < sparse.count; ++i)
+            {
+                const std::size_t writer =
+                    ReadIndexComponent(indexBytes + i * indexStride, sparse.indices_component_type);
+                if (writer >= static_cast<std::size_t>(accessor.count))
+                {
+                    return "sparse override " + std::to_string(i) + " targets element " +
+                           std::to_string(writer) + ", past the accessor's own " +
+                           std::to_string(accessor.count);
+                }
+                for (std::size_t c = 0; c < components; ++c)
+                {
+                    values[writer * components + c] = ReadFloatComponent(
+                        valueBytes + i * elementSize +
+                            ComponentByteOffset(accessor.type, componentSize, c),
+                        accessor.component_type, accessor.normalized != 0);
+                }
+            }
+            return "";
         }
 
         template <std::size_t N>
@@ -170,11 +335,8 @@ namespace CnaTest::GltfOracle
             const cgltf_accessor* accessor =
                 cgltf_find_accessor(&prim, cgltf_attribute_type_position, 0);
             if (accessor == nullptr || cgltf_num_components(accessor->type) != 3) { return out; }
-            std::vector<float> raw(static_cast<std::size_t>(accessor->count) * 3);
-            if (cgltf_accessor_unpack_floats(accessor, raw.data(), raw.size()) != raw.size())
-            {
-                return out;
-            }
+            std::vector<float> raw;
+            if (!UnpackAccessorFloats(*accessor, raw).empty()) { return out; }
             out.reserve(static_cast<std::size_t>(accessor->count));
             for (cgltf_size v = 0; v < accessor->count; ++v)
             {
@@ -318,15 +480,14 @@ namespace CnaTest::GltfOracle
             return dump;
         }
 
-        std::vector<float> values(dump.count * dump.componentsPerElement);
-        const cgltf_size unpacked = values.empty()
-            ? 0 : cgltf_accessor_unpack_floats(&accessor, values.data(), values.size());
-        if (unpacked != values.size())
+        std::vector<float> values;
+        const std::string unpackError = UnpackAccessorFloats(accessor, values);
+        if (!unpackError.empty())
         {
-            dump.error = "cgltf_accessor_unpack_floats decoded " + std::to_string(unpacked) +
-                         " of " + std::to_string(values.size()) + " components";
+            dump.error = unpackError;
             return dump;
         }
+
         dump.values = std::move(values);
         dump.decoded = true;
         return dump;
