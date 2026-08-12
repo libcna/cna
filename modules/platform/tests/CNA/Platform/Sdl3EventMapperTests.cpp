@@ -158,6 +158,43 @@ TEST(Sdl3EventMapperTests, TextEditingCarriesCompositionCursorAndSelection)
     EXPECT_EQ(editing.selectionLength, 3);
 }
 
+TEST(Sdl3EventMapperTests, TextEditingCandidatesCarryOwnedUtf8ListAndDisplayState)
+{
+    char first[] = "候補";
+    const char* candidates[] = {first, nullptr, "選択"};
+    SDL_Event source = MakeEvent(SDL_EVENT_TEXT_EDITING_CANDIDATES);
+    source.edit_candidates.windowID = 11;
+    source.edit_candidates.candidates = candidates;
+    source.edit_candidates.num_candidates = 3;
+    source.edit_candidates.selected_candidate = 2;
+    source.edit_candidates.horizontal = true;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    first[0] = '\0'; // the mapped payload must not retain SDL-owned string storage
+
+    const auto& editing = std::get<TextEditingCandidatesEvent>(mapped);
+    EXPECT_EQ(editing.window, 11u);
+    EXPECT_EQ(editing.candidates, (std::vector<std::string>{"候補", "", "選択"}));
+    EXPECT_EQ(editing.selectedCandidate, 2);
+    EXPECT_TRUE(editing.horizontal);
+}
+
+TEST(Sdl3EventMapperTests, TextEditingCandidatesAcceptAnEmptySdlList)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_TEXT_EDITING_CANDIDATES);
+    source.edit_candidates.candidates = nullptr;
+    source.edit_candidates.num_candidates = 5; // ignored when SDL supplies no array
+    source.edit_candidates.selected_candidate = -1;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    const auto& editing = std::get<TextEditingCandidatesEvent>(mapped);
+    EXPECT_TRUE(editing.candidates.empty());
+    EXPECT_EQ(editing.selectedCandidate, -1);
+    EXPECT_FALSE(editing.horizontal);
+}
+
 // --- mouse and touch (PLAT-35) ------------------------------------------------------------------------
 
 TEST(Sdl3EventMapperTests, MouseMotionCarriesPositionAndDelta)

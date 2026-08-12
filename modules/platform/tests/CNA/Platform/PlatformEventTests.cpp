@@ -29,6 +29,9 @@ std::vector<PlatformEvent> OneOfEach()
     TextEditingEvent textEditing;
     textEditing.window = 7;
 
+    TextEditingCandidatesEvent candidates;
+    candidates.window = 7;
+
     MouseMotionEvent motion;
     motion.window = 7;
 
@@ -43,7 +46,8 @@ std::vector<PlatformEvent> OneOfEach()
 
     return {QuitEvent{},        window,
             key,                textInput,
-            textEditing,        motion,
+            textEditing,        candidates,
+            motion,
             button,             wheel,
             touch,              DeviceEvent{},
             ControllerAxisEvent{}, ControllerButtonEvent{},
@@ -52,7 +56,7 @@ std::vector<PlatformEvent> OneOfEach()
 
 TEST(PlatformEventTests, VariantCoversEveryDocumentedAlternative)
 {
-    EXPECT_EQ(std::variant_size_v<PlatformEvent>, 13u);
+    EXPECT_EQ(std::variant_size_v<PlatformEvent>, 14u);
     EXPECT_EQ(OneOfEach().size(), std::variant_size_v<PlatformEvent>);
 }
 
@@ -85,6 +89,7 @@ TEST(PlatformEventTests, WindowScopedEventsReportTheirWindow)
         const std::string& name = GetEventTypeName(event);
         const bool windowScoped = name == "WindowEvent" || name == "KeyEvent" ||
                                   name == "TextInputEvent" || name == "TextEditingEvent" ||
+                                  name == "TextEditingCandidatesEvent" ||
                                   name == "MouseMotionEvent" || name == "MouseButtonEvent" ||
                                   name == "MouseWheelEvent" || name == "TouchEvent";
         if (windowScoped)

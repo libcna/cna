@@ -101,7 +101,7 @@ tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbo
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
 Ratchet: **200 files / 3260 references** of direct SDL coupling outside the PLAT-3 allowlist, down
-from the 253 / 3641 baseline. Contract: 24 headers, 383 documented declarations, all SDL-free.
+from the 253 / 3641 baseline. Contract: 24 headers, 388 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
 `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` failure was fixed —
@@ -125,7 +125,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**88 ✅ · 12 🟨 · 49 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **59 %** of the 149
+**89 ✅ · 12 🟨 · 48 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **60 %** of the 149
 actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -137,7 +137,7 @@ actionable rows done, counting partials.
   are complete; implementation continues at PLAT-58/62. 46 identities remain in scope.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — four backends deleted, the scancode and keycode vocabularies defined.
-  PLAT-78 blocked on four contract gaps, see §5.
+  PLAT-78c now carries owned IME candidate lists; PLAT-78 remains blocked on 78d–f, see §5.
 - **Phase 6** (audio) — not started.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
@@ -227,21 +227,17 @@ each, zero difference). The round trip is now checked before it is trusted.
 | PLAT-50, PLAT-51 | PLAT-62 | `GameWindow` still wraps the `SDL_Window*` owned by `GraphicsDevice`. Until `GraphicsDevice` owns an `IPlatformWindow` there is no platform window for `GameWindow` to retain. |
 | PLAT-77f | PLAT-78 | `GetModStateEXT` is a live query while `KeyboardSnapshot` is per-frame; re-pointing only it would put keyboard state on two clocks. |
 | PLAT-102 | PLAT-50 | `DisplayInfo` takes a `GameWindow&` and calls `GetNativeSdlWindowEXT()`. Also needs a safe-area concept the contract lacks. |
-| PLAT-78 | PLAT-78c–f | Four gaps between what the bridge consumes and what `PlatformEvent` carries. |
+| PLAT-78 | PLAT-78d–f | Three remaining gaps between what the bridge consumes and what `PlatformEvent` carries. |
 
-**PLAT-78c–f, in order of severity:**
+**PLAT-78d–f, in order of severity:**
 
-1. **PLAT-78c — total loss.** `SDL_EVENT_TEXT_EDITING_CANDIDATES` has no `PlatformEvent`
-   alternative *and* no case in `MapSdlEvent`.
-   `TextInputEXT::INTERNAL_OnTextEditingCandidates` would become unreachable and IME candidate UI
-   would stop appearing for CJK input.
-2. **PLAT-78d — field gap.** `TouchEvent` has no `dx`/`dy`; the bridge reads `tfinger.dx/dy` on
+1. **PLAT-78d — field gap.** `TouchEvent` has no `dx`/`dy`; the bridge reads `tfinger.dx/dy` on
    motion and feeds `TouchPanel`. Every motion would report a zero delta.
-3. **PLAT-78e — four silent numeric divergences.** Negative-axis divisor (the bridge uses 32767
+2. **PLAT-78e — four silent numeric divergences.** Negative-axis divisor (the bridge uses 32767
    and carries a comment that 32768 "diverged from FNA at every non-endpoint negative sample"; the
    mapper does exactly the rejected thing), thumbstick Y inversion, trigger clamping range, and
    raw-vs-translated axis/button indices.
-4. **PLAT-78f — behaviour change, not a gap.** The bridge never reads `wheel.direction`; the
+3. **PLAT-78f — behaviour change, not a gap.** The bridge never reads `wheel.direction`; the
    mapper negates on `SDL_MOUSEWHEEL_FLIPPED`. Migrating would reverse scrolling on flipped-wheel
    systems.
 
@@ -309,7 +305,7 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **PLAT-78c–f** where in-repo evidence decides the answer.
+2. **PLAT-78d–f** where in-repo evidence decides the answer.
 
 ---
 

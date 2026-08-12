@@ -23,6 +23,7 @@ namespace CNA::Platform {
         static const std::string key = "KeyEvent";
         static const std::string textInput = "TextInputEvent";
         static const std::string textEditing = "TextEditingEvent";
+        static const std::string textEditingCandidates = "TextEditingCandidatesEvent";
         static const std::string mouseMotion = "MouseMotionEvent";
         static const std::string mouseButton = "MouseButtonEvent";
         static const std::string mouseWheel = "MouseWheelEvent";
@@ -40,6 +41,7 @@ namespace CNA::Platform {
             [&](const KeyEvent&) -> const std::string& { return key; },
             [&](const TextInputEvent&) -> const std::string& { return textInput; },
             [&](const TextEditingEvent&) -> const std::string& { return textEditing; },
+            [&](const TextEditingCandidatesEvent&) -> const std::string& { return textEditingCandidates; },
             [&](const MouseMotionEvent&) -> const std::string& { return mouseMotion; },
             [&](const MouseButtonEvent&) -> const std::string& { return mouseButton; },
             [&](const MouseWheelEvent&) -> const std::string& { return mouseWheel; },
@@ -58,6 +60,7 @@ namespace CNA::Platform {
             [](const KeyEvent& e) { return e.window; },
             [](const TextInputEvent& e) { return e.window; },
             [](const TextEditingEvent& e) { return e.window; },
+            [](const TextEditingCandidatesEvent& e) { return e.window; },
             [](const MouseMotionEvent& e) { return e.window; },
             [](const MouseButtonEvent& e) { return e.window; },
             [](const MouseWheelEvent& e) { return e.window; },

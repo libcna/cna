@@ -8,6 +8,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <utility>
+
 namespace CNA::Platform::Sdl3 {
 
     namespace {
@@ -101,6 +103,29 @@ namespace CNA::Platform::Sdl3 {
                 editing.cursor = source.edit.start;
                 editing.selectionLength = source.edit.length;
                 destination = editing;
+                return true;
+            }
+
+            case SDL_EVENT_TEXT_EDITING_CANDIDATES:
+            {
+                TextEditingCandidatesEvent editing;
+                editing.window = static_cast<WindowId>(source.edit_candidates.windowID);
+                editing.selectedCandidate = source.edit_candidates.selected_candidate;
+                editing.horizontal = source.edit_candidates.horizontal;
+
+                // SDL owns both the array and its strings only for the lifetime of this event.
+                // Copy them into the value event before PollEvents recycles the SDL_Event.
+                const int count = source.edit_candidates.candidates != nullptr
+                                      ? source.edit_candidates.num_candidates
+                                      : 0;
+                editing.candidates.reserve(static_cast<std::size_t>(count > 0 ? count : 0));
+                for (int index = 0; index < count; ++index)
+                {
+                    const char* candidate = source.edit_candidates.candidates[index];
+                    editing.candidates.emplace_back(candidate != nullptr ? candidate : "");
+                }
+
+                destination = std::move(editing);
                 return true;
             }
 

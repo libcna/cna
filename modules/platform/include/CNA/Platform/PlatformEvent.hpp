@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace CNA::Platform {
 
@@ -126,6 +127,19 @@ namespace CNA::Platform {
         int cursor = 0;
         /** @brief Length of the selected range within the composition, in characters. */
         int selectionLength = 0;
+    };
+
+    /** @brief The input method's candidate list changed. */
+    struct TextEditingCandidatesEvent
+    {
+        /** @brief The window with keyboard focus, or zero. */
+        WindowId window = 0;
+        /** @brief Candidate strings, UTF-8 encoded and ordered as displayed by the input method. */
+        std::vector<std::string> candidates;
+        /** @brief Index of the selected candidate, or -1 when none is selected. */
+        int selectedCandidate = -1;
+        /** @brief True when the input method displays the candidates horizontally. */
+        bool horizontal = false;
     };
 
     /** @brief The mouse moved. */
@@ -291,6 +305,7 @@ namespace CNA::Platform {
         KeyEvent,
         TextInputEvent,
         TextEditingEvent,
+        TextEditingCandidatesEvent,
         MouseMotionEvent,
         MouseButtonEvent,
         MouseWheelEvent,
