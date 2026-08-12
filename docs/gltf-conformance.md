@@ -355,8 +355,12 @@ replacement decoder. The index path was a different, genuinely broken path; `GLT
 ### 3.6 Running the harness
 
 ```bash
-./cmake-build-tests/CnaTests --gtest_filter='Gltf*'
+./cmake-build-tests/CnaTests --gtest_filter='*Gltf*'
 ```
+
+Note the **leading** star. `RuntimeGltfModelTest` is a glTF suite whose name does not begin with
+`Gltf`, and a prefix filter left it outside this command, outside the ladder and outside the
+sanitizer CI job — with four failing cases nobody saw (`known_bugs.md`, 2026-08-12).
 
 Run from the repository root — the fixtures are opened at `tests/assets/gltf/` relative to the
 working directory, which is what CTest is configured to use. The suites are:
@@ -377,7 +381,10 @@ working directory, which is what CTest is configured to use. The suites are:
 | `GltfDrawTopology` | each primitive mode reaching its `ModelMeshPart` as a real `PrimitiveType` with a §12.3 count (`GLTF-073`/`GLTF-078`) |
 | `GltfLightingPolicy` | the default-lighting fallback for a file that declares no light (`GLTF-215`) |
 | `GltfConformanceL6` / `GltfDrawParamsOracleL6` | the parameter block a draw binds: world/view/projection, the normal matrix, the material factors, the bone palette and influence count, and the alpha state's carried-vs-applied boundary (`GLTF-008`) |
-| `GltfConformanceLadder` | that every `Gltf*` suite belongs to exactly one rung of the `gltf-conformance` label (`GLTF-010`) |
+| `GltfLimitationsDoc` | `docs/gltf-limitations.md` against the code: the extension table against the registry, every report field it names against the header, and `CNAEXT.md` §3.2 against the registry's classifications (`GLTF-447`/`GLTF-448`) |
+| `GltfVendoredCgltf` | that `third_party/cgltf/cgltf.h` carries no CNA edit, and that each known cgltf fault still has its CNA-side answer (`GLTF-038`) |
+| `RuntimeGltfModelTest` | the runtime `.gltf` path end to end through `ContentManager::Load<Model>` — the loader a game actually calls |
+| `GltfConformanceLadder` | that every suite whose name contains `Gltf` belongs to exactly one rung of the `gltf-conformance` label (`GLTF-010`), and that §27.1's milestone checklist cites fixtures and suites that exist (`GLTF-403`/`GLTF-413`) |
 
 #### The `gltf-conformance` CTest label (`GLTF-010`)
 
@@ -406,6 +413,86 @@ tests.
 
 There is no `L7` entry. It appears when a renderer with a real 3D pipeline is configured; see
 §5.3.
+
+#### Reading a failure: the layer, the fixture, the field, the delta (`GLTF-402`)
+
+Every rung is a numerical comparison against a stated expectation, and every failure carries four
+things in that order. CTest's result line gives the **layer**, the `SCOPED_TRACE` gives the
+**fixture**, the assertion gives the **field**, and the values give the **delta**:
+
+```text
+CnaGltfConformanceL5 .......... Failed
+  [ RUN ] GltfConformanceL5.GeneratedBuffersMatchTheGoldenBytesExactly
+  u8-idx VB differs at byte 45 (vertex 1, Normal +1): expected 0x00, actual 0xFF
+```
+
+```text
+CnaGltfConformanceL6 .......... Failed
+  mat-alpha-mask-cutoff: alphaTest, element 0
+    Expected: 0.75   Actual: 0.5
+```
+
+The layer comes first because it is the cheapest thing to act on: an L2 failure makes every value
+above it meaningless, and fixing the L5 golden of a fixture whose accessor decode is wrong wastes
+the afternoon. A byte in inter-field padding says so rather than naming a field it does not belong
+to, and an unknown stride says `<unknown stride layout>` rather than guessing (§4.2).
+
+#### Why the gate has no screenshot step (`GLTF-412`)
+
+The `gltf-conformance` label contains **no L7 rung**, and that is a decision rather than a
+limitation of the current environment. A gate whose first failing check is an image diff tells you
+that something is wrong and nothing about what: the same screenshot changes for a wrong world
+matrix, a wrong stride, a wrong colour space and a driver upgrade. Every one of those has a
+numerical layer that names it exactly, and each of those layers runs first.
+
+So the ordering is the contract: **the earliest divergent layer is the one that fails.** When an
+L7 rung is added (`GLTF-009`) it is registered last, after L6, for the same reason — a pixel
+comparison is the *last* question worth asking, not the first.
+
+### 3.7 Adding a fixture (`GLTF-417`)
+
+Four steps, one of which is a command. The corpus is generated, so **never edit anything under
+`tests/assets/gltf/`** — an asset edited by hand disagrees with its own generator and the first
+`--check` says so.
+
+1. **Write the fixture** in the `tools/gltf_fixtures/defs/` module whose name is its owning group
+   (§24.1: a fixture is owned by the module it lives in, and the corpus builder enforces that), and
+   append it to that module's `FIXTURES` list. Author values that **discriminate**: if a wrong
+   answer would be the same as the expected one, the fixture proves nothing. Every corpus normal
+   was `(0,0,1)` and every world 3×3 was diagonal — its own transpose — until fixtures were
+   deliberately tilted out of those defaults, and each time the tilt exposed something.
+2. **Regenerate**:
+
+   ```bash
+   scripts/regenerate-gltf-goldens.sh
+   ```
+
+   It writes the `.gltf`, the `.glb` twin, the `.expected.json` and the L5 goldens from your one
+   description, verifies the result, and prints what changed — decoding any binary golden that
+   moved (`GLTF-410`).
+3. **Add its row** to §7's inventory, which is generated too:
+
+   ```bash
+   python3 -m gltf_fixtures --fixture-table
+   ```
+
+   `GltfFixtureCorpus.TheConformanceDocListsEveryFixtureTheManifestDeclares` fails until you do.
+4. **Run the ladder.** Your fixture is already swept by every corpus-wide test, so this is where
+   you find out whether it says what you think:
+
+   ```bash
+   ctest -L gltf-conformance
+   ```
+
+If the fixture must be **refused**, give it a `rejection` block naming the stage and the fragments
+its diagnostic must contain — `GltfContainerValidation` asserts exactly that, and a refusal that
+does not say what is wrong is barely better than a silent one. If you add a new **test suite**
+rather than a fixture, register it in `CNA_GLTF_CONFORMANCE_RUNGS` (`cmake/UnitTests.cmake`) or
+`GltfConformanceLadder` fails: an unregistered suite still runs under a plain `ctest` while sitting
+outside the conformance label, which is the quiet failure that check exists to prevent.
+
+An asset that cannot be kept under 8 KiB needs a `size_exemption` with a reason (`GLTF-419`), and
+an asset that declares an extension needs a registry record (`GLTF-335`). Both are enforced.
 
 ---
 
