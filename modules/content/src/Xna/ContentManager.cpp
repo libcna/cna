@@ -2219,6 +2219,19 @@ namespace Microsoft::Xna::Framework::Content
                     // plan_gltf.md GLTF-073: the topology travels to the draw rather than being
                     // assumed there.
                     part->setPrimitiveTypeEXTProperty(PrimitiveTypeForTopology(meshOut.topology));
+                    // plan_gltf.md GLTF-202/GLTF-203: the file's own sampler state, per texture
+                    // slot. Without this every imported texture drew with whatever the device
+                    // happened to have -- LinearWrap -- so a CLAMP_TO_EDGE asset with UVs outside
+                    // [0,1] tiled instead of clamping.
+                    for (std::size_t slot = 0; slot < meshOut.samplers.size(); ++slot)
+                    {
+                        const SamplerOut& sampler = meshOut.samplers[slot];
+                        Graphics::SamplerState state;
+                        state.setFilterProperty(sampler.filter);
+                        state.setAddressUProperty(sampler.addressU);
+                        state.setAddressVProperty(sampler.addressV);
+                        part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
+                    }
                     Graphics::ModelMeshPart* partPtr = part.get();
 
                     // CNB-64/65 (Phase 13B): morph targets, attached to this part's own real XNA

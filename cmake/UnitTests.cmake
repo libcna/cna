@@ -434,7 +434,7 @@ if(CNA_BUILD_TESTS)
         "L0|GltfFixtureCorpus.*:GltfOracleEXT.*:GltfConformanceLadder.*"
         "L1|GltfConformanceL1.*:GltfContainerValidation.*"
         "L2|GltfConformanceL2.*:GltfAccessorDecodeLock.*:GltfIndexDecode.*"
-        "L3|GltfConformanceL3.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfDrawTopology.*"
+        "L3|GltfConformanceL3.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfDrawTopology.*:GltfSamplerMapping.*"
         "L4|GltfConformanceL4.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfRigidAnimation.*"
         "L5|GltfConformanceL5.*:GltfBufferOracle.*"
         "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*"

@@ -3,6 +3,7 @@
 
 #include "cgltf.h"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -13,6 +14,8 @@
 #include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -193,6 +196,89 @@ namespace CNA::Internal::GltfImport
     };
 
     /** @brief One extracted mesh primitive's vertex/index bytes plus its effect-relevant flags. */
+    /**
+     * @brief The XNA sampler state one glTF `sampler` maps to (plan_gltf.md `GLTF-202`/`GLTF-203`).
+     *
+     * `cgltf_sampler` had **zero occurrences** in CNA before this: every imported texture was drawn
+     * with whatever `SamplerState` the device happened to have, which defaults to `LinearWrap`. For
+     * an asset authored `CLAMP_TO_EDGE` with UVs outside `[0,1]` — which `KHR_texture_transform`
+     * routinely produces — that is a large, visible error.
+     *
+     * One of these per texture slot, because glTF attaches a sampler to a *texture*, not to a
+     * material: a material may legitimately clamp its base colour and repeat its normal map.
+     */
+    struct SamplerOut
+    {
+        /** @brief The XNA filter the glTF min/mag pair maps to. */
+        Microsoft::Xna::Framework::Graphics::TextureFilter filter =
+            Microsoft::Xna::Framework::Graphics::TextureFilter::Linear;
+        /** @brief The U address mode, from `wrapS`. */
+        Microsoft::Xna::Framework::Graphics::TextureAddressMode addressU =
+            Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap;
+        /** @brief The V address mode, from `wrapT`. */
+        Microsoft::Xna::Framework::Graphics::TextureAddressMode addressV =
+            Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap;
+        /**
+         * @brief True when the file declared a sampler; false when these are glTF's own defaults.
+         *
+         * §3.8.4 makes an absent sampler mean "repeat, auto filter", which is exactly the default
+         * above — so the values are the same either way and this records *why*, which is what an
+         * import report needs to distinguish "the author chose repeat" from "the author said
+         * nothing".
+         */
+        bool declared = false;
+        /**
+         * @brief True when the glTF `minFilter` asked for no mipmapping at all (`NEAREST`/`LINEAR`).
+         *
+         * XNA's `TextureFilter` has no "base level only" value — that is a property of the texture
+         * having one mip level, not of the sampler — so the mip mode carried in @ref filter is
+         * arbitrary for these two and `MipPoint` is chosen as the least-blending option. This flag
+         * is what makes the approximation visible instead of implied (`GLTF-204`), and it becomes
+         * observable the day `GLTF-206` starts generating mip levels.
+         */
+        bool minFilterHasNoMipStage = false;
+    };
+
+    /**
+     * @brief The material texture slots CNA imports, and the index space `MeshOut::samplers` uses.
+     *
+     * Deliberately an enum rather than bare indices: a sampler array indexed by an untyped `int`
+     * is exactly the kind of thing that silently acquires an off-by-one when a slot is added.
+     */
+    enum class TextureSlotEXT
+    {
+        /** @brief `pbrMetallicRoughness.baseColorTexture`. */
+        BaseColor = 0,
+        /** @brief `normalTexture`. */
+        Normal = 1,
+        /** @brief `pbrMetallicRoughness.metallicRoughnessTexture`. */
+        MetallicRoughness = 2,
+        /** @brief `emissiveTexture`. */
+        Emissive = 3,
+        /** @brief `occlusionTexture`. */
+        Occlusion = 4,
+    };
+
+    /**
+     * @brief Maps a glTF sampler's four fields onto XNA sampler state (plan_gltf.md §14.2).
+     *
+     * Takes raw glTF enum values rather than a `cgltf_sampler` so the whole table is testable
+     * without a file. A zero value means "undefined", which §3.8.4 says to treat as the
+     * implementation's own choice; CNA reads it as glTF's stated default of repeat + linear.
+     *
+     * XNA turns out to cover glTF's filter space **exactly**: its nine `TextureFilter` values
+     * express all eight min×mag×mip combinations, so the four mixed cases need no approximation at
+     * all. The one real approximation is the mip stage of a non-mipmapped `minFilter` — see
+     * @ref SamplerOut::minFilterHasNoMipStage.
+     *
+     * @param magFilter glTF `magFilter` (9728 NEAREST, 9729 LINEAR, or 0 for undefined).
+     * @param minFilter glTF `minFilter` (9728, 9729, 9984…9987, or 0 for undefined).
+     * @param wrapS glTF `wrapS` (10497 REPEAT, 33071 CLAMP_TO_EDGE, 33648 MIRRORED_REPEAT, or 0).
+     * @param wrapT glTF `wrapT`, same values as @p wrapS.
+     * @return The mapped state. @ref SamplerOut::declared is left false; the caller sets it.
+     */
+    [[nodiscard]] SamplerOut MapGltfSamplerEXT(int magFilter, int minFilter, int wrapS, int wrapT);
+
     struct MeshOut
     {
         /** @brief The mesh part's name (from the glTF mesh, or a generated placeholder). */
@@ -233,6 +319,17 @@ namespace CNA::Internal::GltfImport
         const cgltf_image* baseColorImage = nullptr;
         /** @brief The material's occlusion texture image, or nullptr if none. */
         const cgltf_image* occlusionImage = nullptr;
+        /**
+         * @brief The sampler state of each material texture, by slot (plan_gltf.md `GLTF-202`).
+         *
+         * Indexed by @ref TextureSlotEXT. Per slot rather than per material because glTF attaches a
+         * sampler to a *texture*: a material may legitimately clamp its base colour and repeat its
+         * normal map, and one shared value could not express that.
+         *
+         * A slot whose texture is absent still carries glTF's default (repeat + linear) with
+         * `declared` false, so a consumer never has to special-case a missing entry.
+         */
+        std::array<SamplerOut, 5> samplers{};
         /**
          * @brief Per-target, per-vertex position deltas: morphPositionDeltas[target][vertex],
          * already unit-scaled. Empty if the primitive has no morph targets.

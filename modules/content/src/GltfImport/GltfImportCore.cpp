@@ -1160,6 +1160,25 @@ namespace CNA::Internal::GltfImport
         return prim.material->emissive_texture.texture->image;
     }
 
+    /// GLTF-202: the sampler a texture view's texture declares, mapped to XNA state. A view with no
+    /// texture, or a texture with no sampler, yields glTF's own default (repeat + linear) with
+    /// `declared` left false -- so "the author chose repeat" and "the author said nothing" stay
+    /// distinguishable, which is what an import report needs.
+    SamplerOut SamplerForTextureView(const cgltf_texture_view& view)
+    {
+        if (view.texture == nullptr || view.texture->sampler == nullptr)
+        {
+            return MapGltfSamplerEXT(0, 0, 0, 0);
+        }
+        const cgltf_sampler& sampler = *view.texture->sampler;
+        SamplerOut out = MapGltfSamplerEXT(static_cast<int>(sampler.mag_filter),
+                                           static_cast<int>(sampler.min_filter),
+                                           static_cast<int>(sampler.wrap_s),
+                                           static_cast<int>(sampler.wrap_t));
+        out.declared = true;
+        return out;
+    }
+
 #ifdef CNA_DRACO_AVAILABLE
     // CNB-91 (Phase 14F): decodes a Draco-compressed primitive's buffer_view into a real
     // draco::Mesh. Dequantization/attribute-transform is left at the decoder's own default
@@ -1617,6 +1636,24 @@ namespace CNA::Internal::GltfImport
             out.alphaCutoff = prim.material->alpha_cutoff;
             out.doubleSided = prim.material->double_sided != 0;
 
+            // plan_gltf.md GLTF-202: one sampler per texture slot, read from the texture each view
+            // names. A slot with no texture keeps glTF's default with `declared` false.
+            const auto slot = [](TextureSlotEXT s) { return static_cast<std::size_t>(s); };
+            if (prim.material->has_pbr_metallic_roughness)
+            {
+                out.samplers[slot(TextureSlotEXT::BaseColor)] =
+                    SamplerForTextureView(prim.material->pbr_metallic_roughness.base_color_texture);
+                out.samplers[slot(TextureSlotEXT::MetallicRoughness)] =
+                    SamplerForTextureView(
+                        prim.material->pbr_metallic_roughness.metallic_roughness_texture);
+            }
+            out.samplers[slot(TextureSlotEXT::Normal)] =
+                SamplerForTextureView(prim.material->normal_texture);
+            out.samplers[slot(TextureSlotEXT::Emissive)] =
+                SamplerForTextureView(prim.material->emissive_texture);
+            out.samplers[slot(TextureSlotEXT::Occlusion)] =
+                SamplerForTextureView(prim.material->occlusion_texture);
+
             // CNB-97 (Phase 14H): KHR_materials_emissive_strength extends EmissiveFactor's own
             // [0,1] range with a multiplier (real HDR-authored content routinely uses > 1), before
             // the emissive texture (if any) is applied -- glTF's own spec order.
@@ -2034,6 +2071,72 @@ namespace CNA::Internal::GltfImport
         }
 
         return graph;
+    }
+
+    SamplerOut MapGltfSamplerEXT(int magFilter, int minFilter, int wrapS, int wrapT)
+    {
+        using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+        using Microsoft::Xna::Framework::Graphics::TextureFilter;
+
+        // glTF's minFilter packs two independent decisions into one enum: how minification filters,
+        // and whether/how it blends between mip levels. Splitting them is what makes the mapping a
+        // table lookup instead of nine special cases.
+        bool minLinear = true;   // §3.8.4's default when undefined
+        bool mipLinear = true;
+        bool noMipStage = false;
+        switch (minFilter)
+        {
+            case 9728: minLinear = false; noMipStage = true;  break;  // NEAREST
+            case 9729: minLinear = true;  noMipStage = true;  break;  // LINEAR
+            case 9984: minLinear = false; mipLinear = false;  break;  // NEAREST_MIPMAP_NEAREST
+            case 9985: minLinear = true;  mipLinear = false;  break;  // LINEAR_MIPMAP_NEAREST
+            case 9986: minLinear = false; mipLinear = true;   break;  // NEAREST_MIPMAP_LINEAR
+            case 9987: minLinear = true;  mipLinear = true;   break;  // LINEAR_MIPMAP_LINEAR
+            default:   break;                                          // undefined
+        }
+        // A minFilter with no mip stage means "use the base level only", which XNA expresses
+        // through the texture's level count rather than through TextureFilter. The mip mode is
+        // therefore arbitrary here; point is chosen as the least-blending option, and the caller
+        // is told so via SamplerOut::minFilterHasNoMipStage rather than left to infer it.
+        if (noMipStage) { mipLinear = false; }
+
+        const bool magLinear = (magFilter != 9728);   // NEAREST is the only non-linear value
+
+        SamplerOut out;
+        // All eight min x mag x mip combinations, each to the XNA value that means exactly it.
+        // XNA covers glTF's filter space completely, so none of these is an approximation.
+        if (minLinear && magLinear)
+        {
+            out.filter = mipLinear ? TextureFilter::Linear : TextureFilter::LinearMipPoint;
+        }
+        else if (!minLinear && !magLinear)
+        {
+            out.filter = mipLinear ? TextureFilter::PointMipLinear : TextureFilter::Point;
+        }
+        else if (minLinear && !magLinear)
+        {
+            out.filter = mipLinear ? TextureFilter::MinLinearMagPointMipLinear
+                                   : TextureFilter::MinLinearMagPointMipPoint;
+        }
+        else
+        {
+            out.filter = mipLinear ? TextureFilter::MinPointMagLinearMipLinear
+                                   : TextureFilter::MinPointMagLinearMipPoint;
+        }
+        out.minFilterHasNoMipStage = noMipStage;
+
+        const auto address = [](int wrap) {
+            switch (wrap)
+            {
+                case 33071: return TextureAddressMode::Clamp;    // CLAMP_TO_EDGE
+                case 33648: return TextureAddressMode::Mirror;   // MIRRORED_REPEAT
+                case 10497:                                       // REPEAT
+                default:    return TextureAddressMode::Wrap;      // §3.8.4's default
+            }
+        };
+        out.addressU = address(wrapS);
+        out.addressV = address(wrapT);
+        return out;
     }
 
     std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data, const SceneGraphOut& scene)

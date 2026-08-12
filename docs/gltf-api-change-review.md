@@ -350,6 +350,62 @@ on a 3D-capable renderer (§5.3 of `docs/gltf-conformance.md`), so the pixel-lev
 
 ---
 
+### 1.8 Per-part sampler state — `GLTF-202`, `GLTF-203`, `GLTF-207`
+
+**Problem.** `cgltf_sampler`, `mag_filter` and `wrap_s` had **zero occurrences** in CNA. Every
+imported texture was drawn with whatever `SamplerState` the device happened to have, which defaults
+to `LinearWrap`. For an asset authored `CLAMP_TO_EDGE` with UVs outside `[0,1]` — which
+`KHR_texture_transform` routinely produces — that is a large, obvious error, not a subtle one.
+
+**Shape.**
+
+```cpp
+// Microsoft::Xna::Framework::Graphics::ModelMeshPart
+CNAEXT const std::array<SamplerState, 5>& getSamplerStatesEXTProperty() const;
+CNAEXT void setSamplerStateEXTProperty(int slot, const SamplerState& value);
+```
+
+**A property, not a `Tag` payload — overruling `GLTF-207`'s own sketch.** The task proposed attaching
+a `SamplerStateArrayEXT` to `ModelMeshPart::Tag`, mirroring `MorphTargetDataEXT`. That cannot work:
+`Tag` already *is* `MorphTargetDataEXT` for a morphing part, so a morphing part with clamped
+textures could not express both. This is the same one-object-per-`Tag` collision §1.5 records for
+rigid clips, and the right answer here is the one `GLTF-073` already established for
+`PrimitiveTypeEXT` — a plain CNAEXT property on the part.
+
+**Per slot, not per material.** glTF attaches a sampler to a *texture*, so a material may
+legitimately clamp its base colour and repeat its normal map. One shared value could not say that.
+The slots are named by a `TextureSlotEXT` enum rather than bare indices, because an array indexed
+by an untyped `int` is exactly what acquires an off-by-one when a slot is added.
+
+**A finding that corrected the plan.** §14.2 states that "XNA's `SamplerState` cannot express
+independent min/mag filters for the four mixed combinations" and asks `GLTF-204` to document the
+approximation. That is **wrong**: XNA's nine `TextureFilter` values —
+`MinLinearMagPointMipLinear` and its three siblings among them — cover all eight min×mag×mip
+combinations exactly. There is no approximation to document there.
+
+The one real approximation is elsewhere and is now recorded where it happens: glTF's `NEAREST` and
+`LINEAR` minFilters mean *no mipmapping*, and XNA has no `TextureFilter` value for "base level only"
+— that is a property of the texture's level count, not of the sampler. `SamplerOut` carries a
+`minFilterHasNoMipStage` flag so the arbitrary choice (point, the least-blending mip mode) is
+visible rather than implied, and it becomes observable the day `GLTF-206` starts generating levels.
+
+**Compatibility.** Additive. Every entry is `LinearWrap` for a part built by any other content path,
+which is exactly what those parts got before.
+
+**Test.** `GltfSamplerMappingTests` covers §14.2 exhaustively — every min×mag combination against
+the XNA value that means exactly it, every wrap value on both axes independently, both
+non-mipmapped minFilters, and the undefined-sampler default. The whole table is testable directly
+because `MapGltfSamplerEXT` takes raw glTF enum values rather than a `cgltf_sampler`, which no
+realistic number of fixtures could match for coverage.
+
+**What is not proved here.** There is no end-to-end fixture, because **no corpus asset carries a
+texture at all** — the generator has no image support yet, and `GLTF-190`'s reference checkerboard
+is what several texture tasks are waiting on. So the mapping and the wiring are tested, and "an
+imported textured part ends up with the sampler its file declared" is not. `GLTF-203`'s other half,
+`uv-out-of-range-*` at L7, is blocked on `GLTF-009` regardless.
+
+---
+
 ## 2. Reviewed and deferred
 
 ### 2.1 `PbrEffect::NormalScale`, `OcclusionStrength` — `GLTF-224`, `GLTF-225`

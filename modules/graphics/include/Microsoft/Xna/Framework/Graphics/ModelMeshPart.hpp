@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <array>
+
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "System/Object.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -76,6 +79,36 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param value The topology to draw this part with.
          */
         CNAEXT void setPrimitiveTypeEXTProperty(PrimitiveType value);
+
+        /**
+         * @brief Per-texture-slot sampler state imported from the source asset.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-202`/`GLTF-207`). XNA has
+         * no per-part sampler concept: `SamplerState` is device state the application sets before a
+         * draw, and a part that came from a file carrying `CLAMP_TO_EDGE` had nowhere to say so —
+         * every imported texture was drawn with whatever the device happened to have, which
+         * defaults to `LinearWrap`. For an asset with UVs outside `[0,1]` that is a large, visible
+         * error rather than a subtle one.
+         *
+         * A property rather than a `Tag` payload, which is what `GLTF-207` originally sketched:
+         * `ModelMeshPart::Tag` already carries `MorphTargetDataEXT`, so a morphing part with
+         * clamped textures could not have expressed both.
+         *
+         * Indexed by texture slot in the same order the importer uses (base colour, normal,
+         * metallic-roughness, emissive, occlusion). Every entry is `LinearWrap` for a part built by
+         * any other content path, so this changes nothing for existing content.
+         *
+         * @return The part's sampler states, one per texture slot.
+         */
+        CNAEXT [[nodiscard]] const std::array<SamplerState, 5>& getSamplerStatesEXTProperty() const;
+
+        /**
+         * @brief Sets one texture slot's sampler state.
+         *
+         * @param slot The texture slot index, in the importer's own order; out of range is ignored.
+         * @param value The sampler state to apply when this part's texture is bound to that slot.
+         */
+        CNAEXT void setSamplerStateEXTProperty(int slot, const SamplerState& value);
 
         /**
          * @brief Gets the location in the index array at which to start reading vertices.
@@ -175,6 +208,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int numVertices_    = 0;
         int primitiveCount_ = 0;
         PrimitiveType primitiveType_ = PrimitiveType::TriangleList;
+        std::array<SamplerState, 5> samplerStates_{};
         int startIndex_     = 0;
         int vertexOffset_   = 0;
         Effect* effect_     = nullptr;
