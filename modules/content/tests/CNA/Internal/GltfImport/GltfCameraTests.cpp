@@ -21,6 +21,9 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "System/TimeSpan.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 
@@ -215,4 +218,87 @@ TEST(GltfCameras, AFileWithNoCamerasReportsNoneRatherThanADefault)
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("xf-identity");
     EXPECT_TRUE(model.getCamerasEXTProperty().empty());
+}
+
+// --- plan_gltf.md GLTF-296: animation of camera (and light) nodes -----------------------------------
+
+// §3.11 animates *nodes*, and a camera node is an ordinary node -- so a channel targeting one needs
+// no camera-specific path at all: it is exactly the rigid animation GLTF-293 imports. This proves
+// that rather than assuming it.
+TEST(GltfCameras, AChannelTargetingACameraNodeIsImportedAsAnOrdinaryRigidClip)
+{
+    using Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT;
+    using Microsoft::Xna::Framework::Graphics::ModelAnimationsEXT;
+
+    const LoadedFixture fixture("camera-animated-node");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ASSERT_EQ(0u, static_cast<std::size_t>(fixture.Data().skins_count))
+        << "this fixture is supposed to have no skin at all";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("camera-animated-node");
+
+    auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
+    ASSERT_NE(nullptr, animations) << "the camera node's animation was dropped";
+    ASSERT_EQ(1u, animations->Clips.size());
+    const auto& clip = animations->Clips.at("CameraSpin");
+    EXPECT_EQ(ClipTargetSpaceEXT::SceneNode, clip.TargetSpace);
+    ASSERT_EQ(1u, clip.Tracks.size());
+
+    // The track drives the CAMERA's own bone, which is what makes it usable at all.
+    ASSERT_EQ(1u, model.getCamerasEXTProperty().size());
+    EXPECT_EQ(model.getCamerasEXTProperty().front().SceneNodeIndex, clip.Tracks[0].BoneIndex)
+        << "the clip drives a different bone than the one the camera is attached to";
+}
+
+// The consequence that is easy to get wrong, and the reason ModelCameraEXT::WorldTransform is
+// documented as a snapshot: posing the model moves the camera's BONE, not the stored matrix. A
+// consumer reading the stored one every frame would render an animated camera as a stationary one.
+TEST(GltfCameras, AnAnimatedCamerasLivePlacementComesFromItsBoneNotItsStoredTransform)
+{
+    using Microsoft::Xna::Framework::Graphics::ApplyClipToBonesEXT;
+    using Microsoft::Xna::Framework::Graphics::ModelAnimationsEXT;
+
+    const LoadedFixture fixture("camera-animated-node");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& entry =
+        Member(Path(fixture.Expected(), "l4.cameras"), "entries").arrayValue.front();
+    const std::vector<double> expectedAtEnd =
+        Numbers(Member(entry, "worldTransformAtEndColumnMajor"));
+    ASSERT_EQ(16u, expectedAtEnd.size());
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("camera-animated-node");
+    auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
+    ASSERT_NE(nullptr, animations);
+
+    const auto& camera = model.getCamerasEXTProperty().front();
+    const Matrix storedAtImport = camera.WorldTransform;
+
+    // Pose the model at the end of the clip -- a quarter turn about +Y.
+    ApplyClipToBonesEXT(model, animations->Clips.at("CameraSpin"),
+                        System::TimeSpan::FromSeconds(1.0));
+    std::vector<Matrix> absolute(
+        static_cast<std::size_t>(model.getBonesProperty().getCountProperty()));
+    model.CopyAbsoluteBoneTransformsTo(absolute);
+    const Matrix live = absolute[static_cast<std::size_t>(camera.SceneNodeIndex)];
+
+    ExpectColumnMajorNear(expectedAtEnd, live, "camera world transform at t = 1");
+
+    // And the stored matrix did NOT move, which is exactly why it is documented as a snapshot.
+    float storedNow[16];
+    camera.WorldTransform.ToColumnMajor(storedNow);
+    float storedThen[16];
+    storedAtImport.ToColumnMajor(storedThen);
+    for (std::size_t i = 0; i < 16; ++i)
+    {
+        EXPECT_FLOAT_EQ(storedThen[i], storedNow[i])
+            << "WorldTransform changed under posing -- it is documented as an import-time snapshot";
+    }
+    EXPECT_GT(std::fabs(live.M11 - camera.WorldTransform.M11), 1e-3f)
+        << "the live and stored transforms agree at t = 1, so this test cannot tell them apart";
 }

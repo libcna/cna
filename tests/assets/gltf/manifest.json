@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 34,
+  "distinctAssetCount": 35,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 3,
@@ -22,7 +22,7 @@
     "materials": 4,
     "skinning": 4,
     "animation": 2,
-    "cameras": 3,
+    "cameras": 4,
     "scenes": 1,
     "robustness": 2
   },
@@ -791,6 +791,24 @@
       "auditFixture": null
     },
     {
+      "id": "camera-animated-node",
+      "owningGroup": "cameras",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "animation targeting a camera node",
+        "rotation path",
+        "no skin",
+        "camera"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "scene-default-selection",
       "owningGroup": "scenes",
       "referencingGroups": [],
@@ -916,6 +934,31 @@
       "path": "bad-accessor-out-of-bounds.gltf",
       "bytes": 1174,
       "sha256": "f7fef746ceec3f5404a00dc6efd95ae964b88249ba8a9e73f1fe8ece4a6724fc"
+    },
+    {
+      "path": "camera-animated-node.expected.json",
+      "bytes": 10265,
+      "sha256": "5697ccf0936685460d508a803fd15894a4ad79df699126c356ab7723e2d0932e"
+    },
+    {
+      "path": "camera-animated-node.glb",
+      "bytes": 1436,
+      "sha256": "2cf79da1020ad4014d68417f91fc3d8fd24c31188056df8ece3a8e8e6da2e3a7"
+    },
+    {
+      "path": "camera-animated-node.gltf",
+      "bytes": 2649,
+      "sha256": "df49b9b3271173121e0a43636f25658966a69582e15e90df510ac6ffa69e20d3"
+    },
+    {
+      "path": "camera-animated-node.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "camera-animated-node.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "camera-orthographic.expected.json",

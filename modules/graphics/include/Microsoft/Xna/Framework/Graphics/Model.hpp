@@ -64,10 +64,17 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         Matrix Projection = Matrix::getIdentityProperty();
         /**
-         * @brief The camera node's world transform, as imported.
+         * @brief The camera node's world transform **at import time**.
          *
          * The **view** matrix is its inverse (`GLTF-321`): a glTF camera looks down its own −Z with
          * +Y up, which is exactly XNA's own convention, so no basis change is involved.
+         *
+         * @warning This is a snapshot, not a live value (plan_gltf.md `GLTF-296`). A camera node is
+         * an ordinary node and can be animated like any other, and posing the model updates
+         * `Model::Bones` — not this. A camera's **live** placement is the absolute transform of the
+         * bone @ref SceneNodeIndex names, which `Model::CopyAbsoluteBoneTransformsTo` produces. A
+         * consumer that read this matrix every frame would render an animated camera as a
+         * stationary one.
          */
         Matrix WorldTransform = Matrix::getIdentityProperty();
         /** @brief True for a perspective camera, false for an orthographic one. */

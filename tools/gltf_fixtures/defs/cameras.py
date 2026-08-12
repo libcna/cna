@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 
-from ..builder import TRIANGLES, UNSIGNED_SHORT, GltfBuilder
+from ..builder import FLOAT, TRIANGLES, UNSIGNED_SHORT, GltfBuilder
 from ..manifest import Fixture, l3_primitive, world_positions
 from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
 
@@ -193,4 +193,111 @@ def camera_orthographic() -> Fixture:
         features=["camera.orthographic", "xmag/ymag half extents"])
 
 
-FIXTURES = [camera_perspective, camera_perspective_infinite, camera_orthographic]
+def camera_animated_node() -> Fixture:
+    """A camera whose node is animated. Owns **GLTF-296**.
+
+    §3.11 animates *nodes*, and a camera node is an ordinary node -- so a channel targeting one is
+    exactly the rigid animation ``GLTF-293`` imports, with no camera-specific handling anywhere.
+    This fixture proves that rather than assuming it, and pins the consequence that is easy to get
+    wrong: ``ModelCameraEXT::WorldTransform`` is the pose **at import time**, and the camera's live
+    placement is its bone's absolute transform. A consumer that read the stored matrix every frame
+    would render an animated camera as a stationary one.
+
+    The node starts at the identity rotation and turns a quarter turn about +Y by ``t = 1``, so the
+    two poses are exactly computable and visibly different.
+    """
+    b = GltfBuilder("camera-animated-node")
+    mesh = _carrier(b, "Subject")
+    camera_index = b.add_camera({"name": "MovingCam", "type": "perspective",
+                                 "perspective": {"aspectRatio": _ASPECT, "yfov": _YFOV,
+                                                 "zfar": _ZFAR, "znear": _ZNEAR}})
+    mesh_node = b.add_node(name="Subject", mesh=mesh)
+    # Authored with TRS rather than 'matrix': §3.5.3 forbids 'matrix' on an animated node.
+    camera_node = b.add_node(name="CameraNode", camera=camera_index,
+                             translation=_CAMERA_TRANSLATION, rotation=[0.0, 0.0, 0.0, 1.0])
+    b.add_scene([mesh_node, camera_node], name="Scene")
+    b.set_default_scene(0)
+
+    half_sqrt2 = math.sqrt(0.5)
+    key_times = [0.0, 1.0]
+    key_rotations = [(0.0, 0.0, 0.0, 1.0), (0.0, half_sqrt2, 0.0, half_sqrt2)]
+    times = b.add_packed_accessor(usage="animation input (time)", values=key_times,
+                                  accessor_type="SCALAR", component_type=FLOAT)
+    rotations = b.add_packed_accessor(usage="animation output (rotation)", values=key_rotations,
+                                      accessor_type="VEC4", component_type=FLOAT)
+    b.add_animation({
+        "name": "CameraSpin",
+        "samplers": [{"input": times, "output": rotations, "interpolation": "LINEAR"}],
+        "channels": [{"sampler": 0, "target": {"node": camera_node, "path": "rotation"}}],
+    })
+
+    world_at_rest = [1.0, 0.0, 0.0, 0.0,
+                     0.0, 1.0, 0.0, 0.0,
+                     0.0, 0.0, 1.0, 0.0,
+                     _CAMERA_TRANSLATION[0], _CAMERA_TRANSLATION[1], _CAMERA_TRANSLATION[2], 1.0]
+    # A quarter turn about +Y sends +X to -Z and +Z to +X, with the translation unchanged.
+    world_at_end = [0.0, 0.0, -1.0, 0.0,
+                    0.0, 1.0, 0.0, 0.0,
+                    1.0, 0.0, 0.0, 0.0,
+                    _CAMERA_TRANSLATION[0], _CAMERA_TRANSLATION[1], _CAMERA_TRANSLATION[2], 1.0]
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["cameras"] = {
+        "count": 1,
+        "entries": [{
+            "camera": camera_index,
+            "node": camera_node,
+            "nodeName": "CameraNode",
+            "isPerspective": True,
+            "hasInfiniteFarPlane": False,
+            "projectionColumnMajor": _perspective_matrix(_YFOV, _ASPECT, _ZNEAR, _ZFAR),
+            "worldTransformColumnMajor": world_at_rest,
+            "viewMatrixColumnMajor": [1.0, 0.0, 0.0, 0.0,
+                                      0.0, 1.0, 0.0, 0.0,
+                                      0.0, 0.0, 1.0, 0.0,
+                                      -_CAMERA_TRANSLATION[0], -_CAMERA_TRANSLATION[1],
+                                      -_CAMERA_TRANSLATION[2], 1.0],
+            "animated": True,
+            "clipName": "CameraSpin",
+            "worldTransformAtEndColumnMajor": world_at_end,
+            "liveTransformRule": "ModelCameraEXT::WorldTransform is the pose AT IMPORT TIME. The "
+                                 "camera's live placement is the absolute transform of the bone "
+                                 "SceneNodeIndex names, so a consumer that read the stored matrix "
+                                 "every frame would render an animated camera as a stationary one.",
+        }],
+    }
+    l4["animation"] = {
+        "animationCount": 1,
+        "clipNames": ["CameraSpin"],
+        "duration": key_times[-1],
+        "targetIsCameraNode": True,
+        "channels": [{
+            "animation": 0,
+            "channel": 0,
+            "targetNode": camera_node,
+            "targetNodeName": "CameraNode",
+            "path": "rotation",
+            "interpolation": "LINEAR",
+            "targetsSkinJoint": False,
+            "times": list(key_times),
+            "values": [list(q) for q in key_rotations],
+        }],
+    }
+    return Fixture(
+        id="camera-animated-node", audit_fixture=None, owning_group="cameras",
+        description="A camera node driven by a LINEAR rotation channel through a quarter turn "
+                    "about +Y. A camera node is an ordinary node, so this needs no camera-specific "
+                    "animation path -- and the fixture pins the consequence: the camera's stored "
+                    "WorldTransform is its import-time pose, not its live one.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["animation targeting a camera node", "rotation path", "no skin", "camera"],
+        spec_anchors=_SPEC + ["animations"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="Subject", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+FIXTURES = [camera_perspective, camera_perspective_infinite, camera_orthographic,
+            camera_animated_node]
