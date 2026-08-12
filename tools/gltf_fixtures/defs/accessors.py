@@ -111,7 +111,10 @@ def sparse_position() -> Fixture:
             "count": len(sparse_indices),
             "indices": {"bufferView": idx_view, "byteOffset": 0, "componentType": UNSIGNED_SHORT},
             "values": {"bufferView": val_view, "byteOffset": 0},
-        })
+        },
+        # GLTF-066's control: with no base bufferView the base array is all zeros, so a decoder
+        # that ignored the sparse block would collapse two of the three vertices onto the origin.
+        base_values_if_sparse_ignored=[0.0] * 9)
     indices = b.add_packed_accessor(usage="indices", values=[0, 1, 2], accessor_type="SCALAR",
                                     component_type=UNSIGNED_SHORT)
     mesh = b.add_mesh([{
@@ -163,7 +166,11 @@ def sparse_indices() -> Fixture:
             "count": 1,
             "indices": {"bufferView": sidx_view, "byteOffset": 0, "componentType": UNSIGNED_SHORT},
             "values": {"bufferView": sval_view, "byteOffset": 0},
-        })
+        },
+        # GLTF-066's control, and the sharpest of the three: the base array's last element is 0, so
+        # a decoder that ignored the override produces the degenerate triangle (0,2,0) -- which is
+        # a quad missing half of itself, not an error anything downstream would notice.
+        base_values_if_sparse_ignored=_SPARSE_INDEX_BASE)
     mesh = b.add_mesh([{
         "attributes": {"POSITION": position},
         "indices": indices,
@@ -254,7 +261,10 @@ def sparse_interleaved_base() -> Fixture:
             "count": len(override_indices),
             "indices": {"bufferView": idx_view, "byteOffset": 0, "componentType": UNSIGNED_SHORT},
             "values": {"bufferView": val_view, "byteOffset": 0},
-        })
+        },
+        # GLTF-066's control: the interleaved base array, which is what a decoder that ignored the
+        # sparse block would produce -- three of the four vertices differ from the effective value.
+        base_values_if_sparse_ignored=flatten(_SPARSE_INTERLEAVED_BASE))
     normal = b.add_accessor(usage="NORMAL", component_type=FLOAT, accessor_type="VEC3", count=4,
                             expected=flatten(_SPARSE_INTERLEAVED_NORMALS),
                             buffer_view=base_view, byte_offset=12)

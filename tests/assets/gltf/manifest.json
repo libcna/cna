@@ -3005,8 +3005,8 @@
     },
     {
       "path": "sparse-indices.expected.json",
-      "bytes": 7710,
-      "sha256": "e95e35e86c0a7e62a3c33928e19179edbf1fd14c744440f908225c6654803f84"
+      "bytes": 7837,
+      "sha256": "c6a599c1102ee3bf341b3f9e6e0aa427e717098fcc9e151b23a12c7eba3350ef"
     },
     {
       "path": "sparse-indices.glb",
@@ -3030,8 +3030,8 @@
     },
     {
       "path": "sparse-interleaved-base.expected.json",
-      "bytes": 7389,
-      "sha256": "304d5c8905de749caafc53f63fef97ef7a6a4ae967454cfa2d714f27392f8d16"
+      "bytes": 7627,
+      "sha256": "039fda75a55d81acded0f889adb74bbaa51a17bfabd67c82e8f9ae0dd2e45bb2"
     },
     {
       "path": "sparse-interleaved-base.glb",
@@ -3055,8 +3055,8 @@
     },
     {
       "path": "sparse-position.expected.json",
-      "bytes": 5769,
-      "sha256": "880640bddcd5b7f866a5ee363129fa0d1dc32cbfc561c38f1aa6f2e1f947e93b"
+      "bytes": 5953,
+      "sha256": "d87182c556cae92de501e6b069993c233563f25d5f622545672b9f201c55c47c"
     },
     {
       "path": "sparse-position.glb",

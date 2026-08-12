@@ -1072,3 +1072,61 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
            "one-off, a loader-machinery probe or a mutation, raise this ceiling and say which in "
            "the commit message.";
 }
+
+// --- plan_gltf.md GLTF-066: the L2 dump shows the sparse override APPLIED -------------------------
+
+TEST(GltfConformanceL2, ASparseOverrideIsVisibleInTheDumpAndNotJustPlausible)
+{
+    // "The dump shows the override applied" is only checkable against what the dump would have
+    // said WITHOUT it. Each sparse fixture therefore states its base array -- the values a decoder
+    // that ignored the `sparse` block would produce -- and this asserts three things in order:
+    // the decoded values match the effective expectation, they differ from the base, and they
+    // differ at the elements the override names. Without the middle one, a fixture whose base
+    // happened to equal its overridden values would pass while proving nothing, which is exactly
+    // how D4 hid: `cgltf_accessor_read_index` returned 0 for every element, and 0 was a legal
+    // index.
+    std::size_t checkedAccessors = 0;
+    for (const std::string& id : CorpusFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        const LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        if (IsRejectionFixture(fixture.Expected())) { continue; }
+
+        for (const JsonValue& expected : Path(fixture.Expected(), "l2.accessors").arrayValue)
+        {
+            const JsonValue& base = Member(expected, "baseValuesIfSparseIgnored");
+            if (base.type != JsonType::Array) { continue; }
+            const auto index = static_cast<std::size_t>(NumberOr(expected, "index", -1));
+            SCOPED_TRACE("accessor " + std::to_string(index) + " (" +
+                         StringOr(expected, "usage", "?") + ")");
+            ++checkedAccessors;
+
+            EXPECT_TRUE(CnaTest::GltfOracle::BoolOr(expected, "sparse", false))
+                << "an accessor states a sparse base but is not marked sparse";
+
+            const AccessorDump dump = DumpAccessorEXT(fixture.Data(), index);
+            ASSERT_TRUE(dump.decoded) << dump.error;
+
+            const std::vector<double> effective = Numbers(Member(expected, "values"));
+            const std::vector<double> ignored = Numbers(base);
+            ASSERT_EQ(effective.size(), ignored.size())
+                << "the base array and the effective values have different lengths";
+            ASSERT_EQ(effective.size(), dump.values.size());
+
+            std::size_t differingComponents = 0;
+            for (std::size_t i = 0; i < effective.size(); ++i)
+            {
+                EXPECT_NEAR(effective[i], static_cast<double>(dump.values[i]), 1e-6)
+                    << "component " << i << " does not match the effective expectation";
+                if (std::fabs(effective[i] - ignored[i]) > 1e-6) { ++differingComponents; }
+            }
+            EXPECT_GT(differingComponents, 0u)
+                << "this fixture's sparse override changes nothing: its base array already equals "
+                   "its effective values, so a decoder that skipped the override entirely would "
+                   "pass every assertion above";
+        }
+    }
+    EXPECT_GE(checkedAccessors, 3u)
+        << "fewer than three sparse accessors state a base array -- the control has shrunk";
+}

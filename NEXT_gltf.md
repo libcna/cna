@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf_`, pushed. Never push elsewhere without explicit permission. No pull
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **351 closed (`✔` 230, `✅` 121),
-  91 `⬜` remaining**, plus `GLTF-388`'s and `GLTF-449`'s new `✅/⬜` partials, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **353 closed (`✔` 232, `✅` 121),
+  89 `⬜` remaining**, plus `GLTF-388`'s and `GLTF-449`'s new `✅/⬜` partials, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 3 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-093`, `252`,
   `265`, `289`, `449`; `GLTF-064`/`067`/`068` were completed on 2026-08-12), 2 `🐛` (open: `GLTF-157`, `421`), and 1 `⛔` (`GLTF-009`,
   blocked by this environment).

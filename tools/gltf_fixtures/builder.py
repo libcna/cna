@@ -325,7 +325,8 @@ class GltfBuilder:
                      byte_offset: int = 0, normalized: bool = False,
                      min_: Sequence[float] | None = None, max_: Sequence[float] | None = None,
                      sparse: dict[str, Any] | None = None,
-                     declared_count: int | None = None) -> int:
+                     declared_count: int | None = None,
+                     base_values_if_sparse_ignored: Sequence[float] | None = None) -> int:
         """Adds an accessor whose bytes some caller has already placed in the buffer.
 
         Use this when the accessor's storage is the thing under test -- interleaving, a non-zero
@@ -345,6 +346,11 @@ class GltfBuilder:
         :param min_: the authored ``min`` bound, if any.
         :param max_: the authored ``max`` bound, if any.
         :param sparse: the authored ``sparse`` block, if any.
+        :param base_values_if_sparse_ignored: for a sparse accessor, the values a decoder that
+            ignored the ``sparse`` block would produce. Recorded so the L2 dump can be asserted to
+            show the override *applied* (``GLTF-066``) rather than merely to contain plausible
+            numbers -- the control that separates "the override ran" from "the base happened to be
+            right".
         :param declared_count: the count to WRITE into the file, when it must differ from the
             honest ``count`` the expectation is built from. Only a malformed fixture wants this --
             a count no buffer could back is the lie under test (``GLTF-039``) -- so the two are
@@ -399,6 +405,10 @@ class GltfBuilder:
         # number under test while every honest fixture's expectation stays exactly as it was.
         if declared_count is not None and declared_count != count:
             self.accessor_records[-1]["declaredCount"] = declared_count
+        if base_values_if_sparse_ignored is not None:
+            self.accessor_records[-1]["baseValuesIfSparseIgnored"] = (
+                [int(v) for v in base_values_if_sparse_ignored] if is_integer and not normalized
+                else [float(v) for v in base_values_if_sparse_ignored])
         return len(self._accessors) - 1
 
     def add_packed_accessor(self, *, usage: str, values: Sequence[Any], accessor_type: str,
