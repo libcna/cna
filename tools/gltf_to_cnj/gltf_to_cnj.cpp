@@ -267,6 +267,19 @@ namespace
                         "data (CNA currently samples every PBR map from one shared UV channel).");
                 }
 
+                // plan_gltf.md GLTF-095/GLTF-257: influence sets past the first are dropped,
+                // because XNA's BlendIndices/BlendWeight carry exactly four.
+                if (meshOut.extraInfluenceSetsEXT > 0)
+                {
+                    warnings.push_back(
+                        "Primitive '" + partName + "' authors " +
+                        std::to_string(meshOut.extraInfluenceSetsEXT + 1) +
+                        " joint influence sets; only the first four influences are imported. Up to " +
+                        std::to_string(meshOut.worstDroppedInfluenceEXT * 100.0f) +
+                        "% of a vertex's influence was dropped. The retained weights are "
+                        "renormalised, so the skin is coarser rather than collapsed.");
+                }
+
                 // plan_gltf.md GLTF-200/GLTF-350: a map whose pixels are in a format CNA has no
                 // decoder for. A build pipeline is exactly where this needs to be loud -- the
                 // conversion succeeds, and the texture is simply not in the output.

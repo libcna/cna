@@ -2073,6 +2073,59 @@ namespace CNA::Internal::GltfImport
         // because a sum that is *far* off is a different thing from float error and the caller
         // should be able to see the difference. An all-zero weight set is left alone: it means the
         // vertex is unweighted, and 0/0 is not a normalisation.
+        // plan_gltf.md GLTF-095/GLTF-257: influence sets past the first.
+        //
+        // glTF allows any number of JOINTS_n/WEIGHTS_n sets, four joints each; XNA's BlendIndices
+        // and BlendWeight carry exactly four, and no CNA vertex layout or shader has room for more.
+        // So every set past the first is dropped -- which is a real decision, not an oversight, and
+        // the only thing wrong with it before was that it happened in silence.
+        //
+        // The dropped share is measured here, BEFORE renormalisation, because that is the number
+        // that says whether the truncation matters: a fifth influence weighted 0.002 is exporter
+        // noise and one weighted 0.4 is a different pose. Renormalisation then rescales the four
+        // retained weights to sum to 1, so the vertex ends up influenced by four joints instead of
+        // eight rather than dragged toward the origin by the missing weight.
+        if (out.skinned)
+        {
+            std::size_t extraSets = 0;
+            for (cgltf_size a = 0; a < prim.attributes_count; ++a)
+            {
+                const cgltf_attribute& attribute = prim.attributes[a];
+                if ((attribute.type == cgltf_attribute_type_joints ||
+                     attribute.type == cgltf_attribute_type_weights) &&
+                    attribute.index > 0)
+                {
+                    ++extraSets;
+                }
+            }
+            // JOINTS_n and WEIGHTS_n come in pairs (§3.7.3.3), so the pair count is the set count.
+            out.extraInfluenceSetsEXT = (extraSets + 1) / 2;
+
+            for (cgltf_size setIndex = 1; setIndex <= out.extraInfluenceSetsEXT; ++setIndex)
+            {
+                const cgltf_accessor* extra =
+                    cgltf_find_accessor(&prim, cgltf_attribute_type_weights,
+                                        static_cast<cgltf_int>(setIndex));
+                if (extra == nullptr) { break; }
+                const std::vector<float> dropped = UnpackAccessor(extra, 4, "WEIGHTS_n");
+                for (std::size_t v = 0; v + 3 < dropped.size(); v += 4)
+                {
+                    const std::size_t vertex = v / 4;
+                    const std::size_t base = vertex * 4;
+                    if (base + 3 >= weights.size()) { break; }
+                    const float kept = weights[base] + weights[base + 1] + weights[base + 2] +
+                                       weights[base + 3];
+                    const float lost = dropped[v] + dropped[v + 1] + dropped[v + 2] + dropped[v + 3];
+                    const float total = kept + lost;
+                    if (total > 0.0f)
+                    {
+                        out.worstDroppedInfluenceEXT =
+                            std::max(out.worstDroppedInfluenceEXT, lost / total);
+                    }
+                }
+            }
+        }
+
         if (out.skinned && !weights.empty())
         {
             constexpr float kTolerance = 1e-4f;

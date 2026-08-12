@@ -416,6 +416,32 @@ namespace CNA::Internal::GltfImport
          */
         std::vector<std::string> unsupportedTextureSourcesEXT;
         /**
+         * @brief How many `JOINTS_n`/`WEIGHTS_n` sets beyond set 0 the primitive authored.
+         *
+         * plan_gltf.md `GLTF-095` / `GLTF-257`. glTF allows any number of influence sets, four
+         * joints each; XNA's `BlendIndices`/`BlendWeight` carry exactly four. Every set past the
+         * first is therefore dropped, and until this field existed it was dropped without a word —
+         * a mesh authored for eight influences imported as though the author had asked for four.
+         *
+         * Zero for the overwhelming majority of files, which author one set.
+         */
+        std::size_t extraInfluenceSetsEXT = 0;
+        /**
+         * @brief The largest share of a single vertex's total influence that set truncation
+         * discarded, in [0,1].
+         *
+         * plan_gltf.md `GLTF-095`. The count alone does not say whether the truncation matters: a
+         * fifth influence weighted 0.002 is exporter noise, and one weighted 0.4 is a visibly
+         * different pose. This is the number that tells them apart, measured before `GLTF-256`'s
+         * renormalisation runs.
+         *
+         * Note what renormalisation then does: the retained four weights are rescaled to sum to 1,
+         * so a truncated vertex is influenced by *four* joints rather than eight — it is **not**
+         * dragged toward the origin by the missing weight. The degradation is a coarser skin, not a
+         * collapsed one.
+         */
+        float worstDroppedInfluenceEXT = 0.0f;
+        /**
          * @brief How many vertices had their joint weights renormalised (plan_gltf.md `GLTF-256`).
          *
          * §3.7.3.3 requires a vertex's weights to sum to 1, but a file is not guaranteed to honour

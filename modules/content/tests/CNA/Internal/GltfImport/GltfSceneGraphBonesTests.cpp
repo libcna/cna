@@ -1171,6 +1171,100 @@ TEST(GltfSkinSpaces, UnnormalisedWeightsAreRenormalisedAndReportedButOnlyWhenThe
     }
 }
 
+// --- plan_gltf.md GLTF-095/GLTF-257: influence sets past the first --------------------------------
+
+// glTF puts no limit on JOINTS_n/WEIGHTS_n sets; XNA's BlendIndices/BlendWeight carry exactly four
+// influences, and no CNA vertex layout or shader has room for more. So a second set cannot be
+// carried -- but dropping it in silence turns "eight influences" into "four" with nothing anywhere
+// saying so, which is the class of quiet wrongness this campaign exists to remove.
+//
+// The measurement is the point, not the count. A fifth influence weighted 0.002 is exporter noise
+// and one weighted 0.4 is a visibly different pose, and only the dropped SHARE tells them apart.
+TEST(GltfSkinSpaces, ASecondInfluenceSetIsDroppedAndTheLostShareIsMeasured)
+{
+    const LoadedFixture fixture("skin-eight-influences");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& skin = Path(fixture.Expected(), "l4.skin");
+
+    const CNA::Internal::GltfImport::SceneGraphOut scene =
+        CNA::Internal::GltfImport::BuildSceneGraph(&fixture.Data());
+    const CNA::Internal::GltfImport::SkeletonResult skeleton =
+        CNA::Internal::GltfImport::BuildSkeleton(fixture.Data().skins, scene,
+                                                  Matrix::getIdentityProperty(), 1.0f);
+    const CNA::Internal::GltfImport::MeshOut skinned = CNA::Internal::GltfImport::ExtractMesh(
+        &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", &skeleton, 1.0f);
+
+    EXPECT_EQ(static_cast<std::size_t>(NumberOr(skin, "extraInfluenceSets", -1)),
+              skinned.extraInfluenceSetsEXT)
+        << "the extra influence set was not detected at all";
+    EXPECT_NEAR(NumberOr(skin, "worstDroppedInfluence", -1.0),
+                static_cast<double>(skinned.worstDroppedInfluenceEXT), kTolerance)
+        << "the dropped share was not measured -- without it a caller cannot tell exporter noise "
+           "from a materially different pose";
+}
+
+// The interaction with GLTF-256 is the half that decides whether truncation is survivable.
+// Vertex 0's set-0 weights sum to 0.6 as authored, because the other 0.4 lives in set 1. Left at
+// 0.6 the skin equation applies three-fifths of the vertex's transform and drags it toward the
+// origin -- H12, arriving by a different road. Renormalising the retained four is what turns a
+// collapsed skin into a merely coarser one.
+TEST(GltfSkinSpaces, TruncatedInfluencesAreRenormalisedSoTheVertexIsNotDraggedTowardTheOrigin)
+{
+    const LoadedFixture fixture("skin-eight-influences");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& skin = Path(fixture.Expected(), "l4.skin");
+    const CNA::Internal::JsonValue& after = Member(skin, "weightsAfterPolicy");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, after.type);
+    ASSERT_EQ(3u, after.arrayValue.size());
+
+    const CNA::Internal::GltfImport::SceneGraphOut scene =
+        CNA::Internal::GltfImport::BuildSceneGraph(&fixture.Data());
+    const CNA::Internal::GltfImport::SkeletonResult skeleton =
+        CNA::Internal::GltfImport::BuildSkeleton(fixture.Data().skins, scene,
+                                                  Matrix::getIdentityProperty(), 1.0f);
+    const CNA::Internal::GltfImport::MeshOut skinned = CNA::Internal::GltfImport::ExtractMesh(
+        &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", &skeleton, 1.0f);
+
+    const CNA::Internal::Graphics::InferredVertexLayout layout =
+        CNA::Internal::Graphics::InferredLayoutForStride(
+            skinned.stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+    ASSERT_TRUE(layout.known) << "stride " << skinned.stride << " is not in the canonical table";
+    int blendWeightOffset = -1;
+    for (std::size_t i = 0; i < layout.count; ++i)
+    {
+        if (layout.elements[i].usage ==
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendWeight)
+        {
+            blendWeightOffset = layout.elements[i].offset;
+            break;
+        }
+    }
+    ASSERT_GE(blendWeightOffset, 0) << "the chosen layout has no BlendWeight slot";
+
+    for (std::size_t v = 0; v < 3; ++v)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(v));
+        const std::vector<double> expected = Numbers(after.arrayValue[v]);
+        ASSERT_EQ(4u, expected.size());
+        float actual[4];
+        std::memcpy(actual,
+                    skinned.vertexBytes.data() +
+                        v * static_cast<std::size_t>(skinned.stride) +
+                        static_cast<std::size_t>(blendWeightOffset),
+                    sizeof(actual));
+        float sum = 0.0f;
+        for (std::size_t c = 0; c < 4; ++c)
+        {
+            EXPECT_NEAR(static_cast<float>(expected[c]), actual[c], kTolerance)
+                << "component " << c;
+            sum += actual[c];
+        }
+        EXPECT_NEAR(1.0f, sum, kTolerance)
+            << "an imported vertex's weights must sum to 1 whatever was truncated away, or the "
+               "skin equation applies a fraction of its transform";
+    }
+}
+
 // --- plan_gltf.md GLTF-261: a rig past the GPU palette (the audit's H6) ----------------------------
 
 // The palette is 72 mat4s -- a real XNA constant every renderer's uniform array is sized by -- so a

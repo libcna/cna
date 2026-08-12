@@ -2254,6 +2254,20 @@ namespace Microsoft::Xna::Framework::Content
                             ". That map is not applied; the primitive draws as though it had none "
                             "(GLTF-200).");
                     }
+                    // plan_gltf.md GLTF-095/GLTF-257: influence sets past the first. The dropped
+                    // share is what says whether it matters -- a fifth influence weighted 0.002 is
+                    // exporter noise and one weighted 0.4 is a visibly different pose.
+                    if (meshOut.extraInfluenceSetsEXT > 0)
+                    {
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name + "' authors " +
+                            std::to_string(meshOut.extraInfluenceSetsEXT + 1) +
+                            " joint influence sets. XNA's BlendIndices/BlendWeight carry exactly "
+                            "four influences, so only the first set is imported; up to " +
+                            std::to_string(meshOut.worstDroppedInfluenceEXT * 100.0f) +
+                            "% of a vertex's influence was dropped. The retained weights are "
+                            "renormalised, so the skin is coarser, not collapsed (GLTF-257).");
+                    }
                     // plan_gltf.md GLTF-256: joint weights that did not sum to 1 were renormalised.
                     // Never silent -- a sum far from 1 is a broken file, not exporter quantisation,
                     // and the deviation is what tells the two apart.

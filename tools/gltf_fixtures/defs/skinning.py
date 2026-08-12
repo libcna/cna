@@ -648,5 +648,115 @@ def skin_73_joints() -> Fixture:
     )
 
 
+#: `skin-eight-influences`' two influence sets. Set 0 keeps four joints and set 1 adds four more;
+#: each vertex sums to exactly 1 ACROSS BOTH sets, which is what §3.7.3.3 actually requires.
+#: The three vertices are chosen so the dropped share is unmistakable, borderline, and nil in turn:
+#: vertex 0 loses 40% of its influence, vertex 1 loses 1% (exporter noise), vertex 2 loses nothing
+#: because its set-1 weights are all zero.
+_EIGHT_JOINTS_SET0 = [(0, 1, 2, 3), (0, 1, 2, 3), (0, 1, 2, 3)]
+_EIGHT_JOINTS_SET1 = [(4, 5, 6, 7), (4, 5, 6, 7), (4, 5, 6, 7)]
+_EIGHT_WEIGHTS_SET0 = [(0.3, 0.2, 0.05, 0.05), (0.6, 0.2, 0.1, 0.09), (0.5, 0.3, 0.15, 0.05)]
+_EIGHT_WEIGHTS_SET1 = [(0.2, 0.1, 0.05, 0.05), (0.01, 0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 0.0)]
+#: What CNA imports: set 0 only, renormalised to sum to 1 by GLTF-256. Vertex 0's authored set-0
+#: weights sum to 0.6, so each is divided by 0.6; vertex 1's sum to 0.99; vertex 2's already sum to
+#: 1 and are left exactly alone.
+_EIGHT_WEIGHTS_IMPORTED = [
+    (0.3 / 0.6, 0.2 / 0.6, 0.05 / 0.6, 0.05 / 0.6),
+    (0.6 / 0.99, 0.2 / 0.99, 0.1 / 0.99, 0.09 / 0.99),
+    (0.5, 0.3, 0.15, 0.05),
+]
+
+
+def skin_eight_influences() -> Fixture:
+    """Two `JOINTS_n`/`WEIGHTS_n` sets — eight influences per vertex. Owns **GLTF-095**/**GLTF-257**.
+
+    glTF puts no limit on influence sets; XNA's ``BlendIndices``/``BlendWeight`` carry exactly four.
+    Every set past the first is therefore dropped, and this fixture is what makes the drop
+    *measurable* rather than merely known: each vertex's weights sum to 1 **across both sets**, so
+    the share lost is exactly the set-1 sum and is different for all three vertices.
+
+    The interaction with `GLTF-256` is the part worth pinning. Truncation alone would leave vertex 0
+    with weights summing to 0.6, which is `H12` — three-fifths of the transform, dragging the vertex
+    toward the origin. Renormalisation of the retained four is what turns that into a *coarser*
+    skin instead of a collapsed one, and the L3 expectation states the renormalised values so a
+    regression in either half fails here.
+    """
+    b = GltfBuilder("skin-eight-influences")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    joints0 = b.add_packed_accessor(usage="JOINTS_0", values=_EIGHT_JOINTS_SET0,
+                                    accessor_type="VEC4", component_type=UNSIGNED_BYTE)
+    weights0 = b.add_packed_accessor(usage="WEIGHTS_0", values=_EIGHT_WEIGHTS_SET0,
+                                     accessor_type="VEC4")
+    joints1 = b.add_packed_accessor(usage="JOINTS_1", values=_EIGHT_JOINTS_SET1,
+                                    accessor_type="VEC4", component_type=UNSIGNED_BYTE)
+    weights1 = b.add_packed_accessor(usage="WEIGHTS_1", values=_EIGHT_WEIGHTS_SET1,
+                                     accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+
+    inverse_bind = mat_identity()
+    ibm_offset = b.append_bytes(pack(list(inverse_bind) * 8, FLOAT), alignment=4)
+    ibm = b.add_accessor(usage="inverseBindMatrices", component_type=FLOAT, accessor_type="MAT4",
+                         count=8, expected=list(inverse_bind) * 8,
+                         buffer_view=b.add_buffer_view(ibm_offset, 64 * 8))
+
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position,
+                       "JOINTS_0": joints0, "WEIGHTS_0": weights0,
+                       "JOINTS_1": joints1, "WEIGHTS_1": weights1},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="EightInfluenceTri")
+
+    joint_nodes = [b.add_node(name=f"Joint{i}") for i in range(8)]
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": joint_nodes, "inverseBindMatrices": ibm})
+    b.add_scene(joint_nodes + [mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = {
+        "jointCount": 8,
+        "meshNodeWorldColumnMajor": mat_identity(),
+        "policy": "IMPORT SET 0, RENORMALISE IT, AND REPORT. XNA's BlendIndices/BlendWeight carry "
+                  "exactly four influences and no CNA vertex layout or shader has room for more, "
+                  "so a second set cannot be carried -- but it must not be dropped in silence, and "
+                  "the share lost is what says whether the loss matters.",
+        "influenceSets": 2,
+        "extraInfluenceSets": 1,
+        "weightsAsAuthoredSet0": [list(w) for w in _EIGHT_WEIGHTS_SET0],
+        "weightsAsAuthoredSet1": [list(w) for w in _EIGHT_WEIGHTS_SET1],
+        "weightsAfterPolicy": [list(w) for w in _EIGHT_WEIGHTS_IMPORTED],
+        "droppedInfluencePerVertex": [0.4, 0.01, 0.0],
+        "worstDroppedInfluence": 0.4,
+        "renormalisationRule": "Measured BEFORE renormalisation, because that is the number that "
+                               "distinguishes exporter noise from a different pose. Renormalising "
+                               "the retained four is then what makes the result a coarser skin "
+                               "rather than a collapsed one: without it vertex 0's weights would "
+                               "sum to 0.6 and drag the vertex toward the origin, which is H12.",
+    }
+    return Fixture(
+        id="skin-eight-influences", audit_fixture=None, owning_group="skinning",
+        description="Two influence sets, eight joints per vertex, each vertex summing to 1 across "
+                    "both. The dropped share differs per vertex (40%, 1%, none) so a report that "
+                    "merely counted sets could not pass. Owns the decision that a second set is "
+                    "reported rather than carried, and pins its interaction with GLTF-256's "
+                    "renormalisation.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["JOINTS_1/WEIGHTS_1", "eight influences per vertex",
+                  "influence-set truncation", "renormalisation after truncation"],
+        spec_anchors=["skins", "skinned-mesh-attributes"],
+        # L2 holds every accessor as authored, including set 1 -- it decodes perfectly well and
+        # saying otherwise would be false. L3 holds what the importer understood the mesh to be
+        # after its documented policy ran, which is set 0 renormalised.
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="EightInfluenceTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, joints=_EIGHT_JOINTS_SET0,
+            weights=_EIGHT_WEIGHTS_IMPORTED, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
 FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform, skin_plus_static_mesh,
-            skin_skeleton_hint, skin_unnormalized, skin_73_joints]
+            skin_skeleton_hint, skin_unnormalized, skin_73_joints, skin_eight_influences]

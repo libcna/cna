@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 39,
+  "distinctAssetCount": 40,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -20,7 +20,7 @@
     "topology": 7,
     "transforms": 5,
     "materials": 4,
-    "skinning": 6,
+    "skinning": 7,
     "animation": 3,
     "cameras": 4,
     "scenes": 1,
@@ -748,6 +748,23 @@
         "skin.joints beyond MaxBones",
         "palette limit",
         "import rejection"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-eight-influences",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "JOINTS_1/WEIGHTS_1",
+        "eight influences per vertex",
+        "influence-set truncation",
+        "renormalisation after truncation"
       ],
       "auditFixture": null
     },
@@ -1531,6 +1548,31 @@
       "path": "skin-armature-ancestor.vb.bin",
       "bytes": 204,
       "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
+    },
+    {
+      "path": "skin-eight-influences.expected.json",
+      "bytes": 13478,
+      "sha256": "3e6809de5eb3337e4682acc5e3611948feeccba0a64529f88fe208db801f720d"
+    },
+    {
+      "path": "skin-eight-influences.glb",
+      "bytes": 2120,
+      "sha256": "ea5b96af4b6c62dfc1b29ae41e8c94c02d7b9f9b22eeedf189588bf6f0828a33"
+    },
+    {
+      "path": "skin-eight-influences.gltf",
+      "bytes": 3654,
+      "sha256": "4311351343d27f1b0c44b47e17ac8858dd7edf16fe14eff013d486797431eb39"
+    },
+    {
+      "path": "skin-eight-influences.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-eight-influences.vb.bin",
+      "bytes": 204,
+      "sha256": "015a840d104f32876b533c92ce2015ac4173be12d4407778239c32d6fd06038f"
     },
     {
       "path": "skin-mesh-node-transform.expected.json",
