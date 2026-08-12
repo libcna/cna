@@ -136,10 +136,11 @@ namespace CNA::Platform::Terminal {
         std::string prologue;
         AppendIf(prologue, options.alternateScreen, "\x1b[?1049h");
         AppendIf(prologue, options.hideCursor, "\x1b[?25l");
-        // 1000 is button events, 1002 adds motion while a button is held, 1006 switches the
-        // encoding to SGR -- which is what lifts the 223-column limit of the original scheme and
-        // makes release events distinguishable from presses.
-        AppendIf(prologue, options.mouseReporting, "\x1b[?1000h\x1b[?1002h\x1b[?1006h");
+        // 1000 is button events, 1003 adds all motion, and 1006 switches the encoding to SGR --
+        // which lifts the 223-column limit of the original scheme and makes release events
+        // distinguishable from presses. Mouse reporting is leased only while input is read, so
+        // all-motion traffic is never imposed on a presentation-only session.
+        AppendIf(prologue, options.mouseReporting, "\x1b[?1000h\x1b[?1003h\x1b[?1006h");
         // Push rather than replace the mode. A shell, multiplexer or embedding application may
         // already have enabled its own flags; popping on exit restores that exact state instead
         // of assuming CNA was the only terminal application involved. Fifteen requests
@@ -154,7 +155,7 @@ namespace CNA::Platform::Terminal {
     {
         std::string epilogue;
         AppendIf(epilogue, options.kittyKeyboard, "\x1b[<u");
-        AppendIf(epilogue, options.mouseReporting, "\x1b[?1006l\x1b[?1002l\x1b[?1000l");
+        AppendIf(epilogue, options.mouseReporting, "\x1b[?1006l\x1b[?1003l\x1b[?1000l");
         // Unconditional: a session that drew anything left an SGR state behind, and a shell
         // inheriting a stray background colour is the most visible way to get this wrong.
         epilogue += "\x1b[0m";

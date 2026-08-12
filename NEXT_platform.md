@@ -74,8 +74,8 @@ driver themselves, scoped by `--gtest_filter`, which is why they pass.
 | `cmake-build-devices` | **6471 passed, 0 failed** |
 | `cmake-build-terminal` | **6315 passed, 0 failed** |
 
-PLAT-138's focused terminal/session/conformance matrix was rerun after the synthetic fallback
-landed: **97 passed / 2 skipped** in `cmake-build-debug`, and **80 passed / 1 skipped** in each of
+PLAT-139's focused terminal/session/conformance matrix was rerun after SGR-1006 mouse input
+landed: **115 passed / 2 skipped** in `cmake-build-debug`, and **98 passed / 1 skipped** in each of
 `cmake-build-headless` and `cmake-build-terminal` (only environment/configuration skips). The
 registered `CnaPlatformWindowTests` + `CnaPlatformTests` also pass; in a restricted sandbox set
 `XDG_DATA_HOME` to a writable `/tmp` path so the preferences-path write test measures the service
@@ -124,7 +124,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**81 ✅ · 12 🟨 · 56 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **54 %** of the 149
+**82 ✅ · 12 🟨 · 55 ⬜ · 5 ⛔ · 1 ❌** across `plan_platform.md` — about **55 %** of the 149
 actionable rows done, counting partials.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -140,10 +140,10 @@ actionable rows done, counting partials.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
-- **Phase 10** (terminal) — **10 of 13 done**: PLAT-129 (spike), 130 (skeleton + selection), 131
+- **Phase 10** (terminal) — **11 of 13 done**: PLAT-129 (spike), 130 (skeleton + selection), 131
   (session lifecycle + restoration), 132 (surface presenter), 133 (damage tracking), 134 (colour
   ladder, landed with 132), 135 (frame budget), 136 (`SIGWINCH`), 137 (exact Kitty keyboard),
-  138 (synthetic keyboard fallback). **Remaining: PLAT-139, 140, 141** — see §7. The
+  138 (synthetic keyboard fallback), 139 (SGR-1006 mouse). **Remaining: PLAT-140, 141** — see §7. The
   conformance suite already runs green against `Terminal` as a third implementation, so PLAT-141's
   claim holds for the surface that exists today; the row stays open until the capabilities it is
   meant to cover are actually turned on.
@@ -265,8 +265,8 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-139**. Ten of thirteen rows are done
-   (129–138); three remain: **139, 140, 141**.
+1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-140**. Eleven of thirteen rows are done
+   (129–139); two remain: **140, 141**.
 
    **What already exists, and must be used rather than re-derived.** Everything is under
    `modules/platform/src/Terminal/`:
@@ -274,8 +274,8 @@ each, zero difference). The round trip is now checked before it is trusted.
    | File | What it does |
    |---|---|
    | `TerminalCapabilityProbe.*` | Detects tty-ness, colour depth and the **Kitty keyboard protocol**. Takes its descriptors as parameters so it is testable under a pty. `hasKittyKeyboard` selects PLAT-137's exact path or PLAT-138's timed fallback. |
-   | `TerminalSession.*`, `TerminalSessionController.*` | The session takes raw mode, alternate screen, hidden cursor, optional Kitty keyboard and optional SGR-1006 mouse, then gives all of it back on **every** exit path. The controller shares the one process session through per-use RAII leases; the fallback keyboard already reuses its lease without Kitty flags, and PLAT-139 acquires the already-defined mouse lease. |
-   | `TerminalKeyboard.*` | Shared exact Kitty + traditional CSI/SS3 decoder, held-key snapshot and event queue. Legacy presses receive one timed synthetic release; `PollEvents` and the keyboard service cannot race separate readers. PLAT-139 must extend this same input pump rather than read the descriptor independently. |
+   | `TerminalSession.*`, `TerminalSessionController.*` | The session takes raw mode, alternate screen, hidden cursor, optional Kitty keyboard and optional SGR-1006 mouse, then gives all of it back on **every** exit path. The controller shares the one process session through per-use RAII leases; keyboard, mouse and presenter combine their modes without opening parallel sessions. |
+   | `TerminalKeyboard.*`, `TerminalMouse.*` | One shared exact-Kitty/traditional-keyboard/SGR-mouse decoder, snapshots and ordered event queue. Legacy presses receive one timed synthetic release; keyboard, mouse and `PollEvents` cannot race separate descriptor readers. Mouse coordinates use the same nominal 8×16 cells as terminal resize handling and truthfully keep `pixelAccurateMouse` false. |
    | `TerminalFrameGrid.*` | RGBA → glyph grid. `TerminalCell` has `operator==` for the diff. |
    | `TerminalAnsiWriter.*` | Grid → ANSI, all four colour rungs, full frame and diff. |
    | `TerminalFrameBudget.*` | Median-of-five measured throughput; drops frames rather than blocking. |
@@ -286,8 +286,8 @@ each, zero difference). The round trip is now checked before it is trusted.
    platform construction and owns the process's single session only while a presenter, keyboard
    or mouse lease exists. Changing the set of users rebuilds the immutable signal-safe restoration
    record with the union of their modes; the presenter watches a generation counter and forces a
-   full redraw if that rebuild invalidated the alternate screen. PLAT-139 must add to this
-   controller/decoder path, not open a parallel session or race a second reader against it.
+   full redraw if that rebuild invalidated the alternate screen. PLAT-140 must preserve this
+   lifecycle while completing the capability/refusal profile and native-handle boundary.
 
    **Testing terminal code in CI.** This environment has no terminal: output is redirected, so
    `isatty` is false and every interesting path refuses. Two mechanisms already exist and both

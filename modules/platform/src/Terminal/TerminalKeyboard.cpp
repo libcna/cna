@@ -9,6 +9,8 @@
 #include <charconv>
 #include <chrono>
 #include <cstdint>
+#include <limits>
+#include <type_traits>
 #include <utility>
 
 namespace CNA::Platform::Terminal {
@@ -571,6 +573,86 @@ namespace CNA::Platform::Terminal {
         return true;
     }
 
+    bool DecodeSgrMouseReport(const std::string_view sequence, SgrMouseReport& report)
+    {
+        if (sequence.size() < 9 || !sequence.starts_with("\x1b[<") ||
+            (sequence.back() != 'M' && sequence.back() != 'm'))
+        {
+            return false;
+        }
+
+        const std::string_view body = sequence.substr(3, sequence.size() - 4);
+        const std::size_t firstSeparator = body.find(';');
+        if (firstSeparator == std::string_view::npos)
+        {
+            return false;
+        }
+        const std::size_t secondSeparator = body.find(';', firstSeparator + 1);
+        if (secondSeparator == std::string_view::npos ||
+            body.find(';', secondSeparator + 1) != std::string_view::npos)
+        {
+            return false;
+        }
+
+        std::uint32_t encodedButton = 0;
+        std::uint32_t column = 0;
+        std::uint32_t row = 0;
+        if (!ParseNumber(body.substr(0, firstSeparator), encodedButton) ||
+            !ParseNumber(body.substr(firstSeparator + 1,
+                                     secondSeparator - firstSeparator - 1), column) ||
+            !ParseNumber(body.substr(secondSeparator + 1), row) || column == 0 || row == 0)
+        {
+            return false;
+        }
+
+        SgrMouseReport decoded;
+        decoded.column = column;
+        decoded.row = row;
+        const std::uint32_t button = encodedButton & 3u;
+
+        if (encodedButton > 255u || (encodedButton & 128u) != 0)
+        {
+            return false;  // extended buttons 8--11 have no CNA snapshot bits
+        }
+        if ((encodedButton & 64u) != 0)
+        {
+            if (sequence.back() != 'M')
+            {
+                return false;  // wheel releases do not exist in the protocol
+            }
+            decoded.kind = SgrMouseReportKind::Wheel;
+            switch (button)
+            {
+                case 0: decoded.wheelY = 1; break;
+                case 1: decoded.wheelY = -1; break;
+                case 2: decoded.wheelX = -1; break;
+                case 3: decoded.wheelX = 1; break;
+                default: break;
+            }
+        }
+        else if ((encodedButton & 32u) != 0)
+        {
+            if (sequence.back() != 'M')
+            {
+                return false;
+            }
+            decoded.kind = SgrMouseReportKind::Motion;
+        }
+        else
+        {
+            if (button >= 3)
+            {
+                return false;
+            }
+            decoded.kind = SgrMouseReportKind::Button;
+            decoded.button = static_cast<std::uint8_t>(button + 1);
+            decoded.pressed = sequence.back() == 'M';
+        }
+
+        report = decoded;
+        return true;
+    }
+
     TerminalInputDecoder::TerminalInputDecoder(
         std::shared_ptr<TerminalSessionController> sessions)
         : sessions_(std::move(sessions)), exactKeyboardState_(sessions_->HasKittyKeyboard())
@@ -585,7 +667,33 @@ namespace CNA::Platform::Terminal {
         {
             keyboardLease_ = sessions_->Acquire(TerminalSessionUse::Keyboard);
         }
+        PumpInput(now);
+    }
 
+    void TerminalInputDecoder::PumpMouse()
+    {
+        if (!mouseLease_)
+        {
+            mouseLease_ = sessions_->Acquire(TerminalSessionUse::Mouse);
+        }
+        PumpInput(std::chrono::steady_clock::now());
+    }
+
+    void TerminalInputDecoder::PumpAll()
+    {
+        if (!keyboardLease_)
+        {
+            keyboardLease_ = sessions_->Acquire(TerminalSessionUse::Keyboard);
+        }
+        if (!mouseLease_)
+        {
+            mouseLease_ = sessions_->Acquire(TerminalSessionUse::Mouse);
+        }
+        PumpInput(std::chrono::steady_clock::now());
+    }
+
+    void TerminalInputDecoder::PumpInput(const std::chrono::steady_clock::time_point now)
+    {
         const int descriptor = sessions_->GetInputDescriptor();
         char buffer[512];
         for (;;)
@@ -649,25 +757,38 @@ namespace CNA::Platform::Terminal {
                 inputBuffer_.erase(0, start);
             }
 
-            const std::size_t end = inputBuffer_.find('u', 2);
+            const auto isFinal = [](const unsigned char byte) {
+                return byte >= 0x40 && byte <= 0x7e;
+            };
+            const auto end = std::find_if(inputBuffer_.begin() + 2, inputBuffer_.end(), isFinal);
             const std::size_t next = inputBuffer_.find("\x1b[", 2);
-            if (next != std::string::npos && (end == std::string::npos || next < end))
+            if (next != std::string::npos &&
+                (end == inputBuffer_.end() ||
+                 next < static_cast<std::size_t>(end - inputBuffer_.begin())))
             {
                 inputBuffer_.erase(0, next);
                 continue;
             }
-            if (end == std::string::npos)
+            if (end == inputBuffer_.end())
             {
                 return;
             }
 
+            const std::size_t sequenceLength =
+                static_cast<std::size_t>(end - inputBuffer_.begin()) + 1;
+            const std::string_view sequence(inputBuffer_.data(), sequenceLength);
+            SgrMouseReport mouse;
             KeyEvent event;
-            if (DecodeKittyKeyEvent(std::string_view(inputBuffer_).substr(0, end + 1), event))
+            if (DecodeSgrMouseReport(sequence, mouse))
+            {
+                Apply(mouse);
+            }
+            else if (DecodeKittyKeyEvent(sequence, event))
             {
                 Apply(event);
                 events_.push_back(event);
             }
-            inputBuffer_.erase(0, end + 1);
+            inputBuffer_.erase(0, sequenceLength);
         }
     }
 
@@ -716,8 +837,13 @@ namespace CNA::Platform::Terminal {
             }
 
             const std::string_view sequence(inputBuffer_.data(), sequenceLength);
+            SgrMouseReport mouse;
             KeyEvent event;
-            if (DecodeLegacyKeyEvent(sequence, event))
+            if (DecodeSgrMouseReport(sequence, mouse))
+            {
+                Apply(mouse);
+            }
+            else if (DecodeLegacyKeyEvent(sequence, event))
             {
                 ApplySyntheticPress(event, now);
             }
@@ -737,6 +863,71 @@ namespace CNA::Platform::Terminal {
             }
             inputBuffer_.erase(0, sequenceLength);
         }
+    }
+
+    void TerminalInputDecoder::Apply(const SgrMouseReport& report)
+    {
+        const auto cellToClient = [](const std::uint32_t coordinate, const int cellSize) {
+            const std::uint32_t zeroBased = coordinate - 1;
+            if (zeroBased > static_cast<std::uint32_t>(
+                                std::numeric_limits<int>::max() / cellSize))
+            {
+                return std::numeric_limits<int>::max();
+            }
+            return static_cast<int>(zeroBased) * cellSize;
+        };
+        const int x = cellToClient(report.column, 8);
+        const int y = cellToClient(report.row, 16);
+
+        if (report.kind == SgrMouseReportKind::Motion)
+        {
+            MouseMotionEvent motion;
+            motion.x = static_cast<float>(x);
+            motion.y = static_cast<float>(y);
+            motion.deltaX = static_cast<float>(x - mouseSnapshot_.x);
+            motion.deltaY = static_cast<float>(y - mouseSnapshot_.y);
+            mouseSnapshot_.x = x;
+            mouseSnapshot_.y = y;
+            events_.emplace_back(motion);
+            return;
+        }
+
+        mouseSnapshot_.x = x;
+        mouseSnapshot_.y = y;
+        if (report.kind == SgrMouseReportKind::Button)
+        {
+            const std::uint8_t bit = static_cast<std::uint8_t>(1u << (report.button - 1));
+            if (report.pressed)
+            {
+                mouseSnapshot_.buttons |= bit;
+            }
+            else
+            {
+                mouseSnapshot_.buttons &= static_cast<std::uint8_t>(~bit);
+            }
+
+            MouseButtonEvent button;
+            button.button = report.button;
+            button.pressed = report.pressed;
+            button.x = static_cast<float>(x);
+            button.y = static_cast<float>(y);
+            events_.emplace_back(button);
+            return;
+        }
+
+        const auto addStep = [](int& accumulator, const int step) {
+            if ((step > 0 && accumulator < std::numeric_limits<int>::max()) ||
+                (step < 0 && accumulator > std::numeric_limits<int>::min()))
+            {
+                accumulator += step;
+            }
+        };
+        addStep(mouseSnapshot_.scrollX, report.wheelX);
+        addStep(mouseSnapshot_.scrollY, report.wheelY);
+        MouseWheelEvent wheel;
+        wheel.x = static_cast<float>(report.wheelX);
+        wheel.y = static_cast<float>(report.wheelY);
+        events_.emplace_back(wheel);
     }
 
     void TerminalInputDecoder::ApplySyntheticPress(
@@ -853,10 +1044,21 @@ namespace CNA::Platform::Terminal {
     void TerminalInputDecoder::DrainEvents(std::vector<PlatformEvent>& destination,
                                            const WindowId window)
     {
-        for (KeyEvent& event : events_)
+        for (PlatformEvent& event : events_)
         {
-            event.window = window;
-            destination.emplace_back(event);
+            std::visit(
+                [window](auto& value) {
+                    using Event = std::decay_t<decltype(value)>;
+                    if constexpr (std::is_same_v<Event, KeyEvent> ||
+                                  std::is_same_v<Event, MouseMotionEvent> ||
+                                  std::is_same_v<Event, MouseButtonEvent> ||
+                                  std::is_same_v<Event, MouseWheelEvent>)
+                    {
+                        value.window = window;
+                    }
+                },
+                event);
+            destination.emplace_back(std::move(event));
         }
         events_.clear();
     }

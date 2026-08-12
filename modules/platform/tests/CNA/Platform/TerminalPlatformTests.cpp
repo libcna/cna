@@ -61,10 +61,10 @@ TEST(TerminalPlatformTest, ConstructionTouchesNoTerminalState)
 
 TEST(TerminalPlatformTest, OnlyTheCapabilitiesWhoseTasksHaveLandedAreAdvertised)
 {
-    // Not an aspiration: mouse (PLAT-139) lands in its own task, and a capability advertised
-    // before its implementation exists is the silent no-op the contract forbids. Exact keyboard
-    // state is conditional on a successful Kitty probe; the synthetic PLAT-138 service may exist
-    // while that quality flag is false, as IPlatformKeyboard's contract explicitly requires.
+    // Not an aspiration: a capability advertised before its implementation exists is the silent
+    // no-op the contract forbids. ExactKeyboardState and PixelAccurateMouse are quality flags,
+    // however: the synthetic keyboard and cell-quantised mouse services may exist while those
+    // flags are false, as their service contracts explicitly require.
     //
     // Surface presentation is the exception, and conditionally: it is implemented (PLAT-132), so
     // it is true exactly when standard output really is a terminal and false otherwise. Asserting
@@ -82,7 +82,8 @@ TEST(TerminalPlatformTest, OnlyTheCapabilitiesWhoseTasksHaveLandedAreAdvertised)
     for (const PlatformCapability capability : AllCapabilities())
     {
         if (capability == PlatformCapability::SurfacePresentation ||
-            capability == PlatformCapability::ExactKeyboardState)
+            capability == PlatformCapability::ExactKeyboardState ||
+            capability == PlatformCapability::PixelAccurateMouse)
         {
             continue;
         }

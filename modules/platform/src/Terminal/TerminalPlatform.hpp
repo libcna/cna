@@ -7,6 +7,7 @@
 #include "../Common/StandardSystemInfo.hpp"
 #include "TerminalCapabilityProbe.hpp"
 #include "TerminalKeyboard.hpp"
+#include "TerminalMouse.hpp"
 #include "TerminalResizeWatcher.hpp"
 #include "TerminalSessionController.hpp"
 
@@ -32,8 +33,7 @@ namespace CNA::Platform::Terminal {
      * Selection, factory registration, timing, the subsystem lifecycle, a window, the services
      * every platform must have (PLAT-130), surface presentation (PLAT-132), exact keyboard state
      * where the terminal answers the Kitty protocol probe (PLAT-137), and a timed synthetic
-     * keyboard fallback otherwise (PLAT-138). Mouse input (PLAT-139) still refuses until its task
-     * lands.
+     * keyboard fallback otherwise (PLAT-138), plus cell-quantised SGR mouse input (PLAT-139).
      *
      * ### The window is a pixel surface, not the character grid
      *
@@ -84,7 +84,8 @@ namespace CNA::Platform::Terminal {
          *
          * `surfacePresentation` is true exactly when standard output is a terminal, so the answer
          * differs between a process run from a shell and the same process with its output
-         * redirected. `exactKeyboardState` is true only after a successful Kitty-protocol probe.
+         * redirected. `exactKeyboardState` is true only after a successful Kitty-protocol probe;
+         * `pixelAccurateMouse` stays false because SGR-1006 reports character cells.
          *
          * @return The capability set.
          */
@@ -135,7 +136,10 @@ namespace CNA::Platform::Terminal {
          * @return Exact Kitty input, a timed fallback on a queryable TTY, or null without one.
          */
         [[nodiscard]] IPlatformKeyboard* GetKeyboard() override;
-        /** @brief Gets the mouse service. @return Null until PLAT-139 lands. */
+        /**
+         * @brief Gets the cell-quantised mouse service.
+         * @return The service on a queryable TTY, or null without one.
+         */
         [[nodiscard]] IPlatformMouse* GetMouse() override;
         /** @brief Gets the gamepad service. @return Null; no gamepad channel exists through a TTY. */
         [[nodiscard]] IPlatformGamepad* GetGamepad() override;
@@ -233,6 +237,7 @@ namespace CNA::Platform::Terminal {
         mutable std::shared_ptr<TerminalSessionController> sessions_;
         mutable std::shared_ptr<TerminalInputDecoder> inputDecoder_;
         mutable std::unique_ptr<TerminalKeyboard> keyboard_;
+        mutable std::unique_ptr<TerminalMouse> mouse_;
 
         /// The single window slot, held jointly with whatever window occupies it.
         std::shared_ptr<WindowSlot> windowSlot_;

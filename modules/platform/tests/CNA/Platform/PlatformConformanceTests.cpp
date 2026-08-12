@@ -58,6 +58,11 @@ TEST_P(PlatformConformance, EveryServiceIsNullExactlyWhenItsCapabilityIsFalse)
     // The contract's central rule. A platform that advertises a capability and then hands back
     // null sends a caller into a null dereference; one that returns a service while reporting
     // false makes the capability set useless for deciding whether to ask.
+    //
+    // Keyboard and mouse are intentionally absent from this equality list. Their capability
+    // fields describe quality, not presence: a terminal offers timed key releases while
+    // ExactKeyboardState is false, and cell-quantised mouse input while PixelAccurateMouse is
+    // false. Those are usable services whose approximation callers can inspect explicitly.
     EXPECT_EQ(platform_->GetGamepad() != nullptr, capabilities_.gamepad) << "gamepad";
     EXPECT_EQ(platform_->GetTextInput() != nullptr, capabilities_.textInput) << "textInput";
     EXPECT_EQ(platform_->GetSensors() != nullptr, capabilities_.sensors) << "sensors";

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include "CNA/Platform/Input/IPlatformMouse.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
 
 #include "TerminalSessionController.hpp"
@@ -39,6 +40,44 @@ namespace CNA::Platform::Terminal {
      */
     [[nodiscard]] bool DecodeLegacyKeyEvent(std::string_view sequence, KeyEvent& event);
 
+    /** @brief The semantic kind carried by one decoded SGR-1006 mouse report. */
+    enum class SgrMouseReportKind
+    {
+        /** @brief A physical button was pressed or released. */
+        Button,
+        /** @brief The pointer entered another terminal cell. */
+        Motion,
+        /** @brief A vertical or horizontal wheel step occurred. */
+        Wheel
+    };
+
+    /** @brief One decoded SGR-1006 report before cell coordinates become client coordinates. */
+    struct SgrMouseReport
+    {
+        /** @brief What the report describes. */
+        SgrMouseReportKind kind = SgrMouseReportKind::Motion;
+        /** @brief One-based terminal column. */
+        std::uint32_t column = 0;
+        /** @brief One-based terminal row. */
+        std::uint32_t row = 0;
+        /** @brief CNA button number (1 left, 2 middle, 3 right), or zero. */
+        std::uint8_t button = 0;
+        /** @brief True for a button press, false for a release. */
+        bool pressed = false;
+        /** @brief Horizontal wheel step: -1 left, +1 right, or zero. */
+        int wheelX = 0;
+        /** @brief Vertical wheel step: -1 down, +1 up, or zero. */
+        int wheelY = 0;
+    };
+
+    /**
+     * @brief Decodes one xterm SGR-1006 mouse report.
+     * @param sequence The complete `CSI < Cb ; Cx ; Cy M|m` report.
+     * @param report Receives cell coordinates and event semantics; untouched on failure.
+     * @return True when the complete sequence is a supported report.
+     */
+    [[nodiscard]] bool DecodeSgrMouseReport(std::string_view sequence, SgrMouseReport& report);
+
     /**
      * @brief The shared terminal input pump and held-key state.
      *
@@ -62,6 +101,12 @@ namespace CNA::Platform::Terminal {
         /** @brief Reads every key sequence currently available without blocking. */
         void Pump();
 
+        /** @brief Acquires mouse reporting and pumps currently available input. */
+        void PumpMouse();
+
+        /** @brief Acquires both input modes and pumps the platform event stream. */
+        void PumpAll();
+
         /**
          * @brief Pumps input using a supplied monotonic instant.
          *
@@ -82,6 +127,9 @@ namespace CNA::Platform::Terminal {
         /** @brief Gets the current held-key snapshot. @return Exact or synthesised state. */
         [[nodiscard]] const KeyboardSnapshot& GetSnapshot() const { return snapshot_; }
 
+        /** @brief Gets the current cell-quantised mouse snapshot. @return The snapshot. */
+        [[nodiscard]] const MouseSnapshot& GetMouseSnapshot() const { return mouseSnapshot_; }
+
     private:
         struct SyntheticHeldKey
         {
@@ -94,18 +142,22 @@ namespace CNA::Platform::Terminal {
         void ConsumeLegacySequences(std::chrono::steady_clock::time_point now);
         void ApplySyntheticPress(KeyEvent event, std::chrono::steady_clock::time_point now);
         void ExpireSyntheticKeys(std::chrono::steady_clock::time_point now);
+        void PumpInput(std::chrono::steady_clock::time_point now);
         void Apply(const KeyEvent& event);
+        void Apply(const SgrMouseReport& report);
         void RebuildSnapshot();
 
         std::shared_ptr<TerminalSessionController> sessions_;
         TerminalSessionController::Lease keyboardLease_;
+        TerminalSessionController::Lease mouseLease_;
         bool exactKeyboardState_ = false;
         std::string inputBuffer_;
         std::set<std::pair<Scancode, KeyCode>> heldKeys_;
         std::map<std::pair<Scancode, KeyCode>, SyntheticHeldKey> syntheticHeldKeys_;
         std::set<KeyCode> pressed_;
-        std::vector<KeyEvent> events_;
+        std::vector<PlatformEvent> events_;
         KeyboardSnapshot snapshot_;
+        MouseSnapshot mouseSnapshot_;
         std::uint16_t lockModifiers_ = 0;
         std::optional<std::chrono::steady_clock::time_point> pendingEscapeSince_;
     };

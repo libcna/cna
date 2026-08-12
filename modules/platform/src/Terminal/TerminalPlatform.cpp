@@ -176,8 +176,9 @@ namespace CNA::Platform::Terminal {
         capabilities.surfacePresentation = attachedToTerminal_;
         capabilities.exactKeyboardState = detectedCapabilities_.hasKittyKeyboard;
 
-        // The non-Kitty keyboard fallback (PLAT-138) reports the service with this flag false;
-        // mouse (PLAT-139) stays absent until its own task lands.
+        // The non-Kitty keyboard fallback reports a service with its quality flag false. The
+        // terminal mouse follows the same pattern: its service exists but coordinates are cells
+        // expanded to nominal client units, so pixelAccurateMouse deliberately remains false.
         return capabilities;
     }
 
@@ -194,10 +195,12 @@ namespace CNA::Platform::Terminal {
             outputDescriptor_, inputDescriptor_, detected.hasKittyKeyboard);
         std::shared_ptr<TerminalInputDecoder> decoder;
         std::unique_ptr<TerminalKeyboard> keyboard;
+        std::unique_ptr<TerminalMouse> mouse;
         if (detected.canQuery)
         {
             decoder = std::make_shared<TerminalInputDecoder>(sessions);
             keyboard = std::make_unique<TerminalKeyboard>(decoder);
+            mouse = std::make_unique<TerminalMouse>(decoder);
         }
 
         // Publish the cache only after every allocation succeeded. A failed first call remains
@@ -206,6 +209,7 @@ namespace CNA::Platform::Terminal {
         sessions_ = std::move(sessions);
         inputDecoder_ = std::move(decoder);
         keyboard_ = std::move(keyboard);
+        mouse_ = std::move(mouse);
         capabilitiesDetected_ = true;
     }
 
@@ -303,7 +307,7 @@ namespace CNA::Platform::Terminal {
         EnsureCapabilitiesDetected();
         if (inputDecoder_ != nullptr)
         {
-            inputDecoder_->Pump();
+            inputDecoder_->PumpAll();
             const WindowId window = windowSlot_->window != nullptr
                                         ? windowSlot_->window->GetId()
                                         : WindowId{0};
@@ -333,7 +337,11 @@ namespace CNA::Platform::Terminal {
         EnsureCapabilitiesDetected();
         return keyboard_.get();
     }
-    IPlatformMouse* TerminalPlatform::GetMouse() { return nullptr; }
+    IPlatformMouse* TerminalPlatform::GetMouse()
+    {
+        EnsureCapabilitiesDetected();
+        return mouse_.get();
+    }
     IPlatformGamepad* TerminalPlatform::GetGamepad() { return nullptr; }
     IPlatformTextInput* TerminalPlatform::GetTextInput() { return nullptr; }
     IPlatformSensors* TerminalPlatform::GetSensors() { return nullptr; }
