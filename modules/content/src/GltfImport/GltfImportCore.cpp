@@ -487,19 +487,51 @@ namespace CNA::Internal::GltfImport
             int componentsPerValue = 0;
             bool cubicSpline = false;
             bool stepInterpolation = false;
+            /// Adjacent input samples sharing a time (§3.11 forbids them; see `LoadChannel`).
+            int duplicateTimes = 0;
         };
 
+        // plan_gltf.md GLTF-313. §3.11 requires a sampler's input times to be **strictly
+        // increasing**, and every reader here takes that on trust: `FindBracket` walks the array
+        // once looking for the first pair straddling t, and `BuildTrack` merges channel times with
+        // a sort-then-unique that assumes the inputs were already ordered.
+        //
+        // The two ways to break that rule are not equally harmful, so they get different answers:
+        //
+        //   * A **decreasing** step is refused. There is no defensible reading of it -- the curve
+        //     doubles back on itself, so a time inside the reversed span has two authored values
+        //     and `FindBracket` returns whichever it meets first. Sorting instead would silently
+        //     re-pair each time with a different value than the exporter wrote, turning a broken
+        //     file into a plausible-looking wrong animation, which is worse than a named failure.
+        //   * **Equal** adjacent times are tolerated and counted. They are what an exporter emits
+        //     for a hard cut (hold, then jump), `FindBracket`'s zero-length span already yields
+        //     amount 0 and therefore the earlier sample, and refusing them would reject assets
+        //     that play correctly. The count reaches `AnimationReportEXT` so the tolerance is
+        //     visible rather than assumed.
         SampledChannel LoadChannel(const cgltf_animation_channel& ch, cgltf_size componentsPerValue,
-                                    const char* context)
+                                    const std::string& context)
         {
             SampledChannel result;
             result.componentsPerValue = static_cast<int>(componentsPerValue);
             result.cubicSpline = ch.sampler->interpolation == cgltf_interpolation_type_cubic_spline;
             result.stepInterpolation = ch.sampler->interpolation == cgltf_interpolation_type_step;
 
-            const std::vector<float> times = UnpackAccessor(ch.sampler->input, 1, context);
+            const std::vector<float> times = UnpackAccessor(ch.sampler->input, 1, context.c_str());
             result.times.assign(times.begin(), times.end());
-            result.values = UnpackAccessor(ch.sampler->output, componentsPerValue, context);
+            for (std::size_t i = 0; i + 1 < result.times.size(); ++i)
+            {
+                if (result.times[i + 1] < result.times[i])
+                {
+                    throw std::runtime_error(
+                        "Animation sampler input of " + context + " is not ascending: sample " +
+                        std::to_string(i + 1) + " is at t=" + std::to_string(result.times[i + 1]) +
+                        ", before sample " + std::to_string(i) + " at t=" +
+                        std::to_string(result.times[i]) +
+                        ". glTF requires sampler input to be strictly increasing.");
+                }
+                if (result.times[i + 1] == result.times[i]) { ++result.duplicateTimes; }
+            }
+            result.values = UnpackAccessor(ch.sampler->output, componentsPerValue, context.c_str());
             return result;
         }
 
@@ -953,36 +985,44 @@ namespace CNA::Internal::GltfImport
         ///
         /// @param resolve Maps a channel's target node to a bone index, or -1 to skip it.
         /// @param skippedTargets Incremented for each channel whose target `resolve` rejected.
+        /// @param clipName Names the owning clip in any diagnostic a loaded channel raises.
+        /// @param duplicateTimes Accumulates every channel's equal-adjacent-input count.
         std::unordered_map<int, BoneChannels> GatherChannels(
             const cgltf_animation& anim, float unitScale,
             const std::function<int(const cgltf_node*)>& resolve, double& maxTime,
-            bool& sawUnsupportedPath, std::size_t& skippedTargets)
+            std::size_t& unsupportedPaths, std::size_t& skippedTargets,
+            const std::string& clipName, int& duplicateTimes)
         {
             std::unordered_map<int, BoneChannels> byBone;
             for (cgltf_size c = 0; c < anim.channels_count; ++c)
             {
                 const cgltf_animation_channel& ch = anim.channels[c];
+                const std::string context =
+                    "clip '" + clipName + "' channel " + std::to_string(c);
                 const int boneIdx = resolve(ch.target_node);
                 if (boneIdx < 0) { ++skippedTargets; continue; }
 
                 if (ch.target_path == cgltf_animation_path_type_translation)
                 {
-                    byBone[boneIdx].translation = LoadChannel(ch, 3, "translation channel");
+                    byBone[boneIdx].translation = LoadChannel(ch, 3, context + " (translation)");
                     // Translation values (and, for CUBICSPLINE, their in/out tangents -- both are
                     // position-derived quantities) must track the same unit-scale correction
                     // already applied to bind-pose translations, or an animated bone would jump
                     // back to unscaled-space offsets mid-clip.
                     for (float& component : byBone[boneIdx].translation->values) { component *= unitScale; }
+                    duplicateTimes += byBone[boneIdx].translation->duplicateTimes;
                 }
                 else if (ch.target_path == cgltf_animation_path_type_rotation)
                 {
-                    byBone[boneIdx].rotation = LoadChannel(ch, 4, "rotation channel");
+                    byBone[boneIdx].rotation = LoadChannel(ch, 4, context + " (rotation)");
+                    duplicateTimes += byBone[boneIdx].rotation->duplicateTimes;
                 }
                 else if (ch.target_path == cgltf_animation_path_type_scale)
                 {
-                    byBone[boneIdx].scale = LoadChannel(ch, 3, "scale channel");
+                    byBone[boneIdx].scale = LoadChannel(ch, 3, context + " (scale)");
+                    duplicateTimes += byBone[boneIdx].scale->duplicateTimes;
                 }
-                else { sawUnsupportedPath = true; continue; } // e.g. morph target weights
+                else { ++unsupportedPaths; continue; } // e.g. morph target weights
 
                 if (ch.sampler->input->count > 0)
                 {
@@ -991,6 +1031,19 @@ namespace CNA::Internal::GltfImport
                 }
             }
             return byBone;
+        }
+
+        /// The longest single source channel of one bone, in samples. A track with more keys than
+        /// this was genuinely resampled onto a union of disagreeing key times (`GLTF-315`); a track
+        /// with exactly this many passed its source through.
+        std::size_t LongestSourceChannel(const BoneChannels& channels)
+        {
+            std::size_t longest = 0;
+            for (const auto* ch : {&channels.translation, &channels.rotation, &channels.scale})
+            {
+                if (*ch) { longest = std::max(longest, ch->value().times.size()); }
+            }
+            return longest;
         }
 
         /// Resamples one bone's channels onto the union of their key times, filling each missing
@@ -1033,13 +1086,15 @@ namespace CNA::Internal::GltfImport
 
     std::vector<ClipOut> ExtractSceneNodeClips(const cgltf_data* data, const SceneGraphOut& scene,
                                                 float unitScale,
-                                                std::vector<std::string>& warnings)
+                                                std::vector<std::string>& warnings,
+                                                AnimationReportEXT* report)
     {
         // GLTF-293: rigid (non-joint) node animation. Before the real ModelBone hierarchy existed
         // there was nothing for such a channel to drive, which is why D6 waited on GLTF-103/113/114
         // rather than on the animation layer.
         std::vector<ClipOut> clips;
         if (data == nullptr) { return clips; }
+        if (report != nullptr) { *report = AnimationReportEXT{}; }
 
         for (cgltf_size a = 0; a < data->animations_count; ++a)
         {
@@ -1047,21 +1102,23 @@ namespace CNA::Internal::GltfImport
             const std::string clipName = anim.name ? anim.name : ("Clip" + std::to_string(a));
 
             double maxTime = 0.0;
-            bool sawUnsupportedPath = false;
+            std::size_t unsupportedPaths = 0;
             std::size_t skippedTargets = 0;
+            int duplicateTimes = 0;
             const std::unordered_map<int, BoneChannels> byBone = GatherChannels(
                 anim, unitScale,
                 [&scene](const cgltf_node* node) {
                     const auto it = scene.indexOfNode.find(node);
                     return it == scene.indexOfNode.end() ? -1 : it->second;
                 },
-                maxTime, sawUnsupportedPath, skippedTargets);
+                maxTime, unsupportedPaths, skippedTargets, clipName, duplicateTimes);
 
-            if (sawUnsupportedPath)
+            if (unsupportedPaths > 0)
             {
                 warnings.push_back(
-                    "Clip '" + clipName + "' targets a channel path this tool does not import "
-                    "(e.g. morph target weights) -- skipped.");
+                    "Clip '" + clipName + "' has " + std::to_string(unsupportedPaths) +
+                    " channel(s) on a path this tool does not import (e.g. morph target "
+                    "weights) -- skipped.");
             }
             if (skippedTargets > 0)
             {
@@ -1076,13 +1133,33 @@ namespace CNA::Internal::GltfImport
             clip.name = clipName;
             clip.duration = maxTime;
             clip.targetSpace = ClipTargetSpace::SceneNode;
+            int resampledTracks = 0;
             for (const auto& [boneIdx, channels] : byBone)
             {
                 const Matrix& bindPose =
                     scene.nodes[static_cast<std::size_t>(boneIdx)].localTransform;
                 if (std::optional<TrackOut> track = BuildTrack(boneIdx, channels, bindPose))
                 {
+                    if (track->keys.size() > LongestSourceChannel(channels)) { ++resampledTracks; }
                     clip.tracks.push_back(std::move(*track));
+                }
+            }
+
+            if (report != nullptr)
+            {
+                ++report->animationCount;
+                report->channelCount += static_cast<int>(anim.channels_count);
+                report->skippedOutOfSceneChannels += static_cast<int>(skippedTargets);
+                report->skippedUnsupportedPathChannels += static_cast<int>(unsupportedPaths);
+                report->duplicateInputTimeCount += duplicateTimes;
+                report->trackCount += static_cast<int>(clip.tracks.size());
+                report->resampledTrackCount += resampledTracks;
+                if (clip.tracks.empty()) { ++report->emptyAnimationCount; }
+                else
+                {
+                    ++report->clipCount;
+                    report->longestClipDuration =
+                        std::max(report->longestClipDuration, clip.duration);
                 }
             }
             // Deterministic order: an unordered_map's iteration order is not a property anyone
@@ -1100,62 +1177,52 @@ namespace CNA::Internal::GltfImport
     }
 
     std::vector<ClipOut> ExtractClips(const cgltf_data* data, const SkeletonResult& skel,
-                                       float unitScale, std::vector<std::string>& warnings)
+                                       float unitScale, std::vector<std::string>& warnings,
+                                       AnimationReportEXT* report)
     {
         std::vector<ClipOut> clips;
+        if (report != nullptr) { *report = AnimationReportEXT{}; }
 
         for (cgltf_size a = 0; a < data->animations_count; ++a)
         {
             const cgltf_animation& anim = data->animations[a];
+            const std::string clipName = anim.name ? anim.name : ("Clip" + std::to_string(a));
 
-            std::unordered_map<int, BoneChannels> byBone;
             double maxTime = 0.0;
-            bool sawUnsupportedTarget = false;
+            std::size_t unsupportedPaths = 0;
+            std::size_t skippedTargets = 0;
+            int duplicateTimes = 0;
+            // The same gatherer the scene-node path uses -- the only difference between the two is
+            // which index space a target node resolves into (§15.1.2), and keeping the resolution
+            // as the sole parameter is what stops the joint and rigid readers drifting apart.
+            const std::unordered_map<int, BoneChannels> byBone = GatherChannels(
+                anim, unitScale,
+                [&skel](const cgltf_node* node) {
+                    const auto it = skel.nodeToNewIndex.find(node);
+                    return it == skel.nodeToNewIndex.end() ? -1 : it->second;
+                },
+                maxTime, unsupportedPaths, skippedTargets, clipName, duplicateTimes);
 
-            for (cgltf_size c = 0; c < anim.channels_count; ++c)
-            {
-                const cgltf_animation_channel& ch = anim.channels[c];
-                auto it = skel.nodeToNewIndex.find(ch.target_node);
-                if (it == skel.nodeToNewIndex.end()) { continue; } // targets a non-joint node -- skip
-                const int boneIdx = it->second;
-
-                if (ch.target_path == cgltf_animation_path_type_translation)
-                {
-                    byBone[boneIdx].translation = LoadChannel(ch, 3, "translation channel");
-                    // Translation values (and, for CUBICSPLINE, their in/out tangents -- both are
-                    // position-derived quantities) must track the same unit-scale correction
-                    // already applied to the skeleton's own bind-pose translations, or an
-                    // animated bone would jump back to unscaled-space offsets mid-clip.
-                    for (float& component : byBone[boneIdx].translation->values) { component *= unitScale; }
-                }
-                else if (ch.target_path == cgltf_animation_path_type_rotation)
-                {
-                    byBone[boneIdx].rotation = LoadChannel(ch, 4, "rotation channel");
-                }
-                else if (ch.target_path == cgltf_animation_path_type_scale)
-                {
-                    byBone[boneIdx].scale = LoadChannel(ch, 3, "scale channel");
-                }
-                else { sawUnsupportedTarget = true; continue; } // e.g. morph target weights
-
-                if (ch.sampler->input->count > 0)
-                {
-                    const std::vector<float> t = UnpackAccessor(ch.sampler->input, 1, "sampler input");
-                    maxTime = std::max(maxTime, static_cast<double>(t.back()));
-                }
-            }
-
-            if (sawUnsupportedTarget)
+            if (unsupportedPaths > 0)
             {
                 warnings.push_back(
-                    "Clip '" + std::string(anim.name ? anim.name : "") +
-                    "' targets a channel path this tool does not import (e.g. morph target "
+                    "Clip '" + clipName + "' has " + std::to_string(unsupportedPaths) +
+                    " channel(s) on a path this tool does not import (e.g. morph target "
                     "weights) -- skipped.");
+            }
+            if (skippedTargets > 0)
+            {
+                warnings.push_back(
+                    "Clip '" + clipName + "' has " + std::to_string(skippedTargets) +
+                    " channel(s) whose target node is not a joint of this skin -- they drive "
+                    "nothing in this palette, and are skipped. Rigid node animation is imported "
+                    "separately (GLTF-293).");
             }
 
             ClipOut clip;
-            clip.name = anim.name ? anim.name : ("Clip" + std::to_string(a));
+            clip.name = clipName;
             clip.duration = maxTime;
+            int resampledTracks = 0;
 
             for (const auto& [boneIdx, channels] : byBone)
             {
@@ -1163,10 +1230,36 @@ namespace CNA::Internal::GltfImport
                 if (std::optional<TrackOut> track = BuildTrack(
                         boneIdx, channels, skel.bones[static_cast<std::size_t>(boneIdx)].bindPoseLocal))
                 {
+                    if (track->keys.size() > LongestSourceChannel(channels)) { ++resampledTracks; }
                     clip.tracks.push_back(std::move(*track));
                 }
             }
+            // Deterministic order, for the same reason the scene-node path sorts: byBone is an
+            // unordered_map, so without this the track order of a skinned clip is a rehash away
+            // from changing, and `GLTF-314` asks the two loaders to agree track-for-track.
+            std::sort(clip.tracks.begin(), clip.tracks.end(),
+                      [](const TrackOut& l, const TrackOut& r) { return l.boneIndex < r.boneIndex; });
 
+            if (report != nullptr)
+            {
+                ++report->animationCount;
+                report->channelCount += static_cast<int>(anim.channels_count);
+                report->skippedOutOfSceneChannels += static_cast<int>(skippedTargets);
+                report->skippedUnsupportedPathChannels += static_cast<int>(unsupportedPaths);
+                report->duplicateInputTimeCount += duplicateTimes;
+                report->trackCount += static_cast<int>(clip.tracks.size());
+                report->resampledTrackCount += resampledTracks;
+                ++report->clipCount;
+                if (clip.tracks.empty()) { ++report->emptyAnimationCount; }
+                report->longestClipDuration =
+                    std::max(report->longestClipDuration, clip.duration);
+            }
+
+            // Unlike the scene-node path, a trackless clip is still emitted here. The two are not
+            // inconsistent: a skinned model's clips are selected BY NAME (GLTF-306), so dropping
+            // one silently renames every clip after it from the application's point of view,
+            // whereas a rigid clip driving nothing would put an "animations" key on a model that
+            // has no animated bone at all. The warning above says which channels were lost.
             clips.push_back(std::move(clip));
         }
 

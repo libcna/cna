@@ -1062,6 +1062,46 @@ namespace CNA::Internal::GltfImport
                                   float unitScale);
 
     /**
+     * @brief What one file's animations turned into (plan_gltf.md `GLTF-315`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API, and internal for the same reason
+     * @ref NodeGraphReportEXT is: `GLTF-034`'s public report is deferred by the `GLTF-025` gate.
+     *
+     * Every field is a place where an animation arrives **incompletely**, and each is invisible in
+     * the result on its own. A channel whose target is outside the default scene, and a channel on
+     * a path CNA cannot drive, both leave a clip that plays — just not the motion that was
+     * authored. Resampling is the third: a bone whose translation and rotation are keyed at
+     * different times is baked onto the union of both, which is exact at the source keys and an
+     * approximation between them, and nothing in a `ClipOut` records that it happened.
+     */
+    struct AnimationReportEXT
+    {
+        /** @brief Animations the file declares. */
+        int animationCount = 0;
+        /** @brief Clips produced — never more than `animationCount`, and fewer when one drives nothing. */
+        int clipCount = 0;
+        /** @brief Animations that resolved to no track at all, so no clip was emitted for them. */
+        int emptyAnimationCount = 0;
+        /** @brief Channels across every animation, before any were skipped. */
+        int channelCount = 0;
+        /** @brief Channels skipped because their target node is not in the imported index space. */
+        int skippedOutOfSceneChannels = 0;
+        /** @brief Channels skipped because their `path` is one CNA cannot drive (e.g. `weights`). */
+        int skippedUnsupportedPathChannels = 0;
+        /** @brief Tracks produced across every clip. */
+        int trackCount = 0;
+        /**
+         * @brief Tracks whose keys outnumber the longest single source channel, i.e. genuinely
+         * resampled onto a union of disagreeing key times rather than passed through.
+         */
+        int resampledTrackCount = 0;
+        /** @brief Adjacent sampler input samples sharing a time, summed over every channel loaded. */
+        int duplicateInputTimeCount = 0;
+        /** @brief The longest clip's duration, in seconds. */
+        double longestClipDuration = 0.0;
+    };
+
+    /**
      * @brief Extracts every animation in a glTF file as a resampled, per-bone keyframe clip.
      *
      * @param data The parsed glTF file.
@@ -1069,10 +1109,15 @@ namespace CNA::Internal::GltfImport
      * @param unitScale Uniform scale applied to translation channel values/tangents.
      * @param warnings Appended with a human-readable note for each skipped, unsupported channel
      *                 target (e.g. morph target weights).
+     * @param report Optional out-parameter, filled with the counts described by
+     *               @ref AnimationReportEXT. Ignored when nullptr.
      * @return One `ClipOut` per glTF animation.
+     * @throws std::runtime_error If a sampler's input times are not ascending (§3.11: they must be
+     *                            strictly increasing, and `FindBracket` assumes it).
      */
     std::vector<ClipOut> ExtractClips(const cgltf_data* data, const SkeletonResult& skel,
-                                       float unitScale, std::vector<std::string>& warnings);
+                                       float unitScale, std::vector<std::string>& warnings,
+                                       AnimationReportEXT* report = nullptr);
 
     /**
      * @brief Extracts every animation as a clip whose tracks target **scene nodes**, not joints.
@@ -1098,11 +1143,16 @@ namespace CNA::Internal::GltfImport
      * @param scene The default scene's flattened node graph (from `BuildSceneGraph`).
      * @param unitScale Uniform scale applied to translation channel values/tangents.
      * @param warnings Appended with a human-readable note per skipped channel, naming why.
+     * @param report Optional out-parameter, filled with the counts described by
+     *               @ref AnimationReportEXT. Ignored when nullptr.
      * @return One `ClipOut` per glTF animation that drives at least one imported scene node.
+     * @throws std::runtime_error If a sampler's input times are not ascending (§3.11: they must be
+     *                            strictly increasing, and `FindBracket` assumes it).
      */
     std::vector<ClipOut> ExtractSceneNodeClips(const cgltf_data* data, const SceneGraphOut& scene,
                                                 float unitScale,
-                                                std::vector<std::string>& warnings);
+                                                std::vector<std::string>& warnings,
+                                                AnimationReportEXT* report = nullptr);
 
     /**
      * @brief Extracts a glTF image's raw encoded bytes, resolving whichever of the three glTF

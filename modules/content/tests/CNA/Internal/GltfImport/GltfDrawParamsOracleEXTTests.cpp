@@ -347,6 +347,12 @@ TEST(GltfConformanceL6, ViewAndProjectionReachEveryDrawUnaltered)
 // matrix, over the whole corpus. Two independent routes to the same nine numbers.
 TEST(GltfConformanceL6, NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3)
 {
+    // Every world 3x3 in the corpus was diagonal until an animation fixture put a rotation in one,
+    // and a diagonal matrix is its own transpose -- so a transposition error in either route was
+    // invisible. Counted here so the sweep cannot quietly go back to proving nothing: with only
+    // symmetric worlds it would pass whichever convention it used.
+    std::size_t asymmetricWorlds = 0;
+
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
@@ -359,12 +365,21 @@ TEST(GltfConformanceL6, NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3)
                  model, Matrix::getIdentityProperty(), TestView(), TestProjection()))
         {
             SCOPED_TRACE(ToJson(d));
+            // Matrix::ToColumnMajor is a straight sequential copy of XNA's row-major storage --
+            // reinterpreting a row-vector matrix's rows as a column-vector matrix's columns IS
+            // the transpose, so no arithmetic one is performed. Copying the array straight back
+            // therefore reproduces the XNA world exactly, and transposing here would ask for the
+            // inverse rotation: correct for every diagonal world, wrong for every rotated one.
             Matrix world;
             float* w = &world.M11;
             for (std::size_t i = 0; i < 16; ++i) { w[i] = d.worldColMajor[i]; }
-            // worldColMajor is column-major; XNA's Matrix is row-major, so the array above is the
-            // transpose of the bound world. Transposing it back gives the matrix to invert.
-            world = Matrix::Transpose(world);
+
+            if (std::fabs(world.M12 - world.M21) > kTolerance ||
+                std::fabs(world.M13 - world.M31) > kTolerance ||
+                std::fabs(world.M23 - world.M32) > kTolerance)
+            {
+                ++asymmetricWorlds;
+            }
 
             const ColumnMajor3x3 expected = ExpectedNormalMatrix(world);
             for (std::size_t i = 0; i < expected.size(); ++i)
@@ -373,6 +388,10 @@ TEST(GltfConformanceL6, NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3)
             }
         }
     }
+
+    EXPECT_GT(asymmetricWorlds, 0u)
+        << "no fixture's world 3x3 is asymmetric, so this sweep agrees with itself under either "
+           "transposition convention and proves nothing about which one is right";
 }
 
 // The case the rule exists for. Under `scale = [2,3,4]` the world 3x3 and its inverse transpose

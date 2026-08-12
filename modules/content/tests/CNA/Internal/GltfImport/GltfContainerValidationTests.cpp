@@ -85,11 +85,33 @@ namespace
             return {};
         };
 
-        if (skeletons.empty()) { return extractWith(nullptr); }
+        if (skeletons.empty())
+        {
+            const std::string error = extractWith(nullptr);
+            if (!error.empty()) { return error; }
+        }
         for (const SkeletonResult& skeleton : skeletons)
         {
             const std::string error = extractWith(&skeleton);
             if (!error.empty()) { return error; }
+        }
+
+        // Clips are extraction too, and the third instance of the same blind spot the two comments
+        // above describe: GLTF-313's non-monotonic-sampler refusal lives in the channel loader, so
+        // a probe that only extracted meshes and skeletons reported a file with a backwards
+        // animation timeline as importing perfectly cleanly.
+        std::vector<std::string> clipWarnings;
+        try
+        {
+            (void)ExtractSceneNodeClips(&data, scene, 1.0f, clipWarnings);
+            for (const SkeletonResult& skeleton : skeletons)
+            {
+                (void)ExtractClips(&data, skeleton, 1.0f, clipWarnings);
+            }
+        }
+        catch (const std::exception& e)
+        {
+            return e.what();
         }
         return {};
     }

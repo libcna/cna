@@ -17,8 +17,60 @@ from __future__ import annotations
 import math
 
 from ..builder import FLOAT, TRIANGLES, UNSIGNED_SHORT, GltfBuilder
-from ..manifest import Defect, Fixture, l3_primitive, mat_from_trs, transform_point, world_positions
+from ..manifest import (Defect, Fixture, l3_primitive, mat_from_trs, mat_mul, transform_point,
+                        world_positions)
 from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
+
+
+def _carrier(b: GltfBuilder, *, mesh_name: str,
+             targets: list[dict[str, int]] | None = None,
+             weights: list[float] | None = None) -> tuple[int, int, int, int]:
+    """Adds the shared carrier triangle to ``b``.
+
+    Every fixture below animates *something*; the geometry is never the thing under test, so it is
+    built once here rather than restated ten times where a typo could quietly mean two different
+    meshes.
+
+    :param b: the builder to add to.
+    :param mesh_name: the mesh's name.
+    :param targets: optional morph targets, authored as glTF target objects.
+    :param weights: optional default morph weights.
+    :return: ``(mesh, position, normal, indices)`` -- the mesh index and its accessor indices.
+    """
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    primitive: dict = {
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }
+    if targets is not None:
+        primitive["targets"] = targets
+    mesh = b.add_mesh([primitive], name=mesh_name, weights=weights)
+    return mesh, position, normal, indices
+
+
+def _sampler(b: GltfBuilder, *, times: list[float], values: list, value_type: str,
+             interpolation: str = "LINEAR") -> dict:
+    """Packs one animation sampler's input/output accessors and returns the sampler object.
+
+    :param b: the builder to add the accessors to.
+    :param times: the sampler's input (key times, in seconds).
+    :param values: the sampler's output, already in glTF's own element form.
+    :param value_type: the output accessor type (``SCALAR``, ``VEC3``, ``VEC4``).
+    :param interpolation: ``LINEAR``, ``STEP`` or ``CUBICSPLINE``.
+    :return: the glTF sampler object.
+    """
+    return {
+        "input": b.add_packed_accessor(usage="animation input (time)", values=times,
+                                       accessor_type="SCALAR", component_type=FLOAT),
+        "output": b.add_packed_accessor(usage="animation output", values=values,
+                                        accessor_type=value_type, component_type=FLOAT),
+        "interpolation": interpolation,
+    }
 
 _HALF_SQRT2 = math.sqrt(0.5)
 #: Rest pose and a quarter turn about +Z. The quarter turn maps the triangle's +X vertex onto +Y,
@@ -337,4 +389,564 @@ def morph_node_weights_override() -> Fixture:
     )
 
 
-FIXTURES = [anim_rigid_node, anim_nonzero_start, morph_node_weights_override]
+def anim_translation_scale() -> Fixture:
+    """Translation and scale channels keyed at **disjoint** times. Owns **GLTF-316**'s resampling.
+
+    A ``ClipOut`` track carries one keyframe per time, holding all three of T/R/S at once, but glTF
+    keys each path on its own sampler. Reconciling the two means baking onto the union of every
+    channel's times, which is exact at each source key and an interpolation everywhere else -- and
+    a ``ClipOut`` cannot say it happened, which is why ``AnimationReportEXT`` counts it
+    (``GLTF-315``).
+
+    Disjoint times are what make the union observable: translation is keyed at 0 and 2, scale at 1
+    and 3, so the track has **four** keys where neither source channel has more than two. Overlap
+    would produce a union the same size as its inputs and prove nothing.
+
+    The node's rest rotation is a quarter turn -- a value no channel touches -- so "the missing
+    component comes from the bind pose" is separable from "the missing component is identity".
+    """
+    b = GltfBuilder("anim-translation-scale")
+    mesh, _, _, _ = _carrier(b, mesh_name="SlidingTri")
+    node = b.add_node(name="Slider", mesh=mesh, rotation=list(_KEY_ROTATIONS[1]))
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    b.add_animation({
+        "name": "SlideAndSwell",
+        "samplers": [
+            _sampler(b, times=[0.0, 2.0], values=[(0.0, 0.0, 0.0), (4.0, 0.0, 0.0)],
+                     value_type="VEC3"),
+            _sampler(b, times=[1.0, 3.0], values=[(1.0, 1.0, 1.0), (3.0, 3.0, 3.0)],
+                     value_type="VEC3"),
+        ],
+        "channels": [
+            {"sampler": 0, "target": {"node": node, "path": "translation"}},
+            {"sampler": 1, "target": {"node": node, "path": "scale"}},
+        ],
+    })
+
+    # Every value below is the LINEAR reading of the two channels at the union times, with each
+    # channel clamped to its own first/last key outside its own range (Appendix C).
+    expected = [
+        {"time": 0.0, "translation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        {"time": 1.0, "translation": [2.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        {"time": 2.0, "translation": [4.0, 0.0, 0.0], "scale": [2.0, 2.0, 2.0]},
+        {"time": 3.0, "translation": [4.0, 0.0, 0.0], "scale": [3.0, 3.0, 3.0]},
+    ]
+    for key in expected:
+        key["rotation"] = list(_KEY_ROTATIONS[1])
+        key["nodeLocalColumnMajor"] = mat_from_trs(key["translation"], key["rotation"],
+                                                   key["scale"])
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 1,
+        "clipNames": ["SlideAndSwell"],
+        "duration": 3.0,
+        "trackCount": 1,
+        "sourceChannelKeyCounts": [2, 2],
+        "expectedTrackKeyCount": 4,
+        "resampled": True,
+        "resamplingRule": "A track holds T, R and S together at one time, so channels keyed apart "
+                          "are baked onto the union of their times -- four keys here, from two "
+                          "channels of two. Exact at every source key, interpolated between them.",
+        "restRotation": list(_KEY_ROTATIONS[1]),
+        "bindPoseFillRule": "The rotation no channel drives comes from the NODE'S OWN rest pose, "
+                            "not from identity -- which is why the rest rotation here is a quarter "
+                            "turn rather than identity.",
+        "expectedKeys": expected,
+    }
+    return Fixture(
+        id="anim-translation-scale", audit_fixture=None, owning_group="animation",
+        description="One node driven by a translation channel keyed at t=0,2 and a scale channel "
+                    "keyed at t=1,3. The union of the two is four keys where neither channel has "
+                    "more than two, so resampling is observable; the untouched rotation must come "
+                    "from the node's non-identity rest pose.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["translation path", "scale path", "channels keyed at disjoint times",
+                  "union resampling", "bind-pose fill of an undriven component"],
+        spec_anchors=["animations", "transformations"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SlidingTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def anim_step() -> Fixture:
+    """A ``STEP`` translation channel. Locks **GLTF-301** into the corpus.
+
+    STEP holds the sample at the *start* of the half-open interval it is in, so at exactly
+    ``times[i+1]`` the next sample is already in force. Every interior key of a STEP channel lands
+    on a bracket boundary once the track is resampled onto its own times, so the whole channel is
+    that one case repeated -- a three-sample channel read the naive way yields ``0, 0, 20`` instead
+    of ``0, 10, 20``, with the last value right only because the end clamp takes a different path.
+
+    Three samples rather than two: with two, the first is the start clamp and the second the end
+    clamp, and neither exercises the boundary rule at all.
+    """
+    b = GltfBuilder("anim-step")
+    mesh, _, _, _ = _carrier(b, mesh_name="SteppingTri")
+    node = b.add_node(name="Stepper", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    times = [0.0, 1.0, 2.0]
+    values = [(0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (20.0, 0.0, 0.0)]
+    b.add_animation({
+        "name": "Teleport",
+        "samplers": [_sampler(b, times=times, values=values, value_type="VEC3",
+                              interpolation="STEP")],
+        "channels": [{"sampler": 0, "target": {"node": node, "path": "translation"}}],
+    })
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 1,
+        "clipNames": ["Teleport"],
+        "duration": 2.0,
+        "interpolation": "STEP",
+        "expectedKeys": [
+            {"time": t, "translation": list(v), "nodeLocalColumnMajor": mat_from_trs(v, None, None)}
+            for t, v in zip(times, values)
+        ],
+        "boundaryRule": "§3.6's intervals are half-open: times[i]'s value applies on "
+                        "[times[i], times[i+1]), so AT times[i+1] the next sample is already in "
+                        "force. Reading STEP as 'the value at the bracket's lower index' gives "
+                        "0, 0, 20 here -- the last one right by accident, via the end clamp.",
+        "midIntervalSamples": [
+            {"time": 0.5, "translation": [0.0, 0.0, 0.0]},
+            {"time": 1.5, "translation": [10.0, 0.0, 0.0]},
+        ],
+    }
+    return Fixture(
+        id="anim-step", audit_fixture=None, owning_group="animation",
+        description="A three-sample STEP translation channel. Every interior key lands exactly on "
+                    "a bracket boundary once resampled, which is the one case that separates a "
+                    "correct STEP reader from one that always returns the bracket's lower sample.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["STEP interpolation", "translation path", "half-open interval boundary"],
+        spec_anchors=["animations", "interpolation-step"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SteppingTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def anim_cubicspline() -> Fixture:
+    """A ``CUBICSPLINE`` translation channel, resampled at an interior time by a second channel.
+
+    CUBICSPLINE stores each key as an ``[in-tangent, value, out-tangent]`` triplet, so its output
+    accessor has three times the input's count and every read must stride past the tangents. With
+    both tangents zero the Hermite basis reduces to smoothstep, whose midpoint is exactly half --
+    ``5.0`` of a 10-unit span, against the ``5.0`` a linear reader would also produce. That is
+    deliberate: the midpoint is where the two agree, so the fixture states the **quarter** point
+    too (``2.5`` linear versus ``1.5625`` Hermite), where they do not.
+
+    A LINEAR scale channel keyed at ``t = 0.5`` is what forces the interior evaluation to happen
+    during *extraction* rather than only at playback: without it the union of key times is the
+    translation channel's own two, and the Hermite basis is never entered.
+    """
+    b = GltfBuilder("anim-cubicspline")
+    mesh, _, _, _ = _carrier(b, mesh_name="EasedTri")
+    node = b.add_node(name="Eased", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    zero = (0.0, 0.0, 0.0)
+    b.add_animation({
+        "name": "Ease",
+        "samplers": [
+            # Two keys, six elements: in-tangent, value, out-tangent for each.
+            _sampler(b, times=[0.0, 1.0],
+                     values=[zero, zero, zero, zero, (10.0, 0.0, 0.0), zero],
+                     value_type="VEC3", interpolation="CUBICSPLINE"),
+            _sampler(b, times=[0.0, 0.5, 1.0],
+                     values=[(1.0, 1.0, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0, 1.0)],
+                     value_type="VEC3"),
+        ],
+        "channels": [
+            {"sampler": 0, "target": {"node": node, "path": "translation"}},
+            {"sampler": 1, "target": {"node": node, "path": "scale"}},
+        ],
+    })
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 1,
+        "clipNames": ["Ease"],
+        "duration": 1.0,
+        "interpolation": "CUBICSPLINE",
+        "outputTripletRule": "A CUBICSPLINE output holds [in-tangent, value, out-tangent] per key, "
+                             "so its count is 3x the input's and the VALUE is the middle third. A "
+                             "reader that strides one element per key returns the tangents.",
+        "expectedKeys": [
+            {"time": 0.0, "translation": [0.0, 0.0, 0.0]},
+            # h01(0.5) = -2(0.125) + 3(0.25) = 0.5, and both tangents are zero.
+            {"time": 0.5, "translation": [5.0, 0.0, 0.0]},
+            {"time": 1.0, "translation": [10.0, 0.0, 0.0]},
+        ],
+        "quarterPoint": {
+            "time": 0.25,
+            "hermite": [1.5625, 0.0, 0.0],
+            "linearWouldBe": [2.5, 0.0, 0.0],
+            "note": "The midpoint is where smoothstep and lerp agree, so it cannot tell them "
+                    "apart. h01(0.25) = -2(0.015625) + 3(0.0625) = 0.15625.",
+        },
+    }
+    return Fixture(
+        id="anim-cubicspline", audit_fixture=None, owning_group="animation",
+        description="A two-key CUBICSPLINE translation channel with zero tangents, plus a LINEAR "
+                    "scale channel keyed at t=0.5 so the spline is actually evaluated at an "
+                    "interior time during extraction rather than only at playback.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["CUBICSPLINE interpolation", "in/out tangent triplets", "Hermite basis",
+                  "interior resampling"],
+        spec_anchors=["animations", "interpolation-cubic"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="EasedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def anim_two_clips() -> Fixture:
+    """Two animations in one file, the second **unnamed**. Owns **GLTF-305**/**GLTF-306**.
+
+    Two animations is the ordinary case -- "Idle" and "Walk" -- and merging them would give one
+    clip whose second half is a different animation, which still plays and reads as a badly
+    authored loop rather than as an import bug.
+
+    The second animation carries no ``name``, so it becomes ``Clip1``: its **index**, which is the
+    only identifier the file itself provides. The first keeps its authored name, which is the
+    control -- a generator that renamed everything uniformly would satisfy "the names are
+    deterministic" without preserving anything an application can look a clip up by.
+    """
+    b = GltfBuilder("anim-two-clips")
+    mesh, _, _, _ = _carrier(b, mesh_name="DualClipTri")
+    node = b.add_node(name="Actor", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    b.add_animation({
+        "name": "Walk",
+        "samplers": [_sampler(b, times=[0.0, 2.0], values=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)],
+                              value_type="VEC3")],
+        "channels": [{"sampler": 0, "target": {"node": node, "path": "translation"}}],
+    })
+    # No "name" key at all -- not an empty string, which is a different thing an exporter writes.
+    b.add_animation({
+        "samplers": [_sampler(b, times=[0.0, 0.5], values=list(_KEY_ROTATIONS), value_type="VEC4")],
+        "channels": [{"sampler": 0, "target": {"node": node, "path": "rotation"}}],
+    })
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 2,
+        "clipNames": ["Walk", "Clip1"],
+        "clipDurations": [2.0, 0.5],
+        "namingRule": "An unnamed animation becomes 'Clip<index>' -- the only identifier the file "
+                      "provides. It must be stable across extractions, because AnimationPlayer and "
+                      "every .cnj consumer look a clip up BY NAME: a name that varied between runs "
+                      "would make a saved game referencing Clip1 find a different animation.",
+        "separationRule": "Two animations are two clips with their own durations, never one clip "
+                          "of 2.0s whose second half is the other animation.",
+    }
+    return Fixture(
+        id="anim-two-clips", audit_fixture=None, owning_group="animation",
+        description="One file with two animations driving the same node -- a named 'Walk' of 2.0s "
+                    "and an unnamed 0.5s one that must become 'Clip1'. Separates 'clips stay "
+                    "separate' from 'names survive', and the authored name is the control against "
+                    "a generator that renamed everything.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["multiple animations", "unnamed animation", "generated clip name",
+                  "per-clip duration"],
+        spec_anchors=["animations"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="DualClipTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def anim_repeated_time() -> Fixture:
+    """A channel with two samples at the **same** time -- an authored hard cut. Owns **GLTF-313**.
+
+    §3.11 requires sampler input to be strictly increasing, so a repeated time is technically
+    malformed, but it is what an exporter emits for an instantaneous jump and the file plays
+    correctly: ``FindBracket``'s zero-length span yields the earlier sample, so nothing reads out
+    of range. Refusing it would reject working assets, which is why CNA **tolerates and counts**
+    equal times while refusing decreasing ones (``bad-animation-input-order``).
+
+    What tolerance costs is stated rather than glossed: a track holds one keyframe per time, so the
+    union-with-dedup keeps the value in force *at* the cut (``+5``) and the post-cut value
+    (``-5``) is not representable. The clip plays a ramp up and a ramp down where the file
+    describes a jump. That is an approximation with a name and a count, not a silent one.
+    """
+    b = GltfBuilder("anim-repeated-time")
+    mesh, _, _, _ = _carrier(b, mesh_name="CutTri")
+    node = b.add_node(name="Cut", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    times = [0.0, 1.0, 1.0, 2.0]
+    values = [(0.0, 0.0, 0.0), (5.0, 0.0, 0.0), (-5.0, 0.0, 0.0), (0.0, 0.0, 0.0)]
+    b.add_animation({
+        "name": "HardCut",
+        "samplers": [_sampler(b, times=times, values=values, value_type="VEC3")],
+        "channels": [{"sampler": 0, "target": {"node": node, "path": "translation"}}],
+    })
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 1,
+        "clipNames": ["HardCut"],
+        "duration": 2.0,
+        "authoredTimes": list(times),
+        "duplicateAdjacentTimes": 1,
+        "policy": "tolerated-and-counted",
+        "policyRule": "Equal adjacent input times are kept: FindBracket's zero-length span already "
+                      "yields the earlier sample, so nothing reads out of range, and refusing them "
+                      "would reject assets that play correctly. A DECREASING step is refused "
+                      "instead -- see bad-animation-input-order.",
+        "expectedKeys": [
+            {"time": 0.0, "translation": [0.0, 0.0, 0.0]},
+            {"time": 1.0, "translation": [5.0, 0.0, 0.0]},
+            {"time": 2.0, "translation": [0.0, 0.0, 0.0]},
+        ],
+        "approximation": "Three keys, not four: a track holds one keyframe per time, so the value "
+                         "in force AT the cut (+5) survives and the post-cut value (-5) is not "
+                         "representable. AnimationReportEXT::duplicateInputTimeCount is what makes "
+                         "that visible rather than a silently smoothed jump.",
+    }
+    return Fixture(
+        id="anim-repeated-time", audit_fixture=None, owning_group="animation",
+        description="A translation channel with two samples at t=1.0 -- an authored hard cut. "
+                    "Tolerated and counted rather than refused, and the fixture states what the "
+                    "tolerance costs: the post-cut value is not representable in a resampled "
+                    "track, so the jump arrives as a ramp.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["repeated sampler input time", "hard cut", "input monotonicity policy"],
+        spec_anchors=["animations"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="CutTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def anim_parent_child() -> Fixture:
+    """A parent **and** its child, each driven by its own channel, in one clip.
+
+    One clip with two tracks is the shape a jointed mechanism has -- a turntable carrying an arm --
+    and it is where the two halves of the import meet: the tracks must land on the right *bones*
+    (the scene-node indices of two different nodes) and the poses must **compose**, parent before
+    child, or the arm swings in world space instead of with the table.
+
+    The child carries the mesh and the parent does not, so a reader that placed the geometry by the
+    animated node alone -- rather than by the composed chain -- would put it in the wrong place at
+    every time but ``t = 0``.
+    """
+    b = GltfBuilder("anim-parent-child")
+    mesh, _, _, _ = _carrier(b, mesh_name="ArmTri")
+    child = b.add_node(name="Arm", mesh=mesh, translation=[2.0, 0.0, 0.0])
+    parent = b.add_node(name="Turntable", children=[child])
+    b.add_scene([parent], name="Scene")
+    b.set_default_scene(0)
+
+    b.add_animation({
+        "name": "Rotate",
+        "samplers": [
+            _sampler(b, times=list(_KEY_TIMES), values=list(_KEY_ROTATIONS), value_type="VEC4"),
+            _sampler(b, times=list(_KEY_TIMES),
+                     values=[(2.0, 0.0, 0.0), (2.0, 0.0, 3.0)], value_type="VEC3"),
+        ],
+        "channels": [
+            {"sampler": 0, "target": {"node": parent, "path": "rotation"}},
+            {"sampler": 1, "target": {"node": child, "path": "translation"}},
+        ],
+    })
+
+    poses = []
+    for i, t in enumerate(_KEY_TIMES):
+        parent_local = mat_from_trs(None, _KEY_ROTATIONS[i], None)
+        child_local = mat_from_trs([(2.0, 0.0, 0.0), (2.0, 0.0, 3.0)][i], None, None)
+        world = mat_mul(parent_local, child_local)
+        poses.append({
+            "time": t,
+            "parentLocalColumnMajor": parent_local,
+            "childLocalColumnMajor": child_local,
+            "childWorldColumnMajor": world,
+            "worldPositions": [transform_point(world, p) for p in TRIANGLE_POSITIONS],
+        })
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 1,
+        "clipNames": ["Rotate"],
+        "duration": _KEY_TIMES[-1],
+        "trackCount": 2,
+        "animatedNodes": [{"node": parent, "name": "Turntable", "path": "rotation"},
+                          {"node": child, "name": "Arm", "path": "translation"}],
+        "compositionRule": "The mesh hangs off the CHILD and the parent carries no geometry, so a "
+                           "reader that placed it by the animated node alone rather than by the "
+                           "composed chain would be wrong everywhere except t=0.",
+        "posesAtKeyTimes": poses,
+    }
+    return Fixture(
+        id="anim-parent-child", audit_fixture=None, owning_group="animation",
+        description="A rotation channel on a parent and a translation channel on its mesh-bearing "
+                    "child, in one animation. Two tracks in one clip, landing on two different "
+                    "nodes' bones, whose poses must compose parent-before-child.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["two channels, two nodes", "parent/child composition", "animated hierarchy"],
+        spec_anchors=["animations", "nodes-and-hierarchy", "transformations"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="ArmTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def anim_weights_path() -> Fixture:
+    """A ``weights`` channel beside a ``rotation`` channel. Owns **GLTF-315**'s unsupported path.
+
+    ``weights`` is a legal fourth animation path (§3.11) and CNA cannot drive it: morph weights are
+    applied on the CPU at import (`GLTF-289`), so there is no per-frame weight to key. Skipping it
+    is the right answer; skipping it *silently* is not, because the file then imports, plays its
+    rotation, and simply never morphs -- which reads as a broken morph target rather than as an
+    unimported channel.
+
+    The rotation channel beside it is what makes the assertion sharp: the clip is **not** empty, so
+    "the unsupported channel was skipped" cannot be confused with "the animation was dropped".
+    """
+    b = GltfBuilder("anim-weights-path")
+    target_deltas = [(0.0, 0.0, 2.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]
+    target_position = b.add_packed_accessor(usage="morph POSITION delta", values=target_deltas,
+                                            accessor_type="VEC3", with_bounds=True)
+    mesh, _, _, _ = _carrier(b, mesh_name="MorphedTri",
+                             targets=[{"POSITION": target_position}], weights=[0.0])
+    node = b.add_node(name="Morphing", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    b.add_animation({
+        "name": "SpinAndMorph",
+        "samplers": [
+            _sampler(b, times=list(_KEY_TIMES), values=list(_KEY_ROTATIONS), value_type="VEC4"),
+            # One weight per target per key: SCALAR, count = keys x targets.
+            _sampler(b, times=list(_KEY_TIMES), values=[0.0, 1.0], value_type="SCALAR"),
+        ],
+        "channels": [
+            {"sampler": 0, "target": {"node": node, "path": "rotation"}},
+            {"sampler": 1, "target": {"node": node, "path": "weights"}},
+        ],
+    })
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 1,
+        "clipNames": ["SpinAndMorph"],
+        "duration": _KEY_TIMES[-1],
+        "channelCount": 2,
+        "importedChannelCount": 1,
+        "skippedUnsupportedPathChannels": 1,
+        "unsupportedPaths": ["weights"],
+        "rule": "'weights' is a legal fourth animation path and CNA cannot drive it: morph weights "
+                "are applied on the CPU at import (GLTF-289), so there is no per-frame weight to "
+                "key. Skipped -- and REPORTED, because a silent skip leaves a file that plays its "
+                "rotation and never morphs, which reads as a broken morph target.",
+        "notEmptyRule": "The clip still has one track from the rotation channel, so 'the "
+                        "unsupported channel was skipped' is distinguishable from 'the animation "
+                        "was dropped'.",
+    }
+    return Fixture(
+        id="anim-weights-path", audit_fixture=None, owning_group="animation",
+        description="An animation with a rotation channel CNA imports and a morph-target 'weights' "
+                    "channel it cannot drive. The weights channel is skipped and counted; the clip "
+                    "survives with its rotation track, so a skip is never mistaken for a drop.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["weights animation path", "unsupported channel path", "morph target",
+                  "partial channel import"],
+        spec_anchors=["animations", "morph-targets"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="MorphedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def anim_out_of_scene_target() -> Fixture:
+    """A channel targeting a node that is **not in the default scene**. Owns **GLTF-310**.
+
+    glTF scopes an animation to nothing: ``animations`` is a top-level array, and a channel may
+    name any node in the file, including one only a non-default scene contains. CNA imports the
+    default scene alone (`GLTF-133`), so such a channel drives a bone that does not exist.
+
+    Ignoring it is the only available answer -- there is nothing to apply it to -- so the whole
+    task is the *report*. A second channel drives an in-scene node, which is what makes the two
+    outcomes separable: one track survives, one channel is skipped, and the file is neither
+    rejected nor silently half-imported.
+    """
+    b = GltfBuilder("anim-out-of-scene-target")
+    mesh, _, _, _ = _carrier(b, mesh_name="InSceneTri")
+    in_scene = b.add_node(name="InScene", mesh=mesh)
+    # Nothing in the default scene reaches this node -- it is a root of scene 1 only.
+    off_scene = b.add_node(name="OffScene", translation=[0.0, 0.0, -8.0])
+    b.add_scene([in_scene], name="Default")
+    b.add_scene([off_scene], name="Other")
+    b.set_default_scene(0)
+
+    b.add_animation({
+        "name": "SpinBoth",
+        "samplers": [
+            _sampler(b, times=list(_KEY_TIMES), values=list(_KEY_ROTATIONS), value_type="VEC4"),
+            _sampler(b, times=list(_KEY_TIMES),
+                     values=[(0.0, 0.0, -8.0), (0.0, 4.0, -8.0)], value_type="VEC3"),
+        ],
+        "channels": [
+            {"sampler": 0, "target": {"node": in_scene, "path": "rotation"}},
+            {"sampler": 1, "target": {"node": off_scene, "path": "translation"}},
+        ],
+    })
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 1,
+        "clipNames": ["SpinBoth"],
+        "duration": _KEY_TIMES[-1],
+        "channelCount": 2,
+        "importedChannelCount": 1,
+        "skippedOutOfSceneChannels": 1,
+        "expectedTrackCount": 1,
+        "animatedInSceneNode": {"node": in_scene, "name": "InScene", "path": "rotation"},
+        "skippedTarget": {"node": off_scene, "name": "OffScene", "path": "translation",
+                          "inScene": 1},
+        "rule": "animations is a TOP-LEVEL array scoped to nothing, so a channel may name any node "
+                "in the file. CNA imports the default scene alone (GLTF-133), so a channel naming "
+                "a node only another scene contains drives a bone that does not exist. Ignored -- "
+                "there is nothing else available -- and reported, which is the whole task.",
+        "separabilityRule": "The second channel drives an in-scene node, so 'one channel was "
+                            "skipped' cannot be confused with 'the animation was dropped' or with "
+                            "'the file was rejected'.",
+    }
+    return Fixture(
+        id="anim-out-of-scene-target", audit_fixture=None, owning_group="animation",
+        description="A two-channel animation where one channel targets a node in the default scene "
+                    "and the other targets a node only the second scene contains. The out-of-scene "
+                    "channel is ignored and reported; the in-scene one still produces its track.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["channel targeting a node outside the default scene", "two scenes",
+                  "partial channel import", "default scene selection"],
+        spec_anchors=["animations", "scenes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="InSceneTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+FIXTURES = [anim_rigid_node, anim_nonzero_start, anim_translation_scale, anim_step,
+            anim_cubicspline, anim_two_clips, anim_repeated_time, anim_parent_child,
+            anim_weights_path, anim_out_of_scene_target, morph_node_weights_override]

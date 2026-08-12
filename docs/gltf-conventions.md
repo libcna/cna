@@ -324,3 +324,37 @@ animated translation keys, and the node hierarchy's own local translations — n
 never a node's authored scale, because a change of unit is not a change of shape. All of those have
 to move together: a model whose vertices shrink by a hundred while its node offsets do not comes
 apart, each part correctly sized and standing a hundred times too far from the next.
+
+## Animation: which channels arrive, and what the rest report
+
+An imported clip is a list of keyframes per bone, each holding translation, rotation and scale
+together. glTF keys each of those on its own sampler, so the two shapes do not correspond
+one-for-one and the reconciliation has consequences worth naming.
+
+**Channels are baked onto the union of their key times.** A bone whose translation is keyed at
+`t = 0, 2` and whose scale is keyed at `t = 1, 3` produces a track with four keys, each holding
+both components — every source key exactly, and an interpolation between them. A component no
+channel drives is filled from the node's **own rest pose**, not from identity, or a node authored
+with a rotation and animated only in translation would snap upright the moment the clip started.
+
+**Sampler input must be ascending, and the two ways of breaking that get different answers.** §3.11
+requires strictly increasing input, and every reader here relies on it. A **decreasing** step is
+refused with a named error: the curve doubles back, so a time inside the reversed span has two
+authored values, and sorting instead would silently re-pair each time with a value the exporter did
+not write — a broken file turned into a plausible-looking wrong animation. **Equal** adjacent times
+are kept and counted: they are what an exporter writes for a hard cut, the bracket search's
+zero-length span already yields the earlier sample, and refusing them would reject assets that play
+correctly. What tolerance costs is that a track holds one keyframe per time, so the value in force
+*at* the cut survives and the post-cut value does not — the jump arrives as a ramp.
+
+**Two kinds of channel are skipped, and both are reported by count.** A channel whose target node is
+not in the default scene drives a bone that was never imported (`animations` is a top-level array
+scoped to nothing, so a channel may name any node in the file). A channel on the `weights` path has
+nothing to drive either, because morph weights are applied on the CPU at import rather than per
+frame. Neither is an error and neither is silent: an animation that plays its rotation and never
+morphs reads as a broken morph target, not as an unimported channel.
+
+**An animation that drives nothing imported yields no rigid clip**, because an `animations` key on a
+model with no animated bone is its own kind of lie. A *skinned* clip is emitted even when trackless,
+which is not an inconsistency: skinned clips are selected by name, so dropping one silently renames
+every clip after it from the application's point of view.

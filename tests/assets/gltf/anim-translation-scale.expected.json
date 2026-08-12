@@ -1,0 +1,570 @@
+{
+  "id": "anim-translation-scale",
+  "description": "One node driven by a translation channel keyed at t=0,2 and a scale channel keyed at t=1,3. The union of the two is four keys where neither channel has more than two, so resampling is observable; the untouched rotation must come from the node's non-identity rest pose.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "animations",
+    "transformations"
+  ],
+  "inventory": {
+    "id": "anim-translation-scale",
+    "owningGroup": "animation",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3",
+      "L4"
+    ],
+    "features": [
+      "translation path",
+      "scale path",
+      "channels keyed at disjoint times",
+      "union resampling",
+      "bind-pose fill of an undriven component"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 1,
+    "accessorCount": 7,
+    "bufferViewCount": 7,
+    "bufferCount": 1,
+    "bufferByteLength": 144,
+    "extensionsUsed": [],
+    "extensionsRequired": []
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 72,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "animation input (time)",
+        "type": "SCALAR",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 80,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          2.0
+        ]
+      },
+      {
+        "index": 4,
+        "usage": "animation output",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 4,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 88,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          4.0,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "index": 5,
+        "usage": "animation input (time)",
+        "type": "SCALAR",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 5,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 112,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          3.0
+        ]
+      },
+      {
+        "index": 6,
+        "usage": "animation output",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 6,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 120,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          1.0,
+          1.0,
+          3.0,
+          3.0,
+          3.0
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "SlidingTri",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "tangents": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "Slider",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          -2.220446049250313e-16,
+          1.0000000000000002,
+          0.0,
+          0.0,
+          -1.0000000000000002,
+          -2.220446049250313e-16,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            -2.220446049250313e-16,
+            1.0000000000000002,
+            0.0
+          ],
+          [
+            -1.0000000000000002,
+            -2.220446049250313e-16,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        -1.0000000000000002,
+        -2.220446049250313e-16,
+        0.0
+      ],
+      "max": [
+        0.0,
+        1.0000000000000002,
+        0.0
+      ]
+    },
+    "animation": {
+      "animationCount": 1,
+      "clipNames": [
+        "SlideAndSwell"
+      ],
+      "duration": 3.0,
+      "trackCount": 1,
+      "sourceChannelKeyCounts": [
+        2,
+        2
+      ],
+      "expectedTrackKeyCount": 4,
+      "resampled": true,
+      "resamplingRule": "A track holds T, R and S together at one time, so channels keyed apart are baked onto the union of their times -- four keys here, from two channels of two. Exact at every source key, interpolated between them.",
+      "restRotation": [
+        0.0,
+        0.0,
+        0.7071067811865476,
+        0.7071067811865476
+      ],
+      "bindPoseFillRule": "The rotation no channel drives comes from the NODE'S OWN rest pose, not from identity -- which is why the rest rotation here is a quarter turn rather than identity.",
+      "expectedKeys": [
+        {
+          "time": 0.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "nodeLocalColumnMajor": [
+            -2.220446049250313e-16,
+            1.0000000000000002,
+            0.0,
+            0.0,
+            -1.0000000000000002,
+            -2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "translation": [
+            2.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "nodeLocalColumnMajor": [
+            -2.220446049250313e-16,
+            1.0000000000000002,
+            0.0,
+            0.0,
+            -1.0000000000000002,
+            -2.220446049250313e-16,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            2.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "time": 2.0,
+          "translation": [
+            4.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            2.0,
+            2.0,
+            2.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "nodeLocalColumnMajor": [
+            -4.440892098500626e-16,
+            2.0000000000000004,
+            0.0,
+            0.0,
+            -2.0000000000000004,
+            -4.440892098500626e-16,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.0,
+            0.0,
+            4.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "time": 3.0,
+          "translation": [
+            4.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            3.0,
+            3.0,
+            3.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.7071067811865476,
+            0.7071067811865476
+          ],
+          "nodeLocalColumnMajor": [
+            -6.661338147750939e-16,
+            3.000000000000001,
+            0.0,
+            0.0,
+            -3.000000000000001,
+            -6.661338147750939e-16,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            3.0,
+            0.0,
+            4.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      ]
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "anim-translation-scale.vb.bin",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "anim-translation-scale.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": []
+}

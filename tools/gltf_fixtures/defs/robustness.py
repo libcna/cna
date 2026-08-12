@@ -262,5 +262,90 @@ def skin_joint_index_padding() -> Fixture:
     )
 
 
+def bad_animation_input_order() -> Fixture:
+    """An animation sampler whose input times go **backwards**. Proves **`GLTF-313`**.
+
+    §3.11 requires sampler input to be strictly increasing, and every reader here takes that on
+    trust: ``FindBracket`` walks the array once looking for the first pair straddling ``t``, and
+    the track builder merges channel times with a sort-then-unique that assumes its inputs were
+    already ordered. Times ``0, 2, 1`` break both -- the curve doubles back, so a time inside the
+    reversed span has two authored values.
+
+    Refused rather than sorted, and which of the two is not arbitrary. Sorting would silently
+    re-pair each time with a different value than the exporter wrote, turning a broken file into a
+    plausible-looking wrong animation that plays; a named failure at import is recoverable, and a
+    quietly wrong animation is the failure mode this whole corpus exists to prevent. The **equal**
+    case is answered the other way -- see ``anim-repeated-time`` -- because equal times are what an
+    exporter emits for a hard cut and they read correctly.
+
+    Refused at *extraction*, not at validation: ``cgltf_validate`` does not check sampler input
+    ordering, so this is CNA's own check and the only thing standing between the file and an
+    animation whose values are paired with the wrong times.
+    """
+    b = GltfBuilder("bad-animation-input-order")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="BackwardsTri")
+    node = b.add_node(name="Backwards", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    # Both accessors are honestly packed and honestly described; the file is malformed only in the
+    # ORDER of the input values, which no structural check looks at.
+    times = b.add_packed_accessor(usage="animation input (time)", values=[0.0, 2.0, 1.0],
+                                  accessor_type="SCALAR", component_type=FLOAT)
+    offsets = b.add_packed_accessor(
+        usage="animation output (translation)",
+        values=[(0.0, 0.0, 0.0), (4.0, 0.0, 0.0), (8.0, 0.0, 0.0)], accessor_type="VEC3",
+        component_type=FLOAT)
+    b.add_animation({
+        "name": "Backwards",
+        "samplers": [{"input": times, "output": offsets, "interpolation": "LINEAR"}],
+        "channels": [{"sampler": 0, "target": {"node": node, "path": "translation"}}],
+    })
+
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["animation"] = {
+        "animationCount": 1,
+        "authoredTimes": [0.0, 2.0, 1.0],
+        "decreasingAtSample": 2,
+        "importable": False,
+    }
+    return Fixture(
+        id="bad-animation-input-order", audit_fixture=None, owning_group="robustness",
+        description="An animation sampler whose input times are 0, 2, 1. Every accessor is "
+                    "individually valid and cgltf_validate does not look at input ordering, so "
+                    "this is CNA's own check -- and it refuses rather than sorting, because "
+                    "sorting would re-pair each time with a value the exporter did not write.",
+        builder=b, validated_layers=["L1", "L2"],
+        features=["non-monotonic sampler input", "animation input ordering", "import rejection"],
+        spec_anchors=["animations"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="BackwardsTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+        rejection={
+            "stage": "extraction",
+            "task": "GLTF-313",
+            "errorContains": ["not ascending", "strictly increasing"],
+            "alsoRefusedAtExtraction": True,
+            "extractionErrorContains": ["not ascending", "strictly increasing"],
+            "note": "cgltf_validate has no rule about sampler input ordering, so structural "
+                    "validation passes and the mesh itself imports fine -- the refusal comes from "
+                    "clip extraction. Equal adjacent times are deliberately NOT refused "
+                    "(anim-repeated-time): they are what an exporter writes for a hard cut and "
+                    "they read correctly, whereas a decreasing step has two authored values for "
+                    "one time and no defensible reading at all.",
+        },
+    )
+
+
 FIXTURES = [bad_accessor_out_of_bounds, accessor_count_mismatch, skin_joint_index_out_of_range,
-            skin_joint_index_padding]
+            skin_joint_index_padding, bad_animation_input_order]

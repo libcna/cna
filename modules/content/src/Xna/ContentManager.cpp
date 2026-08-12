@@ -1936,6 +1936,47 @@ namespace Microsoft::Xna::Framework::Content
         // splitting the source into separate files) to reach the other groups -- a documented
         // limitation, not a bug. unitScale is always 1.0 (no CLI-argument equivalent exists for
         // runtime loading); a source file not authored in meters needs the offline tool instead.
+
+        // plan_gltf.md GLTF-315. Shared by both extraction paths so a skinned and an unskinned
+        // file report their animations the same way. Everything the report counts is a place an
+        // animation arrived incompletely and the result cannot say so on its own, so a lost
+        // channel is a warning while the shape of what did arrive is a debug line.
+        void LogAnimationReport(const std::string& path,
+                                 const CNA::Internal::GltfImport::AnimationReportEXT& report)
+        {
+            if (report.animationCount == 0) { return; }
+            CNA::Logger::Debug(
+                "glTF file '" + path + "': " + std::to_string(report.animationCount) +
+                " animation(s) -> " + std::to_string(report.clipCount) + " clip(s), " +
+                std::to_string(report.trackCount) + " track(s) over " +
+                std::to_string(report.channelCount) + " channel(s); longest clip " +
+                std::to_string(report.longestClipDuration) + "s.");
+            if (report.emptyAnimationCount > 0)
+            {
+                CNA::Logger::Warn(
+                    "glTF file '" + path + "': " + std::to_string(report.emptyAnimationCount) +
+                    " animation(s) drove nothing that was imported.");
+            }
+            if (report.resampledTrackCount > 0)
+            {
+                // Exact at every source key, an approximation between them. Worth saying: a rig
+                // whose translation and rotation are keyed on different beats is baked onto the
+                // union of both, so a curve authored with two keys can arrive with twelve.
+                CNA::Logger::Debug(
+                    "glTF file '" + path + "': " + std::to_string(report.resampledTrackCount) +
+                    " track(s) were resampled onto the union of their channels' key times, "
+                    "because translation, rotation and scale were keyed at different times.");
+            }
+            if (report.duplicateInputTimeCount > 0)
+            {
+                CNA::Logger::Debug(
+                    "glTF file '" + path + "': " +
+                    std::to_string(report.duplicateInputTimeCount) +
+                    " sampler input sample(s) repeat the previous time. glTF requires strictly "
+                    "increasing input; equal times are read as a hard cut and kept (GLTF-313).");
+            }
+        }
+
         Graphics::Model ReadGltfModel(const std::string& path, ContentManager& cm)
         {
             namespace fs = std::filesystem;
@@ -2170,7 +2211,14 @@ namespace Microsoft::Xna::Framework::Content
                 skinningData->SkeletonRootNameEXT = skeleton.declaredSkeletonRootName;
 
                 std::vector<std::string> warnings;
-                const std::vector<ClipOut> clips = ExtractClips(data, skeleton, 1.0f, warnings);
+                AnimationReportEXT animReport;
+                const std::vector<ClipOut> clips =
+                    ExtractClips(data, skeleton, 1.0f, warnings, &animReport);
+                // These were gathered and then dropped on the floor before GLTF-315: a channel a
+                // skinned import could not place said nothing at all on this path, which is the
+                // same silence D6 was made of.
+                for (const std::string& warning : warnings) { CNA::Logger::Warn(warning); }
+                LogAnimationReport(path, animReport);
                 for (const ClipOut& clip : clips)
                 {
                     Graphics::AnimationClipEXT outClip;
@@ -2203,9 +2251,11 @@ namespace Microsoft::Xna::Framework::Content
                 // model -- a skinned one's Tag already carries the skeleton, and that collision is
                 // a recorded limitation rather than something to resolve silently (GLTF-295).
                 std::vector<std::string> clipWarnings;
+                AnimationReportEXT animReport;
                 const std::vector<ClipOut> rigidClips =
-                    ExtractSceneNodeClips(data, sceneGraph, 1.0f, clipWarnings);
+                    ExtractSceneNodeClips(data, sceneGraph, 1.0f, clipWarnings, &animReport);
                 for (const std::string& warning : clipWarnings) { CNA::Logger::Warn(warning); }
+                LogAnimationReport(path, animReport);
                 if (!rigidClips.empty())
                 {
                     auto animations = std::make_unique<Graphics::ModelAnimationsEXT>();

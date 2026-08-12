@@ -1,6 +1,57 @@
 # CNA Known Bugs
 
 
+## `Matrix::Decompose` lost every axis-aligned rotation to a negative-zero sign test — FIXED 2026-08-12
+
+XNA's `Decompose` recovers each axis' scale sign from the product of that row's four elements.
+FNA's guard is `Math.Sign(product) < 0`, and **`Math.Sign` returns 0 for negative zero**, so FNA
+takes the `+1` branch there. CNA used `std::signbit`, which *is* true for negative zero, and a
+comment called the difference "an edge case with no practical impact".
+
+It was not an edge case. A quarter turn about any principal axis has exact zeros in every row, and
+`(-1) * 0` is `-0.0`, so `signbit` fired and flipped that row's sign. At unit scale that turns the
+normalised 3×3 into a **reflection**, and `Quaternion::CreateFromRotationMatrix` of a reflection is
+not a rotation at all: the quarter turn came back as the **identity quaternion**. Any code
+decomposing a node's local transform — glTF's own animation import among them — silently lost the
+node's orientation, with no error and no wrong-looking number anywhere upstream.
+
+Found by `anim-translation-scale`, a glTF fixture whose node rest pose is a quarter turn about +Z
+precisely so "the undriven component comes from the bind pose" is distinguishable from "the
+undriven component is identity". Every keyframe came back with an identity rotation.
+
+Fixed by reproducing FNA's test exactly (`product < 0.0f`, which is `Math.Sign(x) < 0` including
+for `-0.0f`). Locked by `MatrixTest.DecomposeAxisAlignedQuarterTurnRecoversTheRotationRatherThanIdentity`
+for all three axes, because the zero pattern differs per row and one axis passing is what made this
+look fine.
+
+One boundary is documented rather than changed, in
+`MatrixTest.DecomposeReportsPositiveScaleForAMirroredAffineTransform`: the sign heuristic multiplies
+the **fourth** column into each product, and `M14`/`M24`/`M34` are zero in every affine transform,
+so the sign is always `+1` for the matrices anyone actually decomposes and a mirrored transform
+decomposes to positive scales. That is FNA's behaviour, so CNA keeps it — `Decompose` is simply not
+a mirroring test, and anything that needs handedness (glTF's winding rule, `GLTF-116`) takes the
+determinant of the 3×3 instead.
+
+
+## glTF L6 oracle: the normal-matrix sweep transposed the world one time too many — FIXED 2026-08-12
+
+`GltfConformanceL6.NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3` checks the renderer's
+cofactor derivation against `Matrix::Invert` on the same world. It rebuilt the XNA matrix from the
+captured `worldColMajor` array and then transposed it — but `Matrix::ToColumnMajor` is a **straight
+sequential copy** of XNA's row-major storage (reinterpreting a row-vector matrix's rows as a
+column-vector matrix's columns *is* the transpose, so no arithmetic one is performed). Copying the
+array back therefore already reproduces the XNA world, and the extra transpose asked the oracle for
+the **inverse** rotation.
+
+Invisible for the whole life of the suite because every world 3×3 in the corpus was diagonal, and a
+diagonal matrix is its own transpose. `anim-translation-scale` is the first fixture whose bound
+world carries a rotation, and it failed immediately. The renderer's own derivation was correct
+throughout; only the oracle was wrong.
+
+The sweep now counts how many worlds it saw that are actually asymmetric and fails if that count is
+zero, so it cannot go back to agreeing with itself under either convention.
+
+
 ## glTF import: the eight defects the forensic audit found (`plan_gltf.md` D1–D8)
 
 `plan_gltf.md` `GLTF-012`. Every one was found by the conformance campaign's own oracle ladder

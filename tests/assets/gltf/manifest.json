@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 52,
+  "distinctAssetCount": 61,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 4,
@@ -23,10 +23,10 @@
     "materials": 6,
     "textures": 2,
     "skinning": 10,
-    "animation": 3,
+    "animation": 11,
     "cameras": 4,
     "scenes": 1,
-    "robustness": 4
+    "robustness": 5
   },
   "promotedAuditFixtures": {
     "f1": "xf-shared-mesh",
@@ -991,6 +991,148 @@
       "auditFixture": null
     },
     {
+      "id": "anim-translation-scale",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "translation path",
+        "scale path",
+        "channels keyed at disjoint times",
+        "union resampling",
+        "bind-pose fill of an undriven component"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "anim-step",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "STEP interpolation",
+        "translation path",
+        "half-open interval boundary"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "anim-cubicspline",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "CUBICSPLINE interpolation",
+        "in/out tangent triplets",
+        "Hermite basis",
+        "interior resampling"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "anim-two-clips",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "multiple animations",
+        "unnamed animation",
+        "generated clip name",
+        "per-clip duration"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "anim-repeated-time",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "repeated sampler input time",
+        "hard cut",
+        "input monotonicity policy"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "anim-parent-child",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "two channels, two nodes",
+        "parent/child composition",
+        "animated hierarchy"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "anim-weights-path",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "weights animation path",
+        "unsupported channel path",
+        "morph target",
+        "partial channel import"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "anim-out-of-scene-target",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "channel targeting a node outside the default scene",
+        "two scenes",
+        "partial channel import",
+        "default scene selection"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "morph-node-weights-override",
       "owningGroup": "animation",
       "referencingGroups": [],
@@ -1151,6 +1293,21 @@
         "zero-weight padding slot"
       ],
       "auditFixture": null
+    },
+    {
+      "id": "bad-animation-input-order",
+      "owningGroup": "robustness",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2"
+      ],
+      "features": [
+        "non-monotonic sampler input",
+        "animation input ordering",
+        "import rejection"
+      ],
+      "auditFixture": null
     }
   ],
   "files": [
@@ -1168,6 +1325,31 @@
       "path": "accessor-count-mismatch.gltf",
       "bytes": 1415,
       "sha256": "962b43bad2d86c96bbaf424f2f563b0b96ace7e736ee51e0494022f0d769115d"
+    },
+    {
+      "path": "anim-cubicspline.expected.json",
+      "bytes": 9886,
+      "sha256": "f3bdafd804c4f9cfc32121bd9d06875aad1e002fdee8c0274d4fd17c406eb3aa"
+    },
+    {
+      "path": "anim-cubicspline.glb",
+      "bytes": 1608,
+      "sha256": "0946358f4af05af57bdf7864e3f4f8c9f5c963948eca99e908ba13ab4097af38"
+    },
+    {
+      "path": "anim-cubicspline.gltf",
+      "bytes": 2924,
+      "sha256": "383f05786920f4cea10c00abf42e4917135c85e0df096b13ec7de39b491c6eaf"
+    },
+    {
+      "path": "anim-cubicspline.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-cubicspline.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "anim-nonzero-start.expected.json",
@@ -1191,6 +1373,81 @@
     },
     {
       "path": "anim-nonzero-start.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "anim-out-of-scene-target.expected.json",
+      "bytes": 9617,
+      "sha256": "12ead15c6565bf7cadcfce45449d73ad2e4845d55c6bb06d37dff04f047980fb"
+    },
+    {
+      "path": "anim-out-of-scene-target.glb",
+      "bytes": 1636,
+      "sha256": "003f459f551c538e1b84ce599b18626476b8ecf7ef7a3df5784d80e49de52f30"
+    },
+    {
+      "path": "anim-out-of-scene-target.gltf",
+      "bytes": 3035,
+      "sha256": "fa083091074ed31db972bde3b8bcc74c7bad7f7134b78e88fd39d08f34e873fd"
+    },
+    {
+      "path": "anim-out-of-scene-target.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-out-of-scene-target.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "anim-parent-child.expected.json",
+      "bytes": 12042,
+      "sha256": "258af842e8e77f2e865fb8d38e54a17d7cdcb0a5f34a6688800747a576df81c0"
+    },
+    {
+      "path": "anim-parent-child.glb",
+      "bytes": 1612,
+      "sha256": "ee9455878a1e37b4f95a27f19dc10a9458d0e1bf8d91f903fcc3d3ef358d5b8d"
+    },
+    {
+      "path": "anim-parent-child.gltf",
+      "bytes": 2991,
+      "sha256": "67d1fe781cf863532520d41690426d4faf55fb67ea4518d2d7a3dff1e65ee0b0"
+    },
+    {
+      "path": "anim-parent-child.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-parent-child.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "anim-repeated-time.expected.json",
+      "bytes": 8887,
+      "sha256": "40a0bfdbd09ccdb25e02341aacccd637c92ed160f8abd9aed9f1ce1f11927c11"
+    },
+    {
+      "path": "anim-repeated-time.glb",
+      "bytes": 1224,
+      "sha256": "bd06bf998cd957148776967e5ac2354bf6ab9facbbb16c9d80feb9dc75fa10c1"
+    },
+    {
+      "path": "anim-repeated-time.gltf",
+      "bytes": 2229,
+      "sha256": "274b01f376ef58a8dae5033135ab994c59953b11355aa538351c22d9887a4e52"
+    },
+    {
+      "path": "anim-repeated-time.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-repeated-time.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
@@ -1220,6 +1477,106 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "anim-step.expected.json",
+      "bytes": 9659,
+      "sha256": "9281f165dcc14caa9c2fabda26444176b86dfc04fd87ef7e71146adfeb3b9a70"
+    },
+    {
+      "path": "anim-step.glb",
+      "bytes": 1216,
+      "sha256": "98ac73d2a5a656a9071ad455fd04d475e9d1c78ae81c3934c3a403c1cbed6809"
+    },
+    {
+      "path": "anim-step.gltf",
+      "bytes": 2217,
+      "sha256": "3b5724112abb6de8096de51b084281b49f04b3043b6278d9d9f417cc3363bb8b"
+    },
+    {
+      "path": "anim-step.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-step.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "anim-translation-scale.expected.json",
+      "bytes": 12589,
+      "sha256": "f6c78ada8ee868841c34e495ec0e8ddec6e3458c9f02ef118dece9050e2a0bef"
+    },
+    {
+      "path": "anim-translation-scale.glb",
+      "bytes": 1608,
+      "sha256": "4a0477c050e618f0dbd14d93ec353634264452dc88969fa91678207848e98cb9"
+    },
+    {
+      "path": "anim-translation-scale.gltf",
+      "bytes": 2952,
+      "sha256": "acdd8b1d5005f18010cf964382549fb920096bd63e9e275f207b2f6e5e34c59a"
+    },
+    {
+      "path": "anim-translation-scale.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-translation-scale.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "anim-two-clips.expected.json",
+      "bytes": 9179,
+      "sha256": "bf9f906146efe9a7cb59148c6b368fbc1b9811014108d50617587ac3033ab937"
+    },
+    {
+      "path": "anim-two-clips.glb",
+      "bytes": 1580,
+      "sha256": "5e1fa49788dbddc5c9369ff5f757a6e612e6ab338a16d577f8699d3c477eb653"
+    },
+    {
+      "path": "anim-two-clips.gltf",
+      "bytes": 2916,
+      "sha256": "3f945a0cdb85c2fc6e30356404a02e8c2ceb7b51fa51eb7bae58126876201c53"
+    },
+    {
+      "path": "anim-two-clips.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-two-clips.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "anim-weights-path.expected.json",
+      "bytes": 9846,
+      "sha256": "c61b6456a303dd553a02a7db9a47ceb16b7858e35a822661079982ba71d65c54"
+    },
+    {
+      "path": "anim-weights-path.glb",
+      "bytes": 1772,
+      "sha256": "1607f6f76cd65c3c4e3620c43dbc6fa947b4f7d3e9b3f3f9593aef6669a51732"
+    },
+    {
+      "path": "anim-weights-path.gltf",
+      "bytes": 3325,
+      "sha256": "55eb21cc68017729c53e6469ef63793de95a3b75765a126eb5afee73f973bb6e"
+    },
+    {
+      "path": "anim-weights-path.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "anim-weights-path.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "bad-accessor-out-of-bounds.expected.json",
       "bytes": 3134,
       "sha256": "def70ccc6da3c43d0d20796b854b28396a5c6980f02f34a01047b5f51f27fc40"
@@ -1233,6 +1590,31 @@
       "path": "bad-accessor-out-of-bounds.gltf",
       "bytes": 1174,
       "sha256": "f7fef746ceec3f5404a00dc6efd95ae964b88249ba8a9e73f1fe8ece4a6724fc"
+    },
+    {
+      "path": "bad-animation-input-order.expected.json",
+      "bytes": 8465,
+      "sha256": "c33b6b7d1ce36320eea27a0345c370ea5d740f6eba59247206e3398a4718eeb2"
+    },
+    {
+      "path": "bad-animation-input-order.glb",
+      "bytes": 1220,
+      "sha256": "d3d25f26c95df010891c3aec26d6aa1e5af3368d33fd104dc5ed4ec033d4247f"
+    },
+    {
+      "path": "bad-animation-input-order.gltf",
+      "bytes": 2223,
+      "sha256": "553743978e1023abe68bac39adc0b8327e7833025105d569acfcf52fad9e5d0d"
+    },
+    {
+      "path": "bad-animation-input-order.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "bad-animation-input-order.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "camera-animated-node.expected.json",
