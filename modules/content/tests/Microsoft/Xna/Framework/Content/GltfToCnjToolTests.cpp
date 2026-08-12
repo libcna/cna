@@ -2009,3 +2009,125 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsKhrLightsPunctualThroughTheOfflineCn
     EXPECT_NEAR(color.Y, 0.5f, 1e-5f);
     EXPECT_NEAR(color.Z, 0.75f, 1e-5f);
 }
+
+// plan_gltf.md GLTF-314: the two loaders must agree, clip for clip, on every animation fixture.
+//
+// The runtime path builds a ModelAnimationsEXT straight from ExtractSceneNodeClips; the offline
+// path writes each clip to its own .cnj and reads it back through a JSON parser. Those are two
+// entirely separate pieces of code producing the same type, and everything that can go wrong
+// between them is silent: a dropped track, a key time rounded through a decimal round-trip, a
+// track order that depends on an unordered_map's rehash, a targetSpace that defaults to
+// JointPalette on the way back in and poses the wrong bones.
+//
+// Swept over the whole `anim-*` corpus rather than one fixture, because the divergences are
+// per-shape -- disjoint key times, STEP, CUBICSPLINE, two clips, an unnamed clip, a parent and a
+// child, a channel path that is skipped.
+TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalAnimationClipsForEveryAnimFixture)
+{
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    if (!std::filesystem::exists(corpus)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    std::vector<std::string> ids;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(corpus))
+    {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("anim-", 0) == 0 && entry.path().extension() == ".gltf")
+        {
+            ids.push_back(entry.path().stem().string());
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+    ASSERT_FALSE(ids.empty()) << "no anim fixtures found -- the sweep proved nothing";
+
+    std::size_t compared = 0;
+    for (const std::string& id : ids)
+    {
+        SCOPED_TRACE(id);
+        ScratchDir contentRoot;
+        const int toolExit = RunGltfToCnjTool((corpus / (id + ".gltf")).string(),
+                                               contentRoot.path().string(), "anim");
+        ASSERT_EQ(0, toolExit) << "the offline tool refused a fixture the corpus says imports";
+
+        GraphicsDevice gd;
+        ContentManager runtimeCm(nullptr, corpus.string());
+        runtimeCm.setGraphicsDevice(gd);
+        Model runtime = runtimeCm.Load<Model>(id);
+
+        // One Model .cnj per file here (no fixture in this group has a skin), plus one per clip.
+        // Found by its "type" field rather than by a filename this test would have to predict.
+        std::string modelAsset;
+        for (const std::filesystem::directory_entry& out :
+             std::filesystem::directory_iterator(contentRoot.path()))
+        {
+            if (out.path().extension() != ".cnj") { continue; }
+            std::ifstream cnj(out.path());
+            const std::string text((std::istreambuf_iterator<char>(cnj)),
+                                    std::istreambuf_iterator<char>());
+            if (text.find("\"type\": \"Model\"") != std::string::npos)
+            {
+                modelAsset = out.path().stem().string();
+                break;
+            }
+        }
+        ASSERT_FALSE(modelAsset.empty()) << "the tool wrote no Model .cnj at all";
+
+        ContentManager offlineCm(nullptr, contentRoot.path().string());
+        offlineCm.setGraphicsDevice(gd);
+        Model offline = offlineCm.Load<Model>(modelAsset);
+
+        auto* runtimeAnims = dynamic_cast<ModelAnimationsEXT*>(runtime.getTagProperty());
+        auto* offlineAnims = dynamic_cast<ModelAnimationsEXT*>(offline.getTagProperty());
+        if (runtimeAnims == nullptr && offlineAnims == nullptr) { continue; }
+        ASSERT_NE(nullptr, runtimeAnims) << "the runtime path produced no ModelAnimationsEXT";
+        ASSERT_NE(nullptr, offlineAnims) << "the offline path produced no ModelAnimationsEXT";
+        ++compared;
+
+        ASSERT_EQ(runtimeAnims->Clips.size(), offlineAnims->Clips.size())
+            << "the two paths disagree about how many clips this file has";
+        for (const auto& [name, runtimeClip] : runtimeAnims->Clips)
+        {
+            SCOPED_TRACE("clip " + name);
+            const auto found = offlineAnims->Clips.find(name);
+            ASSERT_NE(offlineAnims->Clips.end(), found)
+                << "a clip the runtime path names is missing from the .cnj -- and a clip is looked "
+                   "up BY NAME, so this is a lookup that silently returns nothing";
+            const AnimationClipEXT& offlineClip = found->second;
+
+            EXPECT_NEAR(runtimeClip.Duration.getTotalSecondsProperty(),
+                        offlineClip.Duration.getTotalSecondsProperty(), 1e-5);
+            // Applying a joint-palette clip's indices to Model::Bones would pose the wrong bones
+            // with no symptom but wrong motion, so the space must survive the round-trip too.
+            EXPECT_EQ(runtimeClip.TargetSpace, offlineClip.TargetSpace);
+            ASSERT_EQ(runtimeClip.Tracks.size(), offlineClip.Tracks.size());
+
+            for (std::size_t t = 0; t < runtimeClip.Tracks.size(); ++t)
+            {
+                SCOPED_TRACE("track " + std::to_string(t));
+                const BoneTrackEXT& r = runtimeClip.Tracks[t];
+                const BoneTrackEXT& o = offlineClip.Tracks[t];
+                EXPECT_EQ(r.BoneIndex, o.BoneIndex)
+                    << "track order is observable: byBone is an unordered_map, so without a sort "
+                       "the two paths agree only until a rehash";
+                ASSERT_EQ(r.Keys.size(), o.Keys.size());
+                for (std::size_t k = 0; k < r.Keys.size(); ++k)
+                {
+                    SCOPED_TRACE("key " + std::to_string(k));
+                    EXPECT_NEAR(r.Keys[k].Time.getTotalSecondsProperty(),
+                                o.Keys[k].Time.getTotalSecondsProperty(), 1e-5);
+                    EXPECT_NEAR(r.Keys[k].Translation.X, o.Keys[k].Translation.X, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Translation.Y, o.Keys[k].Translation.Y, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Translation.Z, o.Keys[k].Translation.Z, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Rotation.X, o.Keys[k].Rotation.X, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Rotation.Y, o.Keys[k].Rotation.Y, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Rotation.Z, o.Keys[k].Rotation.Z, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Rotation.W, o.Keys[k].Rotation.W, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Scale.X, o.Keys[k].Scale.X, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Scale.Y, o.Keys[k].Scale.Y, 1e-4f);
+                    EXPECT_NEAR(r.Keys[k].Scale.Z, o.Keys[k].Scale.Z, 1e-4f);
+                }
+            }
+        }
+    }
+    EXPECT_GT(compared, 0u) << "every anim fixture was skipped -- the sweep proved nothing";
+}
