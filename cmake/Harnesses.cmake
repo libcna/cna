@@ -307,3 +307,19 @@ if(CNA_BUILD_TESTS AND NOT WIN32)
         cna_platform
     )
 endif()
+
+# --- plan_platform.md PLAT-136: terminal resize harness ---
+# TerminalPlatform installs its SIGWINCH watcher only when attached to a terminal and reads the new
+# size from its own stdout -- neither of which holds inside CnaTests, where CI redirects output. So
+# the resize assertions run here, in a process whose standard descriptors really are a
+# pseudo-terminal, spawned by TerminalResizeTests.cpp. Without it the two tests that matter most in
+# that file would skip in CI, and a test that always skips proves nothing.
+if(CNA_BUILD_TESTS AND NOT WIN32)
+    add_executable(cna_platform_terminal_resize_harness
+        tools/platform/terminal_resize_harness.cpp
+    )
+    target_link_libraries(cna_platform_terminal_resize_harness
+        PRIVATE
+        cna_platform
+    )
+endif()

@@ -8,6 +8,7 @@
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <utility>
@@ -35,9 +36,9 @@ namespace CNA::Platform::Terminal {
     class TerminalPlatform::TerminalWindow final : public IPlatformWindow
     {
     public:
-        TerminalWindow(std::shared_ptr<bool> slotTaken, const WindowId id,
+        TerminalWindow(std::shared_ptr<WindowSlot> slot, const WindowId id,
                        const WindowDescription& description)
-            : slotTaken_(std::move(slotTaken))
+            : slot_(std::move(slot))
             , id_(id)
             , title_(description.title)
             , width_(description.width)
@@ -48,7 +49,11 @@ namespace CNA::Platform::Terminal {
         {
         }
 
-        ~TerminalWindow() override { *slotTaken_ = false; }
+        ~TerminalWindow() override
+        {
+            slot_->taken = false;
+            slot_->window = nullptr;
+        }
 
         TerminalWindow(const TerminalWindow&) = delete;
         TerminalWindow& operator=(const TerminalWindow&) = delete;
@@ -109,12 +114,23 @@ namespace CNA::Platform::Terminal {
             height_ = pendingHeight_ > 0 ? pendingHeight_ : height_;
         }
 
+        /// Applies a terminal resize. Distinct from SetSize(), which is a *request* a caller
+        /// makes and which the contract says lands only on Sync(); this is the terminal telling
+        /// the window what it now is, which is not negotiable and takes effect at once.
+        void ApplyTerminalSize(const int width, const int height)
+        {
+            width_ = width;
+            height_ = height;
+            pendingWidth_ = 0;
+            pendingHeight_ = 0;
+        }
+
         [[nodiscard]] bool HasFocus() const override { return visible_ && !minimized_; }
         [[nodiscard]] bool IsMinimized() const override { return minimized_; }
         [[nodiscard]] std::string GetDisplayName() const override { return {}; }
 
     private:
-        std::shared_ptr<bool> slotTaken_;
+        std::shared_ptr<WindowSlot> slot_;
         WindowId id_;
         std::string title_;
         int width_ = 0, height_ = 0;
@@ -130,7 +146,7 @@ namespace CNA::Platform::Terminal {
         // constructing a platform must stay safe in a process whose terminal belongs to somebody
         // else, which is exactly what the conformance suite does.
         , attachedToTerminal_(CNA::Platform::Terminal::IsAttachedToTerminal())
-        , windowSlotTaken_(std::make_shared<bool>(false))
+        , windowSlot_(std::make_shared<WindowSlot>())
         , fileSystem_(std::make_unique<Common::StandardFileSystem>("cna-terminal"))
         , systemInfo_(std::make_unique<Common::StandardSystemInfo>())
     {
@@ -184,14 +200,38 @@ namespace CNA::Platform::Terminal {
 
     std::unique_ptr<IPlatformWindow> TerminalPlatform::CreateWindow(const WindowDescription& description)
     {
-        if (*windowSlotTaken_)
+        if (windowSlot_->taken)
         {
             // There is exactly one terminal. Handing back a second window would alias it onto the
             // first and leave two callers each believing they owned the screen.
             throw PlatformNotSupportedException(PlatformCapability::MultipleWindows, GetName());
         }
-        *windowSlotTaken_ = true;
-        return std::make_unique<TerminalWindow>(windowSlotTaken_, nextWindowId_++, description);
+        windowSlot_->taken = true;
+
+        // The requested size stands, exactly as it does on any other implementation: a game draws
+        // at the resolution it asked for and the presenter quantises. The terminal becomes
+        // authoritative only when it *changes* -- which is the same way a real windowing system
+        // behaves when a window manager resizes a window after it was created.
+        auto window = std::make_unique<TerminalWindow>(windowSlot_, nextWindowId_++, description);
+        windowSlot_->window = window.get();
+
+        if (attachedToTerminal_ && !TerminalResizeWatcher::IsWatching())
+        {
+            resizeWatcher_ = std::make_unique<TerminalResizeWatcher>();
+        }
+        return window;
+    }
+
+    void TerminalPlatform::CellGridToPixelSize(const int columns, const int rows, int& width,
+                                               int& height)
+    {
+        // Nominal, not measured: no escape sequence reports a cell's pixel size, and it depends on
+        // the font. 8x16 is the classic VGA text cell and carries the 1:2 ratio the presenter's
+        // letterboxing assumes, which is the part that has to be right.
+        constexpr int kNominalCellWidth = 8;
+        constexpr int kNominalCellHeight = 16;
+        width = std::max(1, columns) * kNominalCellWidth;
+        height = std::max(1, rows) * kNominalCellHeight;
     }
 
     void TerminalPlatform::PollEvents(std::vector<PlatformEvent>& destination)
@@ -199,6 +239,32 @@ namespace CNA::Platform::Terminal {
         // Clearing first is the contract: the buffer belongs to the caller and is reused every
         // frame, so stale content from the previous frame must not survive into this one.
         destination.clear();
+
+        if (windowSlot_->window != nullptr && TerminalResizeWatcher::TakePendingResize())
+        {
+            // SIGWINCH carries no size, so the size is read here rather than in the handler --
+            // which is also why coalescing is free: what a caller wants is the current size, and
+            // ten resizes between two frames have one current size.
+            const TerminalSize grid = QueryTerminalSize(STDOUT_FILENO);
+            int width = 0, height = 0;
+            CellGridToPixelSize(grid.columns, grid.rows, width, height);
+            windowSlot_->window->ApplyTerminalSize(width, height);
+
+            // Both kinds, because a caller that resizes its backbuffer watches PixelSizeChanged
+            // and one that lays out its UI watches Resized. There is no display scaling here, so
+            // the two always agree -- and emitting only one would silently break whichever half
+            // of a game listened for the other.
+            WindowEvent resized;
+            resized.window = windowSlot_->window->GetId();
+            resized.kind = WindowEventKind::Resized;
+            resized.data1 = width;
+            resized.data2 = height;
+            destination.emplace_back(resized);
+
+            resized.kind = WindowEventKind::PixelSizeChanged;
+            destination.emplace_back(resized);
+        }
+
         destination.insert(destination.end(), queued_.begin(), queued_.end());
         queued_.clear();
     }

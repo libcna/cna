@@ -316,6 +316,14 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    if(TARGET cna_platform_terminal_resize_harness)
+        # plan_platform.md PLAT-136: see cna_platform_terminal_restoration_harness above.
+        add_dependencies(CnaTests cna_platform_terminal_resize_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_PLATFORM_TERMINAL_RESIZE_HARNESS_PATH="$<TARGET_FILE:cna_platform_terminal_resize_harness>"
+        )
+    endif()
+
     if(TARGET cna_audio_mixer_destroy_active_static_voice_harness)
         # Task AUD-04-008: same reasoning as cna_net_two_process_harness above.
         add_dependencies(CnaTests cna_audio_mixer_destroy_active_static_voice_harness)
@@ -466,7 +474,7 @@ if(CNA_BUILD_TESTS)
     # subsystem refcount is process-global, and an acquire/release imbalance would show up as
     # order dependence rather than as a direct failure.
     cna_register_renderer_test(NAME CnaPlatformTests
-        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:CurrentPlatformTest.*
+        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:TerminalResize*:CurrentPlatformTest.*
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 

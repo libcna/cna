@@ -6,6 +6,7 @@
 #include "../Common/StandardFileSystem.hpp"
 #include "../Common/StandardSystemInfo.hpp"
 #include "TerminalCapabilityProbe.hpp"
+#include "TerminalResizeWatcher.hpp"
 
 #include <cstdint>
 #include <map>
@@ -162,6 +163,21 @@ namespace CNA::Platform::Terminal {
             IPlatformWindow& window) override;
 
         /**
+         * @brief Converts the terminal's cell grid into the pixel size a window reports.
+         *
+         * A cell has no true pixel size — it depends on the user's font — so a nominal 8×16 is
+         * assumed, chosen for its 1:2 ratio so a window sized from it has the same shape the
+         * presenter's letterboxing assumes. Getting the absolute numbers wrong costs nothing;
+         * getting the *ratio* wrong squashes every picture by half.
+         *
+         * @param columns The terminal's width in cells.
+         * @param rows The terminal's height in cells.
+         * @param width Receives the width in nominal pixels.
+         * @param height Receives the height in nominal pixels.
+         */
+        static void CellGridToPixelSize(int columns, int rows, int& width, int& height);
+
+        /**
          * @brief Reports whether the process is actually attached to a terminal.
          *
          * Determined once at construction, and free: no query is sent and no terminal state is
@@ -176,20 +192,29 @@ namespace CNA::Platform::Terminal {
     private:
         class TerminalWindow;
 
+        /// Shared between the platform and the one window it made, so that destroying either
+        /// first is defined behaviour. A raw back-pointer would dangle in exactly one teardown
+        /// order and in no other -- the kind of defect that passes every test until the one
+        /// process that happens to tear down that way.
+        struct WindowSlot
+        {
+            bool taken = false;
+            TerminalWindow* window = nullptr;
+        };
+
         std::map<PlatformSubsystem, int> refCounts_;
         std::vector<PlatformEvent> queued_;
         std::uint64_t createdAtNanoseconds_ = 0;
         WindowId nextWindowId_ = 1;
         bool attachedToTerminal_ = false;
 
-        /// Whether the one window is taken, held jointly with the window that took it.
-        ///
-        /// Shared rather than a back-pointer to the platform: nothing in the contract forbids
-        /// destroying a platform while a window it created is still alive, and a window whose
-        /// destructor reached back into a destroyed platform would be undefined behaviour that
-        /// appears only in that order. Shared ownership of the flag alone makes the order
-        /// irrelevant.
-        std::shared_ptr<bool> windowSlotTaken_;
+        /// The single window slot, held jointly with whatever window occupies it.
+        std::shared_ptr<WindowSlot> windowSlot_;
+
+        /// Installed while a window exists, because a resize is only meaningful when there is
+        /// something to resize -- and because installing a process-global signal handler merely
+        /// to construct a platform would be state a constructor has no business changing.
+        std::unique_ptr<TerminalResizeWatcher> resizeWatcher_;
 
         std::unique_ptr<Common::StandardFileSystem> fileSystem_;
         std::unique_ptr<Common::StandardSystemInfo> systemInfo_;
