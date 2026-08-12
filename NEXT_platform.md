@@ -69,10 +69,17 @@ driver themselves, scoped by `--gtest_filter`, which is why they pass.
 
 | Variant | Result |
 |---|---|
-| `cmake-build-debug` | **5747 passed, 0 failed** |
-| `cmake-build-headless` | **5640 passed, 0 failed** |
-| `cmake-build-devices` | **6456 passed, 0 failed** |
-| `cmake-build-terminal` | **6300 passed, 0 failed** |
+| `cmake-build-debug` | **5762 passed, 0 failed** |
+| `cmake-build-headless` | **5655 passed, 0 failed** |
+| `cmake-build-devices` | **6471 passed, 0 failed** |
+| `cmake-build-terminal` | **6315 passed, 0 failed** |
+
+**Do not run a full suite while a build is saturating the machine.**
+`TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`
+spawns two real processes and gives host migration a 30-second budget. It hit that budget once
+here, purely because a four-way build was running alongside it; unloaded it completes in ~0.7 s.
+A timeout in that test is a load symptom, not a regression — check the machine before
+investigating the code.
 
 **Run `CnaTests` from the repository root, not from the build directory.** Dozens of content,
 media and audio-tag tests load fixture files by repo-relative path, so running
