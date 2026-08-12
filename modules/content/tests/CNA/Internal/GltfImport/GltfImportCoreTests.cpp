@@ -569,6 +569,156 @@ TEST(GltfImportCoreTest, ExtractPunctualLightsEXTApproximatesDirectionalAndPoint
     cgltf_free(data);
 }
 
+// --- plan_gltf.md GLTF-326: what the three-directional-light approximation costs ----------------
+
+namespace
+{
+    /// A scene of `count` lights built from `entries`, one node each at the given positions.
+    std::string LightSceneDocument(const std::string& lightEntries, std::size_t count)
+    {
+        std::string nodes;
+        std::string sceneNodes;
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            if (i != 0) { nodes += ", "; sceneNodes += ", "; }
+            nodes += "{ \"name\": \"L" + std::to_string(i) +
+                     "\", \"translation\": [0, 0, -5], \"extensions\": { "
+                     "\"KHR_lights_punctual\": { \"light\": " + std::to_string(i) + " } } }";
+            sceneNodes += std::to_string(i);
+        }
+        return std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [)GLTF") + sceneNodes + R"GLTF(] } ],
+  "nodes": [ )GLTF" + nodes + R"GLTF( ],
+  "extensions": { "KHR_lights_punctual": { "lights": [ )GLTF" + lightEntries + R"GLTF( ] } },
+  "extensionsUsed": [ "KHR_lights_punctual" ]
+})GLTF";
+    }
+
+    /// Parses a light-scene document into a guard-owned cgltf_data.
+    struct LightScene
+    {
+        cgltf_data* data = nullptr;
+        ~LightScene() { if (data != nullptr) { cgltf_free(data); } }
+        LightScene() = default;
+        LightScene(const LightScene&) = delete;
+        LightScene& operator=(const LightScene&) = delete;
+    };
+
+    bool ParseLightScene(LightScene& out, const std::string& json)
+    {
+        cgltf_options options{};
+        return cgltf_parse(&options, json.data(), json.size(), &out.data) == cgltf_result_success;
+    }
+}
+
+TEST(GltfImportCoreTest, LightReportNamesEveryLightBeyondTheThreeXnaCanBind)
+{
+    // "3 lights imported" is not actionable and "3 of 6 imported" is. Counting the drop means the
+    // loop can no longer stop at three, which is the one behavioural change GLTF-326 makes.
+    std::string entries;
+    for (int i = 0; i < 6; ++i)
+    {
+        if (i != 0) { entries += ", "; }
+        entries += R"({ "type": "directional", "color": [1, 1, 1], "intensity": 1.0 })";
+    }
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(entries, 6)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> lights = ExtractPunctualLightsEXT(scene.data, report);
+    EXPECT_EQ(3u, lights.size()) << "the three-light cap itself must not have changed";
+    EXPECT_EQ(3u, report.droppedLightCount);
+    EXPECT_TRUE(report.AnythingLost());
+}
+
+TEST(GltfImportCoreTest, LightReportCountsPointAndSpotApproximationsApart)
+{
+    // A point light loses its falloff; a spot loses its falloff AND its cone. The approximation is
+    // materially worse for one than the other, so one combined "approximated" count would hide the
+    // difference an author most needs to see.
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(
+        R"({ "type": "point", "color": [1, 1, 1], "intensity": 1.0 },
+            { "type": "spot", "color": [1, 1, 1], "intensity": 1.0,
+              "spot": { "innerConeAngle": 0.2, "outerConeAngle": 0.5 } },
+            { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 })", 3)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> lights = ExtractPunctualLightsEXT(scene.data, report);
+    ASSERT_EQ(3u, lights.size());
+    EXPECT_EQ(1u, report.approximatedPointLightCount);
+    EXPECT_EQ(1u, report.approximatedSpotLightCount);
+    EXPECT_EQ(0u, report.droppedLightCount) << "three lights fit; nothing was dropped";
+}
+
+TEST(GltfImportCoreTest, LightReportNamesAnIntensityClampedOutOfGamut)
+{
+    // glTF intensity is photometric and unbounded -- lux for a directional light, candela for the
+    // others -- while DiffuseColor is a [0,1] colour. 683 lm/W is the luminous efficacy constant
+    // and turns up in real files; it imports as plain white, which is not a bug and is absolutely
+    // something an author comparing renders deserves to be told.
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(
+        R"({ "type": "directional", "color": [1, 0.5, 0.25], "intensity": 683.0 },
+            { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 })", 2)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> lights = ExtractPunctualLightsEXT(scene.data, report);
+    ASSERT_EQ(2u, lights.size());
+    EXPECT_EQ(1u, report.clampedIntensityLightCount) << "only the out-of-gamut light counts";
+    EXPECT_NEAR(683.0f, report.worstPreClampChannelEXT, 1e-3f)
+        << "the worst pre-clamp channel is what says whether the clamp was marginal or total";
+
+    // And the clamp itself still happens -- the report describes the behaviour, it does not
+    // replace it.
+    EXPECT_NEAR(1.0f, lights[0].diffuseColor.X, 1e-5f);
+    EXPECT_NEAR(1.0f, lights[0].diffuseColor.Y, 1e-5f);
+    EXPECT_NEAR(1.0f, lights[0].diffuseColor.Z, 1e-5f);
+}
+
+TEST(GltfImportCoreTest, LightReportIsEmptyForAFileAlreadyInsideXnasLightingModel)
+{
+    // The control. Without it, a report that fired on every file would pass all three tests above
+    // and turn every ordinary import into a warning nobody reads.
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(
+        R"({ "type": "directional", "color": [1, 1, 1], "intensity": 1.0 },
+            { "type": "directional", "color": [0.5, 0.5, 0.5], "intensity": 1.0 })", 2)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> lights = ExtractPunctualLightsEXT(scene.data, report);
+    EXPECT_EQ(2u, lights.size());
+    EXPECT_FALSE(report.AnythingLost())
+        << "a file XNA can light exactly must produce no diagnostic at all";
+}
+
+TEST(GltfImportCoreTest, BothLightOverloadsExtractIdenticalLights)
+{
+    // The reporting overload must be the same extraction with a second output, not a second
+    // implementation that can drift from the one every existing caller uses.
+    LightScene scene;
+    ASSERT_TRUE(ParseLightScene(scene, LightSceneDocument(
+        R"({ "type": "point", "color": [1, 0, 0], "intensity": 1.0 },
+            { "type": "directional", "color": [0, 1, 0], "intensity": 2.0 },
+            { "type": "spot", "color": [0, 0, 1], "intensity": 0.5,
+              "spot": { "outerConeAngle": 0.5 } },
+            { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 })", 4)));
+
+    LightReportEXT report;
+    const std::vector<LightOut> reported = ExtractPunctualLightsEXT(scene.data, report);
+    const std::vector<LightOut> plain = ExtractPunctualLightsEXT(scene.data);
+    ASSERT_EQ(plain.size(), reported.size());
+    for (std::size_t i = 0; i < plain.size(); ++i)
+    {
+        SCOPED_TRACE("light " + std::to_string(i));
+        EXPECT_EQ(plain[i].direction, reported[i].direction);
+        EXPECT_EQ(plain[i].diffuseColor, reported[i].diffuseColor);
+    }
+    EXPECT_EQ(1u, report.droppedLightCount);
+}
+
 TEST(GltfImportCoreTest, ExtractPunctualLightsEXTCapsAtThreeLights)
 {
     const char* kFourLightsGltf = R"GLTF({

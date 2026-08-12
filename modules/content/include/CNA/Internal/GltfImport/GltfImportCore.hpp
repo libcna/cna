@@ -683,6 +683,45 @@ namespace CNA::Internal::GltfImport
         Microsoft::Xna::Framework::Vector3 diffuseColor;
     };
 
+    /**
+     * @brief What `KHR_lights_punctual` import lost or approximated on one file (`GLTF-326`).
+     *
+     * XNA's stock effects light with **three directional lights** and nothing else. A glTF file may
+     * declare any number of lights, of three kinds, with ranges and cone angles — so importing one
+     * is a lossy operation by construction, and every entry here is a place that loss happens.
+     * None of it was previously visible: a scene lit by six point lights imported as three
+     * directionals aimed at the origin and said nothing at all.
+     *
+     * Every count is zero for a file already inside XNA's lighting model: at most three
+     * directional lights whose `color * intensity` is in gamut.
+     */
+    struct LightReportEXT
+    {
+        /** @brief Lights in the default scene beyond the three XNA can bind. */
+        std::size_t droppedLightCount = 0;
+        /** @brief Point lights approximated as directional lights aimed at the scene origin. */
+        std::size_t approximatedPointLightCount = 0;
+        /** @brief Spot lights approximated the same way, additionally losing their cone entirely. */
+        std::size_t approximatedSpotLightCount = 0;
+        /**
+         * @brief Lights whose `color * intensity` exceeded 1 on some channel and was clamped.
+         *
+         * glTF intensity is photometric and unbounded — lux for a directional light, candela for
+         * the other two — while `DirectionalLight::DiffuseColor` is a [0,1] colour. An intensity of
+         * 683 is an ordinary authored value and clamps to white, which is not a bug but is
+         * absolutely something an author comparing renders deserves to be told.
+         */
+        std::size_t clampedIntensityLightCount = 0;
+        /** @brief The largest pre-clamp channel value seen, or 0 when nothing was clamped. */
+        float worstPreClampChannelEXT = 0.0f;
+        /** @brief True when any of the above is non-zero. */
+        [[nodiscard]] bool AnythingLost() const
+        {
+            return droppedLightCount > 0 || approximatedPointLightCount > 0 ||
+                   approximatedSpotLightCount > 0 || clampedIntensityLightCount > 0;
+        }
+    };
+
     /** @brief One keyframe of a morph-weight animation track: a full weight vector at a point in time. */
     struct MorphWeightKeyframeOut
     {
@@ -1121,6 +1160,20 @@ namespace CNA::Internal::GltfImport
      * @return Up to 3 approximated directional lights, empty if the file has no `KHR_lights_punctual` lights.
      */
     std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data);
+
+    /**
+     * @brief `ExtractPunctualLightsEXT`, additionally reporting what it lost (`GLTF-326`).
+     *
+     * The extraction is identical — this overload exists so a caller can *see* the approximation
+     * rather than infer it. Prefer it on any path that can surface a diagnostic.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     *
+     * @param data The parsed glTF file.
+     * @param report Filled with the dropped, approximated and clamped counts.
+     * @return At most three directional lights, in scene-node order.
+     */
+    std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data, LightReportEXT& report);
 
     /**
      * @brief Every camera the default scene instances, in scene-node order (`GLTF-317`).

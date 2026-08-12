@@ -2883,16 +2883,37 @@ namespace CNA::Internal::GltfImport
 
     std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data)
     {
+        LightReportEXT ignored;
+        return ExtractPunctualLightsEXT(data, ignored);
+    }
+
+    std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data, LightReportEXT& report)
+    {
+        report = LightReportEXT{};
         std::vector<LightOut> result;
         if (data->lights_count == 0) { return result; }
 
         const std::unordered_set<const cgltf_node*> reachable = CollectSceneReachableNodes(data);
 
-        for (cgltf_size i = 0; i < data->nodes_count && result.size() < 3; ++i)
+        // plan_gltf.md GLTF-326. XNA's stock effects light with three directional lights and
+        // nothing else, so importing a glTF light rig is lossy by construction -- and until this
+        // report existed, invisibly so: a scene lit by six point lights imported as three
+        // directionals aimed at the origin and said nothing. The loop below is unchanged; every
+        // addition to it records a place the loss happens.
+        //
+        // Note the loop no longer stops at three. It must keep walking to count what it is
+        // dropping, which is the whole point -- "3 of 6 lights imported" is actionable and
+        // "3 lights imported" is not.
+        for (cgltf_size i = 0; i < data->nodes_count; ++i)
         {
             const cgltf_node& node = data->nodes[i];
             if (!node.light) { continue; }
             if (!reachable.empty() && reachable.find(&node) == reachable.end()) { continue; }
+            if (result.size() >= 3)
+            {
+                ++report.droppedLightCount;
+                continue;
+            }
 
             float worldMat[16];
             cgltf_node_transform_world(&node, worldMat);
@@ -2914,6 +2935,10 @@ namespace CNA::Internal::GltfImport
                 // No point/spot light support in any CNA stock effect shader -- approximated as a
                 // directional light pointing from the light's own world position toward the scene
                 // origin (see ExtractPunctualLightsEXT's own doc comment for the full rationale).
+                // A spot additionally loses its cone entirely, which is why the two are counted
+                // apart: the approximation is materially worse for one than the other.
+                if (src.type == cgltf_light_type_spot) { ++report.approximatedSpotLightCount; }
+                else { ++report.approximatedPointLightCount; }
                 direction = (worldPos.LengthSquared() > 1e-12f)
                     ? Vector3::Normalize(Vector3(-worldPos.X, -worldPos.Y, -worldPos.Z))
                     : Vector3(0.0f, -1.0f, 0.0f);
@@ -2921,12 +2946,23 @@ namespace CNA::Internal::GltfImport
             }
 
             const float intensity = std::max(src.intensity, 0.0f);
+            // glTF intensity is photometric and unbounded -- lux for a directional light, candela
+            // for the other two -- while DiffuseColor is a [0,1] colour. An authored intensity of
+            // 683 clamps to white, which is not a bug but is exactly what an author comparing
+            // renders needs to be told rather than left to deduce.
+            const float pre[3] = {src.color[0] * intensity, src.color[1] * intensity,
+                                  src.color[2] * intensity};
+            if (pre[0] > 1.0f || pre[1] > 1.0f || pre[2] > 1.0f)
+            {
+                ++report.clampedIntensityLightCount;
+                report.worstPreClampChannelEXT = std::max(
+                    report.worstPreClampChannelEXT, std::max(pre[0], std::max(pre[1], pre[2])));
+            }
             LightOut light;
             light.direction = direction;
-            light.diffuseColor = Vector3(
-                std::clamp(src.color[0] * intensity, 0.0f, 1.0f),
-                std::clamp(src.color[1] * intensity, 0.0f, 1.0f),
-                std::clamp(src.color[2] * intensity, 0.0f, 1.0f));
+            light.diffuseColor = Vector3(std::clamp(pre[0], 0.0f, 1.0f),
+                                         std::clamp(pre[1], 0.0f, 1.0f),
+                                         std::clamp(pre[2], 0.0f, 1.0f));
             result.push_back(light);
         }
 

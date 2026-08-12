@@ -1982,7 +1982,38 @@ namespace Microsoft::Xna::Framework::Content
             // CNB-97 (Phase 14H): KHR_lights_punctual, approximated as up to 3 directional lights
             // (see ExtractPunctualLightsEXT's own doc comment) -- applied to every mesh part's
             // effect below via ApplyPunctualLightsEXT, for whichever ones implement IEffectLights.
-            const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data);
+            LightReportEXT lightReport;
+            const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data, lightReport);
+            // plan_gltf.md GLTF-326: the approximation is documented, but it was not visible.
+            if (lightReport.droppedLightCount > 0)
+            {
+                CNA::Logger::Warn(
+                    "glTF file '" + path + "': the scene declares " +
+                    std::to_string(punctualLights.size() + lightReport.droppedLightCount) +
+                    " lights; XNA's stock effects bind three, so " +
+                    std::to_string(lightReport.droppedLightCount) + " were dropped (GLTF-326).");
+            }
+            if (lightReport.approximatedPointLightCount > 0 ||
+                lightReport.approximatedSpotLightCount > 0)
+            {
+                CNA::Logger::Warn(
+                    "glTF file '" + path + "': " +
+                    std::to_string(lightReport.approximatedPointLightCount) + " point and " +
+                    std::to_string(lightReport.approximatedSpotLightCount) +
+                    " spot light(s) were approximated as directional lights aimed at the scene "
+                    "origin -- no CNA stock effect shader has a point or spot term, and a spot's "
+                    "cone is lost entirely (GLTF-326).");
+            }
+            if (lightReport.clampedIntensityLightCount > 0)
+            {
+                CNA::Logger::Warn(
+                    "glTF file '" + path + "': " +
+                    std::to_string(lightReport.clampedIntensityLightCount) +
+                    " light(s) had color * intensity above 1 and were clamped (worst channel " +
+                    std::to_string(lightReport.worstPreClampChannelEXT) +
+                    "). glTF intensity is photometric and unbounded; DiffuseColor is a [0,1] "
+                    "colour, so a bright light imports as white (GLTF-326).");
+            }
 
             SkeletonResult skeleton;
             if (hasSkin)

@@ -561,7 +561,35 @@ namespace
         // CNB-97 (Phase 14H): KHR_lights_punctual, approximated as up to 3 directional lights
         // (see ExtractPunctualLightsEXT's own doc comment) -- scene-level, so the same extracted
         // lights are emitted into every mesh group's own .cnj output.
-        const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data);
+        LightReportEXT lightReport;
+        const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data, lightReport);
+        // plan_gltf.md GLTF-326: what the three-directional-light approximation cost this file.
+        if (lightReport.droppedLightCount > 0)
+        {
+            warnings.push_back(
+                "The scene declares " +
+                std::to_string(punctualLights.size() + lightReport.droppedLightCount) +
+                " lights; XNA's stock effects bind three, so " +
+                std::to_string(lightReport.droppedLightCount) + " were dropped.");
+        }
+        if (lightReport.approximatedPointLightCount > 0 ||
+            lightReport.approximatedSpotLightCount > 0)
+        {
+            warnings.push_back(
+                std::to_string(lightReport.approximatedPointLightCount) + " point and " +
+                std::to_string(lightReport.approximatedSpotLightCount) +
+                " spot light(s) were approximated as directional lights aimed at the scene origin; "
+                "a spot's cone is lost entirely.");
+        }
+        if (lightReport.clampedIntensityLightCount > 0)
+        {
+            warnings.push_back(
+                std::to_string(lightReport.clampedIntensityLightCount) +
+                " light(s) had color * intensity above 1 and were clamped (worst channel " +
+                std::to_string(lightReport.worstPreClampChannelEXT) +
+                "); glTF intensity is photometric and unbounded, so a bright light imports as "
+                "white.");
+        }
         if (!punctualLights.empty())
         {
             json << "  \"lights\": [\n";
