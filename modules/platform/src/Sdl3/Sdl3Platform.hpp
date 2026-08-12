@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+#include "CNA/Platform/IPlatform.hpp"
+
+#include <cstdint>
+#include <map>
+#include <string>
+
+namespace CNA::Platform::Sdl3 {
+
+    /**
+     * @brief The SDL3 implementation of the CNA platform contract.
+     *
+     * The first implementation, and the reference the conformance suite compares others against.
+     * It reproduces CNA's existing SDL3 behaviour exactly; it is not an opportunity to redesign
+     * semantics. See docs/platform-sdl-lifecycle-audit.md for the seven constraints this must
+     * honour, and note in particular that it deliberately does **not** call `SDL_Init()` or
+     * `SDL_Quit()` — global SDL lifetime belongs to the host application.
+     */
+    class Sdl3Platform final : public IPlatform
+    {
+    public:
+        /** @brief Creates the platform. Acquires no subsystem: acquisition stays lazy. */
+        Sdl3Platform();
+
+        /** @brief Releases every subsystem this instance still holds. */
+        ~Sdl3Platform() override;
+
+        Sdl3Platform(const Sdl3Platform&) = delete;
+        Sdl3Platform& operator=(const Sdl3Platform&) = delete;
+
+        /** @brief Gets this implementation's name. @return `"SDL3"`. */
+        [[nodiscard]] const std::string& GetName() const override;
+
+        /** @brief Gets what SDL3 can do on this host. @return The capability set. */
+        [[nodiscard]] PlatformCapabilities GetCapabilities() const override;
+
+        /** @brief Acquires a subsystem. @param subsystem The subsystem to acquire. */
+        void AcquireSubsystem(PlatformSubsystem subsystem) override;
+
+        /** @brief Releases a subsystem. @param subsystem The subsystem to release. */
+        void ReleaseSubsystem(PlatformSubsystem subsystem) override;
+
+        /** @brief Gets whether a subsystem is up. @param subsystem The subsystem. @return True if initialised. */
+        [[nodiscard]] bool IsSubsystemInitialized(PlatformSubsystem subsystem) const override;
+
+        /** @brief Creates a window. @param description Creation parameters. @return The window. */
+        [[nodiscard]] std::unique_ptr<IPlatformWindow> CreateWindow(
+            const WindowDescription& description) override;
+
+        /** @brief Drains pending events. @param destination Receives this frame's events. */
+        void PollEvents(std::vector<PlatformEvent>& destination) override;
+
+        /** @brief Gets the high-resolution counter. @return Its current value. */
+        [[nodiscard]] std::uint64_t GetPerformanceCounter() const override;
+
+        /** @brief Gets the counter frequency. @return Counter units per second. */
+        [[nodiscard]] std::uint64_t GetPerformanceFrequency() const override;
+
+        /** @brief Gets elapsed milliseconds. @return Milliseconds since SDL started counting. */
+        [[nodiscard]] std::uint64_t GetTicksMilliseconds() const override;
+
+        /** @brief Sleeps. @param milliseconds How long to sleep for. */
+        void Delay(std::uint32_t milliseconds) override;
+
+        /** @brief Gets the keyboard service. @return Null until PLAT-79 lands. */
+        [[nodiscard]] IPlatformKeyboard* GetKeyboard() override;
+        /** @brief Gets the mouse service. @return Null until PLAT-80 lands. */
+        [[nodiscard]] IPlatformMouse* GetMouse() override;
+        /** @brief Gets the gamepad service. @return Null until PLAT-82 lands. */
+        [[nodiscard]] IPlatformGamepad* GetGamepad() override;
+        /** @brief Gets the text input service. @return Null until PLAT-87 lands. */
+        [[nodiscard]] IPlatformTextInput* GetTextInput() override;
+        /** @brief Gets the sensor service. @return Null until PLAT-85 lands. */
+        [[nodiscard]] IPlatformSensors* GetSensors() override;
+        /** @brief Gets the clipboard service. @return Null until PLAT-88 lands. */
+        [[nodiscard]] IPlatformClipboard* GetClipboard() override;
+        /** @brief Gets the display service. @return Null until PLAT-43 lands. */
+        [[nodiscard]] IPlatformDisplays* GetDisplays() override;
+        /** @brief Gets the dialog service. @return Null until PLAT-103 lands. */
+        [[nodiscard]] IPlatformDialogs* GetDialogs() override;
+        /** @brief Gets the filesystem service. @return Null until PLAT-44 lands. */
+        [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
+        /** @brief Gets the system information service. @return Null until PLAT-107 lands. */
+        [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override;
+        /** @brief Gets the OpenGL context service. @return Null until PLAT-41 lands. */
+        [[nodiscard]] IPlatformGlContext* GetGlContext() override;
+        /** @brief Gets the Vulkan surface service. @return Null until PLAT-42 lands. */
+        [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override;
+
+        /**
+         * @brief Creates a surface presenter for a window.
+         * @param window The window to present to.
+         * @return The presenter.
+         */
+        [[nodiscard]] std::unique_ptr<IPlatformSurfacePresenter> CreateSurfacePresenter(
+            IPlatformWindow& window) override;
+
+    private:
+        /// Per-subsystem acquisition count owned by THIS instance. SDL keeps its own global
+        /// refcount; this one exists so the destructor can release exactly what it acquired and
+        /// no more, which matters when the host application holds subsystems of its own.
+        std::map<PlatformSubsystem, int> ownedRefCounts_;
+    };
+
+} // namespace CNA::Platform::Sdl3

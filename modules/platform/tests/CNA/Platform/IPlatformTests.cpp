@@ -301,12 +301,23 @@ TEST(PlatformFactoryTests, DefaultNameMatchesTheBuildTimeSelection)
     EXPECT_FALSE(PlatformFactory::GetDefaultName().empty());
 }
 
-TEST(PlatformFactoryTests, RefusesByNameWhileNoImplementationIsCompiledIn)
+TEST(PlatformFactoryTests, ReportsWhichImplementationsAreCompiledIn)
 {
-    // Phase 2 has not landed. Refusing beats returning a do-nothing stub, which would let a
-    // caller believe it had a working platform.
-    EXPECT_THROW((void)PlatformFactory::Create(), PlatformException);
-    EXPECT_TRUE(PlatformFactory::GetAvailable().empty());
+    // GetAvailable() is what the conformance suite enumerates, and what a refusal message names.
+    // Its contents depend on CNA_PLATFORM, so the assertion is on consistency rather than on a
+    // fixed list: whatever is advertised must actually be creatable.
+    for (const std::string& name : PlatformFactory::GetAvailable())
+    {
+        EXPECT_NO_THROW((void)PlatformFactory::Create(name)) << "advertised but not creatable: " << name;
+    }
+}
+
+TEST(PlatformFactoryTests, RefusesAnImplementationThatIsNotCompiledIn)
+{
+    // A name that is not built in must refuse rather than fall back to whatever is. Falling back
+    // would hand the caller a platform it did not ask for -- the same failure CNA_PLATFORM's
+    // reserved-identifier check prevents at configure time.
+    EXPECT_THROW((void)PlatformFactory::Create("NoSuchPlatform"), PlatformException);
 }
 
 } // namespace

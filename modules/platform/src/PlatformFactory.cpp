@@ -4,6 +4,10 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 
+#if defined(CNA_PLATFORM_SDL3)
+#  include "Sdl3/Sdl3Platform.hpp"
+#endif
+
 namespace CNA::Platform {
 
     namespace {
@@ -25,18 +29,37 @@ namespace CNA::Platform {
 
     std::unique_ptr<IPlatform> PlatformFactory::Create(const std::string& name)
     {
-        // Implementations register here as their phases land: Sdl3Platform (PLAT-28),
-        // HeadlessPlatform (PLAT-113), TerminalPlatform (PLAT-130). Until then the factory
-        // refuses by name rather than returning a null or a do-nothing stub -- a stub would let
-        // a caller believe it had a working platform.
+#if defined(CNA_PLATFORM_SDL3)
+        if (name == "SDL3")
+        {
+            return std::make_unique<Sdl3::Sdl3Platform>();
+        }
+#endif
+
+        // Remaining implementations register here as their phases land: HeadlessPlatform
+        // (PLAT-113), TerminalPlatform (PLAT-130). An unknown name refuses rather than
+        // returning null or a do-nothing stub, which would let a caller believe it had a
+        // working platform.
         throw PlatformException(
             "PlatformFactory::Create(" + name + ")",
-            "no platform implementation is compiled into this binary yet (plan_platform.md Phase 2)");
+            "not compiled into this binary; available: " +
+                [] {
+                    std::string names;
+                    for (const std::string& available : PlatformFactory::GetAvailable())
+                    {
+                        names += names.empty() ? available : ", " + available;
+                    }
+                    return names.empty() ? std::string("(none)") : names;
+                }());
     }
 
     std::vector<std::string> PlatformFactory::GetAvailable()
     {
-        return {};
+        std::vector<std::string> available;
+#if defined(CNA_PLATFORM_SDL3)
+        available.emplace_back("SDL3");
+#endif
+        return available;
     }
 
     const std::string& PlatformFactory::GetDefaultName()
