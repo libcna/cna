@@ -156,11 +156,16 @@ TEST(GltfConformanceLadder, TheRungListIsReadableFromTheBuildFile)
     ASSERT_TRUE(error.empty()) << error;
     ASSERT_FALSE(rungs.empty());
 
-    // The ladder's own rungs, in order, plus the two entries that ride the same label without
+    // The ladder's own rungs, in order, plus the three entries that ride the same label without
     // being layers. Naming them here means a rung that silently disappears from the build file is
     // caught, not just one that gains an unmatched suite.
+    //
+    // `Perf` is Phase 22's measurements (plan_gltf.md GLTF-433 … GLTF-443). It is on the label
+    // rather than beside it because its assertions are conformance assertions in the campaign's
+    // sense -- "a cached load still costs less than a parse", "a copied Model still shares its
+    // buffers" -- and because a measurement nobody runs stops being a measurement.
     const std::vector<std::string> expectedLayers = {"L0", "L1", "L2", "L3", "L4", "L5", "L6",
-                                                     "Ledger", "Tool"};
+                                                     "Perf", "Ledger", "Tool"};
     std::vector<std::string> actualLayers;
     for (const Rung& rung : rungs) { actualLayers.push_back(rung.layer); }
     EXPECT_EQ(expectedLayers, actualLayers)

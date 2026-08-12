@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf_`, pushed. Never push elsewhere without explicit permission. No pull
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **341 closed (`✔` 220, `✅` 121),
-  102 `⬜` remaining**, plus `GLTF-388`'s and `GLTF-449`'s new `✅/⬜` partials, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **351 closed (`✔` 230, `✅` 121),
+  91 `⬜` remaining**, plus `GLTF-388`'s and `GLTF-449`'s new `✅/⬜` partials, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 3 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-093`, `252`,
   `265`, `289`, `449`; `GLTF-064`/`067`/`068` were completed on 2026-08-12), 2 `🐛` (open: `GLTF-157`, `421`), and 1 `⛔` (`GLTF-009`,
   blocked by this environment).
@@ -40,10 +40,10 @@ Expected as of this writing:
 
 | Check | Expected |
 |---|---|
-| `ctest -L gltf-conformance` | **9/9 passed** |
+| `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite | **6 311 passed, 18 failed** |
 | generator `--check` | **75 assets, 364 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **425 passed, 23 skipped** / **448 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **434 passed, 23 skipped** / **457 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -218,6 +218,7 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 | `modules/content/tests/CNA/Internal/GltfImport/` | Every `Gltf*` suite, plus the oracles. |
 | `cmake/UnitTests.cmake` | `CNA_GLTF_CONFORMANCE_RUNGS` — the ladder's single source of truth. |
 | `docs/gltf-conventions.md` | Every decision with a rationale: transforms, mirroring, colour space, effect selection, lighting, animation, extensions. |
+| `docs/gltf-performance.md` | Phase 22's measurements and the decision each led to — the parse/cache costs, the 4× unpack ceiling, the 2× morph duplication, the occlusion codec. Reproduce with `--gtest_filter='GltfPerformance.*' --gtest_output=xml:`. |
 | `docs/gltf-limitations.md` | The inverse: what cannot be carried, what is approximated, and the report field that names each loss. Its §1 is generated from the extension registry and its report fields are checked against the header — see `GltfLimitationsDoc`. |
 | `docs/gltf-conformance.md` | The oracle ladder and the spec pin. |
 | `docs/gltf-api-change-review.md` | `GLTF-025`'s gate. Read §4 before proposing public API. |
