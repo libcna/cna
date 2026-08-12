@@ -8,6 +8,7 @@
 // for that (PLAT-3).
 
 #include "../../../src/Sdl3/Sdl3EventMapper.hpp"
+#include "../../../src/Sdl3/Sdl3Scancodes.hpp"
 
 #include <SDL3/SDL.h>
 #include <gtest/gtest.h>
@@ -97,7 +98,7 @@ TEST(Sdl3EventMapperTests, KeyDownCarriesScancodeKeycodeModifiersAndRepeat)
     ASSERT_TRUE(MapSdlEvent(source, mapped));
     const auto& key = std::get<KeyEvent>(mapped);
     EXPECT_EQ(key.window, 7u);
-    EXPECT_EQ(key.scancode, static_cast<std::uint32_t>(SDL_SCANCODE_A));
+    EXPECT_EQ(key.scancode, Scancode::A);
     EXPECT_EQ(key.keycode, static_cast<std::uint32_t>(SDLK_A));
     EXPECT_EQ(key.modifiers, static_cast<std::uint16_t>(SDL_KMOD_LSHIFT));
     EXPECT_TRUE(key.pressed);
@@ -365,6 +366,50 @@ TEST(Sdl3EventMapperTests, AnUnmappedEventLeavesTheDestinationUntouched)
     SDL_Event source = MakeEvent(SDL_EVENT_CLIPBOARD_UPDATE);
     EXPECT_FALSE(MapSdlEvent(source, mapped));
     EXPECT_EQ(GetEventTypeName(mapped), "WindowEvent") << "destination must not be overwritten";
+}
+
+// --- scancode translation (PLAT-78a) ----------------------------------------------------------
+
+TEST(Sdl3EventMapperTests, EverySdlScancodeCnaNamesRoundTripsThroughTheContract)
+{
+    // Both numberings are HID usage IDs, so the translation is a validated cast rather than a
+    // table. That makes it cheap and makes a silent mismatch invisible -- this walks SDL's entire
+    // scancode range and checks that anything CNA recognises comes back as the same SDL value.
+    int recognised = 0;
+    for (int raw = 0; raw < SDL_SCANCODE_COUNT; ++raw)
+    {
+        const auto sdl = static_cast<SDL_Scancode>(raw);
+        const Scancode mapped = CNA::Platform::Sdl3::ToScancode(sdl);
+        if (mapped == Scancode::Unknown && sdl != SDL_SCANCODE_UNKNOWN)
+        {
+            continue;  // a key CNA does not name; refusing it is the correct answer
+        }
+        EXPECT_EQ(CNA::Platform::Sdl3::ToSdlScancode(mapped), sdl) << "raw " << raw;
+        ++recognised;
+    }
+
+    // A translation that recognised nothing would pass every assertion above.
+    EXPECT_GE(recognised, 120);
+}
+
+TEST(Sdl3EventMapperTests, AnSdlScancodeCnaDoesNotNameBecomesUnknown)
+{
+    // SDL's space runs past the HID keyboard page with its own media and system keys. Letting one
+    // through as a raw cast would produce a Scancode no switch handles and ToString cannot name.
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_UNKNOWN), Scancode::Unknown);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_CUT), Scancode::Unknown);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_MEDIA_EJECT), Scancode::Unknown);
+}
+
+TEST(Sdl3EventMapperTests, TheLettersAndModifiersTranslateToTheKeysTheyName)
+{
+    // The cases a reader would want spot-checked by name rather than by round-trip.
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_A), Scancode::A);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_W), Scancode::W);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_LSHIFT), Scancode::LeftShift);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_RGUI), Scancode::RightGui);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_KP_5), Scancode::Keypad5);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_SLEEP), Scancode::Sleep);
 }
 
 } // namespace

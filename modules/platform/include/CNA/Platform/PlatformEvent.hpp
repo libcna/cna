@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Platform/Input/Scancode.hpp"
+
 #include <cstdint>
 #include <string>
 #include <variant>
@@ -73,12 +75,13 @@ namespace CNA::Platform {
         /** @brief The window with focus, or zero. */
         WindowId window = 0;
         /**
-         * @brief Layout-independent physical key code.
+         * @brief Layout-independent physical key.
          *
-         * The value space is CNA's own; an implementation maps its native codes onto it. Games
-         * that care about physical position (WASD) use this.
+         * Games that bind by position rather than by character (WASD) use this: on an AZERTY
+         * keyboard those are still the same four keys under the same four fingers. `Unknown` when
+         * the platform cannot classify the key.
          */
-        std::uint32_t scancode = 0;
+        Scancode scancode = Scancode::Unknown;
         /** @brief Layout-dependent virtual key code, matching `Microsoft::Xna::Framework::Input::Keys`. */
         std::uint32_t keycode = 0;
         /**
