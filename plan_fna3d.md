@@ -147,8 +147,8 @@ across the driver matrix. Do not describe it as validated on SDL_GPU or Direct3D
 
 ## Reconciliation remediation (FNA3D-36+)
 
-The original, now-archival `../plan_fna3d.md` is useful as a design checklist, but it predates
-this implementation and must not replace the evidence above. Its remaining applicable rules are
+The earlier, now-archival plan was useful as a design checklist, but it predates this
+implementation and must not replace the evidence above. Its remaining applicable rules are
 carried forward here: validate every native boundary before calling FNA3D, make post-device
 destruction harmless, and keep normal draw submission allocation-free. The completed work below
 is based on source inspection, not only on the older document's intended design.
