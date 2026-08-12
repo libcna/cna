@@ -2221,11 +2221,47 @@ namespace CNA::Internal::GltfImport
 
                 for (int k = 0; k < 4; ++k)
                 {
-                    const int oldJointIdx = static_cast<int>(joints[i4 + static_cast<std::size_t>(k)] + 0.5f);
-                    int newJointIdx = 0;
-                    if (oldJointIdx >= 0 && static_cast<std::size_t>(oldJointIdx) < skel->oldToNew.size())
+                    const std::size_t influence = i4 + static_cast<std::size_t>(k);
+                    const int oldJointIdx = static_cast<int>(joints[influence] + 0.5f);
+                    const bool inRange =
+                        oldJointIdx >= 0 &&
+                        static_cast<std::size_t>(oldJointIdx) < skel->oldToNew.size();
+
+                    // plan_gltf.md GLTF-254. An index outside the skin's own joints array used to
+                    // fall back to joint 0 unconditionally -- which binds the vertex to the root
+                    // and drags it there, the same collapse this campaign exists to remove, from a
+                    // malformed file rather than a bug.
+                    //
+                    // The two cases are genuinely different and are treated differently. A
+                    // ZERO-WEIGHTED influence with a garbage index is the universal exporter
+                    // padding pattern: an unused slot filled with whatever, contributing nothing to
+                    // the skin equation. Refusing those would reject a large share of real assets
+                    // for no gain, so they are clamped and left alone. A WEIGHTED influence naming
+                    // a joint that does not exist is a broken file, and silently rebinding it to
+                    // the root is the worst available answer.
+                    if (!inRange && weights[influence] > 0.0f)
                     {
-                        newJointIdx = skel->oldToNew[static_cast<std::size_t>(oldJointIdx)];
+                        throw std::runtime_error(
+                            "Primitive '" + name + "': vertex " + std::to_string(i4 / 4) +
+                            " is weighted " + std::to_string(weights[influence]) + " to joint " +
+                            std::to_string(oldJointIdx) + ", but the skin declares only " +
+                            std::to_string(skel->oldToNew.size()) +
+                            " joints. Binding it to the root instead would drag the vertex there, "
+                            "so the file is refused (plan_gltf.md GLTF-254).");
+                    }
+
+                    const int newJointIdx =
+                        inRange ? skel->oldToNew[static_cast<std::size_t>(oldJointIdx)] : 0;
+                    // BlendIndices is one byte per influence. GLTF-261 caps a skin at 72 joints, so
+                    // this cannot wrap -- but the two limits live far apart, and a silent wrap here
+                    // would rebind a vertex to an arbitrary joint. Coupling them explicitly costs a
+                    // comparison and removes the possibility.
+                    if (newJointIdx < 0 || newJointIdx > 255)
+                    {
+                        throw std::runtime_error(
+                            "Primitive '" + name + "': remapped joint index " +
+                            std::to_string(newJointIdx) +
+                            " does not fit the one-byte BlendIndices element.");
                     }
                     out.vertexBytes.push_back(static_cast<std::uint8_t>(newJointIdx));
                 }

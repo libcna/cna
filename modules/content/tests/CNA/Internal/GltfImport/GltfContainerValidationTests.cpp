@@ -46,31 +46,50 @@ namespace
         // BuildSkeleton, not ExtractMesh, and a probe that only extracted primitives would report
         // an over-limit rig as importing cleanly.
         const SceneGraphOut scene = BuildSceneGraph(&data);
+        std::vector<SkeletonResult> skeletons;
         for (cgltf_size s = 0; s < data.skins_count; ++s)
         {
             try
             {
-                (void)BuildSkeleton(&data.skins[s], scene,
-                                     Microsoft::Xna::Framework::Matrix::getIdentityProperty(), 1.0f);
+                skeletons.push_back(BuildSkeleton(&data.skins[s], scene,
+                                                   Microsoft::Xna::Framework::Matrix::getIdentityProperty(),
+                                                   1.0f));
             }
             catch (const std::exception& e)
             {
                 return e.what();
             }
         }
-        for (cgltf_size m = 0; m < data.meshes_count; ++m)
-        {
-            for (cgltf_size p = 0; p < data.meshes[m].primitives_count; ++p)
+
+        // Extraction is run once per skeleton, and unskinned only when the file has no skins at
+        // all. GLTF-254's out-of-range-joint refusal lives in the packing loop's skinning branch,
+        // which a probe passing nullptr never reaches -- the same shape of blind spot GLTF-261's
+        // skin loop above was added to close, one layer further down. Which skin actually owns a
+        // given mesh does not matter here: the probe is asking whether ANY path refuses the file.
+        const auto extractWith = [&](const SkeletonResult* skeleton) -> std::string {
+            for (cgltf_size m = 0; m < data.meshes_count; ++m)
             {
-                try
+                for (cgltf_size p = 0; p < data.meshes[m].primitives_count; ++p)
                 {
-                    (void)ExtractMesh(&data, data.meshes[m].primitives[p], "probe", nullptr, 1.0f);
-                }
-                catch (const std::exception& e)
-                {
-                    return e.what();
+                    try
+                    {
+                        (void)ExtractMesh(&data, data.meshes[m].primitives[p], "probe", skeleton,
+                                           1.0f);
+                    }
+                    catch (const std::exception& e)
+                    {
+                        return e.what();
+                    }
                 }
             }
+            return {};
+        };
+
+        if (skeletons.empty()) { return extractWith(nullptr); }
+        for (const SkeletonResult& skeleton : skeletons)
+        {
+            const std::string error = extractWith(&skeleton);
+            if (!error.empty()) { return error; }
         }
         return {};
     }
