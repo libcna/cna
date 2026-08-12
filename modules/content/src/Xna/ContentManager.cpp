@@ -2671,6 +2671,20 @@ namespace Microsoft::Xna::Framework::Content
                             (skinReport.hasDeclaredSkeletonRoot ? "declared." : "not declared."));
                     }
 
+                    // plan_gltf.md GLTF-100: what the selected layout cannot carry, named once from
+                    // the decision table rather than re-derived per symptom. The individual
+                    // reports below (a dropped normal, a dropped tangent, a dropped material) each
+                    // catch one consequence; this catches the combination, which is what an author
+                    // is actually looking at. Debug, because every one of them is also warned
+                    // about specifically -- this is the summary, not a second alarm.
+                    if (!meshOut.unrepresentableForStrideEXT.empty())
+                    {
+                        CNA::Logger::Debug(
+                            "glTF file '" + path + "': primitive '" + meshOut.name +
+                            "' selected vertex stride " + std::to_string(meshOut.stride) +
+                            ", which cannot carry " + meshOut.unrepresentableForStrideEXT +
+                            " (GLTF-100).");
+                    }
                     // plan_gltf.md GLTF-082: a topology conversion, reported rather than silent.
                     // A strip or fan becomes a triangle list at import, which is a rewrite of the
                     // index list -- so the triangle a consumer draws is not at the index the file

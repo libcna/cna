@@ -432,6 +432,17 @@ namespace CNA::Internal::GltfImport
          */
         bool convertedFromSpecularGlossinessEXT = false;
         /**
+         * @brief What the selected vertex stride cannot carry, or empty (plan_gltf.md `GLTF-100`).
+         *
+         * Taken from the `GLTF-099` decision table's own row rather than re-derived wherever a
+         * caller happens to care. Every downgrade CNA performs is one of these — a coloured
+         * primitive losing its normals, a dual-texture one losing its lighting entirely, a
+         * PBR material dropped for want of a colour-carrying PBR layout — and stating it per row
+         * is what makes the set of them enumerable instead of a property of which ternary branch
+         * was taken.
+         */
+        std::string unrepresentableForStrideEXT;
+        /**
          * @brief The largest `specularFactor` channel dropped by that conversion, or 0.
          *
          * How much the approximation cost, in the one term it discards. Near 0 means the material
@@ -1555,6 +1566,69 @@ namespace CNA::Internal::GltfImport
      */
     [[nodiscard]] std::vector<CameraOut> ExtractCamerasEXT(
         const cgltf_data* data, const SceneGraphOut& scene, float unitScale);
+
+    /**
+     * @brief The attribute combination one primitive presents to the stride selector.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-099`). Exactly the four
+     * booleans §2.3's table is indexed by, named so a row reads as a sentence rather than as a
+     * position in a nested ternary.
+     */
+    struct VertexLayoutRequestEXT
+    {
+        /** @brief The primitive has `JOINTS_0` and `WEIGHTS_0`, so it needs a GPU-skinned layout. */
+        bool skinned = false;
+        /** @brief The primitive has `COLOR_0`. */
+        bool colored = false;
+        /** @brief The material is metallic-roughness and CNA can shade it as PBR. */
+        bool usePbr = false;
+        /** @brief A non-PBR material carrying both a base-colour and an occlusion map. */
+        bool useDualTexture = false;
+    };
+
+    /**
+     * @brief One row of the vertex-stride decision table (plan_gltf.md §2.3, `GLTF-099`).
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API.
+     */
+    struct VertexLayoutRuleEXT
+    {
+        /** @brief The combination this row matches. */
+        VertexLayoutRequestEXT request;
+        /** @brief The byte stride it selects. */
+        int stride = 32;
+        /**
+         * @brief What this row cannot carry, or empty when it carries everything asked for.
+         *
+         * plan_gltf.md `GLTF-100`. A row whose stride has no slot for something the primitive
+         * authored is a **downgrade**, and the point of naming it here is that the downgrade stops
+         * being a property of whichever ternary branch happened to be taken. Empty means the
+         * combination is represented exactly.
+         */
+        std::string unrepresentable;
+    };
+
+    /**
+     * @brief The whole stride decision table, in a stable order.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. §2.3's table as data rather than as a nested
+     * ternary chain: every renderer's `ApplyLayout` is an implicit restatement of it, and a rule
+     * spelled as an expression cannot be enumerated, tested row by row, or asked what it loses.
+     *
+     * @return Every row; the first whose `request` matches wins.
+     */
+    const std::vector<VertexLayoutRuleEXT>& VertexLayoutTableEXT();
+
+    /**
+     * @brief The row of @ref VertexLayoutTableEXT that a combination selects.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API. Total over all sixteen combinations of the four
+     * booleans, so there is no combination without an answer.
+     *
+     * @param request The primitive's attribute combination.
+     * @return The matching row.
+     */
+    const VertexLayoutRuleEXT& SelectVertexLayoutEXT(const VertexLayoutRequestEXT& request);
 
     /**
      * @brief How completely CNA implements one glTF extension (plan_gltf.md `GLTF-334`, §19).

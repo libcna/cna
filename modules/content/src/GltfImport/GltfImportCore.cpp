@@ -2203,8 +2203,14 @@ namespace CNA::Internal::GltfImport
         // Skinned colored meshes use the stride-56 layout instead (Position+Normal+
         // TextureCoordinate+BlendWeight+BlendIndices+Color). Skinned + PBR meshes use the new
         // stride-68 layout (Position+Normal+Tangent+TextureCoordinate+BlendWeight+BlendIndices).
-        out.stride = out.skinned ? (out.colored ? 56 : (out.usePbr ? 68 : 52))
-                                 : (out.colored ? 24 : (out.usePbr ? 48 : (out.useDualTexture ? 20 : 32)));
+        const VertexLayoutRequestEXT layoutRequest{out.skinned, out.colored, out.usePbr,
+                                                    out.useDualTexture};
+        const VertexLayoutRuleEXT& layoutRule = SelectVertexLayoutEXT(layoutRequest);
+        out.stride = layoutRule.stride;
+        // plan_gltf.md GLTF-100: what this row cannot carry, taken from the table rather than
+        // re-derived at each site that cares. A downgrade decided by which ternary branch happened
+        // to be taken is a downgrade nobody can enumerate.
+        out.unrepresentableForStrideEXT = layoutRule.unrepresentable;
 
         const cgltf_size vertexCount = posAcc->count;
 
@@ -3183,6 +3189,64 @@ namespace CNA::Internal::GltfImport
             if (count > 1) { ++report.sharedMeshCount; }
         }
         return report;
+    }
+
+    // plan_gltf.md GLTF-099. §2.3's stride table as DATA. It was a nested ternary chain, which has
+    // three problems a table does not: it cannot be enumerated (so no test can walk its rows), it
+    // cannot be asked what a row loses (GLTF-100), and every renderer's ApplyLayout is an implicit
+    // restatement of the same rule with no way to check the two agree.
+    //
+    // Order matters: the first matching row wins, and `skinned` is tested before everything else
+    // because the skinned layouts are a different family rather than a variation.
+    const std::vector<VertexLayoutRuleEXT>& VertexLayoutTableEXT()
+    {
+        static const std::vector<VertexLayoutRuleEXT> table = {
+            // Skinned. A skinned primitive always carries a Normal, so nothing here loses one.
+            {{true, true, false, false}, 56,
+             "the material's PBR factors and maps: no PBR shader reads a colour stream"},
+            {{true, true, true, false}, 56,
+             "the material's PBR factors and maps: no PBR shader reads a colour stream"},
+            {{true, false, true, false}, 68, ""},
+            {{true, false, false, false}, 52, ""},
+            // Unskinned, coloured. Stride 24 is XNA's own VertexPositionColorTexture, which has no
+            // Normal slot at all -- so a coloured primitive loses its normals whatever its
+            // material, and its PBR material on top of that (GLTF-241/GLTF-085).
+            {{false, true, true, false}, 24,
+             "the Normal stream and the material's PBR factors and maps: stride 24 has no normal "
+             "slot and no PBR shader reads a colour stream"},
+            {{false, true, false, false}, 24,
+             "the Normal stream: stride 24 (Position+Color+TextureCoordinate) has no normal slot"},
+            // Unskinned, uncoloured.
+            {{false, false, true, false}, 48, ""},
+            {{false, false, false, true}, 20,
+             "the Normal and Tangent streams: DualTextureEffect's layout is "
+             "Position+TextureCoordinate only, so the primitive cannot be lit"},
+            {{false, false, false, false}, 32, ""},
+        };
+        return table;
+    }
+
+    const VertexLayoutRuleEXT& SelectVertexLayoutEXT(const VertexLayoutRequestEXT& request)
+    {
+        const std::vector<VertexLayoutRuleEXT>& table = VertexLayoutTableEXT();
+        for (const VertexLayoutRuleEXT& rule : table)
+        {
+            // useDualTexture is only ever set for an unskinned, uncoloured, non-PBR primitive, so
+            // matching on the other three and letting the dual-texture row sit ahead of the plain
+            // stride-32 one keeps the table readable without a don't-care column.
+            if (rule.request.skinned == request.skinned &&
+                rule.request.colored == request.colored &&
+                rule.request.usePbr == request.usePbr &&
+                (rule.request.useDualTexture == request.useDualTexture ||
+                 (!rule.request.useDualTexture && !request.useDualTexture)))
+            {
+                return rule;
+            }
+        }
+        // Total by construction -- the table covers every reachable combination -- but a fallback
+        // that silently produced a plausible stride is exactly the failure GLTF-100 is about, so
+        // the last row (the plain unskinned layout) is returned explicitly rather than by accident.
+        return table.back();
     }
 
     std::string GltfExtensionSupportNameEXT(GltfExtensionSupportEXT support)
