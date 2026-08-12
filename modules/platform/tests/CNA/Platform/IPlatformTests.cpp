@@ -115,6 +115,7 @@ public:
     [[nodiscard]] IPlatformGamepad* GetGamepad() override { return nullptr; }
     [[nodiscard]] IPlatformTextInput* GetTextInput() override { return nullptr; }
     [[nodiscard]] IPlatformSensors* GetSensors() override { return nullptr; }
+    [[nodiscard]] IPlatformHaptics* GetHaptics() override { return nullptr; }
     [[nodiscard]] IPlatformClipboard* GetClipboard() override { return nullptr; }
     [[nodiscard]] IPlatformDisplays* GetDisplays() override { return nullptr; }
     [[nodiscard]] IPlatformDialogs* GetDialogs() override { return nullptr; }

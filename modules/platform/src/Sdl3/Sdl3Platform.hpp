@@ -4,6 +4,7 @@
 #include "CNA/Platform/IPlatform.hpp"
 
 #include "Sdl3GraphicsServices.hpp"
+#include "Sdl3DeviceServices.hpp"
 #include "Sdl3InputServices.hpp"
 #include "Sdl3SystemServices.hpp"
 
@@ -76,8 +77,10 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformGamepad* GetGamepad() override;
         /** @brief Gets the text input service. @return The SDL3 text input service; never null. */
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
-        /** @brief Gets the sensor service. @return Null until PLAT-85 lands. */
+        /** @brief Gets the sensor service. @return The SDL3 sensor service; never null. */
         [[nodiscard]] IPlatformSensors* GetSensors() override;
+        /** @brief Gets the haptics service. @return The SDL3 haptics service; never null. */
+        [[nodiscard]] IPlatformHaptics* GetHaptics() override;
         /** @brief Gets the clipboard service. @return The SDL3 clipboard; never null. */
         [[nodiscard]] IPlatformClipboard* GetClipboard() override;
         /** @brief Gets the display service. @return The SDL3 display enumerator; never null. */
@@ -119,6 +122,8 @@ namespace CNA::Platform::Sdl3 {
         Sdl3Mouse mouse_;
         Sdl3Gamepad gamepad_;
         Sdl3TextInput textInput_;
+        Sdl3Sensors sensors_;
+        Sdl3Haptics haptics_;
     };
 
 } // namespace CNA::Platform::Sdl3

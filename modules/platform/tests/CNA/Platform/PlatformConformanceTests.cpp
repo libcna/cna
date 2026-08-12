@@ -61,6 +61,7 @@ TEST_P(PlatformConformance, EveryServiceIsNullExactlyWhenItsCapabilityIsFalse)
     EXPECT_EQ(platform_->GetGamepad() != nullptr, capabilities_.gamepad) << "gamepad";
     EXPECT_EQ(platform_->GetTextInput() != nullptr, capabilities_.textInput) << "textInput";
     EXPECT_EQ(platform_->GetSensors() != nullptr, capabilities_.sensors) << "sensors";
+    EXPECT_EQ(platform_->GetHaptics() != nullptr, capabilities_.haptics) << "haptics";
     EXPECT_EQ(platform_->GetClipboard() != nullptr, capabilities_.clipboard) << "clipboard";
     EXPECT_EQ(platform_->GetDisplays() != nullptr, capabilities_.multipleDisplays) << "displays";
     EXPECT_EQ(platform_->GetGlContext() != nullptr, capabilities_.openGlContext) << "openGlContext";

@@ -66,8 +66,8 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1116** |
-| Files referencing SDL (all) | **588** |
-| Production files (`src/` + `include/`) referencing SDL | **268** |
+| Files referencing SDL (all) | **590** |
+| Production files (`src/` + `include/`) referencing SDL | **270** |
 | …of which are renderer production files | **116** |
 | Test/example files referencing SDL | **320** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
@@ -80,7 +80,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/input` | 48 | keyboard, mouse, gamepad, joystick, haptic, sensor, touch, text input |
 | `modules/devices-ext` | 30 | clipboard, message box, file dialog, tray, camera, locale, power, display, URL |
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
-| `modules/platform` | 15 | - |
+| `modules/platform` | 17 | - |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
 | `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
@@ -419,8 +419,8 @@ re-points that seam at the platform contract rather than inventing a new one.
 | PLAT-81 | Migrate `MouseCursor` | 🟨 | System cursor shapes implemented on `Sdl3Mouse`. The previous cursor is destroyed **only after** the new one is made current — freeing a cursor that is still set is a use-after-free inside SDL. Custom (image) cursors and the `modules/input` re-point remain. Original scope: | System and custom cursors, capability-gated. |
 | PLAT-82 | Migrate `GamePad` | 🟨 | **`Sdl3Gamepad` implemented**: enumeration, buttons, axes, triggers and rumble. Axis normalisation scales each half of SDL's asymmetric `[-32768, 32767]` range by its own magnitude, matching the event mapper. Rumble strength is **clamped** before the 16-bit conversion — an out-of-range value would wrap and turn "maximum" into "almost nothing". An empty or out-of-range slot reports not-connected rather than throwing, because XNA games poll all four player indices unconditionally. Handles are closed on every rescan; verified leak-free under ASan. The mapping database and `GamePadMappingTests` re-point remain. Original scope: | Including the mapping database and `GamePadMappingTests`. The SDL3-vs-SDL2-vs-SDL1 capability gap noted in `cnaplatform.md` is expressed through capabilities here — but no second implementation is written. |
 | PLAT-83 | Migrate joystick support | ⬜ | Legacy joystick path, distinct from gamepad. |
-| PLAT-84 | Migrate haptics | ⬜ | `Haptics.cpp`, `HapticDevice.cpp`, `SdlHapticBackend`; capability-gated (`supportsGamepadRumble`). |
-| PLAT-85 | Migrate sensors | ⬜ | `SystemSensorBackend`; shares subsystem ownership with `modules/devices` — PLAT-29's refcounting is the contract here. |
+| PLAT-84 | Migrate haptics | 🟨 | **`IPlatformHaptics` added and `Sdl3Haptics` implemented.** Kept **separate from `IPlatformGamepad::SetRumble`** on evidence, not taste: `Microsoft::Devices::VibrateController` drives the device's *own* haptics with no gamepad involved, so folding the two would force a phone-only caller through a controller index. PLAT-24 had deferred the interface until a second distinct caller appeared; `modules/devices` and `modules/input` are two. Devices are opened **lazily and cached** (`SDL_OpenHaptic` is not cheap and `VibrateController` calls start/stop repeatedly on one device), and an index that vanished on hotplug **returns false rather than throwing** — losing a controller mid-effect is ordinary, not exceptional. Strength is clamped, matching gamepad rumble. Amber until `Haptics.cpp`/`HapticDevice.cpp`/`SdlHapticBackend` are re-pointed at the service in Phase 5. Original scope: | `Haptics.cpp`, `HapticDevice.cpp`, `SdlHapticBackend`; capability-gated (`supportsGamepadRumble`). |
+| PLAT-85 | Migrate sensors | 🟨 | **`Sdl3Sensors` implemented** on the PLAT-24 `IPlatformSensors` contract (enumerate, open, read, close). `Start()` on a sensor the device does not have throws `PlatformNotSupportedException(Sensors)` — an absent accelerometer is a capability answer, so it names the capability instead of surfacing an SDL error string; `Stop()` on something never started is a no-op, symmetric with `ReleaseSubsystem`. `TryGetReading` leaves its out parameter **untouched** on false, so a caller that ignores the return value cannot act on stale values. `capabilities.sensors`/`.haptics` are now honestly true and the conformance suite asserts the service/capability pairing for both. Amber until `SystemSensorBackend` is re-pointed in Phase 5 and PLAT-36 maps sensor events. Original scope: | `SystemSensorBackend`; shares subsystem ownership with `modules/devices` — PLAT-29's refcounting is the contract here. |
 | PLAT-86 | Migrate `TouchPanel` and gestures | ⬜ | `TouchPanel.cpp` + `GestureDetector`; `SdlInputBridgeTouchGestureTests` pass. |
 | PLAT-87 | Migrate `TextInputEXT` | 🟨 | **`Sdl3TextInput` implemented**: start/stop, active state and IME input area. `textInput`/`ime` now honestly true. Amber until `modules/input`'s `TextInputEXT` is re-pointed in Phase 5. Original scope: | Text input start/stop, input area, IME; capability-gated (`supportsTextInput`, `supportsIme`). |
 | PLAT-88 | Migrate input-side `Clipboard` | ⬜ | `modules/input/src/CnaExt/Clipboard.cpp` → clipboard service. Coordinate with PLAT-100 (`devices-ext` has a second clipboard surface) so one service backs both. |

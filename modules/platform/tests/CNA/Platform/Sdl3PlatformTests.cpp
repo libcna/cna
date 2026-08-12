@@ -151,8 +151,8 @@ TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
     EXPECT_TRUE(capabilities.textInput);
 
     // Still unwired, so still false -- the pairing the conformance suite enforces.
-    EXPECT_FALSE(capabilities.sensors) << "flips true in PLAT-85";
-    EXPECT_FALSE(capabilities.haptics) << "flips true in PLAT-84";
+    EXPECT_TRUE(capabilities.sensors);
+    EXPECT_TRUE(capabilities.haptics);
     EXPECT_FALSE(capabilities.messageBox) << "flips true in PLAT-103";
 }
 

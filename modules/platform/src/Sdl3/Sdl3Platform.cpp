@@ -105,11 +105,11 @@ namespace CNA::Platform::Sdl3 {
         capabilities.gamepadRumble = true;
         capabilities.textInput = true;
         capabilities.ime = true;
+        capabilities.sensors = true;
+        capabilities.haptics = true;
 
         // Still unwired. Each flips true in the task that wires its accessor, not before.
         //   capabilities.gamepadSensors      PLAT-82 (gyro/accel on the pad itself)
-        //   capabilities.haptics             PLAT-84
-        //   capabilities.sensors             PLAT-85
         //   capabilities.messageBox          PLAT-103
         //   capabilities.nativeFileDialog    PLAT-104
         //   capabilities.tray                PLAT-105
@@ -242,7 +242,8 @@ namespace CNA::Platform::Sdl3 {
     IPlatformMouse* Sdl3Platform::GetMouse() { return &mouse_; }
     IPlatformGamepad* Sdl3Platform::GetGamepad() { return &gamepad_; }
     IPlatformTextInput* Sdl3Platform::GetTextInput() { return &textInput_; }
-    IPlatformSensors* Sdl3Platform::GetSensors() { return nullptr; }
+    IPlatformSensors* Sdl3Platform::GetSensors() { return &sensors_; }
+    IPlatformHaptics* Sdl3Platform::GetHaptics() { return &haptics_; }
     IPlatformClipboard* Sdl3Platform::GetClipboard() { return &clipboard_; }
     IPlatformDisplays* Sdl3Platform::GetDisplays() { return &displays_; }
     IPlatformDialogs* Sdl3Platform::GetDialogs() { return nullptr; }

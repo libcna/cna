@@ -101,6 +101,8 @@ namespace CNA::Platform::Headless {
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return Null; there are no sensors. */
         [[nodiscard]] IPlatformSensors* GetSensors() override;
+        /** @brief Gets the haptics service. @return Null; there are no haptic devices. */
+        [[nodiscard]] IPlatformHaptics* GetHaptics() override;
         /** @brief Gets the clipboard service. @return Null; there is no clipboard. */
         [[nodiscard]] IPlatformClipboard* GetClipboard() override;
         /** @brief Gets the display service. @return Null; there are no displays. */
