@@ -1035,6 +1035,22 @@ namespace CNA::Internal::Renderers
         /// PbrEffect: roughness factor [0,1], multiplied with pbrMetallicRoughnessMap's G channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrRoughnessFactor = 1.0f;
+        /// plan_gltf.md GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
+        /// decoded to linear before lighting (glTF §3.9.2). The `DiffuseColor` FACTOR is already
+        /// linear and must NOT be decoded -- the two multiply, and decoding both would apply the
+        /// transfer twice to one of them. Renderers that do not implement colour management ignore
+        /// this, the established accepted-and-ignored pattern for a field they do not yet honour.
+        bool pbrBaseColorTextureIsSrgb = true;
+        /// plan_gltf.md GLTF-210: the emissive texture is sRGB-encoded, on the same terms as
+        /// `pbrBaseColorTextureIsSrgb`. `emissiveColor` (the factor, possibly scaled above 1 by
+        /// KHR_materials_emissive_strength) is linear and is not decoded.
+        bool pbrEmissiveTextureIsSrgb = true;
+        /// plan_gltf.md GLTF-212: encode the fragment's RGB from linear back to sRGB before it
+        /// reaches the framebuffer. Alpha is never encoded -- glTF §3.9.4 makes it coverage, not
+        /// colour. Normal, occlusion and metallic-roughness maps carry no flag at all because
+        /// §3.9.2 declares them linear unconditionally; a flag would imply a choice that does not
+        /// exist.
+        bool pbrEncodeOutputToSrgb = true;
     };
 
     /**

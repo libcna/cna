@@ -1,4 +1,6 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+
+#include "CNA/Internal/Graphics/SrgbTransfer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include <cstdint>
@@ -90,6 +92,12 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 /// REMED-GFX-147: unit 4's flag, declared only by the shaders that reach that far (PbrEffect).
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
 "uniform vec4 uRtFlipVHi;\n"
+
+/// plan_gltf.md GLTF-210/GLTF-212: the sRGB transfer, pasted into the PbrEffect shaders. The text
+/// is not written here -- it comes from CNA/Internal/Graphics/SrgbTransfer.hpp, which is also
+/// where the C++ implementation of the same formula lives, so the two cannot drift into two
+/// slightly different curves.
+#define CNA_GL_SRGB_TRANSFER_DECL CNA_GLSL_SRGB_TRANSFER
 
 // REMED-GFX-122: stock EasyGL effects share one optional per-instance world matrix input. Locations
 // 12-15 reserve the final four slots of GLES 3's guaranteed 16-attribute floor. That leaves the
@@ -5867,6 +5875,10 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
+// plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
+// than a branch, so every fragment costs the same whichever way it is set.
+"uniform vec3 uSrgb;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -5879,6 +5891,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec4 FragColor;\n"
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.3/B.3.4/B.3.2).
+CNA_GL_SRGB_TRANSFER_DECL
 "vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
 "    vec3 H=normalize(V+L);\n"
 "    float NdotL=max(dot(N,L),0.0);\n"
@@ -5900,7 +5913,10 @@ CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
 "    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
-"    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
+// glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
+// the sample is decoded -- transferring both would apply it twice to one of them.
+"    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
+"    vec3 albedo=baseRGB*uDiffuseColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
@@ -5919,11 +5935,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+// Same split as the base colour. The factor is additionally allowed above 1 by
+// KHR_materials_emissive_strength, which is a second reason never to transfer it.
+"    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+// Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
+// colour -- is decoded first. Mixing an encoded colour into a linear result would tint
+// the fade toward the wrong shade as it thickens.
+"    vec3 fogLinear=mix(uFogColor,cnaSrgbToLinear(uFogColor),uSrgb.z);\n"
+"    FragColor.rgb=mix(fogLinear,FragColor.rgb,vFogFactor);\n"
+// GLTF-212: encode last, and RGB only -- §3.9.4 makes alpha coverage, never colour.
+"    FragColor.rgb=mix(FragColor.rgb,cnaLinearToSrgb(FragColor.rgb),uSrgb.z);\n"
 "}\n";
 
         CompileAndLink(prog_pbr_.prog, vsrc, fsrc, "pbr");
@@ -5949,6 +5974,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6026,6 +6052,10 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
+// plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
+// than a branch, so every fragment costs the same whichever way it is set.
+"uniform vec3 uSrgb;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6036,6 +6066,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
+CNA_GL_SRGB_TRANSFER_DECL
 "vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
 "    vec3 H=normalize(V+L);\n"
 "    float NdotL=max(dot(N,L),0.0);\n"
@@ -6057,7 +6088,10 @@ CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
 "    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
-"    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
+// glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
+// the sample is decoded -- transferring both would apply it twice to one of them.
+"    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
+"    vec3 albedo=baseRGB*uDiffuseColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
@@ -6076,11 +6110,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+// Same split as the base colour. The factor is additionally allowed above 1 by
+// KHR_materials_emissive_strength, which is a second reason never to transfer it.
+"    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+// Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
+// colour -- is decoded first. Mixing an encoded colour into a linear result would tint
+// the fade toward the wrong shade as it thickens.
+"    vec3 fogLinear=mix(uFogColor,cnaSrgbToLinear(uFogColor),uSrgb.z);\n"
+"    FragColor.rgb=mix(fogLinear,FragColor.rgb,vFogFactor);\n"
+// GLTF-212: encode last, and RGB only -- §3.9.4 makes alpha coverage, never colour.
+"    FragColor.rgb=mix(FragColor.rgb,cnaLinearToSrgb(FragColor.rgb),uSrgb.z);\n"
 "}\n";
 
         CompileAndLink(prog_pbr_skinned_.prog, vsrc, fsrc, "pbr_skinned");
@@ -6108,6 +6151,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6568,6 +6612,17 @@ CNA_GL_RT_SAMPLE_UV_DECL
             p.prog.set_uniform(p.loc_pbr_metallic, params.pbrMetallicFactor);
         if (p.loc_pbr_roughness >= 0)
             p.prog.set_uniform(p.loc_pbr_roughness, params.pbrRoughnessFactor);
+        // plan_gltf.md GLTF-210/GLTF-212. Three independent decisions, so three independent
+        // components: two about what a bound texture contains, one about where the fragment is
+        // going. A renderer that ignored this field entirely would keep the pre-GLTF-209
+        // behaviour exactly, which is what makes adopting it a per-renderer step.
+        if (p.loc_pbr_srgb >= 0)
+        {
+            p.prog.set_uniform(p.loc_pbr_srgb,
+                params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                params.pbrEmissiveTextureIsSrgb  ? 1.0f : 0.0f,
+                params.pbrEncodeOutputToSrgb     ? 1.0f : 0.0f);
+        }
 
         // Texture (unit 0)
         if (p.loc_texture >= 0)

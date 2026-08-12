@@ -53,6 +53,9 @@ namespace Microsoft::Xna::Framework::Graphics
         emissiveFactor_    = src.emissiveFactor_;
         metallicFactor_    = src.metallicFactor_;
         roughnessFactor_   = src.roughnessFactor_;
+        baseColorTextureIsSrgb_ = src.baseColorTextureIsSrgb_;
+        emissiveTextureIsSrgb_  = src.emissiveTextureIsSrgb_;
+        encodeOutputToSrgb_     = src.encodeOutputToSrgb_;
 
         DirectionalLight0 = src.DirectionalLight0;
         DirectionalLight1 = src.DirectionalLight1;
@@ -243,6 +246,13 @@ namespace Microsoft::Xna::Framework::Graphics
     Vector3 PbrEffect::getEmissiveFactorProperty() const { return emissiveFactor_; }
     void    PbrEffect::setEmissiveFactorProperty(const Vector3& v) { emissiveFactor_ = v; }
 
+    bool    PbrEffect::getBaseColorTextureIsSrgbEXTProperty() const { return baseColorTextureIsSrgb_; }
+    void    PbrEffect::setBaseColorTextureIsSrgbEXTProperty(bool v) { baseColorTextureIsSrgb_ = v; }
+    bool    PbrEffect::getEmissiveTextureIsSrgbEXTProperty() const { return emissiveTextureIsSrgb_; }
+    void    PbrEffect::setEmissiveTextureIsSrgbEXTProperty(bool v) { emissiveTextureIsSrgb_ = v; }
+    bool    PbrEffect::getEncodeOutputToSrgbEXTProperty() const { return encodeOutputToSrgb_; }
+    void    PbrEffect::setEncodeOutputToSrgbEXTProperty(bool v) { encodeOutputToSrgb_ = v; }
+
     // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Plain carried state: nothing here touches the
     // device, and the renderer reads it through FillGpuDrawParams like every other material value.
     AlphaModeEXT PbrEffect::getAlphaModeEXTProperty() const { return alphaMode_; }
@@ -332,6 +342,14 @@ namespace Microsoft::Xna::Framework::Graphics
         p.emissiveColor[0] = emissiveFactor_.X;
         p.emissiveColor[1] = emissiveFactor_.Y;
         p.emissiveColor[2] = emissiveFactor_.Z;
+
+        // plan_gltf.md GLTF-210/GLTF-212: which bound textures are sRGB-encoded, and whether the
+        // lit result is encoded back. Carried as three separate facts because they are three
+        // separate decisions -- two about what a texture contains, one about where the fragment
+        // is going.
+        p.pbrBaseColorTextureIsSrgb = baseColorTextureIsSrgb_;
+        p.pbrEmissiveTextureIsSrgb  = emissiveTextureIsSrgb_;
+        p.pbrEncodeOutputToSrgb     = encodeOutputToSrgb_;
 
         p.pbrMetallicFactor  = metallicFactor_;
         p.pbrRoughnessFactor = roughnessFactor_;

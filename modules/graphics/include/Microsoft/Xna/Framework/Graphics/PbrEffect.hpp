@@ -201,6 +201,67 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Gets the emissive factor, multiplied with the emissive map's RGB. @return The emissive factor. */
         CNAEXT [[nodiscard]] Vector3 getEmissiveFactorProperty() const;
+
+        /**
+         * @brief Whether the bound base-colour texture's samples are sRGB-encoded.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-210`). glTF §3.9.2
+         * declares `baseColorTexture` sRGB-encoded, so `true` is the default and is what an
+         * imported glTF material wants. It is a property rather than a constant because this
+         * effect is reachable from content that is not glTF, where a caller may bind a texture it
+         * has already linearised.
+         *
+         * The base-colour **factor** (@ref getDiffuseColorProperty) is linear either way and is
+         * never decoded: the two multiply, and decoding both would apply the transfer twice.
+         *
+         * @return True when the texture is sRGB-encoded and must be decoded before lighting.
+         */
+        CNAEXT [[nodiscard]] bool getBaseColorTextureIsSrgbEXTProperty() const;
+
+        /**
+         * @brief Sets whether the bound base-colour texture's samples are sRGB-encoded.
+         * @param value True for an sRGB-encoded texture (glTF's own rule), false for a linear one.
+         */
+        CNAEXT void setBaseColorTextureIsSrgbEXTProperty(bool value);
+
+        /**
+         * @brief Whether the bound emissive texture's samples are sRGB-encoded.
+         *
+         * @note CNAEXT — plan_gltf.md `GLTF-210`, on the same terms as
+         * @ref getBaseColorTextureIsSrgbEXTProperty. The emissive **factor** is linear and is not
+         * decoded, which matters because `KHR_materials_emissive_strength` can legitimately push
+         * it above 1.
+         *
+         * @return True when the texture is sRGB-encoded and must be decoded before lighting.
+         */
+        CNAEXT [[nodiscard]] bool getEmissiveTextureIsSrgbEXTProperty() const;
+
+        /**
+         * @brief Sets whether the bound emissive texture's samples are sRGB-encoded.
+         * @param value True for an sRGB-encoded texture (glTF's own rule), false for a linear one.
+         */
+        CNAEXT void setEmissiveTextureIsSrgbEXTProperty(bool value);
+
+        /**
+         * @brief Whether the lit result is encoded from linear back to sRGB for display.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-212`). Unlike the two
+         * decode flags, this is a genuine policy choice rather than a fact about a texture: an
+         * application drawing into an sRGB render target, or doing its own tone mapping, must turn
+         * it off or the transfer is applied twice. It defaults to `true` because the common case
+         * is an ordinary UNORM back buffer shown directly.
+         *
+         * Alpha is never encoded — glTF §3.9.4 makes it coverage, not colour.
+         *
+         * @return True when the fragment's RGB is encoded to sRGB before it leaves the shader.
+         */
+        CNAEXT [[nodiscard]] bool getEncodeOutputToSrgbEXTProperty() const;
+
+        /**
+         * @brief Sets whether the lit result is encoded from linear back to sRGB for display.
+         * @param value False when the render target or a later pass already applies the transfer.
+         */
+        CNAEXT void setEncodeOutputToSrgbEXTProperty(bool value);
         /** @brief Sets the emissive factor. @param value The new emissive factor. */
         CNAEXT void setEmissiveFactorProperty(const Vector3& value);
 
@@ -288,6 +349,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         bool fogEnabled_ = false;
 
+        bool baseColorTextureIsSrgb_ = true;
+        bool emissiveTextureIsSrgb_  = true;
+        bool encodeOutputToSrgb_     = true;
         Matrix world_      = Matrix::getIdentityProperty();
         Matrix view_       = Matrix::getIdentityProperty();
         Matrix projection_ = Matrix::getIdentityProperty();

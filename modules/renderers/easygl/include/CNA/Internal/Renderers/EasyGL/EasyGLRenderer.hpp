@@ -664,6 +664,11 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_occlusionmap = -1; ///< sampler2D occlusion map (PbrEffect only, R channel)
             int loc_pbr_metallic    = -1;  ///< float metallic factor (PbrEffect only)
             int loc_pbr_roughness   = -1;  ///< float roughness factor (PbrEffect only)
+            /// plan_gltf.md GLTF-210/GLTF-212: vec3 colour-management gate (PbrEffect only).
+            /// x = decode the base-colour sample from sRGB, y = decode the emissive sample,
+            /// z = encode the fragment's RGB back to sRGB. Each is 0 or 1 and multiplies a
+            /// `mix()` rather than driving a branch, so every fragment costs the same.
+            int loc_pbr_srgb        = -1;
             int loc_rt_flip_v       = -1;  ///< REMED-GFX-147: vec4 render-target V-flip flags for texture units 0-3
             int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: vec4 whose x is texture unit 4's flag (PbrEffect only)
             int loc_instanced       = -1;  ///< REMED-GFX-122: stock-program per-instance matrix gate

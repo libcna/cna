@@ -245,6 +245,9 @@ namespace CnaTest::GltfOracle
                                      p.diffuseColor[3]};
                 dump.metallicFactor  = p.pbrMetallicFactor;
                 dump.roughnessFactor = p.pbrRoughnessFactor;
+                dump.baseColorTextureIsSrgb = p.pbrBaseColorTextureIsSrgb;
+                dump.emissiveTextureIsSrgb  = p.pbrEmissiveTextureIsSrgb;
+                dump.encodeOutputToSrgb     = p.pbrEncodeOutputToSrgb;
                 dump.emissiveColor   = {p.emissiveColor[0], p.emissiveColor[1], p.emissiveColor[2]};
                 dump.ambientColor    = {p.ambientColor[0], p.ambientColor[1], p.ambientColor[2]};
 
@@ -296,6 +299,9 @@ namespace CnaTest::GltfOracle
         out += ",\"diffuseColor\":" + Flat(dump.diffuseColor);
         out += ",\"metallicFactor\":" + Num(dump.metallicFactor);
         out += ",\"roughnessFactor\":" + Num(dump.roughnessFactor);
+        out += ",\"baseColorTextureIsSrgb\":" + Bool(dump.baseColorTextureIsSrgb);
+        out += ",\"emissiveTextureIsSrgb\":" + Bool(dump.emissiveTextureIsSrgb);
+        out += ",\"encodeOutputToSrgb\":" + Bool(dump.encodeOutputToSrgb);
         out += ",\"emissiveColor\":" + Flat(dump.emissiveColor);
         out += ",\"ambientColor\":" + Flat(dump.ambientColor);
         out += ",\"hasBaseColorMap\":" + Bool(dump.hasBaseColorMap);

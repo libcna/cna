@@ -256,6 +256,87 @@ of `skin-armature-ancestor` **is** all-identity, and that is the point of `GLTF-
 
 ---
 
+### 1.7 Colour space — `GLTF-209` … `GLTF-212`
+
+**Problem.** glTF §3.9.2 assigns each material texture a colour space: `baseColorTexture` and
+`emissiveTexture` are **sRGB-encoded**, `normalTexture`, `occlusionTexture` and
+`metallicRoughnessTexture` are **linear**. Lighting is defined in linear space and the result is
+encoded for display. CNA did none of it: every image became `SurfaceFormat::Color` (RGBA8 UNORM),
+the PBR shader sampled all five maps raw, and the lit result was written unencoded. Two errors that
+partly cancel to the eye and are quantitatively wrong everywhere — an sRGB mid-grey albedo of `0.5`
+was being lit as if it were linear `0.5` rather than `0.2140`, **2.3× too bright**.
+
+**The decision: option B, shader-side.** The three options §13.3 records:
+
+| | Approach | Why not chosen |
+|---|---|---|
+| A | Hardware sRGB texture formats plus an sRGB framebuffer | Correct and free at runtime, but needs a new `SurfaceFormat` across **41 renderers** — a change of that blast radius to fix a glTF defect is the wrong order of work |
+| **B** | **Shader-side decode of the two sRGB maps, encode on output, gated per map** | **Chosen.** Renderer-local, no format change, adoptable one renderer at a time, and observable at L6 without a renderer at all |
+| C | Decode baked into the texture bytes at import | Precision-lossy at 8 bits, and it would make the imported texture disagree with the file it came from |
+
+**Shape.**
+
+```cpp
+// CNA::Internal::Renderers::GpuDrawParams
+bool pbrBaseColorTextureIsSrgb = true;   // GLTF-210
+bool pbrEmissiveTextureIsSrgb  = true;   // GLTF-210
+bool pbrEncodeOutputToSrgb     = true;   // GLTF-212
+
+// Microsoft::Xna::Framework::Graphics — on PbrEffect and SkinnedPbrEffect
+CNAEXT bool getBaseColorTextureIsSrgbEXTProperty() const;   CNAEXT void set…(bool);
+CNAEXT bool getEmissiveTextureIsSrgbEXTProperty() const;    CNAEXT void set…(bool);
+CNAEXT bool getEncodeOutputToSrgbEXTProperty() const;       CNAEXT void set…(bool);
+```
+
+**Three flags, not one, and this is the part worth arguing about.** They are three different kinds
+of statement. The first two describe *what a bound texture contains* — facts, defaulting to glTF's
+own rule, and properties only because these effects are reachable from content that is not glTF and
+may bind an already-linear texture. The third describes *where the fragment is going* — a genuine
+policy choice, because an application rendering into an sRGB target or running its own tone map
+must switch off the encode without thereby claiming its textures are linear. A single
+"colour management on/off" flag could not express that, and a test pins the three as independently
+settable so a later simplification cannot quietly collapse them.
+
+**There is deliberately no flag for the three linear maps.** §3.9.2 leaves no choice there. A flag
+would invent one, and an invented choice is a thing someone eventually sets wrong.
+
+**Factors are never transferred.** `baseColorFactor` and `emissiveFactor` are linear values in the
+file; only the *texture samples* are encoded. The shader decodes the sample and then multiplies by
+the factor — transferring both would apply the curve twice to one of them. This matters
+concretely for emissive, where `KHR_materials_emissive_strength` (`GLTF-222`) legitimately pushes
+the factor above 1; the transfer functions therefore do not clamp either.
+
+**Alpha is never encoded.** §3.9.4 makes alpha a coverage value, not a colour. Both GLSL functions
+take `vec3` rather than `vec4` so this cannot be got wrong by accident, and a test asserts the text
+contains no `vec4`.
+
+**One formula, two languages.** The transfer lives in
+`modules/graphics/include/CNA/Internal/Graphics/SrgbTransfer.hpp` as a macro of string literals; the
+GLSL is that macro, and the C++ functions beside it are the same arithmetic. Two hand-written copies
+of a piecewise curve with a `0.0031308` knee and a `1/2.4` exponent would drift, and the drift would
+be a subtle brightness error rather than a crash.
+
+**Compatibility.** Additive on every renderer: the fields are new, so a renderer that does not read
+them behaves exactly as it did before — the established accepted-and-ignored pattern. Adoption is
+therefore per renderer rather than a flag day. `EasyGLRenderer` implements it (and with it the five
+GL profiles it backs); the other renderers are unchanged and still show the old behaviour.
+
+**A boundary this review names rather than hides.** The output encode is applied *by the PBR
+shader*, so in a scene mixing `PbrEffect` with the stock XNA effects the two write differently
+encoded colour into the same render target. That is real, and it is the price of B over A. It is
+also not a regression — the stock effects behave exactly as they always have, and XNA content never
+had colour management to lose. The proper fix is a colour-managed render target, which is option A's
+other half and belongs with the `SurfaceFormat` work, not here.
+
+**Test.** `SrgbTransferTests` holds the C++ transfer to the specification's own values — endpoints,
+mid-grey, both knees evaluated branch-against-branch, a 256-level round trip, and the no-clamp
+property — and checks the GLSL declares both functions with the same constants. `GltfConformanceL6`
+asserts every PBR draw in the corpus declares both maps sRGB and the encode on, and that the three
+flags move independently. What cannot be tested here is the shader executing: `GLTF-009` is blocked
+on a 3D-capable renderer (§5.3 of `docs/gltf-conformance.md`), so the pixel-level proof waits.
+
+---
+
 ## 2. Reviewed and deferred
 
 ### 2.1 `PbrEffect::NormalScale`, `OcclusionStrength` — `GLTF-224`, `GLTF-225`

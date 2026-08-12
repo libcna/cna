@@ -106,6 +106,15 @@ namespace CnaTest::GltfOracle
         float metallicFactor = 0.0f;
         /** @brief `GpuDrawParams::pbrRoughnessFactor`. */
         float roughnessFactor = 0.0f;
+
+        // --- §21.1 colour space (plan_gltf.md GLTF-210/GLTF-212) ---------------------------------
+
+        /** @brief `GpuDrawParams::pbrBaseColorTextureIsSrgb`. */
+        bool baseColorTextureIsSrgb = false;
+        /** @brief `GpuDrawParams::pbrEmissiveTextureIsSrgb`. */
+        bool emissiveTextureIsSrgb = false;
+        /** @brief `GpuDrawParams::pbrEncodeOutputToSrgb`. */
+        bool encodeOutputToSrgb = false;
         /** @brief `GpuDrawParams::emissiveColor`. */
         std::array<float, 3> emissiveColor{};
 

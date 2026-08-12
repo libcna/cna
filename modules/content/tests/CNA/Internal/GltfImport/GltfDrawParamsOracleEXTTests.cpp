@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
@@ -828,4 +829,75 @@ TEST(GltfConformanceL6, EveryImportedPartOwnsItsBuffersSoItsOffsetsAreZero)
         }
     }
     EXPECT_GT(checkedParts, 0u) << "no part was checked";
+}
+
+// --- plan_gltf.md GLTF-210/GLTF-212: colour space reaches the renderer ------------------------------
+
+// glTF §3.9.2 assigns colour spaces per map, and it does so unconditionally: baseColorTexture and
+// emissiveTexture are sRGB-encoded, normalTexture / occlusionTexture / metallicRoughnessTexture are
+// linear. Before this, CNA sampled all five raw and wrote the lit result without encoding -- a
+// double error that partly cancels visually and is quantitatively wrong everywhere.
+//
+// Only the two decisions the file actually makes are carried. There is deliberately NO flag for the
+// three linear maps: the specification leaves no choice there, and a flag would invent one.
+TEST(GltfConformanceL6, EveryPbrDrawDeclaresItsTexturesColourSpace)
+{
+    std::size_t checked = 0;
+    for (const std::string& id : LoadableFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        GraphicsDevice gd;
+        ContentManager cm(nullptr, CorpusDirectory().string());
+        cm.setGraphicsDevice(gd);
+        Model model = cm.Load<Model>(id);
+
+        for (const DrawParamsDump& d : CaptureDrawParamsEXT(
+                 model, Matrix::getIdentityProperty(), TestView(), TestProjection()))
+        {
+            if (!d.pbr) { continue; }
+            SCOPED_TRACE(ToJson(d));
+            EXPECT_TRUE(d.baseColorTextureIsSrgb)
+                << "the base-colour texture is declared linear -- glTF §3.9.2 says sRGB";
+            EXPECT_TRUE(d.emissiveTextureIsSrgb)
+                << "the emissive texture is declared linear -- glTF §3.9.2 says sRGB";
+            EXPECT_TRUE(d.encodeOutputToSrgb)
+                << "the lit result reaches the framebuffer unencoded";
+            ++checked;
+        }
+    }
+    EXPECT_GT(checked, 0u) << "no PBR draw exercised the colour-space contract";
+}
+
+// The three are separate decisions and must stay separately settable: an application drawing into
+// an sRGB render target has to turn the output encode off without also claiming its textures are
+// linear. A single "colour management on/off" flag would make that impossible to express.
+TEST(GltfConformanceL6, TheThreeColourSpaceDecisionsAreIndependent)
+{
+    using Microsoft::Xna::Framework::Graphics::PbrEffect;
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-factor-only-gold");
+
+    auto* effect = dynamic_cast<PbrEffect*>(
+        model.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(nullptr, effect);
+
+    effect->setEncodeOutputToSrgbEXTProperty(false);
+    std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    EXPECT_FALSE(captured.front().encodeOutputToSrgb);
+    EXPECT_TRUE(captured.front().baseColorTextureIsSrgb) << "turning off the encode changed a decode";
+    EXPECT_TRUE(captured.front().emissiveTextureIsSrgb);
+
+    effect->setEncodeOutputToSrgbEXTProperty(true);
+    effect->setBaseColorTextureIsSrgbEXTProperty(false);
+    captured = CaptureDrawParamsEXT(model, Matrix::getIdentityProperty(), TestView(),
+                                    TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    EXPECT_FALSE(captured.front().baseColorTextureIsSrgb);
+    EXPECT_TRUE(captured.front().emissiveTextureIsSrgb) << "the two decodes are not independent";
+    EXPECT_TRUE(captured.front().encodeOutputToSrgb);
 }
