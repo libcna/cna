@@ -70,6 +70,20 @@ namespace CNA::Internal::GltfImport
         std::vector<int> oldToNew;
         /** @brief Maps a joint's glTF node pointer directly to its reordered index. */
         std::unordered_map<const cgltf_node*, int> nodeToNewIndex;
+        /**
+         * @brief The `sceneNodeIndex` of the node `skin.skeleton` names, or -1 when it names none.
+         *
+         * plan_gltf.md `GLTF-249`. This is a **hint**, recorded so an application can locate and
+         * name the rig; it is deliberately **not** consulted anywhere in the transform arithmetic.
+         * §15.1.1 is explicit that truncating the ancestry walk at `skin.skeleton` reproduces D8
+         * in a new disguise, so the walk above stays driven by the scene graph alone and this
+         * field exists to be *reported*, never to bound anything.
+         *
+         * -1 also when the skin declares a `skeleton` node that is not in the default scene.
+         */
+        int declaredSkeletonRootNodeIndex = -1;
+        /** @brief The declared skeleton root's node name; empty when the skin declares none. */
+        std::string declaredSkeletonRootName;
     };
 
     /** @brief One animation keyframe: a bone-local translation/rotation/scale at a point in time. */

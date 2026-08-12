@@ -72,6 +72,23 @@ namespace Microsoft::Xna::Framework::Graphics
          * bone. May be left empty, which is read as all-identity.
          */
         std::vector<Matrix> SkeletonRootPrefix;
+        /**
+         * @brief The scene-node index of the rig root the file declares, or -1 when it declares none.
+         *
+         * @note CNAEXT — plan_gltf.md GLTF-249. glTF's `skin.skeleton` names the rig's semantic
+         * root: the node an editor would show as "the armature", and the one to attach a prop or a
+         * whole character to. It is carried here purely so an application can *find* that node,
+         * indexed into `Model::Bones` like every other scene node (§15.1.2's `sceneNodeIndex`).
+         *
+         * It has **no** effect on any transform CNA computes, and must never acquire one:
+         * plan_gltf.md §15.1.1 records that truncating a joint's ancestry walk at this node
+         * reproduces defect D8 — one dropped ancestor translation displaced every skinned vertex
+         * by 100 units. Joint global transforms come from the complete scene ancestry regardless
+         * of where this points.
+         */
+        int SkeletonRootNodeIndexEXT = -1;
+        /** @brief The declared rig root's node name; empty when the file declares none. */
+        std::string SkeletonRootNameEXT;
         /** @brief Animation clips, keyed by clip name. */
         std::unordered_map<std::string, AnimationClip> AnimationClips;
     };

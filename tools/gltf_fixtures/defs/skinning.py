@@ -343,4 +343,142 @@ def skin_plus_static_mesh() -> Fixture:
     )
 
 
-FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform, skin_plus_static_mesh]
+#: `skin-skeleton-hint`'s chain. Two transforms, on opposite sides of the declared root, so a walk
+#: that stopped at `skin.skeleton` would keep the inner one and lose the outer one -- and lose it
+#: by 100 units, the same magnitude D8 displaced every vertex by.
+_HINT_OUTER_TRANSLATION = [0.0, 100.0, 0.0]
+_HINT_DECLARED_TRANSLATION = [0.0, 0.0, 7.0]
+_HINT_MID_TRANSLATION = [3.0, 0.0, 0.0]
+
+
+def skin_skeleton_hint() -> Fixture:
+    """``skin.skeleton`` declared above a transform it must not swallow. Owns **GLTF-249**.
+
+    §15.1.1 states the rule twice over, and this fixture is built so both halves can fail
+    separately:
+
+    * **A transform-bearing ancestor sits ABOVE the declared root.** ``Outer`` carries
+      ``T(0,100,0)`` and is the parent of ``Declared``. An implementation that walked joint
+      ancestry only up to ``skin.skeleton`` would keep ``Declared``'s and ``Mid``'s transforms and
+      drop ``Outer``'s -- recreating D8 exactly, down to the 100-unit displacement.
+    * **The declared root is not the joints' natural common ancestor.** Both joints hang off
+      ``Mid``; ``skin.skeleton`` names ``Declared``, one level higher. So "the declared root" and
+      "the node a reader would have inferred" are different nodes, and code that quietly
+      substitutes one for the other is visible.
+
+    The inverse bind matrices are the true inverses of the joints' full global transforms, which
+    makes every joint matrix exactly the identity: a correct reader moves no vertex at all. Joint 1
+    carries no weight and exists solely to make ``Mid`` the common ancestor.
+    """
+    b = GltfBuilder("skin-skeleton-hint")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    joints = b.add_packed_accessor(usage="JOINTS_0", values=_JOINTS, accessor_type="VEC4",
+                                   component_type=UNSIGNED_BYTE)
+    weights = b.add_packed_accessor(usage="WEIGHTS_0", values=_WEIGHTS, accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+
+    # globalTransform(joint) = Outer * Declared * Mid, for both joints (neither has a local
+    # transform of its own), so the true inverse bind matrix is that product's inverse.
+    joint_global_translation = [
+        _HINT_OUTER_TRANSLATION[i] + _HINT_DECLARED_TRANSLATION[i] + _HINT_MID_TRANSLATION[i]
+        for i in range(3)]
+    joint_global = mat_translation(joint_global_translation)
+    inverse_bind = mat_translation([-c for c in joint_global_translation])
+    ibm_offset = b.append_bytes(pack(list(inverse_bind) + list(inverse_bind), FLOAT), alignment=4)
+    ibm = b.add_accessor(usage="inverseBindMatrices", component_type=FLOAT, accessor_type="MAT4",
+                         count=2, expected=list(inverse_bind) + list(inverse_bind),
+                         buffer_view=b.add_buffer_view(ibm_offset, 128))
+
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "JOINTS_0": joints, "WEIGHTS_0": weights},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="SkinnedTri")
+
+    joint0 = b.add_node(name="Joint0")
+    joint1 = b.add_node(name="Joint1")
+    mid_node = b.add_node(name="Mid", children=[joint0, joint1],
+                          translation=_HINT_MID_TRANSLATION)
+    declared_node = b.add_node(name="DeclaredRoot", children=[mid_node],
+                               translation=_HINT_DECLARED_TRANSLATION)
+    outer_node = b.add_node(name="Outer", children=[declared_node],
+                            translation=_HINT_OUTER_TRANSLATION)
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": [joint0, joint1], "skeleton": declared_node,
+                "inverseBindMatrices": ibm})
+    b.add_scene([outer_node, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    joint_matrix = mat_mul(joint_global, inverse_bind)  # meshNodeWorld is the identity here
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = {
+        "jointCount": 2,
+        "meshNodeWorldColumnMajor": mat_identity(),
+        "declaredSkeletonRoot": {
+            "node": declared_node,
+            "nodeName": "DeclaredRoot",
+            "isTheJointsCommonAncestor": False,
+            "commonAncestorNodeName": "Mid",
+            "rule": "A hint only. It names the rig's semantic root and must never bound the "
+                    "ancestry walk: Outer sits ABOVE it and its T(0,100,0) still contributes to "
+                    "globalTransform(joint). Stopping here would reproduce D8 exactly.",
+        },
+        "joints": [
+            {
+                "joint": 0,
+                "node": joint0,
+                "nodeName": "Joint0",
+                "parentJoint": -1,
+                "jointGlobalColumnMajor": joint_global,
+                "inverseBindMatrixColumnMajor": inverse_bind,
+                "jointMatrixColumnMajor": joint_matrix,
+            },
+            {
+                "joint": 1,
+                "node": joint1,
+                "nodeName": "Joint1",
+                "parentJoint": -1,
+                "jointGlobalColumnMajor": joint_global,
+                "inverseBindMatrixColumnMajor": inverse_bind,
+                "jointMatrixColumnMajor": joint_matrix,
+            },
+        ],
+        "skinnedPositions": [list(p) for p in TRIANGLE_POSITIONS],
+        "truncatedAtDeclaredRoot": {
+            "jointMatrixColumnMajor": mat_mul(
+                mat_mul(mat_translation(_HINT_DECLARED_TRANSLATION),
+                        mat_translation(_HINT_MID_TRANSLATION)),
+                inverse_bind),
+            "skinnedPositions": [[p[0], p[1] - _HINT_OUTER_TRANSLATION[1], p[2]]
+                                 for p in TRIANGLE_POSITIONS],
+            "note": "What a reader that stopped its ancestry walk at skin.skeleton would produce: "
+                    "Outer's T(0,100,0) dropped, so every skinned vertex sits 100 units low in Y. "
+                    "Stated so the WRONG answer is a named value a test can assert against, not "
+                    "merely something that differs from the right one.",
+        },
+        "note": "Every joint matrix is exactly the identity, because each inverse bind matrix is "
+                "the true inverse of its joint's FULL global transform. A correct reader moves no "
+                "vertex; any displacement is a dropped ancestor.",
+    }
+    return Fixture(
+        id="skin-skeleton-hint", audit_fixture=None, owning_group="skinning",
+        description="A skin whose declared skeleton root has a transform-bearing ancestor above it "
+                    "and is not the joints' natural common ancestor. skin.skeleton must be honoured "
+                    "as a semantic hint and must never truncate the ancestry walk -- doing so drops "
+                    "Outer's T(0,100,0) and reproduces D8.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["skin.skeleton", "declared root below a transform-bearing ancestor",
+                  "declared root above the joints' common ancestor", "two joints"],
+        spec_anchors=["skins", "joint-hierarchy", "skinned-mesh-attributes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, joints=_JOINTS, weights=_WEIGHTS,
+            indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform, skin_plus_static_mesh,
+            skin_skeleton_hint]

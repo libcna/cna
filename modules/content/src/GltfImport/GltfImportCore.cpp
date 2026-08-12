@@ -652,6 +652,22 @@ namespace CNA::Internal::GltfImport
                                   const Matrix& meshNodeWorld, float unitScale)
     {
         SkeletonResult result;
+
+        // GLTF-249: read the declared root, and read it ONLY to report it. §15.1.1 makes the rule
+        // explicit -- skin.skeleton names the rig's semantic root, and an implementation that used
+        // it to stop walking ancestors would recreate D8 under a new name. Nothing below consults
+        // these two fields; the ancestry that feeds parentWorldPrefix comes from the scene graph.
+        if (skin->skeleton != nullptr)
+        {
+            result.declaredSkeletonRootName =
+                skin->skeleton->name != nullptr ? skin->skeleton->name : "";
+            const auto placed = scene.indexOfNode.find(skin->skeleton);
+            if (placed != scene.indexOfNode.end())
+            {
+                result.declaredSkeletonRootNodeIndex = placed->second;
+            }
+        }
+
         const std::size_t n = skin->joints_count;
         if (n == 0) { return result; }
 

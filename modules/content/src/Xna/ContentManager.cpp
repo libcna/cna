@@ -2029,6 +2029,10 @@ namespace Microsoft::Xna::Framework::Content
                     skinningData->InverseBindPose[ui] = skeleton.bones[ui].inverseBindGlobal;
                     skinningData->SkeletonRootPrefix[ui] = skeleton.bones[ui].parentWorldPrefix;
                 }
+                // plan_gltf.md GLTF-249: the declared rig root, carried so an application can find
+                // it. Read nowhere in the transform arithmetic, by design -- see §15.1.1.
+                skinningData->SkeletonRootNodeIndexEXT = skeleton.declaredSkeletonRootNodeIndex;
+                skinningData->SkeletonRootNameEXT = skeleton.declaredSkeletonRootName;
 
                 std::vector<std::string> warnings;
                 const std::vector<ClipOut> clips = ExtractClips(data, skeleton, 1.0f, warnings);

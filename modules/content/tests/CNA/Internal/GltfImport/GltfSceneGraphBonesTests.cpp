@@ -55,6 +55,7 @@
 
 using CnaTest::GltfOracle::CorpusDirectory;
 using CnaTest::GltfOracle::LoadedFixture;
+using CnaTest::GltfOracle::BoolOr;
 using CnaTest::GltfOracle::Member;
 using CnaTest::GltfOracle::NumberOr;
 using CnaTest::GltfOracle::Numbers;
@@ -908,4 +909,108 @@ TEST(GltfRigidAnimation, BeforeTheFirstKeyTheClipHoldsThatKeyNotTheRestPose)
         EXPECT_FALSE(matchesRestPose)
             << "the bone fell back to the node's rest pose instead of holding the first key";
     }
+}
+
+// --- plan_gltf.md GLTF-249: skin.skeleton is a root hint, never a traversal stop --------------------
+
+// The half that was missing entirely: `skin.skeleton` was parsed by cgltf and read by nobody, so an
+// application had no way to find the rig root the file declares. It is carried now -- and carried
+// as data, not as control flow.
+TEST(GltfSkinSpaces, TheDeclaredSkeletonRootIsCarriedAsASceneNodeIndex)
+{
+    const LoadedFixture fixture("skin-skeleton-hint");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& declared = Path(fixture.Expected(), "l4.skin.declaredSkeletonRoot");
+    const std::string expectedName = StringOr(declared, "nodeName", "");
+    ASSERT_FALSE(expectedName.empty()) << "the fixture no longer declares a skeleton root";
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skin-skeleton-hint");
+
+    auto* skinning = dynamic_cast<Microsoft::Xna::Framework::Graphics::SkinningData*>(
+        model.getTagProperty());
+    ASSERT_NE(nullptr, skinning);
+    EXPECT_EQ(expectedName, skinning->SkeletonRootNameEXT);
+
+    // The index is a sceneNodeIndex (§15.1.2), so it indexes Model::Bones -- and the bone it lands
+    // on must be the node the file named. Asserting the resolved bone's name, not just the number,
+    // is what makes this a test of the index space rather than of an integer.
+    const int index = skinning->SkeletonRootNodeIndexEXT;
+    ASSERT_GE(index, 0) << "the declared root did not resolve to a scene node";
+    ASSERT_LT(index, model.getBonesProperty().getCountProperty());
+    EXPECT_EQ(expectedName, model.getBonesProperty()[index]->getNameProperty())
+        << "SkeletonRootNodeIndexEXT is not in the scene-node index space";
+
+    // And it really is a different node from the one a reader would infer from the joint set, so
+    // code that substituted the common ancestor for the declared root would be caught.
+    EXPECT_FALSE(BoolOr(declared, "isTheJointsCommonAncestor", true));
+    EXPECT_NE(StringOr(declared, "commonAncestorNodeName", ""), expectedName);
+}
+
+// The half that must NEVER change: the hint does not bound the ancestry walk. `Outer` sits above
+// the declared root and carries T(0,100,0); a reader that stopped at `skin.skeleton` would drop it
+// and land every vertex 100 units low -- D8 exactly, under a new name. The manifest states that
+// wrong answer by name, so this asserts against both poles rather than only away from one.
+TEST(GltfSkinSpaces, AnAncestorAboveTheDeclaredRootStillContributesItsTransform)
+{
+    const LoadedFixture fixture("skin-skeleton-hint");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& skinBlock = Path(fixture.Expected(), "l4.skin");
+    const CNA::Internal::JsonValue& joints = Member(skinBlock, "joints");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, joints.type);
+    ASSERT_FALSE(joints.arrayValue.empty());
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skin-skeleton-hint");
+
+    auto* skinning = dynamic_cast<Microsoft::Xna::Framework::Graphics::SkinningData*>(
+        model.getTagProperty());
+    ASSERT_NE(nullptr, skinning);
+    ASSERT_EQ(2, skinning->BoneCount);
+
+    Microsoft::Xna::Framework::Graphics::AnimationPlayer player(*skinning);
+    const std::vector<Matrix>& palette = player.GetSkinTransforms();
+    ASSERT_EQ(2u, palette.size());
+
+    // Every inverse bind matrix is the true inverse of its joint's FULL global transform, so every
+    // joint matrix is exactly the identity. Nothing weaker would do: an identity here means each
+    // of Outer, DeclaredRoot and Mid contributed exactly once.
+    for (std::size_t j = 0; j < palette.size(); ++j)
+    {
+        ExpectMatrixNear(Matrix::getIdentityProperty(), palette[j],
+                         "joint matrix " + std::to_string(j));
+    }
+
+    // The named wrong answer, asserted against directly.
+    const CNA::Internal::JsonValue& truncated = Member(skinBlock, "truncatedAtDeclaredRoot");
+    const std::vector<double> wrongColumnMajor =
+        Numbers(Member(truncated, "jointMatrixColumnMajor"));
+    ASSERT_EQ(16u, wrongColumnMajor.size());
+    float actualColumnMajor[16];
+    palette[0].ToColumnMajor(actualColumnMajor);
+    bool matchesTruncated = true;
+    for (std::size_t i = 0; i < 16; ++i)
+    {
+        if (std::fabs(static_cast<float>(wrongColumnMajor[i]) - actualColumnMajor[i]) > kTolerance)
+        {
+            matchesTruncated = false;
+            break;
+        }
+    }
+    EXPECT_FALSE(matchesTruncated)
+        << "the ancestry walk stopped at skin.skeleton -- Outer's T(0,100,0) was dropped and D8 is "
+           "back under a new name";
+
+    // In world space, which is what an owner actually sees.
+    const Microsoft::Xna::Framework::Vector3 skinned =
+        Microsoft::Xna::Framework::Vector3::Transform(
+            Microsoft::Xna::Framework::Vector3(1.0f, 0.0f, 0.0f), palette[0]);
+    EXPECT_NEAR(1.0f, skinned.X, kTolerance);
+    EXPECT_NEAR(0.0f, skinned.Y, kTolerance)
+        << "the vertex sits " << skinned.Y << " in Y -- an ancestor above the declared root was lost";
+    EXPECT_NEAR(0.0f, skinned.Z, kTolerance);
 }
