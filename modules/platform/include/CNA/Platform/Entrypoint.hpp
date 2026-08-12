@@ -21,8 +21,10 @@
  * platform are separate build choices. It keys off `CNA_PLATFORM_*` instead, and lives in the
  * platform module so `modules/core` no longer includes an SDL header at all.
  *
- * Under a platform that manages no entry point — `HEADLESS`, and a future `TERMINAL` — this
- * header is empty, which is the correct answer rather than an omission.
+ * Under a platform that manages no entry point — `HEADLESS` and `TERMINAL` — this header is
+ * empty, which is the correct answer rather than an omission. Both report the
+ * `managedEntrypoint` capability as false, so the emptiness is stated in the contract too and not
+ * merely implied by this file compiling to nothing.
  */
 
 #if defined(CNA_PLATFORM_SDL3)

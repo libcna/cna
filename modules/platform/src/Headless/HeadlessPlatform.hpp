@@ -3,6 +3,9 @@
 
 #include "CNA/Platform/IPlatform.hpp"
 
+#include "../Common/StandardFileSystem.hpp"
+#include "../Common/StandardSystemInfo.hpp"
+
 #include <cstdint>
 #include <map>
 #include <string>
@@ -131,16 +134,13 @@ namespace CNA::Platform::Headless {
             IPlatformWindow& window) override;
 
     private:
-        class HeadlessFileSystem;
-        class HeadlessSystemInfo;
-
         std::map<PlatformSubsystem, int> refCounts_;
         std::vector<PlatformEvent> queued_;
         std::uint64_t createdAtNanoseconds_ = 0;
         WindowId nextWindowId_ = 1;
 
-        std::unique_ptr<HeadlessFileSystem> fileSystem_;
-        std::unique_ptr<HeadlessSystemInfo> systemInfo_;
+        std::unique_ptr<Common::StandardFileSystem> fileSystem_;
+        std::unique_ptr<Common::StandardSystemInfo> systemInfo_;
     };
 
 } // namespace CNA::Platform::Headless

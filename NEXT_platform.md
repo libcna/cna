@@ -23,6 +23,13 @@ pass in two of them while not being compiled *at all* in the third.
 | `cmake-build-debug` | default (`CNA_PLATFORM=SDL3`, `CNA_GRAPHICS_RENDERER=HEADLESS`) | the SDL3 platform implementation |
 | `cmake-build-headless` | `-DCNA_PLATFORM=HEADLESS` | the second platform implementation; the conformance suite's other arm |
 | `cmake-build-devices` | `-DCNA_DEVICES=ON -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_PLATFORM=SDL3` | **all of `modules/devices-ext` and `modules/devices`** |
+| `cmake-build-terminal` | `-DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=HEADLESS` | the terminal platform *as the selected one* (PLAT-130) |
+
+`TerminalPlatform` itself is compiled in **every** POSIX configuration, not only that last one —
+same arrangement as `HeadlessPlatform`, so the conformance suite always has three implementations
+live in one process. `cmake-build-terminal` exists to prove the *selection* works: that
+`CNA_PLATFORM=TERMINAL` configures, that it becomes the factory default, and that nothing else in
+the tree assumed the default was SDL3.
 
 `CNA_DEVICES` defaults to **OFF**. Every file in `modules/devices-ext` is wrapped in
 `#ifdef CNA_DEVICES`, so with it off the whole module — implementation *and* tests — compiles to
@@ -62,16 +69,42 @@ driver themselves, scoped by `--gtest_filter`, which is why they pass.
 
 | Variant | Result |
 |---|---|
-| `cmake-build-debug` | **5703 passed, 0 failed** |
-| `cmake-build-headless` | **5596 passed, 0 failed** |
-| `cmake-build-devices` | **6412 passed, 0 failed** |
+| `cmake-build-debug` | **5747 passed, 0 failed** |
+| `cmake-build-headless` | **5640 passed, 0 failed** |
+| `cmake-build-devices` | **6456 passed, 0 failed** |
+| `cmake-build-terminal` | **6300 passed, 0 failed** |
+
+**Run `CnaTests` from the repository root, not from the build directory.** Dozens of content,
+media and audio-tag tests load fixture files by repo-relative path, so running
+`cd cmake-build-debug && ./CnaTests` fails about 120 of them with assertion errors that look like
+real product bugs. `gtest_discover_tests` sets `WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"`
+(REMED-BUILD-001) precisely so ctest does not hit this; a bare run has to do it manually:
+`./cmake-build-debug/CnaTests` from `/home/user/cna`.
+
+The per-variant totals differ because the variants configure different option sets, not because
+tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
+selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
 Ratchet: **225 files / 3423 references** of direct SDL coupling outside the PLAT-3 allowlist, down
 from the 253 / 3641 baseline. Contract: 24 headers, 383 documented declarations, all SDL-free.
 
-There are currently **no known failing tests**. The long-standing
+The gtest binary has **no known failing tests**. The long-standing
 `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` failure was fixed —
 see §4.
+
+### Three failures the *full* `ctest` run has, and this campaign did not cause
+
+The numbers above come from running `./CnaTests` directly. A full `ctest` in `cmake-build-debug`
+also runs 250-odd registered harnesses and probes that the gtest binary does not, and three of
+them fail. Each was **verified to fail identically on a stashed working tree**, so none is a
+regression from this campaign — but they were not visible before, and they should not be mistaken
+for one later:
+
+| Test | Failure | Nature |
+|---|---|---|
+| `ModuleLinkClosure_probe_storage` | `FORBIDDEN link inputs: modules/platform/libcna_platform.a` | Build-graph. `modules/storage` links `cna_platform` PRIVATE (PLAT-109), but a static library cannot link anything privately — it propagates to consumers regardless, so the probe's minimal-closure rule and PLAT-109's edge contradict each other. Needs a decision: widen the probe's allowlist, or stop `StorageDevice` reaching the platform directly. |
+| `Headless_Smoke` | `ArgumentOutOfRangeException: The requested primitive range exceeds the bound index buffer (primitiveCount 10)` | Product bug in the headless renderer harness, unrelated to the platform layer. |
+| `Headless_PresentLifecycle` | every one of 22 legs reports `[SKIP] no usable display`, and the supervisor still exits non-zero | Harness. An all-skipped run should not be a failure in an environment with no display server. |
 
 ---
 
@@ -92,7 +125,10 @@ see §4.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
-- **Phase 10** (terminal) — not started; unblocked now that Phase 8 is done.
+- **Phase 10** (terminal) — PLAT-129 (spike) and PLAT-130 (skeleton + selection) done. The
+  conformance suite already runs green against `Terminal` as a third implementation, so PLAT-141's
+  claim holds for the surface that exists today; the row stays open until the capabilities it is
+  meant to cover are actually turned on.
 
 ---
 
@@ -123,6 +159,15 @@ inventing numbering. `KeyboardSnapshot::modifiers` had the same defect and is no
 is why `KeyCode` is a separate enum rather than a reference to XNA's `Keys`. Their value-for-value
 correspondence is verified by `KeyCodeMatchesXnaKeysTests` in `modules/input` — the only layer that
 can see both types.
+
+**Twenty-one conformance tests matched no ctest filter and had never run.** `PlatformWindowConformance`
+— the window half of PLAT-116's suite — was invisible to `CnaPlatformTests`, whose filter token
+`*PlatformConformance*` does **not** match the string `PlatformWindowConformance`. Found at
+PLAT-130 by running the registered filter and grepping its `--gtest_list_tests` output, which is
+the only way to see this: a test that is never selected reports nothing, and the suite is green
+either way. It now runs under `CnaPlatformWindowTests`, where the dummy video driver is already
+set — otherwise the SDL3 parameterisation would skip for want of a display and only the
+implementations that need no display would have been exercised.
 
 **Pointer identity is not a service identity.** An "already started" cache in
 `CNA::Input::Sensors` keyed on the service address broke when a destroyed platform's address was
@@ -181,10 +226,21 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Phase 10 — `TerminalPlatform`** (PLAT-129…141). Unblocked and buildable. Its value beyond the
-   feature: a second genuinely different implementation stresses the contract far harder than
-   `HeadlessPlatform`, which implements everything by doing nothing. Every capability gap found so
-   far came from making a real caller work.
+1. **Phase 10 — `TerminalPlatform`**, continuing at **PLAT-131** (lifecycle and state
+   restoration): raw mode, alternate screen, hidden cursor and mouse reporting, each restored on
+   normal exit, `SIGINT`/`SIGTERM`/`SIGHUP`, unhandled exception *and* abort. Two constraints
+   PLAT-130 set that PLAT-131 has to respect:
+   - **The session must not start from `AcquireSubsystem(Video)` unconditionally.** The
+     conformance suite acquires video in a real process; if that took the terminal over, running
+     the test binary from a shell would hijack the developer's terminal. Gate it on
+     `stdout` actually being a tty and on the session being explicitly requested.
+   - **Detection is already written and already tested** —
+     `src/Terminal/TerminalCapabilityProbe.*`, driven under a real pseudo-terminal. PLAT-131 calls
+     it; it should not re-derive it.
+
+   Its value beyond the feature is unchanged: an implementation with a genuinely different output
+   model stresses the contract far harder than `HeadlessPlatform`, which implements everything by
+   doing nothing. Every capability gap found so far came from making a real caller work.
 2. **Phase 4, narrow slice.** PLAT-57's written decision, then PLAT-59/60/61 — the
    `IGraphicsRenderer` interface changes that the PLAT-3 audit says free STUB/HEADLESS/SOFTWARE/
    PORTABLEGL with no per-renderer work. Anything needing an absent dependency is marked

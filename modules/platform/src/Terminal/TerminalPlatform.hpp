@@ -1,0 +1,189 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+#include "CNA/Platform/IPlatform.hpp"
+
+#include "../Common/StandardFileSystem.hpp"
+#include "../Common/StandardSystemInfo.hpp"
+#include "TerminalCapabilityProbe.hpp"
+
+#include <cstdint>
+#include <map>
+#include <string>
+#include <vector>
+
+namespace CNA::Platform::Terminal {
+
+    /**
+     * @brief A platform whose display is the text terminal the process is attached to.
+     *
+     * The third implementation of the contract, and the one that tests whether the contract is
+     * genuinely implementation-neutral rather than SDL3 with the names changed. `HeadlessPlatform`
+     * proves the *refusal* paths work by supporting almost nothing; this one has a real display,
+     * real input and real resize events, none of which come from a windowing system — so an
+     * interface that quietly assumed one would fail here rather than pass by saying no to
+     * everything.
+     *
+     * ### What this task provides
+     *
+     * `plan_platform.md` PLAT-130 is the skeleton: selection, factory registration, timing, the
+     * subsystem lifecycle, a window, and the services every platform must have. Every capability
+     * is reported `false`, which is honest — the presenter (PLAT-132), the colour ladder
+     * (PLAT-134), keyboard (PLAT-137/138) and mouse (PLAT-139) each turn one on as they land, and
+     * a capability reported `true` before its implementation exists is exactly the silent no-op
+     * the contract forbids.
+     *
+     * ### The window is a pixel surface, not the character grid
+     *
+     * A game asks for the resolution it wants to draw at and gets it. The terminal's cell grid is
+     * a property of the *presenter*, which quantises the RGBA frame down to glyphs (PLAT-132,
+     * reusing `QuantizeFrameToGrid()`). Handing a game an 80×24 "window" instead would break
+     * every layout computation it has, to describe the same thing less usefully.
+     *
+     * ### Constructing one touches nothing
+     *
+     * No raw mode, no escape sequences, no queries: construction asks only whether standard
+     * output is a terminal, which is free and changes no state. That is what makes it safe for
+     * the conformance suite to build one in a process whose terminal belongs to somebody else.
+     * Taking the terminal over is the session's job (PLAT-131), not the constructor's.
+     *
+     * Compiled on every POSIX target regardless of `CNA_PLATFORM`, for the same reason
+     * `HeadlessPlatform` is: the conformance suite needs the implementations live in one process,
+     * and this one links no third-party library at all.
+     */
+    class TerminalPlatform final : public IPlatform
+    {
+    public:
+        /** @brief Creates the platform without touching the terminal. */
+        TerminalPlatform();
+
+        /** @brief Destroys the platform and any windows it still owns. */
+        ~TerminalPlatform() override;
+
+        TerminalPlatform(const TerminalPlatform&) = delete;
+        TerminalPlatform& operator=(const TerminalPlatform&) = delete;
+
+        /** @brief Gets this implementation's name. @return `"Terminal"`. */
+        [[nodiscard]] const std::string& GetName() const override;
+
+        /**
+         * @brief Gets what this platform can do.
+         *
+         * @return A capability set that is entirely false while the phase is in progress.
+         */
+        [[nodiscard]] PlatformCapabilities GetCapabilities() const override;
+
+        /** @brief Acquires a subsystem. @param subsystem The subsystem to acquire. */
+        void AcquireSubsystem(PlatformSubsystem subsystem) override;
+
+        /** @brief Releases a subsystem. @param subsystem The subsystem to release. */
+        void ReleaseSubsystem(PlatformSubsystem subsystem) override;
+
+        /** @brief Gets whether a subsystem is up. @param subsystem The subsystem. @return True if acquired. */
+        [[nodiscard]] bool IsSubsystemInitialized(PlatformSubsystem subsystem) const override;
+
+        /**
+         * @brief Creates the one window a terminal can have.
+         *
+         * @param description The window's creation parameters; its size is the resolution the
+         *        game will draw at, not the terminal's cell grid.
+         * @return The created window.
+         * @throws PlatformNotSupportedException If a window already exists — there is exactly one
+         *         terminal, so a second window is refused rather than silently aliased onto it.
+         */
+        [[nodiscard]] std::unique_ptr<IPlatformWindow> CreateWindow(
+            const WindowDescription& description) override;
+
+        /**
+         * @brief Drains this frame's events.
+         *
+         * @param destination Receives this frame's events; always cleared first.
+         */
+        void PollEvents(std::vector<PlatformEvent>& destination) override;
+
+        /** @brief Gets a monotonic counter. @return Nanoseconds from a steady clock. */
+        [[nodiscard]] std::uint64_t GetPerformanceCounter() const override;
+
+        /** @brief Gets the counter frequency. @return One billion; the counter is in nanoseconds. */
+        [[nodiscard]] std::uint64_t GetPerformanceFrequency() const override;
+
+        /** @brief Gets elapsed milliseconds since construction. @return The elapsed time. */
+        [[nodiscard]] std::uint64_t GetTicksMilliseconds() const override;
+
+        /** @brief Sleeps for the requested duration. @param milliseconds How long to sleep. */
+        void Delay(std::uint32_t milliseconds) override;
+
+        /** @brief Gets the keyboard service. @return Null until PLAT-137/138 land. */
+        [[nodiscard]] IPlatformKeyboard* GetKeyboard() override;
+        /** @brief Gets the mouse service. @return Null until PLAT-139 lands. */
+        [[nodiscard]] IPlatformMouse* GetMouse() override;
+        /** @brief Gets the gamepad service. @return Null; no gamepad channel exists through a TTY. */
+        [[nodiscard]] IPlatformGamepad* GetGamepad() override;
+        /** @brief Gets the text input service. @return Null; text input is not delivered separately. */
+        [[nodiscard]] IPlatformTextInput* GetTextInput() override;
+        /** @brief Gets the sensor service. @return Null; a terminal exposes no sensors. */
+        [[nodiscard]] IPlatformSensors* GetSensors() override;
+        /** @brief Gets the haptics service. @return Null; a terminal exposes no haptic devices. */
+        [[nodiscard]] IPlatformHaptics* GetHaptics() override;
+        /** @brief Gets the input device enumeration service. @return Null; no devices are enumerable. */
+        [[nodiscard]] IPlatformInputDevices* GetInputDevices() override;
+        /** @brief Gets the clipboard service. @return Null; there is no clipboard to reach. */
+        [[nodiscard]] IPlatformClipboard* GetClipboard() override;
+        /** @brief Gets the display service. @return Null; there is one terminal, not a display list. */
+        [[nodiscard]] IPlatformDisplays* GetDisplays() override;
+        /** @brief Gets the dialog service. @return Null; there is no native dialog in a terminal. */
+        [[nodiscard]] IPlatformDialogs* GetDialogs() override;
+        /** @brief Gets the filesystem service. @return A real filesystem; never null. */
+        [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
+        /** @brief Gets the system information service. @return Real host information; never null. */
+        [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override;
+        /** @brief Gets the OpenGL context service. @return Null; a terminal has no GL context. */
+        [[nodiscard]] IPlatformGlContext* GetGlContext() override;
+        /** @brief Gets the Vulkan surface service. @return Null; a terminal has no Vulkan surface. */
+        [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override;
+
+        /**
+         * @brief Refuses to create a surface presenter.
+         *
+         * @param window The window that would be presented to.
+         * @return Never returns.
+         * @throws PlatformNotSupportedException Always, until PLAT-132 implements presentation.
+         */
+        [[nodiscard]] std::unique_ptr<IPlatformSurfacePresenter> CreateSurfacePresenter(
+            IPlatformWindow& window) override;
+
+        /**
+         * @brief Reports whether the process is actually attached to a terminal.
+         *
+         * Determined once at construction, and free: no query is sent and no terminal state is
+         * touched. False is a normal outcome — piped into a log, redirected to a file, captured
+         * by CI — and is what lets presentation refuse cleanly instead of writing escape
+         * sequences into somebody's build output.
+         *
+         * @return True when standard output is a terminal.
+         */
+        [[nodiscard]] bool IsAttachedToTerminal() const;
+
+    private:
+        class TerminalWindow;
+
+        std::map<PlatformSubsystem, int> refCounts_;
+        std::vector<PlatformEvent> queued_;
+        std::uint64_t createdAtNanoseconds_ = 0;
+        WindowId nextWindowId_ = 1;
+        bool attachedToTerminal_ = false;
+
+        /// Whether the one window is taken, held jointly with the window that took it.
+        ///
+        /// Shared rather than a back-pointer to the platform: nothing in the contract forbids
+        /// destroying a platform while a window it created is still alive, and a window whose
+        /// destructor reached back into a destroyed platform would be undefined behaviour that
+        /// appears only in that order. Shared ownership of the flag alone makes the order
+        /// irrelevant.
+        std::shared_ptr<bool> windowSlotTaken_;
+
+        std::unique_ptr<Common::StandardFileSystem> fileSystem_;
+        std::unique_ptr<Common::StandardSystemInfo> systemInfo_;
+    };
+
+} // namespace CNA::Platform::Terminal

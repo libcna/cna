@@ -70,6 +70,20 @@ Both file descriptors refer to the same tty when a terminal is attached, so eith
 if stdout were ever redirected the query would otherwise be written into a file while the code
 waited forever for an answer that was never sent.
 
+## Where this ended up
+
+PLAT-130 promoted the detection logic to
+`modules/platform/src/Terminal/TerminalCapabilityProbe.{hpp,cpp}`, with one change: the production
+version takes its file descriptors as parameters instead of hardcoding stdin and stdout. That is
+what makes it *testable* — `TerminalCapabilityProbeTests.cpp` drives it against a pipe to reach
+the not-a-terminal path and against a real pseudo-terminal that answers DA1 and XTVERSION but can
+be told to stay silent on the Kitty query, which pins finding 2 as an assertion rather than a
+note. A probe hardcoded to stdin could not be tested at all without writing escape sequences into
+whatever terminal was running the suite.
+
+This program stays as it is: it is the record of how the findings were established, not the
+implementation.
+
 ## Restoration
 
 The probe enters raw mode through an RAII guard whose destructor runs on every exit path. A spike

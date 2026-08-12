@@ -5,8 +5,6 @@
 #include "CNA/Platform/PlatformException.hpp"
 
 #include <chrono>
-#include <filesystem>
-#include <fstream>
 #include <thread>
 
 namespace CNA::Platform::Headless {
@@ -107,105 +105,14 @@ namespace CNA::Platform::Headless {
 
     } // namespace
 
-    /// Real path resolution and file loading, implemented on the standard library rather than
-    /// stubbed out. A headless platform still has a filesystem, and a game's save/load path is
-    /// exactly the kind of logic worth running in CI.
-    class HeadlessPlatform::HeadlessFileSystem final : public IPlatformFileSystem
-    {
-    public:
-        [[nodiscard]] std::string GetBasePath() const override
-        {
-            return std::filesystem::current_path().string() + "/";
-        }
-
-        [[nodiscard]] std::string GetPreferencesPath(const std::string& organization,
-                                                     const std::string& application) const override
-        {
-            const std::filesystem::path path =
-                std::filesystem::temp_directory_path() / "cna-headless" / organization / application;
-            std::error_code code;
-            std::filesystem::create_directories(path, code);
-            if (code)
-            {
-                throw PlatformException("FileSystem::GetPreferencesPath", code.message());
-            }
-            return path.string() + "/";
-        }
-
-        [[nodiscard]] bool TryLoadFile(const std::string& path,
-                                       std::vector<std::uint8_t>& data) const override
-        {
-            std::ifstream input(path, std::ios::binary | std::ios::ate);
-            if (!input.good())
-            {
-                return false;
-            }
-            const std::streamsize size = input.tellg();
-            input.seekg(0);
-
-            std::vector<std::uint8_t> contents(static_cast<std::size_t>(size));
-            if (size > 0 && !input.read(reinterpret_cast<char*>(contents.data()), size))
-            {
-                return false;
-            }
-            data = std::move(contents);
-            return true;
-        }
-
-        void CreateDirectory(const std::string& path) override
-        {
-            std::error_code code;
-            std::filesystem::create_directories(path, code);
-            if (code)
-            {
-                throw PlatformException("FileSystem::CreateDirectory(" + path + ")", code.message());
-            }
-        }
-    };
-
-    /// Host facts the standard library can answer. Everything it cannot is reported as unknown
-    /// rather than guessed -- a fabricated core count is worse than an honest zero.
-    class HeadlessPlatform::HeadlessSystemInfo final : public IPlatformSystemInfo
-    {
-    public:
-        [[nodiscard]] std::string GetPlatformName() const override
-        {
-#if defined(_WIN32)
-            return "Windows";
-#elif defined(__APPLE__)
-            return "macOS";
-#elif defined(__ANDROID__)
-            return "Android";
-#elif defined(__linux__)
-            return "Linux";
-#else
-            return "Unknown";
-#endif
-        }
-
-        [[nodiscard]] int GetSystemMemoryMegabytes() const override { return 0; }
-
-        [[nodiscard]] int GetLogicalCoreCount() const override
-        {
-            return static_cast<int>(std::thread::hardware_concurrency());
-        }
-
-        [[nodiscard]] std::vector<PlatformLocale> GetPreferredLocales() const override { return {}; }
-
-        [[nodiscard]] PowerInfo GetPowerInfo() const override
-        {
-            // Unknown, not "no battery": this platform cannot tell, and claiming otherwise would
-            // be a fabricated answer a caller could display.
-            return PowerInfo{};
-        }
-
-        bool OpenUrl(const std::string&) override { return false; }
-    };
-
     HeadlessPlatform::HeadlessPlatform()
         : createdAtNanoseconds_(NowNanoseconds())
-        , fileSystem_(std::make_unique<HeadlessFileSystem>())
-        , systemInfo_(std::make_unique<HeadlessSystemInfo>())
+        // Real path resolution and file loading rather than stubs. A headless platform still has
+        // a filesystem, and a game's save/load path is exactly the kind of logic worth running in
+        // CI. The preferences root is implementation-specific so two platforms live in one
+        // process cannot collide on the same directory.
+        , fileSystem_(std::make_unique<Common::StandardFileSystem>("cna-headless"))
+        , systemInfo_(std::make_unique<Common::StandardSystemInfo>())
     {
     }
 

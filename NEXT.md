@@ -5,9 +5,17 @@
 > is on branch `claude/cna-platform-sdl3-separation-pxuc33`; do not reconstruct its state from
 > this file, which predates it.
 >
-> One thing from it belongs here because it affects every subsystem: **`CNA_DEVICES` defaults to
-> OFF**, so `modules/devices-ext` and `modules/devices` compile to nothing and their tests pass
-> vacuously unless you configure a build with `-DCNA_DEVICES=ON`. See `NEXT_platform.md` §1.
+> Two things from it belong here because they affect every subsystem.
+>
+> **`CNA_DEVICES` defaults to OFF**, so `modules/devices-ext` and `modules/devices` compile to
+> nothing and their tests pass vacuously unless you configure a build with `-DCNA_DEVICES=ON`.
+> See `NEXT_platform.md` §1.
+>
+> **A full `ctest` run has three failures that `./CnaTests` alone never shows** —
+> `ModuleLinkClosure_probe_storage`, `Headless_Smoke`, `Headless_PresentLifecycle`. All three
+> reproduce on an unmodified tree, so they belong to nobody's current change; validating with the
+> gtest binary alone (what most subsystem campaigns do) hides them. Diagnoses in
+> `NEXT_platform.md` §2.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

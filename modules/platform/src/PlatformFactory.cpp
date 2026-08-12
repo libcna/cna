@@ -10,6 +10,12 @@
 #  include "Sdl3/Sdl3Platform.hpp"
 #endif
 
+// Compiled on every POSIX target regardless of the selection -- see the module's CMakeLists for
+// why, and _WIN32 for why not there.
+#if !defined(_WIN32)
+#  include "Terminal/TerminalPlatform.hpp"
+#endif
+
 namespace CNA::Platform {
 
     namespace {
@@ -18,6 +24,8 @@ namespace CNA::Platform {
         // than at each call site so exactly one file knows which implementations exist.
 #if defined(CNA_PLATFORM_HEADLESS)
         const std::string kDefaultName = "Headless";
+#elif defined(CNA_PLATFORM_TERMINAL)
+        const std::string kDefaultName = "Terminal";
 #else
         const std::string kDefaultName = "SDL3";
 #endif
@@ -45,10 +53,17 @@ namespace CNA::Platform {
             return std::make_unique<Headless::HeadlessPlatform>();
         }
 
-        // Remaining implementations register here as their phases land: TerminalPlatform
-        // (PLAT-130). An unknown name refuses rather than
-        // returning null or a do-nothing stub, which would let a caller believe it had a
-        // working platform.
+#if !defined(_WIN32)
+        // Also always available on POSIX, and for the same reason as Headless: the conformance
+        // suite is only worth something with more than one implementation live in one process.
+        if (name == "Terminal")
+        {
+            return std::make_unique<Terminal::TerminalPlatform>();
+        }
+#endif
+
+        // An unknown name refuses rather than returning null or a do-nothing stub, which would
+        // let a caller believe it had a working platform.
         throw PlatformException(
             "PlatformFactory::Create(" + name + ")",
             "not compiled into this binary; available: " +
@@ -69,6 +84,9 @@ namespace CNA::Platform {
         available.emplace_back("SDL3");
 #endif
         available.emplace_back("Headless");
+#if !defined(_WIN32)
+        available.emplace_back("Terminal");
+#endif
         return available;
     }
 

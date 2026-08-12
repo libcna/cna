@@ -52,6 +52,15 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl3.*\\.cpp$")
     endif()
 
+    # plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
+    # both it and its tests are POSIX-only -- excluded on Windows for the same reason the
+    # implementation directory is (modules/platform/CMakeLists.txt), not gated line-by-line.
+    # Everywhere else they always build, whatever CNA_PLATFORM says, because the implementation
+    # always does.
+    if(WIN32)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Terminal.*\\.cpp$")
+    endif()
+
     # REMED-BUILD-013 (discovered while verifying it): mirrors CnaLibrary.cmake's own
     # CNA_FFMPEG_AVAILABLE exclusion for VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp/
     # VideoContentTypeReader.cpp -- these 4 test files exercise exactly those classes, which do not
@@ -434,7 +443,12 @@ if(CNA_BUILD_TESTS)
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
     # another suite usually has, so these skip there and would otherwise contribute no coverage
     # at all. Running them as their own ctest, in their own process, is what makes them real.
-    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*
+    # The window half of the conformance suite (PLAT-116) belongs here rather than with the rest
+    # of it: its SDL3 parameterisation skips outright without a video subsystem, so running it in
+    # the display-independent suite would have exercised only the implementations that need no
+    # display. It ran nowhere at all until PLAT-130 -- the other suite's *PlatformConformance*
+    # token does not match the string "PlatformWindowConformance".
+    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
     # The rest of the platform contract is display-independent by construction, so it runs
@@ -442,7 +456,7 @@ if(CNA_BUILD_TESTS)
     # subsystem refcount is process-global, and an acquire/release imbalance would show up as
     # order dependence rather than as a direct failure.
     cna_register_renderer_test(NAME CnaPlatformTests
-        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:CurrentPlatformTest.*
+        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:CurrentPlatformTest.*
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
