@@ -2303,6 +2303,29 @@ namespace Microsoft::Xna::Framework::Content
             // How many placements each glTF mesh has, so a name only carries its node when the
             // node is what distinguishes it (GLTF-141). Appending the node name unconditionally
             // would rename every mesh in the ordinary one-placement file for no gain.
+            // plan_gltf.md GLTF-238: one Effect per (material, import shape), shared by every
+            // primitive that lands on it.
+            struct EffectCacheKey
+            {
+                const cgltf_material* material = nullptr;
+                bool skinned = false;
+                bool pbr = false;
+                bool dualTexture = false;
+                bool colored = false;
+                bool operator==(const EffectCacheKey& other) const = default;
+            };
+            struct EffectCacheKeyHash
+            {
+                std::size_t operator()(const EffectCacheKey& key) const noexcept
+                {
+                    const std::size_t flags =
+                        (key.skinned ? 1u : 0u) | (key.pbr ? 2u : 0u) |
+                        (key.dualTexture ? 4u : 0u) | (key.colored ? 8u : 0u);
+                    return std::hash<const void*>{}(key.material) * 31u + flags;
+                }
+            };
+            std::unordered_map<EffectCacheKey, Graphics::Effect*, EffectCacheKeyHash> effectCache;
+
             std::unordered_map<const cgltf_mesh*, int> instanceCountOfMesh;
             for (const ImportableInstance& entry : importable)
             {
@@ -2618,6 +2641,29 @@ namespace Microsoft::Xna::Framework::Content
                         res->morphOwners.push_back(std::move(morph));
                     }
 
+                    // plan_gltf.md GLTF-238: two primitives with the same material, imported the
+                    // same way, share one Effect. A file whose every primitive got its own was
+                    // paying a redundant effect (and, at draw time, a redundant state change) per
+                    // primitive for a material the file states once -- and XNA's own content
+                    // pipeline shares them. The key is the material POINTER plus the four flags
+                    // that decide which effect class and which parameters it gets: two primitives
+                    // of one material still need separate effects when one is skinned and the
+                    // other is not, because they are not even the same type.
+                    const EffectCacheKey effectKey{
+                        meshOut.materialEXT, meshOut.skinned, meshOut.usePbr, meshOut.useDualTexture,
+                        meshOut.colored};
+                    if (const auto cached = effectCache.find(effectKey); cached != effectCache.end())
+                    {
+                        partPtr->setEffectProperty(cached->second);
+                        instanceEffects.push_back(cached->second);
+                        res->vbs.push_back(std::move(vb));
+                        res->ibs.push_back(std::move(ib));
+                        instancePartPtrs.push_back(partPtr);
+                        instanceParts.push_back(std::move(part));
+                        ++meshCounter;
+                        continue;
+                    }
+
                     std::shared_ptr<Graphics::Effect> fx;
                     // PBR + skinning combo: SkinnedPbrEffect is a separate class from both
                     // SkinnedEffect and PbrEffect (see that header's own doc comment), so it must
@@ -2729,6 +2775,7 @@ namespace Microsoft::Xna::Framework::Content
                     ApplyPunctualLightsEXT(*fx, punctualLights);
 
                     instanceEffects.push_back(fx.get());
+                    effectCache.emplace(effectKey, fx.get());
                     res->effectOwners.push_back(std::move(fx));
 
                     res->vbs.push_back(std::move(vb));

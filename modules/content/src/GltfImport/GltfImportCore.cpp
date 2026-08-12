@@ -1860,6 +1860,8 @@ namespace CNA::Internal::GltfImport
             (prim.material == nullptr) ||
             (!prim.material->has_pbr_specular_glossiness && !prim.material->unlit);
         out.usePbr = (!out.colored) && metallicRoughnessMaterial;
+        // GLTF-238: the material's identity, for effect sharing in the loaders.
+        out.materialEXT = prim.material;
         // plan_gltf.md GLTF-241: `colored && metallicRoughnessMaterial` is the one combination the
         // rule above refuses, and refusing it silently is what the task is about. No CNA vertex
         // layout carries a Color alongside a Tangent and no PBR shader reads a colour stream, so

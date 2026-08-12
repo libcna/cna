@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-134 / GLTF-139 / GLTF-140 / GLTF-141 / GLTF-142 / GLTF-144.
+// plan_gltf.md GLTF-134 / GLTF-139 / GLTF-140 / GLTF-141 / GLTF-142 / GLTF-144 / GLTF-238.
 //
 // What shape the imported `Model` has, as distinct from where its geometry is. Every row here is
 // about a mapping decision rather than a number, and each has one wrong answer that renders
@@ -377,4 +377,55 @@ TEST(GltfModelShape, AFileWithNoScenesFallsBackToEveryMeshInIt)
     }
     EXPECT_EQ("A", std::string(groups[0].instances[0].mesh->name));
     EXPECT_EQ("B", std::string(groups[0].instances[1].mesh->name));
+}
+
+// --- GLTF-238: one Effect per material, not per primitive ------------------------------------------
+
+TEST(GltfModelShape, TwoPrimitivesOfOneMaterialShareASingleEffect)
+{
+    // A file states a material once and may use it on any number of primitives. Giving each its
+    // own Effect copies every factor and every texture binding per primitive, and costs a
+    // redundant state change per draw for a material the GPU is already set up for -- XNA's own
+    // content pipeline shares them, and so does this now.
+    //
+    // The document below is the two-primitive mesh with BOTH primitives pointing at material 0.
+    const ScratchDir dir;
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, dir.path().string());
+    cm.setGraphicsDevice(gd);
+
+    std::string json = TwoPrimitiveDocument();
+    const std::string second = R"("attributes": { "POSITION": 1 }, "material": 1)";
+    const std::size_t at = json.find(second);
+    ASSERT_NE(std::string::npos, at) << "the shared fixture changed shape";
+    json.replace(at, second.size(), R"("attributes": { "POSITION": 1 }, "material": 0)");
+
+    Model model = LoadModel(dir, json, gd, cm);
+    ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+    ASSERT_EQ(2, mesh->getMeshPartsProperty().getCountProperty());
+
+    EXPECT_EQ(mesh->getMeshPartsProperty()[0]->getEffectProperty(),
+              mesh->getMeshPartsProperty()[1]->getEffectProperty())
+        << "one material produced two effects";
+    EXPECT_EQ(1, mesh->getEffectsProperty().getCountProperty())
+        << "ModelMesh::Effects counts the shared effect twice";
+}
+
+TEST(GltfModelShape, TwoMaterialsStillGetTwoEffects)
+{
+    // The control that keeps the sharing honest: a cache keyed too coarsely -- on the mesh, say,
+    // or on the effect class -- would collapse these two and give the second primitive the first
+    // material's colour. That is a rendering bug with no error anywhere.
+    const ScratchDir dir;
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, dir.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = LoadModel(dir, TwoPrimitiveDocument(), gd, cm);
+
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+    ASSERT_EQ(2, mesh->getMeshPartsProperty().getCountProperty());
+    EXPECT_NE(mesh->getMeshPartsProperty()[0]->getEffectProperty(),
+              mesh->getMeshPartsProperty()[1]->getEffectProperty());
+    EXPECT_EQ(2, mesh->getEffectsProperty().getCountProperty());
 }

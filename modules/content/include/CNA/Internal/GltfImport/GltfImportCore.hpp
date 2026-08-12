@@ -359,6 +359,16 @@ namespace CNA::Internal::GltfImport
         /** @brief True when this mesh has a per-vertex COLOR_0 attribute. */
         bool colored = false;
         /**
+         * @brief The glTF material this primitive uses, or nullptr when it declares none.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md `GLTF-238`: carried so a
+         * loader can give two primitives of the *same* material one shared `Effect` instead of an
+         * identical copy each. It is the material's identity that matters, not its contents, which
+         * is why this is the pointer rather than a decoded record — two materials with identical
+         * factors are still two materials, and a file that repeats one is the case worth sharing.
+         */
+        const cgltf_material* materialEXT = nullptr;
+        /**
          * @brief Names the material model this primitive could not be imported with, or empty.
          *
          * plan_gltf.md `GLTF-241`. A primitive with `COLOR_0` **and** a metallic-roughness material
