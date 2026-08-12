@@ -59,17 +59,28 @@ TEST(TerminalPlatformTest, ConstructionTouchesNoTerminalState)
     EXPECT_EQ(before.c_oflag, after.c_oflag);
 }
 
-TEST(TerminalPlatformTest, EveryCapabilityIsFalseWhileThePhaseIsInProgress)
+TEST(TerminalPlatformTest, OnlyTheCapabilitiesWhoseTasksHaveLandedAreAdvertised)
 {
-    // Not an aspiration: presentation, colour, keyboard and mouse each land in their own task,
-    // and a capability advertised before its implementation exists is the silent no-op the
+    // Not an aspiration: keyboard (PLAT-137/138) and mouse (PLAT-139) each land in their own
+    // task, and a capability advertised before its implementation exists is the silent no-op the
     // contract forbids. This fails the moment one is turned on without its work, which is the
     // point -- turning one on should be a deliberate edit here too.
+    //
+    // Surface presentation is the exception, and conditionally: it is implemented (PLAT-132), so
+    // it is true exactly when standard output really is a terminal and false otherwise. Asserting
+    // it unconditionally either way would be wrong in one of the two environments this suite
+    // runs in.
     const std::unique_ptr<IPlatform> platform = MakeTerminal();
     const PlatformCapabilities capabilities = platform->GetCapabilities();
 
+    EXPECT_EQ(capabilities.surfacePresentation, isatty(STDOUT_FILENO) != 0);
+
     for (const PlatformCapability capability : AllCapabilities())
     {
+        if (capability == PlatformCapability::SurfacePresentation)
+        {
+            continue;
+        }
         EXPECT_FALSE(Supports(capabilities, capability)) << ToString(capability);
     }
 }
@@ -161,25 +172,6 @@ TEST(TerminalPlatformTest, TheWindowOffersNoNativeHandleForARendererToDereferenc
 
     const std::unique_ptr<IPlatformWindow> window = platform->CreateWindow(description);
     EXPECT_FALSE(HasNativeWindow(window->GetNativeHandle()));
-}
-
-TEST(TerminalPlatformTest, PresentationRefusesUntilItsOwnTaskLands)
-{
-    const std::unique_ptr<IPlatform> platform = MakeTerminal();
-    WindowDescription description;
-    description.width = 320;
-    description.height = 240;
-    const std::unique_ptr<IPlatformWindow> window = platform->CreateWindow(description);
-
-    try
-    {
-        (void)platform->CreateSurfacePresenter(*window);
-        FAIL() << "an unimplemented capability must refuse, not silently succeed";
-    }
-    catch (const PlatformNotSupportedException& refusal)
-    {
-        EXPECT_EQ(refusal.GetCapability(), PlatformCapability::SurfacePresentation);
-    }
 }
 
 TEST(TerminalPlatformTest, SettingATitleDoesNotWriteToStandardOutput)

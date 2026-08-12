@@ -26,26 +26,25 @@ namespace CNA::Platform::Terminal {
      *
      * ### What this task provides
      *
-     * `plan_platform.md` PLAT-130 is the skeleton: selection, factory registration, timing, the
-     * subsystem lifecycle, a window, and the services every platform must have. Every capability
-     * is reported `false`, which is honest — the presenter (PLAT-132), the colour ladder
-     * (PLAT-134), keyboard (PLAT-137/138) and mouse (PLAT-139) each turn one on as they land, and
-     * a capability reported `true` before its implementation exists is exactly the silent no-op
-     * the contract forbids.
+     * Selection, factory registration, timing, the subsystem lifecycle, a window, the services
+     * every platform must have (PLAT-130), and surface presentation (PLAT-132). Keyboard
+     * (PLAT-137/138) and mouse (PLAT-139) are still reported `false` and still refuse: a
+     * capability reported `true` before its implementation exists is exactly the silent no-op the
+     * contract forbids.
      *
      * ### The window is a pixel surface, not the character grid
      *
      * A game asks for the resolution it wants to draw at and gets it. The terminal's cell grid is
-     * a property of the *presenter*, which quantises the RGBA frame down to glyphs (PLAT-132,
-     * reusing `QuantizeFrameToGrid()`). Handing a game an 80×24 "window" instead would break
-     * every layout computation it has, to describe the same thing less usefully.
+     * a property of the *presenter*, which quantises the RGBA frame down to glyphs. Handing a game
+     * an 80×24 "window" instead would break every layout computation it has, to describe the same
+     * thing less usefully.
      *
      * ### Constructing one touches nothing
      *
      * No raw mode, no escape sequences, no queries: construction asks only whether standard
      * output is a terminal, which is free and changes no state. That is what makes it safe for
      * the conformance suite to build one in a process whose terminal belongs to somebody else.
-     * Taking the terminal over is the session's job (PLAT-131), not the constructor's.
+     * Taking the terminal over happens when a presenter is created, and not before.
      *
      * Compiled on every POSIX target regardless of `CNA_PLATFORM`, for the same reason
      * `HeadlessPlatform` is: the conformance suite needs the implementations live in one process,
@@ -69,7 +68,11 @@ namespace CNA::Platform::Terminal {
         /**
          * @brief Gets what this platform can do.
          *
-         * @return A capability set that is entirely false while the phase is in progress.
+         * `surfacePresentation` is true exactly when standard output is a terminal, so the answer
+         * differs between a process run from a shell and the same process with its output
+         * redirected. Everything else stays false until its own task lands.
+         *
+         * @return The capability set.
          */
         [[nodiscard]] PlatformCapabilities GetCapabilities() const override;
 
@@ -143,11 +146,17 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override;
 
         /**
-         * @brief Refuses to create a surface presenter.
+         * @brief Creates a presenter that draws frames as characters.
          *
-         * @param window The window that would be presented to.
-         * @return Never returns.
-         * @throws PlatformNotSupportedException Always, until PLAT-132 implements presentation.
+         * Also the moment the terminal is taken over: raw mode, the alternate screen and a hidden
+         * cursor all start here, because this is the first point at which anything genuinely
+         * needs them. Terminal capabilities are detected here too, for the same reason — probing
+         * costs a round trip and raw mode, neither of which belongs in a constructor.
+         *
+         * @param window The window whose pixel size sets the resolution callers rasterise at.
+         * @return The presenter; destroying it gives the terminal back.
+         * @throws PlatformNotSupportedException If standard output is not a terminal.
+         * @throws PlatformException If a session is already active in this process.
          */
         [[nodiscard]] std::unique_ptr<IPlatformSurfacePresenter> CreateSurfacePresenter(
             IPlatformWindow& window) override;

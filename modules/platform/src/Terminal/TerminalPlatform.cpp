@@ -2,7 +2,11 @@
 
 #include "TerminalPlatform.hpp"
 
+#include "TerminalSurfacePresenter.hpp"
+
 #include "CNA/Platform/PlatformException.hpp"
+
+#include <unistd.h>
 
 #include <chrono>
 #include <thread>
@@ -142,12 +146,16 @@ namespace CNA::Platform::Terminal {
 
     PlatformCapabilities TerminalPlatform::GetCapabilities() const
     {
-        // Everything false while Phase 10 is in progress. Presentation (PLAT-132), the colour
-        // ladder (PLAT-134), keyboard (PLAT-137/138) and mouse (PLAT-139) each turn one on as
-        // they land. Advertising a capability before its implementation exists is precisely the
-        // silent no-op the contract forbids -- a caller branching on it would take the wrong path
-        // and see nothing happen.
-        return PlatformCapabilities{};
+        PlatformCapabilities capabilities;
+
+        // True only where stdout really is a terminal. Reported honestly rather than
+        // unconditionally, because the contract's rule is that a false capability refuses and a
+        // true one works: advertising presentation into a pipe would be a promise this cannot
+        // keep, and a caller branching on it would pick the path that draws nothing.
+        capabilities.surfacePresentation = attachedToTerminal_;
+
+        // Keyboard (PLAT-137/138) and mouse (PLAT-139) stay false until they land.
+        return capabilities;
     }
 
     void TerminalPlatform::AcquireSubsystem(const PlatformSubsystem subsystem)
@@ -224,11 +232,26 @@ namespace CNA::Platform::Terminal {
     IPlatformGlContext* TerminalPlatform::GetGlContext() { return nullptr; }
     IPlatformVulkanSurface* TerminalPlatform::GetVulkanSurface() { return nullptr; }
 
-    std::unique_ptr<IPlatformSurfacePresenter> TerminalPlatform::CreateSurfacePresenter(IPlatformWindow&)
+    std::unique_ptr<IPlatformSurfacePresenter> TerminalPlatform::CreateSurfacePresenter(
+        IPlatformWindow& window)
     {
-        // Refuses naming the capability until PLAT-132 implements it. A stub that accepted frames
-        // and dropped them would let a caller believe it was drawing.
-        throw PlatformNotSupportedException(PlatformCapability::SurfacePresentation, GetName());
+        if (!attachedToTerminal_)
+        {
+            // Piped into a log, redirected to a file, captured by CI. Refusing here is what stops
+            // a build log filling with escape sequences, and it is the same answer
+            // GetCapabilities() already gave.
+            throw PlatformNotSupportedException(PlatformCapability::SurfacePresentation, GetName());
+        }
+
+        // Detection is deferred to exactly this point: it needs raw mode and a round trip to the
+        // terminal, which is far too costly and far too intrusive to do when a platform is merely
+        // constructed. Here, something is about to draw, so asking is warranted.
+        const TerminalCapabilities detected = DetectTerminalCapabilities();
+
+        const WindowSize size = window.GetPixelSize();
+        return std::make_unique<TerminalSurfacePresenter>(STDOUT_FILENO, STDIN_FILENO,
+                                                          detected.colourDepth, size.width,
+                                                          size.height);
     }
 
     bool TerminalPlatform::IsAttachedToTerminal() const { return attachedToTerminal_; }
