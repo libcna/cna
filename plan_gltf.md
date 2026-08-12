@@ -10,7 +10,7 @@ Oracle repository: `openeggbert/cna-gltf-viewer` @ `aaa008dc62bcb1127901ca23b75b
 > working record.** The banner it opened with ("nothing in it was implemented") described the
 > planning session of 2026-08-11 only, and is preserved below for provenance.
 >
-> Of 460 rows: **329 are closed (`✔` 208, `✅` 121)** and **112 remain `⬜`**, with `GLTF-449` newly
+> Of 460 rows: **331 are closed (`✔` 210, `✅` 121)** and **110 remain `⬜`**, with `GLTF-449` newly
 > carrying a `✅/⬜` partial marker. The other 18 carry a
 > deliberate partial marker — 8 `🔬` (investigation, no implementation owed), 5 `✅/⬜` and 2 `✅/🐛`
 > (landed with a named residue), 2 `🐛` (open defect), 1 `⛔` (blocked by this environment,
@@ -1756,6 +1756,45 @@ permanent automated tests at the stated oracle layer:
 | 19 | The whole corpus passes identically on `STUB`, `HEADLESS`, `OPENGLES3` and `VULKAN` at L5 and L6 | L5/L6 |
 | 20 | `cna-gltf-viewer` renders the §29 Phase 21 retake matrix correctly against reference output, with **no** compensating logic | L7 |
 
+#### 27.1.1 Traceability — which fixtures and which tests (`GLTF-403` / `GLTF-413`)
+
+Each row of §27.1 above, mapped to the corpus assets that exercise it and the test suites that
+assert it. **This table is checked**, not written: `GltfConformanceLadder.EverySection271RowIsTraceableToFixturesAndTestsThatExist`
+requires every row 1–20 to appear, every fixture named to be in the corpus, and every test suite
+named to be registered in the binary — so a renamed suite or a deleted fixture fails a test instead
+of leaving a milestone citing evidence that no longer exists.
+
+The `State` column is what `GLTF-458` reads. **Green** means the requirement is asserted at its
+stated layer today; **blocked** means the assertion needs something this environment does not have,
+and says what.
+
+| # | Fixtures | Test suites | State |
+|---|---|---|---|
+| 1 | `xf-identity` plus every GLB twin in the corpus; the malformed containers are hand-authored in the suite | `GltfContainerRobustness`, `GltfFixtureCorpus`, `GltfConformanceL1` | green |
+| 2 | `xf-identity` (its GLB twin carries the BIN chunk); the external-file and percent-encoded URI cases are hand-authored in the suite | `GltfExternalBuffer`, `GltfUriContainment`, `GltfConformanceL1` | green |
+| 3 | `interleaved-position-normal`, `sparse-interleaved-base`, `normalized-u8-color`, `normal-quantized` | `GltfConformanceL2`, `GltfAccessorDecodeLock`, `GltfBufferAndWeightForm`, `GltfContainerValidation` | green |
+| 4 | `sparse-position`, `sparse-indices` | `GltfConformanceL2`, `GltfIndexDecode` | green |
+| 5 | `mode-triangles`, `mode-triangle-strip`, `mode-triangle-fan`, `mode-lines`, `mode-line-strip`, `mode-line-loop`, `mode-points` | `GltfPrimitiveTopology`, `GltfDrawTopology`, `GltfConformanceL3` | green |
+| 6 | `u8-idx`, `sparse-indices`, `mode-triangles` (the 16-bit path), `accessor-count-mismatch` | `GltfIndexDecode`, `GltfIndexForm`, `GltfConformanceL3` | green |
+| 7 | `normal-absent`, `mat-authored-tangent`, `mat-vertex-color-pbr`, `normalized-u8-color`, `skin-*` | `GltfAttributeCoverage`, `GltfConformanceL3`, `GltfUvChannel` | green |
+| 8 | `xf-matrix-node`, `xf-parent-child`, `xf-scale-nonuniform`, `xf-negative-scale`, `xf-mirror-child` | `GltfConformanceL4`, `GltfNodeTransformOrder`, `GltfNodeHierarchy`, `GltfMirroring`, `GltfConventions` | green |
+| 9 | `xf-shared-mesh`, `scene-default-selection`, `skin-plus-static-mesh` | `GltfConformanceL4`, `GltfSceneSelection`, `GltfModelShape`, `GltfSceneGraphBones` | green |
+| 10 | every fixture with `l5.supported` (65 of 71) | `GltfConformanceL5`, `GltfBufferOracle`, `GltfStrideAndBuffer`, `GltfVertexLayoutTable`, `GltfVertexBufferInvariants` | green |
+| 11 | `tex-reference-checkerboard`, `tex-texture-transform`, `tex-dual-texture-stride`, `mat-normal-occlusion-scale` | `GltfSamplerMapping`, `GltfImageSource`, `GltfUnsupportedTexture`, `GltfOcclusionRemap`, `GltfConformanceL6` | green at L6; the L7 half is `GLTF-009`-blocked |
+| 12 | `mat-factor-only-gold`, `mat-emissive-strength`, `mat-normal-occlusion-scale` | `GltfConformanceL6`, `GltfMaterialState`, `GltfDrawParamsOracleL6` | green |
+| 13 | `mat-factor-only-gold` (BLEND, doubleSided), `mat-alpha-mask-cutoff` (MASK) | `GltfConformanceL6` | **partial by decision**: `MASK` is applied (`GLTF-372`); `BLEND` and `doubleSided` are carried, and applying them is `GLTF-230` at L7 |
+| 14 | `skin-armature-ancestor`, `skin-mesh-node-transform`, `skin-mesh-node-parent-transform`, `skin-skeleton-hint`, `skin-unnormalized` | `GltfSkinSpaces`, `GltfSkinComposition`, `GltfConformanceL4` | green |
+| 15 | `morph-node-weights-override`, `mode-triangle-strip-morph`, `anim-weights-path` | `GltfMorphWeights`, `GltfMorphBlending`, `GltfConformanceL4` | **partial**: tangent deltas import but are not written to the `.cnj` sidecar (`GLTF-289`) |
+| 16 | `anim-step`, `anim-cubicspline`, `anim-rigid-node`, `anim-weights-path`, `anim-parent-child`, `anim-two-clips`, `anim-nonzero-start` | `GltfAnimationSampling`, `GltfAnimationRobustness`, `GltfRigidAnimation`, `GltfClipAndLight`, `GltfConformanceL4` | green |
+| 17 | `gltf-required-extension-unsupported` | `GltfContainerValidation`, `GltfExtensionRegistry` | green |
+| 18 | `mat-vertex-color-pbr`, `skin-eight-influences`, `skin-unnormalized`, `lights-over-budget` | `GltfKnownDefect`, `GltfLightBudget`, `GltfAttributeCoverage`, `GltfLimitationsDoc` | green **as counters and named reports**; the structured `GltfImportReportEXT` a caller could query is `GLTF-034`, deferred by the API-change gate |
+| 19 | the whole corpus | `GltfConformanceL5`, `GltfConformanceL6` on two renderers | **partial**: identical on `STUB` and `HEADLESS` (`GLTF-017`/`GLTF-383`); `OPENGLES3` and `VULKAN` need renderers this environment cannot build |
+| 20 | the §29 retake matrix | — | **blocked**: `cna-gltf-viewer` is a separate repository (`GLTF-421`), and L7 needs a real 3D pipeline (`GLTF-009`) |
+
+Rows 13, 15, 18 and 19 are partial for **stated** reasons, and row 20 is blocked outright — so
+`GLTF-458` cannot be declared today, which is the answer this table exists to give rather than
+avoid.
+
 Explicitly **not** required for this milestone: image-based lighting, tone mapping, transmission,
 clearcoat/sheen/volume/iridescence, material variants, Basis/WebP textures, meshopt, GPU instancing,
 GPU morphing, >4 skin influences, >72 bones.
@@ -2595,7 +2634,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | GLTF-400 | `.glb` twin for every synthetic asset | ⬜ | GLTF-399 | **Accept:** twins agree at L3/L4. |
 | GLTF-401 | Manifest completeness audit | ✔ | GLTF-399 | **Accept:** every asset declares exactly one `owningGroup`, its `referencingGroups[]`, the layers it validates and the expected values for each; the sum of owning-group counts equals the reported distinct-asset total, checked mechanically rather than by reading. **The arithmetic half was already locked** by `DistinctAssetCountEqualsTheSumOfOwningGroupCounts`; `EveryAssetDeclaresItsGroupItsLayersAndAnExpectationForEachOfThem` adds the descriptive half, and its last clause is the one with teeth: for every layer an asset *declares*, the fixture must carry the matching expectation block. A fixture claiming `L4` with an empty `l4` is compared against nothing at that layer while the inventory reports coverage — worse than declaring nothing. Also asserted: the owning group is one of the counted groups, and a `referencingGroups` entry is a known group that is **not** the asset's own — naming its own would double-count it in exactly the way §24.1's ownership model exists to prevent. A floor over the corpus's declared layers keeps the sweep from shrinking. |
 | GLTF-402 | Corpus runner reports the first divergent layer | ⬜ | GLTF-010 | **Accept:** a failure names the layer, the fixture, the field and the delta. |
-| GLTF-403 | Corpus coverage matrix vs the §27.1 checklist | ⬜ | GLTF-401 | **Accept:** every CORE requirement maps to ≥1 fixture. |
+| GLTF-403 | Corpus coverage matrix vs the §27.1 checklist | ✔ | GLTF-401 | **Accept:** every CORE requirement maps to ≥1 fixture. **§27.1.1 is that matrix**, one row per §27.1 requirement, and it is **checked rather than written**: `EverySection271RowIsTraceableToFixturesAndTestsThatExist` requires all 20 rows to be present and every fixture named to exist in the corpus. It failed on its first run against five fixture names that sounded right and were not (`anim-linear`, `attr-full-set`, `attr-ignored-custom`, `external-buffer-uri`, `bad-index-*`) — which is the whole argument for checking a coverage matrix instead of reading one. A wildcard (`skin-*`) is accepted as naming a family the sweeps cover; anything else must be a real asset. |
 | GLTF-404 | Fixture-count and runtime budget | ⬜ | GLTF-402 | **Accept:** the full corpus runs within a stated CI time budget. |
 | GLTF-405 | Real-world asset subset decision executed | ⬜ | GLTF-019 | **Accept:** either a committed, licence-reviewed subset or a fetch script; `THIRD_PARTY_NOTICES.md` updated. |
 | GLTF-406 | Licence review for every committed asset | ⬜ | GLTF-018 | **Accept:** no asset committed without a recorded licence. |
@@ -2605,7 +2644,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | GLTF-410 | Golden regeneration is reviewable | ✔ | GLTF-167 | **Accept:** a golden change shows a readable diff and requires justification. **Both halves landed.** *Readable*: `git diff` on an L5 golden says `Binary files differ` and stops, which leaves a reviewer choosing between taking it on trust and decoding 144 bytes by hand — and the first is what makes a golden stop being evidence. `tools/gltf_fixtures/explain.py` decodes both sides through the fixture's **own** `.expected.json` layout (stride, and each field's name/offset/size) and prints `vertex 2 TextureCoordinate.y: 0 -> 0.25`; `scripts/regenerate-gltf-goldens.sh` runs it automatically for every modified `.vb.bin`/`.ib.bin`, against the committed version. It is deliberately **not** a general binary differ: a buffer that is no longer a whole number of vertices at its stated stride is reported as *the stride itself changed*, which is a different and much larger review, since every renderer's `ApplyLayout` restates that table. Verified end to end by moving `DEFAULT_TEXCOORD` in the generator and reading the decoded diff across every affected fixture, then reverting to a zero diff. *Justification*: `docs/gltf-conformance.md` §4.2.1 states the rule — a golden changes for exactly two reasons, the vertex ABI or a fixture's authored values, and a commit touching one must say which and why. It also states why: this is the one case where "the tests still pass" means nothing, because the goldens were regenerated from the same code that produced them. |
 | GLTF-411 | Cross-check a subset against the reference renderer | ⬜ | GLTF-016 | **Accept:** documented capture and comparison for ≥10 assets. |
 | GLTF-412 | Numerical oracles precede screenshots in every gate | ⬜ | GLTF-402 | **Accept:** the CI job fails at the earliest divergent layer, not at L7. |
-| GLTF-413 | Test-name → requirement traceability | ⬜ | GLTF-403 | **Accept:** each §27.1 row lists its tests. |
+| GLTF-413 | Test-name → requirement traceability | ✔ | GLTF-403 | **Accept:** each §27.1 row lists its tests. **The same table's third column**, and the same test asserts it — every suite named must be **registered in the binary**, enumerated through `::testing::UnitTest::GetInstance()` rather than grepped from a file. This is the half that rots fastest: a suite renamed in a refactor leaves a milestone citing a test that no longer runs, and nothing else in the repository would notice. What the test deliberately does **not** check is the `State` column — whether a row is green is the judgement `GLTF-458` must make from the tests themselves, and a test asserting its own milestone would be circular. The State column is where this row earns its keep: rows 13, 15, 18 and 19 are **partial for stated reasons** and row 20 is blocked, so the table says plainly that `GLTF-458` cannot be declared today. |
 | GLTF-414 | Retire or migrate inline JSON test fixtures | ⬜ | GLTF-399 | ~30 fixtures live as string literals inside `GltfToCnjToolTests.cpp`. **Accept:** migrated to the generator or explicitly kept, with rationale. |
 | GLTF-415 | Existing 39 glTF tests still pass | ⬜ | GLTF-399 | **Accept:** no regression in `GltfImportCoreTests`, `GltfToCnjToolTests`, `RuntimeGltfModelTests`. |
 | GLTF-416 | Corpus documentation | ✔ | GLTF-403 | **Accept:** `docs/gltf-conformance.md` lists every fixture and what it proves. **§7 lists all 71,** with the owning group (§24.1: one asset, exactly one owner), the oracle layers each declares, and what it exists to prove — and the table is **generated** (`python3 -m gltf_fixtures --fixture-table`) rather than maintained, because an inventory written by hand is stale the first time a fixture is added and a stale inventory is worse than none: it reads as a coverage claim nobody checked. `TheConformanceDocListsEveryFixtureTheManifestDeclares` compares it to the manifest in both directions — a fixture missing a row, and a row whose fixture was removed — and prints the regeneration command on failure. Verified to discriminate by renaming one row's id and watching it fail by name. The "what it proves" column is the fixture's own `features` list rather than a summary written for the document, because two descriptions of one fixture are two things that can disagree. §4.3's golden coverage was stale in the same way and is corrected with it: **65 of 71** carry an L5 golden, and the six without are the fixtures the importer must refuse, each recording `l5.supported = false` with its reason — which is what keeps "no golden" distinguishable from "golden forgotten". |

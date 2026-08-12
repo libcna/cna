@@ -14,6 +14,8 @@
 #include <algorithm>
 #include <fstream>
 #include <regex>
+#include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -29,6 +31,21 @@ namespace
         const std::filesystem::path corpus = CnaTest::GltfOracle::CorpusDirectory();
         if (corpus.empty()) { return {}; }
         return corpus.parent_path().parent_path().parent_path();
+    }
+
+    /// Every `backticked` token in one markdown table cell, in order.
+    std::vector<std::string> BacktickedTokens(const std::string& cell)
+    {
+        std::vector<std::string> out;
+        std::string::size_type at = 0;
+        while ((at = cell.find('`', at)) != std::string::npos)
+        {
+            const auto end = cell.find('`', at + 1);
+            if (end == std::string::npos) { break; }
+            out.push_back(cell.substr(at + 1, end - at - 1));
+            at = end + 1;
+        }
+        return out;
     }
 
     struct Rung
@@ -181,4 +198,100 @@ TEST(GltfConformanceLadder, EveryGltfSuiteBelongsToExactlyOneRung)
                 << "', which is not registered -- that CTest entry runs zero tests";
         }
     }
+}
+
+// --- plan_gltf.md GLTF-403 / GLTF-413: §27.1's evidence must exist ------------------------------
+
+TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatExist)
+{
+    // §27.1 is the CORE 2.0 CORRECT milestone's checklist, and §27.1.1 maps each of its 20 rows to
+    // the fixtures that exercise it and the suites that assert it. A milestone citing evidence is
+    // only worth as much as the evidence being real, so this checks exactly that: every row
+    // present, every fixture named actually in the corpus, every suite named actually registered
+    // in this binary. A renamed suite or a deleted fixture then fails a test rather than leaving
+    // the declaration pointing at nothing.
+    //
+    // What it deliberately does NOT check is the State column. Whether a row is green is the
+    // judgement `GLTF-458` has to make from the tests themselves; a test asserting its own
+    // milestone would be circular.
+    std::ifstream plan(RepositoryRoot() / "plan_gltf.md");
+    ASSERT_TRUE(plan.is_open()) << "cannot open plan_gltf.md";
+
+    std::set<std::string> registeredSuites;
+    const ::testing::UnitTest& unitTest = *::testing::UnitTest::GetInstance();
+    for (int i = 0; i < unitTest.total_test_suite_count(); ++i)
+    {
+        registeredSuites.insert(unitTest.GetTestSuite(i)->name());
+    }
+    ASSERT_FALSE(registeredSuites.empty());
+
+    std::set<std::string> corpusIds;
+    for (const std::string& id : CnaTest::GltfOracle::CorpusFixtureIds()) { corpusIds.insert(id); }
+    ASSERT_FALSE(corpusIds.empty());
+
+    std::set<int> rowsSeen;
+    std::size_t fixturesChecked = 0;
+    std::size_t suitesChecked = 0;
+    std::string line;
+    bool inSection = false;
+    while (std::getline(plan, line))
+    {
+        if (line.rfind("#### 27.1.1 ", 0) == 0) { inSection = true; continue; }
+        if (inSection && line.rfind("#", 0) == 0) { break; }
+        if (!inSection || line.empty() || line.front() != '|') { continue; }
+        if (line.find("---") != std::string::npos) { continue; }
+
+        std::vector<std::string> cells;
+        std::string cell;
+        std::istringstream stream(line);
+        while (std::getline(stream, cell, '|')) { cells.push_back(cell); }
+        if (!cells.empty() && cells.front().find_first_not_of(" \t") == std::string::npos)
+        {
+            cells.erase(cells.begin());
+        }
+        if (cells.size() < 4) { continue; }
+
+        const std::string number = cells[0].substr(cells[0].find_first_not_of(" \t"));
+        if (number.rfind("#", 0) == 0) { continue; }  // the header row
+        int row = 0;
+        try { row = std::stoi(number); } catch (const std::exception&) { continue; }
+        SCOPED_TRACE("§27.1 row " + std::to_string(row));
+        rowsSeen.insert(row);
+
+        // Every backticked token in the fixtures cell that is not a wildcard or a task id must be
+        // a real corpus asset. A wildcard (`morph-*`) names a family the corpus test suites sweep,
+        // and pinning each member here would duplicate the manifest.
+        for (const std::string& token : BacktickedTokens(cells[1]))
+        {
+            if (token.find('*') != std::string::npos) { continue; }
+            if (token.rfind("GLTF-", 0) == 0) { continue; }
+            if (token.rfind("l5.", 0) == 0) { continue; }
+            EXPECT_NE(corpusIds.end(), corpusIds.find(token))
+                << "§27.1.1 row " << row << " cites fixture '" << token
+                << "', which is not in the corpus";
+            ++fixturesChecked;
+        }
+
+        // Every backticked token in the test cell must be a registered suite. This is the half
+        // that rots fastest: a suite renamed in a refactor leaves a milestone citing a test that
+        // no longer runs, and nothing else would notice.
+        for (const std::string& token : BacktickedTokens(cells[2]))
+        {
+            if (token.rfind("GLTF-", 0) == 0) { continue; }
+            if (token.find('(') != std::string::npos) { continue; }  // a named case, not a suite
+            EXPECT_NE(registeredSuites.end(), registeredSuites.find(token))
+                << "§27.1.1 row " << row << " cites test suite '" << token
+                << "', which is not registered in this binary";
+            ++suitesChecked;
+        }
+    }
+
+    for (int row = 1; row <= 20; ++row)
+    {
+        EXPECT_NE(rowsSeen.end(), rowsSeen.find(row))
+            << "§27.1 row " << row << " has no entry in §27.1.1, so the milestone would be "
+               "declared with nothing said about it";
+    }
+    EXPECT_GT(fixturesChecked, 40u) << "too few fixtures cited for this to be traceability";
+    EXPECT_GT(suitesChecked, 40u) << "too few suites cited for this to be traceability";
 }
