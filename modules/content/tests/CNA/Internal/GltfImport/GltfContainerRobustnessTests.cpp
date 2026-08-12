@@ -20,11 +20,13 @@
 #include <gtest/gtest.h>
 #include <iterator>
 #include <limits>
+#include <random>
 #include <string>
 #include <vector>
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "GltfFixtureCorpus.hpp"
+#include "GltfOracleEXT.hpp"
 
 using namespace CNA::Internal::GltfImport;
 using CnaTest::GltfOracle::CorpusDirectory;
@@ -418,4 +420,229 @@ TEST(GltfContainerRobustness, AnOrdinaryBufferViewIsNotMistakenForACompressedOne
         }
     }
     EXPECT_GT(validated, 0u) << "no fixture validated at all -- the control proved nothing";
+}
+
+// --- plan_gltf.md GLTF-040: the container/buffer layer under mutation ------------------------------
+
+namespace
+{
+    /// The GLB seeds the fuzz starts from: the whole `bad-*` group, plus one valid asset.
+    ///
+    /// The malformed group is the seed the row asks for, and it is the right one -- those files
+    /// already sit on the boundary the checks defend. On its own it would be a weak fuzz, though:
+    /// a mutation of a file that is already refused is usually still refused, and never reaches
+    /// the code past validation. Valid assets are seeded alongside them -- and weighted, because
+    /// they are where the mutants that get *deep* come from -- with three different shapes, so
+    /// what survives to extraction is not always the same one primitive.
+    std::vector<std::vector<std::uint8_t>> FuzzSeeds()
+    {
+        std::vector<std::vector<std::uint8_t>> seeds;
+        for (const std::string& id : CorpusFixtureIds())
+        {
+            if (id.rfind("bad-", 0) != 0) { continue; }
+            seeds.push_back(ReadBytes(CorpusDirectory() / (id + ".glb")));
+        }
+        for (const char* id : {"xf-identity", "skin-mesh-node-transform", "mat-alpha-mask-cutoff"})
+        {
+            std::vector<std::uint8_t> valid = ReadBytes(CorpusDirectory() / (std::string(id) + ".glb"));
+            seeds.push_back(valid);
+            seeds.push_back(std::move(valid));
+        }
+        return seeds;
+    }
+
+    /// The u32 values a length or offset field is worth being set to: the boundaries an unchecked
+    /// `+`/`*` behaves differently at, rather than uniform noise, which almost never lands on one.
+    constexpr std::uint32_t kInterestingU32[] = {
+        0u, 1u, 3u, 4u, 12u, 0x7FFFFFFFu, 0x80000000u, 0xFFFFFFFCu, 0xFFFFFFFFu};
+
+    /// Applies one structured mutation in place. Every kind targets something a reader must
+    /// decide about -- a length, an alignment, a chunk boundary, the JSON text itself -- because a
+    /// mutation that only perturbs vertex data proves nothing about the container.
+    void MutateOnce(std::vector<std::uint8_t>& bytes, std::mt19937& rng)
+    {
+        if (bytes.empty()) { return; }
+        switch (rng() % 5)
+        {
+            case 0:  // one bit, anywhere
+                bytes[rng() % bytes.size()] ^= static_cast<std::uint8_t>(1u << (rng() % 8));
+                break;
+            case 1:  // truncation, the commonest real-world corruption
+                bytes.resize(rng() % bytes.size());
+                break;
+            case 2:  // a length or offset field, set to a boundary value
+            {
+                if (bytes.size() < 4) { break; }
+                const std::size_t offset = (rng() % (bytes.size() / 4)) * 4;
+                WriteU32(bytes, offset,
+                          kInterestingU32[rng() % (sizeof(kInterestingU32) / sizeof(*kInterestingU32))]);
+                break;
+            }
+            case 3:  // shift everything after a point out of alignment
+            {
+                const std::size_t at = rng() % bytes.size();
+                bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(at),
+                              static_cast<std::uint8_t>(rng() % 256));
+                break;
+            }
+            default:  // a JSON-significant byte, to reach the parser's own error paths
+            {
+                static const char kJsonBytes[] = {'{', '}', '[', ']', '"', ',', ':', '0', '\\'};
+                bytes[rng() % bytes.size()] =
+                    static_cast<std::uint8_t>(kJsonBytes[rng() % sizeof(kJsonBytes)]);
+                break;
+            }
+        }
+    }
+}
+
+// A mutated container must be refused by name or handled, never crash and never throw something a
+// caller cannot catch deliberately.
+//
+// The property is deliberately not "every mutant is rejected": a bit flipped in a vertex's
+// mantissa produces a perfectly valid file with slightly different geometry, and demanding
+// rejection would be demanding that CNA reject files it should load. What is asserted is the
+// contract a caller can actually rely on -- the loader either succeeds or throws a
+// `std::runtime_error` naming the problem. `std::length_error` from inside an allocator, which is
+// what an unguarded `count * stride` produces (`GLTF-039`), is a failure of that contract even
+// though it is technically an exception.
+//
+// Seeded from a stated constant, because a fuzz whose failures cannot be reproduced is a flake
+// generator. This is also the test `GLTF-036`'s sanitizer CI job exercises for free: it runs
+// `--gtest_filter='Gltf*'` under ASan and UBSan, so a mutation that reads out of bounds or
+// overflows a signed integer is reported there rather than only when it happens to segfault.
+TEST(GltfContainerRobustness, MutatedContainersAreRefusedByNameRatherThanCrashing)
+{
+    using namespace CNA::Internal::GltfImport;
+
+    const std::vector<std::vector<std::uint8_t>> seeds = FuzzSeeds();
+    ASSERT_GE(seeds.size(), 2u) << "the corpus has no bad-* group to seed from";
+
+    std::mt19937 rng(20260812u);
+    std::size_t parsed = 0;
+    std::size_t validated = 0;
+    std::size_t extracted = 0;
+    std::size_t namedRefusals = 0;
+
+    for (int iteration = 0; iteration < 3000; ++iteration)
+    {
+        std::vector<std::uint8_t> bytes = seeds[static_cast<std::size_t>(rng()) % seeds.size()];
+        const int mutations = 1 + static_cast<int>(rng() % 3);
+        for (int m = 0; m < mutations; ++m) { MutateOnce(bytes, rng); }
+        if (bytes.empty()) { continue; }
+        SCOPED_TRACE("iteration " + std::to_string(iteration) + ", " +
+                      std::to_string(bytes.size()) + " bytes");
+
+        cgltf_options options{};
+        cgltf_data* data = nullptr;
+        if (cgltf_parse(&options, bytes.data(), bytes.size(), &data) != cgltf_result_success)
+        {
+            continue;  // Refused by the parser, which is a refusal by name.
+        }
+        struct Free { cgltf_data* d; ~Free() { cgltf_free(d); } } freeGuard{data};
+        if (cgltf_load_buffers(&options, data, ".") != cgltf_result_success) { continue; }
+        ++parsed;
+
+        try
+        {
+            std::vector<std::string> warnings;
+            ValidateGltfEXT(data, "fuzz.glb", warnings);
+        }
+        catch (const std::runtime_error&)
+        {
+            ++namedRefusals;
+            continue;
+        }
+        catch (const std::exception& e)
+        {
+            ADD_FAILURE() << "validation threw something other than a runtime_error, which a "
+                              "caller cannot distinguish from a bug in itself: " << e.what();
+            continue;
+        }
+        ++validated;
+
+        // Past validation, every remaining stage must hold the same contract. Extraction is where
+        // the counts and strides are actually used, so it is the half a container mutation reaches
+        // last and damages most quietly.
+        try
+        {
+            const SceneGraphOut scene = BuildSceneGraph(data);
+            (void)scene;
+            for (cgltf_size m = 0; m < data->meshes_count; ++m)
+            {
+                for (cgltf_size pi = 0; pi < data->meshes[m].primitives_count; ++pi)
+                {
+                    (void)ExtractMesh(data, data->meshes[m].primitives[pi], "fuzz", nullptr, 1.0f);
+                }
+            }
+            ++extracted;
+        }
+        catch (const std::runtime_error&)
+        {
+            ++namedRefusals;
+        }
+        catch (const std::exception& e)
+        {
+            ADD_FAILURE() << "extraction threw something other than a runtime_error: " << e.what();
+        }
+    }
+
+    // How far the run actually got, recorded rather than described: a fuzz that reports only
+    // "passed" cannot be told apart from one whose mutations all died at the front door.
+    RecordProperty("mutants", 3000);
+    RecordProperty("parsed", static_cast<int>(parsed));
+    RecordProperty("validated", static_cast<int>(validated));
+    RecordProperty("extracted", static_cast<int>(extracted));
+    RecordProperty("namedRefusals", static_cast<int>(namedRefusals));
+
+    // Floors, so a fuzz that stopped reaching the code cannot report success. A mutation set that
+    // never produced a parseable document would exercise nothing but cgltf's front door, and one
+    // that never produced a refusal would mean the checks are not being reached at all.
+    EXPECT_GT(parsed, 200u) << "almost nothing survived parsing -- the mutations are too coarse to "
+                               "reach anything past cgltf's front door";
+    EXPECT_GT(namedRefusals, 50u)
+        << "too few mutants were refused by name, so this run says little about the checks";
+    EXPECT_GT(extracted, 20u)
+        << "too few mutants reached extraction, so the deepest half went unexercised";
+}
+
+// The regression test for what the fuzz above found on its first widened run, kept as its own
+// case so the finding does not depend on a seed continuing to reach it.
+//
+// §3.6.2.1 lets an accessor omit its `bufferView`, in which case it reads as zeros. Nothing in the
+// file then bounds its count -- unlike `bad-accessor-count-overflow`, whose span guard has a view
+// to check against -- so a count of 2^62 asks the reader to materialise 55 exabytes of zeros that
+// the document never shipped. The allocation failed as `std::length_error` from inside the
+// allocator, which names neither the file nor the accessor and is not what any caller of an
+// importer catches.
+TEST(GltfContainerRobustness, AnAccessorWithNoBufferViewAndAnAbsurdCountIsRefusedByName)
+{
+    Parsed doc;
+    ASSERT_TRUE(ParseText(doc, R"GLTF({
+  "asset": { "version": "2.0" },
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+  "buffers": [ { "byteLength": 36, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [ { "componentType": 5126, "count": 4611686018427387904, "type": "VEC3" } ]
+})GLTF"));
+
+    try
+    {
+        (void)CNA::Internal::GltfImport::ExtractMesh(
+            doc.data, doc.data->meshes[0].primitives[0], "zero-base", nullptr, 1.0f);
+        ADD_FAILURE() << "an accessor demanding 55 exabytes of implicit zeros was extracted";
+    }
+    catch (const std::runtime_error& e)
+    {
+        const std::string message = e.what();
+        EXPECT_NE(std::string::npos, message.find("zero-base"))
+            << "the refusal does not name what failed: " << message;
+        EXPECT_NE(std::string::npos, message.find("4611686018427387904"))
+            << "the refusal does not name the count it refused: " << message;
+    }
+    catch (const std::exception& e)
+    {
+        ADD_FAILURE() << "refused with an exception a caller cannot catch deliberately: "
+                      << e.what();
+    }
 }

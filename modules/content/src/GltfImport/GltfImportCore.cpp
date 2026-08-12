@@ -232,6 +232,88 @@ namespace CNA::Internal::GltfImport
             return byteOffset + walk + elementSize;
         }
 
+        // plan_gltf.md GLTF-039/GLTF-040: an allocation a malformed file asked for, refused by
+        // name.
+        //
+        // An accessor with **no** bufferView is initialised with zeros (§3.6.2.1), so nothing in
+        // the file bounds its count -- an eight-byte edit to the JSON can demand terabytes that
+        // the document never shipped. The span guard cannot help there: there is no view to check
+        // against. What the caller needs either way is a diagnostic naming the file and the
+        // number, and `std::length_error: cannot create std::vector larger than max_size()` from
+        // inside the allocator names neither. Reserving through this helper turns both it and
+        // `std::bad_alloc` into the same named refusal every other malformed input produces, which
+        // is what lets a caller catch one thing. Found by the container fuzz, not by inspection.
+        template <typename T>
+        std::vector<T> AllocateDecodedElements(std::size_t elements, const std::string& context)
+        {
+            constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+            if (elements > kMax / sizeof(T))
+            {
+                throw std::runtime_error("Accessor '" + context + "' declares " +
+                                          std::to_string(elements) + " components, whose byte size "
+                                          "overflows.");
+            }
+            try
+            {
+                return std::vector<T>(elements);
+            }
+            catch (const std::length_error&)
+            {
+                throw std::runtime_error(
+                    "Accessor '" + context + "' declares " + std::to_string(elements) +
+                    " components (" + std::to_string(elements * sizeof(T)) + " bytes), which is "
+                    "more than can be allocated.");
+            }
+            catch (const std::bad_alloc&)
+            {
+                throw std::runtime_error(
+                    "Accessor '" + context + "' declares " + std::to_string(elements) +
+                    " components (" + std::to_string(elements * sizeof(T)) + " bytes), which this "
+                    "build could not allocate.");
+            }
+        }
+
+        /// Reserves capacity for @p elements items of @p bytesPerElement, refusing by name when the
+        /// product overflows or the allocation fails.
+        ///
+        /// plan_gltf.md `GLTF-040`. A `reserve` is an optimisation, and an optimisation must not be
+        /// the thing that decides how a malformed file fails: an accessor count no buffer backs
+        /// reached `vertexBytes.reserve()` before any decode, and the run ended in
+        /// `std::length_error: vector::reserve` -- naming neither the primitive nor the number.
+        /// Refusing here is also what stops the process from *attempting* the allocation, which for
+        /// a count in the billions is a request for tens of gigabytes rather than an error.
+        template <typename T>
+        void ReserveOrRefuse(std::vector<T>& out, std::size_t elements, std::size_t bytesPerElement,
+                              const std::string& context)
+        {
+            constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
+            if (bytesPerElement != 0 && elements > kMax / bytesPerElement)
+            {
+                throw std::runtime_error("Primitive '" + context + "' declares " +
+                                          std::to_string(elements) + " elements at " +
+                                          std::to_string(bytesPerElement) +
+                                          " bytes each, whose product overflows.");
+            }
+            try
+            {
+                out.reserve(elements * bytesPerElement / sizeof(T));
+            }
+            catch (const std::length_error&)
+            {
+                throw std::runtime_error("Primitive '" + context + "' declares " +
+                                          std::to_string(elements) + " elements (" +
+                                          std::to_string(elements * bytesPerElement) +
+                                          " bytes), which is more than can be allocated.");
+            }
+            catch (const std::bad_alloc&)
+            {
+                throw std::runtime_error("Primitive '" + context + "' declares " +
+                                          std::to_string(elements) + " elements (" +
+                                          std::to_string(elements * bytesPerElement) +
+                                          " bytes), which this build could not allocate.");
+            }
+        }
+
         // Unpacks an entire accessor to floats in one call. Unlike per-element
         // cgltf_accessor_read_float, cgltf_accessor_unpack_floats correctly resolves sparse
         // accessors (base values overlaid with sparse overrides) -- read_float rejects sparse
@@ -273,8 +355,18 @@ namespace CNA::Internal::GltfImport
                         " bytes.");
                 }
             }
-            std::vector<float> out(static_cast<std::size_t>(accessor->count) *
-                                    static_cast<std::size_t>(expectedComponents));
+            std::size_t components = static_cast<std::size_t>(accessor->count);
+            if (expectedComponents != 0 &&
+                components > std::numeric_limits<std::size_t>::max() /
+                                 static_cast<std::size_t>(expectedComponents))
+            {
+                throw std::runtime_error(std::string("Accessor '") + context + "' declares " +
+                                          std::to_string(components) + " elements of " +
+                                          std::to_string(expectedComponents) +
+                                          " components, whose product overflows.");
+            }
+            components *= static_cast<std::size_t>(expectedComponents);
+            std::vector<float> out = AllocateDecodedElements<float>(components, context);
             const cgltf_size unpacked = cgltf_accessor_unpack_floats(accessor, out.data(), out.size());
             if (unpacked != out.size())
             {
@@ -383,7 +475,7 @@ namespace CNA::Internal::GltfImport
             }
 
             const std::size_t count = static_cast<std::size_t>(accessor.count);
-            std::vector<std::uint32_t> out(count, 0u);
+            std::vector<std::uint32_t> out = AllocateDecodedElements<std::uint32_t>(count, context);
 
             if (accessor.buffer_view != nullptr)
             {
@@ -2264,7 +2356,8 @@ namespace CNA::Internal::GltfImport
                 "(malformed file).");
         }
 
-        out.vertexBytes.reserve(static_cast<std::size_t>(vertexCount) * static_cast<std::size_t>(out.stride));
+        ReserveOrRefuse(out.vertexBytes, static_cast<std::size_t>(vertexCount),
+                         static_cast<std::size_t>(out.stride), name);
 
 #ifdef CNA_DRACO_AVAILABLE
         if (dracoMesh && static_cast<cgltf_size>(dracoMesh->num_points()) != vertexCount)
@@ -2324,7 +2417,8 @@ namespace CNA::Internal::GltfImport
         {
             // Non-indexed primitive: implicit sequential vertex order per the glTF spec --
             // Khronos's own "Fox" sample has exactly this shape.
-            indices.reserve(static_cast<std::size_t>(vertexCount));
+            ReserveOrRefuse(indices, static_cast<std::size_t>(vertexCount),
+                             sizeof(std::uint32_t), name);
             for (cgltf_size i = 0; i < vertexCount; ++i)
             {
                 indices.push_back(static_cast<std::uint32_t>(i));
