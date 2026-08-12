@@ -10,7 +10,7 @@ Oracle repository: `openeggbert/cna-gltf-viewer` @ `aaa008dc62bcb1127901ca23b75b
 > working record.** The banner it opened with ("nothing in it was implemented") described the
 > planning session of 2026-08-11 only, and is preserved below for provenance.
 >
-> Of 460 rows: **320 are closed (`✔` 199, `✅` 121)** and **121 remain `⬜`**, with `GLTF-449` newly
+> Of 460 rows: **321 are closed (`✔` 200, `✅` 121)** and **120 remain `⬜`**, with `GLTF-449` newly
 > carrying a `✅/⬜` partial marker. The other 18 carry a
 > deliberate partial marker — 8 `🔬` (investigation, no implementation owed), 5 `✅/⬜` and 2 `✅/🐛`
 > (landed with a named residue), 2 `🐛` (open defect), 1 `⛔` (blocked by this environment,
@@ -2046,7 +2046,7 @@ column of these tables.
 | GLTF-017 | Prove the harness is renderer-independent at L1–L5 | ⬜ | GLTF-010 | Run L1–L5 on `STUB` and `HEADLESS`; results must be identical. **Accept:** byte-identical L2–L5 output. |
 | GLTF-018 | Third-party asset licence review procedure | ⬜ | GLTF-013 | Per-asset licence + attribution in `THIRD_PARTY_NOTICES.md` before any commit. **Accept:** written procedure; **no asset committed without it.** |
 | GLTF-019 | Decide: commit a curated Khronos subset vs fetch-on-demand | ⬜ | GLTF-018 | Weigh repository size against CI reproducibility. **Accept:** decision recorded with rationale. |
-| GLTF-020 | One reproducible `regenerate-gltf-goldens` script | ⬜ | GLTF-007, GLTF-009 | **Accept:** running it on an unchanged tree produces a zero diff. |
+| GLTF-020 | One reproducible `regenerate-gltf-goldens` script | ✔ | GLTF-007, GLTF-009 | **Accept:** running it on an unchanged tree produces a zero diff. **`scripts/regenerate-gltf-goldens.sh`**, with no arguments to get wrong. It does three things, and the second is the one that matters: it regenerates, then runs the generator's own `--check` — because a generator that wrote nothing at all would otherwise "succeed" — and then, in a git worktree, **reports whether the tree changed**, which is the acceptance stated as an observation rather than assumed. `--check` verifies without writing and is what CI now runs, replacing the hand-written `python3 -m tools.gltf_fixtures --check` line in `gltf-sanitizers-ci.yml` so the command exists in one place. Verified in both directions: a clean tree reports "working tree unchanged", and appending a single newline to `xf-identity.gltf` makes `--check` exit 1 naming the file and both byte counts. A corpus change is *reported*, not refused — changing a fixture is a legitimate reason to run this — but it must be visible, which is `GLTF-410`'s concern. |
 
 ---
 

@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf_`, pushed. Never push elsewhere without explicit permission. No pull
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **320 closed (`✔` 199, `✅` 121),
-  121 `⬜` remaining**, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **321 closed (`✔` 200, `✅` 121),
+  120 `⬜` remaining**, plus `GLTF-449`'s new `✅/⬜`. The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 5 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-064`, `067`,
   `068`, `093`, `252`, `265`, `289`), 2 `🐛` (open: `GLTF-157`, `421`), and 1 `⛔` (`GLTF-009`,
   blocked by this environment).
@@ -33,7 +33,7 @@ export CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache CCACHE_MAXSIZE=30G
 cmake --build "$B" --target CnaTests -j3     # -j3 is the ceiling in openeggbert/CLAUDE.md
 ctest --test-dir "$B" -L gltf-conformance    # the 9-rung ladder
 "$B"/CnaTests                                # the whole suite, from the ROOT
-PYTHONPATH=tools python3 -m gltf_fixtures --check tests/assets/gltf
+scripts/regenerate-gltf-goldens.sh --check    # the corpus, against its own generator
 ```
 
 Expected as of this writing:
@@ -79,7 +79,7 @@ first; clone them sharing the main checkout's object store
 `tools/gltf_fixtures/`. Edit the Python, then:
 
 ```bash
-PYTHONPATH=tools python3 -m gltf_fixtures --out tests/assets/gltf
+scripts/regenerate-gltf-goldens.sh    # GLTF-020: regenerate, verify, and report what changed
 ```
 
 A fixture's `.gltf`, `.glb`, `.expected.json` and L5 `.bin` goldens all come from one description,

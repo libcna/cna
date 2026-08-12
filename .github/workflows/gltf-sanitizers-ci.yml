@@ -89,7 +89,7 @@ jobs:
       # that no longer matches its asset means one of the two was edited by hand. Cheap to check
       # here, and it makes every assertion below trustworthy.
       - name: Verify the fixture corpus regenerates byte-identically
-        run: python3 -m tools.gltf_fixtures --check tests/assets/gltf
+        run: scripts/regenerate-gltf-goldens.sh --check
 
       # The tool tests spawn cna_tool_gltf_to_cnj as a subprocess; it is built with the same
       # sanitizers, so the offline conversion path is covered too rather than only the in-process

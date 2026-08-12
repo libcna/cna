@@ -7,6 +7,12 @@ Run from the repository root::
     PYTHONPATH=tools python3 -m gltf_fixtures --check tests/assets/gltf
     PYTHONPATH=tools python3 -m gltf_fixtures --list
 
+or, for the two ordinary cases, through the wrapper that also verifies the result and reports
+whether the working tree changed (`GLTF-020`)::
+
+    scripts/regenerate-gltf-goldens.sh            # regenerate, then verify
+    scripts/regenerate-gltf-goldens.sh --check    # verify only -- what CI runs
+
 Generation is deterministic: regenerating an unchanged tree produces a zero diff, which is what
 ``--check`` asserts and what the corpus tests rely on.
 """
