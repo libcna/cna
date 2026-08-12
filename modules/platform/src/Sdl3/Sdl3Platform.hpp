@@ -4,6 +4,7 @@
 #include "CNA/Platform/IPlatform.hpp"
 
 #include "Sdl3GraphicsServices.hpp"
+#include "Sdl3InputServices.hpp"
 #include "Sdl3SystemServices.hpp"
 
 #include <cstdint>
@@ -67,13 +68,13 @@ namespace CNA::Platform::Sdl3 {
         /** @brief Sleeps. @param milliseconds How long to sleep for. */
         void Delay(std::uint32_t milliseconds) override;
 
-        /** @brief Gets the keyboard service. @return Null until PLAT-79 lands. */
+        /** @brief Gets the keyboard service. @return The SDL3 keyboard; never null. */
         [[nodiscard]] IPlatformKeyboard* GetKeyboard() override;
-        /** @brief Gets the mouse service. @return Null until PLAT-80 lands. */
+        /** @brief Gets the mouse service. @return The SDL3 mouse; never null. */
         [[nodiscard]] IPlatformMouse* GetMouse() override;
-        /** @brief Gets the gamepad service. @return Null until PLAT-82 lands. */
+        /** @brief Gets the gamepad service. @return The SDL3 gamepad service; never null. */
         [[nodiscard]] IPlatformGamepad* GetGamepad() override;
-        /** @brief Gets the text input service. @return Null until PLAT-87 lands. */
+        /** @brief Gets the text input service. @return The SDL3 text input service; never null. */
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return Null until PLAT-85 lands. */
         [[nodiscard]] IPlatformSensors* GetSensors() override;
@@ -114,6 +115,10 @@ namespace CNA::Platform::Sdl3 {
         Sdl3SystemInfo systemInfo_;
         Sdl3GlContext glContext_;
         Sdl3VulkanSurface vulkanSurface_;
+        Sdl3Keyboard keyboard_;
+        Sdl3Mouse mouse_;
+        Sdl3Gamepad gamepad_;
+        Sdl3TextInput textInput_;
     };
 
 } // namespace CNA::Platform::Sdl3

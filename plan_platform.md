@@ -65,9 +65,9 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1107** |
-| Files referencing SDL (all) | **587** |
-| Production files (`src/` + `include/`) referencing SDL | **267** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1116** |
+| Files referencing SDL (all) | **588** |
+| Production files (`src/` + `include/`) referencing SDL | **268** |
 | …of which are renderer production files | **116** |
 | Test/example files referencing SDL | **320** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
@@ -80,7 +80,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/input` | 48 | keyboard, mouse, gamepad, joystick, haptic, sensor, touch, text input |
 | `modules/devices-ext` | 30 | clipboard, message box, file dialog, tray, camera, locale, power, display, URL |
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
-| `modules/platform` | 14 | - |
+| `modules/platform` | 15 | - |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
 | `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
@@ -414,15 +414,15 @@ re-points that seam at the platform contract rather than inventing a new one.
 |---|---|---|---|
 | PLAT-77 | Map the existing input backend seam onto PLAT-24 | ⬜ | Written mapping from `SdlGamepadBackend`/`SdlJoystickBackend`/`SdlHapticBackend`/`System*Backend` to the platform input interfaces, including which of them disappear entirely. Prevents two parallel abstractions coexisting. |
 | PLAT-78 | Migrate `SdlInputBridge` to `PlatformEvent` | ⬜ | The bridge consumes `PlatformEvent` instead of `SDL_Event` and is renamed accordingly. Its golden tests (`SdlInputBridgeGoldenTests`) are the equivalence oracle and must pass unchanged in substance. |
-| PLAT-79 | Migrate `Keyboard` | ⬜ | Snapshot-per-frame model per `cnaplatform.md`'s "input snapshots"; `KeyboardInputTests` pass. |
-| PLAT-80 | Migrate `Mouse` | ⬜ | Position, buttons, wheel, relative mode, window association. |
-| PLAT-81 | Migrate `MouseCursor` | ⬜ | System and custom cursors, capability-gated. |
-| PLAT-82 | Migrate `GamePad` | ⬜ | Including the mapping database and `GamePadMappingTests`. The SDL3-vs-SDL2-vs-SDL1 capability gap noted in `cnaplatform.md` is expressed through capabilities here — but no second implementation is written. |
+| PLAT-79 | Migrate `Keyboard` | 🟨 | **`Sdl3Keyboard` implemented**: one pass over SDL's key array per `Update()`, producing a compact held-key list — the snapshot shape is what enforces `cnaplatform.md`'s rule that thousands of `IsKeyDown` calls read a local structure rather than becoming thousands of platform calls. `exactKeyboardState` now honestly true. Amber until `modules/input`'s `Keyboard` is re-pointed at it in Phase 5. Original scope: | Snapshot-per-frame model per `cnaplatform.md`'s "input snapshots"; `KeyboardInputTests` pass. |
+| PLAT-80 | Migrate `Mouse` | 🟨 | **`Sdl3Mouse` implemented**. The button mask is **repacked into CNA's own bit order** rather than passed through: SDL's is 1-based-button-indexed, and leaking that would make every consumer depend on an SDL detail. Relative mode **refuses when no window is focused** — SDL3 scopes it to a window, so there is genuinely nothing to capture, and silently reporting success would be worse. Amber until `modules/input`'s `Mouse` is re-pointed in Phase 5. Original scope: | Position, buttons, wheel, relative mode, window association. |
+| PLAT-81 | Migrate `MouseCursor` | 🟨 | System cursor shapes implemented on `Sdl3Mouse`. The previous cursor is destroyed **only after** the new one is made current — freeing a cursor that is still set is a use-after-free inside SDL. Custom (image) cursors and the `modules/input` re-point remain. Original scope: | System and custom cursors, capability-gated. |
+| PLAT-82 | Migrate `GamePad` | 🟨 | **`Sdl3Gamepad` implemented**: enumeration, buttons, axes, triggers and rumble. Axis normalisation scales each half of SDL's asymmetric `[-32768, 32767]` range by its own magnitude, matching the event mapper. Rumble strength is **clamped** before the 16-bit conversion — an out-of-range value would wrap and turn "maximum" into "almost nothing". An empty or out-of-range slot reports not-connected rather than throwing, because XNA games poll all four player indices unconditionally. Handles are closed on every rescan; verified leak-free under ASan. The mapping database and `GamePadMappingTests` re-point remain. Original scope: | Including the mapping database and `GamePadMappingTests`. The SDL3-vs-SDL2-vs-SDL1 capability gap noted in `cnaplatform.md` is expressed through capabilities here — but no second implementation is written. |
 | PLAT-83 | Migrate joystick support | ⬜ | Legacy joystick path, distinct from gamepad. |
 | PLAT-84 | Migrate haptics | ⬜ | `Haptics.cpp`, `HapticDevice.cpp`, `SdlHapticBackend`; capability-gated (`supportsGamepadRumble`). |
 | PLAT-85 | Migrate sensors | ⬜ | `SystemSensorBackend`; shares subsystem ownership with `modules/devices` — PLAT-29's refcounting is the contract here. |
 | PLAT-86 | Migrate `TouchPanel` and gestures | ⬜ | `TouchPanel.cpp` + `GestureDetector`; `SdlInputBridgeTouchGestureTests` pass. |
-| PLAT-87 | Migrate `TextInputEXT` | ⬜ | Text input start/stop, input area, IME; capability-gated (`supportsTextInput`, `supportsIme`). |
+| PLAT-87 | Migrate `TextInputEXT` | 🟨 | **`Sdl3TextInput` implemented**: start/stop, active state and IME input area. `textInput`/`ime` now honestly true. Amber until `modules/input`'s `TextInputEXT` is re-pointed in Phase 5. Original scope: | Text input start/stop, input area, IME; capability-gated (`supportsTextInput`, `supportsIme`). |
 | PLAT-88 | Migrate input-side `Clipboard` | ⬜ | `modules/input/src/CnaExt/Clipboard.cpp` → clipboard service. Coordinate with PLAT-100 (`devices-ext` has a second clipboard surface) so one service backs both. |
 | PLAT-89 | Migrate `Power` | ⬜ | `modules/input/src/CnaExt/Power.cpp` + `SystemPowerBackend` → power service. Same dedup consideration as PLAT-88 with `devices-ext`'s `PowerInfo`. |
 | PLAT-90 | Retire the `FakeSdl*Backend` doubles | ⬜ | Replaced by fakes implementing the platform input interfaces. Fewer, sharper doubles is the measurable outcome; the tests they serve keep their coverage. |

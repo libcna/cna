@@ -126,12 +126,12 @@ TEST_F(Sdl3PlatformTest, ReportsTheCapabilitiesSdl3ActuallyHas)
     EXPECT_TRUE(capabilities.multipleWindows);
     EXPECT_TRUE(capabilities.highDpi);
 
-    // exactKeyboardState and pixelAccurateMouse -- the two capabilities that exist because a
-    // terminal cannot provide them -- stay false until PLAT-79/80 wire the keyboard and mouse
-    // services. SDL3 can do both; the contract's rule is that a capability describes what is
-    // reachable now, not what the library is capable of.
-    EXPECT_FALSE(capabilities.exactKeyboardState) << "flips true in PLAT-79";
-    EXPECT_FALSE(capabilities.pixelAccurateMouse) << "flips true in PLAT-80";
+    // The two capabilities that exist because a terminal cannot provide them. SDL delivers real
+    // key-release events and true pixel coordinates, so both are honestly true here -- and they
+    // became true only when PLAT-79/80 actually wired the services, not when SDL gained the
+    // ability.
+    EXPECT_TRUE(capabilities.exactKeyboardState);
+    EXPECT_TRUE(capabilities.pixelAccurateMouse);
 }
 
 TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
@@ -146,10 +146,14 @@ TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
     EXPECT_TRUE(capabilities.surfacePresentation);
     EXPECT_TRUE(capabilities.clipboard);
 
-    // Phase 5/7 services are not wired yet, so their capabilities must still read false.
-    EXPECT_FALSE(capabilities.gamepad) << "flips true in PLAT-82";
-    EXPECT_FALSE(capabilities.textInput) << "flips true in PLAT-87";
+    // Wired in this phase.
+    EXPECT_TRUE(capabilities.gamepad);
+    EXPECT_TRUE(capabilities.textInput);
+
+    // Still unwired, so still false -- the pairing the conformance suite enforces.
     EXPECT_FALSE(capabilities.sensors) << "flips true in PLAT-85";
+    EXPECT_FALSE(capabilities.haptics) << "flips true in PLAT-84";
+    EXPECT_FALSE(capabilities.messageBox) << "flips true in PLAT-103";
 }
 
 TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)

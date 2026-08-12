@@ -94,19 +94,22 @@ namespace CNA::Platform::Sdl3 {
         capabilities.powerInfo = true;
         capabilities.managedEntrypoint = true;
 
-        // Input services land in Phase 5 (PLAT-79..87) and the remaining dialog/tray/camera
-        // services in Phase 7 (PLAT-103..106). Each flips true in the task that wires its
-        // accessor, not before.
-        //   capabilities.exactKeyboardState  PLAT-79
-        //   capabilities.pixelAccurateMouse  PLAT-80
-        //   capabilities.relativeMouse       PLAT-80
-        //   capabilities.cursorShapes        PLAT-81
-        //   capabilities.gamepad             PLAT-82
-        //   capabilities.gamepadRumble       PLAT-82
-        //   capabilities.gamepadSensors      PLAT-82
+        // Input services: implemented. exactKeyboardState and pixelAccurateMouse are the two
+        // capabilities that exist because a terminal cannot provide them -- SDL delivers real
+        // key-release events and true pixel coordinates, so both are honestly true here.
+        capabilities.exactKeyboardState = true;
+        capabilities.pixelAccurateMouse = true;
+        capabilities.relativeMouse = true;
+        capabilities.cursorShapes = true;
+        capabilities.gamepad = true;
+        capabilities.gamepadRumble = true;
+        capabilities.textInput = true;
+        capabilities.ime = true;
+
+        // Still unwired. Each flips true in the task that wires its accessor, not before.
+        //   capabilities.gamepadSensors      PLAT-82 (gyro/accel on the pad itself)
         //   capabilities.haptics             PLAT-84
         //   capabilities.sensors             PLAT-85
-        //   capabilities.textInput / ime     PLAT-87
         //   capabilities.messageBox          PLAT-103
         //   capabilities.nativeFileDialog    PLAT-104
         //   capabilities.tray                PLAT-105
@@ -235,10 +238,10 @@ namespace CNA::Platform::Sdl3 {
         SDL_Delay(milliseconds);
     }
 
-    IPlatformKeyboard* Sdl3Platform::GetKeyboard() { return nullptr; }
-    IPlatformMouse* Sdl3Platform::GetMouse() { return nullptr; }
-    IPlatformGamepad* Sdl3Platform::GetGamepad() { return nullptr; }
-    IPlatformTextInput* Sdl3Platform::GetTextInput() { return nullptr; }
+    IPlatformKeyboard* Sdl3Platform::GetKeyboard() { return &keyboard_; }
+    IPlatformMouse* Sdl3Platform::GetMouse() { return &mouse_; }
+    IPlatformGamepad* Sdl3Platform::GetGamepad() { return &gamepad_; }
+    IPlatformTextInput* Sdl3Platform::GetTextInput() { return &textInput_; }
     IPlatformSensors* Sdl3Platform::GetSensors() { return nullptr; }
     IPlatformClipboard* Sdl3Platform::GetClipboard() { return &clipboard_; }
     IPlatformDisplays* Sdl3Platform::GetDisplays() { return &displays_; }
