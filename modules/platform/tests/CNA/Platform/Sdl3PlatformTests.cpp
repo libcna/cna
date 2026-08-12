@@ -26,6 +26,38 @@ bool Sdl3IsAvailable()
     return std::find(available.begin(), available.end(), "SDL3") != available.end();
 }
 
+/// A window that satisfies the interface without touching SDL, so the refusal test can pass a
+/// real reference. Forming one from nullptr is undefined behaviour, and this project builds
+/// under ASan+UBSan.
+class InertWindowForRefusalTest final : public IPlatformWindow
+{
+public:
+    [[nodiscard]] WindowId GetId() const override { return 1; }
+    [[nodiscard]] NativeWindowHandle GetNativeHandle() const override { return {}; }
+    [[nodiscard]] std::string GetTitle() const override { return {}; }
+    void SetTitle(const std::string&) override {}
+    [[nodiscard]] WindowBounds GetClientBounds() const override { return {}; }
+    [[nodiscard]] WindowSize GetPixelSize() const override { return {}; }
+    void SetSize(int, int) override {}
+    [[nodiscard]] float GetDisplayScale() const override { return 1.0f; }
+    void SetResizable(bool) override {}
+    void SetBorderless(bool) override {}
+    void SetFullscreenMode(WindowFullscreenMode) override {}
+    [[nodiscard]] WindowFullscreenMode GetFullscreenMode() const override
+    {
+        return WindowFullscreenMode::Windowed;
+    }
+    void Show() override {}
+    void Hide() override {}
+    void Minimize() override {}
+    void Maximize() override {}
+    void Restore() override {}
+    void Sync() override {}
+    [[nodiscard]] bool HasFocus() const override { return false; }
+    [[nodiscard]] bool IsMinimized() const override { return false; }
+    [[nodiscard]] std::string GetDisplayName() const override { return {}; }
+};
+
 class Sdl3PlatformTest : public ::testing::Test
 {
 protected:
@@ -247,15 +279,14 @@ TEST_F(Sdl3PlatformTest, PollEventsDiscardsStaleBufferContent)
 
 // --- not-yet-implemented surfaces refuse rather than returning something broken ---------------------
 
-TEST_F(Sdl3PlatformTest, UnimplementedSurfacesRefuseExplicitly)
+TEST_F(Sdl3PlatformTest, NotYetImplementedSurfacesRefuseInsteadOfReturningSomethingBroken)
 {
-    // Deliberately does NOT acquire video: CreateWindow refuses regardless, and acquiring here
-    // would make this test's outcome depend on whether the video subsystem can start at all.
-    WindowDescription description;
-    description.title = "probe";
-    // PLAT-30 has not landed. Refusing beats returning a null unique_ptr a caller would
-    // dereference.
-    EXPECT_THROW((void)platform_->CreateWindow(description), PlatformException);
+    // CreateWindow used to be the example here; PLAT-30 landed and it now works, so this points
+    // at what is genuinely still missing. The property under test is the one that matters
+    // throughout Phase 2: an unfinished surface refuses explicitly rather than handing back a
+    // null or a stub the caller would treat as working.
+    InertWindowForRefusalTest window;
+    EXPECT_THROW((void)platform_->CreateSurfacePresenter(window), PlatformException);
 }
 
 TEST_F(Sdl3PlatformTest, UnknownPlatformNameRefusesAndListsWhatIsAvailable)

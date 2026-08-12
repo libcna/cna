@@ -65,9 +65,9 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1104** |
-| Files referencing SDL (all) | **587** |
-| Production files (`src/` + `include/`) referencing SDL | **268** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1112** |
+| Files referencing SDL (all) | **589** |
+| Production files (`src/` + `include/`) referencing SDL | **270** |
 | …of which are renderer production files | **116** |
 | Test/example files referencing SDL | **319** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
@@ -82,9 +82,9 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
 | `modules/audio` | 11 | audio device/stream, mixer, microphone |
 | `modules/graphics` | 11 | `GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader` |
+| `modules/platform` | 8 | - |
 | `modules/media` | 7 | `MediaPlayer`, `VideoPlayer`, library paths |
 | `modules/runtime` | 7 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
-| `modules/platform` | 6 | - |
 | `modules/content` | 3 | `SDL_IOStream`-based readers, glTF import |
 | `modules/core` | 3 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
 | `modules/gamer-services` | 3 | `Guide` overlay, local store |
@@ -333,9 +333,9 @@ The first and, within this plan, only real implementation. It reproduces today's
 |---|---|---|---|
 | PLAT-28 | `Sdl3Platform` skeleton + SDL linkage | ✅ | `modules/platform/src/Sdl3/`, compiled only when `CNA_PLATFORM=SDL3`, with `SDL3::SDL3` linked **PRIVATE** so it never reaches the public include interface — proven by PLAT-27's probe still passing. Registered in `PlatformFactory`, which now advertises `SDL3` in `GetAvailable()` and names it when refusing an unknown platform. |
 | PLAT-29 | Subsystem lifecycle and refcounting | 🟨 | Core implemented and verified against **real SDL3**: lazy acquisition, `SDL_WasInit`-backed queries, unpaired release as a no-op, and a **per-instance** count so a platform's destructor releases exactly what it acquired — never the host application's own hold, and never `SDL_Quit()`. 16 tests pass. Still open before this closes: the process-wide mutex, the pre-`SDL_Quit()` shutdown hook, and re-verification against `DevicesShutdownOrderingTests`/`SensorSubsystemOwnershipTests` once Phase 7 re-points those subsystems. |
-| PLAT-30 | `Sdl3Window` creation and destruction | ⬜ | Maps `WindowDescription` → `SDL_CreateWindow` flags, including the `RequiresOpenGl`/`RequiresVulkan` intent from PLAT-15. |
-| PLAT-31 | `Sdl3Window` geometry and state | ⬜ | Size, pixel size, position, display scale, title, bordered, resizable, fullscreen, minimize/restore, sync. Direct port of `GameWindow.cpp`'s current SDL calls. |
-| PLAT-32 | Native handle extraction for all 7 properties | ⬜ | Win32 / X11 (display + window number) / Wayland (display + surface) / Cocoa / Android → `NativeWindowHandle`. Includes the Emscripten and headless cases. Unit-tested per platform where CI can reach it; unreachable systems documented as untested rather than claimed. |
+| PLAT-30 | `Sdl3Window` creation and destruction | ✅ | `WindowDescription` → `SDL_CreateWindow` flags. Creation-time-only properties (render intent → `SDL_WINDOW_OPENGL`/`VULKAN`/`METAL`, high-DPI, borderless, hidden, fullscreen) are set as flags; the genuinely post-creation ones (explicit position, min/max size, borderless-fullscreen mode) are applied after. `Sdl3Window` owns the `SDL_Window` and destroys it — the only place in the module that stores one. |
+| PLAT-31 | `Sdl3Window` geometry and state | ✅ | Title, client bounds, **`SDL_GetWindowSizeInPixels` for pixel size** (not the logical size — a renderer sizes its swapchain from this), display scale, resizable, bordered, fullscreen mode, show/hide/minimize/maximize/restore, `Sync`, focus and minimized queries, display name. `GetDisplayScale()` substitutes 1:1 when SDL returns `0.0f`, since a zero scale divides to infinity in any layout computation. |
+| PLAT-32 | Native handle extraction for all 7 properties | ✅ | All 7 `SDL_PROP_WINDOW_*` properties → `NativeWindowHandle`, keyed off `SDL_GetCurrentVideoDriver()` rather than probing which properties answer — probing would pick the first responder, and XWayland answers both X11 and Wayland queries. **X11's XID is read with `SDL_GetNumberProperty` into `windowId`**, never the pointer field. `dummy`/`offscreen` report `Headless`, which is what makes a GPU renderer refuse deterministically. Tests assert *self-consistency* for whatever system the host actually reports — so the same test is meaningful on X11, Wayland, Win32 or none — plus agreement between `HasNativeWindow()` and the typed accessors, handle stability across calls, and that `Describe()` prints no addresses. Systems this host cannot reach are exercised by their branch of that switch, not claimed as verified. |
 | PLAT-33 | Event pump: window events | ⬜ | Resize, pixel-size change, focus gained/lost, close, minimize/restore/maximize, move, display change, DPI change → `PlatformEvent`. Must match PLAT-6's golden capture. |
 | PLAT-34 | Event pump: keyboard and text input | ⬜ | Key down/up with the existing keycode/scancode mapping preserved, plus text input and IME events. |
 | PLAT-35 | Event pump: mouse and touch | ⬜ | Motion, buttons, wheel, relative mode, touch and gesture events. |

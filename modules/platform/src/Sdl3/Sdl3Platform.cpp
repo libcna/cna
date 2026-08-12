@@ -4,6 +4,8 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 
+#include "Sdl3Window.hpp"
+
 #include <SDL3/SDL.h>
 
 namespace CNA::Platform::Sdl3 {
@@ -118,10 +120,59 @@ namespace CNA::Platform::Sdl3 {
         return (SDL_WasInit(flag) & flag) != 0;
     }
 
-    std::unique_ptr<IPlatformWindow> Sdl3Platform::CreateWindow(const WindowDescription&)
+    std::unique_ptr<IPlatformWindow> Sdl3Platform::CreateWindow(const WindowDescription& description)
     {
-        // PLAT-30/31/32.
-        throw PlatformException("CreateWindow", "Sdl3Window is not implemented yet (PLAT-30)");
+        // Creation-time flags only. Render intent and high-DPI in particular CANNOT be applied
+        // afterwards -- the native surface attributes are chosen when the window is made -- which
+        // is why WindowDescription carries them rather than exposing setters.
+        SDL_WindowFlags flags = 0;
+        if (description.resizable)  { flags |= SDL_WINDOW_RESIZABLE; }
+        if (description.borderless) { flags |= SDL_WINDOW_BORDERLESS; }
+        if (!description.visible)   { flags |= SDL_WINDOW_HIDDEN; }
+        if (description.highDpi)    { flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY; }
+
+        switch (description.renderIntent)
+        {
+            case WindowRenderIntent::OpenGl: flags |= SDL_WINDOW_OPENGL; break;
+            case WindowRenderIntent::Vulkan: flags |= SDL_WINDOW_VULKAN; break;
+            case WindowRenderIntent::Metal:  flags |= SDL_WINDOW_METAL; break;
+            case WindowRenderIntent::None:   break;
+        }
+
+        if (description.fullscreenMode != WindowFullscreenMode::Windowed)
+        {
+            flags |= SDL_WINDOW_FULLSCREEN;
+        }
+
+        SDL_Window* raw = SDL_CreateWindow(description.title.c_str(), description.width,
+                                           description.height, flags);
+        if (raw == nullptr)
+        {
+            throw PlatformException("CreateWindow(" + description.title + ")", LastSdlError());
+        }
+
+        auto window = std::make_unique<Sdl3Window>(raw);
+
+        // Post-creation state that genuinely can be applied afterwards. Position is applied only
+        // when the caller asked for an explicit one; SDL centres by default.
+        if (!description.centered)
+        {
+            SDL_SetWindowPosition(raw, description.x, description.y);
+        }
+        if (description.minimumWidth > 0 || description.minimumHeight > 0)
+        {
+            SDL_SetWindowMinimumSize(raw, description.minimumWidth, description.minimumHeight);
+        }
+        if (description.maximumWidth > 0 || description.maximumHeight > 0)
+        {
+            SDL_SetWindowMaximumSize(raw, description.maximumWidth, description.maximumHeight);
+        }
+        if (description.fullscreenMode == WindowFullscreenMode::BorderlessFullscreen)
+        {
+            SDL_SetWindowFullscreenMode(raw, nullptr);
+        }
+
+        return window;
     }
 
     void Sdl3Platform::PollEvents(std::vector<PlatformEvent>& destination)

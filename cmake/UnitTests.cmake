@@ -412,6 +412,23 @@ if(CNA_BUILD_TESTS)
     cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
         LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
+    # plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
+    # get one from SDL's dummy driver rather than a display server. That only works in a process
+    # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
+    # another suite usually has, so these skip there and would otherwise contribute no coverage
+    # at all. Running them as their own ctest, in their own process, is what makes them real.
+    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*
+        LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
+
+    # The rest of the platform contract is display-independent by construction, so it runs
+    # unconditionally. Shuffled and repeated for the same reason the input suite is: SDL's
+    # subsystem refcount is process-global, and an acquire/release imbalance would show up as
+    # order dependence rather than as a direct failure.
+    cna_register_renderer_test(NAME CnaPlatformTests
+        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*
+                --gtest_shuffle --gtest_repeat=3
+        LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+
     if(MINGW)
         # Statically link MinGW runtime into the test binary too, so it can
         # run outside CLion without libgcc_s_seh-1.dll / libstdc++-6.dll.
