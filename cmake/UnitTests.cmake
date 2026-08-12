@@ -42,6 +42,16 @@ if(CNA_BUILD_TESTS)
     # as the Glide ABI programs just above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")
 
+    # plan_platform.md PLAT-119: the platform module's SDL3-specific tests exercise
+    # CNA::Platform::Sdl3, which is compiled only when CNA_PLATFORM=SDL3. Under any other
+    # platform selection they would reference symbols that do not exist and fail to link -- found
+    # by actually configuring CNA_PLATFORM=HEADLESS rather than by inspection. The
+    # implementation-neutral tests (the contract, and the conformance suite parameterised over
+    # every available implementation) always build.
+    if(NOT CNA_PLATFORM STREQUAL "SDL3")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl3.*\\.cpp$")
+    endif()
+
     # REMED-BUILD-013 (discovered while verifying it): mirrors CnaLibrary.cmake's own
     # CNA_FFMPEG_AVAILABLE exclusion for VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp/
     # VideoContentTypeReader.cpp -- these 4 test files exercise exactly those classes, which do not
