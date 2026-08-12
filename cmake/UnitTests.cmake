@@ -215,6 +215,13 @@ if(CNA_BUILD_TESTS)
     # not propagate to CnaTests via target_link_libraries and must be added here too.
     target_include_directories(CnaTests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
+            # plan_platform.md PLAT-77/PLAT-90: modules/platform/tests holds shared test
+            # scaffolding (PlatformTestDecorator.hpp) that tests in other modules include to drive
+            # CNA against a controlled platform. It replaces the eight per-subsystem injectable
+            # backend seams modules/input used to carry for the same purpose, so it has to be
+            # reachable from outside its own module. Deliberately NOT in any module's public
+            # include tree -- a production build has no business including scaffolding.
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform/tests
     )
 
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
