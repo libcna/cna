@@ -21,10 +21,11 @@
 // plan_html_dom.md HTMLDOM-10 / design decision 2: creates the <div> every sprite element lives in,
 // positioned over the <canvas> SDL3's Emscripten video driver owns.
 //
-// The canvas itself is hidden but deliberately NOT removed or display:none'd -- SDL keeps sizing it
-// and delivering input through it, so it has to stay in the layout. `contain:strict` keeps the
-// sprite subtree's layout and painting isolated from the rest of the page, and clips sprites that
-// leave the viewport.
+// The canvas itself is made transparent but deliberately NOT hidden, removed or display:none'd --
+// SDL keeps sizing it and delivering input through it, so it must remain in both layout and pointer
+// hit testing. The DOM surface ignores pointer events, allowing them to reach the transparent
+// canvas underneath. `contain:strict` keeps the sprite subtree's layout and painting isolated from
+// the rest of the page, and clips sprites that leave the viewport.
 //
 // plan_html_dom.md HTMLDOM-108: #cna-dom-root now lives inside a second wrapper element,
 // #cna-dom-viewport, sized/positioned to the CANVAS's own physical bounds with its own
@@ -87,6 +88,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // are always black, not the app's current clear colour) -- this element is exactly what shows
     // through in a Letterbox bar or outside an undersized NativeBackBuffer surface.
     viewportEl.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;contain:strict;' +
+                               'pointer-events:none;' +
                                'background-color:#000;';
     const root = document.createElement('div');
     root.id = 'cna-dom-root';
@@ -94,13 +96,12 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
                          'contain:strict;background-color:#000;';
     (canvas.parentNode || document.body).insertBefore(viewportEl, canvas.nextSibling);
     viewportEl.appendChild(root);
-    // plan_html_dom.md HTMLDOM-115: preserves whatever visibility the host page had already set
-    // (including "", the CSS default) rather than assuming it was unset -- an earlier version
-    // always restored "" on destroy, silently discarding a host page's own pre-existing visibility
-    // choice (e.g. a page that itself set visibility:hidden for an unrelated reason before this
-    // renderer ever ran).
-    Module['cnaDomOriginalCanvasVisibility'] = canvas.style.visibility;
-    canvas.style.visibility = 'hidden';
+    // Keep the canvas in pointer hit testing: SDL's Emscripten driver registered its mouse/touch
+    // handlers on this exact element. visibility:hidden would remove it from hit testing, while
+    // opacity:0 keeps it as the input surface without exposing its pixels below the DOM renderer.
+    // Preserve the host page's exact inline opacity for symmetric teardown.
+    Module['cnaDomOriginalCanvasOpacity'] = canvas.style.opacity;
+    canvas.style.opacity = '0';
     // plan_html_dom.md HTMLDOM-115: Present()'s own dirty check only re-derives geometry when the
     // LOGICAL or PHYSICAL SIZE changes -- a host-page layout reflow that moves the canvas WITHOUT
     // resizing it (a responsive layout shift, an animated margin/position change elsewhere on the
@@ -349,8 +350,8 @@ EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
                    (typeof document === 'undefined' ? null : document.querySelector('canvas'));
     // plan_html_dom.md HTMLDOM-115: restores the EXACT pre-existing value CNA_HtmlDom_EnsureRoot
     // captured, not a hardcoded "" -- see that capture's own comment.
-    if (canvas) canvas.style.visibility = Module['cnaDomOriginalCanvasVisibility'] || "";
-    Module['cnaDomOriginalCanvasVisibility'] = null;
+    if (canvas) canvas.style.opacity = Module['cnaDomOriginalCanvasOpacity'] || "";
+    Module['cnaDomOriginalCanvasOpacity'] = null;
     if (Module['cnaDomResizeListener']) {
         window.removeEventListener('resize', Module['cnaDomResizeListener']);
         Module['cnaDomResizeListener'] = null;
