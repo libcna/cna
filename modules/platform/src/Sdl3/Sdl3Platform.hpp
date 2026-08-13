@@ -3,6 +3,7 @@
 
 #include "CNA/Platform/IPlatform.hpp"
 
+#include "Sdl3Camera.hpp"
 #include "Sdl3GraphicsServices.hpp"
 #include "Sdl3DeviceServices.hpp"
 #include "Sdl3InputServices.hpp"
@@ -109,6 +110,8 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformDialogs* GetDialogs() override;
         /** @brief Gets the tray service. @return The service on desktop targets, otherwise null. */
         [[nodiscard]] IPlatformTray* GetTray() override;
+        /** @brief Gets the camera provider. @return The provider when SDL has a camera driver. */
+        [[nodiscard]] IPlatformCameraProvider* GetCamera() override;
         /** @brief Gets the filesystem service. @return The SDL3 filesystem; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
         /** @brief Gets the system information service. @return The SDL3 system info; never null. */
@@ -150,6 +153,7 @@ namespace CNA::Platform::Sdl3 {
         Sdl3InputDevices inputDevices_;
         Sdl3Dialogs dialogs_;
         Sdl3Tray tray_;
+        Sdl3CameraProvider camera_;
     };
 
 } // namespace CNA::Platform::Sdl3

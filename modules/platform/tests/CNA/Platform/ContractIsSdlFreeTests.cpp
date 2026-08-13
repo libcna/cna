@@ -14,6 +14,7 @@
 #include "CNA/Audio/Platform/IAudioRecordingDevice.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformCamera.hpp"
 #include "CNA/Platform/IPlatformGlContext.hpp"
 #include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"

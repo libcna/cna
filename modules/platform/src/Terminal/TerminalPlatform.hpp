@@ -161,6 +161,8 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] IPlatformDialogs* GetDialogs() override;
         /** @brief Gets the tray service. @return Null; a terminal has no notification area. */
         [[nodiscard]] IPlatformTray* GetTray() override;
+        /** @brief Gets the camera provider. @return Null; a terminal exposes no camera device. */
+        [[nodiscard]] IPlatformCameraProvider* GetCamera() override;
         /** @brief Gets the filesystem service. @return A real filesystem; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
         /** @brief Gets the system information service. @return Real host information; never null. */

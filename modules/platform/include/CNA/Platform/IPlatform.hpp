@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Platform/IPlatformCamera.hpp"
 #include "CNA/Platform/IPlatformGlContext.hpp"
 #include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
@@ -304,6 +305,13 @@ namespace CNA::Platform {
          * @return The service, or null when this platform reports no `Tray` capability.
          */
         [[nodiscard]] virtual IPlatformTray* GetTray() = 0;
+
+        /**
+         * @brief Gets the camera provider.
+         *
+         * @return The provider, or null when this platform reports no `Camera` capability.
+         */
+        [[nodiscard]] virtual IPlatformCameraProvider* GetCamera() = 0;
 
         /**
          * @brief Gets the filesystem service.

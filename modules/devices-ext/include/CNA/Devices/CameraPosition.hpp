@@ -8,8 +8,8 @@ namespace CNA::Devices
     /**
      * @brief Physical position of a camera device relative to the system, when known.
      *
-     * Mirrors SDL3's `SDL_CameraPosition` (`third_party/SDL/include/SDL3/SDL_camera.h`).
-     * CNA extension — no XNA/WP7 equivalent exists.
+     * CNA extension — no XNA/WP7 equivalent exists. Mapped from the selected platform's own
+     * camera-position vocabulary.
      */
     enum class CameraPosition
     {

@@ -118,6 +118,8 @@ namespace CNA::Platform::Headless {
         [[nodiscard]] IPlatformDialogs* GetDialogs() override;
         /** @brief Gets the tray service. @return Null; there is no desktop notification area. */
         [[nodiscard]] IPlatformTray* GetTray() override;
+        /** @brief Gets the camera provider. @return Null; there are no capture devices. */
+        [[nodiscard]] IPlatformCameraProvider* GetCamera() override;
         /** @brief Gets the filesystem service. @return A real filesystem; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
         /** @brief Gets the system information service. @return Real host information; never null. */

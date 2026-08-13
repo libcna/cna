@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Platform/IPlatformSystemServices.hpp"
+#include "CNA/Platform/IPlatformCamera.hpp"
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
 #include "CNA/Platform/Input/IPlatformHaptics.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
@@ -34,6 +35,8 @@ TEST(ServiceContractTests, EveryServiceInterfaceHasAVirtualDestructor)
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformDialogs>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformTray>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformTrayIcon>);
+    EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformCameraProvider>);
+    EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformCamera>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformFileSystem>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformSystemInfo>);
 }
@@ -52,6 +55,8 @@ TEST(ServiceContractTests, EveryServiceInterfaceIsAbstract)
     EXPECT_TRUE(std::is_abstract_v<IPlatformDialogs>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformTray>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformTrayIcon>);
+    EXPECT_TRUE(std::is_abstract_v<IPlatformCameraProvider>);
+    EXPECT_TRUE(std::is_abstract_v<IPlatformCamera>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformFileSystem>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformSystemInfo>);
 }
