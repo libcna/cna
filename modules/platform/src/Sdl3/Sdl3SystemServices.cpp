@@ -181,6 +181,20 @@ namespace CNA::Platform::Sdl3 {
         return true;
     }
 
+    bool Sdl3Displays::IsScreenSaverEnabled() const { return SDL_ScreenSaverEnabled(); }
+
+    void Sdl3Displays::SetScreenSaverEnabled(const bool enabled)
+    {
+        if (enabled)
+        {
+            SDL_EnableScreenSaver();
+        }
+        else
+        {
+            SDL_DisableScreenSaver();
+        }
+    }
+
     // --- filesystem -------------------------------------------------------------------------------
 
     std::string Sdl3FileSystem::GetBasePath() const

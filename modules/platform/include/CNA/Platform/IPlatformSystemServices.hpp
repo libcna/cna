@@ -126,6 +126,19 @@ namespace CNA::Platform {
          * @return True when the display is known and its current mode is available.
          */
         [[nodiscard]] virtual bool TryGetCurrentDisplayMode(std::uint32_t displayId, DisplayMode& mode) const = 0;
+
+        /** @brief Gets whether the host screen saver may activate. */
+        [[nodiscard]] virtual bool IsScreenSaverEnabled() const { return true; }
+
+        /**
+         * @brief Allows or prevents the host screen saver from activating.
+         * @param enabled True to allow screen saving.
+         *
+         * The default no-op keeps lightweight display test doubles focused on enumeration. A
+         * platform with real displays overrides this pair; a platform without them exposes no
+         * display service.
+         */
+        virtual void SetScreenSaverEnabled(bool enabled) { (void)enabled; }
     };
 
     // --- Dialogs -------------------------------------------------------------------------------

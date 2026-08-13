@@ -9,9 +9,6 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
-#include <SDL3/SDL.h>
-#include <SDL3_mixer/SDL_mixer.h>
-
 #include <algorithm>
 #include <iterator>
 #include <memory>
@@ -37,23 +34,6 @@ namespace Microsoft::Xna::Framework
 
     namespace
     {
-        void InitAudio()
-        {
-#ifdef SOUND_ENABLED
-            if (!MIX_Init())
-            {
-                throw std::runtime_error(std::string("MIX_Init failed: ") + SDL_GetError());
-            }
-#endif
-        }
-
-        void ShutdownAudio()
-        {
-#ifdef SOUND_ENABLED
-            MIX_Quit();
-#endif
-        }
-
         [[nodiscard]] double TotalMilliseconds(const System::TimeSpan& value)
         {
             return value.getTotalMillisecondsProperty();
@@ -234,14 +214,11 @@ namespace Microsoft::Xna::Framework
         Content_.setGraphicsDevice(GraphicsDevice_);
 
         FrameworkDispatcher::Update();
-        InitAudio();
     }
 
     Game::~Game()
     {
         Dispose(false);
-        ShutdownAudio();
-
         // Hand the ambient installation back to whichever game is still alive, if any. This runs
         // before platform_ is destroyed (members are destroyed after the body), so the accessor
         // is never left aimed at a platform that has already gone away.

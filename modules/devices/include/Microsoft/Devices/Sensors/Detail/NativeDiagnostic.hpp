@@ -68,9 +68,7 @@ namespace Microsoft::Devices::Sensors::Detail
 
         /**
          * @brief Records one diagnostic event: logs it (debug builds only,
-         * via SDL_Log() -- available and already linked on every CNA target
-         * this sink can be called from, including Android, where SDL_Log()
-         * itself routes to logcat), increments the process-wide counter,
+         * via CNA's process-wide logger), increments the process-wide counter,
          * stores a copy as the last record, and invokes the test/diagnostics
          * callback if one is set. Never throws, regardless of what logging,
          * copying, or the callback itself do internally.

@@ -53,6 +53,10 @@ namespace CNA::Platform::Sdl3 {
          */
         [[nodiscard]] bool TryGetCurrentDisplayMode(
             std::uint32_t displayId, DisplayMode& mode) const override;
+        /** @brief Gets whether SDL allows the screen saver. */
+        [[nodiscard]] bool IsScreenSaverEnabled() const override;
+        /** @brief Allows or prevents the screen saver. */
+        void SetScreenSaverEnabled(bool enabled) override;
     };
 
     /** @brief SDL3-backed path resolution and file loading. */

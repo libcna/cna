@@ -13,13 +13,15 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include <algorithm>
-#include <SDL3/SDL.h>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -334,15 +336,19 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool Guide::getIsScreenSaverEnabledProperty()
     {
-        return SDL_ScreenSaverEnabled();
+        CNA::Platform::IPlatformDisplays* displays =
+            CNA::Platform::GetCurrentPlatform().GetDisplays();
+        return displays == nullptr || displays->IsScreenSaverEnabled();
     }
 
     void Guide::setIsScreenSaverEnabledProperty(bool value)
     {
-        if (value)
-            SDL_EnableScreenSaver();
-        else
-            SDL_DisableScreenSaver();
+        if (CNA::Platform::IPlatformDisplays* displays =
+                CNA::Platform::GetCurrentPlatform().GetDisplays();
+            displays != nullptr)
+        {
+            displays->SetScreenSaverEnabled(value);
+        }
     }
 
     bool Guide::getIsTrialModeProperty()          { return isTrialMode_; }

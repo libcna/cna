@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
 
-#include <mutex>
+#include "CNA/Logger.hpp"
 
-#include <SDL3/SDL.h>
+#include <mutex>
+#include <string>
 
 namespace Microsoft::Devices::Sensors::Detail
 {
@@ -39,12 +40,10 @@ namespace Microsoft::Devices::Sensors::Detail
         try
         {
 #ifndef NDEBUG
-            SDL_Log(
-                "NativeDiagnostic [%s] %s failed (code %d): %s",
-                record.Backend.c_str(),
-                record.Operation.c_str(),
-                record.NativeCode,
-                record.NativeMessage.c_str());
+            CNA::Logger::Debug(
+                "NativeDiagnostic [" + record.Backend + "] " + record.Operation
+                + " failed (code " + std::to_string(record.NativeCode) + "): "
+                + record.NativeMessage);
 #endif
 
             Callback callbackCopy;
