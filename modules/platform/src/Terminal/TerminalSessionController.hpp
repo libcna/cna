@@ -86,6 +86,9 @@ namespace CNA::Platform::Terminal {
         /** @brief Gets the output descriptor. @return The descriptor frames use. */
         [[nodiscard]] int GetOutputDescriptor() const { return outputDescriptor_; }
 
+        /** @brief Whether this session can request Kitty's exact keyboard protocol. */
+        [[nodiscard]] bool SupportsKittyKeyboard() const { return kittyKeyboardSupported_; }
+
         /**
          * @brief Gets whether keyboard leases enable the exact Kitty protocol.
          * @return True for exact press/repeat/release input; false for the timed fallback.

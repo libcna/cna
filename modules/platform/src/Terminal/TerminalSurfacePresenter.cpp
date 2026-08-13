@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <cstdio>
 
 namespace CNA::Platform::Terminal {
 
@@ -76,7 +77,22 @@ namespace CNA::Platform::Terminal {
         sessionGeneration_ = sessions_->GetGeneration();
     }
 
-    TerminalSurfacePresenter::~TerminalSurfacePresenter() = default;
+    TerminalSurfacePresenter::~TerminalSurfacePresenter()
+    {
+        // Release our alternate-screen lease before writing the summary.  stderr is deliberately
+        // used for diagnostics so ANSI frame bytes on stdout remain an opaque presentation
+        // channel, and releasing first makes the line survive after the game returns to the
+        // shell rather than disappearing with the alternate screen.
+        const TerminalSize grid = GetGridSize();
+        const TerminalColourDepth depth = writer_.GetColourDepth();
+        const bool kittyKeyboard = sessions_->SupportsKittyKeyboard();
+        presenterLease_ = {};
+        std::fprintf(stderr,
+                     "CNA terminal diagnostics: colour=%s grid=%dx%d dropped_frames=%d "
+                     "kitty_keyboard=%s\n",
+                     ToString(depth).c_str(), grid.columns, grid.rows, droppedFrames_,
+                     kittyKeyboard ? "yes" : "no");
+    }
 
     void TerminalSurfacePresenter::SetScaleMode(const PresentScaleMode mode, PresentFilter)
     {
