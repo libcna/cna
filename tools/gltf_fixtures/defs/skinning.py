@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from ..builder import FLOAT, TRIANGLES, UNSIGNED_BYTE, UNSIGNED_SHORT, GltfBuilder, pack
 from ..l5 import unsupported as l5_unsupported
-from ..manifest import (Defect, Fixture, l3_primitive, mat_identity, mat_translation, mat_mul,
-                        world_positions)
+from ..manifest import (Defect, Fixture, l3_primitive, mat_identity, mat_scale, mat_translation,
+                        mat_mul, world_positions)
 from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
 
 #: The armature's own translation. 100 units so the resulting error is unmistakable at every layer.
@@ -996,6 +996,424 @@ def skin_vertex_color() -> Fixture:
     )
 
 
+# --- §15.4's arithmetic ladder ------------------------------------------------------------------
+#
+# The rungs above own a defect each. These own the skin equation itself: one property per fixture,
+# each authored so that the plausible wrong answer is a DIFFERENT answer rather than a slightly
+# worse one. `GltfSkinLadder` evaluates every one of them through the real loader's bone palette,
+# so none of these expectations is prose.
+
+
+def _skinned_triangle(b: GltfBuilder, *, joint_indices, joint_weights, inverse_binds,
+                      joints_component_type: int = UNSIGNED_BYTE,
+                      normals=None, mesh_name: str = "SkinnedTri") -> tuple[int, int | None]:
+    """Packs the carrier triangle with a skin's attributes. Returns ``(mesh, ibmAccessor)``.
+
+    ``inverse_binds`` is a list of 16-float column-major matrices, or ``None`` for a skin that
+    authors no ``inverseBindMatrices`` at all -- which §3.7.3 says means identity for every joint.
+    """
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    joints = b.add_packed_accessor(usage="JOINTS_0", values=joint_indices, accessor_type="VEC4",
+                                   component_type=joints_component_type)
+    weights = b.add_packed_accessor(usage="WEIGHTS_0", values=joint_weights, accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    attributes = {"POSITION": position, "JOINTS_0": joints, "WEIGHTS_0": weights}
+    if normals is not None:
+        attributes["NORMAL"] = b.add_packed_accessor(usage="NORMAL", values=normals,
+                                                     accessor_type="VEC3")
+
+    ibm = None
+    if inverse_binds is not None:
+        flat = [c for matrix in inverse_binds for c in matrix]
+        ibm_offset = b.append_bytes(pack(flat, FLOAT), alignment=4)
+        ibm = b.add_accessor(usage="inverseBindMatrices", component_type=FLOAT,
+                             accessor_type="MAT4", count=len(inverse_binds), expected=flat,
+                             buffer_view=b.add_buffer_view(ibm_offset, 64 * len(inverse_binds)))
+
+    mesh = b.add_mesh([{"attributes": attributes, "indices": indices, "mode": TRIANGLES}],
+                      name=mesh_name)
+    return mesh, ibm
+
+
+def _blend(joint_globals, joint_indices, joint_weights):
+    """The skin equation of §3.7.3.3, evaluated on the carrier triangle.
+
+    Identity inverse bind matrices and an identity mesh-node transform are assumed, which is true
+    of every fixture below that uses it -- so ``jointMatrix[j]`` is ``joint_globals[j]`` and the
+    expected value stays readable as arithmetic rather than as a matrix product.
+    """
+    out = []
+    for vertex, (js, ws) in enumerate(zip(joint_indices, joint_weights)):
+        p = TRIANGLE_POSITIONS[vertex]
+        acc = [0.0, 0.0, 0.0]
+        for j, w in zip(js, ws):
+            if w == 0.0:
+                continue
+            m = joint_globals[j]
+            for row in range(3):
+                acc[row] += w * (m[0 * 4 + row] * p[0] + m[1 * 4 + row] * p[1] +
+                                 m[2 * 4 + row] * p[2] + m[3 * 4 + row])
+        out.append(acc)
+    return out
+
+
+def _skin_block(*, joint_nodes, joint_names, joint_globals, joint_indices, joint_weights,
+                note: str, parents=None, inverse_binds=None):
+    """The ``l4.skin`` expectation `GltfSkinLadder` reads: joint matrices and skinned positions."""
+    binds = inverse_binds if inverse_binds is not None else [mat_identity()] * len(joint_nodes)
+    return {
+        "jointCount": len(joint_nodes),
+        "meshNodeWorldColumnMajor": mat_identity(),
+        "joints": [{
+            "joint": i,
+            "node": joint_nodes[i],
+            "nodeName": joint_names[i],
+            "parentJoint": -1 if parents is None else parents[i],
+            "jointGlobalColumnMajor": joint_globals[i],
+            "inverseBindMatrixColumnMajor": binds[i],
+            "jointMatrixColumnMajor": mat_mul(joint_globals[i], binds[i]),
+        } for i in range(len(joint_nodes))],
+        "skinnedPositions": _blend(joint_globals, joint_indices, joint_weights),
+        "note": note,
+    }
+
+
+#: Two joints, one at the origin and one 10 units up, and a vertex split evenly between them.
+_TWO_WEIGHTED_JOINTS = [(0, 1, 0, 0)] * 3
+_TWO_WEIGHTED_WEIGHTS = [(0.5, 0.5, 0.0, 0.0)] * 3
+
+
+def skin_two_weighted() -> Fixture:
+    """§15.4's blending rung: `w = [0.5, 0.5]` across two joints 10 units apart.
+
+    The skin equation is a weighted sum of joint matrices, and this is the smallest asset on which
+    a reader that is not summing produces a *different* answer rather than a slightly worse one:
+    taking the highest weight lands the vertex at one joint or the other (a 5-unit error either
+    way, and ties are decided by whichever comparison the reader happens to use), while summing
+    correctly lands it exactly halfway.
+    """
+    b = GltfBuilder("skin-two-weighted")
+    mesh, ibm = _skinned_triangle(b, joint_indices=_TWO_WEIGHTED_JOINTS,
+                                  joint_weights=_TWO_WEIGHTED_WEIGHTS,
+                                  inverse_binds=[mat_identity()] * 2)
+    joint0 = b.add_node(name="Joint0")
+    joint1 = b.add_node(name="Joint1", translation=[0.0, 10.0, 0.0])
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": [joint0, joint1], "inverseBindMatrices": ibm})
+    b.add_scene([joint0, joint1, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    globals_ = [mat_identity(), mat_translation([0.0, 10.0, 0.0])]
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = _skin_block(
+        joint_nodes=[joint0, joint1], joint_names=["Joint0", "Joint1"], joint_globals=globals_,
+        joint_indices=_TWO_WEIGHTED_JOINTS, joint_weights=_TWO_WEIGHTED_WEIGHTS,
+        note="Both inverse bind matrices are the identity, so each joint matrix is that joint's "
+             "own global transform and the blend is readable directly: the vertex at (1,0,0) "
+             "lands at (1,5,0), exactly halfway between the two joints' results.")
+    return Fixture(
+        id="skin-two-weighted", audit_fixture=None, owning_group="skinning",
+        description="A vertex weighted 0.5/0.5 between a joint at the origin and one 10 units up. "
+                    "Summing lands it at the midpoint; picking the dominant weight lands it on a "
+                    "joint, 5 units away, with the tie broken by an implementation accident.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["two-joint weight blending", "JOINTS_0 / WEIGHTS_0", "identity inverse binds"],
+        spec_anchors=["skins", "skinned-mesh-attributes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, joints=_TWO_WEIGHTED_JOINTS,
+            weights=_TWO_WEIGHTED_WEIGHTS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+#: Four influences, each on its own axis or magnitude, so no permutation of the weight vector
+#: produces the same point: X is joint 0's alone, Y is joint 1's alone, and joints 2 and 3 pull
+#: against each other along Z.
+_FOUR_WEIGHTED_JOINTS = [(0, 1, 2, 3)] * 3
+_FOUR_WEIGHTED_WEIGHTS = [(0.4, 0.3, 0.2, 0.1)] * 3
+
+
+def skin_four_weighted() -> Fixture:
+    """§15.4's four-influence rung. Every slot of `JOINTS_0`/`WEIGHTS_0` carries real work.
+
+    XNA's ``BlendIndices``/``BlendWeight`` are four-wide and glTF's first influence set is too, so
+    four is the case an importer must get exactly right -- and a reader that drops the fourth
+    influence, or reads the four in the wrong order, is the failure this rung is shaped to catch.
+    The joints are placed so that each weight is recoverable from the result on its own: X comes
+    only from joint 0, Y only from joint 1, and joints 2 and 3 pull in opposite directions along Z
+    so swapping their weights flips the sign of the Z displacement.
+    """
+    b = GltfBuilder("skin-four-weighted")
+    mesh, ibm = _skinned_triangle(b, joint_indices=_FOUR_WEIGHTED_JOINTS,
+                                  joint_weights=_FOUR_WEIGHTED_WEIGHTS,
+                                  inverse_binds=[mat_identity()] * 4)
+    translations = [[100.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, -1.0]]
+    joint_nodes = [b.add_node(name="Joint" + str(i), translation=t)
+                   for i, t in enumerate(translations)]
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": joint_nodes, "inverseBindMatrices": ibm})
+    b.add_scene(joint_nodes + [mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    globals_ = [mat_translation(t) for t in translations]
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = _skin_block(
+        joint_nodes=joint_nodes, joint_names=["Joint" + str(i) for i in range(4)],
+        joint_globals=globals_, joint_indices=_FOUR_WEIGHTED_JOINTS,
+        joint_weights=_FOUR_WEIGHTED_WEIGHTS,
+        note="The displacement is 0.4*(100,0,0) + 0.3*(0,10,0) + 0.2*(0,0,1) + 0.1*(0,0,-1) = "
+             "(40,3,0.1). Dropping the fourth influence gives Z=0.2 rather than 0.1, and swapping "
+             "the last two weights gives -0.1: both are visible without a tolerance argument.")
+    return Fixture(
+        id="skin-four-weighted", audit_fixture=None, owning_group="skinning",
+        description="Four influences with weights 0.4/0.3/0.2/0.1 on joints placed so that each "
+                    "weight is separately recoverable from the result. A dropped or reordered "
+                    "influence moves the vertex to a different point, not merely a worse one.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["four-influence weight blending", "JOINTS_0 / WEIGHTS_0"],
+        spec_anchors=["skins", "skinned-mesh-attributes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, joints=_FOUR_WEIGHTED_JOINTS,
+            weights=_FOUR_WEIGHTED_WEIGHTS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def skin_no_ibm() -> Fixture:
+    """§15.4's absent-`inverseBindMatrices` rung. §3.7.3: absent means identity, not absent joints.
+
+    The property is undefined-by-omission, which is the kind an importer gets wrong in two opposite
+    directions: skipping the joint entirely (the vertex never moves) or leaving the bind matrix
+    uninitialised (it moves somewhere unrepeatable). The single joint is translated 7 units up and
+    its inverse bind matrix is *not* authored, so the correct joint matrix is that translation
+    itself -- and "the vertex did not move" is exactly the wrong answer, distinguishable from the
+    right one at a glance.
+    """
+    b = GltfBuilder("skin-no-ibm")
+    mesh, ibm = _skinned_triangle(b, joint_indices=_JOINTS, joint_weights=_WEIGHTS,
+                                  inverse_binds=None)
+    assert ibm is None
+    joint0 = b.add_node(name="Joint0", translation=[0.0, 7.0, 0.0])
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    # No `inverseBindMatrices` member at all -- the case under test.
+    b.add_skin({"name": "Skin", "joints": [joint0]})
+    b.add_scene([joint0, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    globals_ = [mat_translation([0.0, 7.0, 0.0])]
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = _skin_block(
+        joint_nodes=[joint0], joint_names=["Joint0"], joint_globals=globals_,
+        joint_indices=_JOINTS, joint_weights=_WEIGHTS,
+        note="§3.7.3: when inverseBindMatrices is undefined every matrix is the identity. The "
+             "joint matrix is therefore the joint's global transform, T(0,7,0), and every skinned "
+             "vertex rises by 7. A vertex that stays put means the joint was skipped for lacking "
+             "a bind matrix.")
+    return Fixture(
+        id="skin-no-ibm", audit_fixture=None, owning_group="skinning",
+        description="A skin with no `inverseBindMatrices` at all and a joint translated 7 units "
+                    "up. §3.7.3 makes the missing matrices identity, so the skinned vertices rise "
+                    "by 7; an importer that skips a joint without a bind matrix leaves them put.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["skin without inverseBindMatrices", "identity bind pose by omission"],
+        spec_anchors=["skins", "skinned-mesh-attributes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, joints=_JOINTS, weights=_WEIGHTS,
+            indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+#: A normal deliberately off every axis, so a non-uniform scale changes its DIRECTION rather than
+#: only its length -- the difference between the correct inverse-transpose and the joint matrix
+#: applied directly is then a visible rotation instead of a renormalisation no-op.
+_TILTED_NORMALS = [(0.0, 0.6, 0.8)] * 3
+
+
+def skin_nonuniform_joint_scale() -> Fixture:
+    """§15.4's non-uniform joint scale rung: positions **and** what happens to normals.
+
+    A joint scaled `[1,2,1]` doubles Y for positions. Normals are the interesting half: they
+    transform by the inverse transpose, so the same joint *halves* their Y before renormalisation.
+    The authored normal is tilted off every axis on purpose -- an axis-aligned one is an
+    eigenvector of a diagonal scale, so it comes back unchanged whichever rule was applied, and the
+    fixture would prove nothing.
+
+    The manifest states both answers and which is correct. Positions are asserted at L4 by
+    `GltfSkinLadder`; the normal transform is **not**, and the manifest says so rather than
+    implying coverage -- skinned normals are computed in each renderer's vertex shader, which is L7
+    ground, and a CPU assertion here would only be re-checking arithmetic this file wrote itself.
+    """
+    b = GltfBuilder("skin-nonuniform-joint-scale")
+    mesh, ibm = _skinned_triangle(b, joint_indices=_JOINTS, joint_weights=_WEIGHTS,
+                                  inverse_binds=[mat_identity()], normals=_TILTED_NORMALS)
+    joint0 = b.add_node(name="Joint0", scale=[1.0, 2.0, 1.0])
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": [joint0], "inverseBindMatrices": ibm})
+    b.add_scene([joint0, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    globals_ = [mat_scale([1.0, 2.0, 1.0])]
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = _skin_block(
+        joint_nodes=[joint0], joint_names=["Joint0"], joint_globals=globals_,
+        joint_indices=_JOINTS, joint_weights=_WEIGHTS,
+        note="The joint matrix is S(1,2,1), so the vertex at (0,1,0) skins to (0,2,0) while the "
+             "one at (1,0,0) does not move at all -- a uniform scale mistaken for this one would "
+             "move both.")
+    # Stated, and stated as unasserted. inverse-transpose(S(1,2,1)) halves Y: (0,0.6,0.8) becomes
+    # (0,0.3,0.8), which normalises to (0,0.351123,0.936329). Applying the joint matrix directly
+    # instead gives (0,1.2,0.8) -> (0,0.832050,0.554700): a 30-degree error, not a scale.
+    l4["skin"]["normals"] = {
+        "authored": [list(n) for n in _TILTED_NORMALS],
+        "correctSkinnedNormals": [[0.0, 0.3511234, 0.9363292]] * 3,
+        "wrongIfJointMatrixAppliedDirectly": [[0.0, 0.8320503, 0.5547002]] * 3,
+        "rule": "A normal transforms by the inverse transpose of the joint matrix, then is "
+                "renormalised. For a diagonal scale that means dividing each component by its own "
+                "scale factor rather than multiplying.",
+        "assertedAtL4": False,
+        "whyNot": "Skinned normals are produced by each renderer's vertex shader, so the claim "
+                  "belongs to L7. Asserting it on the CPU here would check arithmetic this "
+                  "manifest wrote itself against nothing.",
+    }
+    return Fixture(
+        id="skin-nonuniform-joint-scale", audit_fixture=None, owning_group="skinning",
+        description="A joint scaled [1,2,1] with a normal tilted off every axis. Positions double "
+                    "in Y; the normal's Y is HALVED before renormalisation, so the two rules give "
+                    "visibly different directions rather than the same one at a different length.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["non-uniform joint scale", "normal inverse-transpose rule",
+                  "JOINTS_0 / WEIGHTS_0"],
+        spec_anchors=["skins", "skinned-mesh-attributes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=_TILTED_NORMALS, joints=_JOINTS,
+            weights=_WEIGHTS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+#: One vertex per joint plus one shared between them, so the chain is observable at both ends and
+#: in a blend: vertex 0 rides the parent, vertex 1 the child, vertex 2 half of each.
+_PARENTED_JOINTS = [(0, 0, 0, 0), (1, 0, 0, 0), (0, 1, 0, 0)]
+_PARENTED_WEIGHTS = [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0), (0.5, 0.5, 0.0, 0.0)]
+
+
+def skin_parented_joints() -> Fixture:
+    """§15.4's joint-chain rung: joint B is a child of joint A, and both are transformed.
+
+    A joint's matrix is built from its **global** transform, so the child's must include its
+    parent's. An importer using node-local transforms produces a child matrix of T(2,0,0) instead
+    of T(2,3,0) -- and this fixture binds one vertex to each joint plus one to both, so that error
+    shows up on the child's vertex and half of it on the shared one, while the parent's vertex
+    stays correct. A single-joint fixture cannot tell the two rules apart at all.
+    """
+    b = GltfBuilder("skin-parented-joints")
+    mesh, ibm = _skinned_triangle(b, joint_indices=_PARENTED_JOINTS,
+                                  joint_weights=_PARENTED_WEIGHTS,
+                                  inverse_binds=[mat_identity()] * 2)
+    # Declared parent-before-child, which is also the order BuildSkeleton reorders into, so the
+    # golden's BlendIndices are the authored ones and a reordering regression is visible at L5.
+    child = b.add_node(name="JointB", translation=[2.0, 0.0, 0.0])
+    parent = b.add_node(name="JointA", translation=[0.0, 3.0, 0.0], children=[child])
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": [parent, child], "inverseBindMatrices": ibm})
+    b.add_scene([parent, mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    parent_global = mat_translation([0.0, 3.0, 0.0])
+    child_global = mat_mul(parent_global, mat_translation([2.0, 0.0, 0.0]))
+    globals_ = [parent_global, child_global]
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = _skin_block(
+        joint_nodes=[parent, child], joint_names=["JointA", "JointB"], joint_globals=globals_,
+        joint_indices=_PARENTED_JOINTS, joint_weights=_PARENTED_WEIGHTS, parents=[-1, 0],
+        note="JointB's global transform is T(0,3,0) * T(2,0,0) = T(2,3,0), so the vertex bound to "
+             "it lands at (3,3,0). A reader using node-local transforms puts it at (3,0,0) and "
+             "moves the shared vertex half as far wrong, while the parent's vertex stays right -- "
+             "which is what makes the failure attributable to the chain rather than to the skin.")
+    return Fixture(
+        id="skin-parented-joints", audit_fixture=None, owning_group="skinning",
+        description="Joint B parented to joint A, both translated, with one vertex on each and "
+                    "one shared. The child's joint matrix must carry its parent's transform; a "
+                    "node-local reading is wrong on two of the three vertices and right on one.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["joint parented to joint", "global joint transform", "per-vertex joint binding"],
+        spec_anchors=["skins", "joint-hierarchy", "skinned-mesh-attributes"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, joints=_PARENTED_JOINTS, weights=_PARENTED_WEIGHTS,
+            indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+#: Joints 1 and 2, never 0, and in that order: as UNSIGNED_SHORT this is `01 00 02 00`, which a
+#: reader that mistakes the stream for UNSIGNED_BYTE reads as joints (1,0,2,0) -- the same first
+#: index, a spurious joint 0, and joint 2 landing in the slot weight 0 belongs to.
+_USHORT_JOINTS = [(1, 2, 0, 0)] * 3
+_USHORT_WEIGHTS = [(0.5, 0.5, 0.0, 0.0)] * 3
+
+
+def skin_ushort_joint_indices() -> Fixture:
+    """`JOINTS_0` stored as `UNSIGNED_SHORT`, which §3.7.3.3 permits alongside `UNSIGNED_BYTE`.
+
+    XNA's ``BlendIndices`` is four bytes, so a wide index stream must be *converted* rather than
+    copied, and the conversion is where a reader silently reinterprets the bytes. The three joints
+    are given distinct translations and every vertex is split evenly between joints 1 and 2, so a
+    byte-wise reading blends joints 1 and 0 instead: (2.5,3,0) rather than (0,3,3.5), which no
+    tolerance can absorb.
+
+    This rung replaces §15.4's `skin-256-joints`, whose stated point -- that a 256-joint rig must
+    not wrap the index byte -- is unreachable: `GLTF-261` refuses any skin past the 72-joint GPU
+    palette long before its indices are decoded, and `skin-73-joints` already owns that refusal
+    one joint past the boundary. The reachable half of the same hazard is the component type, and
+    that is what this fixture tests.
+    """
+    b = GltfBuilder("skin-ushort-joint-indices")
+    mesh, ibm = _skinned_triangle(b, joint_indices=_USHORT_JOINTS, joint_weights=_USHORT_WEIGHTS,
+                                  inverse_binds=[mat_identity()] * 3,
+                                  joints_component_type=UNSIGNED_SHORT)
+    translations = [[5.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 7.0]]
+    joint_nodes = [b.add_node(name="Joint" + str(i), translation=t)
+                   for i, t in enumerate(translations)]
+    mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    b.add_skin({"name": "Skin", "joints": joint_nodes, "inverseBindMatrices": ibm})
+    b.add_scene(joint_nodes + [mesh_node], name="Scene")
+    b.set_default_scene(0)
+
+    globals_ = [mat_translation(t) for t in translations]
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["skin"] = _skin_block(
+        joint_nodes=joint_nodes, joint_names=["Joint0", "Joint1", "Joint2"],
+        joint_globals=globals_, joint_indices=_USHORT_JOINTS, joint_weights=_USHORT_WEIGHTS,
+        note="Every vertex is split evenly between joints 1 and 2, displacing it by "
+             "0.5*(0,6,0) + 0.5*(0,0,7) = (0,3,3.5). A reader treating the UNSIGNED_SHORT stream "
+             "as bytes blends joints 1 and 0 instead and displaces it by (2.5,3,0).")
+    l4["skin"]["jointIndexComponentType"] = "UNSIGNED_SHORT"
+    return Fixture(
+        id="skin-ushort-joint-indices", audit_fixture=None, owning_group="skinning",
+        description="JOINTS_0 stored as UNSIGNED_SHORT rather than UNSIGNED_BYTE, with the two "
+                    "influencing joints chosen so a byte-wise misreading blends a different pair "
+                    "of joints and lands the vertex somewhere else entirely.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["UNSIGNED_SHORT JOINTS_0", "joint index component conversion"],
+        spec_anchors=["skins", "skinned-mesh-attributes", "accessor-data-types"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, joints=_USHORT_JOINTS, weights=_USHORT_WEIGHTS,
+            indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
 FIXTURES = [skin_armature_ancestor, skin_mesh_node_transform, skin_plus_static_mesh,
             skin_unlit, skin_vertex_color, skin_mesh_node_parent_transform,
-            skin_skeleton_hint, skin_unnormalized, skin_73_joints, skin_eight_influences]
+            skin_skeleton_hint, skin_unnormalized, skin_73_joints, skin_eight_influences,
+            skin_two_weighted, skin_four_weighted, skin_no_ibm, skin_nonuniform_joint_scale,
+            skin_parented_joints, skin_ushort_joint_indices]

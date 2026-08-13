@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 114,
+  "distinctAssetCount": 120,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 12,
@@ -22,7 +22,7 @@
     "transforms": 17,
     "materials": 12,
     "textures": 3,
-    "skinning": 10,
+    "skinning": 16,
     "animation": 23,
     "cameras": 5,
     "lights": 2,
@@ -1504,6 +1504,111 @@
         "eight influences per vertex",
         "influence-set truncation",
         "renormalisation after truncation"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-two-weighted",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "two-joint weight blending",
+        "JOINTS_0 / WEIGHTS_0",
+        "identity inverse binds"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-four-weighted",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "four-influence weight blending",
+        "JOINTS_0 / WEIGHTS_0"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-no-ibm",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "skin without inverseBindMatrices",
+        "identity bind pose by omission"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-nonuniform-joint-scale",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "non-uniform joint scale",
+        "normal inverse-transpose rule",
+        "JOINTS_0 / WEIGHTS_0"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-parented-joints",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "joint parented to joint",
+        "global joint transform",
+        "per-vertex joint binding"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "skin-ushort-joint-indices",
+      "owningGroup": "skinning",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "UNSIGNED_SHORT JOINTS_0",
+        "joint index component conversion"
       ],
       "auditFixture": null
     },
@@ -4040,6 +4145,31 @@
       "sha256": "015a840d104f32876b533c92ce2015ac4173be12d4407778239c32d6fd06038f"
     },
     {
+      "path": "skin-four-weighted.expected.json",
+      "bytes": 14289,
+      "sha256": "e18c537b959917d42e123967410ff33571fc029c4c3ce24f4b85c07d97d49ddd"
+    },
+    {
+      "path": "skin-four-weighted.glb",
+      "bytes": 1584,
+      "sha256": "2ea9749e5c8243220e833359efe634339f611fd15eb3d4656c707d3e9bf82e43"
+    },
+    {
+      "path": "skin-four-weighted.gltf",
+      "bytes": 2852,
+      "sha256": "f8f0ddd579fa6e41663b6e81074837c5f92498dd7e9625c86d86205c5db24cab"
+    },
+    {
+      "path": "skin-four-weighted.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-four-weighted.vb.bin",
+      "bytes": 204,
+      "sha256": "23d079e075ecea57d8801b0d5bbbe01f6e0371ff4bcf7af9cd242a89fbf22e9e"
+    },
+    {
       "path": "skin-joint-index-out-of-range.expected.json",
       "bytes": 5513,
       "sha256": "0ff60aa13a63041fd7a3016293f1acc5924abaac905d54bf2d3171fb3493052f"
@@ -4130,6 +4260,81 @@
       "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
     },
     {
+      "path": "skin-no-ibm.expected.json",
+      "bytes": 9602,
+      "sha256": "1231d61ade95258c9295df3e64009d0ff8a89d7f670a7b19caa1791fa388f4b3"
+    },
+    {
+      "path": "skin-no-ibm.glb",
+      "bytes": 1040,
+      "sha256": "6db6b7b7895ef56464ee7f6327dfb18adc1b47d0f9051a0033dc36f16fd2979d"
+    },
+    {
+      "path": "skin-no-ibm.gltf",
+      "bytes": 1903,
+      "sha256": "9c5d287e06596f4aa2899d5638bc4790549b5aec27ccb01467400e35cf149544"
+    },
+    {
+      "path": "skin-no-ibm.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-no-ibm.vb.bin",
+      "bytes": 204,
+      "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
+    },
+    {
+      "path": "skin-nonuniform-joint-scale.expected.json",
+      "bytes": 12414,
+      "sha256": "1733e2983001aaa0bf08e50c5c081472add47e7e09b8d537d5b6cfbd309b4f34"
+    },
+    {
+      "path": "skin-nonuniform-joint-scale.glb",
+      "bytes": 1384,
+      "sha256": "42a950d8284906628d234d869a7f5454b278023d870a1c92d5e5559d4aff3941"
+    },
+    {
+      "path": "skin-nonuniform-joint-scale.gltf",
+      "bytes": 2458,
+      "sha256": "1657b21abcc76e2d9663c7e9d0ffc2ad47f529d5ff82269c9ecce9fa2693fb91"
+    },
+    {
+      "path": "skin-nonuniform-joint-scale.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-nonuniform-joint-scale.vb.bin",
+      "bytes": 204,
+      "sha256": "3ef0534f5fbe9e3b8717dd63116f3aee291c8cef146cdcb22b2aa424109dfd8e"
+    },
+    {
+      "path": "skin-parented-joints.expected.json",
+      "bytes": 11742,
+      "sha256": "56bf6f99d02a18bff4866d4534717337fc471fa57364e78315325fb746c8dee1"
+    },
+    {
+      "path": "skin-parented-joints.glb",
+      "bytes": 1364,
+      "sha256": "d7256cc9d8c400640f01d748d74315379def95c9e5799c7139d26ef42079bfbc"
+    },
+    {
+      "path": "skin-parented-joints.gltf",
+      "bytes": 2452,
+      "sha256": "22c564c83ba7615ea6ce501a551c33b16ef7be22341a1df7d69d5ef64fa5e6bb"
+    },
+    {
+      "path": "skin-parented-joints.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-parented-joints.vb.bin",
+      "bytes": 204,
+      "sha256": "560e74fcadbc8aee771d60c28acc463fa03fda8408a65bf0ac482549ef06acf5"
+    },
+    {
       "path": "skin-plus-static-mesh.expected.json",
       "bytes": 15239,
       "sha256": "542cf1bedbe31816e964258eb19bc3704a4065d77d07acba1a76a177e2d917aa"
@@ -4190,6 +4395,31 @@
       "sha256": "27139c2c76b5f29f820e547de00829201bc180bedba97c6f574cdcf73a0610ea"
     },
     {
+      "path": "skin-two-weighted.expected.json",
+      "bytes": 11606,
+      "sha256": "e4e981be946dbfbcd3b4e12bff7ac2d9c5d6ba0981a42578d597c7abcb201e00"
+    },
+    {
+      "path": "skin-two-weighted.glb",
+      "bytes": 1324,
+      "sha256": "b268d492f0435b09331e771a1be58595d146b941b864f58bed43595de2680f56"
+    },
+    {
+      "path": "skin-two-weighted.gltf",
+      "bytes": 2355,
+      "sha256": "474d5ea3caa254163d599842510d6c58a4b9acc83b83c080fa13222fe7e937b7"
+    },
+    {
+      "path": "skin-two-weighted.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-two-weighted.vb.bin",
+      "bytes": 204,
+      "sha256": "55e99ff29123b836f3899385278388e317195912a18537e45ff2ca3b05b8fabc"
+    },
+    {
       "path": "skin-unlit.expected.json",
       "bytes": 10414,
       "sha256": "66835dc1c05bcec1a94e49a1d25422c84a42c33107b7b631542a839cc5f55718"
@@ -4238,6 +4468,31 @@
       "path": "skin-unnormalized.vb.bin",
       "bytes": 204,
       "sha256": "42b7dae81a02117e665265a8347a8e19afb11e754f7b0b679039dc431e388f60"
+    },
+    {
+      "path": "skin-ushort-joint-indices.expected.json",
+      "bytes": 13006,
+      "sha256": "84de75e0c8a16f39c610203bfd5d12c9e5b08ab0018e91920cca0985d27dada3"
+    },
+    {
+      "path": "skin-ushort-joint-indices.glb",
+      "bytes": 1476,
+      "sha256": "8e1a7dc22c4f6c0299ab23c90baba61a4d9ad9ee2083b61965d589f634d667e0"
+    },
+    {
+      "path": "skin-ushort-joint-indices.gltf",
+      "bytes": 2653,
+      "sha256": "7d6b69911947f00d5dc13db727eec296f808491cee7d66dc3620df7605599cdd"
+    },
+    {
+      "path": "skin-ushort-joint-indices.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "skin-ushort-joint-indices.vb.bin",
+      "bytes": 204,
+      "sha256": "7d040c821cbf867885e2712328d809438cee6f60760c724a1a502b888bdf1d69"
     },
     {
       "path": "skin-vertex-color.expected.json",

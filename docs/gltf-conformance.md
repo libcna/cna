@@ -594,7 +594,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**106 of the 114** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**112 of the 120** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. The seven without one are the fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`); their manifests record
@@ -831,6 +831,12 @@ written for this document: two descriptions of the same fixture are two things t
 | `skin-unnormalized` | skinning | L1, L2, L3 | unnormalized WEIGHTS_0; zero-weight vertex; renormalisation policy |
 | `skin-73-joints` | skinning | L1, L2 | skin.joints beyond MaxBones; palette limit; import rejection |
 | `skin-eight-influences` | skinning | L1, L2, L3 | JOINTS_1/WEIGHTS_1; eight influences per vertex; influence-set truncation; renormalisation after truncation |
+| `skin-two-weighted` | skinning | L1, L2, L3, L4, L5 | two-joint weight blending; JOINTS_0 / WEIGHTS_0; identity inverse binds |
+| `skin-four-weighted` | skinning | L1, L2, L3, L4, L5 | four-influence weight blending; JOINTS_0 / WEIGHTS_0 |
+| `skin-no-ibm` | skinning | L1, L2, L3, L4, L5 | skin without inverseBindMatrices; identity bind pose by omission |
+| `skin-nonuniform-joint-scale` | skinning | L1, L2, L3, L4, L5 | non-uniform joint scale; normal inverse-transpose rule; JOINTS_0 / WEIGHTS_0 |
+| `skin-parented-joints` | skinning | L1, L2, L3, L4, L5 | joint parented to joint; global joint transform; per-vertex joint binding |
+| `skin-ushort-joint-indices` | skinning | L1, L2, L3, L4, L5 | UNSIGNED_SHORT JOINTS_0; joint index component conversion |
 | `morph-position-only` | animation | L1, L2, L3 | one morph target; POSITION deltas only |
 | `morph-position-normal` | animation | L1, L2, L3 | POSITION and NORMAL deltas; normal renormalisation |
 | `morph-position-normal-tangent` | animation | L1, L2, L3 | POSITION, NORMAL and TANGENT deltas; tangent handedness preserved; GLTF-289 residue |

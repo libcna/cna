@@ -1,0 +1,610 @@
+{
+  "id": "skin-nonuniform-joint-scale",
+  "description": "A joint scaled [1,2,1] with a normal tilted off every axis. Positions double in Y; the normal's Y is HALVED before renormalisation, so the two rules give visibly different directions rather than the same one at a different length.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "skins",
+    "skinned-mesh-attributes"
+  ],
+  "inventory": {
+    "id": "skin-nonuniform-joint-scale",
+    "owningGroup": "skinning",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "L5"
+    ],
+    "features": [
+      "non-uniform joint scale",
+      "normal inverse-transpose rule",
+      "JOINTS_0 / WEIGHTS_0"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 2,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 1,
+    "animationCount": 0,
+    "accessorCount": 6,
+    "bufferViewCount": 6,
+    "bufferCount": 1,
+    "bufferByteLength": 204,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "JOINTS_0",
+        "type": "VEC4",
+        "componentType": 5121,
+        "componentTypeName": "UNSIGNED_BYTE",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "WEIGHTS_0",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 48,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 96,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "index": 4,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 4,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 104,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.6,
+          0.8,
+          0.0,
+          0.6,
+          0.8,
+          0.0,
+          0.6,
+          0.8
+        ]
+      },
+      {
+        "index": 5,
+        "usage": "inverseBindMatrices",
+        "type": "MAT4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 1,
+        "componentsPerElement": 16,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 5,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 140,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "SkinnedTri",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.6,
+            0.8
+          ],
+          [
+            0.0,
+            0.6,
+            0.8
+          ],
+          [
+            0.0,
+            0.6,
+            0.8
+          ]
+        ],
+        "tangents": [],
+        "texcoords": [],
+        "colors": [],
+        "joints": [
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "weights": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 1,
+        "nodeName": "SkinnedMeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    },
+    "skin": {
+      "jointCount": 1,
+      "meshNodeWorldColumnMajor": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "joints": [
+        {
+          "joint": 0,
+          "node": 0,
+          "nodeName": "Joint0",
+          "parentJoint": -1,
+          "jointGlobalColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "inverseBindMatrixColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "jointMatrixColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      ],
+      "skinnedPositions": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          2.0,
+          0.0
+        ]
+      ],
+      "note": "The joint matrix is S(1,2,1), so the vertex at (0,1,0) skins to (0,2,0) while the one at (1,0,0) does not move at all -- a uniform scale mistaken for this one would move both.",
+      "normals": {
+        "authored": [
+          [
+            0.0,
+            0.6,
+            0.8
+          ],
+          [
+            0.0,
+            0.6,
+            0.8
+          ],
+          [
+            0.0,
+            0.6,
+            0.8
+          ]
+        ],
+        "correctSkinnedNormals": [
+          [
+            0.0,
+            0.3511234,
+            0.9363292
+          ],
+          [
+            0.0,
+            0.3511234,
+            0.9363292
+          ],
+          [
+            0.0,
+            0.3511234,
+            0.9363292
+          ]
+        ],
+        "wrongIfJointMatrixAppliedDirectly": [
+          [
+            0.0,
+            0.8320503,
+            0.5547002
+          ],
+          [
+            0.0,
+            0.8320503,
+            0.5547002
+          ],
+          [
+            0.0,
+            0.8320503,
+            0.5547002
+          ]
+        ],
+        "rule": "A normal transforms by the inverse transpose of the joint matrix, then is renormalised. For a diagonal scale that means dividing each component by its own scale factor rather than multiplying.",
+        "assertedAtL4": false,
+        "whyNot": "Skinned normals are produced by each renderer's vertex shader, so the claim belongs to L7. Asserting it on the CPU here would check arithmetic this manifest wrote itself against nothing."
+      }
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 68,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          },
+          {
+            "name": "BlendWeight",
+            "offset": 48,
+            "size": 16
+          },
+          {
+            "name": "BlendIndices",
+            "offset": 64,
+            "size": 4
+          }
+        ],
+        "vertexBufferFile": "skin-nonuniform-joint-scale.vb.bin",
+        "vertexBufferBytes": 204,
+        "vertexBufferSha256": "3ef0534f5fbe9e3b8717dd63116f3aee291c8cef146cdcb22b2aa424109dfd8e",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "skin-nonuniform-joint-scale.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": []
+}
