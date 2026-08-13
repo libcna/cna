@@ -99,7 +99,7 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **176 files / 2599 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+Ratchet: **173 files / 2594 references** of direct SDL coupling outside the PLAT-3 allowlist, down
 from the 253 / 3641 baseline. Contract: 27 headers, 517 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
@@ -124,7 +124,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**115 ✅ · 3 🟨 · 34 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **74 %** of the 155
+**116 ✅ · 3 🟨 · 33 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **75 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -140,10 +140,10 @@ task rows complete.
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by
   the selected platform and no SDL cursor type remains in the public input API.
   `PlatformInputBridge` consumes the complete event vocabulary in the production path.
-- **Phase 6** (audio) — PLAT-91…97 complete: independent playback/recording contracts, selection,
-  the SDL3 playback and recording devices, contract-driven `AudioMixer` output, and SDL-free XNA
-  sound-effect / queued-stream / microphone ownership. Continue at PLAT-98 (`WaveBank` /
-  `XactParser`).
+- **Phase 6** (audio) — PLAT-91…98 complete: independent playback/recording contracts, selection,
+  SDL3 devices, contract-driven `AudioMixer` output, SDL-free XNA sound-effect / queued-stream /
+  microphone ownership, and platform-neutral WaveBank/XACT file IO. Continue at PLAT-99
+  (`NullAudioDevice`).
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
@@ -300,8 +300,10 @@ each, zero difference). The round trip is now checked before it is trusted.
    output through the selected SDL3 playback device. PLAT-96 moved sound effects, instances and
    queued streams behind the private opaque `MixerEngine` facade. PLAT-97 now routes `Microphone`
    through the selected recording provider, gives every native audio object its own balanced
-   subsystem lease and removes the last permanent compatibility pin. Continue with **PLAT-98**:
-   migrate `WaveBank` / `XactParser` SDL IO usage, then implement PLAT-99's `NullAudioDevice`.
+   subsystem lease and removes the last permanent compatibility pin. PLAT-98 verified that
+   `WaveBank` / `XactParser` already use standard C++ file IO and removed their last stale native
+   audio names. Continue with **PLAT-99**: implement the selected `NullAudioDevice` and close the
+   decode/playback-dependent NULL tests that currently refuse by design.
 
 ---
 
