@@ -13,10 +13,11 @@ The current contract and validation boundary are maintained in
    duplicate every one of those and let the two drift apart. `cmake/ApplePlatform.cmake` is the
    single place that knows which Apple target a configure is for.
 
-2. **iOS is a build-configuration target, and says so everywhere.** Nothing in this lane runs on
-   a device or a simulator. Every configure of an iOS renderer prints that it has no runtime
-   evidence; the CI leg is named "build only"; the documentation states it twice. The project's
-   existing habit of separating "compiles" from "works" is what this follows.
+2. **iOS support is experimental and every claim names its evidence.** The workflow final-links a
+   real application for device and simulator and runs one framework frame in the simulator. That
+   is initialization/runtime smoke evidence, not physical-device, pixel, input, audio, storage or
+   performance evidence. The project's existing habit of separating "compiles" from "works" is
+   what this follows.
 
 3. **An allow-list, not a deny-list, for iOS renderers.** CNA has 46 renderer identities and
    almost all of them are impossible on iOS. Enumerating the impossible ones would rot the
@@ -24,14 +25,17 @@ The current contract and validation boundary are maintained in
    the list fails at configure time with a message naming the platform, instead of failing deep
    inside a third-party dependency that was never configured for an iOS sysroot.
 
-4. **One bundle sweep instead of ~200 edited example registrations.** iOS products must be `.app`
+4. **One repository-owned bundle sweep instead of ~200 edited example registrations.** iOS products must be `.app`
    bundles with an `Info.plist`. The module-local example/tool/test registrations know nothing
    about Apple and should not have to. The top-level `CMakeLists.txt` walks the finished
-   buildsystem once and hands every executable target its bundle configuration.
+   CNA buildsystem once and hands every CNA-owned executable its bundle configuration. A
+   downstream target created outside CNA's source tree calls `cna_apple_configure_bundle()`
+   explicitly; the helper resolves plist paths relative to CNA, not the outer source tree.
 
 5. **macOS keeps plain executables.** Every example, tool and ctest binary in this repository is
    invoked by path; a `.app` layout would break all of them. Bundling on macOS is available
-   behind `CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON` for shipping a real application.
+   behind `CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON` for shipping a real application. The opt-in
+   bundle copies non-system dylibs into `Contents/Frameworks` and fixes their install names.
 
 6. **The mobile lifecycle deviates from FNA deliberately.** FNA tracks only `IsActive` on the
    background/foreground events. iOS terminates an application that submits GPU work after
@@ -45,9 +49,15 @@ The current contract and validation boundary are maintained in
    the allow-list decisions, so the layer has a gate that runs on every push rather than only
    when someone happens to configure on macOS.
 
-8. **SDL3 is linked statically on iOS.** A dylib inside an `.app` needs `Frameworks/` embedding,
-   an `@rpath` install name and separate signing — none of which the plain `cmake --install` used
-   by the vendored SDL build performs.
+8. **All SDL components are linked statically on iOS.** SDL3, SDL3_image and SDL3_mixer each have
+   independent shared/static switches. A dylib inside an `.app` needs `Frameworks/` embedding, an
+   `@rpath` install name and separate signing, so all three are forced static and CI rejects a
+   final app with a dynamic SDL dependency.
+
+9. **Deployment floors follow the libraries actually used.** Floating-point `std::to_chars` in
+   CNA/sharp-runtime is unavailable in Apple libc++ before macOS 13.3 and iOS 16.3. Those versions
+   are hard floors; suppressing availability diagnostics would create older binaries with missing
+   runtime symbols.
 
 ## Tasks
 
@@ -55,41 +65,38 @@ The current contract and validation boundary are maintained in
 |---|---|---|
 | `APPLE-1` | `cmake/ApplePlatform.cmake`: Apple target detection (macOS / iOS device / iOS simulator), deployment-target defaults, bundle identity options, rejection of tvOS/watchOS/visionOS | Done |
 | `APPLE-2` | `cmake/toolchains/ios.cmake`: device and simulator toolchain, architecture selection, re-rooted find rules | Done |
-| `APPLE-3` | `.app` bundle generation: `cna_apple_configure_bundle()`, the buildsystem-wide sweep, `Info.plist` templates for both platforms | Done |
-| `APPLE-4` | iOS renderer allow-list + `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` escape hatch, called from `cmake/RendererSelection.cmake` | Done |
-| `APPLE-5` | Platform-conditional build surface: iOS-keyed SDL prebuilt root, static SDL on iOS, Apple sysroot/architecture propagation into the vendored SDL sub-builds, FFmpeg off on iOS, multi-process tests excluded on iOS | Done |
+| `APPLE-3` | `.app` bundle generation: downstream-safe helper, CNA-owned target sweep, plist templates, macOS dylib embedding/fixup plus bundled-app launch/dependency CI | Done |
+| `APPLE-4` | Conservative iOS renderer allow-list (`SDL_RENDERER` only) + `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` escape hatch | Done |
+| `APPLE-5` | Platform-conditional build surface: deployment/architecture/sysroot-keyed SDL cache, static SDL3/image/mixer, Apple toolchain propagation, FFmpeg off on iOS, multi-process tests excluded | Done |
 | `APPLE-6` | `CNA/Platform.hpp`: `CNA_PLATFORM_APPLE`/`_MACOS`/`_IOS` macros, `isApplePlatform()`, `isMobilePlatform()`, `getCurrentPlatformName()` | Done |
-| `APPLE-7` | Mobile application lifecycle in `Game`: suspend the loop between background/foreground, restart timing on resume, handle `SDL_EVENT_TERMINATING` and `SDL_EVENT_LOW_MEMORY` | Done |
+| `APPLE-7` | Mobile application lifecycle in `Game`: suspend/resume timing, termination/low-memory handling, focused event-state test | Done |
 | `APPLE-8` | `CNA/Entrypoint.hpp`: pull in `<SDL3/SDL_main.h>` on iOS so UIKit owns the process | Done |
-| `APPLE-9` | `.github/workflows/apple-ci.yml`: host-portable CMake-layer check, macOS build + portable suites, iOS device/simulator cross-compile with a Mach-O platform check | Done — only the CMake-layer leg has run |
+| `APPLE-9` | `.github/workflows/apple-ci.yml`: host-portable checks, macOS build/tests, final-linked iOS device/simulator app validation, simulator install/launch | Done — [run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) |
 | `APPLE-9a` | `scripts/check-apple-platform-cmake.sh`: exercises the Apple CMake layer from any host, since every line of it is behind `if(APPLE)` and unreachable otherwise | Done — passes on Linux |
 | `APPLE-10` | `modules/core/tests/CNA/PlatformTests.cpp`: platform-helper coverage, including the macOS/iOS-specific expectations | Done |
 | `APPLE-11` | `METAL` on iOS: refused by default, configurable through `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` | Done (gate only) |
 | `APPLE-12` | Storage-root fallback follows the Apple convention instead of the Linux XDG layout | Done |
-| `APPLE-15` | `GraphicsDeviceManager.SupportedOrientations` reaches the OS on mobile through `SDL_HINT_ORIENTATIONS`, bounded by the bundle's `UISupportedInterfaceOrientations` | Done |
+| `APPLE-13` | Minimal `CNA/Entrypoint` + `Game::RunOneFrame()` app is final-linked for both Apple platforms and launched from macOS bundle/simulator CI | Done — [run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) |
+| `APPLE-15` | Initial orientation hint is set before SDL video init; later `SupportedOrientations` changes invalidate UIKit's cached answer | Done |
+| `APPLE-20` | Enforce macOS 13.3 / iOS 16.3 libc++ availability floors and request only CNA's sharp-runtime component closure | Done |
 
 ## Verification status
 
 | Claim | Evidence |
 |---|---|
-| The Apple CMake layer parses and its allow-list behaves | `cmake -P` smoke run of `cmake/ApplePlatform.cmake` on Linux: allow-listed renderer, refused renderer under the escape hatch, and both non-Apple no-op paths |
+| The Apple CMake layer parses and its policies stay connected | Linux smoke check: renderer gate/override, non-Apple no-ops, deployment floors, all static SDL switches, bundle fixup and orientation bridge |
 | Non-Apple configures are unaffected | Linux `HEADLESS` configure completes, the whole `CnaTests` corpus builds, and `PlatformTest.*` / `GameWindowTest.*` / `Storage*` / `*DesktopOS*` pass (24 cases; the one unrelated pre-existing failure, `GameWindowTest.MinimizeAndRestoreEXT_UsingSdlWindow`, only appears under `SDL_VIDEODRIVER=dummy`, which rejects minimize/restore, and skips otherwise) |
-| macOS builds and its platform contracts hold | `apple-ci.yml` `macos-build` — **not yet executed** |
-| CNA cross-compiles for iOS device and simulator | `apple-ci.yml` `ios-build` — **not yet executed** |
-| A CNA application runs on iOS | **None. Not attempted.** |
-
-The orientation-hint mapping (`APPLE-15`) was written against SDL's documented
-`SDL_HINT_ORIENTATIONS` token set. The FNA reference tree was not present in the environment this
-work was done in, so the mapping has not been diffed against FNA's own equivalent; if FNA orders
-or names the tokens differently, that is the place to reconcile.
+| macOS builds and its platform contracts hold | Green `macos-build` in [run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749): CnaTests, focused suites, self-contained bundle verification and launch |
+| CNA final-links an iOS device application | Green `ios-build/device` in the same run: Mach-O platform, plist, entry-point symbols and dependency-closure checks |
+| A minimal CNA application runs in the iOS simulator | Green `ios-build/simulator` in the same run: install, launch and `CNA_APPLE_SMOKE_OK` after one `Game` frame |
+| A CNA application runs on physical iPhone/iPad hardware | **None. Not attempted.** |
 
 ## Open work
 
 These are unstarted, not attempted-and-failed:
 
-- `APPLE-13` — run a CNA example on the iOS simulator and record what actually happens. This is
-  the task that would turn iOS from a build target into a supported one; everything below depends
-  on it.
+- Run a representative content-bearing CNA game/example for multiple frames in the iOS simulator;
+  the current smoke app deliberately exits after one empty framework frame.
 - `APPLE-14` — exercise touch on iOS. The path already exists and is platform-neutral
   (`SdlInputBridge` translates SDL finger events into `TouchPanel`/`GestureDetector`, and
   `GraphicsDevice` keeps the display metrics in sync), so this is verification work, not

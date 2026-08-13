@@ -73,8 +73,8 @@
     },
     {
       "name": "ios",
-      "displayName": "iOS device (arm64, SDL_RENDERER, build only)",
-      "description": "plan_apple.md APPLE-2: cross-compiles CNA for arm64 iPhone/iPad on a macOS host with Xcode. Tests and examples are off — CnaTests is a console binary an app-sandboxed process cannot run the way CI would need to, and the examples' fixtures assume a desktop filesystem. This configuration has never been run on a device: see docs/apple-platforms.md for what is and is not claimed. Add -G Xcode and -DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID> to sign and deploy.",
+      "displayName": "iOS device (arm64, SDL_RENDERER, final-link smoke app)",
+      "description": "plan_apple.md APPLE-2/APPLE-13: cross-compiles CNA and final-links cna_ios_smoke.app for arm64 iPhone/iPad on a macOS host with Xcode. Tests/examples are off because their harnesses assume a desktop process/filesystem. The app is not run on a physical device; see docs/apple-platforms.md. Add -G Xcode and -DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID> to sign and deploy.",
       "binaryDir": "${sourceDir}/cmake-build-ios",
       "toolchainFile": "${sourceDir}/cmake/toolchains/ios.cmake",
       "cacheVariables": {
@@ -88,8 +88,8 @@
     },
     {
       "name": "ios-simulator",
-      "displayName": "iOS simulator (host arch, SDL_RENDERER, build only)",
-      "description": "plan_apple.md APPLE-2: the simulator counterpart of the 'ios' preset — same contract, iphonesimulator sysroot, host architecture. Kept in its own build directory because device and simulator binaries are not interchangeable even at the same architecture (different Mach-O platform), which is also why the vendored SDL install root is keyed by sysroot.",
+      "displayName": "iOS simulator (host arch, SDL_RENDERER, smoke app)",
+      "description": "plan_apple.md APPLE-2/APPLE-13: the simulator counterpart of the 'ios' preset. It final-links cna_ios_smoke.app; Apple CI installs and launches that app for one framework frame. Kept in its own build directory because device and simulator binaries are not interchangeable even at the same architecture, which is also why the vendored SDL install root is keyed by sysroot.",
       "binaryDir": "${sourceDir}/cmake-build-ios-sim",
       "toolchainFile": "${sourceDir}/cmake/toolchains/ios.cmake",
       "cacheVariables": {

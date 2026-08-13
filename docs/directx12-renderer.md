@@ -15,7 +15,7 @@ cmake -S . -B cmake-build-d3d12 \
   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
   -DCNA_GRAPHICS_RENDERER=D3D12 \
   -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d12 --target CNA
+cmake --build cmake-build-d3d12 --target CnaTests
 ```
 
 `D3D12` is hard-gated to `CMAKE_SYSTEM_NAME=Windows` at configure time, same as `D3D11`. The

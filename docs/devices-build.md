@@ -96,11 +96,10 @@ document's other sections use.
 cmake -S . -B cmake-build-debug \
       -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
 
-cmake --build cmake-build-debug --target CNA -j"$(nproc)"
 cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
 ```
 
-Both targets build clean as of this writing (2026-07-04, `feature/devices`,
+The test target and its transitive CNA libraries build clean as of this writing (2026-07-04, `feature/devices`,
 `plan_devices_phase8.md`) — compiled and tested locally in this session's
 git checkout; see the ZIP-export caveat above for what this does not claim.
 
@@ -239,12 +238,12 @@ cmake -S . -B cmake-build-android -G Ninja \
   -DANDROID_PLATFORM=android-24 \
   -DCNA_BUILD_TESTS=OFF
 
-cmake --build cmake-build-android --target CNA -j"$(nproc)"
+cmake --build cmake-build-android -j"$(nproc)"
 ```
 
 `-DCNA_BUILD_TESTS=OFF`: `googletest` was not configured for the Android NDK toolchain
-in this session, so `CnaTests` was never cross-compiled — only the `CNA` static library
-itself. This is a **compile-only** verification: no APK packaging, no emulator/device
+in this session, so `CnaTests` was never cross-compiled — only the configured CNA libraries.
+This is a **compile-only** verification: no APK packaging, no emulator/device
 run. Confirmed (Task P4-11, then re-confirmed after further changes in Task P5-7) that
 `Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__` code actually gets compiled
 in, via the NDK's own `llvm-nm` (the host's plain `nm` produces empty/wrong output
