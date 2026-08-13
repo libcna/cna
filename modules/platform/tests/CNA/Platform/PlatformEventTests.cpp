@@ -148,7 +148,8 @@ TEST(PlatformEventTests, TouchCoordinatesAreNormalised)
 TEST(PlatformEventTests, WindowEventKindNamesAreDistinct)
 {
     const WindowEventKind kinds[] = {
-        WindowEventKind::Resized,   WindowEventKind::PixelSizeChanged,
+        WindowEventKind::Exposed, WindowEventKind::Resized,
+        WindowEventKind::PixelSizeChanged,
         WindowEventKind::FocusGained, WindowEventKind::FocusLost,
         WindowEventKind::CloseRequested, WindowEventKind::Minimized,
         WindowEventKind::Maximized, WindowEventKind::Restored,
@@ -160,7 +161,7 @@ TEST(PlatformEventTests, WindowEventKindNamesAreDistinct)
         EXPECT_FALSE(ToString(kind).empty());
         names.insert(ToString(kind));
     }
-    EXPECT_EQ(names.size(), 11u);
+    EXPECT_EQ(names.size(), std::size(kinds));
 }
 
 TEST(PlatformEventTests, ResizedAndPixelSizeChangedAreDistinctKinds)

@@ -35,6 +35,8 @@ namespace CNA::Platform {
     /** @brief What happened to a window. */
     enum class WindowEventKind
     {
+        /** @brief The native client area must be repainted from retained renderer contents. */
+        Exposed,
         /** @brief The logical client size changed. */
         Resized,
         /** @brief The drawable pixel size changed, which may differ from a logical resize under high DPI. */

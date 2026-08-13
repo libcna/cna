@@ -1,5 +1,4 @@
 #include "CNA/Internal/Renderers/Glide/GlideRenderer.hpp"
-#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Glide/GlideAbi.hpp"
 #include "CNA/Internal/Renderers/Glide/GlideBlendFactor.hpp"
 #include "CNA/Internal/Renderers/Glide/GlideCapability.hpp"
@@ -18,7 +17,6 @@
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 
-#include <SDL3/SDL.h>
 #include <windows.h>
 
 #include <algorithm>
@@ -368,16 +366,11 @@ namespace CNA::Internal::Renderers::Glide
     struct GlideRenderer::Impl
     {
         explicit Impl(const GraphicsRendererCreateArgs& args)
-            : window(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
-            , virtualWidth(args.virtualWidth > 0 ? args.virtualWidth : 640)
+            : virtualWidth(args.virtualWidth > 0 ? args.virtualWidth : 640)
             , virtualHeight(args.virtualHeight > 0 ? args.virtualHeight : 480)
             , presentationMode(static_cast<CnaPresentationMode>(args.presentationMode))
             , swapInterval(args.swapInterval)
         {
-            if (window == nullptr)
-            {
-                throw std::runtime_error("GLIDE renderer requires CNA's SDL window");
-            }
             if (presentationMode != CnaPresentationMode::NativeBackBuffer)
             {
                 throw std::runtime_error(
@@ -388,12 +381,12 @@ namespace CNA::Internal::Renderers::Glide
             {
                 throw std::runtime_error("GLIDE renderer supports only swap intervals 0 (immediate) and 1 (v-sync)");
             }
-            const HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-                SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-            if (hwnd == nullptr)
+            CNA::Platform::Win32NativeWindow nativeWindow;
+            if (!CNA::Platform::TryGetWin32(args.surface.nativeHandle, nativeWindow))
             {
-                throw std::runtime_error("GLIDE renderer could not obtain a Win32 HWND from CNA's SDL window");
+                throw std::runtime_error("GLIDE renderer requires a Win32 native window");
             }
+            const HWND hwnd = static_cast<HWND>(nativeWindow.hwnd);
 
             try
             {
@@ -948,7 +941,6 @@ namespace CNA::Internal::Renderers::Glide
             const char* value = std::getenv("CNA_GLIDE_ADAPTIVE_TEXTURE_FORMAT");
             return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
         }();
-        SDL_Window* window = nullptr;
         GlideApi::Context context = nullptr;
         bool glideInitialized = false;
         int virtualWidth = 640;

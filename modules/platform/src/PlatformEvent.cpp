@@ -80,6 +80,7 @@ namespace CNA::Platform {
 
     const std::string& ToString(const WindowEventKind kind)
     {
+        static const std::string exposed = "Exposed";
         static const std::string resized = "Resized";
         static const std::string pixelSizeChanged = "PixelSizeChanged";
         static const std::string focusGained = "FocusGained";
@@ -94,6 +95,7 @@ namespace CNA::Platform {
 
         switch (kind)
         {
+            case WindowEventKind::Exposed:             return exposed;
             case WindowEventKind::Resized:             return resized;
             case WindowEventKind::PixelSizeChanged:    return pixelSizeChanged;
             case WindowEventKind::FocusGained:         return focusGained;

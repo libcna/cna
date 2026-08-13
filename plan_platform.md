@@ -67,13 +67,13 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1115** |
-| Files referencing SDL (all) | **448** |
-| Production files (`src/` + `include/`) referencing SDL | **137** |
-| …of which are renderer production files | **29** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1111** |
+| Files referencing SDL (all) | **444** |
+| Production files (`src/` + `include/`) referencing SDL | **133** |
+| …of which are renderer production files | **25** |
 | Test/example files referencing SDL | **311** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
-| Renderer families reaching for `SDL_GL_*` directly | **1** |
+| Renderer families reaching for `SDL_GL_*` directly | **0** |
 
 Production SDL surface per module (`src/` + `include/` only):
 
@@ -91,7 +91,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/core` | 1 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
 | `modules/graphics-ext` | 1 | ASCII post-process effect |
 | `modules/runtime` | 1 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
-| `modules/renderers/*` | 29 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (13 families) |
+| `modules/renderers/*` | 25 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (10 families) |
 
 The native-window properties actually consumed today — these define the minimum
 `NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:
@@ -109,7 +109,7 @@ SDL_PROP_WINDOW_X11_WINDOW_NUMBER
 Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatformGlContext`:
 
 ```text
-metal
+
 ```
 
 <!-- END GENERATED: tools/platform/sdl_inventory.py -->
@@ -400,7 +400,7 @@ task builds and verifies a coherent group.
 | PLAT-71 | Migrate `VULKAN` | ✅ | VULKAN now receives only `RendererSurfaceInfo` plus `IPlatformVulkanSurface`; instance extensions and surface create/destroy cross that narrow service by stable `WindowId`, while all Vulkan drawing and swapchain work remains in the renderer. A dedicated RAII owner rejects missing capability/null handles and returns an acquired surface exactly once even after later construction failure. The renderer registers the stable id, refreshes physical drawable size and display scale through `OnSurfaceChanged`, recreates its swapchain on a real size change and performs logical-coordinate transforms without a native window lookup. Production headers, sources and target definitions contain **zero SDL identifiers, headers or direct SDL link inputs**. The full Vulkan-selected `CnaTests` target builds; focused service/contract ownership coverage passes **11/11**, and all **5/5** real-display Vulkan smoke, orientation, resize, present-lifecycle and swapchain-synchronisation tests pass. Contract: **27 headers / 531 documented declarations**; inventory and hot-path gates pass, the generated renderer audit moves VULKAN to `sdl-free`, and the ratchet tightens to **131 files / 1715 references**, down two files and 27 references. |
 | PLAT-72 | Migrate `DILIGENT` / `LLGL` / `WICKED` | ✅ | All three runtime-selected/multi-API families now consume only `RendererSurfaceInfo` and the applicable narrow service. DILIGENT creates its optional OpenGL context through `IPlatformGlContext` and maps X11/Win32 handles for its other APIs; LLGL replaces `LlglSdlSurface` with an X11 native-handle `LlglPlatformSurface`; WICKED passes an immutable CNA native-window snapshot through a pinned upstream patch and creates its Vulkan Xlib surface without linking SDL. Shared state freezes identity/handle, refreshes drawable size/density and performs high-DPI coordinate conversion. Full selected `CnaTests` targets build for all three; DILIGENT real Vulkan/OpenGL coverage passes **4/4**, LLGL real Vulkan/OpenGL smoke/presentation/resize coverage passes **6/6**, and WICKED passes **22/22** hardware Vulkan/X11 lifecycle/geometry/staged-transfer tests plus its state/pipeline suite. The generated audit marks all three `sdl-free`; inventory and hot-path gates pass, and the ratchet tightens to **122 files / 1638 references**, down nine files and 77 references. |
 | PLAT-73 | Migrate the DirectX family (`DIRECTX1`…`DIRECTX12`, `DIRECT2D`, `FREEDIRECT`) | ✅ | All twelve native DirectDraw, Direct3D and Direct2D backends now consume the typed Win32 handle and mutable drawable-size/display-scale snapshot in `RendererSurfaceInfo`; their production sources, headers and target definitions contain **zero SDL identifiers or direct SDL link inputs**. Existing presentation behaviour stays intact: the legacy DirectDraw and D3D8 paths use high-DPI-aware logical transforms, D3D9/D3D11 retain lazy device/swap-chain resize, Direct2D retains dynamic target recreation, and D3D12 still permits its tested off-screen construction with no window. Every native target cross-compiles with MinGW. FREEDIRECT remains the deliberate design-decision-6 `sdl-upstream` exception: its third-party ABI owns an internal SDL renderer, so CNA cannot remove that dependency and its target already declares `REQUIRES_PLATFORM SDL3`. The generated audit moves all twelve native families to `sdl-free`; inventory and hot-path gates pass, and the ratchet tightens to **98 files / 1474 references**, down twenty-four files and 164 references. |
-| PLAT-74 | Migrate `GDI` / `GLIDE` / `METAL` | ⬜ | Native-handle consumers on Win32 and Cocoa. |
+| PLAT-74 | Migrate `GDI` / `GLIDE` / `METAL` | ✅ | GDI and GLIDE now consume the typed Win32 handle directly; GDI additionally keeps its drawable size and display scale in `PlatformRendererSurfaceState`, preserves minimized-window handling with `IsIconic`, and receives retained-client repaint requests through the new platform-neutral `OnSurfaceInvalidated(WindowId)` contract. SDL shown/exposed events map to the new `WindowEventKind::Exposed`, while resize, density, focus, restore and foreground transitions forward invalidation from `Game`. METAL now owns a layer-backed Cocoa `NSView`/`CAMetalLayer`, sizes it from the mutable platform snapshot and performs high-DPI coordinate transforms without an SDL view. Production sources, headers and target definitions for all three families contain zero counted SDL identifiers or direct SDL links. The GDI production target plus all nine affected example translation units cross-compile for x86_64 MinGW; GLIDE cross-compiles for its required i686 target. Apple SDKs are unavailable on the Linux worker, so Metal is covered by source/audit gates and its eight portable viewport-policy tests rather than a false cross-platform link claim. Focused surface/event/mapper/Metal coverage passes **58/58**; contract, inventory and hot-path gates pass, and the ratchet tightens to **94 files / 1414 references**, down four files and 60 references. |
 | PLAT-75 | Migrate `BGFX` / `WEBGPU` / `CANVAS` / `HTML_DOM` / `SVG_DOM` / `BLEND2D` / `SOFTWARE` / `PORTABLEGL` / `STUB` / `HEADLESS` | ⬜ | Remaining renderers. PLAT-3 sized this row: `BLEND2D` is a `cpu-presentation` family and moves to `IPlatformSurfacePresenter` (PLAT-127); `SOFTWARE`, `PORTABLEGL`, `STUB` and `HEADLESS` are pure `interface-leak` and need **no work here at all** beyond PLAT-59/PLAT-60; the rest are light native-handle users. |
 | PLAT-76 | Confirm the SDL-specific allowlist is exactly four | ⬜ | `python3 tools/platform/renderer_sdl_audit.py --check` exits 0: `SDL_RENDERER`, `SDL_GPU`, `FNA3D` and `FREEDIRECT` are the only renderers still referencing SDL3, and each declares `REQUIRES_PLATFORM SDL3` in CMake. The gate already exists and already fails correctly (38 families still coupled today), so this row is verified by running it, not by re-reading the tree. Any other survivor is a Phase 4 defect, not an accepted exception. |
 

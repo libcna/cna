@@ -14,12 +14,12 @@ namespace CNA::Internal::Renderers::Metal
     {
     public:
         /**
-         * @brief Creates a Metal device, command queue, and SDL Metal view for a macOS window.
+         * @brief Creates a Metal device, command queue, and layer-backed view for a macOS window.
          *
-         * @param args Renderer creation parameters, including the SDL window and presentation settings.
+         * @param args Renderer creation parameters, including the Cocoa window and presentation settings.
          */
         explicit MetalRenderer(const GraphicsRendererCreateArgs& args);
-        /** @brief Releases all Metal and SDL resources owned by the renderer. */
+        /** @brief Releases all Metal and Cocoa resources owned by the renderer. */
         ~MetalRenderer() override;
 
         /**
@@ -54,6 +54,8 @@ namespace CNA::Internal::Renderers::Metal
          * @param height Receives the logical viewport height.
          */
         void GetViewportSize(int& width, int& height) override;
+        /** @brief Refreshes drawable size and display density from the platform window snapshot. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /**
          * @brief Returns the physical drawable rectangle used by the default viewport.
          *
@@ -122,22 +124,22 @@ namespace CNA::Internal::Renderers::Metal
          */
         [[nodiscard]] bool SupportsStencilBuffer() const override;
         /**
-         * @brief Converts SDL window coordinates to CNA logical coordinates.
+         * @brief Converts platform window coordinates to CNA logical coordinates.
          *
-         * @param windowX Horizontal SDL window coordinate.
-         * @param windowY Vertical SDL window coordinate.
+         * @param windowX Horizontal logical client coordinate.
+         * @param windowY Vertical logical client coordinate.
          * @param logX Receives the horizontal CNA logical coordinate.
          * @param logY Receives the vertical CNA logical coordinate.
          * @return True when the coordinate lies within the active presentation area.
          */
         bool TransformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const override;
         /**
-         * @brief Converts CNA logical coordinates to SDL window coordinates.
+         * @brief Converts CNA logical coordinates to platform window coordinates.
          *
          * @param logX Horizontal CNA logical coordinate.
          * @param logY Vertical CNA logical coordinate.
-         * @param windowX Receives the horizontal SDL window coordinate.
-         * @param windowY Receives the vertical SDL window coordinate.
+         * @param windowX Receives the horizontal logical client coordinate.
+         * @param windowY Receives the vertical logical client coordinate.
          * @return True when the coordinate can be transformed using the active presentation area.
          */
         bool TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const override;

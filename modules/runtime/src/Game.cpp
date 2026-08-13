@@ -1049,16 +1049,26 @@ namespace Microsoft::Xna::Framework
                     case CNA::Platform::WindowEventKind::PixelSizeChanged:
                         Window_.updateFromPlatform();
                         GraphicsDevice_.UpdateViewportFromWindow();
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     case CNA::Platform::WindowEventKind::DisplayScaleChanged:
                         Window_.updateFromPlatform();
                         GraphicsDevice_.UpdateViewportFromWindow();
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     case CNA::Platform::WindowEventKind::FocusLost:
                         setIsActiveProperty(false);
                         break;
                     case CNA::Platform::WindowEventKind::FocusGained:
                         setIsActiveProperty(true);
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        break;
+                    case CNA::Platform::WindowEventKind::Exposed:
+                    case CNA::Platform::WindowEventKind::Minimized:
+                    case CNA::Platform::WindowEventKind::Maximized:
+                    case CNA::Platform::WindowEventKind::Restored:
+                    case CNA::Platform::WindowEventKind::DisplayChanged:
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     default:
                         break;
@@ -1073,6 +1083,7 @@ namespace Microsoft::Xna::Framework
                         break;
                     case CNA::Platform::AppLifecycleKind::DidEnterForeground:
                         setIsActiveProperty(true);
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(0);
                         break;
                     case CNA::Platform::AppLifecycleKind::LowMemory:
                         break;

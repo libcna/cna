@@ -5,6 +5,7 @@
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -116,7 +117,8 @@ namespace
     bool ExerciseLiveStorage(SDL_Window* window)
     {
         bool ok = true;
-        GdiRenderer renderer(window, 8, 6, CnaPresentationMode::Stretch);
+        GdiRenderer renderer(CNA::Examples::SdlTestRendererArgs(
+            window, nullptr, nullptr, 8, 6, CnaPresentationMode::Stretch));
 
         GdiFramebufferStorageTelemetry storage = renderer.DebugGetBackbufferStorage();
         ok &= Expect(storage.colorBytes == 8u * 6u * 4u && storage.depthBytes == 0u &&
@@ -155,8 +157,8 @@ namespace
             "oversized render target fails at the documented byte budget");
         ok &= ExpectArgumentOutOfRange(
             [&] {
-                GdiRenderer invalid(
-                    window, 0, 6, CnaPresentationMode::Stretch);
+                GdiRenderer invalid(CNA::Examples::SdlTestRendererArgs(
+                    window, nullptr, nullptr, 0, 6, CnaPresentationMode::Stretch));
             },
             "must be positive",
             "GDI constructor rejects a non-positive backbuffer dimension");

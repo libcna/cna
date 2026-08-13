@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Metal/MetalRenderer.hpp"
-#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPipelineKey.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalCommandFailure.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalNormalMatrix.hpp"
@@ -34,10 +34,9 @@
 #include "System/NotSupportedException.hpp"
 
 #ifdef __APPLE__
+#import <Cocoa/Cocoa.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_metal.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -51,6 +50,52 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+@interface CNAMetalView : NSView
+- (void)updateDrawableWidth:(int)width height:(int)height displayScale:(float)displayScale;
+@end
+
+@implementation CNAMetalView
++ (Class)layerClass
+{
+    return [CAMetalLayer class];
+}
+
+- (BOOL)wantsUpdateLayer
+{
+    return YES;
+}
+
+- (CALayer*)makeBackingLayer
+{
+    return [CAMetalLayer layer];
+}
+
+- (instancetype)initWithFrame:(NSRect)frame
+{
+    self = [super initWithFrame:frame];
+    if (self != nil)
+    {
+        self.wantsLayer = YES;
+        self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        self.layer.opaque = YES;
+    }
+    return self;
+}
+
+- (void)updateDrawableWidth:(int)width height:(int)height displayScale:(float)displayScale
+{
+    CAMetalLayer* metalLayer = (CAMetalLayer*)self.layer;
+    metalLayer.contentsScale = displayScale > 0.0f ? displayScale : 1.0f;
+    metalLayer.drawableSize = CGSizeMake(MAX(1, width), MAX(1, height));
+}
+
+- (NSView*)hitTest:(NSPoint)point
+{
+    (void)point;
+    return nil;
+}
+@end
 
 namespace CNA::Internal::Renderers::Metal
 {
@@ -1426,10 +1471,15 @@ static id<MTLTexture> makeMultisampleTexture(id<MTLDevice> dev, MTLPixelFormat f
 
 struct MetalRenderer::Impl
 {
+    explicit Impl(const RendererSurfaceInfo& surfaceInfo)
+        : surface(surfaceInfo, "MetalRenderer")
+    {
+    }
+
     ~Impl();
 
-    SDL_Window* window=nullptr;
-    SDL_MetalView view=nullptr;
+    PlatformRendererSurfaceState surface;
+    CNAMetalView* view=nil;
     CAMetalLayer* layer=nil;
     id<MTLDevice> device=nil;
     id<MTLCommandQueue> queue=nil;
@@ -1988,22 +2038,22 @@ struct MetalRenderer::Impl
     }
 
     // plan_metal.md Phase 15 (METAL-153/155/156/158/159): the shared letterbox/overscan/stretch/
-    // native/fixed-height-dynamic-width viewport math, ported near-verbatim from
-    // SdlGpuRenderer::ComputeLogicalViewport() (an already-shipped, already-relied-upon
-    // implementation of the exact same CnaPresentationMode contract every renderer shares) rather
-    // than re-derived from scratch. `width`/`height`/`x`/`y` are the logical canvas's rectangle in
+    // native/fixed-height-dynamic-width viewport math, ported near-verbatim from the already-
+    // shipped GPU presentation implementation rather than re-derived from scratch.
+    // `width`/`height`/`x`/`y` are the logical canvas's rectangle in
     // physical window pixels; `logicalWidth`/`logicalHeight` are the virtual-resolution size that
     // rectangle represents (equal to the physical size whenever no virtual resolution is set,
     // which is also this struct's all-zero-input-safe degenerate case).
     // plan_metal.md METAL-34-style extraction: the real arithmetic now lives in the plain-C++
     // MetalLogicalViewport.hpp (no Objective-C, buildable and unit-tested on any platform without
     // an Apple toolchain) -- kept as a thin same-name alias plus a wrapper here so all existing call
-    // sites in this file are unaffected; this method's only remaining job is asking SDL for the
-    // real physical window size, which genuinely does need a live window.
+    // sites in this file are unaffected; physical sizing comes from the latest platform snapshot.
     using LogicalViewport = MetalLogicalViewport;
     LogicalViewport computeLogicalViewport() const
     {
-        int pw=0, ph=0; SDL_GetWindowSizeInPixels(window, &pw, &ph);
+        const auto drawableSize=surface.GetDrawableSize();
+        const int pw=drawableSize.width;
+        const int ph=drawableSize.height;
         LogicalViewport vp = ComputeMetalLogicalViewport(pw, ph, (CnaPresentationMode)presentationMode, virtualW, virtualH);
         return vp;
     }
@@ -2029,26 +2079,27 @@ struct MetalRenderer::Impl
     Sprite2DTransform computeSpriteTransform() const;
 
     // plan_metal.md METAL-153/154: real window<->logical coordinate transforms, previously
-    // entirely unimplemented (base `IGraphicsRenderer` default returns false) -- SdlInputBridge
+    // entirely unimplemented (base `IGraphicsRenderer` default returns false) -- the input bridge
     // depends on this for correct mouse coordinates on any letterboxed/scaled window, per this
-    // method's own doc comment on IGraphicsRenderer.hpp. Ported from
-    // SdlGpuRenderer::TransformWindowToLogical/TransformLogicalToWindow verbatim (same
-    // LogicalViewport shape, same formula) rather than re-derived.
+    // method's own doc comment on IGraphicsRenderer.hpp. Ported from the established GPU
+    // renderer transform (same LogicalViewport shape and formula) rather than re-derived.
     bool transformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const
     {
         LogicalViewport vp = computeLogicalViewport();
         if (vp.width == 0.0f || vp.height == 0.0f) return false;
-        logX = (windowX - vp.x) * vp.logicalWidth / vp.width;
-        logY = (windowY - vp.y) * vp.logicalHeight / vp.height;
-        return windowX >= vp.x && windowX < vp.x + vp.width &&
-               windowY >= vp.y && windowY < vp.y + vp.height;
+        const float drawableX=surface.WindowToDrawable(windowX);
+        const float drawableY=surface.WindowToDrawable(windowY);
+        logX = (drawableX - vp.x) * vp.logicalWidth / vp.width;
+        logY = (drawableY - vp.y) * vp.logicalHeight / vp.height;
+        return drawableX >= vp.x && drawableX < vp.x + vp.width &&
+               drawableY >= vp.y && drawableY < vp.y + vp.height;
     }
     bool transformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const
     {
         LogicalViewport vp = computeLogicalViewport();
         if (vp.logicalWidth == 0.0f || vp.logicalHeight == 0.0f) return false;
-        windowX = vp.x + logX * vp.width / vp.logicalWidth;
-        windowY = vp.y + logY * vp.height / vp.logicalHeight;
+        windowX = surface.DrawableToWindow(vp.x + logX * vp.width / vp.logicalWidth);
+        windowY = surface.DrawableToWindow(vp.y + logY * vp.height / vp.logicalHeight);
         return true;
     }
 };
@@ -2078,7 +2129,7 @@ MetalRenderer::Impl::~Impl()
     [library release]; library=nil;
     [queue release]; queue=nil;
     [layer release]; layer=nil;
-    if (view) { SDL_Metal_DestroyView(view); view=nullptr; }
+    if (view) { [view removeFromSuperview]; [view release]; view=nil; }
     [device release]; device=nil;
 }
 
@@ -3012,7 +3063,7 @@ MetalRenderer::Impl::Sprite2DTransform MetalRenderer::Impl::computeSpriteTransfo
     if (currentRenderTarget) {
         // An offscreen RenderTarget2D's own pixel space IS the logical space -- no
         // window-relative letterbox scaling applies at all (computeLogicalViewport() queries the
-        // real window size via SDL, which has nothing to do with an offscreen texture's own
+        // live window size, which has nothing to do with an offscreen texture's own
         // coordinate space); this is a real, deliberate 1:1 mapping, not a shortcut.
         id<MTLTexture> rtColor = currentRenderTarget->colorTexture();
         const float dw=(float)rtColor.width, dh=(float)rtColor.height;
@@ -3117,18 +3168,23 @@ static std::function<void()> makeMetalResourceOwnerHealthCheck(
     };
 }
 
-MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::make_shared<Impl>())
+MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::make_shared<Impl>(args.surface))
 {
-    auto& p=*impl_; p.window=CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId); p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
+    auto& p=*impl_; p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
     // plan_metal.md Phase 15: real, previously-invisible bug -- args.presentationMode was never
     // read at all (Impl::presentationMode's own field default, Letterbox=0, silently won this
     // instead), even though GraphicsRendererCreateArgs::presentationMode's own doc comment states
-    // its default is FixedHeightDynamicWidth (XNA/Windows-Phone-matching) and SdlGpu/EasyGL's own
+    // its default is FixedHeightDynamicWidth (XNA/Windows-Phone-matching) and the GPU/EasyGL
     // constructors both already forward it correctly. Had zero observable effect before this
     // phase since nothing consumed `presentationMode` yet; matters now that computeLogicalViewport()
     // does.
     p.presentationMode=(int)args.presentationMode;
-    if(!p.window) throw std::runtime_error("Metal renderer requires an SDL_Window");
+    CNA::Platform::CocoaNativeWindow nativeWindow;
+    if(!CNA::Platform::TryGetCocoa(p.surface.GetNativeHandle(),nativeWindow))
+        throw std::runtime_error("Metal renderer requires a Cocoa native window");
+    NSWindow* cocoaWindow=(NSWindow*)nativeWindow.window;
+    NSView* contentView=[cocoaWindow contentView];
+    if(!contentView) throw std::runtime_error("Metal renderer requires a Cocoa content view");
     // MTLCreateSystemDefaultDevice follows the Create ownership convention and returns one owned
     // (+1) reference under MRR. Do not retain it again. Likewise, every `new*` result stored below
     // is already +1; only borrowed factory/getter results that survive their call scope
@@ -3137,12 +3193,17 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     // The historical MSAA path engaged on macOS CI but did not produce correct edge coverage.
     // Keep the supported contract deterministic until an adapted build has passing Mac evidence.
     p.deviceSampleCount=MetalAppliedMultiSampleCount(args.multiSampleCount)+1;
-    p.view=SDL_Metal_CreateView(p.window); if(!p.view) throw std::runtime_error(std::string("Metal: SDL_Metal_CreateView failed: ")+SDL_GetError());
-    p.layer=(CAMetalLayer*)SDL_Metal_GetLayer(p.view);
-    if(!p.layer) throw std::runtime_error("Metal: SDL_Metal_GetLayer returned null");
+    p.view=[[CNAMetalView alloc] initWithFrame:[contentView bounds]];
+    if(!p.view) throw std::runtime_error("Metal: failed to create a layer-backed Cocoa view");
+    [contentView addSubview:p.view];
+    const auto drawableSize=p.surface.GetDrawableSize();
+    [p.view updateDrawableWidth:drawableSize.width height:drawableSize.height
+                   displayScale:p.surface.GetDisplayScale()];
+    p.layer=(CAMetalLayer*)p.view.layer;
+    if(!p.layer) throw std::runtime_error("Metal: Cocoa view did not create a CAMetalLayer");
     [p.layer retain]; p.layer.device=p.device; p.layer.pixelFormat=MTLPixelFormatBGRA8Unorm; p.layer.framebufferOnly=NO;
     // plan_metal.md METAL-168: swapInterval was previously stored but never applied -- CAMetalLayer
-    // has no direct integer-interval knob (unlike SDL_GL_SetSwapInterval's 0/1/-1 or Vulkan's
+    // has no direct integer-interval knob (unlike OpenGL's 0/1/-1 swap interval or Vulkan's
     // present-mode choice, both real per-value behavior elsewhere in this codebase), only the
     // boolean displaySyncEnabled. XNA PresentInterval::Immediate(0) -> NO (uncapped); One(1, the
     // default)/Two(2) both -> YES (real, honest vsync) since Metal has no true half-rate present
@@ -3202,6 +3263,13 @@ void MetalRenderer::GetViewportSize(int&w,int&h){
     // ratio instead of returning virtualW unconditionally, matching its own documented contract.
     auto vp=impl_->computeLogicalViewport();
     w=(int)std::lround(vp.logicalWidth); h=(int)std::lround(vp.logicalHeight);
+}
+void MetalRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+{
+    impl_->surface.Update(surface);
+    const auto drawableSize=impl_->surface.GetDrawableSize();
+    [impl_->view updateDrawableWidth:drawableSize.width height:drawableSize.height
+                        displayScale:impl_->surface.GetDisplayScale()];
 }
 void MetalRenderer::GetDefaultViewportRect(int&x,int&y,int&w,int&h)
 {
@@ -3731,7 +3799,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     }
     int n=primitiveVertexCount(pt,pc);
     // plan_metal.md: real bug found and fixed 2026-07-20 -- every other renderer (EasyGL/Vulkan/
-    // Bgfx/SdlGpu/WebGPU) reads GpuDrawParams::vertexStart/startIndex/baseVertex and applies them;
+    // Bgfx/native GPU/WebGPU) reads GpuDrawParams::vertexStart/startIndex/baseVertex and applies them;
     // this function silently hardcoded 0/0 for all three, so any draw with a nonzero offset into a
     // shared vertex/index buffer rendered the wrong vertex range. Never caught until
     // Metal_PbrEffect_Golden/Metal_SkinnedPbrEffect_Golden (METAL-89) became the first Metal test

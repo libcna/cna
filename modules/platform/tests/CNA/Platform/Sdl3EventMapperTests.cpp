@@ -42,6 +42,8 @@ TEST(Sdl3EventMapperTests, WindowEventsMapToTheirKinds)
         SDL_EventType sdl;
         WindowEventKind expected;
     } cases[] = {
+        {SDL_EVENT_WINDOW_SHOWN, WindowEventKind::Exposed},
+        {SDL_EVENT_WINDOW_EXPOSED, WindowEventKind::Exposed},
         {SDL_EVENT_WINDOW_RESIZED, WindowEventKind::Resized},
         {SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, WindowEventKind::PixelSizeChanged},
         {SDL_EVENT_WINDOW_FOCUS_GAINED, WindowEventKind::FocusGained},

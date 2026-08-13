@@ -24,6 +24,8 @@ namespace CNA::Platform::Sdl3 {
 
             switch (source.type)
             {
+                case SDL_EVENT_WINDOW_SHOWN:
+                case SDL_EVENT_WINDOW_EXPOSED:         window.kind = WindowEventKind::Exposed; break;
                 case SDL_EVENT_WINDOW_RESIZED:            window.kind = WindowEventKind::Resized; break;
                 // Distinct from Resized on purpose: under high DPI the drawable pixel size can
                 // change without the logical size doing so, and a renderer that treats them as
@@ -59,6 +61,8 @@ namespace CNA::Platform::Sdl3 {
                 return true;
 
             // --- window ------------------------------------------------------------------------
+            case SDL_EVENT_WINDOW_SHOWN:
+            case SDL_EVENT_WINDOW_EXPOSED:
             case SDL_EVENT_WINDOW_RESIZED:
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             case SDL_EVENT_WINDOW_FOCUS_GAINED:

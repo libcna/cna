@@ -5,6 +5,7 @@
 // attempted more than once for a given Present().
 
 #include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -47,7 +48,8 @@ namespace
     bool ExerciseDcReleaseTransaction(SDL_Window* window)
     {
         bool ok = true;
-        GdiRenderer renderer(window, 16, 12, CnaPresentationMode::NativeBackBuffer);
+        GdiRenderer renderer(CNA::Examples::SdlTestRendererArgs(
+            window, nullptr, nullptr, 16, 12, CnaPresentationMode::NativeBackBuffer));
 
         // Ordinary present establishes a clean baseline: no pending damage, generation
         // acknowledged.
@@ -65,9 +67,12 @@ namespace
         ok &= Expect(SDL_MinimizeWindow(window) && SDL_SyncWindow(window),
                      "native window enters the minimized lifecycle state");
         SDL_PumpEvents();
+        renderer.OnSurfaceInvalidated(SDL_GetWindowID(window));
         ok &= Expect(SDL_RestoreWindow(window) && SDL_SyncWindow(window),
                      "native window completes the restore round-trip");
         SDL_PumpEvents();
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
+        renderer.OnSurfaceInvalidated(SDL_GetWindowID(window));
         ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                      "real restore requests a retained repaint before the injected failure");
 

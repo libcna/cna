@@ -1332,6 +1332,11 @@ namespace CNA::Internal::Renderers
         /// Refreshes the platform-owned presentation surface snapshot after a resize or density
         /// change. The default is inert for renderers whose native swap chain handles this itself.
         virtual void OnSurfaceChanged(const RendererSurfaceInfo& /*surface*/) {}
+        /**
+         * @brief Notifies retained presentation backends that a native client must be repainted.
+         * @param window Affected stable window id, or zero for a process-wide invalidation.
+         */
+        virtual void OnSurfaceInvalidated(CNA::Platform::WindowId /*window*/) {}
         /// Returns the PHYSICAL viewport rectangle (window/framebuffer pixels)
         /// GraphicsDevice::UpdateViewportFromWindow() should apply as the default GL/GPU viewport
         /// after a window resize or presentation-mode change -- separate from GetViewportSize(),
