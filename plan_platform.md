@@ -68,12 +68,12 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1122** |
-| Files referencing SDL (all) | **514** |
-| Production files (`src/` + `include/`) referencing SDL | **202** |
-| …of which are renderer production files | **94** |
-| Test/example files referencing SDL | **312** |
+| Files referencing SDL (all) | **511** |
+| Production files (`src/` + `include/`) referencing SDL | **200** |
+| …of which are renderer production files | **92** |
+| Test/example files referencing SDL | **311** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
-| Renderer families reaching for `SDL_GL_*` directly | **11** |
+| Renderer families reaching for `SDL_GL_*` directly | **10** |
 
 Production SDL surface per module (`src/` + `include/` only):
 
@@ -91,7 +91,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/core` | 1 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
 | `modules/graphics-ext` | 1 | ASCII post-process effect |
 | `modules/runtime` | 1 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
-| `modules/renderers/*` | 94 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (38 families) |
+| `modules/renderers/*` | 92 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (37 families) |
 
 The native-window properties actually consumed today — these define the minimum
 `NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:
@@ -109,7 +109,7 @@ SDL_PROP_WINDOW_X11_WINDOW_NUMBER
 Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatformGlContext`:
 
 ```text
-diligent easygl magnum metal opengl1 opengl2 opengl4 opengles1 openvg skia sokol
+diligent magnum metal opengl1 opengl2 opengl4 opengles1 openvg skia sokol
 ```
 
 <!-- END GENERATED: tools/platform/sdl_inventory.py -->
@@ -393,7 +393,7 @@ task builds and verifies a coherent group.
 | PLAT-64 | Migrate `Texture2D` / `TextureCube` | ✅ | `Texture2D` and `TextureCube`, including their public headers, now contain zero SDL/IMG identifiers. `Texture2D` passes only RGBA8 bytes and dimensions to the existing internal `ImageLoader`; fit/cover resize and crop, exact-size scaling, PNG/JPEG memory encoding and filename encoding are all hidden behind that one backend edge for PLAT-65 to replace. The backend now owns native surfaces and dynamic streams with RAII and copies decoded/scaled pixels row-by-row using the actual pitch instead of assuming packed native storage. `TextureCube` already had no native operations; its two stale renderer examples were the only remaining SDL vocabulary and were removed rather than manufacturing an abstraction. A patterned center-crop regression test pins pixels as well as dimensions. All three existing `CnaTests` configurations build, and stream decode/resize, PNG/JPEG save and cube coverage passes **69 / 69** under SDL3, HEADLESS and TERMINAL. Both target implementations and headers pass the zero-identifier scan; contract (**27 headers / 521 declarations**), inventory and hot-path gates pass. Ratchet: **166 files / 2445 references**, down two files and 67 references. |
 | PLAT-65 | Migrate `ImageLoader` | ✅ | Chose the repository's already-pinned `stb_image` 2.30 / `stb_image_write` 1.16 rather than a platform service: decoding ordinary asset bytes is not a host capability, and the same headers were already a content dependency. `ImageLoader` now decodes file/memory input to packed RGBA8, performs FNA-compatible fit/cover geometry with a CNA-owned pixel-centre bilinear scaler, and writes PNG/JPEG to memory or files with translation-unit-local stb symbols. `ThumbnailGenerator` reuses the same encoder instead of relying on graphics' former transitive SDL3_image link. Exact interpolation, malformed inputs, PNG/JPEG/BMP round trips, patterned cropping and external-window ownership are regression-tested. The stale PLAT-62 bridge was removed as part of satisfying the link criterion: `GraphicsDevice` carries no raw SDL window, platform window requirements and OpenGL visual attributes cross typed contract values, and legacy handles are opaque platform tokens. All three existing `CnaTests` configurations build; the common focused image/window slice passes **34 / 37 + three selection-only skips** in SDL3 and **37 / 37** in HEADLESS and TERMINAL. Contract: **27 headers / 527 documented declarations**; all gates pass; ratchet: **164 files / 2304 references**, down two files and 141 references. `cna_graphics_core` links neither SDL3 nor SDL3_image directly. |
 | PLAT-66 | Migrate the coordinate-conversion contract | ✅ | `IGraphicsRenderer` now defines window↔logical conversion entirely between the platform window's logical client units and the renderer's game units; density, presentation viewport and letterbox/crop offsets belong to the renderer. The `WindowId` registry is the sole input lookup path in both directions. `Mouse` no longer includes SDL, stores a native view or resolves an id; its strict-XNA integer handle is interpreted only by `IPlatform::AdoptWindowHandle`, while the runtime publishes the stable id directly. `PlatformInputBridge` likewise removed its SDL renderer fast path. Normalized touch events now carry their platform-captured client size, eliminating the last native window lookup from shared coordinate conversion. The allowlisted SDL renderer registers itself and implements the common methods with its offset-aware native transform. SDL-free tests pin registry use, a 50-pixel letterbox offset, exact `GetState`/`SetPosition` inversion and touch client-size scaling under every platform selection. All three existing `CnaTests` configurations build; focused coverage passes **46 / 47 + one environment-only video skip** under SDL3 and **45 / 46 + one selection-only skip** under HEADLESS and TERMINAL. A temporary real `SDL_RENDERER` selection compiled its updated implementation before the debug cache was restored to `HEADLESS`/`CNA_DEVICES=OFF`. Contract: **27 headers / 529 documented declarations**; inventory, classification and hot-path gates pass; ratchet: **163 files / 2266 references**, down one file and 38 references. |
-| PLAT-67 | Migrate the EasyGL family | ⬜ | `easygl` + the five GL profiles it serves, via `IPlatformGlContext`. The single highest-leverage renderer task — EasyGL is shared by `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2`. |
+| PLAT-67 | Migrate the EasyGL family | ✅ | All five public identities (`OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2`) now create, bind, recreate, present and configure their context through `IPlatformGlContext`, supplied as the only applicable narrow service in `GraphicsRendererCreateArgs`. The service uses stable `WindowId` values and exposes a C-compatible entry-point loader, so EasyGL production code and its target contain **zero SDL identifiers, headers or direct link inputs**. A first-declared RAII context owner keeps the context current until every GL resource has been destroyed and transactionally cleans up both make-current and later constructor failures. `EasyGLSurfaceState` consumes only `RendererSurfaceInfo`: drawable pixels remain physical, input coordinates remain logical client units, and resize/display-scale events refresh the snapshot through `IGraphicsRenderer::OnSurfaceChanged`. SDL-free fakes pin failed creation, late-failure cleanup, selected profile attributes, missing-capability refusal and non-1.0-scale resize transforms. Full `CnaTests` builds and **10/10** focused tests pass for OPENGLES2 and OPENGLES3; the OPENGL33 production target builds; WEBGL1/2 share the same source but require the unavailable Emscripten toolchain. SDL3/HEADLESS/TERMINAL compatibility builds pass their focused lifecycle/contract coverage, including the captured SDL event oracle. Contract: **27 headers / 531 documented declarations**; inventory, classification, renderer audit and hot-path gates pass; ratchet: **161 files / 2206 references**, down two files and 60 references. |
 | PLAT-68 | Migrate `OPENGL1` / `OPENGL2` / `OPENGL4` / `OPENGLES1` | ⬜ | The standalone GL profiles. |
 | PLAT-69 | Migrate `MAGNUM` | ⬜ | Desktop GL via Magnum; see `docs/magnum-renderer.md` for its boundary. |
 | PLAT-70 | Migrate `SKIA` / `OPENVG` / `SOKOL` | ⬜ | Remaining `SDL_GL_*` consumers. `SKIA` is the larger of the two `cpu-presentation` families PLAT-3 found (83 SDL references in code): its presentation path moves to `IPlatformSurfacePresenter` (PLAT-127), not to a GL context. |

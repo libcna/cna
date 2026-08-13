@@ -31,7 +31,8 @@ change; reaching for `IPlatformWindow` as an escape hatch is not allowed.
 Three already-defined services may accompany the snapshot when the selected renderer needs the
 matching operation:
 
-- `IPlatformGlContext` creates/makes-current/swaps an OpenGL context and resolves entry points.
+- `IPlatformGlContext` creates/makes-current/swaps an OpenGL context by stable `WindowId` and
+  exposes both object-oriented and C-callback entry-point resolution.
 - `IPlatformVulkanSurface` creates and destroys a Vulkan presentation surface.
 - `IPlatformSurfacePresenter` puts one finished CPU RGBA frame on screen.
 
@@ -85,7 +86,7 @@ renderer with a fresh `RendererSurfaceInfo` for only these changes:
 | `Suspended` | `Minimized`, `WillEnterBackground` | Stop acquiring/presenting a surface that the OS has made unavailable. |
 | `Resumed` | `Restored`, `DidEnterForeground` | Revalidate the surface and redraw; the accompanying snapshot is authoritative. |
 
-The implementation will expose one synchronous `IGraphicsRenderer::OnSurfaceChanged(...)` entry
+The implementation exposes one synchronous `IGraphicsRenderer::OnSurfaceChanged(...)` entry
 point rather than callbacks registered against `IPlatform`. Delivery happens on the same thread
 that drains events and completes before the next update/draw. There is no subscription lifetime,
 cross-thread callback, or second event queue to reconcile.
@@ -135,6 +136,9 @@ primitive, vertex, pixel or input event.
   transform is registered. Each renderer accounts for its own presentation viewport, density and
   letterbox/crop offsets. The SDL renderer remains an allowed implementation edge and performs its
   native offset-aware conversion inside that module, not in input or the common interface.
+- PLAT-67 supplies `IPlatformGlContext` only to the selected EasyGL family. EasyGL owns its context
+  transactionally, consumes resize and density from `RendererSurfaceInfo`, and has no native
+  window-toolkit include, symbol or link input.
 - Normalized touch coordinates cross the event boundary together with the client size that defines
   them. Scaling to client units therefore also stays platform-neutral and requires no per-event
   window query in the consumer.

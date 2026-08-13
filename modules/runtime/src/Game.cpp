@@ -1048,6 +1048,11 @@ namespace Microsoft::Xna::Framework
                     case CNA::Platform::WindowEventKind::Resized:
                     case CNA::Platform::WindowEventKind::PixelSizeChanged:
                         Window_.updateFromPlatform();
+                        GraphicsDevice_.UpdateViewportFromWindow();
+                        break;
+                    case CNA::Platform::WindowEventKind::DisplayScaleChanged:
+                        Window_.updateFromPlatform();
+                        GraphicsDevice_.UpdateViewportFromWindow();
                         break;
                     case CNA::Platform::WindowEventKind::FocusLost:
                         setIsActiveProperty(false);

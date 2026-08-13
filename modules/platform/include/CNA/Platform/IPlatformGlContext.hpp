@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Platform/PlatformEvent.hpp"
+
 #include <string>
 
 namespace CNA::Platform {
-
-    class IPlatformWindow;
 
     /** @brief Which OpenGL profile a context is created for. */
     enum class GlProfile
@@ -52,13 +52,15 @@ namespace CNA::Platform {
     /** @brief An opaque handle to a created OpenGL context. Null means "no context". */
     using GlContextHandle = void*;
 
+    /** @brief C-compatible OpenGL entry-point loader accepted by GL helper libraries. */
+    using GlProcAddressLoader = void* (*)(const char* name);
+
     /**
      * @brief Creates and manages OpenGL contexts for windows.
      *
-     * Eleven renderer families call `SDL_GL_*` directly today — `easygl` (serving five GL
-     * profiles), `opengl1`, `opengl2`, `opengl4`, `opengles1`, `openvg`, `skia`, `sokol`,
-     * `magnum`, `metal` and `diligent`. This one interface frees all of them at once, which is
-     * why it is a single service rather than per-renderer plumbing.
+     * Renderer families use this narrow service instead of importing a native window toolkit.
+     * EasyGL is the first migrated family; the same contract is intentionally reusable by the
+     * remaining context-backed renderers rather than duplicated as per-renderer plumbing.
      *
      * Gated by the `OpenGlContext` capability.
      */
@@ -74,13 +76,13 @@ namespace CNA::Platform {
          * The window must have been created with `WindowRenderIntent::OpenGl`: the native
          * attribute has to be set at window-creation time and cannot be applied afterwards.
          *
-         * @param window The window to create the context for.
+         * @param window The stable id of the platform window to create the context for.
          * @param description The requested attributes.
          * @return A non-null context handle.
          * @throws PlatformNotSupportedException If the platform reports no `OpenGlContext` capability.
          * @throws PlatformException If context creation failed.
          */
-        [[nodiscard]] virtual GlContextHandle CreateContext(IPlatformWindow& window,
+        [[nodiscard]] virtual GlContextHandle CreateContext(WindowId window,
                                                            const GlContextDescription& description) = 0;
 
         /**
@@ -93,18 +95,18 @@ namespace CNA::Platform {
         /**
          * @brief Makes a context current on the calling thread.
          *
-         * @param window The window to bind the context to.
+         * @param window The stable id of the platform window to bind the context to.
          * @param context The context to make current, or null to unbind.
          * @throws PlatformException If the context could not be made current.
          */
-        virtual void MakeCurrent(IPlatformWindow& window, GlContextHandle context) = 0;
+        virtual void MakeCurrent(WindowId window, GlContextHandle context) = 0;
 
         /**
          * @brief Presents the back buffer of a window's current context.
          *
-         * @param window The window to swap.
+         * @param window The stable id of the platform window to swap.
          */
-        virtual void SwapBuffers(IPlatformWindow& window) = 0;
+        virtual void SwapBuffers(WindowId window) = 0;
 
         /**
          * @brief Sets the swap interval for the current context.
@@ -122,6 +124,17 @@ namespace CNA::Platform {
          * @return The function pointer, or null when the entry point is unavailable.
          */
         [[nodiscard]] virtual void* GetProcAddress(const std::string& name) const = 0;
+
+        /**
+         * @brief Gets the same resolver as a C-compatible callback.
+         *
+         * GL helper libraries bootstrap by accepting a plain function pointer rather than a
+         * service object. Keeping that adapter at the platform edge prevents a renderer from
+         * naming or linking the native window toolkit merely to initialise its GL dispatch table.
+         *
+         * @return A non-null loader callback valid for the platform service's lifetime.
+         */
+        [[nodiscard]] virtual GlProcAddressLoader GetProcAddressLoader() const = 0;
 
         /**
          * @brief Gets the attributes the created context actually has.

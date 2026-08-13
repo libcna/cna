@@ -24,6 +24,22 @@ namespace CNA::Platform::Sdl3 {
             return *sdlWindow;
         }
 
+        SDL_Window* RequireSdl3Window(const WindowId window, const char* operation)
+        {
+            SDL_Window* nativeWindow =
+                SDL_GetWindowFromID(static_cast<SDL_WindowID>(window));
+            if (nativeWindow == nullptr)
+            {
+                throw PlatformException(operation, "unknown or expired window id");
+            }
+            return nativeWindow;
+        }
+
+        void* LoadSdlGlProcAddress(const char* name)
+        {
+            return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name));
+        }
+
         /// Converts between VkSurfaceKHR and the contract's std::uint64_t handle.
         ///
         /// VkSurfaceKHR is always 64 bits wide, but its C *type* is not uniform: Vulkan defines
@@ -84,10 +100,10 @@ namespace CNA::Platform::Sdl3 {
 
     // --- OpenGL context (PLAT-41) -------------------------------------------------------------------
 
-    GlContextHandle Sdl3GlContext::CreateContext(IPlatformWindow& window,
+    GlContextHandle Sdl3GlContext::CreateContext(const WindowId window,
                                                  const GlContextDescription& description)
     {
-        Sdl3Window& sdlWindow = RequireSdl3Window(window, "GlContext::CreateContext");
+        SDL_Window* nativeWindow = RequireSdl3Window(window, "GlContext::CreateContext");
 
         // Attributes must be set BEFORE context creation; setting them afterwards is silently
         // ignored, which is how a renderer ends up with a context it did not ask for.
@@ -100,7 +116,7 @@ namespace CNA::Platform::Sdl3 {
         SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, description.multisampleSamples);
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, description.doubleBuffer ? 1 : 0);
 
-        SDL_GLContext context = SDL_GL_CreateContext(sdlWindow.GetSdlWindow());
+        SDL_GLContext context = SDL_GL_CreateContext(nativeWindow);
         if (context == nullptr)
         {
             throw PlatformException("GlContext::CreateContext", SDL_GetError());
@@ -117,19 +133,18 @@ namespace CNA::Platform::Sdl3 {
         SDL_GL_DestroyContext(static_cast<SDL_GLContext>(context));
     }
 
-    void Sdl3GlContext::MakeCurrent(IPlatformWindow& window, const GlContextHandle context)
+    void Sdl3GlContext::MakeCurrent(const WindowId window, const GlContextHandle context)
     {
-        Sdl3Window& sdlWindow = RequireSdl3Window(window, "GlContext::MakeCurrent");
-        if (!SDL_GL_MakeCurrent(sdlWindow.GetSdlWindow(), static_cast<SDL_GLContext>(context)))
+        SDL_Window* nativeWindow = RequireSdl3Window(window, "GlContext::MakeCurrent");
+        if (!SDL_GL_MakeCurrent(nativeWindow, static_cast<SDL_GLContext>(context)))
         {
             throw PlatformException("GlContext::MakeCurrent", SDL_GetError());
         }
     }
 
-    void Sdl3GlContext::SwapBuffers(IPlatformWindow& window)
+    void Sdl3GlContext::SwapBuffers(const WindowId window)
     {
-        Sdl3Window& sdlWindow = RequireSdl3Window(window, "GlContext::SwapBuffers");
-        SDL_GL_SwapWindow(sdlWindow.GetSdlWindow());
+        SDL_GL_SwapWindow(RequireSdl3Window(window, "GlContext::SwapBuffers"));
     }
 
     bool Sdl3GlContext::SetSwapInterval(const int interval)
@@ -141,7 +156,12 @@ namespace CNA::Platform::Sdl3 {
 
     void* Sdl3GlContext::GetProcAddress(const std::string& name) const
     {
-        return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name.c_str()));
+        return LoadSdlGlProcAddress(name.c_str());
+    }
+
+    GlProcAddressLoader Sdl3GlContext::GetProcAddressLoader() const
+    {
+        return &LoadSdlGlProcAddress;
     }
 
     GlContextDescription Sdl3GlContext::GetContextAttributes(GlContextHandle) const

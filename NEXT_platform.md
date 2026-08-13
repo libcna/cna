@@ -106,8 +106,8 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **163 files / 2266 references** of direct SDL coupling outside the PLAT-3 allowlist, down
-from the 253 / 3641 baseline. Contract: 27 headers, 529 documented declarations, all SDL-free.
+Ratchet: **161 files / 2206 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+from the 253 / 3641 baseline. Contract: 27 headers, 531 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
 `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` failure was fixed —
@@ -131,7 +131,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**126 ✅ · 3 🟨 · 25 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — **81 %** of the 155
+**127 ✅ · 3 🟨 · 24 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — **82 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -150,8 +150,9 @@ task rows complete.
   `GraphicsDevice` now carries only `IPlatformWindow`, creation requirements are typed contract
   values, and `cna_graphics_core` has no direct SDL/SDL3_image link. PLAT-66 made platform
   client-coordinate↔logical-game conversion a `WindowId`-registry contract and removed native
-  window resolution from mouse/touch conversion. Continue at PLAT-67. 46
-  renderer identities remain in scope.
+  window resolution from mouse/touch conversion. PLAT-67 then migrated all five EasyGL identities
+  onto `IPlatformGlContext` plus `RendererSurfaceInfo`; the family is now completely SDL-free.
+  Continue at PLAT-68.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — five redundant backends are deleted; `Keyboard`, `Mouse` and `MouseCursor`
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by
@@ -256,8 +257,10 @@ each, zero difference). The round trip is now checked before it is trusted.
   Behavioural-fidelity questions are therefore answered from in-repo evidence (several source
   comments record FNA-verified conclusions), and anything with no such evidence is marked
   `needs_human` rather than guessed.
-- **Only `sharp-runtime` is a sibling repository.** `easy-gl` and `free-direct` are absent, so the
-  five EasyGL GL profiles and `FREEDIRECT` cannot configure.
+- **`sharp-runtime`, `easy-gl` and `meta-gl` are available as sibling repositories.** The three
+  native EasyGL identities configure here; OPENGLES2/OPENGLES3 were fully built and tested and
+  OPENGL33's production target was built. WEBGL1/WEBGL2 require an Emscripten toolchain, which is
+  unavailable. `free-direct` is absent, so `FREEDIRECT` cannot configure.
 - **Vendored third-party is only** SDL, SDL_image, SDL_mixer, cgltf, enet, stb. Vulkan, DirectX,
   Magnum, Skia, bgfx, WickedEngine, Diligent, LLGL, FNA3D, wgpu-native, Blend2D, ShivaVG and
   PortableGL are all unavailable, so most of Phase 4's renderer families cannot be compiled here.
@@ -267,12 +270,10 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Migrate the EasyGL family (PLAT-67).** Move `easygl` and the five profiles it serves
-   (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) from the renderer-only SDL window
-   resolver onto `IPlatformGlContext` plus `RendererSurfaceInfo`. Keep context creation/currentness,
-   swap, resize, display scale and the PLAT-66 client↔logical coordinate contract behaviorally
-   intact. This is the highest-leverage renderer family because all six identities share the same
-   implementation.
+1. **Migrate the standalone GL profiles (PLAT-68).** Move `OPENGL1`, `OPENGL2`, `OPENGL4` and
+   `OPENGLES1` from direct native-toolkit context/window calls onto the `IPlatformGlContext` pattern
+   proven by PLAT-67. Preserve each profile's requested version, compatibility/core/ES mode,
+   context-recovery behavior, swap interval, resize and coordinate semantics.
 
 2. **Completed Phase 6 reference.** PLAT-91…99 now provide independent SDL-free playback and
    recording contracts, orthogonal `SDL3`/`NULL` selection, an SDL3 device edge, and a paced

@@ -31,9 +31,11 @@
 #include "CNA/GraphicsCapability.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
+namespace CNA::Platform { class IPlatformGlContext; }
 
 namespace CNA::Internal::Renderers
 {
+    struct RendererSurfaceInfo;
     using Color = Microsoft::Xna::Framework::Color;
     using Rectangle = Microsoft::Xna::Framework::Rectangle;
     using Vector2 = Microsoft::Xna::Framework::Vector2;
@@ -1322,6 +1324,9 @@ namespace CNA::Internal::Renderers
         virtual void Clear(float r, float g, float b, float a) = 0;
         virtual void Present() = 0;
         virtual void GetViewportSize(int& width, int& height) = 0;
+        /// Refreshes the platform-owned presentation surface snapshot after a resize or density
+        /// change. The default is inert for renderers whose native swap chain handles this itself.
+        virtual void OnSurfaceChanged(const RendererSurfaceInfo& /*surface*/) {}
         /// Returns the PHYSICAL viewport rectangle (window/framebuffer pixels)
         /// GraphicsDevice::UpdateViewportFromWindow() should apply as the default GL/GPU viewport
         /// after a window resize or presentation-mode change -- separate from GetViewportSize(),
@@ -2026,6 +2031,14 @@ namespace CNA::Internal::Renderers
     {
         /** @brief Platform-neutral description of the renderer's presentation surface. */
         RendererSurfaceInfo surface;
+        /**
+         * @brief OpenGL context service for GL-family renderers, otherwise null.
+         *
+         * The pointer is non-owning; the platform outlives every renderer. GL renderers use it
+         * with @ref RendererSurfaceInfo::windowId and never receive an `IPlatformWindow` or a
+         * native window-toolkit type.
+         */
+        CNA::Platform::IPlatformGlContext* glContext = nullptr;
         /// Virtual (game-logic) resolution the renderer should present at. A renderer maps this
         /// coordinate space onto the actual platform surface according to presentationMode.
         /// 0 means "unset"; the renderer should ignore logical presentation.

@@ -115,6 +115,7 @@ TEST_F(Sdl3GraphicsServiceTest, DestroyingANullVulkanSurfaceIsANoOp)
 TEST_F(Sdl3GraphicsServiceTest, DestroyingANullGlContextIsANoOp)
 {
     EXPECT_NO_THROW(platform_->GetGlContext()->DestroyContext(nullptr));
+    EXPECT_NE(platform_->GetGlContext()->GetProcAddressLoader(), nullptr);
 }
 
 TEST_F(Sdl3GraphicsServiceTest, GlContextCreationEitherSucceedsOrRefusesCleanly)
@@ -140,7 +141,7 @@ TEST_F(Sdl3GraphicsServiceTest, GlContextCreationEitherSucceedsOrRefusesCleanly)
     GlContextHandle context = nullptr;
     try
     {
-        context = platform_->GetGlContext()->CreateContext(*glWindow, requested);
+        context = platform_->GetGlContext()->CreateContext(glWindow->GetId(), requested);
     }
     catch (const PlatformException&)
     {
@@ -155,10 +156,10 @@ TEST_F(Sdl3GraphicsServiceTest, GlContextCreationEitherSucceedsOrRefusesCleanly)
     platform_->GetGlContext()->DestroyContext(context);
 }
 
-TEST_F(Sdl3GraphicsServiceTest, GlServiceRejectsAWindowItDidNotCreate)
+TEST_F(Sdl3GraphicsServiceTest, GlServiceRejectsUnknownIdAndPresenterRejectsForeignWindow)
 {
-    // Guards the dynamic_cast path: a window from another platform must produce a named refusal
-    // rather than an unchecked cast.
+    // Both stable-id lookup and the presenter's typed-window check must produce a named refusal
+    // rather than dereferencing an unknown native object.
     class ForeignWindow final : public IPlatformWindow
     {
     public:
@@ -192,7 +193,7 @@ TEST_F(Sdl3GraphicsServiceTest, GlServiceRejectsAWindowItDidNotCreate)
 
     ForeignWindow foreign;
     GlContextDescription requested;
-    EXPECT_THROW((void)platform_->GetGlContext()->CreateContext(foreign, requested), PlatformException);
+    EXPECT_THROW((void)platform_->GetGlContext()->CreateContext(0, requested), PlatformException);
     EXPECT_THROW((void)platform_->CreateSurfacePresenter(foreign), PlatformException);
 }
 

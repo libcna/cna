@@ -18,22 +18,22 @@ namespace CNA::Platform::Sdl3 {
     public:
         /**
          * @brief Creates a context for a window.
-         * @param window The window to create the context for.
+         * @param window The stable id of the window to create the context for.
          * @param description The requested attributes.
          * @return A non-null context handle.
          */
-        [[nodiscard]] GlContextHandle CreateContext(IPlatformWindow& window,
+        [[nodiscard]] GlContextHandle CreateContext(WindowId window,
                                                     const GlContextDescription& description) override;
         /** @brief Destroys a context. @param context The context to destroy. */
         void DestroyContext(GlContextHandle context) override;
         /**
          * @brief Makes a context current.
-         * @param window The window to bind to.
+         * @param window The stable id of the window to bind to.
          * @param context The context, or null to unbind.
          */
-        void MakeCurrent(IPlatformWindow& window, GlContextHandle context) override;
-        /** @brief Presents the back buffer. @param window The window to swap. */
-        void SwapBuffers(IPlatformWindow& window) override;
+        void MakeCurrent(WindowId window, GlContextHandle context) override;
+        /** @brief Presents the back buffer. @param window The stable id of the window to swap. */
+        void SwapBuffers(WindowId window) override;
         /**
          * @brief Sets the swap interval.
          * @param interval 0 none, 1 vsync, -1 adaptive.
@@ -46,6 +46,8 @@ namespace CNA::Platform::Sdl3 {
          * @return The pointer, or null when unavailable.
          */
         [[nodiscard]] void* GetProcAddress(const std::string& name) const override;
+        /** @brief Gets the GL loader callback. @return Platform-owned resolver. */
+        [[nodiscard]] GlProcAddressLoader GetProcAddressLoader() const override;
         /**
          * @brief Gets the attributes the driver actually granted.
          * @param context The context to query.

@@ -2366,6 +2366,11 @@ namespace Microsoft::Xna::Framework::Graphics
             args.surface.drawableSize = platformWindow_->GetPixelSize();
             args.surface.displayScale = platformWindow_->GetDisplayScale();
         }
+#ifdef CNA_RENDERER_EASYGL
+        // PLAT-67: EasyGL receives only the narrow context service plus the surface value
+        // snapshot. The renderer never resolves a native window or reaches through IPlatform.
+        args.glContext = platform_->GetGlContext();
+#endif
         args.virtualWidth = virtualWidth_;
         args.virtualHeight = virtualHeight_;
         args.contextRecoveryEnabled = contextRecoveryEnabled_;
@@ -2448,6 +2453,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::UpdateViewportFromWindow()
     {
+        if (renderer_ != nullptr && platformWindow_ != nullptr)
+        {
+            CNA::Internal::Renderers::RendererSurfaceInfo surface;
+            surface.windowId = platformWindow_->GetId();
+            surface.nativeHandle = platformWindow_->GetNativeHandle();
+            surface.drawableSize = platformWindow_->GetPixelSize();
+            surface.displayScale = platformWindow_->GetDisplayScale();
+            renderer_->OnSurfaceChanged(surface);
+        }
+
         int width = 0;
         int height = 0;
 
