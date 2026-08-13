@@ -33,6 +33,7 @@ on:
       - 'modules/runtime/CMakeLists.txt'
       - 'modules/core/include/CNA/Platform.hpp'
       - 'modules/core/include/CNA/Entrypoint.hpp'
+      - 'modules/core/CMakeLists.txt'
       - 'modules/core/src/DesktopOS.cpp'
       - 'modules/core/tests/CNA/PlatformTests.cpp'
       - 'modules/runtime/src/Game.cpp'
@@ -42,6 +43,7 @@ on:
       - 'modules/runtime/tests/Microsoft/Xna/Framework/GameWindowTests.cpp'
       - 'modules/runtime/tests/Microsoft/Xna/Framework/GameTests.cpp'
       - 'modules/graphics/src/Xna/GraphicsDevice.cpp'
+      - 'modules/audio/tests/CNA/Internal/Audio/AudioMixerTests.cpp'
       - 'modules/storage/src/StorageDevice.cpp'
       - 'scripts/check-apple-platform-cmake.sh'
       - 'tests/apple/ios_smoke.cpp'
@@ -177,17 +179,17 @@ jobs:
           -DCNA_MAX_VENDORED_BUILD_JOBS=2
           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-      # The default target, not `--target CNA`: the CNA umbrella is an INTERFACE library and has
-      # no build rule of its own. The default target also links cna_ios_smoke.app, deliberately:
-      # archive-only builds cannot expose missing UIKit frameworks or dynamic SDL dependencies.
+      # Build the final application target, not `--target CNA`: the CNA umbrella is an INTERFACE
+      # library and has no build rule of its own. cna_ios_smoke depends on the whole selected CNA
+      # closure and exposes failures that an archive-only build cannot, without also building
+      # unrelated host-shaped tools for an app-sandboxed platform.
       - name: Build CNA
         working-directory: cna
-        run: cmake --build ${{ matrix.build_dir }} --parallel 3
+        run: cmake --build ${{ matrix.build_dir }} --target cna_ios_smoke --parallel 3
 
-      # A wrong-platform object file links fine into a static archive and only explodes when an
-      # application is linked, which this leg never does. Reading the Mach-O platform back off
-      # the archive is what actually catches an accidental macOS build wearing an iOS build
-      # directory's name.
+      # A wrong-platform object file can hide inside a static archive until the final link needs
+      # that particular member. Read the platform directly from CNA's archive as an explicit
+      # assertion in addition to the application link.
       - name: Verify the archive really targets iOS
         working-directory: cna
         run: |
