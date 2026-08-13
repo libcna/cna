@@ -280,6 +280,7 @@ class GltfBuilder:
         self._default_scene: int | None = None
         self._extensions_used: list[str] = []
         self._extensions_required: list[str] = []
+        self._root_extensions: dict[str, Any] = {}
         #: The L2 expectation: one decoded record per accessor, in accessor order.
         self.accessor_records: list[dict[str, Any]] = []
 
@@ -626,6 +627,21 @@ class GltfBuilder:
         self._materials.append(dict(material))
         return len(self._materials) - 1
 
+    def add_root_extension(self, name: str, payload: dict[str, Any]) -> None:
+        """Adds one extension payload to the document root.
+
+        Root and object extension payloads are structurally different in glTF. In particular,
+        ``KHR_materials_variants`` declares its variant-name table at the root while each
+        primitive carries only material mappings. Keeping this explicit prevents a fixture from
+        accidentally putting the name table on a material or mesh.
+
+        ``declare_extensions`` remains the single place that states ``extensionsUsed`` /
+        ``extensionsRequired``; this method only authors the payload.
+        """
+        if name in self._root_extensions:
+            raise ValueError(f"{self.name}: root extension {name!r} was added twice")
+        self._root_extensions[name] = dict(payload)
+
     def add_image(self, png_bytes: bytes, *, name: str | None = None) -> int:
         """Adds an image, carried as a base64 ``data:`` URI (plan_gltf.md ``GLTF-190``).
 
@@ -701,8 +717,11 @@ class GltfBuilder:
             doc["scene"] = self._default_scene
         doc["scenes"] = self._scenes
         doc["nodes"] = self._nodes
+        root_extensions = dict(self._root_extensions)
         if self._lights:
-            doc["extensions"] = {_KHR_LIGHTS: {"lights": self._lights}}
+            root_extensions[_KHR_LIGHTS] = {"lights": self._lights}
+        if root_extensions:
+            doc["extensions"] = root_extensions
         if self._cameras:
             doc["cameras"] = self._cameras
         doc["meshes"] = self._meshes

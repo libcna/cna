@@ -157,6 +157,32 @@ skinning and a later morph re-upload do not rewrite `ModelMesh::BoundingSphere`;
 vertices outside the imported default-pose sphere, the application updates that read-write XNA
 property. The whole-model accessor will use the updated value on its next call.
 
+## `KHR_materials_variants`: source indices and complete part states
+
+`plan_gltf.md` `GLTF-341`/`GLTF-342`. CNA preserves the extension's root variant array in source
+order and uses its integer position as identity. Display names are exposed for UI, but they are not
+keys: the specification does not require them to be unique. A freshly loaded model always reports
+selection `-1`, meaning every primitive's core `material`; importing the extension never changes
+the default rendering implicitly.
+
+Selection is model-wide and sparse. For each part CNA first restores its captured default, then
+uses an override only when that primitive maps the selected variant. This reset-first rule matters
+when switching from a mapped variant to one absent on that primitive: retaining the previous state
+would violate the extension while looking plausible. `-1` performs the same explicit restoration.
+
+An alternative is a **complete material-dependent part state**, not an effect parameter patch.
+Changing material may select another effect class or vertex layout and may alter textures, sampler
+states and the morph buffer's packed stride. CNA therefore extracts each mapped material through
+the ordinary full primitive path and swaps the resulting effect, vertex buffer/count, tag and all
+sampler slots together. Index data, topology, placement and bounds do not depend on material and
+remain shared.
+
+The `.cnj` writer uses the same rule rather than inventing a smaller variant-material schema: every
+mapped alternative is a complete mesh-state record linked to the preceding default record, while a
+single root name table preserves identity. The reader captures linked records as alternatives and
+does not expose them as additional `ModelMeshPart`s. Thus direct glTF and offline conversion have
+one selection contract, including mappings that cross PBR and unlit layouts.
+
 ## `KHR_texture_transform`: baked, not shader-side
 
 `plan_gltf.md` `GLTF-186`. The extension gives each texture reference its own offset/rotation/scale

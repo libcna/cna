@@ -597,7 +597,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**131 of the 139** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**132 of the 140** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
@@ -856,6 +856,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `mat-normal-occlusion-scale` | materials | L1, L2, L3 | normalTexture.scale; occlusionTexture.strength; texture view without a texture |
 | `mat-alpha-mask-cutoff` | materials | L1, L2, L3 | alphaMode MASK; non-default alphaCutoff; alpha test reaches the shader; no texture maps |
 | `mat-unimplemented-extensions` | materials | L1, L2, L3 | KHR_materials_clearcoat; KHR_materials_sheen; KHR_materials_volume; ignored extension reporting |
+| `mat-material-variants` | materials | L1, L2, L3, L4, L5 | KHR_materials_variants; source-order variant identity; sparse variant mapping; PBR-to-unlit variant; default material reset |
 | `mat-unlit` | materials | L1, L2, L3, L4, L5 | KHR_materials_unlit; non-PBR material model; vertex stride 32 |
 | `mat-unlit-vertex-color-alpha` | materials | L1, L2, L3, L4, L5 | KHR_materials_unlit; COLOR_0; translucent baseColorFactor; alphaMode BLEND; non-PBR material model |
 | `mat-specular-glossiness` | materials | L1, L2, L3, L4, L5 | KHR_materials_pbrSpecularGlossiness; archived extension; converted to metallic-roughness; dropped specular tint |

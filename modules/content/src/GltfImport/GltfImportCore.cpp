@@ -3030,6 +3030,55 @@ namespace CNA::Internal::GltfImport
         return out;
     }
 
+    std::vector<MaterialVariantOutEXT> ExtractMaterialVariantsEXT(
+        const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
+        const SkeletonResult* skel, float unitScale)
+    {
+        std::vector<MaterialVariantOutEXT> result;
+        if (data == nullptr || prim.mappings_count == 0) { return result; }
+
+        std::vector<bool> seen(static_cast<std::size_t>(data->variants_count), false);
+        result.reserve(static_cast<std::size_t>(prim.mappings_count));
+        for (cgltf_size i = 0; i < prim.mappings_count; ++i)
+        {
+            const cgltf_material_mapping& mapping = prim.mappings[i];
+            if (mapping.variant >= data->variants_count)
+            {
+                throw std::runtime_error(
+                    "Primitive '" + name + "' maps material variant index " +
+                    std::to_string(mapping.variant) + ", but the file declares only " +
+                    std::to_string(data->variants_count) + " variant(s).");
+            }
+            if (mapping.material == nullptr)
+            {
+                throw std::runtime_error(
+                    "Primitive '" + name + "' has a material-variant mapping with no material.");
+            }
+            if (seen[static_cast<std::size_t>(mapping.variant)])
+            {
+                throw std::runtime_error(
+                    "Primitive '" + name + "' maps material variant index " +
+                    std::to_string(mapping.variant) +
+                    " more than once; one selected variant cannot choose two materials.");
+            }
+            seen[static_cast<std::size_t>(mapping.variant)] = true;
+
+            cgltf_primitive variantPrimitive = prim;
+            variantPrimitive.material = mapping.material;
+            // The copied mappings describe choices *from* the default primitive and are not part
+            // of the selected material state itself. Clearing them also makes accidental recursive
+            // extraction impossible if this helper is reused later.
+            variantPrimitive.mappings = nullptr;
+            variantPrimitive.mappings_count = 0;
+
+            MaterialVariantOutEXT out;
+            out.variantIndex = static_cast<std::size_t>(mapping.variant);
+            out.mesh = ExtractMesh(data, variantPrimitive, name, skel, unitScale);
+            result.push_back(std::move(out));
+        }
+        return result;
+    }
+
     SceneGraphOut BuildSceneGraph(const cgltf_data* data)
     {
         SceneGraphOut graph;
@@ -3506,8 +3555,11 @@ namespace CNA::Internal::GltfImport
                  "metallic-roughness equivalent, so a file REQUIRING the extension is asking for "
                  "something the conversion cannot deliver.",
                  "GLTF-349"},
-                {"KHR_materials_variants", GltfExtensionSupportEXT::ParsedButIgnored, false,
-                 "The default material mapping is imported; the variants are not.",
+                {"KHR_materials_variants", GltfExtensionSupportEXT::Implemented, true,
+                 "The source-order variant table and sparse primitive mappings are preserved. "
+                 "Model's CNAEXT selection API swaps the complete material-dependent part state, "
+                 "including effect, vertex layout, textures and samplers, on both direct glTF and "
+                 "offline .cnj paths while leaving the default mapping unchanged.",
                  "GLTF-341"},
                 {"KHR_materials_ior", GltfExtensionSupportEXT::ParsedButIgnored, false,
                  "The factor reaches PBR effect state and shader-ready dielectric F0 at L6, but "

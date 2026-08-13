@@ -802,6 +802,125 @@ def mat_unimplemented_extensions() -> Fixture:
     )
 
 
+def mat_material_variants() -> Fixture:
+    """Two mapped KHR_materials_variants plus one sparse fallback. Owns GLTF-341/342.
+
+    The default is a red PBR material, variant 0 another PBR material, and variant 1 unlit. The
+    latter deliberately changes the vertex layout from stride 48 to stride 32, proving that
+    selection swaps the complete part state rather than only an Effect pointer. Variant 2 has no
+    mapping on the primitive: selecting it must restore the default, which separates the
+    extension's sparse fallback rule from stale state left by the prior selection.
+    """
+    b = GltfBuilder("mat-material-variants")
+    variant_names = ["Ocean blue", "Unlit green", "No mapping"]
+    # Both extensions are required deliberately: the fixture proves CNA claims variants only once
+    # the selection semantics and the unlit alternative are both available, rather than merely
+    # noticing the mapping and importing the default material.
+    b.declare_extensions(required=["KHR_materials_variants", "KHR_materials_unlit"])
+    b.add_root_extension("KHR_materials_variants", {
+        "variants": [{"name": name} for name in variant_names],
+    })
+
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS,
+                                   accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+
+    default_material = b.add_material({
+        "name": "DefaultRed",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": [0.6, 0.1, 0.1, 1.0],
+            "metallicFactor": 0.0,
+            "roughnessFactor": 0.4,
+        },
+    })
+    blue_variant = b.add_material({
+        "name": "OceanBlue",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": [0.05, 0.2, 0.9, 1.0],
+            "metallicFactor": 0.65,
+            "roughnessFactor": 0.25,
+        },
+    })
+    unlit_variant = b.add_material({
+        "name": "UnlitGreen",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": [0.1, 0.8, 0.2, 0.75],
+            "metallicFactor": 0.0,
+            "roughnessFactor": 1.0,
+        },
+        "extensions": {"KHR_materials_unlit": {}},
+        "alphaMode": "BLEND",
+    })
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "material": default_material,
+        "mode": TRIANGLES,
+        "extensions": {"KHR_materials_variants": {"mappings": [
+            {"material": blue_variant, "variants": [0]},
+            {"material": unlit_variant, "variants": [1]},
+        ]}},
+    }], name="VariantTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    expected_material = {
+        "index": default_material,
+        "name": "DefaultRed",
+        "baseColorFactor": [0.6, 0.1, 0.1, 1.0],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.4,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return Fixture(
+        id="mat-material-variants", audit_fixture=None, owning_group="materials",
+        description="A red default PBR material, a blue PBR variant, an unlit green variant that "
+                    "changes effect class and vertex stride, and a third variant intentionally "
+                    "unmapped on the primitive. Fresh load and sparse selection keep the default; "
+                    "selection by source index swaps the complete part state.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["KHR_materials_variants", "source-order variant identity",
+                  "sparse variant mapping", "PBR-to-unlit variant", "default material reset"],
+        spec_anchors=["extensions", "metallic-roughness-material"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="VariantTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4={**world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+            "materialVariants": {
+                "names": variant_names,
+                "defaultMaterial": default_material,
+                "defaultBaseColorFactor": [0.6, 0.1, 0.1, 1.0],
+                "mappings": [
+                    {"variant": 0, "material": blue_variant,
+                     "effect": "PbrEffect", "vertexStride": 48,
+                     "baseColorFactor": [0.05, 0.2, 0.9, 1.0]},
+                    {"variant": 1, "material": unlit_variant,
+                     "effect": "BasicEffect", "vertexStride": 32,
+                     "baseColorFactor": [0.1, 0.8, 0.2, 0.75]},
+                ],
+                "unmappedVariant": 2,
+                "defaultSelection": -1,
+                "selectionRule": "Selecting a variant resets every primitive to its core material "
+                                 "first, then applies that variant's sparse mappings. Variant 2 has "
+                                 "no mapping and therefore produces the exact default effect and "
+                                 "vertex buffer rather than retaining variant 1's unlit state.",
+            }},
+    )
+
+
 #: A UV set with three distinct, non-degenerate coordinates, so a stride whose TextureCoordinate
 #: slot were mis-offset produces visibly wrong bytes rather than three copies of (0,0).
 _UNLIT_TEXCOORDS = [(0.0, 0.0), (0.75, 0.125), (0.25, 0.875)]
@@ -1197,4 +1316,5 @@ def mat_specular_glossiness() -> Fixture:
 FIXTURES = [mat_default, mat_factor_only_gold, mat_emissive_factor, mat_emissive_strength,
             mat_vertex_color_pbr,
             mat_normal_occlusion_scale, mat_alpha_mask_cutoff, mat_unimplemented_extensions,
-            mat_unlit, mat_unlit_vertex_color_alpha, mat_specular_glossiness, mat_authored_tangent]
+            mat_material_variants, mat_unlit, mat_unlit_vertex_color_alpha,
+            mat_specular_glossiness, mat_authored_tangent]

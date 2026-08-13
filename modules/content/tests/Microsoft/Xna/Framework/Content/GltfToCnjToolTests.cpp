@@ -2076,6 +2076,105 @@ TEST(GltfToCnjToolTest, OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForThe
     EXPECT_GE(comparedParts, ids.size()) << "the sweep compared fewer parts than fixtures";
 }
 
+// plan_gltf.md GLTF-341/GLTF-342: material variants are complete mesh-part states, not merely
+// alternate colours. Prove the offline schema keeps the source-order name table, the sparse
+// primitive mapping and the PBR-to-unlit vertex-layout/effect transition, then compare every
+// selectable state against the direct runtime path at the draw-parameter boundary.
+TEST(GltfToCnjToolTest, MaterialVariantsRoundTripAsSelectableCompletePartStates)
+{
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    const std::filesystem::path input = corpus / "mat-material-variants.gltf";
+    if (!std::filesystem::exists(input)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    ScratchDir contentRoot;
+    ASSERT_EQ(0, RunGltfToCnjTool(input.string(), contentRoot.path().string(), "variants"));
+
+    std::ifstream cnjFile(contentRoot.path() / "variants.cnj");
+    const std::string cnj((std::istreambuf_iterator<char>(cnjFile)),
+                          std::istreambuf_iterator<char>());
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"materialVariantNames\": [\"Ocean blue\", \"Unlit green\", "
+                       "\"No mapping\"]"));
+    EXPECT_NE(std::string::npos, cnj.find("\"variantOf\": 0, \"materialVariant\": 0"));
+    EXPECT_NE(std::string::npos, cnj.find("\"variantOf\": 0, \"materialVariant\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"vertexStride\": 32, \"effect\": \"BasicEffect\""));
+
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ContentManager runtimeContent(nullptr, corpus.string());
+    runtimeContent.setGraphicsDevice(gd);
+    Model runtime = runtimeContent.Load<Model>("mat-material-variants");
+
+    ContentManager offlineContent(nullptr, contentRoot.path().string());
+    offlineContent.setGraphicsDevice(gd);
+    Model offline = offlineContent.Load<Model>("variants");
+
+    const std::vector<std::string> expectedNames = {
+        "Ocean blue", "Unlit green", "No mapping"};
+    EXPECT_EQ(expectedNames, runtime.getMaterialVariantNamesEXTProperty());
+    EXPECT_EQ(expectedNames, offline.getMaterialVariantNamesEXTProperty());
+    ASSERT_EQ(1, offline.getMeshesProperty().getCountProperty());
+    ASSERT_EQ(1, offline.getMeshesProperty()[0]->getMeshPartsProperty().getCountProperty());
+    ModelMeshPart* offlinePart = offline.getMeshesProperty()[0]->getMeshPartsProperty()[0];
+    auto* defaultEffect = offlinePart->getEffectProperty();
+    auto* defaultVertices = offlinePart->getVertexBufferProperty();
+
+    const Matrix identity = Matrix::getIdentityProperty();
+    for (const int selection : {-1, 0, 1, 2})
+    {
+        SCOPED_TRACE("material variant " + std::to_string(selection));
+        runtime.setMaterialVariantEXTProperty(selection);
+        offline.setMaterialVariantEXTProperty(selection);
+        const auto runtimeDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+            runtime, identity, identity, identity);
+        const auto offlineDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+            offline, identity, identity, identity);
+        ASSERT_EQ(1u, runtimeDraws.size());
+        ASSERT_EQ(1u, offlineDraws.size());
+        ExpectL6MaterialStateEqual(runtimeDraws.front(), offlineDraws.front());
+    }
+
+    offline.setMaterialVariantEXTProperty(1);
+    EXPECT_NE(nullptr, dynamic_cast<BasicEffect*>(offlinePart->getEffectProperty()));
+    EXPECT_NE(defaultVertices, offlinePart->getVertexBufferProperty());
+    offline.setMaterialVariantEXTProperty(2);
+    EXPECT_EQ(defaultEffect, offlinePart->getEffectProperty())
+        << "an unmapped variant retained the previously selected primitive state";
+    EXPECT_EQ(defaultVertices, offlinePart->getVertexBufferProperty());
+    EXPECT_EQ(1, offline.getMeshesProperty()[0]->getEffectsProperty().getCountProperty());
+
+    const auto malformedLoadError = [&](std::string text, const std::string& from,
+                                        const std::string& to, const std::string& asset) {
+        const std::size_t position = text.find(from);
+        if (position == std::string::npos)
+        {
+            ADD_FAILURE() << "generated variants.cnj does not contain " << from;
+            return std::string{};
+        }
+        text.replace(position, from.size(), to);
+        WriteFile(contentRoot.path() / (asset + ".cnj"), text);
+        ContentManager malformedContent(nullptr, contentRoot.path().string());
+        malformedContent.setGraphicsDevice(gd);
+        try
+        {
+            (void)malformedContent.Load<Model>(asset);
+        }
+        catch (const ContentLoadException& ex)
+        {
+            return std::string(ex.what());
+        }
+        return std::string{};
+    };
+    EXPECT_NE(std::string::npos,
+              malformedLoadError(cnj, "\"variantOf\": 0", "\"variantOf\": 99",
+                                 "variants_bad_owner").find("unknown or later mesh entry 99"));
+    EXPECT_NE(std::string::npos,
+              malformedLoadError(cnj, "\"materialVariant\": 0", "\"materialVariant\": 9",
+                                 "variants_bad_index").find("out-of-range materialVariant 9"));
+}
+
 // PBR + skinning combo: the offline CLI tool must serialize a skinned, PBR-mapped mesh through
 // SkinnedPbrEffect (stride 68), not fall back to plain SkinnedEffect (losing the normal map) or
 // plain PbrEffect (losing the skin -- see gltf_to_cnj.cpp's own effect-selection comment).

@@ -4,10 +4,10 @@
     "generator": "CNA gltf_fixtures"
   },
   "extensionsUsed": [
-    "KHR_materials_variants"
+    "KHR_materials_clearcoat"
   ],
   "extensionsRequired": [
-    "KHR_materials_variants"
+    "KHR_materials_clearcoat"
   ],
   "scene": 0,
   "scenes": [

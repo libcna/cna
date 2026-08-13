@@ -133,9 +133,10 @@ loss at run time — is `docs/gltf-limitations.md`.
 | Capability | Status | Notes and evidence |
 |---|---|---|
 | Runtime load — `Content.Load<Model>("character.glb")` | ✅ | No offline step. `ContentManager`'s `ModelTypeReader` resolves `.gltf`/`.glb` through `CNA::Internal::GltfImport::GltfImportCore`. |
-| Offline conversion — `tools/gltf_to_cnj` | ✅ | Produces `.cnj` + sidecars (`.skeleton.bin`, `_morph.bin`, textures). The two loaders are held to the same output by per-fixture parity sweeps (`GltfToCnjToolTest`), including all 12 material fixtures at the L6 effect boundary. |
+| Offline conversion — `tools/gltf_to_cnj` | ✅ | Produces `.cnj` + sidecars (`.skeleton.bin`, `_morph.bin`, textures). The two loaders are held to the same output by per-fixture parity sweeps (`GltfToCnjToolTest`), including all 13 material fixtures at the L6 effect boundary. |
 | Geometry: `POSITION`, `NORMAL`, `TEXCOORD_0`, indices | ✅ | Byte-exact against committed L5 goldens for every corpus fixture. |
 | Whole-model bounds | ✅ | `Model::getBoundingSphereEXTProperty()` merges every mesh's XNA bounding sphere after its current absolute parent-bone transform. The result is in model-root space before the caller's draw-time `world`; imported mesh spheres cover all primitives and authored default morph weights. |
+| Material variants | ✅ | `KHR_materials_variants` names and sparse primitive mappings survive direct glTF and offline `.cnj`. `Model::getMaterialVariantNamesEXTProperty()` exposes source order and `setMaterialVariantEXTProperty(index)` selects a complete part state; `-1` restores the core/default mapping. |
 | Topology: `TRIANGLE_STRIP`, `TRIANGLE_FAN`, `LINE_LOOP` | ✅ | Converted to lists at import, exactly (same triangles, same winding); the source mode is carried so the conversion is checkable. `LINES`/`LINE_STRIP`/`POINTS` keep their own `PrimitiveTypeEXT`. |
 | Missing `NORMAL` | ✅ | A real geometric normal is computed per face; a vertex shared between differently-oriented faces is averaged rather than duplicated, and the count is reported. |
 | Tangents | ⚠️ | Generated (angle-weighted) when absent. An **authored** `TANGENT` is carried only at the PBR strides 48 and 68 — no other vertex layout has a tangent slot — and is otherwise dropped and reported. |
@@ -159,7 +160,8 @@ loss at run time — is `docs/gltf-limitations.md`.
 | `KHR_draco_mesh_compression` | ⚠️ | Decoded when the build has `libdraco` (`CNA_DRACO_AVAILABLE`); claimed only in such a build, so a file requiring Draco is refused rather than arriving empty. |
 | `EXT_meshopt_compression`, `KHR_texture_basisu`, `EXT_texture_webp` | ❌ | No decoder. A texture's plain PNG/JPEG fallback is used when the file provides one; meshopt is refused at validation, because reading such a view without a decoder yields undefined bytes rather than an error. |
 | `EXT_mesh_gpu_instancing` | ❌ | The node's own single placement imports; the per-instance transforms do not, so the file renders one copy where it describes many. Reported per file. |
-| `KHR_materials_variants`, `_clearcoat`, `_sheen`, `_volume` | ❌ | Parsed and ignored, each for a stated reason. None is claimed, so a file requiring one is refused by name. |
+| `KHR_materials_variants` | ✅ | Fully imported and claimed; selection swaps effects, compatible vertex layouts, textures and samplers while preserving sparse default fallbacks. |
+| `KHR_materials_clearcoat`, `_sheen`, `_volume` | ❌ | Parsed and ignored, each for a stated reason. None is claimed, so a file requiring one is refused by name. |
 | Any other extension | — | The full classification of all 20 the registry knows is `docs/gltf-limitations.md` §1, generated from `GltfExtensionRegistryEXT()` — the same registry the `extensionsRequired` gate reads. |
 
 **Malformed input** is refused by name rather than imported wrongly: structural validation

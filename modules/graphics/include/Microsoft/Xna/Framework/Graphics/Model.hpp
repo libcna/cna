@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
@@ -11,6 +12,21 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "System/Object.hpp"
 #include "CNA/CNAHelper.hpp"
+
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class Model;
+}
+
+namespace CNA::Internal::Graphics
+{
+    struct ModelMaterialVariantBindingEXT;
+    struct ModelMaterialVariantsEXT;
+    void ConfigureModelMaterialVariantsEXT(
+        Microsoft::Xna::Framework::Graphics::Model& model,
+        std::vector<std::string> names,
+        std::vector<ModelMaterialVariantBindingEXT> bindings);
+}
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -256,6 +272,44 @@ namespace Microsoft::Xna::Framework::Graphics
         getBoundingSphereEXTProperty() const;
 
         /**
+         * @brief Names of the material variants declared by the imported asset, in source order.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-341`/`GLTF-342`). The
+         * index in this vector is the value accepted by @ref setMaterialVariantEXTProperty. An
+         * index is used rather than a name because the glTF extension defines variant identity by
+         * array position and does not make a display name a safe unique key.
+         *
+         * Empty for models from content paths that do not carry material variants.
+         *
+         * @return Variant display names in source order.
+         */
+        CNAEXT [[nodiscard]] const std::vector<std::string>&
+        getMaterialVariantNamesEXTProperty() const;
+
+        /**
+         * @brief Gets the selected material-variant index, or `-1` for default materials.
+         *
+         * The default is always `-1`; loading a model never selects an extension variant
+         * implicitly, preserving each primitive's core `material` mapping exactly.
+         *
+         * @return The selected variant index, or `-1`.
+         */
+        CNAEXT [[nodiscard]] int getMaterialVariantEXTProperty() const;
+
+        /**
+         * @brief Selects one imported material variant, or restores defaults with `-1`.
+         *
+         * Selection applies across the entire model. A primitive that has no mapping for the
+         * selected variant uses its own default material, as `KHR_materials_variants` specifies;
+         * selecting another variant therefore never leaves stale material state behind from the
+         * previous selection.
+         *
+         * @param value Variant index from @ref getMaterialVariantNamesEXTProperty, or `-1`.
+         * @throws std::out_of_range when @p value is less than `-1` or outside the names vector.
+         */
+        CNAEXT void setMaterialVariantEXTProperty(int value);
+
+        /**
          * @brief Copies bone transforms relative to all parent bones to a given vector.
          * @param destinationBoneTransforms The vector receiving the absolute bone transforms.
          */
@@ -282,7 +336,13 @@ namespace Microsoft::Xna::Framework::Graphics
         void Draw(const Matrix& world, const Matrix& view, const Matrix& projection);
 
     private:
+        friend void CNA::Internal::Graphics::ConfigureModelMaterialVariantsEXT(
+            Model& model,
+            std::vector<std::string> names,
+            std::vector<CNA::Internal::Graphics::ModelMaterialVariantBindingEXT> bindings);
+
         std::vector<ModelCameraEXT> cameras_;
+        std::shared_ptr<CNA::Internal::Graphics::ModelMaterialVariantsEXT> materialVariants_;
         ModelBoneCollection bones_;
         ModelMeshCollection meshes_;
         ModelBone* root_ = nullptr;

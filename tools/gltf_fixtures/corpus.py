@@ -109,6 +109,7 @@ TARGET_ASSET_IDS_BY_GROUP: dict[str, tuple[str, ...]] = {
         "mat-normal-occlusion-scale",
         "mat-alpha-mask-cutoff",
         "mat-unimplemented-extensions",
+        "mat-material-variants",
         "mat-unlit",
         "mat-unlit-vertex-color-alpha",
         "mat-specular-glossiness",

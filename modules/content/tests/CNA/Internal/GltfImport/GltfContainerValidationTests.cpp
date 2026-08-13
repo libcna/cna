@@ -272,10 +272,12 @@ TEST(GltfContainerValidation, SupportedExtensionsAreTheOnesCnaActuallyImplements
     // baseColorFactor as the diffuse colour, rather than merely being detected. It was the
     // textbook case for "detecting is not implementing" until it stopped being one.
     EXPECT_TRUE(IsGltfExtensionSupportedEXT("KHR_materials_unlit"));
+    // GLTF-341/342 preserve the source table and sparse mappings and expose selection on Model;
+    // the direct and offline paths both swap the complete material-dependent part state.
+    EXPECT_TRUE(IsGltfExtensionSupportedEXT("KHR_materials_variants"));
 
     EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_pbrSpecularGlossiness"))
         << "detecting an extension is not implementing it";
-    EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_variants"));
     EXPECT_FALSE(IsGltfExtensionSupportedEXT("EXT_mesh_gpu_instancing"));
     EXPECT_FALSE(IsGltfExtensionSupportedEXT(""));
 

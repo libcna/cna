@@ -744,6 +744,15 @@ namespace CNA::Internal::GltfImport
         std::vector<std::string> uvSetMismatchedMapsEXT;
     };
 
+    /** @brief One KHR_materials_variants override decoded through the same path as the default. */
+    struct MaterialVariantOutEXT
+    {
+        /** @brief Index into `cgltf_data::variants`, and the public Model variant-name vector. */
+        std::size_t variantIndex = 0;
+        /** @brief The primitive re-extracted with this variant's mapped material. */
+        MeshOut mesh;
+    };
+
     /**
      * @brief One node of the imported scene graph — the `sceneNodeIndex` identity space.
      *
@@ -1458,6 +1467,24 @@ namespace CNA::Internal::GltfImport
      */
     MeshOut ExtractMesh(const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
                          const SkeletonResult* skel, float unitScale);
+
+    /**
+     * @brief Extracts every KHR_materials_variants material mapping on one primitive.
+     *
+     * Each override goes through @ref ExtractMesh with a shallow copy of the primitive whose
+     * `material` pointer is replaced. This is intentionally the complete extraction rather than a
+     * material-only shortcut: a variant can choose another UV set/texture transform or effect
+     * class, which changes the vertex bytes and stride as well as the Effect parameters.
+     *
+     * The source primitive itself is never modified, so its core `material` remains the freshly
+     * loaded/default state (`GLTF-341`).
+     *
+     * @throws std::runtime_error if a mapping references an out-of-range variant, has no material,
+     * or maps the same variant more than once on one primitive.
+     */
+    std::vector<MaterialVariantOutEXT> ExtractMaterialVariantsEXT(
+        const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
+        const SkeletonResult* skel, float unitScale);
 
     /**
      * @brief Flattens the file's default scene into a parent-before-child node list with composed

@@ -48,10 +48,10 @@
     "bufferCount": 1,
     "bufferByteLength": 78,
     "extensionsUsed": [
-      "KHR_materials_variants"
+      "KHR_materials_clearcoat"
     ],
     "extensionsRequired": [
-      "KHR_materials_variants"
+      "KHR_materials_clearcoat"
     ],
     "punctualLightCount": 0
   },
@@ -221,7 +221,7 @@
     "stage": "validation",
     "task": "GLTF-023",
     "errorContains": [
-      "KHR_materials_variants",
+      "KHR_materials_clearcoat",
       "extensionsRequired"
     ],
     "note": "The diagnostic must name the extension, because 'this file needs something you do not have' is only actionable if it says which something."

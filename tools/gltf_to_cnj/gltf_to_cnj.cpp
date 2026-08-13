@@ -242,6 +242,15 @@ namespace
             // placement, whose entry is its own mesh either way; that keeps an ordinary asset's
             // .cnj byte-identical to what it was before this field existed.
             int partOfMesh = -1;
+            // GLTF-341/342: a material-variant state is serialized as another full mesh-state
+            // record in the same array, reusing the default entry's index data. The reader does
+            // not expose it as another ModelMeshPart: variantOf names the preceding default entry
+            // it overrides, and materialVariant indexes the root name table. Keeping the record
+            // flat lets it travel through the exact same mature .cnj state reader as a default --
+            // textures, samplers, morph carrier and all -- instead of inventing a smaller nested
+            // material schema that would immediately lose one of those fields.
+            int variantOf = -1;
+            int materialVariant = -1;
         };
         std::vector<MeshEntry> meshEntries;
 
@@ -497,7 +506,95 @@ namespace
                 // single-primitive one is its own ModelMesh under either rule.
                 entry.partOfMesh = mesh->primitives_count > 1 ? placementIndex : -1;
                 entry.name = partName;
+                const int defaultEntryIndex = static_cast<int>(meshEntries.size());
                 meshEntries.push_back(entry);
+
+                for (const MaterialVariantOutEXT& variant : ExtractMaterialVariantsEXT(
+                         data, mesh->primitives[p], partName,
+                         hasSkin ? &skeleton : nullptr, unitScale))
+                {
+                    const MeshOut& variantMesh = variant.mesh;
+                    MeshEntry variantEntry;
+                    variantEntry.name = partName;
+                    variantEntry.variantOf = defaultEntryIndex;
+                    variantEntry.materialVariant = static_cast<int>(variant.variantIndex);
+                    variantEntry.idxFile = idxFile; // topology and indices are material-independent
+                    variantEntry.stride = variantMesh.stride;
+                    variantEntry.primitiveTopology = PrimitiveTopologyName(variantMesh.topology);
+                    variantEntry.vertexColorEnabled = variantMesh.colored;
+                    variantEntry.unlit = variantMesh.unlitEXT;
+                    variantEntry.material = variantMesh.material;
+                    variantEntry.parentBone = entry.parentBone;
+
+                    variantEntry.vertFile =
+                        outName + "_mesh" + std::to_string(meshCounter) + "_variant" +
+                        std::to_string(variant.variantIndex) + "_verts.bin";
+                    WriteBinaryFile(outputDir / variantEntry.vertFile,
+                                    variantMesh.vertexBytes);
+
+                    variantEntry.textureFile = extractCached(
+                        variantMesh.material.baseColorImage);
+                    if (variantMesh.useDualTexture && variantMesh.material.occlusionImage)
+                    {
+                        auto cached = remappedOcclusionTextures.find(
+                            variantMesh.material.occlusionImage);
+                        if (cached != remappedOcclusionTextures.end())
+                        {
+                            variantEntry.texture2File = cached->second;
+                        }
+                        else if (auto img = ExtractImage(
+                                     variantMesh.material.occlusionImage, gltfDir))
+                        {
+                            auto remapped = RemapOcclusionImageForDualTextureEXT(*img);
+                            if (!remapped) { remapped = img; }
+                            variantEntry.texture2File =
+                                outName + "_texocc" +
+                                std::to_string(remappedOcclusionTextures.size()) + "." +
+                                remapped->extension;
+                            WriteBinaryFile(outputDir / variantEntry.texture2File,
+                                            remapped->bytes);
+                            remappedOcclusionTextures[
+                                variantMesh.material.occlusionImage] =
+                                variantEntry.texture2File;
+                        }
+                    }
+                    if (variantMesh.usePbr)
+                    {
+                        variantEntry.normalMapFile =
+                            extractCached(variantMesh.material.normalImage);
+                        variantEntry.metallicRoughnessMapFile =
+                            extractCached(variantMesh.material.metallicRoughnessImage);
+                        variantEntry.emissiveMapFile =
+                            extractCached(variantMesh.material.emissiveImage);
+                        variantEntry.pbrOcclusionMapFile =
+                            extractCached(variantMesh.material.occlusionImage);
+                    }
+
+                    variantEntry.effect =
+                        (variantMesh.usePbr && variantMesh.skinned) ? "SkinnedPbrEffect"
+                        : variantMesh.usePbr ? "PbrEffect"
+                        : variantMesh.skinned ? "SkinnedEffect"
+                        : variantMesh.useDualTexture ? "DualTextureEffect"
+                        : "BasicEffect";
+                    if (variantMesh.useDualTexture && variantEntry.texture2File.empty())
+                        variantEntry.effect = "BasicEffect";
+
+                    if (!variantMesh.morphPositionDeltas.empty())
+                    {
+                        variantEntry.morphFile =
+                            outName + "_mesh" + std::to_string(meshCounter) + "_variant" +
+                            std::to_string(variant.variantIndex) + "_morph.bin";
+                        WriteBinaryFile(outputDir / variantEntry.morphFile,
+                                        BuildMorphBytes(variantMesh));
+                        const std::size_t targetCount =
+                            variantMesh.morphPositionDeltas.size();
+                        variantEntry.morphWeights =
+                            GetMeshDefaultWeights(mesh, targetCount);
+                        variantEntry.morphWeightTrack =
+                            ExtractMorphWeightTrack(data, mesh, targetCount);
+                    }
+                    meshEntries.push_back(std::move(variantEntry));
+                }
                 ++meshCounter;
             }
         }
@@ -693,6 +790,17 @@ namespace
             }
             json << "  ],\n";
         }
+        if (data->variants_count > 0)
+        {
+            json << "  \"materialVariantNames\": [";
+            for (cgltf_size i = 0; i < data->variants_count; ++i)
+            {
+                json << "\"" << JsonEscape(
+                    data->variants[i].name != nullptr ? data->variants[i].name : "") << "\""
+                     << (i + 1 < data->variants_count ? ", " : "");
+            }
+            json << "],\n";
+        }
         json << "  \"meshes\": [\n";
         for (std::size_t i = 0; i < meshEntries.size(); ++i)
         {
@@ -701,6 +809,11 @@ namespace
                  << ", \"vertices\": \"" << JsonEscape(e.vertFile) << "\", \"indices\": \"" << JsonEscape(e.idxFile)
                  << "\", \"vertexStride\": " << e.stride << ", \"effect\": \"" << e.effect << "\""
                  << ", \"parentBone\": " << e.parentBone;
+            if (e.variantOf >= 0)
+            {
+                json << ", \"variantOf\": " << e.variantOf
+                     << ", \"materialVariant\": " << e.materialVariant;
+            }
             // GLTF-139: written only for a multi-primitive placement, so every other asset's .cnj
             // is byte-identical to what it was before the field existed.
             if (e.partOfMesh >= 0) { json << ", \"partOfMesh\": " << e.partOfMesh; }
@@ -848,7 +961,7 @@ namespace
         WriteTextFile(outputDir / (outName + ".cnj"), json.str());
 
         std::cout << "Wrote " << outputDir / (outName + ".cnj") << " ("
-                  << meshEntries.size() << " mesh part(s), "
+                  << meshCounter << " mesh part(s), "
                   << (hasSkin ? std::to_string(skeleton.bones.size()) + " bones, " : std::string("no skeleton, "))
                   << clipEntries.size() << " clip(s)).\n";
     }

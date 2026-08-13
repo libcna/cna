@@ -26,7 +26,7 @@ _IMAGE_SPEC = _BUFFER_SPEC + ["image", "texture", "materials"]
 
 #: An extension CNA does not implement. Chosen because cgltf *parses* it -- so the fixture cannot
 #: pass by accident through an unknown-extension shortcut -- while CNA honours nothing it declares.
-_UNSUPPORTED = "KHR_materials_variants"
+_UNSUPPORTED = "KHR_materials_clearcoat"
 
 
 def _buffer_triangle(name: str, *, trailing_bytes: int = 0) -> tuple[GltfBuilder, int]:

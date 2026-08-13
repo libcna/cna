@@ -5,6 +5,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
+#include "CNA/Internal/Graphics/ModelMaterialVariantsEXT.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "CNA/Internal/PathContainment.hpp"
@@ -1340,6 +1341,27 @@ namespace Microsoft::Xna::Framework::Content
             return result;
         }
 
+        std::vector<std::string> ParseJsonStringArrayEXT(
+            const std::string& json, const std::string& key)
+        {
+            std::vector<std::string> result;
+            const CNA::Internal::JsonValue document = CNA::Internal::ParseJson(json);
+            const CNA::Internal::JsonValue* value = document.FindMember(key);
+            if (value == nullptr || value->type != CNA::Internal::JsonType::Array)
+                return result;
+            result.reserve(value->arrayValue.size());
+            for (const CNA::Internal::JsonValue& item : value->arrayValue)
+            {
+                if (item.type != CNA::Internal::JsonType::String)
+                {
+                    throw ContentLoadException(
+                        "Model .cnj field '" + key + "' must be an array of strings.");
+                }
+                result.push_back(item.stringValue);
+            }
+            return result;
+        }
+
         // Task 941: shared by SkinnedModelTypeReader (.skinnedmodel.json's "animations" section)
         // and ModelTypeReader (.model.json's own new "animations" section, added for real-Model
         // skeletal animation, Phase 77) -- both use the exact same .clip.bin binary format, so
@@ -2500,6 +2522,118 @@ namespace Microsoft::Xna::Framework::Content
             };
             std::unordered_map<EffectCacheKey, Graphics::Effect*, EffectCacheKeyHash> effectCache;
 
+            // Material construction is shared by a primitive's core material and every
+            // KHR_materials_variants override. Keeping it in one cache-backed function matters
+            // beyond reducing code: an override is a complete glTF material and must receive the
+            // same PBR factors, texture slots, lighting policy and unlit handling as a default.
+            const auto effectForMaterial = [&](const MeshOut& meshOut) -> Graphics::Effect*
+            {
+                const EffectCacheKey effectKey{
+                    meshOut.material.sourceMaterialEXT, meshOut.skinned, meshOut.usePbr,
+                    meshOut.useDualTexture, meshOut.colored};
+                if (const auto cached = effectCache.find(effectKey); cached != effectCache.end())
+                {
+                    return cached->second;
+                }
+
+                std::shared_ptr<Graphics::Effect> fx;
+                if (meshOut.skinned && meshOut.usePbr)
+                    fx = std::make_shared<Graphics::SkinnedPbrEffect>(device);
+                else if (meshOut.skinned)
+                    fx = std::make_shared<Graphics::SkinnedEffect>(device);
+                else if (meshOut.usePbr)
+                    fx = std::make_shared<Graphics::PbrEffect>(device);
+                else if (meshOut.useDualTexture)
+                    fx = std::make_shared<Graphics::DualTextureEffect>(device);
+                else
+                    fx = std::make_shared<Graphics::BasicEffect>(device);
+
+                if (Graphics::Texture2D* tex = loadTexture(meshOut.material.baseColorImage))
+                {
+                    if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                        basicFx->setTextureProperty(tex);
+                        basicFx->setTextureEnabledProperty(true);
+                    } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                        skinnedFx->setTextureProperty(tex);
+                    } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                        dualFx->setTextureProperty(tex);
+                    } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                        pbrFx->setTextureProperty(tex);
+                    } else if (auto* skinnedPbrFx =
+                                   dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                        skinnedPbrFx->setTextureProperty(tex);
+                    }
+                }
+
+                if (meshOut.useDualTexture)
+                {
+                    if (Graphics::Texture2D* tex2 =
+                            loadOcclusionTextureForDualTextureEXT(
+                                meshOut.material.occlusionImage))
+                    {
+                        if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get()))
+                            dualFx->setTexture2Property(tex2);
+                    }
+                }
+
+                const auto applyPbrMaterial = [&](auto& pbrFx)
+                {
+                    if (Graphics::Texture2D* normalTex =
+                            loadTexture(meshOut.material.normalImage))
+                        pbrFx.setNormalMapProperty(normalTex);
+                    if (Graphics::Texture2D* mrTex =
+                            loadTexture(meshOut.material.metallicRoughnessImage))
+                        pbrFx.setMetallicRoughnessMapProperty(mrTex);
+                    if (Graphics::Texture2D* emissiveTex =
+                            loadTexture(meshOut.material.emissiveImage))
+                        pbrFx.setEmissiveMapProperty(emissiveTex);
+                    if (Graphics::Texture2D* occlusionTex =
+                            loadTexture(meshOut.material.occlusionImage))
+                        pbrFx.setOcclusionMapProperty(occlusionTex);
+                    pbrFx.setMetallicFactorProperty(meshOut.material.metallicFactor);
+                    pbrFx.setRoughnessFactorProperty(meshOut.material.roughnessFactor);
+                    pbrFx.setIorEXTProperty(meshOut.material.iorEXT);
+                    pbrFx.setSpecularFactorEXTProperty(meshOut.material.specularFactorEXT);
+                    pbrFx.setSpecularColorFactorEXTProperty(
+                        meshOut.material.specularColorFactorEXT);
+                    pbrFx.setEmissiveFactorProperty(meshOut.material.emissiveFactor);
+                    pbrFx.setNormalScaleEXTProperty(meshOut.material.normalScale);
+                    pbrFx.setOcclusionStrengthEXTProperty(meshOut.material.occlusionStrength);
+                    pbrFx.setDiffuseColorProperty(Vector3(
+                        meshOut.material.baseColorFactor.X,
+                        meshOut.material.baseColorFactor.Y,
+                        meshOut.material.baseColorFactor.Z));
+                    pbrFx.setAlphaProperty(meshOut.material.baseColorFactor.W);
+                    pbrFx.setAlphaModeEXTProperty(meshOut.material.alphaMode);
+                    pbrFx.setAlphaCutoffEXTProperty(meshOut.material.alphaCutoff);
+                    pbrFx.setDoubleSidedEXTProperty(meshOut.material.doubleSided);
+                };
+                if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get()))
+                    applyPbrMaterial(*pbrFx);
+                else if (auto* skinnedPbrFx =
+                             dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get()))
+                    applyPbrMaterial(*skinnedPbrFx);
+
+                if (meshOut.colored)
+                {
+                    if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get()))
+                        basicFx->VertexColorEnabled = true;
+                    else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get()))
+                        skinnedFx->VertexColorEnabled = true;
+                }
+
+                if (!ApplyUnlitMaterialEXT(*fx, meshOut))
+                    ApplyPunctualLightsEXT(*fx, punctualLights);
+
+                Graphics::Effect* result = fx.get();
+                effectCache.emplace(effectKey, result);
+                res->effectOwners.push_back(std::move(fx));
+                return result;
+            };
+
+            std::vector<CNA::Internal::Graphics::ModelMaterialVariantBindingEXT>
+                materialVariantBindings;
+
             std::unordered_map<const cgltf_mesh*, int> instanceCountOfMesh;
             for (const ImportableInstance& entry : importable)
             {
@@ -2950,188 +3084,107 @@ namespace Microsoft::Xna::Framework::Content
                     AppendPositionsForMeshBoundsEXT(
                         boundsVertexBytes, meshOut.stride, instanceBoundsPositions);
 
-                    // plan_gltf.md GLTF-238: two primitives with the same material, imported the
-                    // same way, share one Effect. A file whose every primitive got its own was
-                    // paying a redundant effect (and, at draw time, a redundant state change) per
-                    // primitive for a material the file states once -- and XNA's own content
-                    // pipeline shares them. The key is the material POINTER plus the four flags
-                    // that decide which effect class and which parameters it gets: two primitives
-                    // of one material still need separate effects when one is skinned and the
-                    // other is not, because they are not even the same type.
-                    const EffectCacheKey effectKey{
-                        meshOut.material.sourceMaterialEXT, meshOut.skinned, meshOut.usePbr,
-                        meshOut.useDualTexture,
-                        meshOut.colored};
-                    if (const auto cached = effectCache.find(effectKey); cached != effectCache.end())
-                    {
-                        partPtr->setEffectProperty(cached->second);
-                        instanceEffects.push_back(cached->second);
-                        res->vbs.push_back(std::move(vb));
-                        res->ibs.push_back(std::move(ib));
-                        instancePartPtrs.push_back(partPtr);
-                        instanceParts.push_back(std::move(part));
-                        ++meshCounter;
-                        continue;
-                    }
+                    // GLTF-238: the cache makes the default and variant paths share one Effect per
+                    // (source material, import shape), just as the source material is shared.
+                    Graphics::Effect* defaultEffect = effectForMaterial(meshOut);
+                    instanceEffects.push_back(defaultEffect);
 
-                    std::shared_ptr<Graphics::Effect> fx;
-                    // PBR + skinning combo: SkinnedPbrEffect is a separate class from both
-                    // SkinnedEffect and PbrEffect (see that header's own doc comment), so it must
-                    // be checked before either single-flag branch below.
-                    // Which effect a primitive gets is a decision with a written rationale --
-                    // docs/gltf-conventions.md ("Which effect a primitive gets"): it follows the
-                    // material MODEL the file declares, never which texture maps happen to be
-                    // present, which is the rule defect D7 broke.
-                    if (meshOut.skinned && meshOut.usePbr) { fx = std::make_shared<Graphics::SkinnedPbrEffect>(device); }
-                    else if (meshOut.skinned) { fx = std::make_shared<Graphics::SkinnedEffect>(device); }
-                    else if (meshOut.usePbr) { fx = std::make_shared<Graphics::PbrEffect>(device); }
-                    else if (meshOut.useDualTexture) { fx = std::make_shared<Graphics::DualTextureEffect>(device); }
-                    else { fx = std::make_shared<Graphics::BasicEffect>(device); }
-
-                    if (Graphics::Texture2D* tex = loadTexture(meshOut.material.baseColorImage))
+                    // GLTF-341/342: capture the whole default state before constructing sparse
+                    // overrides. The primitive's core material stays active; merely declaring
+                    // KHR_materials_variants must not change a freshly loaded model.
+                    const std::vector<MaterialVariantOutEXT> variants =
+                        ExtractMaterialVariantsEXT(
+                            data, mesh->primitives[p], partName, entry.skeleton, 1.0f);
+                    if (!variants.empty())
                     {
-                        if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
-                            basicFx->setTextureProperty(tex);
-                            basicFx->setTextureEnabledProperty(true);
-                        } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
-                            skinnedFx->setTextureProperty(tex);
-                        } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
-                            dualFx->setTextureProperty(tex);
-                        } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
-                            pbrFx->setTextureProperty(tex);
-                        } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
-                            skinnedPbrFx->setTextureProperty(tex);
-                        }
-                    }
+                        CNA::Internal::Graphics::ModelMaterialVariantBindingEXT binding;
+                        binding.part = partPtr;
+                        binding.defaultState.vertexBuffer = vb.get();
+                        binding.defaultState.effect = defaultEffect;
+                        binding.defaultState.tag = partPtr->getTagProperty();
+                        binding.defaultState.samplerStates =
+                            partPtr->getSamplerStatesEXTProperty();
+                        binding.defaultState.numVertices = numVertices;
+                        binding.variants.resize(static_cast<std::size_t>(data->variants_count));
 
-                    if (meshOut.useDualTexture)
-                    {
-                        if (Graphics::Texture2D* tex2 =
-                                loadOcclusionTextureForDualTextureEXT(meshOut.material.occlusionImage))
+                        for (const MaterialVariantOutEXT& variant : variants)
                         {
-                            if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
-                                dualFx->setTexture2Property(tex2);
+                            const MeshOut& variantMesh = variant.mesh;
+                            std::vector<std::uint8_t> variantVertexBytes =
+                                variantMesh.vertexBytes;
+                            System::Object* variantTag = nullptr;
+
+                            // A material can choose a different layout, but morphing is still the
+                            // same primitive. Give every layout its own carrier so switching a
+                            // variant after SetMorphWeightsEXT never interprets 32-byte base
+                            // vertices as 48-byte ones (or vice versa).
+                            if (!variantMesh.morphPositionDeltas.empty())
+                            {
+                                const std::size_t targetCount =
+                                    variantMesh.morphPositionDeltas.size();
+                                auto morph =
+                                    std::make_unique<Graphics::MorphTargetDataEXT>();
+                                morph->BaseVertexBytes = variantMesh.vertexBytes;
+                                morph->Stride = variantMesh.stride;
+                                morph->PositionDeltas = variantMesh.morphPositionDeltas;
+                                morph->NormalDeltas = variantMesh.morphNormalDeltas;
+                                morph->TangentDeltas = variantMesh.morphTangentDeltas;
+                                morph->Weights =
+                                    GetMeshDefaultWeights(mesh, targetCount, instance.node);
+                                if (auto weightTrack =
+                                        ExtractMorphWeightTrack(data, mesh, targetCount))
+                                {
+                                    for (const MorphWeightKeyframeOut& k : weightTrack->keys)
+                                    {
+                                        Graphics::MorphWeightKeyframeEXT key;
+                                        key.Time = System::TimeSpan::FromSeconds(k.time);
+                                        key.Weights = k.weights;
+                                        key.InTangent = k.inTangent;
+                                        key.OutTangent = k.outTangent;
+                                        morph->WeightTrack.Keys.push_back(std::move(key));
+                                    }
+                                    morph->WeightTrack.StepInterpolation =
+                                        weightTrack->stepInterpolation;
+                                    morph->WeightTrack.CubicSpline = weightTrack->cubicSpline;
+                                }
+                                if (std::any_of(
+                                        morph->Weights.begin(), morph->Weights.end(),
+                                        [](float weight) { return weight != 0.0f; }))
+                                {
+                                    variantVertexBytes = Graphics::BlendMorphTargetsEXT(
+                                        *morph, morph->Weights);
+                                }
+                                variantTag = morph.get();
+                                res->morphOwners.push_back(std::move(morph));
                             }
-                        }
-                    }
 
-                    if (meshOut.usePbr)
-                    {
-                        if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get()))
-                        {
-                            if (Graphics::Texture2D* normalTex =
-                                    loadTexture(meshOut.material.normalImage))
-                                pbrFx->setNormalMapProperty(normalTex);
-                            if (Graphics::Texture2D* mrTex =
-                                    loadTexture(meshOut.material.metallicRoughnessImage))
-                                pbrFx->setMetallicRoughnessMapProperty(mrTex);
-                            if (Graphics::Texture2D* emissiveTex =
-                                    loadTexture(meshOut.material.emissiveImage))
-                                pbrFx->setEmissiveMapProperty(emissiveTex);
-                            // MeshOut::material.occlusionImage is shared with useDualTexture's own
-                            // Texture2 approximation (CNB-72/73) -- the two are mutually
-                            // exclusive per-mesh (useDualTexture is forced false whenever usePbr
-                            // is true), so reusing the same field here is unambiguous.
-                            if (Graphics::Texture2D* occlusionTex =
-                                    loadTexture(meshOut.material.occlusionImage))
-                                pbrFx->setOcclusionMapProperty(occlusionTex);
-                            pbrFx->setMetallicFactorProperty(meshOut.material.metallicFactor);
-                            pbrFx->setRoughnessFactorProperty(meshOut.material.roughnessFactor);
-                            pbrFx->setIorEXTProperty(meshOut.material.iorEXT);
-                            pbrFx->setSpecularFactorEXTProperty(
-                                meshOut.material.specularFactorEXT);
-                            pbrFx->setSpecularColorFactorEXTProperty(
-                                meshOut.material.specularColorFactorEXT);
-                            pbrFx->setEmissiveFactorProperty(meshOut.material.emissiveFactor);
-                            // plan_gltf.md GLTF-224/GLTF-225: never read before, so a material that
-                            // dialled its normal map down to a subtle 0.2 got the full 1.0 instead.
-                            pbrFx->setNormalScaleEXTProperty(meshOut.material.normalScale);
-                            pbrFx->setOcclusionStrengthEXTProperty(
-                                meshOut.material.occlusionStrength);
-                            // plan_gltf.md GLTF-216: baseColorFactor multiplies the base-colour
-                            // texture, or stands alone when there is none. Never read before.
-                            pbrFx->setDiffuseColorProperty(Vector3(
-                                meshOut.material.baseColorFactor.X,
-                                meshOut.material.baseColorFactor.Y,
-                                meshOut.material.baseColorFactor.Z));
-                            pbrFx->setAlphaProperty(meshOut.material.baseColorFactor.W);
-                            // plan_gltf.md GLTF-228/GLTF-229/GLTF-231.
-                            pbrFx->setAlphaModeEXTProperty(meshOut.material.alphaMode);
-                            pbrFx->setAlphaCutoffEXTProperty(meshOut.material.alphaCutoff);
-                            pbrFx->setDoubleSidedEXTProperty(meshOut.material.doubleSided);
-                        }
-                        else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get()))
-                        {
-                            if (Graphics::Texture2D* normalTex =
-                                    loadTexture(meshOut.material.normalImage))
-                                skinnedPbrFx->setNormalMapProperty(normalTex);
-                            if (Graphics::Texture2D* mrTex =
-                                    loadTexture(meshOut.material.metallicRoughnessImage))
-                                skinnedPbrFx->setMetallicRoughnessMapProperty(mrTex);
-                            if (Graphics::Texture2D* emissiveTex =
-                                    loadTexture(meshOut.material.emissiveImage))
-                                skinnedPbrFx->setEmissiveMapProperty(emissiveTex);
-                            if (Graphics::Texture2D* occlusionTex =
-                                    loadTexture(meshOut.material.occlusionImage))
-                                skinnedPbrFx->setOcclusionMapProperty(occlusionTex);
-                            skinnedPbrFx->setMetallicFactorProperty(meshOut.material.metallicFactor);
-                            skinnedPbrFx->setRoughnessFactorProperty(meshOut.material.roughnessFactor);
-                            skinnedPbrFx->setIorEXTProperty(meshOut.material.iorEXT);
-                            skinnedPbrFx->setSpecularFactorEXTProperty(
-                                meshOut.material.specularFactorEXT);
-                            skinnedPbrFx->setSpecularColorFactorEXTProperty(
-                                meshOut.material.specularColorFactorEXT);
-                            skinnedPbrFx->setEmissiveFactorProperty(meshOut.material.emissiveFactor);
-                            // plan_gltf.md GLTF-224/GLTF-225: never read before, so a material that
-                            // dialled its normal map down to a subtle 0.2 got the full 1.0 instead.
-                            skinnedPbrFx->setNormalScaleEXTProperty(meshOut.material.normalScale);
-                            skinnedPbrFx->setOcclusionStrengthEXTProperty(
-                                meshOut.material.occlusionStrength);
-                            // GLTF-216, on the skinned twin: the same base colour, so a skinned
-                            // and an unskinned primitive of one material shade alike.
-                            skinnedPbrFx->setDiffuseColorProperty(Vector3(
-                                meshOut.material.baseColorFactor.X,
-                                meshOut.material.baseColorFactor.Y,
-                                meshOut.material.baseColorFactor.Z));
-                            skinnedPbrFx->setAlphaProperty(meshOut.material.baseColorFactor.W);
-                            skinnedPbrFx->setAlphaModeEXTProperty(meshOut.material.alphaMode);
-                            skinnedPbrFx->setAlphaCutoffEXTProperty(meshOut.material.alphaCutoff);
-                            skinnedPbrFx->setDoubleSidedEXTProperty(meshOut.material.doubleSided);
-                        }
-                    }
+                            const int variantNumVertices = variantMesh.stride > 0
+                                ? static_cast<int>(variantVertexBytes.size()) /
+                                      variantMesh.stride
+                                : 0;
+                            auto variantVb = BuildVertexBufferFromRawBytes(
+                                device, variantMesh.stride, variantNumVertices,
+                                variantVertexBytes);
 
-                    if (meshOut.colored)
-                    {
-                        if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
-                            basicFx->VertexColorEnabled = true;
-                        } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
-                            skinnedFx->VertexColorEnabled = true;
+                            CNA::Internal::Graphics::ModelMaterialVariantPartStateEXT state;
+                            state.vertexBuffer = variantVb.get();
+                            state.effect = effectForMaterial(variantMesh);
+                            state.tag = variantTag;
+                            state.numVertices = variantNumVertices;
+                            for (std::size_t slot = 0;
+                                 slot < variantMesh.material.samplers.size(); ++slot)
+                            {
+                                const SamplerOut& sampler =
+                                    variantMesh.material.samplers[slot];
+                                state.samplerStates[slot].setFilterProperty(sampler.filter);
+                                state.samplerStates[slot].setAddressUProperty(sampler.addressU);
+                                state.samplerStates[slot].setAddressVProperty(sampler.addressV);
+                            }
+                            binding.variants.at(variant.variantIndex) = state;
+                            res->vbs.push_back(std::move(variantVb));
                         }
+                        materialVariantBindings.push_back(std::move(binding));
                     }
-
-                    // plan_gltf.md GLTF-337: KHR_materials_unlit. The extension says "shade this
-                    // surface with its base colour and nothing else", and XNA expresses exactly
-                    // that -- so this maps rather than approximates. The base colour has to be
-                    // applied here as well as the lighting flag: on the non-PBR path nothing else
-                    // reads baseColorFactor, so an unlit material's colour would otherwise be the
-                    // effect's own white and the extension would import as "unlit, and the wrong
-                    // colour".
-                    if (ApplyUnlitMaterialEXT(*fx, meshOut))
-                    {
-                        // Deliberately not ApplyPunctualLightsEXT: every one of its paths ends with
-                        // lighting ON -- the fallback calls EnableDefaultLighting(), and the normal
-                        // path enables light slots -- so calling it here would immediately undo the
-                        // flag just set, leaving an unlit material lit by the scene or by XNA's
-                        // default rig. Skipping it is the point, not an omission.
-                    }
-                    else
-                    {
-                        ApplyPunctualLightsEXT(*fx, punctualLights);
-                    }
-
-                    instanceEffects.push_back(fx.get());
-                    effectCache.emplace(effectKey, fx.get());
-                    res->effectOwners.push_back(std::move(fx));
 
                     res->vbs.push_back(std::move(vb));
                     res->ibs.push_back(std::move(ib));
@@ -3205,6 +3258,18 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::Model model(&device, std::move(boneRawPtrs), std::move(meshRawPtrs));
             model.setOwnedResources(res);
+            if (data->variants_count > 0)
+            {
+                std::vector<std::string> variantNames;
+                variantNames.reserve(static_cast<std::size_t>(data->variants_count));
+                for (cgltf_size i = 0; i < data->variants_count; ++i)
+                {
+                    variantNames.emplace_back(
+                        data->variants[i].name != nullptr ? data->variants[i].name : "");
+                }
+                CNA::Internal::Graphics::ConfigureModelMaterialVariantsEXT(
+                    model, std::move(variantNames), std::move(materialVariantBindings));
+            }
             // plan_gltf.md GLTF-294: an unskinned model's Tag carries its rigid clips instead.
             if (res->skinningData)      { model.setTagProperty(res->skinningData.get()); }
             else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
@@ -3477,6 +3542,12 @@ namespace Microsoft::Xna::Framework::Content
                     std::vector<Graphics::Effect*> effects;
                 };
                 std::vector<PendingCnjMesh> pendingMeshes;
+                const std::vector<std::string> materialVariantNames =
+                    ParseJsonStringArrayEXT(json, "materialVariantNames");
+                std::vector<CNA::Internal::Graphics::ModelMaterialVariantBindingEXT>
+                    materialVariantBindings;
+                std::unordered_map<int, std::size_t> variantBindingByEntry;
+                int serializedMeshEntryIndex = 0;
 
                 const std::size_t mk = json.find("\"meshes\"");
                 if (mk != std::string::npos) {
@@ -3495,6 +3566,10 @@ namespace Microsoft::Xna::Framework::Content
                             }
                             const std::string mg = json.substr(os, oe - os);
                             pos = oe;
+
+                            const int currentMeshEntryIndex = serializedMeshEntryIndex++;
+                            const int variantOf = JsonInt(mg, "variantOf", -1);
+                            const int materialVariant = JsonInt(mg, "materialVariant", -1);
 
                             const std::string meshName   = ExtractJsonStringField(mg, "name");
                             const std::string vertFile   = ExtractJsonStringField(mg, "vertices");
@@ -3781,24 +3856,27 @@ namespace Microsoft::Xna::Framework::Content
                             // cnjVersion-1 asset, every hand-written .model.json, and every
                             // single-primitive mesh the tool still writes unchanged -- gets one
                             // ModelMesh per entry exactly as before.
-                            const int partOfMesh = JsonInt(mg, "partOfMesh", -1);
-                            if (partOfMesh >= 0 && !pendingMeshes.empty() &&
-                                pendingMeshes.back().group == partOfMesh)
+                            if (variantOf < 0)
                             {
-                                pendingMeshes.back().parts.push_back(partPtr);
-                                pendingMeshes.back().boundsPositions.insert(
-                                    pendingMeshes.back().boundsPositions.end(),
-                                    partBoundsPositions.begin(), partBoundsPositions.end());
-                            }
-                            else
-                            {
-                                PendingCnjMesh pending;
-                                pending.name = meshName.empty() ? "mesh" : meshName;
-                                pending.group = partOfMesh;
-                                pending.parentBone = JsonInt(mg, "parentBone", 0);
-                                pending.parts.push_back(partPtr);
-                                pending.boundsPositions = std::move(partBoundsPositions);
-                                pendingMeshes.push_back(std::move(pending));
+                                const int partOfMesh = JsonInt(mg, "partOfMesh", -1);
+                                if (partOfMesh >= 0 && !pendingMeshes.empty() &&
+                                    pendingMeshes.back().group == partOfMesh)
+                                {
+                                    pendingMeshes.back().parts.push_back(partPtr);
+                                    pendingMeshes.back().boundsPositions.insert(
+                                        pendingMeshes.back().boundsPositions.end(),
+                                        partBoundsPositions.begin(), partBoundsPositions.end());
+                                }
+                                else
+                                {
+                                    PendingCnjMesh pending;
+                                    pending.name = meshName.empty() ? "mesh" : meshName;
+                                    pending.group = partOfMesh;
+                                    pending.parentBone = JsonInt(mg, "parentBone", 0);
+                                    pending.parts.push_back(partPtr);
+                                    pending.boundsPositions = std::move(partBoundsPositions);
+                                    pendingMeshes.push_back(std::move(pending));
+                                }
                             }
 
                             // Task 937: give this mesh its own real ModelBone (a child of the
@@ -4013,12 +4091,76 @@ namespace Microsoft::Xna::Framework::Content
                                 ApplyPunctualLightsEXT(*fx, punctualLights);
                             }
 
-                            pendingMeshes.back().effects.push_back(fx.get());
-                            res->effectOwners.push_back(std::move(fx));
+                            Graphics::Effect* effectPtr = fx.get();
+                            if (variantOf >= 0)
+                            {
+                                const auto owner = variantBindingByEntry.find(variantOf);
+                                if (owner == variantBindingByEntry.end())
+                                {
+                                    throw ContentLoadException(
+                                        "Model .cnj material-variant state references unknown or "
+                                        "later mesh entry " + std::to_string(variantOf) + ": " +
+                                        path);
+                                }
+                                if (materialVariant < 0 ||
+                                    static_cast<std::size_t>(materialVariant) >=
+                                        materialVariantNames.size())
+                                {
+                                    throw ContentLoadException(
+                                        "Model .cnj material-variant state has out-of-range "
+                                        "materialVariant " + std::to_string(materialVariant) +
+                                        ": " + path);
+                                }
 
-                            res->vbs.push_back(std::move(vb));
-                            res->ibs.push_back(std::move(ib));
-                            res->partOwners.push_back(std::move(part));
+                                auto& binding = materialVariantBindings[owner->second];
+                                auto& target =
+                                    binding.variants[static_cast<std::size_t>(materialVariant)];
+                                if (target.has_value())
+                                {
+                                    throw ContentLoadException(
+                                        "Model .cnj maps material variant " +
+                                        std::to_string(materialVariant) +
+                                        " more than once for one mesh part: " + path);
+                                }
+                                CNA::Internal::Graphics::ModelMaterialVariantPartStateEXT state;
+                                state.vertexBuffer = vb.get();
+                                state.effect = effectPtr;
+                                state.tag = partPtr->getTagProperty();
+                                state.samplerStates = partPtr->getSamplerStatesEXTProperty();
+                                state.numVertices = numVertices;
+                                target = state;
+
+                                // The temporary part and duplicate index buffer are parsing aids;
+                                // selection needs the complete vertex/material state but draws
+                                // through the owner's one real ModelMeshPart and index buffer.
+                                res->effectOwners.push_back(std::move(fx));
+                                res->vbs.push_back(std::move(vb));
+                            }
+                            else
+                            {
+                                pendingMeshes.back().effects.push_back(effectPtr);
+                                if (!materialVariantNames.empty())
+                                {
+                                    CNA::Internal::Graphics::ModelMaterialVariantBindingEXT binding;
+                                    binding.part = partPtr;
+                                    binding.defaultState.vertexBuffer = vb.get();
+                                    binding.defaultState.effect = effectPtr;
+                                    binding.defaultState.tag = partPtr->getTagProperty();
+                                    binding.defaultState.samplerStates =
+                                        partPtr->getSamplerStatesEXTProperty();
+                                    binding.defaultState.numVertices = numVertices;
+                                    binding.variants.resize(materialVariantNames.size());
+                                    variantBindingByEntry.emplace(
+                                        currentMeshEntryIndex,
+                                        materialVariantBindings.size());
+                                    materialVariantBindings.push_back(std::move(binding));
+                                }
+
+                                res->effectOwners.push_back(std::move(fx));
+                                res->vbs.push_back(std::move(vb));
+                                res->ibs.push_back(std::move(ib));
+                                res->partOwners.push_back(std::move(part));
+                            }
                         }
 
                         // The meshes themselves, once every part is built and grouped. Order is
@@ -4082,6 +4224,11 @@ namespace Microsoft::Xna::Framework::Content
                                       std::move(boneRawPtrs),
                                       std::move(meshRawPtrs));
                 model.setOwnedResources(res);
+                if (!materialVariantNames.empty())
+                {
+                    CNA::Internal::Graphics::ConfigureModelMaterialVariantsEXT(
+                        model, materialVariantNames, std::move(materialVariantBindings));
+                }
                 // Task 941 (Phase 77): attach the skeleton/animation-clip data (if any) to the
                 // real XNA Model.Tag property, mirroring the Skinned Model Sample's own
                 // convention -- game code retrieves it via

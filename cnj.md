@@ -503,6 +503,8 @@ pre-campaign behaviour for that asset; the *file* is still version 2 whenever it
 | `"vertexColorEnabled"` | `false` | vertex colours on the non-PBR path. |
 | `"metallicFactor"`, `"roughnessFactor"`, `"emissiveFactor"`, `"diffuseColor"`, `"alpha"` | PBR entries only | `GLTF-216`/`GLTF-219`/`GLTF-221` — written for `PbrEffect`/`SkinnedPbrEffect` entries. |
 | `"normalMap"`, `"metallicRoughnessMap"`, `"emissiveMap"`, `"occlusionMap"` | no map | PBR entries only. |
+| `"materialVariantNames"` | no selectable variants | `GLTF-341`/`GLTF-342` — the source-order `KHR_materials_variants` name table at the document root. |
+| `"variantOf"`, `"materialVariant"` | an ordinary exposed mesh-part entry | A variant is another complete `"meshes"` state record. `variantOf` names the preceding default entry ordinal and `materialVariant` indexes the root name table; the reader captures its effect, compatible vertex buffer, textures and samplers as an alternative instead of exposing another `ModelMeshPart`. Missing mappings therefore retain the default state. |
 | `"morphTargets"`, `"morphWeights"`, `"morphWeightTrack"` | no morph targets | the `_morph.bin` sidecar plus its default weights and, when animated, its weight track. |
 | `"lights"` | no imported lights | `KHR_lights_punctual`, at most three directional. |
 | `"animations"` | none | each entry names a standalone `AnimationClip` `.cnj`. |

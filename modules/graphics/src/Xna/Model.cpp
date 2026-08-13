@@ -3,15 +3,45 @@
 
 #include <algorithm>
 #include <cmath>
-
 #include <stdexcept>
+
+#include "CNA/Internal/Graphics/ModelMaterialVariantsEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelEffectCollection.hpp"
 
-#include <stdexcept>
+namespace CNA::Internal::Graphics
+{
+    void ConfigureModelMaterialVariantsEXT(
+        Microsoft::Xna::Framework::Graphics::Model& model,
+        std::vector<std::string> names,
+        std::vector<ModelMaterialVariantBindingEXT> bindings)
+    {
+        if (names.empty())
+        {
+            model.materialVariants_.reset();
+            return;
+        }
+
+        for (ModelMaterialVariantBindingEXT& binding : bindings)
+        {
+            if (binding.part == nullptr)
+            {
+                throw std::invalid_argument(
+                    "ConfigureModelMaterialVariantsEXT: a binding has no ModelMeshPart");
+            }
+            binding.variants.resize(names.size());
+        }
+
+        auto state = std::make_shared<ModelMaterialVariantsEXT>();
+        state->names = std::move(names);
+        state->bindings = std::move(bindings);
+        model.materialVariants_ = std::move(state);
+    }
+}
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -136,6 +166,58 @@ namespace Microsoft::Xna::Framework::Graphics
                 : placed;
         }
         return result;
+    }
+
+    const std::vector<std::string>& Model::getMaterialVariantNamesEXTProperty() const
+    {
+        static const std::vector<std::string> empty;
+        return materialVariants_ != nullptr ? materialVariants_->names : empty;
+    }
+
+    int Model::getMaterialVariantEXTProperty() const
+    {
+        return materialVariants_ != nullptr ? materialVariants_->activeVariant : -1;
+    }
+
+    void Model::setMaterialVariantEXTProperty(int value)
+    {
+        const int variantCount = materialVariants_ != nullptr
+            ? static_cast<int>(materialVariants_->names.size()) : 0;
+        if (value < -1 || value >= variantCount)
+        {
+            throw std::out_of_range("materialVariantEXT");
+        }
+        if (materialVariants_ == nullptr)
+        {
+            // `-1` on a model with no variants is the already-active default.
+            return;
+        }
+
+        for (const CNA::Internal::Graphics::ModelMaterialVariantBindingEXT& binding :
+             materialVariants_->bindings)
+        {
+            const CNA::Internal::Graphics::ModelMaterialVariantPartStateEXT* selected =
+                &binding.defaultState;
+            if (value >= 0)
+            {
+                const auto& overrideState =
+                    binding.variants[static_cast<std::size_t>(value)];
+                if (overrideState.has_value()) { selected = &*overrideState; }
+            }
+
+            binding.part->SetVertexBuffer(selected->vertexBuffer);
+            binding.part->SetNumVertices(selected->numVertices);
+            binding.part->setTagProperty(selected->tag);
+            for (std::size_t slot = 0; slot < selected->samplerStates.size(); ++slot)
+            {
+                binding.part->setSamplerStateEXTProperty(
+                    static_cast<int>(slot), selected->samplerStates[slot]);
+            }
+            // Last: this updates the owning ModelMesh::Effects collection. All other part state
+            // is complete before an observer can find the new effect through that collection.
+            binding.part->setEffectProperty(selected->effect);
+        }
+        materialVariants_->activeVariant = value;
     }
     thread_local std::vector<Matrix> Model::sharedDrawBoneMatrices_;
 

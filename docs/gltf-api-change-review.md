@@ -626,6 +626,48 @@ rule does not. A two-primitive glTF proves one mesh sphere covers both parts; a 
 proves the whole-model sphere contains every independent L4 world position. The offline tool's
 `.cnj` result and the direct glTF result must have component-identical centre and radius.
 
+### 1.13 `Model` material-variant selection — `GLTF-341`, `GLTF-342`
+
+**Problem.** `KHR_materials_variants` describes a model-wide selection over sparse per-primitive
+material mappings. Importing those mappings internally is insufficient: the application or viewer
+is the party that decides which product colourway to show, and neither XNA's `ModelMeshPart::Tag`
+nor `Model::Tag` is available as an undocumented escape hatch — both already carry importer data.
+
+**Shape.** Three additive CNAEXT members on `Model`:
+
+```cpp
+CNAEXT [[nodiscard]] const std::vector<std::string>&
+getMaterialVariantNamesEXTProperty() const;
+CNAEXT [[nodiscard]] int getMaterialVariantEXTProperty() const;
+CNAEXT void setMaterialVariantEXTProperty(int value);
+```
+
+The name vector preserves the glTF root array's source order. Selection is by that array index,
+not by display name: the extension defines identity by index and does not require names to be
+unique. `-1` is the core/default material mapping and is always the initial value; an index below
+`-1` or outside the name vector throws `std::out_of_range` before changing anything. Models from
+other content paths expose an empty vector, report `-1`, and accept the no-op selection `-1`.
+
+**Why the operation belongs on `Model`.** One variant selection applies across every primitive,
+and a primitive absent from the selected variant's sparse mapping must return to its own default.
+A per-part setter would force every caller to reconstruct that global sparse rule and would expose
+the importer's private pairing of default and alternative buffers. A string setter would invent
+uniqueness the source format does not promise.
+
+**State and compatibility.** Selection swaps the complete material-dependent part state: effect,
+compatible vertex buffer and count, morph carrier, textures and all sampler slots. Indices,
+topology, placement and bounds are material-independent and remain unchanged. The implementation
+uses the existing `ModelMeshPart::setEffectProperty` last so `ModelMesh::Effects` stays coherent.
+`Model` copies share selection because they already share their XNA mesh parts; independent loads
+do not. The surface is additive, CNAEXT, and leaves freshly loaded and non-glTF models unchanged.
+
+**Offline contract and tests.** `.cnj` stores the source-order names once and each mapped
+alternative as a complete mesh-state record linked to its default. The reader captures those
+records as alternatives rather than exposing extra mesh parts. The synthetic witness changes PBR
+stride 48 to unlit stride 32 and includes an unmapped third variant after it, proving both the full
+state swap and stale-state reset. Direct STUB/HEADLESS tests cover defaults, invalid indices and
+copy semantics; a real tool subprocess then compares every direct and offline selection at L6.
+
 ---
 
 ## 2. Reviewed and deferred

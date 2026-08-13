@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 139,
+  "distinctAssetCount": 140,
   "owningGroupCounts": {
     "container": 8,
     "accessors": 13,
@@ -20,7 +20,7 @@
     "topology": 8,
     "normals": 6,
     "transforms": 17,
-    "materials": 12,
+    "materials": 13,
     "textures": 10,
     "skinning": 16,
     "animation": 23,
@@ -30,7 +30,7 @@
     "draco": 0,
     "robustness": 8
   },
-  "targetDistinctAssetCount": 143,
+  "targetDistinctAssetCount": 144,
   "targetOwningGroupCounts": {
     "container": 8,
     "accessors": 13,
@@ -38,7 +38,7 @@
     "topology": 8,
     "normals": 6,
     "transforms": 17,
-    "materials": 12,
+    "materials": 13,
     "textures": 10,
     "skinning": 16,
     "animation": 23,
@@ -1467,6 +1467,26 @@
         "KHR_materials_sheen",
         "KHR_materials_volume",
         "ignored extension reporting"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "mat-material-variants",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "KHR_materials_variants",
+        "source-order variant identity",
+        "sparse variant mapping",
+        "PBR-to-unlit variant",
+        "default material reset"
       ],
       "auditFixture": null
     },
@@ -3468,18 +3488,18 @@
     },
     {
       "path": "gltf-required-extension-unsupported.expected.json",
-      "bytes": 5227,
-      "sha256": "a9c01f831c78483cae3c93c7ab91e38b3670ec6bf073451f5e44f92e00a8174a"
+      "bytes": 5230,
+      "sha256": "887cb61ea3919610b6aa99e2bc5754744ed016b2688f61177dfb8ff73102a86b"
     },
     {
       "path": "gltf-required-extension-unsupported.glb",
       "bytes": 888,
-      "sha256": "61f0cb17238443d2659e44eff12124ed275eaacdddda0b5f63ca9d6e9d420410"
+      "sha256": "3c1c90ecc4f3fd277c7c20a095d2a745078add68da862e6ee718d76393d4d94a"
     },
     {
       "path": "gltf-required-extension-unsupported.gltf",
-      "bytes": 1551,
-      "sha256": "0333a3dc1788d6d4f7902ce8dabe748804130b0421ed4c6dffaa7c7e2d710813"
+      "bytes": 1553,
+      "sha256": "256c2852a1a65dcd8ef08b9521bea79a91b6f7451bd89984c7c8a88b88c98475"
     },
     {
       "path": "gltf-uri-percent-encoded geometry.bin",
@@ -3773,6 +3793,31 @@
     },
     {
       "path": "mat-factor-only-gold.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "mat-material-variants.expected.json",
+      "bytes": 8546,
+      "sha256": "594ad22372cc1d4804f427bd5aa0f60a6c056e6e795d657a597a969cb20f1799"
+    },
+    {
+      "path": "mat-material-variants.glb",
+      "bytes": 1628,
+      "sha256": "8b51cb7677d173c454d7217689de940d36e54697110b41c5c83f898aad3e4ca2"
+    },
+    {
+      "path": "mat-material-variants.gltf",
+      "bytes": 3135,
+      "sha256": "777858d70054b21c4ba481c6ec416b1fbe302106526e8a9a3e12f5d6a7ecd306"
+    },
+    {
+      "path": "mat-material-variants.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-material-variants.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },

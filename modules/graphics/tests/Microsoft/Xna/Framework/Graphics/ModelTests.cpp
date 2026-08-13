@@ -68,6 +68,16 @@ TEST(ModelTest, CopyAbsoluteBoneTransformsToRootUsesItsOwnTransform)
     EXPECT_TRUE(VectorNear(origin, Vector3(1.0f, 0.0f, 0.0f)));
 }
 
+TEST(ModelTest, AModelWithoutImportedMaterialVariantsKeepsTheAdditiveApiAtItsDefault)
+{
+    Model model;
+    EXPECT_TRUE(model.getMaterialVariantNamesEXTProperty().empty());
+    EXPECT_EQ(-1, model.getMaterialVariantEXTProperty());
+    EXPECT_NO_THROW(model.setMaterialVariantEXTProperty(-1));
+    EXPECT_THROW(model.setMaterialVariantEXTProperty(0), std::out_of_range);
+    EXPECT_EQ(-1, model.getMaterialVariantEXTProperty());
+}
+
 TEST(ModelTest, CopyAbsoluteBoneTransformsToChildComposesWithParent)
 {
     KnownHierarchy h;

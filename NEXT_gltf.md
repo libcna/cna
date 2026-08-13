@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **371 closed (`✔` 250, `✅` 121),
-  66 `⬜` remaining.** The other 23 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **373 closed (`✔` 252, `✅` 121),
+  64 `⬜` remaining.** The other 23 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 9 `✅/⬜` and 2 `✅/🐛` (landed with a named residue), 2 `🐛` (open:
   `GLTF-157`, `421`), and 2 `⛔` (`GLTF-009` and
   `GLTF-439`, each blocked by this environment for a stated reason).
@@ -44,8 +44,8 @@ Expected as of this writing:
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite | **6 354 passed, 189 skipped, 18 failed** |
-| generator `--check` | **139 assets, 689 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **465 passed, 24 skipped** / **489 passed, 0 skipped** |
+| generator `--check` | **140 assets, 694 files — byte-identical** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **473 passed, 25 skipped** / **498 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -76,7 +76,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 465 passed, 24 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 473 passed, 25 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -163,8 +163,8 @@ turned out not to need CI at all.
 | **L7 / rendered image** | 18 — `GLTF-016`, `175`, `176`, `182`, `189`, `213`, `218`, `230`, `244`, `264`, `268`, `340`, `343`, `344`, `386`, `387`, `390`, `397` | Needs a renderer with a real 3D pipeline. This environment builds `STUB` and `HEADLESS`, neither of which rasterises. `GLTF-343`/`344` now reach shader-ready F0/F90 at L6; consuming those values in every renderer is the blocked residue. |
 | **second/third renderer** | 10 — `GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs the comparison; `OPENGLES3`/`VULKAN` need sibling checkouts and a GPU. `GLTF-017`/`382`/`383`/`388` were closable *because* `HEADLESS` builds here. |
 | **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
-| **`cna-gltf-viewer` repo** | 13 — `GLTF-323`, `342`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
-| **third-party assets** | 6 — `GLTF-013`, `014`, `018`, `341`, `405`–`407`, `411` | Needs pinned, licence-reviewed external sample models. |
+| **`cna-gltf-viewer` repo** | 12 — `GLTF-323`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
+| **third-party assets** | 7 — `GLTF-013`, `014`, `018`, `405`–`407`, `411` | Needs pinned, licence-reviewed external sample models. |
 | **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
 | **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |
 
@@ -175,7 +175,7 @@ The remaining **~36 are doable in this environment.**
 Ordered by value, not by number. Each is a coherent unit with its own tests and one commit.
 Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is superseded.
 
-1. **`GLTF-399` — finish the corpus (139/143 assets today).** Fourteen owning groups are complete;
+1. **`GLTF-399` — finish the corpus (140/144 assets today).** Fourteen owning groups are complete;
    accessors are 13/13, normals 6/6 and container is now 8/8. The generator emits external `.bin`
    and image sidecars from the same fixture source, while GLB twins stay self-contained; exact
    source spellings, BIN padding and byte parity are directly asserted. The four exact missing IDs
@@ -244,7 +244,7 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 |---|---|
 | `plan_gltf.md` | The 460-row campaign record. Each closed row carries its own evidence. |
 | `tools/gltf_fixtures/` | The corpus generator. Edit here, never the assets. |
-| `tests/assets/gltf/` | Generated corpus: **139 assets, 689 files**, including sidecars and `manifest.json`'s defect ledger. Never edited by hand. |
+| `tests/assets/gltf/` | Generated corpus: **140 assets, 694 files**, including sidecars and `manifest.json`'s defect ledger. Never edited by hand. |
 | `modules/content/src/GltfImport/GltfImportCore.cpp` | The importer. Extraction, skeletons, clips, lights, cameras, the extension registry, the stride table. |
 | `modules/content/src/Xna/ContentManager.cpp` | The runtime `.gltf` loader **and** the `.cnj` reader. Both must agree; several tests assert exactly that. |
 | `tools/gltf_to_cnj/gltf_to_cnj.cpp` | The offline converter — the second loader. |
