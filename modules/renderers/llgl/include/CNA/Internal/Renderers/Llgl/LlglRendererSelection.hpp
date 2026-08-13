@@ -95,13 +95,13 @@ namespace CNA::Internal::Renderers::Llgl::Detail
     [[nodiscard]] RendererModule ResolveRendererModule();
 
     /**
-     * @brief Returns whether the given module needs an OpenGL-capable SDL window.
+     * @brief Returns whether the given module needs an OpenGL-capable platform window.
      *
      * True only for the OpenGL module. Vulkan gets its surface straight from the native window
-     * handle and needs no SDL window flag at all, and the Null module presents nothing.
+     * handle and needs no API-specific window flag at all, and the Null module presents nothing.
      *
      * @param module Module to test.
-     * @return True if the SDL window must be created with SDL_WINDOW_OPENGL.
+     * @return True if the platform window must be created with OpenGL render intent.
      */
     [[nodiscard]] bool RendererModuleNeedsOpenGLWindow(RendererModule module);
 }

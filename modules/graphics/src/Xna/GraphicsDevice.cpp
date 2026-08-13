@@ -2380,7 +2380,8 @@ namespace Microsoft::Xna::Framework::Graphics
 #if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL1) || \
     defined(CNA_RENDERER_OPENGL2) || defined(CNA_RENDERER_OPENGL4) || \
     defined(CNA_RENDERER_OPENGLES1) || defined(CNA_RENDERER_MAGNUM) || \
-    defined(CNA_RENDERER_OPENVG) || defined(CNA_RENDERER_SOKOL)
+    defined(CNA_RENDERER_OPENVG) || defined(CNA_RENDERER_SOKOL) || \
+    defined(CNA_RENDERER_DILIGENT)
         // Context-backed renderers receive only the narrow GL service plus the surface value
         // snapshot. They never resolve a native window or reach through IPlatform.
         args.glContext = platform_->GetGlContext();

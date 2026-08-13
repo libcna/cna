@@ -10,8 +10,8 @@
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 2 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
 | `cpu-presentation` | 1 | CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service. |
-| `migratable` | 23 | Uses platform services only (native handle, GL/Vulkan, window, events). |
-| `sdl-free` | 14 | No SDL references at all. |
+| `migratable` | 20 | Uses platform services only (native handle, GL/Vulkan, window, events). |
+| `sdl-free` | 17 | No SDL references at all. |
 
 ## Per-family detail
 
@@ -22,12 +22,10 @@
 | `freedirect` | FREEDIRECT | `sdl-upstream` | 19 / 3 | `window` | — |
 | `fna3d` | FNA3D | `sdl-upstream` | 10 / 8 | `window` | — |
 | `blend2d` | BLEND2D | `cpu-presentation` | 50 / 41 | `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderTexture`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderVSync`, `SDL_UpdateTexture` |
-| `diligent` | DILIGENT | `migratable` | 43 / 33 | `native-handle`, `gl-vulkan-interop`, `window`, `display` | — |
 | `gdi` | GDI | `migratable` | 39 / 36 | `native-handle`, `event`, `window` | — |
 | `webgpu` | WEBGPU | `migratable` | 39 / 38 | `native-handle`, `gl-vulkan-interop`, `window`, `display` | — |
 | `bgfx` | BGFX | `migratable` | 36 / 33 | `native-handle`, `window`, `display` | — |
 | `svg-dom` | SVG_DOM | `migratable` | 27 / 24 | `native-handle`, `window`, `filesystem` | — |
-| `llgl` | LLGL | `migratable` | 24 / 21 | `native-handle`, `window`, `display` | — |
 | `direct2d` | DIRECT2D | `migratable` | 16 / 13 | `native-handle`, `window` | — |
 | `canvas` | CANVAS | `migratable` | 14 / 9 | `window` | — |
 | `directx1` | DIRECTX1 | `migratable` | 14 / 6 | `native-handle`, `window` | — |
@@ -43,10 +41,11 @@
 | `directx9` | DIRECTX9 | `migratable` | 10 / 10 | `native-handle`, `window` | — |
 | `html-dom` | HTML_DOM | `migratable` | 10 / 7 | `window` | — |
 | `directx10` | DIRECTX10 | `migratable` | 7 / 6 | `native-handle`, `window` | — |
-| `wicked` | WICKED | `migratable` | 6 / 6 | `window` | — |
 | `glide` | GLIDE | `migratable` | 4 / 4 | `native-handle` | — |
+| `diligent` | DILIGENT | `sdl-free` | 0 / 0 | — | — |
 | `easygl` | OPENGL33 OPENGLES2 OPENGLES3 WEBGL1 WEBGL2 | `sdl-free` | 0 / 0 | — | — |
 | `headless` | HEADLESS | `sdl-free` | 0 / 0 | — | — |
+| `llgl` | LLGL | `sdl-free` | 0 / 0 | — | — |
 | `magnum` | MAGNUM | `sdl-free` | 0 / 0 | — | — |
 | `opengl1` | OPENGL1 | `sdl-free` | 0 / 0 | — | — |
 | `opengl2` | OPENGL2 | `sdl-free` | 0 / 0 | — | — |
@@ -59,6 +58,7 @@
 | `sokol` | SOKOL | `sdl-free` | 0 / 0 | — | — |
 | `stub` | STUB | `sdl-free` | 0 / 0 | — | — |
 | `vulkan` | VULKAN | `sdl-free` | 0 / 0 | — | — |
+| `wicked` | WICKED | `sdl-free` | 0 / 0 | — | — |
 
 ## Findings
 

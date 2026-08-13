@@ -140,6 +140,11 @@ primitive, vertex, pixel or input event.
 - PLAT-67 supplies `IPlatformGlContext` only to the selected EasyGL family. EasyGL owns its context
   transactionally, consumes resize and density from `RendererSurfaceInfo`, and has no native
   window-toolkit include, symbol or link input.
+- PLAT-72 applies the same value boundary to the runtime-selected middleware families. DILIGENT
+  uses `IPlatformGlContext` only for its OpenGL candidate and the typed native handle for its other
+  APIs; LLGL owns a platform-neutral `LLGL::Surface` adapter; WICKED receives an immutable native
+  snapshot through CNA's small upstream patch. All three refresh size and density through
+  `OnSurfaceChanged` and have no direct SDL dependency in production.
 - Normalized touch coordinates cross the event boundary together with the client size that defines
   them. Scaling to client units therefore also stays platform-neutral and requires no per-event
   window query in the consumer.

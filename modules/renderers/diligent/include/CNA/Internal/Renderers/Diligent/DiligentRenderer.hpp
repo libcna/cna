@@ -2,6 +2,8 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/CNAHelper.hpp"
 
 #include <cstdint>
@@ -22,11 +24,6 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Diligent/DiligentDeviceSelection.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
-
-/// Forward declaration matching SDL3's own `typedef struct SDL_GLContextState* SDL_GLContext;` --
-/// avoids pulling the full SDL3 header into every translation unit that includes this one, the same
-/// rationale IGraphicsRenderer.hpp's own `struct SDL_Window;` forward declaration already follows.
-struct SDL_GLContextState;
 
 namespace CNA::Internal::Renderers::Diligent
 {
@@ -897,6 +894,9 @@ namespace CNA::Internal::Renderers::Diligent
          */
         void GetViewportSize(int& width, int& height) override;
 
+        /** @brief Refreshes the platform surface snapshot and resizes the swap chain if needed. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
+
         /**
          * @brief Sets the logical resolution the game draws in.
          * @param width  Logical width in pixels.
@@ -1566,15 +1566,14 @@ namespace CNA::Internal::Renderers::Diligent
         /// every `DiligentRenderTargetRenderer` with a `resolveTexture_`.
         void ResolveTextureSubresource(Dg::ITexture* src, Dg::ITexture* dst);
 
-        SDL_Window* window_ = nullptr;
+        PlatformRendererSurfaceState surface_;
+        CNA::Platform::IPlatformGlContext* platformGlContextService_ = nullptr;
         /// Only set when deviceType_ == OpenGL. Diligent's own GLContext (GLContextLinux.cpp)
         /// attaches to whatever GL context is already current on this thread via glXGetCurrentContext()
         /// -- it does not create one itself, unlike Vulkan/D3D where DiligentCore owns the whole
-        /// device/context/swap-chain lifecycle. SDL_GL_CreateContext()/SDL_GL_MakeCurrent() must run
-        /// before CreateDeviceAndSwapChainGL(), and this context outlives it (destroyed only in
-        /// ~DiligentRenderer(), after device_/context_/swapChain_ are done with the GL calls
-        /// they make internally).
-        SDL_GLContextState* glContext_ = nullptr;
+        /// device/context/swap-chain lifecycle. The platform context must be current before
+        /// CreateDeviceAndSwapChainGL(), and outlives every Diligent object that can issue GL calls.
+        std::unique_ptr<PlatformGlContextOwner> glContext_;
         DiligentDeviceType deviceType_ = DiligentDeviceType::Vulkan;
         Dg::RefCntAutoPtr<Dg::IRenderDevice> device_;
         Dg::RefCntAutoPtr<Dg::IDeviceContext> context_;

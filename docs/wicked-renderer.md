@@ -37,32 +37,35 @@ No Vulkan SDK is required: Wicked Engine vendors the Vulkan headers and loads th
 volk at run time. A Vulkan **loader and driver** (`libvulkan.so.1` plus an ICD) must be present on
 the machine that runs the game.
 
-### The SDL3 patch
+### The CNA native-window patch
 
 Upstream Wicked Engine's Unix platform layer is SDL2-only: `wiPlatform.h` calls SDL2 window
 functions unconditionally under `PLATFORM_LINUX`, and `GraphicsDevice_Vulkan::CreateSwapChain` has a
-hard `#error PLATFORM NOT SUPPORTED` when neither `_WIN32` nor `SDL2` is defined. CNA is SDL3-only,
-and SDL2 and SDL3 cannot be loaded into one process — they export the same symbol names with
-different ABIs — so no configuration exists in which unpatched upstream and CNA can share a window.
+hard `#error PLATFORM NOT SUPPORTED` when neither `_WIN32` nor `SDL2` is defined. CNA cannot let a
+third-party engine own or query its platform window, so unpatched upstream cannot share CNA's
+window boundary.
 
-`cmake/patches/wicked-sdl3-platform.patch` adds a parallel `SDL3` branch everywhere the `SDL2` one
-already exists, and is applied automatically to the resolved checkout when it is not already
-SDL3-aware. It touches six files (94 added lines) and changes nothing on the SDL2 path:
+`cmake/patches/wicked-cna-platform.patch` adds a `WICKED_CNA_PLATFORM` branch and is applied
+automatically to the resolved checkout. It consumes an immutable X11 native-window snapshot,
+creates the Vulkan surface directly from its display/window pair, and takes current drawable size,
+DPI and fullscreen state from values maintained by CNA:
 
 | File | Change |
 |------|--------|
-| `CMakeLists.txt` | `WICKED_USE_SDL3` option; sets `PLATFORM`/`SDL3=1` on Unix |
-| `WickedEngine/CMakeLists.txt` | skips `find_package(SDL2)`, links `SDL3::SDL3`, defines `SDL3=1` |
-| `WickedEngine/Utility/CMakeLists.txt` | builds FAudio with `BUILD_SDL3` / `FAUDIO_SDL3_PLATFORM` |
-| `WickedEngine/wiPlatform.h` | SDL3 include block, `window_type`, window size/DPI, fullscreen |
-| `WickedEngine/wiGraphicsDevice_Vulkan.cpp` | SDL3 instance extensions and `SDL_Vulkan_CreateSurface` |
+| `CMakeLists.txt` | `WICKED_USE_CNA_PLATFORM` option and `PLATFORM=CNA` selection |
+| `WickedEngine/CMakeLists.txt` | skips the SDL2 dependency for the CNA route |
+| `WickedEngine/wiPlatform.h` | CNA native-window value type plus size/DPI/fullscreen accessors |
+| `WickedEngine/wiGraphicsDevice_Vulkan.cpp` | Xlib instance extension and direct X11 surface creation |
 | `WickedEngine/wiInput.cpp` | inert cursor table when no cursor renderer is compiled in |
 
-`wi::input` is not used by CNA — CNA drives SDL3 input itself — so the last entry deliberately
-leaves Wicked's cursor management inert rather than porting it to SDL3.
+`wi::input` is not used by CNA, so the last entry deliberately leaves Wicked's cursor management
+inert instead of coupling the RHI integration to CNA's input platform. Wicked audio compiles its
+upstream no-backend stubs on this graphics-only route, so neither SDL2 nor FAudio is linked.
 
-Set `-DCNA_WICKED_APPLY_SDL3_PATCH=OFF` to apply it by hand instead. The patch is authored against
-the pinned `CNA_WICKED_COMMIT`; a different revision may need it rebasing.
+Set `-DCNA_WICKED_APPLY_PLATFORM_PATCH=OFF` to apply it by hand instead. The patch is authored
+against the pinned `CNA_WICKED_COMMIT`; a different revision may need it rebasing. CMake also
+recognises a checkout modified by CNA's former SDL3 patch, reverses that exact legacy patch, and
+then applies the native-window patch.
 
 ### The device-teardown patch (`WICKED-78`)
 
@@ -81,7 +84,7 @@ At the pinned revision, `GraphicsDevice_Vulkan`'s destructor leaks in two comple
   of it, which is also what masks the assertion above.
 
 `cmake/patches/wicked-device-teardown.patch` releases both in the destructor and is applied to the
-resolved checkout automatically, exactly like the SDL3 patch; set
+resolved checkout automatically, exactly like the native-window patch; set
 `-DCNA_WICKED_APPLY_TEARDOWN_PATCH=OFF` to apply it by hand. The `Wicked_DeviceLifecycle` test
 pins the fixed behaviour: it is plain device create/destroy cycles, and before the patch the first
 one aborts the binary inside `vk_mem_alloc.h`.
@@ -216,10 +219,9 @@ Not implemented; each is refused explicitly at the call site and reported by
 
 ## Verification status
 
-As of 2026-08-05 the renderer builds against the patched Wicked Engine, creates a real
+As of 2026-08-13 the renderer builds against the patched Wicked Engine, creates a real
 `GraphicsDevice_Vulkan`, and compiles all 22 of its shader entry points at device creation. The
-pipeline-cache-key unit suite, the `Wicked_DeviceLifecycle` and `Wicked_GeometryVertexOffset`
-regression suites and the 2D demo smoke run pass on a **software** Vulkan device
-(llvmpipe/lavapipe under Xvfb). **It has not yet been executed on real GPU hardware with a real
-display** (`plan_wicked.md` `WICKED-18` / `WICKED-74`); do not describe this renderer as
-hardware-verified until that has happened.
+platform-surface state suite and all 22 device lifecycle, geometry-offset and staged-transfer GPU
+tests pass through the CNA X11 native-window bridge on an Intel Iris Xe Vulkan device and a real X11
+display. The earlier software Vulkan/Xvfb results remain useful portability coverage; this run also
+closes the former hardware-verification caveat (`plan_wicked.md` `WICKED-18` / `WICKED-74`).

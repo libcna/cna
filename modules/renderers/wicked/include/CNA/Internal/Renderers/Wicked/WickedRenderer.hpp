@@ -11,6 +11,7 @@
 // not a second engine (plan_wicked.md design decision 1).
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
@@ -958,6 +959,8 @@ namespace CNA::Internal::Renderers::Wicked
          * @param height Receives the logical height.
          */
         void GetViewportSize(int& width, int& height) override;
+        /** @brief Refreshes the platform surface size and density snapshot. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /**
          * @brief Changes the logical render size at runtime.
          * @param width  New logical width.
@@ -1338,6 +1341,7 @@ namespace CNA::Internal::Renderers::Wicked
         void CreateBuiltinShaders();
         void CompileShader(wig::ShaderStage stage, const char* entryPoint, wig::Shader& out);
         void ResolveVirtualResolution();
+        void UpdateNativeWindowSnapshot();
 
         void BeginFrame();
         void BeginRenderPass();
@@ -1362,7 +1366,11 @@ namespace CNA::Internal::Renderers::Wicked
                         PrimitiveType primitive, int primitiveCount,
                         const GpuDrawParams* params, int instanceCount = 1);
 
-        SDL_Window* window_ = nullptr;
+        PlatformRendererSurfaceState surface_;
+#ifdef WICKED_CNA_PLATFORM
+        wi::platform::NativeWindow nativeWindow_;
+#endif
+        wi::platform::window_type wickedWindow_ = {};
         std::unique_ptr<wig::GraphicsDevice> device_;
         wig::SwapChain swapChain_;
         wig::SwapChainDesc swapChainDesc_;

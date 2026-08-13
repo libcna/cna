@@ -35,13 +35,16 @@
 
 #include "CNA/Internal/Renderers/Diligent/DiligentRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <string>
@@ -101,11 +104,9 @@ namespace
     void RunMode(SDL_Window* window, const char* label, CnaPresentationMode mode, int virtualW,
                 int virtualH)
     {
-        GraphicsRendererCreateArgs args;
-        args.surface.windowId = SDL_GetWindowID(window);
-        args.virtualWidth = virtualW;
-        args.virtualHeight = virtualH;
-        args.presentationMode = mode;
+        CNA::Examples::SdlTestGlContext glContext(window);
+        GraphicsRendererCreateArgs args = CNA::Examples::SdlTestRendererArgs(
+            window, &glContext, nullptr, virtualW, virtualH, mode);
 
         DiligentRenderer renderer(args);
         renderer.Clear(kClearR, kClearG, kClearB, 1.0f);
@@ -183,8 +184,12 @@ int main()
         return 77;
     }
 
+    SDL_WindowFlags flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN;
+    const char* deviceOverride = std::getenv("CNA_DILIGENT_DEVICE");
+    if (deviceOverride != nullptr && std::strcmp(deviceOverride, "opengl") == 0)
+        flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_OPENGL;
     SDL_Window* window = SDL_CreateWindow("Diligent backbuffer readback bounds", kPhysicalW,
-                                          kPhysicalH, SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN);
+                                          kPhysicalH, flags);
     if (window == nullptr)
     {
         std::printf("[SKIP] CNA Diligent smoke: no usable device (SDL_CreateWindow failed: %s)\n",

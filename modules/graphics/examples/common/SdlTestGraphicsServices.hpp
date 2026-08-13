@@ -13,6 +13,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <utility>
@@ -27,6 +28,54 @@ namespace CNA::Examples
         SDL_GetWindowSizeInPixels(window, &surface.drawableSize.width, &surface.drawableSize.height);
         surface.displayScale = SDL_GetWindowPixelDensity(window);
         if (!(surface.displayScale > 0.0f)) surface.displayScale = 1.0f;
+
+        const char* driver = SDL_GetCurrentVideoDriver();
+        const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+        if (driver == nullptr || properties == 0) return surface;
+
+        using CNA::Platform::NativeWindowSystem;
+        if (std::strcmp(driver, "windows") == 0)
+        {
+            surface.nativeHandle.system = NativeWindowSystem::Win32;
+            surface.nativeHandle.window = SDL_GetPointerProperty(
+                properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+        }
+        else if (std::strcmp(driver, "x11") == 0)
+        {
+            surface.nativeHandle.system = NativeWindowSystem::X11;
+            surface.nativeHandle.display = SDL_GetPointerProperty(
+                properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
+            surface.nativeHandle.windowId = static_cast<std::uint64_t>(SDL_GetNumberProperty(
+                properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+        }
+        else if (std::strcmp(driver, "wayland") == 0)
+        {
+            surface.nativeHandle.system = NativeWindowSystem::Wayland;
+            surface.nativeHandle.display = SDL_GetPointerProperty(
+                properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
+            surface.nativeHandle.surface = SDL_GetPointerProperty(
+                properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
+        }
+        else if (std::strcmp(driver, "cocoa") == 0)
+        {
+            surface.nativeHandle.system = NativeWindowSystem::Cocoa;
+            surface.nativeHandle.window = SDL_GetPointerProperty(
+                properties, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+        }
+        else if (std::strcmp(driver, "android") == 0)
+        {
+            surface.nativeHandle.system = NativeWindowSystem::Android;
+            surface.nativeHandle.window = SDL_GetPointerProperty(
+                properties, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);
+        }
+        else if (std::strcmp(driver, "emscripten") == 0)
+        {
+            surface.nativeHandle.system = NativeWindowSystem::Web;
+        }
+        else
+        {
+            surface.nativeHandle.system = NativeWindowSystem::Headless;
+        }
         return surface;
     }
 

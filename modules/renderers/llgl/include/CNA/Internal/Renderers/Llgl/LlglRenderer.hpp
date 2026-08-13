@@ -3,7 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Llgl/LlglRendererSelection.hpp"
-#include "CNA/Internal/Renderers/Llgl/LlglSdlSurface.hpp"
+#include "CNA/Internal/Renderers/Llgl/LlglPlatformSurface.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <LLGL/LLGL.h>
@@ -924,8 +924,8 @@ namespace CNA::Internal::Renderers::Llgl
      * this renderer picks its module at runtime, so the game has no reliable way to know in
      * advance whether it needs to hand over GLSL or SPIR-V. `CompileProgram()` compiles the GLSL
      * directly when the loaded module accepts it (OpenGL), or through a real runtime
-     * GLSL-\>SPIR-V compile via `libshaderc` when it does not (Vulkan) -- the same problem this
-     * project's `SDL_GPU` renderer already solved the same way.
+     * GLSL-\>SPIR-V compile via `libshaderc` when it does not (Vulkan) -- the same problem another
+     * runtime-selected renderer already solved the same way.
      *
      * Named-uniform setters (`SetUniformMat4`/`Vec4`/... ) do not do real name-based reflection --
      * LLGL exposes none for a raw GLSL/SPIR-V module, and adding one would need a new dependency
@@ -1224,6 +1224,9 @@ namespace CNA::Internal::Renderers::Llgl
          * @param height Receives the logical height in pixels.
          */
         void GetViewportSize(int& width, int& height) override;
+
+        /** @brief Refreshes size/density and resizes the swap chain when the drawable changed. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
 
         /**
          * @brief Changes the logical resolution at runtime.
@@ -2265,10 +2268,9 @@ namespace CNA::Internal::Renderers::Llgl
         /// CPU like sprites are.
         void CaptureFrameCommandViewportEXT(FrameCommand& command) const;
 
-        SDL_Window*                 window_        = nullptr;
         Detail::RendererModule      module_        = Detail::RendererModule::OpenGL;
         LLGL::RenderSystemPtr       renderer_;
-        std::shared_ptr<LlglSdlSurface> surface_;
+        std::shared_ptr<LlglPlatformSurface> surface_;
         LLGL::SwapChain*            swapChain_     = nullptr;
         LLGL::CommandBuffer*        commands_      = nullptr;
         LLGL::CommandQueue*         queue_         = nullptr;
