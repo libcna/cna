@@ -59,7 +59,7 @@ namespace Microsoft::Xna::Framework
         /** @brief Raised when the game is exiting. */
         System::EventHandler<System::EventArgs> Exiting;
 
-        /** @brief Creates a new Game instance and initialises all subsystems. */
+        /** @brief Creates a new Game instance on the build-time platform and initialises it. */
         Game();
 
         /** @brief Destructor; calls Dispose(false) to release unmanaged resources. */
@@ -278,6 +278,18 @@ namespace Microsoft::Xna::Framework
         CNAEXT bool RunApplication;
 
     protected:
+        /**
+         * @brief Creates a game that owns an explicitly supplied platform.
+         *
+         * This CNAEXT seam is primarily for embedding hosts and cross-implementation tests. The
+         * platform is installed before any other Game member is constructed, exactly like the
+         * build-time default used by Game(), and remains owned by the Game until its teardown.
+         *
+         * @param platform Platform instance to own; must not be null.
+         * @throws std::invalid_argument If @p platform is null.
+         */
+        CNAEXT explicit Game(std::unique_ptr<CNA::Platform::IPlatform> platform);
+
         /** @brief Called before the game loop starts. */
         virtual void BeginRun();
 

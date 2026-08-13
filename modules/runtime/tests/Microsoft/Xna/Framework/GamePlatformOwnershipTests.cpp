@@ -12,10 +12,14 @@
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 
+#include <memory>
+#include <stdexcept>
 #include <string>
+#include <utility>
 
 using namespace Microsoft::Xna::Framework;
 
@@ -23,6 +27,13 @@ namespace
 {
     class QuietGame : public Game
     {
+    public:
+        QuietGame() = default;
+        explicit QuietGame(std::unique_ptr<CNA::Platform::IPlatform> platform)
+            : Game(std::move(platform))
+        {
+        }
+
     protected:
         void LoadContent() override {}
         void Update(GameTime& gameTime) override { Game::Update(gameTime); }
@@ -49,6 +60,29 @@ TEST_F(GamePlatformOwnershipTest, TheSameInstanceIsReturnedEveryTime)
     // refcount, which is precisely the bug the single-owner rule prevents.
     QuietGame game;
     EXPECT_EQ(&game.GetPlatformEXT(), &game.GetPlatformEXT());
+}
+
+TEST_F(GamePlatformOwnershipTest, ExplicitPlatformIsOwnedAndInstalledBeforeGameMembers)
+{
+    std::unique_ptr<CNA::Platform::IPlatform> supplied =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    CNA::Platform::IPlatform* expected = supplied.get();
+
+    QuietGame game(std::move(supplied));
+
+    EXPECT_EQ(&game.GetPlatformEXT(), expected);
+    EXPECT_EQ(&CNA::Platform::GetCurrentPlatform(), expected);
+    EXPECT_EQ(game.GetPlatformEXT().GetName(), "Headless");
+}
+
+TEST_F(GamePlatformOwnershipTest, ExplicitNullPlatformIsRejected)
+{
+    EXPECT_THROW(
+        {
+            QuietGame game(std::unique_ptr<CNA::Platform::IPlatform>{});
+        },
+        std::invalid_argument);
+    EXPECT_FALSE(CNA::Platform::HasCurrentPlatform());
 }
 
 TEST_F(GamePlatformOwnershipTest, ConstructingAGameInstallsItsPlatformAsTheAmbientOne)

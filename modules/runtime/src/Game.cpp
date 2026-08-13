@@ -127,15 +127,19 @@ namespace Microsoft::Xna::Framework
             return stack;
         }
 
-        /// Creates the game's platform and installs it as the process-wide one in a single step.
+        /// Installs the game's owned platform as the process-wide one in a single step.
         ///
         /// Doing both from a member initialiser rather than from the constructor body is what
         /// makes the ordering guarantee real: every other member is constructed after this one,
         /// so a graphics device or content manager that reaches for the ambient platform during
         /// its own construction finds the game's instance rather than lazily creating a second.
-        [[nodiscard]] std::unique_ptr<CNA::Platform::IPlatform> CreateAndInstallPlatform()
+        [[nodiscard]] std::unique_ptr<CNA::Platform::IPlatform> InstallPlatform(
+            std::unique_ptr<CNA::Platform::IPlatform> platform)
         {
-            std::unique_ptr<CNA::Platform::IPlatform> platform = CNA::Platform::PlatformFactory::Create();
+            if (!platform)
+            {
+                throw std::invalid_argument("Game requires a non-null platform");
+            }
 
             {
                 const std::lock_guard<std::mutex> guard(PlatformStackMutex());
@@ -180,7 +184,12 @@ namespace Microsoft::Xna::Framework
     }
 
     Game::Game()
-        : platform_(CreateAndInstallPlatform()),
+        : Game(CNA::Platform::PlatformFactory::Create())
+    {
+    }
+
+    Game::Game(std::unique_ptr<CNA::Platform::IPlatform> platform)
+        : platform_(InstallPlatform(std::move(platform))),
           eventBatch_(std::make_unique<PlatformEventBatch>()),
           Components_(),
           GraphicsDevice_(),
