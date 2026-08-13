@@ -72,4 +72,12 @@ TEST(VulkanSurfaceTests, InterfaceHasAVirtualDestructor)
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformVulkanSurface>);
 }
 
+TEST(VulkanSurfaceTests, WindowIdentityIsAStablePlatformId)
+{
+    using CreateSurfaceSignature = VulkanSurfaceHandle (IPlatformVulkanSurface::*)(
+        VulkanInstanceHandle, WindowId);
+    EXPECT_TRUE((std::is_same_v<decltype(&IPlatformVulkanSurface::CreateSurface),
+                                CreateSurfaceSignature>));
+}
+
 } // namespace

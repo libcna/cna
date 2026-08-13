@@ -2385,6 +2385,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // snapshot. They never resolve a native window or reach through IPlatform.
         args.glContext = platform_->GetGlContext();
 #endif
+#ifdef CNA_RENDERER_VULKAN
+        args.vulkanSurface = platform_->GetVulkanSurface();
+#endif
         args.virtualWidth = virtualWidth_;
         args.virtualHeight = virtualHeight_;
         args.contextRecoveryEnabled = contextRecoveryEnabled_;

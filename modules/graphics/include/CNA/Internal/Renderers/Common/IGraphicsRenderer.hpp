@@ -31,7 +31,12 @@
 #include "CNA/GraphicsCapability.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
-namespace CNA::Platform { class IPlatformGlContext; class IPlatformSurfacePresenter; }
+namespace CNA::Platform
+{
+    class IPlatformGlContext;
+    class IPlatformSurfacePresenter;
+    class IPlatformVulkanSurface;
+}
 
 namespace CNA::Internal::Renderers
 {
@@ -2039,6 +2044,13 @@ namespace CNA::Internal::Renderers
          * native window-toolkit type.
          */
         CNA::Platform::IPlatformGlContext* glContext = nullptr;
+        /**
+         * @brief Vulkan presentation-surface service for Vulkan-family renderers, otherwise null.
+         *
+         * The pointer is non-owning; the platform outlives the renderer. The renderer identifies
+         * its target only by @ref RendererSurfaceInfo::windowId.
+         */
+        CNA::Platform::IPlatformVulkanSurface* vulkanSurface = nullptr;
         /**
          * @brief CPU-frame presentation service for raster renderers, otherwise null.
          *

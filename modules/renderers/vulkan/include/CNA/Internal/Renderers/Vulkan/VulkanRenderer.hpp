@@ -2,6 +2,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformVulkanRendererState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include <vulkan/vulkan.h>
 #include <algorithm>
@@ -1059,7 +1060,7 @@ namespace CNA::Internal::Renderers::Vulkan
         friend class VulkanMRTProxy;
 
     public:
-        explicit VulkanRenderer(SDL_Window* window, int multiSampleCount = 1, int swapInterval = 1);
+        explicit VulkanRenderer(const GraphicsRendererCreateArgs& args);
         ~VulkanRenderer() override;
 
         // AnisotropicFiltering/WireFrame reflect real, already-cached device feature queries
@@ -1071,6 +1072,11 @@ namespace CNA::Internal::Renderers::Vulkan
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         void SetVirtualResolution(int width, int height) override;
@@ -1301,12 +1307,14 @@ namespace CNA::Internal::Renderers::Vulkan
         static constexpr uint32_t MaxDescriptorSets = 512;
 
         // --- Core Vulkan objects (lifetime = renderer) ---
-        SDL_Window*      window_         = nullptr;
+        RendererSurfaceInfo surfaceInfo_;
+        CNA::Platform::IPlatformVulkanSurface* platformSurfaceService_ = nullptr;
         VkInstance       instance_       = VK_NULL_HANDLE;
         VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
         std::vector<std::string> validationMessages_;
         /// REMED-GFX-144: pMessageIdName per entry of validationMessages_, same order and size.
         std::vector<std::string> validationMessageIdNames_;
+        std::unique_ptr<PlatformVulkanSurfaceOwner> platformSurface_;
         VkSurfaceKHR     surface_        = VK_NULL_HANDLE;
         VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
         VkDevice         device_         = VK_NULL_HANDLE;

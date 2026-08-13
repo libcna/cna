@@ -10,8 +10,8 @@
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 2 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
 | `cpu-presentation` | 1 | CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service. |
-| `migratable` | 24 | Uses platform services only (native handle, GL/Vulkan, window, events). |
-| `sdl-free` | 13 | No SDL references at all. |
+| `migratable` | 23 | Uses platform services only (native handle, GL/Vulkan, window, events). |
+| `sdl-free` | 14 | No SDL references at all. |
 
 ## Per-family detail
 
@@ -27,7 +27,6 @@
 | `webgpu` | WEBGPU | `migratable` | 39 / 38 | `native-handle`, `gl-vulkan-interop`, `window`, `display` | — |
 | `bgfx` | BGFX | `migratable` | 36 / 33 | `native-handle`, `window`, `display` | — |
 | `svg-dom` | SVG_DOM | `migratable` | 27 / 24 | `native-handle`, `window`, `filesystem` | — |
-| `vulkan` | VULKAN | `migratable` | 25 / 19 | `gl-vulkan-interop`, `window` | — |
 | `llgl` | LLGL | `migratable` | 24 / 21 | `native-handle`, `window`, `display` | — |
 | `direct2d` | DIRECT2D | `migratable` | 16 / 13 | `native-handle`, `window` | — |
 | `canvas` | CANVAS | `migratable` | 14 / 9 | `window` | — |
@@ -59,6 +58,7 @@
 | `software` | SOFTWARE | `sdl-free` | 0 / 0 | — | — |
 | `sokol` | SOKOL | `sdl-free` | 0 / 0 | — | — |
 | `stub` | STUB | `sdl-free` | 0 / 0 | — | — |
+| `vulkan` | VULKAN | `sdl-free` | 0 / 0 | — | — |
 
 ## Findings
 

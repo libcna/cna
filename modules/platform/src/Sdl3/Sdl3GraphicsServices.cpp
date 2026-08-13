@@ -215,20 +215,20 @@ namespace CNA::Platform::Sdl3 {
     }
 
     VulkanSurfaceHandle Sdl3VulkanSurface::CreateSurface(const VulkanInstanceHandle instance,
-                                                         IPlatformWindow& window)
+                                                         const WindowId window)
     {
         if (!VulkanLoaderAvailable())
         {
             throw PlatformNotSupportedException(PlatformCapability::VulkanSurface, "SDL3");
         }
 
-        Sdl3Window& sdlWindow = RequireSdl3Window(window, "VulkanSurface::CreateSurface");
+        SDL_Window* nativeWindow = RequireSdl3Window(window, "VulkanSurface::CreateSurface");
 
         // Value-initialised rather than VK_NULL_HANDLE: that macro needs a real Vulkan header,
         // and {} is the null handle for both the pointer and the integer form.
         VkSurfaceKHR surface{};
-        if (!SDL_Vulkan_CreateSurface(sdlWindow.GetSdlWindow(), static_cast<VkInstance>(instance),
-                                      nullptr, &surface))
+        if (!SDL_Vulkan_CreateSurface(nativeWindow, static_cast<VkInstance>(instance), nullptr,
+                                      &surface))
         {
             throw PlatformException("VulkanSurface::CreateSurface", SDL_GetError());
         }

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Platform/PlatformEvent.hpp"
+
 #include <cstdint>
 #include <string>
 #include <vector>
 
 namespace CNA::Platform {
-
-    class IPlatformWindow;
 
     /** @brief An opaque `VkInstance`. Kept untyped so this header never includes Vulkan. */
     using VulkanInstanceHandle = void*;
@@ -52,13 +52,13 @@ namespace CNA::Platform {
          * The window must have been created with `WindowRenderIntent::Vulkan`.
          *
          * @param instance The `VkInstance` to create the surface against.
-         * @param window The window to present to.
+         * @param window The stable id of the platform window to present to.
          * @return A non-zero surface handle.
          * @throws PlatformNotSupportedException If the platform reports no `VulkanSurface` capability.
          * @throws PlatformException If surface creation failed.
          */
         [[nodiscard]] virtual VulkanSurfaceHandle CreateSurface(VulkanInstanceHandle instance,
-                                                                IPlatformWindow& window) = 0;
+                                                                WindowId window) = 0;
 
         /**
          * @brief Destroys a surface previously created by this service.

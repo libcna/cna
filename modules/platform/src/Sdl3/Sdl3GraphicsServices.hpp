@@ -65,11 +65,11 @@ namespace CNA::Platform::Sdl3 {
         /**
          * @brief Creates a surface for a window.
          * @param instance The `VkInstance`.
-         * @param window The window to present to.
+         * @param window The stable id of the window to present to.
          * @return A non-zero surface handle.
          */
         [[nodiscard]] VulkanSurfaceHandle CreateSurface(VulkanInstanceHandle instance,
-                                                        IPlatformWindow& window) override;
+                                                        WindowId window) override;
         /**
          * @brief Destroys a surface.
          * @param instance The instance it was created against.

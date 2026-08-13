@@ -33,7 +33,8 @@ matching operation:
 
 - `IPlatformGlContext` creates/makes-current/swaps an OpenGL context by stable `WindowId` and
   exposes both object-oriented and C-callback entry-point resolution.
-- `IPlatformVulkanSurface` creates and destroys a Vulkan presentation surface.
+- `IPlatformVulkanSurface` creates a Vulkan presentation surface by stable `WindowId` and destroys
+  it by opaque handle; the renderer never receives an `IPlatformWindow` escape hatch.
 - `IPlatformSurfacePresenter` puts one finished CPU RGBA frame on screen.
 
 These are surface plumbing, not drawing APIs. OpenGL/Vulkan/CPU drawing remains inside the
