@@ -1,6 +1,7 @@
 // plan_canvas.md CANVAS-15: structural smoke test for the CANVAS (HTML Canvas 2D) graphics
-// renderer. Constructs a real Game (GraphicsDeviceManager, Clear(), a Texture2D + SpriteBatch draw
-// with rotation/origin/tint) and runs a couple of frames.
+// renderer. Constructs a real Game (GraphicsDeviceManager, Clear(), a Texture2D + SpriteBatch
+// draws), verifies exact scaled-destination pixels, and checks the AlphaBlend cache/bulk replay
+// counters across a couple of frames.
 //
 // Design decision 9 / this file's own empirical finding: this renderer is Emscripten-only, and
 // SDL_Init(SDL_INIT_VIDEO) itself throws under this repo's `node CnaTests.js` runner (no real
@@ -24,9 +25,43 @@
 #include <cstdio>
 #include <vector>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Renderers::Canvas;
+
+namespace
+{
+    constexpr int kExpectedChecks = 8;
+
+#if defined(__EMSCRIPTEN__)
+    EM_JS(void, JsResetCanvasDiagnostics, (), {
+        Module['cnaCanvasUnpremultiplyBuildCount'] = 0;
+        Module['cnaCanvasBulkFlushCount'] = 0;
+        Module['cnaCanvasBulkSpriteCount'] = 0;
+    });
+
+    EM_JS(int, JsUnpremultiplyBuildCount, (), {
+        return Module['cnaCanvasUnpremultiplyBuildCount'] || 0;
+    });
+
+    EM_JS(int, JsBulkFlushCount, (), {
+        return Module['cnaCanvasBulkFlushCount'] || 0;
+    });
+
+    EM_JS(int, JsBulkSpriteCount, (), {
+        return Module['cnaCanvasBulkSpriteCount'] || 0;
+    });
+#else
+    void JsResetCanvasDiagnostics() {}
+    int JsUnpremultiplyBuildCount() { return 0; }
+    int JsBulkFlushCount() { return 0; }
+    int JsBulkSpriteCount() { return 0; }
+#endif
+}
 
 class CanvasSmokeTest : public Game
 {
@@ -69,22 +104,44 @@ protected:
             int w = 0, h = 0;
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
+            JsResetCanvasDiagnostics();
+        }
+        else if (frame_ == 2)
+        {
+            std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
+            result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
+            Exit();
+            return;
         }
 
         dev.Clear(Color::CornflowerBlue);
 
-        spriteBatch_->Begin();
-        spriteBatch_->Draw(*texture_, Vector2(8, 8), Color::White);
-        spriteBatch_->Draw(*texture_, Rectangle(20, 8, 16, 16), Rectangle(0, 0, 2, 2), Color(128, 128, 255, 200),
-                           0.5f, Vector2(1, 1), SpriteEffects::FlipHorizontally, 0.0f);
+        // CANVAS-86 scale regression: a 2x2 source expanded to exactly 8x8. Before the fix the
+        // destination/source ratio was applied both to ctx.scale() and the drawImage destination,
+        // producing a 32x32 footprint instead.
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+        spriteBatch_->Draw(*texture_, Rectangle(8, 8, 8, 8), Rectangle(0, 0, 2, 2), Color::White);
         spriteBatch_->End();
 
-        if (frame_ == 2)
-        {
-            std::printf("=== %d/%d PASS ===\n", passCount_, 3);
-            result_ = (passCount_ == 3) ? 0 : 1;
-            Exit();
-        }
+        std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+        dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+        check(pixels[8 * 64 + 8] == Color(255, 0, 0, 255),
+              "scaled draw starts with the source's top-left texel");
+        check(pixels[15 * 64 + 15] == Color(255, 255, 0, 255),
+              "scaled draw reaches the exact destination bottom-right texel");
+        check(pixels[16 * 64 + 16] == Color::CornflowerBlue,
+              "scaled draw does not escape its destination rectangle");
+
+        // Two ordinary AlphaBlend sprites from one uploaded texture must share one cached
+        // straight-alpha variant and cross wasm->JS in one deferred-batch flush.
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend);
+        spriteBatch_->Draw(*texture_, Rectangle(24, 8, 8, 8), Rectangle(0, 0, 2, 2), Color::White);
+        spriteBatch_->Draw(*texture_, Rectangle(36, 8, 8, 8), Rectangle(0, 0, 2, 2), Color::White);
+        spriteBatch_->End();
+        check(JsUnpremultiplyBuildCount() == 1,
+              "two AlphaBlend draws build one cached straight-alpha texture variant");
+        check(JsBulkFlushCount() == 2 && JsBulkSpriteCount() == 3,
+              "two deferred batches use two JS crossings for three sprites");
     }
 
 public:

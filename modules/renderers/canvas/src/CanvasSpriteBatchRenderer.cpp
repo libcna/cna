@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -29,17 +30,18 @@
 // WHOLE compositing area, not just the drawn shape's own footprint -- an earlier version of this
 // code set 'copy' without a clip, which cleared the ENTIRE canvas to transparent outside the
 // sprite's own quad (confirmed via the CSS Compositing spec's per-pixel formula, not assumed). The
-// clip is a no-op for 'source-over'/'lighter' (they never touch pixels outside the drawn shape
-// anyway), so it's applied unconditionally rather than conditionally on the composite-op string.
+// `source-over`/`lighter` never touch pixels outside the drawn shape, so the clip is skipped there;
+// this removes three Canvas calls from Mobile Eggbert's common AlphaBlend sprite hot path.
 //
-// Tint (CANVAS-32) and premultiply-alpha handling (CANVAS-41): both are implemented as a single
-// per-pixel getImageData/putImageData pass, below, rather than composite-mode tricks -- an earlier
+// Tint (CANVAS-32) and premultiply-alpha handling (CANVAS-41): both use an exact per-pixel pass
+// rather than composite-mode tricks -- an earlier
 // multiply+destination-in version of the tint pass was mathematically wrong
 // (verified algebraically against the CSS Compositing spec's blend-mode formula: it produced
 // Rt*(1-As*(1-Rs)) instead of the desired Rt*Rs, a real A^2-style darkening error at semi-transparent,
 // non-white edge pixels). The per-pixel pass is exact: RGB channels are transformed directly,
-// alpha is copied through completely untouched. Skipped entirely when neither tint nor
-// un-premultiply is needed (the common case), so most draws pay zero extra-canvas cost.
+// alpha is copied through completely untouched. CANVAS-86 caches one full-texture straight-alpha
+// canvas after the first AlphaBlend use, so the formerly per-sprite readback/pixel loop/upload is
+// paid once per texture generation. Non-white RGB tint remains a rarer per-source-rect pass.
 //
 // CANVAS-42: smoothingEnabled maps the "expand"/magnification component of TextureFilter to
 // ctx.imageSmoothingEnabled (Canvas2D's only smoothing control).
@@ -119,9 +121,11 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
             m.e = -originX - sx; m.f = -originY - sy;
             pattern.setTransform(m);
         }
-        ctx.beginPath();
-        ctx.rect(-originX, -originY, sw, sh);
-        ctx.clip();
+        if (ctx.globalCompositeOperation === 'copy') {
+            ctx.beginPath();
+            ctx.rect(-originX, -originY, sw, sh);
+            ctx.clip();
+        }
         ctx.fillStyle = pattern;
         ctx.fillRect(-originX, -originY, sw, sh);
         ctx.restore();
@@ -138,27 +142,57 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
     if (csw <= 0 || csh <= 0) { ctx.restore(); return; }
 
     let source = entry.canvas;
+    let sourceCtx = entry.ctx;
     let drawSx = csx, drawSy = csy;
-    if (tinted || needsUnpremultiply) {
+    // Canvas2D readback is always straight alpha, including pixels produced by a render target.
+    // Only uploaded texture bytes need the AlphaBlend premultiplied->straight conversion. Cache
+    // that full texture once: Mobile Eggbert draws hundreds of AlphaBlend sprites per frame, and
+    // the former per-sprite getImageData/loop/putImageData path dominated its frame time.
+    if (needsUnpremultiply && !entry.isRenderTarget) {
+        if (!entry.unpremultipliedCanvas) {
+            const full = entry.ctx.getImageData(0, 0, texW, texH);
+            const fullData = full.data;
+            let changed = false;
+            for (let i = 0; i < fullData.length; i += 4) {
+                const aa = fullData[i + 3];
+                if (aa > 0 && aa < 255) {
+                    const inv = 255 / aa;
+                    fullData[i] = Math.min(255, fullData[i] * inv);
+                    fullData[i + 1] = Math.min(255, fullData[i + 1] * inv);
+                    fullData[i + 2] = Math.min(255, fullData[i + 2] * inv);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                const straight = (typeof OffscreenCanvas !== 'undefined')
+                    ? new OffscreenCanvas(texW, texH) : document.createElement('canvas');
+                straight.width = texW; straight.height = texH;
+                const straightCtx = straight.getContext('2d');
+                straightCtx.putImageData(full, 0, 0);
+                entry.unpremultipliedCanvas = straight;
+                entry.unpremultipliedCtx = straightCtx;
+            } else {
+                // Fully opaque/transparent textures need no converted duplicate.
+                entry.unpremultipliedCanvas = entry.canvas;
+                entry.unpremultipliedCtx = entry.ctx;
+            }
+            Module['cnaCanvasUnpremultiplyBuildCount'] =
+                (Module['cnaCanvasUnpremultiplyBuildCount'] || 0) + 1;
+        }
+        source = entry.unpremultipliedCanvas;
+        sourceCtx = entry.unpremultipliedCtx;
+    }
+    if (tinted) {
         // Exact per-pixel processing: divide RGB by alpha first (un-premultiply, only for
-        // AlphaBlend), then multiply RGB by the tint (only if tinted) -- alpha is read and written
-        // back completely untouched in every case.
-        const imgData = entry.ctx.getImageData(csx, csy, csw, csh);
+        // the cached full texture above), then multiply RGB by the tint -- alpha is read and
+        // written back completely untouched.
+        const imgData = sourceCtx.getImageData(csx, csy, csw, csh);
         const data = imgData.data;
         for (let i = 0; i < data.length; i += 4) {
             let rr = data[i], gg = data[i + 1], bb = data[i + 2];
-            const aa = data[i + 3];
-            if (needsUnpremultiply && aa > 0) {
-                const inv = 255 / aa;
-                rr = Math.min(255, rr * inv);
-                gg = Math.min(255, gg * inv);
-                bb = Math.min(255, bb * inv);
-            }
-            if (tinted) {
-                rr = (rr * r) / 255;
-                gg = (gg * g) / 255;
-                bb = (bb * b) / 255;
-            }
+            rr = (rr * r) / 255;
+            gg = (gg * g) / 255;
+            bb = (bb * b) / 255;
             data[i] = rr; data[i + 1] = gg; data[i + 2] = bb;
         }
         if (!Module['cnaScratchCanvas']) {
@@ -172,21 +206,47 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
         drawSx = 0; drawSy = 0;
     }
 
-    const offX = (csx - sx) * (destW / sw), offY = (csy - sy) * (destH / sh);
-    const outW = csw * (destW / sw), outH = csh * (destH / sh);
-    ctx.beginPath();
-    ctx.rect(-originX + offX, -originY + offY, outW, outH);
-    ctx.clip();
-    ctx.drawImage(source, drawSx, drawSy, csw, csh, -originX + offX, -originY + offY, outW, outH);
+    // The context already carries dest/source scale. Keep the draw rectangle in SOURCE-pixel
+    // coordinates; pre-scaling these values too applied the ratio twice (CANVAS-86).
+    const offX = csx - sx, offY = csy - sy;
+    if (ctx.globalCompositeOperation === 'copy') {
+        ctx.beginPath();
+        ctx.rect(-originX + offX, -originY + offY, csw, csh);
+        ctx.clip();
+    }
+    ctx.drawImage(source, drawSx, drawSy, csw, csh, -originX + offX, -originY + offY, csw, csh);
     ctx.restore();
 });
 
-// C++-callable query for the current BlendState's un-premultiply requirement (set by
-// CanvasRenderer::ApplyBlendState -> CNA_Canvas2D_SetCompositeOp) -- used by DrawSprite
-// (below) to validate the AlphaBlend + out-of-bounds-Wrap/Mirror combination before ever reaching
-// the JS draw path, consistent with how the tint/mixed-address-mode checks are validated in C++.
-EM_JS(int, CNA_Canvas2D_GetNeedsUnpremultiply, (), {
-    return Module['cnaNeedsUnpremultiply'] ? 1 : 0;
+// CANVAS-86: replay one deferred SpriteBatch from one wasm->JS call. The shared SpriteBatch layer
+// has already sorted commands as requested before it invokes this renderer's Draw() methods.
+EM_JS(void, CNA_Canvas2D_DrawSprites, (const void* commands, int count, int stride,
+                                      int compositeOp,
+                                      double ta, double tb, double tc,
+                                      double td, double te, double tf), {
+    const ops = ['copy', 'source-over', 'source-over', 'lighter'];
+    Module['cnaCompositeOp'] = ops[compositeOp] || 'source-over';
+    Module['cnaNeedsUnpremultiply'] = (compositeOp === 2);
+    CNA_Canvas2D_EnsureMainContext();
+    const ctx = Module['cnaCurrentCtx'];
+    if (!ctx) return;
+    ctx.setTransform(ta, tb, tc, td, te, tf);
+
+    const base = commands >> 2;
+    for (let i = 0; i < count; ++i) {
+        const o = base + i * stride;
+        const flags = HEAP32[o + 12];
+        const color = HEAPU32[o + 13];
+        CNA_Canvas2D_DrawSprite(
+            HEAP32[o + 0], HEAP32[o + 1], HEAP32[o + 2], HEAP32[o + 3], HEAP32[o + 4],
+            HEAPF32[o + 5], HEAPF32[o + 6], HEAPF32[o + 7], HEAPF32[o + 8],
+            HEAPF32[o + 9], HEAPF32[o + 10], HEAPF32[o + 11],
+            flags & 1, flags & 2,
+            color & 0xFF, (color >>> 8) & 0xFF, (color >>> 16) & 0xFF,
+            (color >>> 24) & 0xFF, flags & 4, HEAP32[o + 14], HEAP32[o + 15]);
+    }
+    Module['cnaCanvasBulkFlushCount'] = (Module['cnaCanvasBulkFlushCount'] || 0) + 1;
+    Module['cnaCanvasBulkSpriteCount'] = (Module['cnaCanvasBulkSpriteCount'] || 0) + count;
 });
 
 // plan_canvas.md CANVAS-36: sets the base transform every subsequent CNA_Canvas2D_DrawSprite call
@@ -257,76 +317,117 @@ namespace CNA::Internal::Renderers::Canvas
                 "a tiled pattern source, not yet implemented)");
     }
 
-    namespace
+    CanvasSpriteBatchRenderer::CanvasSpriteBatchRenderer()
+        : CanvasSpriteBatchRenderer(std::make_shared<CanvasRendererState>())
     {
-        void DrawSprite(const ITextureRenderer& texture,
-                        const Rectangle& destinationRectangle,
-                        const Rectangle& sourceRectangle,
-                        const Color& color,
-                        float rotation,
-                        const Vector2& origin,
-                        SpriteEffects effects,
-                        bool smoothingEnabled,
-                        int addressU,
-                        int addressV)
-        {
-            const int id = CanvasIdOf(texture);
-            if (id == 0) return;
-#if defined(__EMSCRIPTEN__)
-            const bool exceedsBounds = sourceRectangle.X < 0 || sourceRectangle.Y < 0 ||
-                sourceRectangle.X + sourceRectangle.Width > texture.GetWidth() ||
-                sourceRectangle.Y + sourceRectangle.Height > texture.GetHeight();
-            const bool needsUnpremultiply = CNA_Canvas2D_GetNeedsUnpremultiply() != 0;
-            const Color normalizedTint = NormalizeCanvasSpriteTint(color, needsUnpremultiply);
-            const bool tinted = normalizedTint.getRProperty() != 255 ||
-                                normalizedTint.getGProperty() != 255 ||
-                                normalizedTint.getBProperty() != 255;
-            ValidateAddressModeCombination(addressU, addressV, exceedsBounds, tinted, needsUnpremultiply);
+    }
 
-            const bool flipH = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0;
-            const bool flipV = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0;
-            CNA_Canvas2D_DrawSprite(
-                id, sourceRectangle.X, sourceRectangle.Y, sourceRectangle.Width, sourceRectangle.Height,
-                destinationRectangle.X, destinationRectangle.Y,
-                destinationRectangle.Width, destinationRectangle.Height,
-                static_cast<double>(rotation), static_cast<double>(origin.X), static_cast<double>(origin.Y),
-                flipH ? 1 : 0, flipV ? 1 : 0,
-                normalizedTint.getRProperty(), normalizedTint.getGProperty(),
-                normalizedTint.getBProperty(), normalizedTint.getAProperty(),
-                smoothingEnabled ? 1 : 0, addressU, addressV);
-#else
-            (void)destinationRectangle; (void)sourceRectangle; (void)color; (void)rotation; (void)origin; (void)effects;
-            (void)smoothingEnabled; (void)addressU; (void)addressV;
-#endif
+    CanvasSpriteBatchRenderer::CanvasSpriteBatchRenderer(std::shared_ptr<CanvasRendererState> state)
+        : state_(state ? std::move(state) : std::make_shared<CanvasRendererState>())
+    {
+        static_assert(sizeof(DrawCommand) == 16 * sizeof(std::uint32_t));
+    }
+
+    void CanvasSpriteBatchRenderer::QueueOrDraw(const ITextureRenderer& texture,
+                                                const Rectangle& destinationRectangle,
+                                                const Rectangle& sourceRectangle,
+                                                const Color& color,
+                                                float rotation,
+                                                const Vector2& origin,
+                                                SpriteEffects effects)
+    {
+        const int id = CanvasIdOf(texture);
+        if (id == 0) return;
+
+        const bool alphaBlend = activeCompositeOp_ == CanvasCompositeOp::AlphaBlendSourceOver;
+        const bool sourceNeedsUnpremultiply =
+            alphaBlend && dynamic_cast<const CanvasRenderTargetRenderer*>(&texture) == nullptr;
+        const Color normalizedTint = NormalizeCanvasSpriteTint(color, alphaBlend);
+        const bool tinted = normalizedTint.getRProperty() != 255 ||
+                            normalizedTint.getGProperty() != 255 ||
+                            normalizedTint.getBProperty() != 255;
+        const bool exceedsBounds = sourceRectangle.X < 0 || sourceRectangle.Y < 0 ||
+            static_cast<std::int64_t>(sourceRectangle.X) + sourceRectangle.Width > texture.GetWidth() ||
+            static_cast<std::int64_t>(sourceRectangle.Y) + sourceRectangle.Height > texture.GetHeight();
+        ValidateAddressModeCombination(
+            addressU_, addressV_, exceedsBounds, tinted, sourceNeedsUnpremultiply);
+
+        const bool flipH =
+            (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0;
+        const bool flipV =
+            (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0;
+        const std::uint32_t packedColor =
+            static_cast<std::uint32_t>(normalizedTint.getRProperty()) |
+            (static_cast<std::uint32_t>(normalizedTint.getGProperty()) << 8) |
+            (static_cast<std::uint32_t>(normalizedTint.getBProperty()) << 16) |
+            (static_cast<std::uint32_t>(normalizedTint.getAProperty()) << 24);
+
+        const DrawCommand command{
+            id,
+            sourceRectangle.X, sourceRectangle.Y, sourceRectangle.Width, sourceRectangle.Height,
+            static_cast<float>(destinationRectangle.X),
+            static_cast<float>(destinationRectangle.Y),
+            static_cast<float>(destinationRectangle.Width),
+            static_cast<float>(destinationRectangle.Height),
+            rotation, origin.X, origin.Y,
+            (flipH ? 1 : 0) | (flipV ? 2 : 0) | (smoothingEnabled_ ? 4 : 0),
+            packedColor,
+            addressU_, addressV_
+        };
+
+#if defined(__EMSCRIPTEN__)
+        if (immediateMode_)
+        {
+            CNA_Canvas2D_DrawSprites(
+                &command, 1, 16, static_cast<int>(activeCompositeOp_),
+                transform_.M11, transform_.M12, transform_.M21,
+                transform_.M22, transform_.M41, transform_.M42);
+            return;
         }
+#endif
+        commands_.push_back(command);
     }
 
     void CanvasSpriteBatchRenderer::Begin()
     {
+        commands_.clear();
+        activeCompositeOp_ = state_->compositeOp;
         begun_ = true;
     }
 
     void CanvasSpriteBatchRenderer::End()
     {
-        begun_ = false;
+#if defined(__EMSCRIPTEN__)
+        if (!commands_.empty())
+        {
+            CNA_Canvas2D_DrawSprites(
+                commands_.data(), static_cast<int>(commands_.size()), 16,
+                static_cast<int>(activeCompositeOp_),
+                transform_.M11, transform_.M12, transform_.M21,
+                transform_.M22, transform_.M41, transform_.M42);
+        }
+#endif
+        commands_.clear();
         // Restore the identity transform so a subsequent Clear() (whose fillRect/clearRect assume
         // an untransformed context) isn't corrupted by a lingering SetTransformMatrix() from this
         // batch -- Clear() also defensively resets its own transform (belt and suspenders).
 #if defined(__EMSCRIPTEN__)
         CNA_Canvas2D_SetTransform(1, 0, 0, 1, 0, 0);
 #endif
+        begun_ = false;
+    }
+
+    void CanvasSpriteBatchRenderer::SetImmediateMode(bool immediate)
+    {
+        immediateMode_ = immediate;
     }
 
     void CanvasSpriteBatchRenderer::SetTransformMatrix(const Matrix& m)
     {
-#if defined(__EMSCRIPTEN__)
         // XNA/FNA Matrix is row-major (row-vector convention: v' = v * M); Canvas2D's
         // setTransform(a,b,c,d,e,f) defines x'=a*x+c*y+e, y'=b*x+d*y+f. Matching terms:
         // a=M11, b=M12, c=M21, d=M22, e=M41, f=M42.
-        CNA_Canvas2D_SetTransform(m.M11, m.M12, m.M21, m.M22, m.M41, m.M42);
-#else
-        (void)m;
-#endif
+        transform_ = m;
     }
 
     void CanvasSpriteBatchRenderer::SetCustomEffect(Effect* effect)
@@ -367,8 +468,8 @@ namespace CNA::Internal::Renderers::Canvas
         if (!begun_) throw std::runtime_error("CanvasSpriteBatchRenderer::Draw called before Begin().");
         const Rectangle destRect(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight());
         const Rectangle srcRect(0, 0, texture.GetWidth(), texture.GetHeight());
-        DrawSprite(texture, destRect, srcRect, Color(255, 255, 255, 255), 0.0f, Vector2(0, 0), SpriteEffects::None,
-                  smoothingEnabled_, addressU_, addressV_);
+        QueueOrDraw(texture, destRect, srcRect, Color(255, 255, 255, 255),
+                    0.0f, Vector2(0, 0), SpriteEffects::None);
     }
 
     void CanvasSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
@@ -377,8 +478,8 @@ namespace CNA::Internal::Renderers::Canvas
                                        const Color& color)
     {
         if (!begun_) throw std::runtime_error("CanvasSpriteBatchRenderer::Draw called before Begin().");
-        DrawSprite(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None,
-                  smoothingEnabled_, addressU_, addressV_);
+        QueueOrDraw(texture, destinationRectangle, sourceRectangle, color,
+                    0.0f, Vector2(0, 0), SpriteEffects::None);
     }
 
     void CanvasSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
@@ -392,7 +493,6 @@ namespace CNA::Internal::Renderers::Canvas
     {
         (void)layerDepth;
         if (!begun_) throw std::runtime_error("CanvasSpriteBatchRenderer::Draw called before Begin().");
-        DrawSprite(texture, destinationRectangle, sourceRectangle, color, rotation, origin, effects,
-                  smoothingEnabled_, addressU_, addressV_);
+        QueueOrDraw(texture, destinationRectangle, sourceRectangle, color, rotation, origin, effects);
     }
 }

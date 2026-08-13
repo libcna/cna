@@ -14,9 +14,16 @@ namespace CNA::Internal::Renderers::Canvas
     /// contract (srcBlend=One) assumes the source color is already premultiplied by its own alpha --
     /// the SDL_RENDERER renderer has a dedicated pixel test (Task 697) constructing genuinely
     /// premultiplied source data specifically to verify this, so a Canvas2D draw under AlphaBlend
-    /// must un-premultiply that data first (see CanvasSpriteBatchRenderer.cpp's per-pixel pass),
-    /// since Canvas2D's own 'source-over' always treats its input as straight alpha.
+    /// must un-premultiply that data first (see CanvasSpriteBatchRenderer.cpp's cached texture
+    /// variant), since Canvas2D's own 'source-over' always treats its input as straight alpha.
     enum class CanvasCompositeOp { Copy = 0, NonPremultipliedSourceOver = 1, AlphaBlendSourceOver = 2, Lighter = 3 };
+
+    /** @brief Blend state shared by one Canvas renderer and the SpriteBatch instances it creates. */
+    struct CanvasRendererState
+    {
+        /** @brief Composite operation captured by a SpriteBatch when it begins. */
+        CanvasCompositeOp compositeOp = CanvasCompositeOp::AlphaBlendSourceOver;
+    };
 
     /// Pure mapping from raw BlendState factors/BlendFunction (see IGraphicsRenderer::ApplyBlendState's
     /// own parameter doc) to a CanvasCompositeOp; throws std::runtime_error for any Blend/BlendFunction
@@ -132,5 +139,6 @@ namespace CNA::Internal::Renderers::Canvas
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        std::shared_ptr<CanvasRendererState> state_ = std::make_shared<CanvasRendererState>();
     };
 }

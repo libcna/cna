@@ -195,7 +195,7 @@ namespace CNA::Internal::Renderers::Canvas
 
     std::unique_ptr<ISpriteBatchRenderer> CanvasRenderer::CreateSpriteBatch()
     {
-        return std::make_unique<CanvasSpriteBatchRenderer>();
+        return std::make_unique<CanvasSpriteBatchRenderer>(state_);
     }
 
     std::unique_ptr<IRenderTargetRenderer> CanvasRenderer::CreateRenderTarget2D(
@@ -299,6 +299,7 @@ namespace CNA::Internal::Renderers::Canvas
         // (documented capability gap, not a silent drop).
         const CanvasCompositeOp op = BlendStateToCompositeOp(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
+        state_->compositeOp = op;
 #if defined(__EMSCRIPTEN__)
         CNA_Canvas2D_SetCompositeOp(static_cast<int>(op));
 #else

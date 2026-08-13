@@ -23,7 +23,7 @@ EM_JS(void, CNA_Canvas2D_CreateTextureWithPixels, (int id, int width, int height
     const ctx = canvas.getContext('2d');
     const bytes = new Uint8ClampedArray(HEAPU8.subarray(rgba, rgba + width * height * 4));
     ctx.putImageData(new ImageData(bytes, width, height), 0, 0);
-    Module['cnaTextures'][id] = { canvas: canvas, ctx: ctx };
+    Module['cnaTextures'][id] = { canvas: canvas, ctx: ctx, isRenderTarget: false };
 });
 
 // Same registration as above but blank (fully transparent) -- used by CanvasRenderTargetRenderer,
@@ -39,7 +39,7 @@ EM_JS(void, CNA_Canvas2D_CreateBlankCanvas, (int id, int width, int height), {
         canvas.height = height;
     }
     const ctx = canvas.getContext('2d');
-    Module['cnaTextures'][id] = { canvas: canvas, ctx: ctx };
+    Module['cnaTextures'][id] = { canvas: canvas, ctx: ctx, isRenderTarget: false };
 });
 
 // plan_canvas.md CANVAS-20: full level-0 re-upload, same synchronous putImageData() path as
@@ -52,6 +52,8 @@ EM_JS(void, CNA_Canvas2D_UpdatePixels, (int id, int width, int height, const uin
     if (!entry) { console.error('[CNA] Canvas2D: UpdatePixels on unknown texture id', id); return; }
     const bytes = new Uint8ClampedArray(HEAPU8.subarray(rgba, rgba + width * height * 4));
     entry.ctx.putImageData(new ImageData(bytes, width, height), 0, 0);
+    entry.unpremultipliedCanvas = null;
+    entry.unpremultipliedCtx = null;
     if (Module['cnaMirrorTiles']) delete Module['cnaMirrorTiles'][id];
 });
 

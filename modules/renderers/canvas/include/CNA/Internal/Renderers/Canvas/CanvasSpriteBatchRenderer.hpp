@@ -1,6 +1,11 @@
 #pragma once
 
+#include "CNA/Internal/Renderers/Canvas/CanvasRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+
+#include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace CNA::Internal::Renderers::Canvas
 {
@@ -24,16 +29,30 @@ namespace CNA::Internal::Renderers::Canvas
     /**
      * @brief `SpriteBatch` renderer driven by `ctx.drawImage()` (Phase C4).
      *
-     * `End()` needs no explicit flush -- each `Draw()` paints immediately, since Canvas2D has no
-     * command-buffer batching concept to defer (plan_canvas.md CANVAS-30).
+     * Deferred batches cross the wasm/JavaScript boundary once from `End()` and replay all
+     * `ctx.drawImage()` calls there. Immediate batches continue to paint from each `Draw()`.
      */
     class CanvasSpriteBatchRenderer final : public ISpriteBatchRenderer
     {
     public:
-        CanvasSpriteBatchRenderer() = default;
+        /** @brief Creates a standalone batch renderer with its own default state. */
+        CanvasSpriteBatchRenderer();
+
+        /**
+         * @brief Creates a batch renderer sharing state with its owning Canvas renderer.
+         *
+         * @param state Renderer state used to capture the active blend mode at Begin().
+         */
+        explicit CanvasSpriteBatchRenderer(std::shared_ptr<CanvasRendererState> state);
 
         void Begin() override;
         void End() override;
+        /**
+         * @brief Selects immediate per-draw replay or one deferred bulk replay from End().
+         *
+         * @param immediate True to replay each draw immediately; false to flush once from End().
+         */
+        void SetImmediateMode(bool immediate) override;
         /// CANVAS-36: `ctx.setTransform(a,b,c,d,e,f)` directly supports a full 2D affine matrix --
         /// called unconditionally per `Begin()` (Identity included), unlike SDL_RENDERER's own fix
         /// which needed a separate non-Identity-only code path.
@@ -68,7 +87,40 @@ namespace CNA::Internal::Renderers::Canvas
         [[nodiscard]] bool IsBegun() const { return begun_; }
 
     private:
+        struct DrawCommand
+        {
+            std::int32_t textureId;
+            std::int32_t sourceX;
+            std::int32_t sourceY;
+            std::int32_t sourceWidth;
+            std::int32_t sourceHeight;
+            float destinationX;
+            float destinationY;
+            float destinationWidth;
+            float destinationHeight;
+            float rotation;
+            float originX;
+            float originY;
+            std::int32_t flags;
+            std::uint32_t packedColor;
+            std::int32_t addressU;
+            std::int32_t addressV;
+        };
+
+        void QueueOrDraw(const ITextureRenderer& texture,
+                         const Rectangle& destinationRectangle,
+                         const Rectangle& sourceRectangle,
+                         const Color& color,
+                         float rotation,
+                         const Vector2& origin,
+                         SpriteEffects effects);
+
+        std::shared_ptr<CanvasRendererState> state_;
+        CanvasCompositeOp activeCompositeOp_ = CanvasCompositeOp::AlphaBlendSourceOver;
+        Matrix transform_ = Matrix::getIdentityProperty();
+        std::vector<DrawCommand> commands_;
         bool begun_ = false;
+        bool immediateMode_ = false;
         bool smoothingEnabled_ = true;
         /// Raw TextureAddressMode ints (0=Wrap, 1=Clamp, 2=Mirror); default Clamp matches XNA/FNA's
         /// own default SamplerState (LinearClamp).

@@ -20,20 +20,20 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     add_executable(cna_test_canvas_smoke canvas_smoke_test.cpp)
-    target_link_libraries(cna_test_canvas_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_smoke PRIVATE CNA SDL3::SDL3)
 
     # CNA::GraphicsCapability: Canvas is 2D-only -- SupportsCapability() reports which
     # capabilities are genuinely absent (ThreeD and everything that depends on it). Twin of
     # cna_test_sdl_graphics_capability/cna_test_freedirect_graphics_capability.
     add_executable(cna_test_canvas_graphics_capability canvas_graphics_capability_test.cpp)
-    target_link_libraries(cna_test_canvas_graphics_capability PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_graphics_capability PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
     # reject the request deterministically -- never fabricate one. Built (not ctest-registered, like
     # every Canvas test: this renderer produces a wasm module that needs a browser), so the readback
     # contract at least stays compile-verified on the Emscripten toolchain.
     add_executable(cna_test_canvas_texture2d_getdata_contract ${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_getdata_contract_test.cpp)
-    target_link_libraries(cna_test_canvas_texture2d_getdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_texture2d_getdata_contract PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
     # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
@@ -42,14 +42,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     # render target, rejected legal excess capacity, and silently returned a partial frame for an
     # undersized one.
     add_executable(cna_test_canvas_texture2d_getdata_transfer_range ${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_getdata_transfer_range_test.cpp)
-    target_link_libraries(cna_test_canvas_texture2d_getdata_transfer_range PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_texture2d_getdata_transfer_range PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-130: the TextureCube/Texture3D half of the same finding. Built (not ctest-registered,
     # like every Canvas test) so this renderer's deterministic cube/volume rejection stays
     # compile-verified on the Emscripten toolchain.
     add_executable(cna_test_canvas_cube_volume_getdata_contract
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_getdata_contract_test.cpp)
-    target_link_libraries(cna_test_canvas_cube_volume_getdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_cube_volume_getdata_contract PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
     # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
@@ -60,7 +60,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     # Compile-verified on the Emscripten toolchain only, like every other Canvas entry.
     add_executable(cna_test_canvas_rendertargetcube_getdata_contract
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_getdata_contract_test.cpp)
-    target_link_libraries(cna_test_canvas_rendertargetcube_getdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_rendertargetcube_getdata_contract PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
     # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
@@ -70,7 +70,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     # preservation.
     add_executable(cna_test_canvas_rendertargetcube_usage
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_usage_test.cpp)
-    target_link_libraries(cna_test_canvas_rendertargetcube_usage PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_rendertargetcube_usage PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-141: a MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
     # across all six faces on EasyGL, Vulkan and SdlGpu, so a PreserveContents face reloaded whichever
@@ -82,7 +82,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     # declaration stays compile-verified on the Emscripten toolchain.
     add_executable(cna_test_canvas_rendertargetcube_msaa_face
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_msaa_face_test.cpp)
-    target_link_libraries(cna_test_canvas_rendertargetcube_msaa_face PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_rendertargetcube_msaa_face PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
     # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
@@ -92,7 +92,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     # never drew. A parallel stencil stamp/gate sequence does the same for stencil.
     add_executable(cna_test_canvas_rendertarget_depthstencil_usage
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_depthstencil_usage_test.cpp)
-    target_link_libraries(cna_test_canvas_rendertarget_depthstencil_usage PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_rendertarget_depthstencil_usage PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
     # `VulkanRenderer::RecordCommandBuffer` collected ONE render pass per unique render-target
@@ -103,7 +103,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     # flush.
     add_executable(cna_test_canvas_rendertarget_pass_boundary
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_pass_boundary_test.cpp)
-    target_link_libraries(cna_test_canvas_rendertarget_pass_boundary PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_rendertarget_pass_boundary PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
     # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
@@ -114,18 +114,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     # Present, GetData, flush or extra frame between the cycles, and only then reads once.
     add_executable(cna_test_canvas_backbuffer_pass_order
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_pass_order_test.cpp)
-    target_link_libraries(cna_test_canvas_backbuffer_pass_order PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_backbuffer_pass_order PRIVATE CNA SDL3::SDL3)
 
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
     add_executable(cna_test_canvas_cube_volume_setdata_contract
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_setdata_contract_test.cpp)
-    target_link_libraries(cna_test_canvas_cube_volume_setdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_cube_volume_setdata_contract PRIVATE CNA SDL3::SDL3)
     add_executable(cna_test_canvas_unsupported_3d_behavior
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/unsupported_3d_call_behavior_test.cpp)
     target_link_libraries(cna_test_canvas_unsupported_3d_behavior
-                          PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+                          PRIVATE CNA SDL3::SDL3)
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
