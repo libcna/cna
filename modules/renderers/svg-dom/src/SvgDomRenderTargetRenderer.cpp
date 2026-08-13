@@ -26,6 +26,13 @@ EM_JS(void, CNA_SvgDom_CreateTargetCanvas, (int id, int w, int h), {
 
 EM_JS(void, CNA_SvgDom_DestroyTargetCanvas, (int id), {
     const reg = Module['cnaSvgDomTextures'];
+    const entry = reg && reg[id];
+    if (entry && entry.variantObjectUrls && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        for (const key in entry.variantObjectUrls) {
+            const objectUrl = entry.variantObjectUrls[key];
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        }
+    }
     if (reg) delete reg[id];
 });
 

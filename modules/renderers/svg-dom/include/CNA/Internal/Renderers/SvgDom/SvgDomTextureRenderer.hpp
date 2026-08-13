@@ -127,7 +127,9 @@ namespace CNA::Internal::Renderers::SvgDom
      * `GetData`/`UpdatePixels` regardless) and encodes the PNG itself with SDL3_image -- so the
      * data URI is available the instant it is asked for, with no JS canvas round-trip at all. The
      * straight (as-uploaded) and un-premultiplied variants are each encoded at most once per pixel
-     * generation and cached until `UpdatePixels` invalidates them.
+     * generation and cached until `UpdatePixels` invalidates them. In an Emscripten browser the
+     * JS registry converts each cached data URI once into a short shared Blob URL, so per-sprite
+     * `<image>` nodes do not duplicate the full base64 string.
      */
     class SvgDomTextureRenderer : public ITextureRenderer
     {

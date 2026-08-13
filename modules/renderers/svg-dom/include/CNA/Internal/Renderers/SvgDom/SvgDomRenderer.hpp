@@ -64,7 +64,8 @@ namespace CNA::Internal::Renderers::SvgDom
          * @brief Ends the frame: hides only the pooled sprite elements this frame did not use.
          *
          * There is nothing to swap -- the browser's own SVG renderer presents on its next paint
-         * tick, the same as `HtmlDom`'s DOM/CSS surface.
+         * tick, the same as `HtmlDom`'s DOM/CSS surface. Rewinds the retained-mode frame cursors so
+         * the next frame reuses the pool even when the game does not call GraphicsDevice.Clear().
          */
         void Present() override;
 
