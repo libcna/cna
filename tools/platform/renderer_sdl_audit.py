@@ -96,6 +96,15 @@ PRESENTATION_CALLS = frozenset(
 # The one SDL type still present in common renderer creation/registry plumbing after PLAT-59/60.
 INTERFACE_LEAK_TYPES = frozenset({"SDL_Window"})
 
+# PLAT-76 uses one canonical custom target property as machine-readable CMake metadata. Keeping
+# this syntax deliberately narrow makes a missing declaration or an accidental fifth exception a
+# gate failure instead of accepting an arbitrary mention in a comment.
+REQUIRES_SDL3_CMAKE = re.compile(
+    r"set_property\s*\(\s*TARGET\s+\$\{RENDERER_TARGET\}\s+"
+    r"PROPERTY\s+REQUIRES_PLATFORM\s+SDL3\s*\)",
+    re.MULTILINE,
+)
+
 VERDICT_ORDER = ["sdl-native", "sdl-upstream", "cpu-presentation", "interface-leak", "migratable", "sdl-free"]
 
 
@@ -325,6 +334,14 @@ def main(argv: list[str] | None = None) -> int:
         allowlisted = {str(r["family"]) for r in rows if r["verdict"] in ("sdl-native", "sdl-upstream")}
         expected = SDL_NATIVE | SDL_UPSTREAM
         still_coupled = {str(r["family"]) for r in rows if r["verdict"] in ("cpu-presentation", "interface-leak", "migratable")}
+        renderer_root = repo_root / "modules" / "renderers"
+        declared = {
+            family_dir.name
+            for family_dir in renderer_root.iterdir()
+            if family_dir.is_dir()
+            and (cmake_file := family_dir / "CMakeLists.txt").is_file()
+            and REQUIRES_SDL3_CMAKE.search(cmake_file.read_text(encoding="utf-8"))
+        }
 
         if allowlisted != expected:
             print(f"allowlist drift: expected {sorted(expected)}, found {sorted(allowlisted)}", file=sys.stderr)
@@ -336,7 +353,17 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        print(f"allowlist is exactly {sorted(expected)}; no other renderer family references SDL.")
+        if declared != expected:
+            print(
+                "REQUIRES_PLATFORM SDL3 drift: "
+                f"expected {sorted(expected)}, found {sorted(declared)}",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            f"allowlist and REQUIRES_PLATFORM SDL3 declarations are exactly {sorted(expected)}; "
+            "no other renderer family references SDL."
+        )
         return 0
 
     if args.format == "csv":
