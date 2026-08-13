@@ -122,6 +122,22 @@ TEST(ScancodeTests, NoTwoKeysShareAName)
     }
 }
 
+TEST(ScancodeTests, StableNamesRoundTrip)
+{
+    for (const Scancode scancode : kEveryScancode)
+    {
+        EXPECT_EQ(ScancodeFromString(ToString(scancode)), scancode)
+            << "name " << ToString(scancode);
+    }
+}
+
+TEST(ScancodeTests, UnknownNamesResolveToUnknown)
+{
+    EXPECT_EQ(ScancodeFromString(""), Scancode::Unknown);
+    EXPECT_EQ(ScancodeFromString("not-a-physical-key"), Scancode::Unknown);
+    EXPECT_EQ(ScancodeFromString("leftshift"), Scancode::Unknown);
+}
+
 TEST(ScancodeTests, TheValuesAreHidKeyboardUsageIds)
 {
     // Spot-checked against the HID Usage Tables, Usage Page 0x07. These are the numbers the

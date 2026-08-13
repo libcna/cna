@@ -303,6 +303,13 @@ namespace CNA::Platform {
     [[nodiscard]] const std::string& ToString(Scancode scancode);
 
     /**
+     * @brief Resolves a stable physical-key name.
+     * @param name A name returned by `ToString`.
+     * @return The key, or `Scancode::Unknown` when the name is not known.
+     */
+    [[nodiscard]] Scancode ScancodeFromString(const std::string& name);
+
+    /**
      * @brief Gets whether a value names a key this contract knows.
      *
      * The value space is sparse — the HID keyboard page has gaps, and a platform may report a key

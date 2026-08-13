@@ -4,133 +4,281 @@
 
 #include "CNA/Input/InputDevices.hpp"
 #include "CNA/Input/Joysticks.hpp"
-#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include "CNA/Platform/Input/Scancode.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
-
-#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
-#include <string>
 #include <optional>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace
 {
+    using CNA::Platform::KeyCode;
+    using CNA::Platform::Scancode;
     using Microsoft::Xna::Framework::Input::ButtonState;
-    using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
     using Microsoft::Xna::Framework::Input::Keys;
+    using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
     using SharpRuntime::charcs;
 
-    // Test-only override for use_scancode_mode(): nullopt means "use the cached env value".
-    // Because the env value is cached once (below), tests can't toggle FNA_KEYBOARD_USE_SCANCODES
-    // in-process; this hook lets a test exercise both modes without a subprocess.
     std::optional<bool> g_scancodeModeTestOverride;
+    bool g_textInputControlDown[7] = {};
+    bool g_textInputSuppress = false;
 
-    // Mirrors FNA's UseScancodes static readonly bool (SDL3_FNAPlatform.cs:33-35):
-    // evaluated once, so setting the env var after the first key event/lookup has no
-    // effect, matching FNA's own readonly-at-startup semantics.
     bool use_scancode_mode()
     {
         if (g_scancodeModeTestOverride.has_value())
-            return g_scancodeModeTestOverride.value();
-        static const bool useScancodes = []() -> bool {
-            const char* envValue = std::getenv("FNA_KEYBOARD_USE_SCANCODES");
-            return envValue != nullptr && std::string(envValue) == "1";
+        {
+            return *g_scancodeModeTestOverride;
+        }
+        static const bool enabled = [] {
+            const char* value = std::getenv("FNA_KEYBOARD_USE_SCANCODES");
+            return value != nullptr && std::string(value) == "1";
         }();
-        return useScancodes;
+        return enabled;
     }
 
-    // --- Text input control-character synthesis ---
-    // SDL does not deliver TEXT_INPUT events for these control keys, so FNA synthesizes
-    // them on KEY_DOWN. Indices match kTextInputCharacters.
-    // (FNAPlatform.cs:261-280, SDL3_FNAPlatform.cs:903-953)
-    constexpr char kTextInputCharacters[7] = {
-        static_cast<char>(2),   // Home
-        static_cast<char>(3),   // End
-        static_cast<char>(8),   // Back (Backspace)
-        static_cast<char>(9),   // Tab
-        static_cast<char>(13),  // Enter
-        static_cast<char>(127), // Delete
-        static_cast<char>(22)   // Ctrl+V (Paste)
-    };
+    CNA::Platform::IPlatformKeyboard* current_keyboard()
+    {
+        return CNA::Platform::GetCurrentPlatform().GetKeyboard();
+    }
 
-    // True while the matching control character is held (index 6 = Ctrl+V).
-    bool g_textInputControlDown[7] = {};
-    // Suppresses the literal 'v' TEXT_INPUT that SDL emits alongside a Ctrl+V paste.
-    bool g_textInputSuppress = false;
+    std::optional<Keys> key_for_scancode(const Scancode scancode)
+    {
+        const auto value = static_cast<std::uint16_t>(scancode);
+        if (value >= static_cast<std::uint16_t>(Scancode::A)
+            && value <= static_cast<std::uint16_t>(Scancode::Z))
+        {
+            return static_cast<Keys>(static_cast<int>(Keys::A) + value
+                - static_cast<std::uint16_t>(Scancode::A));
+        }
+        if (value >= static_cast<std::uint16_t>(Scancode::D1)
+            && value <= static_cast<std::uint16_t>(Scancode::D9))
+        {
+            return static_cast<Keys>(static_cast<int>(Keys::D1) + value
+                - static_cast<std::uint16_t>(Scancode::D1));
+        }
+        if (value >= static_cast<std::uint16_t>(Scancode::F1)
+            && value <= static_cast<std::uint16_t>(Scancode::F12))
+        {
+            return static_cast<Keys>(static_cast<int>(Keys::F1) + value
+                - static_cast<std::uint16_t>(Scancode::F1));
+        }
+        if (value >= static_cast<std::uint16_t>(Scancode::F13)
+            && value <= static_cast<std::uint16_t>(Scancode::F24))
+        {
+            return static_cast<Keys>(static_cast<int>(Keys::F13) + value
+                - static_cast<std::uint16_t>(Scancode::F13));
+        }
+        if (value >= static_cast<std::uint16_t>(Scancode::Keypad1)
+            && value <= static_cast<std::uint16_t>(Scancode::Keypad9))
+        {
+            return static_cast<Keys>(static_cast<int>(Keys::NumPad1) + value
+                - static_cast<std::uint16_t>(Scancode::Keypad1));
+        }
 
-    // Decodes a NUL-terminated UTF-8 string into UTF-16 code units, invoking `emit` for each.
-    // This mirrors FNA's TEXT_INPUT handling (SDL3_FNAPlatform.cs:1166-1184), which runs SDL's
-    // UTF-8 bytes through Encoding.UTF8.GetChars() and dispatches each resulting C# char (a UTF-16
-    // code unit) to TextInputEXT.OnTextInput. A code point above U+FFFF is emitted as a high/low
-    // surrogate pair. A self-contained decoder is used here rather than sharp-runtime's Encoding
-    // (which is byte/std::string-oriented and has no UTF-16-code-unit output) — this is internal
-    // backend plumbing, the same category as the other file-local SDL translation helpers above.
-    // Malformed sequences are skipped defensively; SDL always delivers well-formed UTF-8.
+        switch (scancode)
+        {
+            case Scancode::D0: return Keys::D0;
+            case Scancode::Enter: return Keys::Enter;
+            case Scancode::Escape: return Keys::Escape;
+            case Scancode::Backspace: return Keys::Back;
+            case Scancode::Tab: return Keys::Tab;
+            case Scancode::Space: return Keys::Space;
+            case Scancode::Minus: return Keys::OemMinus;
+            case Scancode::Equals: return Keys::OemPlus;
+            case Scancode::LeftBracket: return Keys::OemOpenBrackets;
+            case Scancode::RightBracket: return Keys::OemCloseBrackets;
+            case Scancode::Backslash: return Keys::OemPipe;
+            case Scancode::Semicolon: return Keys::OemSemicolon;
+            case Scancode::Apostrophe: return Keys::OemQuotes;
+            case Scancode::Grave: return Keys::OemTilde;
+            case Scancode::Comma: return Keys::OemComma;
+            case Scancode::Period: return Keys::OemPeriod;
+            case Scancode::Slash: return Keys::OemQuestion;
+            case Scancode::CapsLock: return Keys::CapsLock;
+            case Scancode::PrintScreen: return Keys::PrintScreen;
+            case Scancode::ScrollLock: return Keys::Scroll;
+            case Scancode::Pause: return Keys::Pause;
+            case Scancode::Insert: return Keys::Insert;
+            case Scancode::Home: return Keys::Home;
+            case Scancode::PageUp: return Keys::PageUp;
+            case Scancode::Delete: return Keys::Delete;
+            case Scancode::End: return Keys::End;
+            case Scancode::PageDown: return Keys::PageDown;
+            case Scancode::Right: return Keys::Right;
+            case Scancode::Left: return Keys::Left;
+            case Scancode::Down: return Keys::Down;
+            case Scancode::Up: return Keys::Up;
+            case Scancode::NumLock: return Keys::NumLock;
+            case Scancode::KeypadDivide: return Keys::Divide;
+            case Scancode::KeypadMultiply: return Keys::Multiply;
+            case Scancode::KeypadMinus: return Keys::Subtract;
+            case Scancode::KeypadPlus: return Keys::Add;
+            case Scancode::KeypadEnter: return Keys::Enter;
+            case Scancode::Keypad0: return Keys::NumPad0;
+            case Scancode::KeypadPeriod: return Keys::OemPeriod;
+            case Scancode::Application:
+            case Scancode::Menu: return Keys::Apps;
+            case Scancode::VolumeUp: return Keys::VolumeUp;
+            case Scancode::VolumeDown: return Keys::VolumeDown;
+            case Scancode::KeypadClear: return Keys::OemClear;
+            case Scancode::KeypadDecimal: return Keys::Decimal;
+            case Scancode::LeftControl: return Keys::LeftControl;
+            case Scancode::LeftShift: return Keys::LeftShift;
+            case Scancode::LeftAlt: return Keys::LeftAlt;
+            case Scancode::LeftGui: return Keys::LeftWindows;
+            case Scancode::RightControl: return Keys::RightControl;
+            case Scancode::RightShift: return Keys::RightShift;
+            case Scancode::RightAlt: return Keys::RightAlt;
+            case Scancode::RightGui: return Keys::RightWindows;
+            case Scancode::Sleep: return Keys::Sleep;
+            case Scancode::Unknown:
+            case Scancode::NonUsHash:
+            case Scancode::NonUsBackslash: return std::nullopt;
+            default: return std::nullopt;
+        }
+    }
+
+    std::optional<Scancode> scancode_for_key(const Keys key)
+    {
+        const auto value = static_cast<int>(key);
+        if (value >= static_cast<int>(Keys::A) && value <= static_cast<int>(Keys::Z))
+        {
+            return static_cast<Scancode>(static_cast<std::uint16_t>(Scancode::A)
+                + value - static_cast<int>(Keys::A));
+        }
+        if (value >= static_cast<int>(Keys::D1) && value <= static_cast<int>(Keys::D9))
+        {
+            return static_cast<Scancode>(static_cast<std::uint16_t>(Scancode::D1)
+                + value - static_cast<int>(Keys::D1));
+        }
+        if (value >= static_cast<int>(Keys::F1) && value <= static_cast<int>(Keys::F12))
+        {
+            return static_cast<Scancode>(static_cast<std::uint16_t>(Scancode::F1)
+                + value - static_cast<int>(Keys::F1));
+        }
+        if (value >= static_cast<int>(Keys::F13) && value <= static_cast<int>(Keys::F24))
+        {
+            return static_cast<Scancode>(static_cast<std::uint16_t>(Scancode::F13)
+                + value - static_cast<int>(Keys::F13));
+        }
+        if (value >= static_cast<int>(Keys::NumPad1) && value <= static_cast<int>(Keys::NumPad9))
+        {
+            return static_cast<Scancode>(static_cast<std::uint16_t>(Scancode::Keypad1)
+                + value - static_cast<int>(Keys::NumPad1));
+        }
+
+        switch (key)
+        {
+            case Keys::D0: return Scancode::D0;
+            case Keys::Enter: return Scancode::Enter;
+            case Keys::Escape: return Scancode::Escape;
+            case Keys::Back: return Scancode::Backspace;
+            case Keys::Tab: return Scancode::Tab;
+            case Keys::Space: return Scancode::Space;
+            case Keys::OemMinus: return Scancode::Minus;
+            case Keys::OemPlus: return Scancode::Equals;
+            case Keys::OemOpenBrackets: return Scancode::LeftBracket;
+            case Keys::OemCloseBrackets: return Scancode::RightBracket;
+            case Keys::OemPipe: return Scancode::Backslash;
+            case Keys::OemSemicolon: return Scancode::Semicolon;
+            case Keys::OemQuotes: return Scancode::Apostrophe;
+            case Keys::OemTilde: return Scancode::Grave;
+            case Keys::OemComma: return Scancode::Comma;
+            case Keys::OemPeriod: return Scancode::Period;
+            case Keys::OemQuestion: return Scancode::Slash;
+            case Keys::CapsLock: return Scancode::CapsLock;
+            case Keys::PrintScreen: return Scancode::PrintScreen;
+            case Keys::Scroll: return Scancode::ScrollLock;
+            case Keys::Pause: return Scancode::Pause;
+            case Keys::Insert: return Scancode::Insert;
+            case Keys::Home: return Scancode::Home;
+            case Keys::PageUp: return Scancode::PageUp;
+            case Keys::Delete: return Scancode::Delete;
+            case Keys::End: return Scancode::End;
+            case Keys::PageDown: return Scancode::PageDown;
+            case Keys::Right: return Scancode::Right;
+            case Keys::Left: return Scancode::Left;
+            case Keys::Down: return Scancode::Down;
+            case Keys::Up: return Scancode::Up;
+            case Keys::NumLock: return Scancode::NumLock;
+            case Keys::Divide: return Scancode::KeypadDivide;
+            case Keys::Multiply: return Scancode::KeypadMultiply;
+            case Keys::Subtract: return Scancode::KeypadMinus;
+            case Keys::Add: return Scancode::KeypadPlus;
+            case Keys::NumPad0: return Scancode::Keypad0;
+            case Keys::OemClear: return Scancode::KeypadClear;
+            case Keys::Decimal: return Scancode::KeypadDecimal;
+            case Keys::Apps: return Scancode::Application;
+            case Keys::VolumeUp: return Scancode::VolumeUp;
+            case Keys::VolumeDown: return Scancode::VolumeDown;
+            case Keys::LeftControl: return Scancode::LeftControl;
+            case Keys::LeftShift: return Scancode::LeftShift;
+            case Keys::LeftAlt: return Scancode::LeftAlt;
+            case Keys::LeftWindows: return Scancode::LeftGui;
+            case Keys::RightControl: return Scancode::RightControl;
+            case Keys::RightShift: return Scancode::RightShift;
+            case Keys::RightAlt: return Scancode::RightAlt;
+            case Keys::RightWindows: return Scancode::RightGui;
+            case Keys::Sleep: return Scancode::Sleep;
+            default: return std::nullopt;
+        }
+    }
+
     template <typename Emit>
     void decode_utf8_to_utf16(const char* text, Emit&& emit)
     {
-        const auto* s = reinterpret_cast<const unsigned char*>(text);
-        while (*s != 0)
+        const auto* bytes = reinterpret_cast<const unsigned char*>(text);
+        while (*bytes != 0)
         {
-            const unsigned char b0 = s[0];
-            std::uint32_t cp;
-            int len;
-            std::uint32_t minCp; // smallest code point legally encodable in `len` bytes (overlong guard)
-            if (b0 < 0x80)                 { cp = b0;        len = 1; minCp = 0x0; }
-            else if ((b0 & 0xE0) == 0xC0)  { cp = b0 & 0x1F; len = 2; minCp = 0x80; }
-            else if ((b0 & 0xF0) == 0xE0)  { cp = b0 & 0x0F; len = 3; minCp = 0x800; }
-            else if ((b0 & 0xF8) == 0xF0)  { cp = b0 & 0x07; len = 4; minCp = 0x10000; }
-            else
-            {
-                // Invalid lead byte. FNA decodes via Encoding.UTF8, which substitutes U+FFFD for
-                // malformed input rather than dropping it (DEC-08) — match that.
-                emit(static_cast<charcs>(0xFFFD));
-                ++s;
-                continue;
-            }
+            const unsigned char first = bytes[0];
+            std::uint32_t codePoint = 0;
+            std::uint32_t minimum = 0;
+            int length = 0;
+            if (first < 0x80) { codePoint = first; length = 1; }
+            else if ((first & 0xE0) == 0xC0) { codePoint = first & 0x1F; length = 2; minimum = 0x80; }
+            else if ((first & 0xF0) == 0xE0) { codePoint = first & 0x0F; length = 3; minimum = 0x800; }
+            else if ((first & 0xF8) == 0xF0) { codePoint = first & 0x07; length = 4; minimum = 0x10000; }
+            else { emit(static_cast<charcs>(0xFFFD)); ++bytes; continue; }
 
-            int i = 1;
-            for (; i < len; ++i)
+            int index = 1;
+            for (; index < length && (bytes[index] & 0xC0) == 0x80; ++index)
             {
-                if ((s[i] & 0xC0) != 0x80) break; // truncated/invalid continuation
-                cp = (cp << 6) | (s[i] & 0x3F);
+                codePoint = (codePoint << 6) | (bytes[index] & 0x3F);
             }
-            if (i != len)
-            {
-                // Ill-formed sequence: one U+FFFD for its maximal subpart, then resync at s[i].
-                emit(static_cast<charcs>(0xFFFD));
-                s += i;
-                continue;
-            }
-            s += len;
-
-            // Reject overlong encodings, UTF-16 surrogate code points, and out-of-range code points;
-            // Encoding.UTF8 treats all of these as invalid and substitutes U+FFFD.
-            if (cp < minCp || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF)
+            if (index != length)
             {
                 emit(static_cast<charcs>(0xFFFD));
+                bytes += index;
                 continue;
             }
-
-            if (cp <= 0xFFFF)
+            bytes += length;
+            if (codePoint < minimum || (codePoint >= 0xD800 && codePoint <= 0xDFFF)
+                || codePoint > 0x10FFFF)
             {
-                emit(static_cast<charcs>(cp));
+                emit(static_cast<charcs>(0xFFFD));
+            }
+            else if (codePoint <= 0xFFFF)
+            {
+                emit(static_cast<charcs>(codePoint));
             }
             else
             {
-                cp -= 0x10000;
-                emit(static_cast<charcs>(0xD800 + (cp >> 10)));   // high surrogate
-                emit(static_cast<charcs>(0xDC00 + (cp & 0x3FF))); // low surrogate
+                codePoint -= 0x10000;
+                emit(static_cast<charcs>(0xD800 + (codePoint >> 10)));
+                emit(static_cast<charcs>(0xDC00 + (codePoint & 0x3FF)));
             }
         }
     }
@@ -139,32 +287,30 @@ namespace
     {
         switch (key)
         {
-        case Keys::Home:   return 0;
-        case Keys::End:    return 1;
-        case Keys::Back:   return 2;
-        case Keys::Tab:    return 3;
-        case Keys::Enter:  return 4;
-        case Keys::Delete: return 5;
-        default:           return std::nullopt;
+            case Keys::Home: return 0;
+            case Keys::End: return 1;
+            case Keys::Back: return 2;
+            case Keys::Tab: return 3;
+            case Keys::Enter: return 4;
+            case Keys::Delete: return 5;
+            default: return std::nullopt;
         }
     }
 
     bool control_key_held()
     {
-        const auto kb = CNA::Internal::Input::InputManager::GetKeyboardState();
-        return kb.IsKeyDown(Keys::LeftControl) || kb.IsKeyDown(Keys::RightControl);
+        const auto keyboard = CNA::Internal::Input::InputManager::GetKeyboardState();
+        return keyboard.IsKeyDown(Keys::LeftControl) || keyboard.IsKeyDown(Keys::RightControl);
     }
 
     void handle_text_input_key_down(const Keys key, const bool repeat)
     {
+        constexpr char controls[7] = {2, 3, 8, 9, 13, 127, 22};
         using Microsoft::Xna::Framework::Input::TextInputEXT;
-        if (const auto idx = text_input_binding_index(key))
+        if (const auto index = text_input_binding_index(key))
         {
-            if (!repeat)
-            {
-                g_textInputControlDown[*idx] = true;
-            }
-            TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(kTextInputCharacters[*idx]));
+            if (!repeat) g_textInputControlDown[*index] = true;
+            TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(controls[*index]));
         }
         else if (control_key_held() && key == Keys::V)
         {
@@ -173,15 +319,15 @@ namespace
                 g_textInputControlDown[6] = true;
                 g_textInputSuppress = true;
             }
-            TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(kTextInputCharacters[6]));
+            TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(controls[6]));
         }
     }
 
     void handle_text_input_key_up(const Keys key)
     {
-        if (const auto idx = text_input_binding_index(key))
+        if (const auto index = text_input_binding_index(key))
         {
-            g_textInputControlDown[*idx] = false;
+            g_textInputControlDown[*index] = false;
         }
         else if ((!control_key_held() && g_textInputControlDown[6]) || key == Keys::V)
         {
@@ -190,589 +336,125 @@ namespace
         }
     }
 
-    // Tracks which platform joystick lifecycle events have reached the public CNAEXT event. The
-    // platform service owns native handles; this set only suppresses duplicate add and unknown
-    // remove notifications, preserving the public event semantics without a second device store.
-    std::unordered_set<CNA::Platform::DeviceId>& get_announced_joysticks()
+    std::unordered_set<CNA::Platform::DeviceId>& announced_joysticks()
     {
-        static std::unordered_set<CNA::Platform::DeviceId> announced;
-        return announced;
+        static std::unordered_set<CNA::Platform::DeviceId> value;
+        return value;
     }
 
-    std::unordered_map<std::uint64_t, int>& get_finger_id_to_touch_id_map()
+    std::unordered_map<std::uint64_t, int>& touch_ids()
     {
-        static std::unordered_map<std::uint64_t, int> fingerIdToTouchId;
-        return fingerIdToTouchId;
+        static std::unordered_map<std::uint64_t, int> value;
+        return value;
     }
 
-    int& get_next_touch_id()
+    int& next_touch_id()
     {
-        static int nextTouchId = 1;
-        return nextTouchId;
+        static int value = 1;
+        return value;
     }
 
-    int get_or_create_touch_id(const std::uint64_t fingerId)
+    int get_or_create_touch_id(const std::uint64_t finger)
     {
-        auto& fingerIdToTouchId = get_finger_id_to_touch_id_map();
-        const auto existing = fingerIdToTouchId.find(fingerId);
-        if (existing != fingerIdToTouchId.end())
-        {
-            return existing->second;
-        }
-
-        const int touchId = get_next_touch_id();
-        get_next_touch_id() += 1;
-        fingerIdToTouchId[fingerId] = touchId;
-        return touchId;
+        const auto found = touch_ids().find(finger);
+        if (found != touch_ids().end()) return found->second;
+        const int id = next_touch_id()++;
+        touch_ids()[finger] = id;
+        return id;
     }
 
-    std::optional<int> try_get_touch_id(const std::uint64_t fingerId)
+    std::optional<int> find_touch_id(const std::uint64_t finger)
     {
-        const auto& fingerIdToTouchId = get_finger_id_to_touch_id_map();
-        const auto existing = fingerIdToTouchId.find(fingerId);
-        if (existing == fingerIdToTouchId.end())
-        {
-            return std::nullopt;
-        }
-        return existing->second;
+        const auto found = touch_ids().find(finger);
+        return found != touch_ids().end() ? std::optional<int>(found->second) : std::nullopt;
     }
 
-    void release_touch_id_mapping(const std::uint64_t fingerId)
-    {
-        auto& fingerIdToTouchId = get_finger_id_to_touch_id_map();
-        fingerIdToTouchId.erase(fingerId);
-    }
-
-    /// Converts platform window-client coordinates to logical renderer coordinates. WindowId is
-    /// the whole cross-module identity: platform-specific renderer implementations own any native
-    /// presentation details, including high-DPI scale and letterbox offsets. Falls back to raw
-    /// coordinates if no renderer or transform is registered.
     Microsoft::Xna::Framework::Vector2 to_logical_position(
-        const CNA::Platform::WindowId windowId, const float windowX, const float windowY)
+        const CNA::Platform::WindowId window, const float x, const float y)
     {
-        if (auto* renderer =
-                CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(windowId))
+        if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(window))
         {
-            float logX = windowX;
-            float logY = windowY;
-            if (renderer->TransformWindowToLogical(windowX, windowY, logX, logY))
+            float logicalX = x;
+            float logicalY = y;
+            if (renderer->TransformWindowToLogical(x, y, logicalX, logicalY))
             {
-                return Microsoft::Xna::Framework::Vector2(logX, logY);
+                return {logicalX, logicalY};
             }
         }
-        return Microsoft::Xna::Framework::Vector2(windowX, windowY);
+        return {x, y};
     }
 
-    // INPUT-TOUCH-024 / PLAT-66: the platform event carries the logical client size that defines
-    // its normalized coordinates. Scale into window-client units, then use the same renderer
-    // registry transform as mouse input; no native window lookup belongs in this common bridge.
-    // The gesture path still scales by DisplayWidth/Height (linear, FNA-matching). Both target the
-    // logical space; they differ only inside letterbox bars (accepted).
-    Microsoft::Xna::Framework::Vector2 to_touch_pixel_position(
-        const CNA::Platform::WindowId windowId, const int clientWidth, const int clientHeight,
-        const float normalizedX, const float normalizedY)
+    Microsoft::Xna::Framework::Vector2 to_touch_position(
+        const CNA::Platform::TouchEvent& event)
     {
-        const float windowX = normalizedX * static_cast<float>(std::max(clientWidth, 1));
-        const float windowY = normalizedY * static_cast<float>(std::max(clientHeight, 1));
-
-        return to_logical_position(windowId, windowX, windowY);
-    }
-
-    std::optional<Microsoft::Xna::Framework::Input::Keys> try_convert_sdl_key(const SDL_Keycode keycode)
-    {
-        using Microsoft::Xna::Framework::Input::Keys;
-        switch (keycode)
-        {
-        case SDLK_AC_BACK: return Keys::Escape; // DEC-17: CNA-only Android/browser Back -> Escape (no FNA mapping)
-        case SDLK_LEFT: return Keys::Left;
-        case SDLK_RIGHT: return Keys::Right;
-        case SDLK_UP: return Keys::Up;
-        case SDLK_DOWN: return Keys::Down;
-        case SDLK_SPACE: return Keys::Space;
-        case SDLK_RETURN: return Keys::Enter;
-        case SDLK_ESCAPE: return Keys::Escape;
-        case SDLK_LCTRL: return Keys::LeftControl;
-        case SDLK_RCTRL: return Keys::RightControl;
-        case SDLK_LSHIFT: return Keys::LeftShift;
-        case SDLK_RSHIFT: return Keys::RightShift;
-        case SDLK_TAB: return Keys::Tab;
-        case SDLK_A: return Keys::A;
-        case SDLK_B: return Keys::B;
-        case SDLK_C: return Keys::C;
-        case SDLK_D: return Keys::D;
-        case SDLK_E: return Keys::E;
-        case SDLK_F: return Keys::F;
-        case SDLK_G: return Keys::G;
-        case SDLK_H: return Keys::H;
-        case SDLK_I: return Keys::I;
-        case SDLK_J: return Keys::J;
-        case SDLK_K: return Keys::K;
-        case SDLK_L: return Keys::L;
-        case SDLK_M: return Keys::M;
-        case SDLK_N: return Keys::N;
-        case SDLK_O: return Keys::O;
-        case SDLK_P: return Keys::P;
-        case SDLK_Q: return Keys::Q;
-        case SDLK_R: return Keys::R;
-        case SDLK_S: return Keys::S;
-        case SDLK_T: return Keys::T;
-        case SDLK_U: return Keys::U;
-        case SDLK_V: return Keys::V;
-        case SDLK_W: return Keys::W;
-        case SDLK_X: return Keys::X;
-        case SDLK_Y: return Keys::Y;
-        case SDLK_Z: return Keys::Z;
-        case SDLK_0: return Keys::D0;
-        case SDLK_1: return Keys::D1;
-        case SDLK_2: return Keys::D2;
-        case SDLK_3: return Keys::D3;
-        case SDLK_4: return Keys::D4;
-        case SDLK_5: return Keys::D5;
-        case SDLK_6: return Keys::D6;
-        case SDLK_7: return Keys::D7;
-        case SDLK_8: return Keys::D8;
-        case SDLK_9: return Keys::D9;
-        case SDLK_BACKSPACE: return Keys::Back;
-        case SDLK_LALT:  return Keys::LeftAlt;
-        case SDLK_RALT:  return Keys::RightAlt;
-        case SDLK_LGUI:  return Keys::LeftWindows;
-        case SDLK_RGUI:  return Keys::RightWindows;
-        case SDLK_CAPSLOCK:  return Keys::CapsLock;
-        case SDLK_NUMLOCKCLEAR: return Keys::NumLock;
-        case SDLK_SCROLLLOCK:   return Keys::Scroll;
-        case SDLK_F1:  return Keys::F1;
-        case SDLK_F2:  return Keys::F2;
-        case SDLK_F3:  return Keys::F3;
-        case SDLK_F4:  return Keys::F4;
-        case SDLK_F5:  return Keys::F5;
-        case SDLK_F6:  return Keys::F6;
-        case SDLK_F7:  return Keys::F7;
-        case SDLK_F8:  return Keys::F8;
-        case SDLK_F9:  return Keys::F9;
-        case SDLK_F10: return Keys::F10;
-        case SDLK_F11: return Keys::F11;
-        case SDLK_F12: return Keys::F12;
-        case SDLK_KP_0: return Keys::NumPad0;
-        case SDLK_KP_1: return Keys::NumPad1;
-        case SDLK_KP_2: return Keys::NumPad2;
-        case SDLK_KP_3: return Keys::NumPad3;
-        case SDLK_KP_4: return Keys::NumPad4;
-        case SDLK_KP_5: return Keys::NumPad5;
-        case SDLK_KP_6: return Keys::NumPad6;
-        case SDLK_KP_7: return Keys::NumPad7;
-        case SDLK_KP_8: return Keys::NumPad8;
-        case SDLK_KP_9: return Keys::NumPad9;
-        case SDLK_KP_MULTIPLY: return Keys::Multiply;
-        case SDLK_KP_PLUS:     return Keys::Add;
-        case SDLK_KP_MINUS:    return Keys::Subtract;
-        case SDLK_KP_DECIMAL:  return Keys::Decimal;
-        case SDLK_KP_DIVIDE:   return Keys::Divide;
-        case SDLK_KP_ENTER:    return Keys::Enter;
-        case SDLK_SEMICOLON:   return Keys::OemSemicolon;
-        case SDLK_EQUALS:      return Keys::OemPlus;
-        case SDLK_COMMA:       return Keys::OemComma;
-        case SDLK_MINUS:       return Keys::OemMinus;
-        case SDLK_PERIOD:      return Keys::OemPeriod;
-        case SDLK_SLASH:       return Keys::OemQuestion;
-        case SDLK_GRAVE:       return Keys::OemTilde;
-        case SDLK_LEFTBRACKET: return Keys::OemOpenBrackets;
-        case SDLK_BACKSLASH:   return Keys::OemPipe;
-        case SDLK_RIGHTBRACKET:return Keys::OemCloseBrackets;
-        case SDLK_APOSTROPHE:  return Keys::OemQuotes;
-        case SDLK_PAGEUP:   return Keys::PageUp;
-        case SDLK_PAGEDOWN: return Keys::PageDown;
-        case SDLK_HOME:     return Keys::Home;
-        case SDLK_END:      return Keys::End;
-        case SDLK_INSERT:   return Keys::Insert;
-        case SDLK_DELETE:   return Keys::Delete;
-        case SDLK_PRINTSCREEN: return Keys::PrintScreen;
-        case SDLK_PAUSE:       return Keys::Pause;
-        case SDLK_F13: return Keys::F13;
-        case SDLK_F14: return Keys::F14;
-        case SDLK_F15: return Keys::F15;
-        case SDLK_F16: return Keys::F16;
-        case SDLK_F17: return Keys::F17;
-        case SDLK_F18: return Keys::F18;
-        case SDLK_F19: return Keys::F19;
-        case SDLK_F20: return Keys::F20;
-        case SDLK_F21: return Keys::F21;
-        case SDLK_F22: return Keys::F22;
-        case SDLK_F23: return Keys::F23;
-        case SDLK_F24: return Keys::F24;
-        case SDLK_APPLICATION: return Keys::Apps;
-        case SDLK_MENU:        return Keys::Apps;
-        case SDLK_SLEEP:       return Keys::Sleep;
-        case SDLK_VOLUMEUP:    return Keys::VolumeUp;
-        case SDLK_VOLUMEDOWN:  return Keys::VolumeDown;
-        case SDLK_KP_CLEAR:    return Keys::OemClear;
-        case SDLK_KP_PERIOD:   return Keys::OemPeriod;
-        // Locale keyboard-layout fallbacks: SDL reports the character these physical keys
-        // produce on non-US layouts, which differs from the US-layout keycode already mapped
-        // above for the same physical key.
-        case 0x00B2: return Keys::OemTilde;     // '²' — AZERTY
-        case '|':    return Keys::OemPipe;      // Norwegian
-        case '+':    return Keys::OemPlus;      // Norwegian
-        case 0x00F8: return Keys::OemSemicolon; // 'ø' — Norwegian
-        case 0x00E6: return Keys::OemQuotes;    // 'æ' — Norwegian
-        case 0x00E9: return std::nullopt;       // 'é' — BEPO; no real Keys mapping exists yet
-        default: return std::nullopt;
-        }
-    }
-
-    /// Maps an SDL_Scancode (physical key position) directly to an XNA Keys value, mirroring
-    /// FNA's INTERNAL_scanMap (SDL3_FNAPlatform.cs:2490-2618). Used only in scancode mode
-    /// (FNA_KEYBOARD_USE_SCANCODES=1), where the physical key position is reported instead of
-    /// the character the current keyboard layout produces there.
-    std::optional<Microsoft::Xna::Framework::Input::Keys> try_convert_sdl_scancode(
-        const std::uint16_t scancode)
-    {
-        using Microsoft::Xna::Framework::Input::Keys;
-        switch (scancode)
-        {
-        case SDL_SCANCODE_A: return Keys::A;
-        case SDL_SCANCODE_B: return Keys::B;
-        case SDL_SCANCODE_C: return Keys::C;
-        case SDL_SCANCODE_D: return Keys::D;
-        case SDL_SCANCODE_E: return Keys::E;
-        case SDL_SCANCODE_F: return Keys::F;
-        case SDL_SCANCODE_G: return Keys::G;
-        case SDL_SCANCODE_H: return Keys::H;
-        case SDL_SCANCODE_I: return Keys::I;
-        case SDL_SCANCODE_J: return Keys::J;
-        case SDL_SCANCODE_K: return Keys::K;
-        case SDL_SCANCODE_L: return Keys::L;
-        case SDL_SCANCODE_M: return Keys::M;
-        case SDL_SCANCODE_N: return Keys::N;
-        case SDL_SCANCODE_O: return Keys::O;
-        case SDL_SCANCODE_P: return Keys::P;
-        case SDL_SCANCODE_Q: return Keys::Q;
-        case SDL_SCANCODE_R: return Keys::R;
-        case SDL_SCANCODE_S: return Keys::S;
-        case SDL_SCANCODE_T: return Keys::T;
-        case SDL_SCANCODE_U: return Keys::U;
-        case SDL_SCANCODE_V: return Keys::V;
-        case SDL_SCANCODE_W: return Keys::W;
-        case SDL_SCANCODE_X: return Keys::X;
-        case SDL_SCANCODE_Y: return Keys::Y;
-        case SDL_SCANCODE_Z: return Keys::Z;
-        case SDL_SCANCODE_0: return Keys::D0;
-        case SDL_SCANCODE_1: return Keys::D1;
-        case SDL_SCANCODE_2: return Keys::D2;
-        case SDL_SCANCODE_3: return Keys::D3;
-        case SDL_SCANCODE_4: return Keys::D4;
-        case SDL_SCANCODE_5: return Keys::D5;
-        case SDL_SCANCODE_6: return Keys::D6;
-        case SDL_SCANCODE_7: return Keys::D7;
-        case SDL_SCANCODE_8: return Keys::D8;
-        case SDL_SCANCODE_9: return Keys::D9;
-        case SDL_SCANCODE_KP_0: return Keys::NumPad0;
-        case SDL_SCANCODE_KP_1: return Keys::NumPad1;
-        case SDL_SCANCODE_KP_2: return Keys::NumPad2;
-        case SDL_SCANCODE_KP_3: return Keys::NumPad3;
-        case SDL_SCANCODE_KP_4: return Keys::NumPad4;
-        case SDL_SCANCODE_KP_5: return Keys::NumPad5;
-        case SDL_SCANCODE_KP_6: return Keys::NumPad6;
-        case SDL_SCANCODE_KP_7: return Keys::NumPad7;
-        case SDL_SCANCODE_KP_8: return Keys::NumPad8;
-        case SDL_SCANCODE_KP_9: return Keys::NumPad9;
-        case SDL_SCANCODE_KP_CLEAR: return Keys::OemClear;
-        case SDL_SCANCODE_KP_DECIMAL: return Keys::Decimal;
-        case SDL_SCANCODE_KP_DIVIDE: return Keys::Divide;
-        case SDL_SCANCODE_KP_ENTER: return Keys::Enter;
-        case SDL_SCANCODE_KP_MINUS: return Keys::Subtract;
-        case SDL_SCANCODE_KP_MULTIPLY: return Keys::Multiply;
-        case SDL_SCANCODE_KP_PERIOD: return Keys::OemPeriod;
-        case SDL_SCANCODE_KP_PLUS: return Keys::Add;
-        case SDL_SCANCODE_F1: return Keys::F1;
-        case SDL_SCANCODE_F2: return Keys::F2;
-        case SDL_SCANCODE_F3: return Keys::F3;
-        case SDL_SCANCODE_F4: return Keys::F4;
-        case SDL_SCANCODE_F5: return Keys::F5;
-        case SDL_SCANCODE_F6: return Keys::F6;
-        case SDL_SCANCODE_F7: return Keys::F7;
-        case SDL_SCANCODE_F8: return Keys::F8;
-        case SDL_SCANCODE_F9: return Keys::F9;
-        case SDL_SCANCODE_F10: return Keys::F10;
-        case SDL_SCANCODE_F11: return Keys::F11;
-        case SDL_SCANCODE_F12: return Keys::F12;
-        case SDL_SCANCODE_F13: return Keys::F13;
-        case SDL_SCANCODE_F14: return Keys::F14;
-        case SDL_SCANCODE_F15: return Keys::F15;
-        case SDL_SCANCODE_F16: return Keys::F16;
-        case SDL_SCANCODE_F17: return Keys::F17;
-        case SDL_SCANCODE_F18: return Keys::F18;
-        case SDL_SCANCODE_F19: return Keys::F19;
-        case SDL_SCANCODE_F20: return Keys::F20;
-        case SDL_SCANCODE_F21: return Keys::F21;
-        case SDL_SCANCODE_F22: return Keys::F22;
-        case SDL_SCANCODE_F23: return Keys::F23;
-        case SDL_SCANCODE_F24: return Keys::F24;
-        case SDL_SCANCODE_SPACE: return Keys::Space;
-        case SDL_SCANCODE_UP: return Keys::Up;
-        case SDL_SCANCODE_DOWN: return Keys::Down;
-        case SDL_SCANCODE_LEFT: return Keys::Left;
-        case SDL_SCANCODE_RIGHT: return Keys::Right;
-        case SDL_SCANCODE_LALT: return Keys::LeftAlt;
-        case SDL_SCANCODE_RALT: return Keys::RightAlt;
-        case SDL_SCANCODE_LCTRL: return Keys::LeftControl;
-        case SDL_SCANCODE_RCTRL: return Keys::RightControl;
-        case SDL_SCANCODE_LGUI: return Keys::LeftWindows;
-        case SDL_SCANCODE_RGUI: return Keys::RightWindows;
-        case SDL_SCANCODE_LSHIFT: return Keys::LeftShift;
-        case SDL_SCANCODE_RSHIFT: return Keys::RightShift;
-        case SDL_SCANCODE_APPLICATION: return Keys::Apps;
-        case SDL_SCANCODE_MENU: return Keys::Apps;
-        case SDL_SCANCODE_SLASH: return Keys::OemQuestion;
-        case SDL_SCANCODE_BACKSLASH: return Keys::OemPipe;
-        case SDL_SCANCODE_LEFTBRACKET: return Keys::OemOpenBrackets;
-        case SDL_SCANCODE_RIGHTBRACKET: return Keys::OemCloseBrackets;
-        case SDL_SCANCODE_CAPSLOCK: return Keys::CapsLock;
-        case SDL_SCANCODE_COMMA: return Keys::OemComma;
-        case SDL_SCANCODE_DELETE: return Keys::Delete;
-        case SDL_SCANCODE_END: return Keys::End;
-        case SDL_SCANCODE_BACKSPACE: return Keys::Back;
-        case SDL_SCANCODE_RETURN: return Keys::Enter;
-        case SDL_SCANCODE_ESCAPE: return Keys::Escape;
-        case SDL_SCANCODE_HOME: return Keys::Home;
-        case SDL_SCANCODE_INSERT: return Keys::Insert;
-        case SDL_SCANCODE_MINUS: return Keys::OemMinus;
-        case SDL_SCANCODE_NUMLOCKCLEAR: return Keys::NumLock;
-        case SDL_SCANCODE_PAGEUP: return Keys::PageUp;
-        case SDL_SCANCODE_PAGEDOWN: return Keys::PageDown;
-        case SDL_SCANCODE_PAUSE: return Keys::Pause;
-        case SDL_SCANCODE_PERIOD: return Keys::OemPeriod;
-        case SDL_SCANCODE_EQUALS: return Keys::OemPlus;
-        case SDL_SCANCODE_PRINTSCREEN: return Keys::PrintScreen;
-        case SDL_SCANCODE_APOSTROPHE: return Keys::OemQuotes;
-        case SDL_SCANCODE_SCROLLLOCK: return Keys::Scroll;
-        case SDL_SCANCODE_SEMICOLON: return Keys::OemSemicolon;
-        case SDL_SCANCODE_SLEEP: return Keys::Sleep;
-        case SDL_SCANCODE_TAB: return Keys::Tab;
-        case SDL_SCANCODE_GRAVE: return Keys::OemTilde;
-        case SDL_SCANCODE_VOLUMEUP: return Keys::VolumeUp;
-        case SDL_SCANCODE_VOLUMEDOWN: return Keys::VolumeDown;
-        // INPUT-KBD-011/019: scancodes with no XNA Keys value are DROPPED (std::nullopt), never mapped to
-        // Keys::None — the same DEC-16 policy already applied to unmapped keycodes, so Keys::None never
-        // enters the pressed set (IsKeyDown(None) stays false; None never leaks into GetPressedKeys()).
-        // This covers the no-scancode sentinel (SDL_SCANCODE_UNKNOWN, matching the keycode path's SDLK_
-        // UNKNOWN drop) and the two ISO-layout extra keys (NONUSHASH on UK, NONUSBACKSLASH on most ISO
-        // boards), which FNA maps to Keys.None with its own unresolved "need verification" FIXME
-        // (SDL3_FNAPlatform.cs:2615-2617) and adds to its pressed list. A deliberate, DEC-16-consistent
-        // deviation from FNA — recorded in docs/input-fna-fidelity.md and pinned by the
-        // PlatformInputBridgeKeyboardTest scancode policy regression.
-        case SDL_SCANCODE_UNKNOWN: return std::nullopt;
-        case SDL_SCANCODE_NONUSHASH: return std::nullopt;
-        case SDL_SCANCODE_NONUSBACKSLASH: return std::nullopt;
-        default: return std::nullopt;
-        }
-    }
-
-    /// Maps a US-layout XNA Keys value to the SDL_Scancode of the physical key that produces
-    /// it, mirroring FNA's INTERNAL_xnaMap (SDL3_FNAPlatform.cs:2619-2742). Used by
-    /// GetKeyFromScancode to find the physical key position for a given Keys value before
-    /// asking SDL what character the *current* keyboard layout produces there.
-    ///
-    /// Intentionally unmapped Keys (fall through to std::nullopt), matching FNA's INTERNAL_xnaMap
-    /// omissions exactly (task 819 audit) — SDL3 exposes no scancode for these, so they cannot
-    /// round-trip through GetKeyFromScancode and are documented here rather than silently dropped:
-    ///   IME:      Kana, Kanji, ImeConvert, ImeNoConvert, ProcessKey
-    ///   System:   Select, Print, Execute, Help, Separator, Attn, Crsel, Exsel, EraseEof, Play,
-    ///             Zoom, Pa1
-    ///   Browser:  BrowserBack/Forward/Refresh/Stop/Search/Favorites/Home
-    ///   Media:    VolumeMute, MediaNextTrack, MediaPreviousTrack, MediaStop, MediaPlayPause,
-    ///             LaunchMail, SelectMedia, LaunchApplication1, LaunchApplication2
-    ///   Xbox:     ChatPadGreen, ChatPadOrange
-    ///   OEM:      Oem8, OemBackslash, OemCopy, OemAuto, OemEnlW
-    /// (Keys::None is NOT in this set — it maps to SDL_SCANCODE_UNKNOWN. The forward keycode and
-    /// scancode maps are otherwise byte-for-byte faithful ports of FNA's keyMap/scanMap.)
-    std::optional<SDL_Scancode> try_convert_keys_to_sdl_scancode(const Microsoft::Xna::Framework::Input::Keys key)
-    {
-        using Microsoft::Xna::Framework::Input::Keys;
-        switch (key)
-        {
-        case Keys::A: return SDL_SCANCODE_A;
-        case Keys::B: return SDL_SCANCODE_B;
-        case Keys::C: return SDL_SCANCODE_C;
-        case Keys::D: return SDL_SCANCODE_D;
-        case Keys::E: return SDL_SCANCODE_E;
-        case Keys::F: return SDL_SCANCODE_F;
-        case Keys::G: return SDL_SCANCODE_G;
-        case Keys::H: return SDL_SCANCODE_H;
-        case Keys::I: return SDL_SCANCODE_I;
-        case Keys::J: return SDL_SCANCODE_J;
-        case Keys::K: return SDL_SCANCODE_K;
-        case Keys::L: return SDL_SCANCODE_L;
-        case Keys::M: return SDL_SCANCODE_M;
-        case Keys::N: return SDL_SCANCODE_N;
-        case Keys::O: return SDL_SCANCODE_O;
-        case Keys::P: return SDL_SCANCODE_P;
-        case Keys::Q: return SDL_SCANCODE_Q;
-        case Keys::R: return SDL_SCANCODE_R;
-        case Keys::S: return SDL_SCANCODE_S;
-        case Keys::T: return SDL_SCANCODE_T;
-        case Keys::U: return SDL_SCANCODE_U;
-        case Keys::V: return SDL_SCANCODE_V;
-        case Keys::W: return SDL_SCANCODE_W;
-        case Keys::X: return SDL_SCANCODE_X;
-        case Keys::Y: return SDL_SCANCODE_Y;
-        case Keys::Z: return SDL_SCANCODE_Z;
-        case Keys::D0: return SDL_SCANCODE_0;
-        case Keys::D1: return SDL_SCANCODE_1;
-        case Keys::D2: return SDL_SCANCODE_2;
-        case Keys::D3: return SDL_SCANCODE_3;
-        case Keys::D4: return SDL_SCANCODE_4;
-        case Keys::D5: return SDL_SCANCODE_5;
-        case Keys::D6: return SDL_SCANCODE_6;
-        case Keys::D7: return SDL_SCANCODE_7;
-        case Keys::D8: return SDL_SCANCODE_8;
-        case Keys::D9: return SDL_SCANCODE_9;
-        case Keys::NumPad0: return SDL_SCANCODE_KP_0;
-        case Keys::NumPad1: return SDL_SCANCODE_KP_1;
-        case Keys::NumPad2: return SDL_SCANCODE_KP_2;
-        case Keys::NumPad3: return SDL_SCANCODE_KP_3;
-        case Keys::NumPad4: return SDL_SCANCODE_KP_4;
-        case Keys::NumPad5: return SDL_SCANCODE_KP_5;
-        case Keys::NumPad6: return SDL_SCANCODE_KP_6;
-        case Keys::NumPad7: return SDL_SCANCODE_KP_7;
-        case Keys::NumPad8: return SDL_SCANCODE_KP_8;
-        case Keys::NumPad9: return SDL_SCANCODE_KP_9;
-        case Keys::OemClear: return SDL_SCANCODE_KP_CLEAR;
-        case Keys::Decimal: return SDL_SCANCODE_KP_DECIMAL;
-        case Keys::Divide: return SDL_SCANCODE_KP_DIVIDE;
-        case Keys::Multiply: return SDL_SCANCODE_KP_MULTIPLY;
-        case Keys::Subtract: return SDL_SCANCODE_KP_MINUS;
-        case Keys::Add: return SDL_SCANCODE_KP_PLUS;
-        case Keys::F1: return SDL_SCANCODE_F1;
-        case Keys::F2: return SDL_SCANCODE_F2;
-        case Keys::F3: return SDL_SCANCODE_F3;
-        case Keys::F4: return SDL_SCANCODE_F4;
-        case Keys::F5: return SDL_SCANCODE_F5;
-        case Keys::F6: return SDL_SCANCODE_F6;
-        case Keys::F7: return SDL_SCANCODE_F7;
-        case Keys::F8: return SDL_SCANCODE_F8;
-        case Keys::F9: return SDL_SCANCODE_F9;
-        case Keys::F10: return SDL_SCANCODE_F10;
-        case Keys::F11: return SDL_SCANCODE_F11;
-        case Keys::F12: return SDL_SCANCODE_F12;
-        case Keys::F13: return SDL_SCANCODE_F13;
-        case Keys::F14: return SDL_SCANCODE_F14;
-        case Keys::F15: return SDL_SCANCODE_F15;
-        case Keys::F16: return SDL_SCANCODE_F16;
-        case Keys::F17: return SDL_SCANCODE_F17;
-        case Keys::F18: return SDL_SCANCODE_F18;
-        case Keys::F19: return SDL_SCANCODE_F19;
-        case Keys::F20: return SDL_SCANCODE_F20;
-        case Keys::F21: return SDL_SCANCODE_F21;
-        case Keys::F22: return SDL_SCANCODE_F22;
-        case Keys::F23: return SDL_SCANCODE_F23;
-        case Keys::F24: return SDL_SCANCODE_F24;
-        case Keys::Space: return SDL_SCANCODE_SPACE;
-        case Keys::Up: return SDL_SCANCODE_UP;
-        case Keys::Down: return SDL_SCANCODE_DOWN;
-        case Keys::Left: return SDL_SCANCODE_LEFT;
-        case Keys::Right: return SDL_SCANCODE_RIGHT;
-        case Keys::LeftAlt: return SDL_SCANCODE_LALT;
-        case Keys::RightAlt: return SDL_SCANCODE_RALT;
-        case Keys::LeftControl: return SDL_SCANCODE_LCTRL;
-        case Keys::RightControl: return SDL_SCANCODE_RCTRL;
-        case Keys::LeftWindows: return SDL_SCANCODE_LGUI;
-        case Keys::RightWindows: return SDL_SCANCODE_RGUI;
-        case Keys::LeftShift: return SDL_SCANCODE_LSHIFT;
-        case Keys::RightShift: return SDL_SCANCODE_RSHIFT;
-        case Keys::Apps: return SDL_SCANCODE_APPLICATION;
-        case Keys::OemQuestion: return SDL_SCANCODE_SLASH;
-        case Keys::OemPipe: return SDL_SCANCODE_BACKSLASH;
-        case Keys::OemOpenBrackets: return SDL_SCANCODE_LEFTBRACKET;
-        case Keys::OemCloseBrackets: return SDL_SCANCODE_RIGHTBRACKET;
-        case Keys::CapsLock: return SDL_SCANCODE_CAPSLOCK;
-        case Keys::OemComma: return SDL_SCANCODE_COMMA;
-        case Keys::Delete: return SDL_SCANCODE_DELETE;
-        case Keys::End: return SDL_SCANCODE_END;
-        case Keys::Back: return SDL_SCANCODE_BACKSPACE;
-        case Keys::Enter: return SDL_SCANCODE_RETURN;
-        case Keys::Escape: return SDL_SCANCODE_ESCAPE;
-        case Keys::Home: return SDL_SCANCODE_HOME;
-        case Keys::Insert: return SDL_SCANCODE_INSERT;
-        case Keys::OemMinus: return SDL_SCANCODE_MINUS;
-        case Keys::NumLock: return SDL_SCANCODE_NUMLOCKCLEAR;
-        case Keys::PageUp: return SDL_SCANCODE_PAGEUP;
-        case Keys::PageDown: return SDL_SCANCODE_PAGEDOWN;
-        case Keys::Pause: return SDL_SCANCODE_PAUSE;
-        case Keys::OemPeriod: return SDL_SCANCODE_PERIOD;
-        case Keys::OemPlus: return SDL_SCANCODE_EQUALS;
-        case Keys::PrintScreen: return SDL_SCANCODE_PRINTSCREEN;
-        case Keys::OemQuotes: return SDL_SCANCODE_APOSTROPHE;
-        case Keys::Scroll: return SDL_SCANCODE_SCROLLLOCK;
-        case Keys::OemSemicolon: return SDL_SCANCODE_SEMICOLON;
-        case Keys::Sleep: return SDL_SCANCODE_SLEEP;
-        case Keys::Tab: return SDL_SCANCODE_TAB;
-        case Keys::OemTilde: return SDL_SCANCODE_GRAVE;
-        case Keys::VolumeUp: return SDL_SCANCODE_VOLUMEUP;
-        case Keys::VolumeDown: return SDL_SCANCODE_VOLUMEDOWN;
-        case Keys::None: return SDL_SCANCODE_UNKNOWN;
-        default: return std::nullopt;
-        }
+        return to_logical_position(
+            event.window,
+            event.x * static_cast<float>(std::max(event.clientWidth, 1)),
+            event.y * static_cast<float>(std::max(event.clientHeight, 1)));
     }
 }
 
 namespace CNA::Internal::Input
 {
-    Microsoft::Xna::Framework::Input::Keys SdlInputBridge::GetKeyFromScancode(
-        const Microsoft::Xna::Framework::Input::Keys scancode
-    )
+    Keys SdlInputBridge::GetKeyFromScancode(const Keys key)
     {
-        using Microsoft::Xna::Framework::Input::Keys;
-
-        if (use_scancode_mode())
+        if (use_scancode_mode()) return key;
+        const auto scancode = scancode_for_key(key);
+        if (!scancode.has_value()) return Keys::None;
+        if (CNA::Platform::IPlatformKeyboard* keyboard = current_keyboard())
         {
-            return scancode;
+            const KeyCode resolved = keyboard->GetKeyFromScancode(*scancode);
+            if (resolved != KeyCode::None) return static_cast<Keys>(resolved);
         }
+        return key_for_scancode(*scancode).value_or(Keys::None);
+    }
 
-        const auto sdlScancode = try_convert_keys_to_sdl_scancode(scancode);
-        if (!sdlScancode.has_value())
+    std::string SdlInputBridge::GetScancodeName(const Keys key)
+    {
+        const auto scancode = scancode_for_key(key);
+        if (!scancode.has_value()) return {};
+        if (CNA::Platform::IPlatformKeyboard* keyboard = current_keyboard())
         {
-            return Keys::None;
+            const std::string name = keyboard->GetScancodeName(*scancode);
+            if (!name.empty()) return name;
         }
-
-        const SDL_Keycode sym = SDL_GetKeyFromScancode(*sdlScancode, SDL_KMOD_NONE, true);
-        return try_convert_sdl_key(sym).value_or(Keys::None);
+        return CNA::Platform::ToString(*scancode);
     }
 
-    std::string SdlInputBridge::GetScancodeName(const Microsoft::Xna::Framework::Input::Keys key)
+    Keys SdlInputBridge::GetScancodeFromName(const std::string& name)
     {
-        const auto sdlScancode = try_convert_keys_to_sdl_scancode(key);
-        if (!sdlScancode.has_value())
-            return "";
-        const char* name = SDL_GetScancodeName(*sdlScancode);
-        return name ? name : "";
+        Scancode scancode = Scancode::Unknown;
+        if (CNA::Platform::IPlatformKeyboard* keyboard = current_keyboard())
+        {
+            scancode = keyboard->GetScancodeFromName(name);
+        }
+        if (scancode == Scancode::Unknown)
+        {
+            scancode = CNA::Platform::ScancodeFromString(name);
+        }
+        return key_for_scancode(scancode).value_or(Keys::None);
     }
 
-    Microsoft::Xna::Framework::Input::Keys SdlInputBridge::GetScancodeFromName(const std::string& name)
+    std::string SdlInputBridge::GetKeyName(const Keys key)
     {
-        using Microsoft::Xna::Framework::Input::Keys;
-        const SDL_Scancode scancode = SDL_GetScancodeFromName(name.c_str());
-        if (scancode == SDL_SCANCODE_UNKNOWN)
-            return Keys::None;
-        return try_convert_sdl_scancode(scancode).value_or(Keys::None);
+        const auto scancode = scancode_for_key(key);
+        if (!scancode.has_value()) return {};
+        if (CNA::Platform::IPlatformKeyboard* keyboard = current_keyboard())
+        {
+            const std::string name = keyboard->GetKeyName(*scancode);
+            if (!name.empty()) return name;
+        }
+        return CNA::Platform::ToString(*scancode);
     }
 
-    std::string SdlInputBridge::GetKeyName(const Microsoft::Xna::Framework::Input::Keys key)
+    Keys SdlInputBridge::GetKeyFromName(const std::string& name)
     {
-        const auto sdlScancode = try_convert_keys_to_sdl_scancode(key);
-        if (!sdlScancode.has_value())
-            return "";
-        const SDL_Keycode keycode = SDL_GetKeyFromScancode(*sdlScancode, SDL_KMOD_NONE, true);
-        const char* name = SDL_GetKeyName(keycode);
-        return name ? name : "";
-    }
-
-    Microsoft::Xna::Framework::Input::Keys SdlInputBridge::GetKeyFromName(const std::string& name)
-    {
-        using Microsoft::Xna::Framework::Input::Keys;
-        const SDL_Keycode keycode = SDL_GetKeyFromName(name.c_str());
-        if (keycode == SDLK_UNKNOWN)
-            return Keys::None;
-        return try_convert_sdl_key(keycode).value_or(Keys::None);
+        if (CNA::Platform::IPlatformKeyboard* keyboard = current_keyboard())
+        {
+            const KeyCode resolved = keyboard->GetKeyFromName(name);
+            if (resolved != KeyCode::None) return static_cast<Keys>(resolved);
+        }
+        return key_for_scancode(CNA::Platform::ScancodeFromString(name)).value_or(Keys::None);
     }
 
     void SdlInputBridge::SetScancodeModeForTests(const bool enabled)
@@ -782,187 +464,140 @@ namespace CNA::Internal::Input
 
     void SdlInputBridge::ClearScancodeModeForTests()
     {
-        g_scancodeModeTestOverride = std::nullopt;
+        g_scancodeModeTestOverride.reset();
     }
 
     void SdlInputBridge::ResetForTests()
     {
         g_textInputSuppress = false;
-        for (bool& down : g_textInputControlDown)
-            down = false;
-        get_finger_id_to_touch_id_map().clear();
-        get_next_touch_id() = 1;
-        g_scancodeModeTestOverride = std::nullopt;
-        get_announced_joysticks().clear();
+        for (bool& down : g_textInputControlDown) down = false;
+        touch_ids().clear();
+        next_touch_id() = 1;
+        g_scancodeModeTestOverride.reset();
+        announced_joysticks().clear();
     }
 
     void PlatformInputBridge::ProcessEvent(const CNA::Platform::PlatformEvent& event)
     {
         using namespace CNA::Platform;
-
-        std::visit([](const auto& platformEvent)
+        std::visit([](const auto& value)
         {
-            using Event = std::decay_t<decltype(platformEvent)>;
-
+            using Event = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<Event, MouseMotionEvent>)
             {
-                const auto position = to_logical_position(
-                    platformEvent.window, platformEvent.x, platformEvent.y);
+                const auto position = to_logical_position(value.window, value.x, value.y);
                 InputManager::SetMousePosition(static_cast<int>(position.X), static_cast<int>(position.Y));
-                InputManager::AddMouseRelativeDelta(platformEvent.deltaX, platformEvent.deltaY);
+                InputManager::AddMouseRelativeDelta(value.deltaX, value.deltaY);
             }
             else if constexpr (std::is_same_v<Event, MouseButtonEvent>)
             {
-                const auto state = platformEvent.pressed ? ButtonState::Pressed : ButtonState::Released;
-                switch (platformEvent.button)
+                const ButtonState state = value.pressed ? ButtonState::Pressed : ButtonState::Released;
+                switch (value.button)
                 {
-                case 1: InputManager::SetMouseButtonState(MouseButton::Left, state); break;
-                case 2: InputManager::SetMouseButtonState(MouseButton::Middle, state); break;
-                case 3: InputManager::SetMouseButtonState(MouseButton::Right, state); break;
-                case 4: InputManager::SetMouseButtonState(MouseButton::XButton1, state); break;
-                case 5: InputManager::SetMouseButtonState(MouseButton::XButton2, state); break;
-                default: break;
+                    case 1: InputManager::SetMouseButtonState(MouseButton::Left, state); break;
+                    case 2: InputManager::SetMouseButtonState(MouseButton::Middle, state); break;
+                    case 3: InputManager::SetMouseButtonState(MouseButton::Right, state); break;
+                    case 4: InputManager::SetMouseButtonState(MouseButton::XButton1, state); break;
+                    case 5: InputManager::SetMouseButtonState(MouseButton::XButton2, state); break;
+                    default: break;
                 }
-
-                const auto position = to_logical_position(
-                    platformEvent.window, platformEvent.x, platformEvent.y);
+                const auto position = to_logical_position(value.window, value.x, value.y);
                 InputManager::SetMousePosition(static_cast<int>(position.X), static_cast<int>(position.Y));
-
-                if (platformEvent.pressed && platformEvent.button >= 1)
+                if (value.pressed && value.button >= 1)
                 {
-                    Microsoft::Xna::Framework::Input::Mouse::INTERNAL_onClicked(
-                        static_cast<int>(platformEvent.button - 1));
+                    Microsoft::Xna::Framework::Input::Mouse::INTERNAL_onClicked(value.button - 1);
                 }
             }
             else if constexpr (std::is_same_v<Event, MouseWheelEvent>)
             {
-                InputManager::AddScrollWheelDelta(static_cast<int>(platformEvent.y) * 120);
-                InputManager::AddHorizontalScrollWheelDelta(static_cast<int>(platformEvent.x) * 120);
+                InputManager::AddScrollWheelDelta(static_cast<int>(value.y) * 120);
+                InputManager::AddHorizontalScrollWheelDelta(static_cast<int>(value.x) * 120);
             }
             else if constexpr (std::is_same_v<Event, DeviceEvent>)
             {
-                if (platformEvent.kind == InputDeviceKind::Mouse)
+                if (value.kind == InputDeviceKind::Mouse)
                 {
-                    if (platformEvent.connected)
-                        CNA::Input::InputDevices::MouseConnectedEXT.Invoke(platformEvent.device);
-                    else
-                        CNA::Input::InputDevices::MouseDisconnectedEXT.Invoke(platformEvent.device);
+                    if (value.connected) CNA::Input::InputDevices::MouseConnectedEXT.Invoke(value.device);
+                    else CNA::Input::InputDevices::MouseDisconnectedEXT.Invoke(value.device);
                 }
-                else if (platformEvent.kind == InputDeviceKind::Keyboard)
+                else if (value.kind == InputDeviceKind::Keyboard)
                 {
-                    if (platformEvent.connected)
-                        CNA::Input::InputDevices::KeyboardConnectedEXT.Invoke(platformEvent.device);
-                    else
-                        CNA::Input::InputDevices::KeyboardDisconnectedEXT.Invoke(platformEvent.device);
+                    if (value.connected) CNA::Input::InputDevices::KeyboardConnectedEXT.Invoke(value.device);
+                    else CNA::Input::InputDevices::KeyboardDisconnectedEXT.Invoke(value.device);
                 }
-                else if (platformEvent.kind == InputDeviceKind::Joystick)
+                else if (value.kind == InputDeviceKind::Joystick
+                    && value.device <= std::numeric_limits<std::uint32_t>::max())
                 {
-                    const auto device = platformEvent.device;
-                    if (device > std::numeric_limits<std::uint32_t>::max())
-                    {
-                        return;
-                    }
-                    auto& announced = get_announced_joysticks();
-                    if (platformEvent.connected)
+                    if (value.connected)
                     {
                         IPlatformJoystick* joysticks = GetCurrentPlatform().GetJoystick();
-                        if (joysticks == nullptr || !joysticks->IsConnected(device)
-                            || !announced.insert(device).second)
+                        if (joysticks != nullptr && joysticks->IsConnected(value.device)
+                            && announced_joysticks().insert(value.device).second)
                         {
-                            return;
+                            CNA::Input::Joysticks::ConnectedEXT.Invoke(
+                                static_cast<std::uint32_t>(value.device));
                         }
-                        CNA::Input::Joysticks::ConnectedEXT.Invoke(
-                            static_cast<std::uint32_t>(device));
                     }
-                    else
+                    else if (announced_joysticks().erase(value.device) != 0)
                     {
-                        if (announced.erase(device) == 0)
-                        {
-                            return;
-                        }
                         CNA::Input::Joysticks::DisconnectedEXT.Invoke(
-                            static_cast<std::uint32_t>(device));
+                            static_cast<std::uint32_t>(value.device));
                     }
                 }
             }
             else if constexpr (std::is_same_v<Event, KeyEvent>)
             {
-                const auto key = use_scancode_mode()
-                                     ? try_convert_sdl_scancode(
-                                           static_cast<std::uint16_t>(platformEvent.scancode))
-                                     : std::optional<Keys>(
-                                           static_cast<Keys>(platformEvent.keycode));
-                if (!key.has_value() || key.value() == Keys::None)
-                    return;
-
-                const bool isRepeat = platformEvent.pressed && platformEvent.repeat;
-                if (!isRepeat)
-                    InputManager::SetKeyState(key.value(), platformEvent.pressed);
-
-                if (platformEvent.pressed)
-                    handle_text_input_key_down(key.value(), isRepeat);
-                else
-                    handle_text_input_key_up(key.value());
+                const std::optional<Keys> key = use_scancode_mode()
+                    ? key_for_scancode(value.scancode)
+                    : std::optional<Keys>(static_cast<Keys>(value.keycode));
+                if (!key.has_value() || *key == Keys::None) return;
+                const bool repeat = value.pressed && value.repeat;
+                if (!repeat) InputManager::SetKeyState(*key, value.pressed);
+                if (value.pressed) handle_text_input_key_down(*key, repeat);
+                else handle_text_input_key_up(*key);
             }
             else if constexpr (std::is_same_v<Event, TextInputEvent>)
             {
-                if (g_textInputSuppress)
-                    return;
-                decode_utf8_to_utf16(platformEvent.text.c_str(), [](const charcs codeUnit)
+                if (!g_textInputSuppress)
                 {
-                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(codeUnit);
-                });
+                    decode_utf8_to_utf16(value.text.c_str(), [](const charcs unit) {
+                        Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(unit);
+                    });
+                }
             }
             else if constexpr (std::is_same_v<Event, TextEditingEvent>)
             {
-                if (!platformEvent.text.empty())
-                {
-                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditing(
-                        platformEvent.text, platformEvent.cursor, platformEvent.selectionLength);
-                }
-                else
-                {
-                    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditing(
-                        std::string(), 0, 0);
-                }
+                Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditing(
+                    value.text, value.text.empty() ? 0 : value.cursor,
+                    value.text.empty() ? 0 : value.selectionLength);
             }
             else if constexpr (std::is_same_v<Event, TextEditingCandidatesEvent>)
             {
                 Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextEditingCandidates(
-                    platformEvent.candidates, platformEvent.selectedCandidate,
-                    platformEvent.horizontal);
+                    value.candidates, value.selectedCandidate, value.horizontal);
             }
             else if constexpr (std::is_same_v<Event, TouchEvent>)
             {
-                const auto fingerId = platformEvent.fingerId;
-                const bool released = platformEvent.kind == TouchEventKind::Up ||
-                                      platformEvent.kind == TouchEventKind::Cancelled;
-                const auto state = platformEvent.kind == TouchEventKind::Down
-                                       ? TouchLocationState::Pressed
-                                       : released ? TouchLocationState::Released
-                                                  : TouchLocationState::Moved;
-                if (platformEvent.kind == TouchEventKind::Down)
+                const bool released = value.kind == TouchEventKind::Up
+                    || value.kind == TouchEventKind::Cancelled;
+                const TouchLocationState state = value.kind == TouchEventKind::Down
+                    ? TouchLocationState::Pressed
+                    : released ? TouchLocationState::Released : TouchLocationState::Moved;
+                if (value.kind == TouchEventKind::Down)
                 {
                     Microsoft::Xna::Framework::Input::Touch::TouchPanel::setTouchDeviceExistsProperty(true);
                 }
-                const int touchId = released
-                                        ? try_get_touch_id(fingerId).value_or(
-                                              get_or_create_touch_id(fingerId))
-                                        : get_or_create_touch_id(fingerId);
+                const int id = released
+                    ? find_touch_id(value.fingerId).value_or(get_or_create_touch_id(value.fingerId))
+                    : get_or_create_touch_id(value.fingerId);
                 Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_setTouchState(
-                    touchId, state,
-                    to_touch_pixel_position(
-                        platformEvent.window, platformEvent.clientWidth, platformEvent.clientHeight,
-                        platformEvent.x, platformEvent.y),
-                    platformEvent.pressure);
+                    id, state, to_touch_position(value), value.pressure);
                 Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
-                    touchId, state, platformEvent.x, platformEvent.y,
-                    platformEvent.kind == TouchEventKind::Motion ? platformEvent.deltaX : 0.0f,
-                    platformEvent.kind == TouchEventKind::Motion ? platformEvent.deltaY : 0.0f);
-                if (released)
-                    release_touch_id_mapping(fingerId);
+                    id, state, value.x, value.y,
+                    value.kind == TouchEventKind::Motion ? value.deltaX : 0.0f,
+                    value.kind == TouchEventKind::Motion ? value.deltaY : 0.0f);
+                if (released) touch_ids().erase(value.fingerId);
             }
         }, event);
     }
-
 }

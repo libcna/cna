@@ -6,6 +6,7 @@
 #include "Sdl3JoystickControls.hpp"
 #include "Sdl3KeyCodes.hpp"
 #include "Sdl3Modifiers.hpp"
+#include "Sdl3Scancodes.hpp"
 #include "Sdl3TextInputTypes.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
@@ -110,6 +111,36 @@ namespace CNA::Platform::Sdl3 {
     const KeyboardSnapshot& Sdl3Keyboard::GetSnapshot() const { return snapshot_; }
 
     bool Sdl3Keyboard::HasKeyboard() const { return SDL_HasKeyboard(); }
+
+    KeyCode Sdl3Keyboard::GetKeyFromScancode(const Scancode scancode) const
+    {
+        return ToKeyCode(SDL_GetKeyFromScancode(
+            ToSdlScancode(scancode), SDL_KMOD_NONE, true));
+    }
+
+    std::string Sdl3Keyboard::GetScancodeName(const Scancode scancode) const
+    {
+        const char* name = SDL_GetScancodeName(ToSdlScancode(scancode));
+        return name != nullptr ? name : "";
+    }
+
+    Scancode Sdl3Keyboard::GetScancodeFromName(const std::string& name) const
+    {
+        return ToScancode(SDL_GetScancodeFromName(name.c_str()));
+    }
+
+    std::string Sdl3Keyboard::GetKeyName(const Scancode scancode) const
+    {
+        const SDL_Keycode keycode = SDL_GetKeyFromScancode(
+            ToSdlScancode(scancode), SDL_KMOD_NONE, true);
+        const char* name = SDL_GetKeyName(keycode);
+        return name != nullptr ? name : "";
+    }
+
+    KeyCode Sdl3Keyboard::GetKeyFromName(const std::string& name) const
+    {
+        return ToKeyCode(SDL_GetKeyFromName(name.c_str()));
+    }
 
     // --- mouse (PLAT-80/81) --------------------------------------------------------------------
 

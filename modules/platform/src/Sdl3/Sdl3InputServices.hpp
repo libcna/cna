@@ -31,6 +31,16 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] const KeyboardSnapshot& GetSnapshot() const override;
         /** @brief Gets whether a keyboard is connected. @return True if at least one is present. */
         [[nodiscard]] bool HasKeyboard() const override;
+        /** @brief Resolves a physical key through SDL's active layout. */
+        [[nodiscard]] KeyCode GetKeyFromScancode(Scancode scancode) const override;
+        /** @brief Gets SDL's stable physical-key name. */
+        [[nodiscard]] std::string GetScancodeName(Scancode scancode) const override;
+        /** @brief Resolves SDL's physical-key name. */
+        [[nodiscard]] Scancode GetScancodeFromName(const std::string& name) const override;
+        /** @brief Gets SDL's active-layout key name. */
+        [[nodiscard]] std::string GetKeyName(Scancode scancode) const override;
+        /** @brief Resolves SDL's active-layout key name. */
+        [[nodiscard]] KeyCode GetKeyFromName(const std::string& name) const override;
 
     private:
         KeyboardSnapshot snapshot_;

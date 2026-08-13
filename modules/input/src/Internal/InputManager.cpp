@@ -2,16 +2,13 @@
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Internal/Input/GestureDetector.hpp"
+#include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <string>
 #include <unordered_set>
-
-#ifdef __ANDROID__
-#include <SDL3/SDL.h>
-#endif
 
 namespace CNA::Internal::Input
 {
@@ -190,8 +187,9 @@ namespace CNA::Internal::Input
                 keyList += std::to_string(static_cast<int>(k));
                 keyList += ' ';
             }
-            SDL_Log("[Keyboard] GetKeyboardState: pressed=%zu [%s]",
-                    pressedKeys.size(), keyList.c_str());
+            CNA::Logger::Debug(
+                "[Keyboard] GetKeyboardState: pressed="
+                + std::to_string(pressedKeys.size()) + " [" + keyList + "]");
         }
 #endif
         return Microsoft::Xna::Framework::Input::KeyboardState(pressedKeys);

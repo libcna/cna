@@ -170,6 +170,14 @@ namespace CNA::Platform {
         return names[0];  // Unknown is the first entry
     }
 
+    Scancode ScancodeFromString(const std::string& name)
+    {
+        const auto found = std::find_if(
+            kScancodeNames.begin(), kScancodeNames.end(),
+            [&name](const ScancodeName& entry) { return name == entry.name; });
+        return found != kScancodeNames.end() ? found->scancode : Scancode::Unknown;
+    }
+
     bool IsKnownScancode(const std::uint16_t value)
     {
         return std::any_of(kScancodeNames.begin(), kScancodeNames.end(),

@@ -2,8 +2,10 @@
 #pragma once
 
 #include "CNA/Platform/Input/KeyCode.hpp"
+#include "CNA/Platform/Input/Scancode.hpp"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace CNA::Platform {
@@ -112,6 +114,41 @@ namespace CNA::Platform {
          * @return True if at least one keyboard is connected.
          */
         [[nodiscard]] virtual bool HasKeyboard() const = 0;
+
+        /** @brief Resolves a physical key through the active keyboard layout. */
+        [[nodiscard]] virtual KeyCode GetKeyFromScancode(Scancode scancode) const
+        {
+            (void)scancode;
+            return KeyCode::None;
+        }
+
+        /** @brief Gets the platform's stable name for a physical key. */
+        [[nodiscard]] virtual std::string GetScancodeName(Scancode scancode) const
+        {
+            (void)scancode;
+            return {};
+        }
+
+        /** @brief Resolves a physical-key name. */
+        [[nodiscard]] virtual Scancode GetScancodeFromName(const std::string& name) const
+        {
+            (void)name;
+            return Scancode::Unknown;
+        }
+
+        /** @brief Gets the active-layout name produced by a physical key. */
+        [[nodiscard]] virtual std::string GetKeyName(Scancode scancode) const
+        {
+            (void)scancode;
+            return {};
+        }
+
+        /** @brief Resolves an active-layout key name. */
+        [[nodiscard]] virtual KeyCode GetKeyFromName(const std::string& name) const
+        {
+            (void)name;
+            return KeyCode::None;
+        }
     };
 
 } // namespace CNA::Platform

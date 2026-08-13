@@ -8,7 +8,10 @@
 namespace CNA::Internal::Input
 {
     /**
-     * @brief SDL-backed key-name helpers and input-state test controls.
+     * @brief Legacy key-name helpers and input-state test controls.
+     *
+     * The name is retained for source compatibility. Native keyboard queries are delegated to
+     * `IPlatformKeyboard`; this type has no SDL dependency.
      */
     class SdlInputBridge
     {
@@ -25,7 +28,7 @@ namespace CNA::Internal::Input
 
         /**
          * @brief Test-only: resets `SdlInputBridge`'s process-wide file-static state — the
-         *        text-input suppression + control-down flags, the SDL-finger-id→touch-id map (and
+         *        text-input suppression + control-down flags, the platform-finger-id→touch-id map (and
          *        its counter), and the scancode-mode override — so tests don't leak state into
          *        one another. Not part of the runtime input path.
          */
