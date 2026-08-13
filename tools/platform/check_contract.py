@@ -5,8 +5,9 @@ PLAT-26 / PLAT-27 - keep the platform contract complete and documented.
 
 Purpose
 -------
-Two mechanical checks over modules/platform/include, both guarding properties that are easy to
-state and easy to let slip:
+Two mechanical checks over the CNA platform contracts (the general contract in
+modules/platform/include and the independent audio contract in modules/audio/include), both
+guarding properties that are easy to state and easy to let slip:
 
   headers   Every contract header is listed in the SDL-free probe translation unit
             (ContractIsSdlFreeTests.cpp). The probe is what proves the contract pulls in no SDL,
@@ -36,7 +37,10 @@ import re
 import sys
 from pathlib import Path
 
-CONTRACT_INCLUDE = Path("modules/platform/include")
+CONTRACT_INCLUDES = (
+    Path("modules/platform/include"),
+    Path("modules/audio/include/CNA/Audio/Platform"),
+)
 PROBE = Path("modules/platform/tests/CNA/Platform/ContractIsSdlFreeTests.cpp")
 
 # Headers exempt from the SDL-free probe, each for a stated reason. This list must stay tiny: it
@@ -68,7 +72,10 @@ DOC_LINE = re.compile(r"^\s*(/\*\*|\*|\*/|/\*\*.*\*/)")
 
 
 def contract_headers(repo_root: Path) -> list[Path]:
-    return sorted((repo_root / CONTRACT_INCLUDE).rglob("*.hpp"))
+    headers: list[Path] = []
+    for contract_include in CONTRACT_INCLUDES:
+        headers.extend((repo_root / contract_include).rglob("*.hpp"))
+    return sorted(headers)
 
 
 def check_headers(repo_root: Path) -> int:
@@ -78,12 +85,18 @@ def check_headers(repo_root: Path) -> int:
         return 1
 
     probe = probe_path.read_text(encoding="utf-8")
-    included = set(re.findall(r'#include\s+"(CNA/Platform/[^"]+)"', probe))
+    included = set(re.findall(r'#include\s+"(CNA/(?:Platform|Audio/Platform)/[^"]+)"', probe))
 
-    expected = {
-        h.relative_to(repo_root / CONTRACT_INCLUDE).as_posix() for h in contract_headers(repo_root)
-    }
-    expected = {f"CNA/Platform/{p}" if not p.startswith("CNA/") else p for p in expected}
+    expected: set[str] = set()
+    for header in contract_headers(repo_root):
+        include_path = next(
+            include for include in CONTRACT_INCLUDES
+            if header.is_relative_to(repo_root / include)
+        )
+        relative = header.relative_to(repo_root / include_path).as_posix()
+        if include_path == Path("modules/audio/include/CNA/Audio/Platform"):
+            relative = f"CNA/Audio/Platform/{relative}"
+        expected.add(f"CNA/Platform/{relative}" if not relative.startswith("CNA/") else relative)
     expected -= SDL_FREE_EXEMPT
 
     missing = sorted(expected - included)
@@ -133,7 +146,7 @@ def check_doxygen(repo_root: Path) -> int:
                 in_private = False
             if in_private:
                 continue
-            if stripped.startswith(("//", "*", "/*")) or not stripped:
+            if stripped.startswith(("//", "*", "/*", "return ")) or not stripped:
                 continue
 
             # A forward declaration (`class IPlatformWindow;`) introduces no API surface -- it

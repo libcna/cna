@@ -10,6 +10,7 @@
 // tools/platform/check_contract.py keeps the include list below complete, so a newly added
 // contract header cannot quietly escape the check by not being listed.
 
+#include "CNA/Audio/Platform/IAudioDevice.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformGlContext.hpp"

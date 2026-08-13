@@ -456,6 +456,14 @@ if(CNA_BUILD_TESTS)
     cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
         LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
+    # plan_platform.md PLAT-91: audio has its own platform contract and selection axis rather
+    # than inheriting from CNA::Platform. Keep its native-SDK-free/lifecycle/buffer-granularity
+    # contract visible as a dedicated CTest; future SDL3 and NULL conformance cases join this
+    # filter in PLAT-94/99.
+    cna_register_renderer_test(NAME CnaAudioPlatformTests
+        COMMAND CnaTests --gtest_filter=AudioDeviceContractTests.* --gtest_shuffle --gtest_repeat=3
+        LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+
     # plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
     # get one from SDL's dummy driver rather than a display server. That only works in a process
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary

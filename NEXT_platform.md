@@ -292,13 +292,12 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **Phase 6 audio continuation.** Phase 5 is complete through PLAT-90. All event-state tests now
-   drive `PlatformInputBridge`; the unused `SDL_Event` compatibility adapter and its non-SDL
-   fallback are deleted, native mapping coverage lives at the SDL3 edge, and the sole retained
-   full-effect haptic recorder is explicitly documented as PLAT-77/84's narrow survivor rather
-   than a platform-service substitute. Continue with **PLAT-91**, defining the independent
-   whole-buffer `CNA::Audio::Platform::IAudioDevice` contract without putting per-sample calls
-   behind a virtual interface.
+2. **Phase 6 audio continuation.** PLAT-91 established the independent, SDL-free playback
+   contract: negotiated PCM formats and one `FillBuffer` dispatch per complete interleaved
+   buffer, with callback ownership bounded by open/close. Its dedicated CTest passes under all
+   three general-platform selections, and the contract completeness/Doxygen gate now covers the
+   audio root too. Continue with **PLAT-92**, defining the capability-gated recording-device
+   contract needed by `Microphone` without mixing capture lifecycle into playback.
 
 ---
 
