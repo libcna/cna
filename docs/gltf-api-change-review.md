@@ -405,25 +405,21 @@ also not a regression — the stock effects behave exactly as they always have, 
 had colour management to lose. The proper fix is a colour-managed render target, which is option A's
 other half and belongs with the `SurfaceFormat` work, not here.
 
-**What could not be verified here, stated plainly.** `EasyGLRenderer.cpp` **was not compiled** while
-making this change. The EasyGL family builds against sibling checkouts (`../easy-gl`, itself needing
-`../meta-gl`) that this working tree does not have, so a renderer-configured build cannot be
-configured at all and the STUB build the test suite uses does not compile that file. What *was*
-verified: the header compiles, the C++ transfer is tested against the specification, and the one
-genuinely non-obvious construct — splicing a macro of string literals into a shader-source
-concatenation — is reproduced by `SrgbTransferTest.TheMacroSplicesIntoShaderSourceConcatenation`.
-That test exists because the first version of the header used a `const char*` variable, which
-**cannot** join adjacent literals and would not have compiled. The remaining risk is ordinary
-compile error in a file whose changes are string literals, one `int` member and one `set_uniform`
-call whose 3-float overload the same file already uses; a session with the sibling checkouts should
-build `OPENGLES3` once to close it.
+**Renderer verification.** `EasyGLRenderer.cpp` now compiles in a real OPENGLES3 configuration,
+and its rigid and skinned PBR programs both execute in registered framebuffer tests. The focused
+`GLTF-212` witness produces the independently calculated sRGB-encoded bytes and compares four
+golden regions on both programs. The macro-splicing unit test remains valuable: the first version
+used a `const char*` variable, which **cannot** join adjacent shader-source literals and would not
+have compiled. The remaining colour-space gap is narrower: current pixel textures use endpoint
+colours, so a mid-grey base-colour/emissive texture still has to discriminate the decode itself.
 
 **Test.** `SrgbTransferTests` holds the C++ transfer to the specification's own values — endpoints,
 mid-grey, both knees evaluated branch-against-branch, a 256-level round trip, and the no-clamp
 property — and checks the GLSL declares both functions with the same constants. `GltfConformanceL6`
 asserts every PBR draw in the corpus declares both maps sRGB and the encode on, and that the three
-flags move independently. What cannot be tested here is the shader executing: `GLTF-009` is blocked
-on a 3D-capable renderer (§5.3 of `docs/gltf-conformance.md`), so the pixel-level proof waits.
+flags move independently. Focused EasyGL framebuffer tests now prove the shader executes and the
+output encode is applied exactly once. The mid-grey texture-decode witness and the corpus-wide L7
+matrix remain open (§5.3 of `docs/gltf-conformance.md`).
 
 ---
 
@@ -479,7 +475,7 @@ realistic number of fixtures could match for coverage.
 texture at all** — the generator has no image support yet, and `GLTF-190`'s reference checkerboard
 is what several texture tasks are waiting on. So the mapping and the wiring are tested, and "an
 imported textured part ends up with the sampler its file declared" is not. `GLTF-203`'s other half,
-`uv-out-of-range-*` at L7, is blocked on `GLTF-009` regardless.
+`uv-out-of-range-*` at L7, remains part of the open `GLTF-009` corpus-image work.
 
 ---
 

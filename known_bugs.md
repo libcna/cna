@@ -193,14 +193,16 @@ own ledger so the conformance suite keeps asserting the current behaviour:
 |---|---|---|---|
 | `GLTF-241` | A primitive with `COLOR_0` **and** a metallic-roughness material cannot be imported as the file asks: no CNA vertex layout carries a colour alongside a tangent and no PBR shader reads a colour stream, so it imports through the non-PBR path with its colours and without its material. The stride-24 layout it lands on has no normal slot either, so an authored `NORMAL` is discarded and the primitive cannot be lit at all. Both losses are now reported by name rather than silent. | `mat-vertex-color-pbr` | `GLTF-238`/`GLTF-241` |
 
-Two open glTF-side items remain, both **environment-blocked** rather than undiagnosed:
+Two environment/external-scope residues remain named rather than hidden:
 
-* `EasyGLRenderer::ApplyLayout`'s silent position-only fallback for an unlisted vertex stride
-  (`GLTF-157`). The importer's half is fixed — an unlisted stride now throws instead of returning
-  an empty buffer — but the renderer file needs sibling `../easy-gl` and `../meta-gl` checkouts to
-  compile, and an unverified renderer change is not a fix.
+* Renderer context-loss recovery (`GLTF-439`) cannot be measured here because the available
+  renderers expose only a no-op simulation hook.
 * The glTF viewer's own defect list lives in `openeggbert/cna-gltf-viewer` (`GLTF-421`), a separate
   repository.
+
+The former EasyGL unknown-stride defect (`GLTF-157`) is closed: a real OPENGLES3 build now runs a
+registered test proving an unlisted stride is rejected by name instead of silently bound as
+position-only.
 
 ## LLGL post-audit disposition (2026-08-09)
 

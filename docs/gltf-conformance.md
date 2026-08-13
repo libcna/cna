@@ -196,7 +196,7 @@ pass for its fixture. Implemented so far:
 | **L4** | world-space vertex positions after node composition | implemented — `EvaluateWorldPositionsEXT` | `GLTF-006` |
 | **L5** | byte-exact generated vertex/index buffers | implemented — `CompareVertexBytesEXT` / `CompareIndexBytesEXT` | `GLTF-007` |
 | **L6** | effect parameters actually bound for a draw | implemented — `CaptureDrawParamsEXT` | `GLTF-008` |
-| **L7** | rendered pixels vs a golden PNG | not implemented — needs a 3D-capable renderer | `GLTF-009` |
+| **L7** | rendered pixels vs a golden PNG | focused EasyGL tests implemented; corpus rung open | `GLTF-009` |
 
 The helpers are **test scope only** — they live under `modules/content/tests/CNA/Internal/GltfImport/`
 in namespace `CnaTest::GltfOracle`, are compiled only into `CnaTests`, and are not part of the CNA
@@ -414,8 +414,9 @@ directions: a new `Gltf*` suite matching no rung fails the run rather than quiet
 the label, and a rung naming a suite that no longer exists fails rather than quietly running zero
 tests.
 
-There is no `L7` entry. It appears when a renderer with a real 3D pipeline is configured; see
-§5.3.
+There is no **corpus-wide** `L7` entry. Focused renderer CTests may compare their own golden PNGs,
+but the generated glTF corpus does not yet have the fixed camera/light rig and image matrix
+`GLTF-009` requires; see §5.3.
 
 #### Reading a failure: the layer, the fixture, the field, the delta (`GLTF-402`)
 
@@ -708,21 +709,26 @@ Two entries in the table are honest boundaries rather than coverage:
   gap deliberately, so it cannot be crossed silently in either direction: when `GLTF-230` wires the
   blend and cutoff state, that test fails and has to be updated on purpose.
 
-### 5.3 Why L7 is not implemented
+### 5.3 Why corpus-wide L7 remains open
 
-`GLTF-009`'s acceptance is *deterministic PNGs across two runs on `OPENGLES3`*. It is not blocked by
-design work; it is blocked by the renderer the conformance suite runs on. `STUB` has no 3D pipeline
-at all — that is exactly why the repository's `GraphicsDeviceCapability`, `TextureCube` and
-`XnbBuiltInReader` suites already fail there, and why `ModelMesh::Draw`'s own
-`Ensure3DSupported()` gate exists. No image can be produced, so no image can be compared, and a
-"golden" captured from a renderer that draws nothing would be a golden bug of exactly the kind
-`docs/gltf-center-collapse-verdict.md` §5 warns about.
+`GLTF-009`'s acceptance is *deterministic PNGs across two runs on `OPENGLES3`*. An OPENGLES3
+configuration is now available and genuinely rasterises: the registered rigid and identity-skinned
+EasyGL PBR golden tests both render, read the framebuffer and compare four 8×8 PNG regions. The
+`GLTF-212` refresh also gives a discriminating colour-space witness: the former linear-space byte
+oracle `(64,74,87)` becomes `(137,146,158)` after the independently calculated sRGB OETF, and both
+programs produce the latter. Thus `GLTF-009` is open work, no longer an environment blocker.
+
+What those focused tests do **not** provide is the corpus rung: generated fixtures still need a
+fixed camera/light rig, a documented per-renderer tolerance, a reproducible capture path and the
+two-run determinism check. Registering an existing non-corpus demo under an L7-shaped name would
+make the ladder look complete without testing the corpus. `STUB` still cannot be used as a shortcut:
+it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
+bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.
 
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
-directly. When a GL-capable configuration is available, `GLTF-009` adds the L7 rung and
-`cmake/UnitTests.cmake` gains a `CnaGltfConformanceL7` entry beside the others — the label's shape
-already accommodates it.
+directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a
+`CnaGltfConformanceL7` entry beside the others — the label's shape already accommodates it.
 
 ---
 

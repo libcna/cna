@@ -10,10 +10,9 @@ session needs to start work without re-deriving the state.
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
 - **Working document:** `plan_gltf.md`, 460 numbered rows. **378 closed (`✔` 252, `✅` 126),
-  64 `⬜` remaining.** The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+  65 `⬜` remaining.** The other 17 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
-  `GLTF-421`), and 2 `⛔` (`GLTF-009` and
-  `GLTF-439`, each blocked by this environment for a stated reason).
+  `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
   (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
   `partially-remediated`: `GLTF-241`, whose residue is owned by `GLTF-238`.
@@ -153,15 +152,17 @@ These are not style preferences; they are what made the campaign find things.
 
 ## What is blocked in this environment, and why
 
-**45 of the 81 remaining rows cannot be finished here.** Do not mark them done, and do not work
-around them by weakening their acceptance. Recounted 2026-08-13: `HEADLESS` was added as a second
-renderer, which moved several rows out of the "second renderer" bucket, and `GLTF-404`/`GLTF-419`
-turned out not to need CI at all.
+The table below is a work/residue index, not a disjoint count: some rows depend on more than one
+entry. Do not mark blocked work done, and do not work around it by weakening acceptance. Rechecked
+2026-08-14: `HEADLESS` is available as a second renderer and `OPENGLES3` now builds and genuinely
+rasterises on Mesa. That lifts the old blanket L7 blocker; the corpus L7 harness itself is open
+work (`GLTF-009`), while acceptances that explicitly require Vulkan or another renderer remain
+blocked on those backends.
 
 | Blocker | Rows | Note |
 |---|---|---|
-| **L7 / rendered image** | 18 — `GLTF-016`, `175`, `176`, `182`, `189`, `213`, `218`, `230`, `244`, `264`, `268`, `340`, `343`, `344`, `386`, `387`, `390`, `397` | Needs a renderer with a real 3D pipeline. This environment builds `STUB` and `HEADLESS`, neither of which rasterises. `GLTF-343`/`344` now reach shader-ready F0/F90 at L6; consuming those values in every renderer is the blocked residue. |
-| **second/third renderer** | 10 — `GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs the comparison; `OPENGLES3`/`VULKAN` need sibling checkouts and a GPU. `GLTF-017`/`382`/`383`/`388` were closable *because* `HEADLESS` builds here. |
+| **corpus L7 work** | 17 — `GLTF-016`, `175`, `176`, `182`, `189`, `218`, `230`, `244`, `264`, `268`, `340`, `343`, `344`, `386`, `387`, `390`, `397` | No longer environment-blocked on EasyGL. Focused PBR golden tests rasterise successfully, but these rows still need their stated fixture/harness work; do not infer corpus coverage from four small regions. `GLTF-213` is listed below because its acceptance explicitly requires Vulkan too. |
+| **second/third renderer** | 11 — `GLTF-158`, `160`, `168`, `213`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs L1–L6 comparisons. OPENGLES3 is now present; Vulkan and the platform-specific renderers are not. Some EasyGL-only halves are therefore actionable even where the whole cross-renderer row is not. |
 | **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
 | **`cna-gltf-viewer` repo** | 12 — `GLTF-323`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
 | **third-party assets** | 7 — `GLTF-013`, `014`, `018`, `405`–`407`, `411` | Needs pinned, licence-reviewed external sample models. |
