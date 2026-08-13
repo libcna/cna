@@ -594,7 +594,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**81 of the 88** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**91 of the 98** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. The seven without one are the fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`); their manifests record
@@ -779,12 +779,22 @@ written for this document: two descriptions of the same fixture are two things t
 | `normal-absent` | normals | L1, L2, L3, L4 | absent NORMAL; computed flat normals; non-planar triangle |
 | `normal-quantized` | normals | L1, L2, L3, L4, L5 | NORMAL as normalized SHORT; §3.6.2.2 normalized decode; authored normal passed through byte-exact |
 | `xf-identity` | transforms | L1, L2, L3, L4 | node without transform; single scene root |
-| `xf-shared-mesh` | transforms | L1, L2, L3, L4 | node.translation; mesh instancing; two scene roots |
-| `xf-parent-child` | transforms | L1, L2, L3, L4 | node.scale; node.translation; parent-child composition |
-| `xf-matrix-node` | transforms | L1, L2, L3, L4 | node.matrix; column-major matrix layout |
+| `xf-translation` | transforms | L1, L2, L3, L4 | node translation |
+| `xf-scale-uniform` | transforms | L1, L2, L3, L4 | uniform node scale; normal matrix agrees with the world 3x3 |
 | `xf-scale-nonuniform` | transforms | L1, L2, L3, L4 | node.scale non-uniform; normal matrix; inverse-transpose normal transform |
+| `xf-rot-x90` | transforms | L1, L2, L3, L4 | node rotation; quaternion about +X |
+| `xf-rot-y90` | transforms | L1, L2, L3, L4 | node rotation; quaternion about +Y; handedness |
+| `xf-rot-z90` | transforms | L1, L2, L3, L4 | node rotation; quaternion about +Z; axis-aligned quarter turn |
+| `xf-trs-order` | transforms | L1, L2, L3, L4 | TRS composition order; scale then rotate then translate |
+| `xf-matrix-node` | transforms | L1, L2, L3, L4 | node.matrix; column-major matrix layout |
+| `xf-matrix-vs-trs` | transforms | L1, L2, L3, L4 | matrix vs TRS equivalence; two authorings of one transform |
+| `xf-parent-child` | transforms | L1, L2, L3, L4 | node.scale; node.translation; parent-child composition |
+| `xf-deep-chain` | transforms | L1, L2, L3, L4 | five-deep node chain; accumulating composition |
 | `xf-negative-scale` | transforms | L1, L2, L3, L4 | node.scale negative; mirroring; winding order |
 | `xf-mirror-child` | transforms | L1, L2, L3, L4 | mirroring; hierarchical composition; mesh instancing |
+| `xf-shared-mesh` | transforms | L1, L2, L3, L4 | node.translation; mesh instancing; two scene roots |
+| `xf-transform-only` | transforms | L1, L2, L3, L4 | transform-only node; mesh on a child |
+| `xf-multi-root` | transforms | L1, L2, L3, L4 | three scene roots; multi-root scene |
 | `mat-factor-only-gold` | materials | L1, L2, L3 | pbrMetallicRoughness factors; baseColorFactor; alphaMode BLEND; doubleSided; no texture maps |
 | `mat-emissive-strength` | materials | L1, L2, L3 | KHR_materials_emissive_strength; emissiveFactor; HDR emissive above 1; no texture maps |
 | `mat-vertex-color-pbr` | materials | L1, L2, L3 | COLOR_0 with a PBR material; unsupported material model; import report |

@@ -12,14 +12,14 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 88,
+  "distinctAssetCount": 98,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 5,
     "component-types": 4,
     "topology": 8,
     "normals": 2,
-    "transforms": 7,
+    "transforms": 17,
     "materials": 10,
     "textures": 3,
     "skinning": 10,
@@ -619,11 +619,9 @@
       "auditFixture": null
     },
     {
-      "id": "xf-shared-mesh",
+      "id": "xf-translation",
       "owningGroup": "transforms",
-      "referencingGroups": [
-        "scenes"
-      ],
+      "referencingGroups": [],
       "validatedLayers": [
         "L1",
         "L2",
@@ -631,11 +629,140 @@
         "L4"
       ],
       "features": [
-        "node.translation",
-        "mesh instancing",
-        "two scene roots"
+        "node translation"
       ],
-      "auditFixture": "f1"
+      "auditFixture": null
+    },
+    {
+      "id": "xf-scale-uniform",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "uniform node scale",
+        "normal matrix agrees with the world 3x3"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-scale-nonuniform",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node.scale non-uniform",
+        "normal matrix",
+        "inverse-transpose normal transform"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-rot-x90",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node rotation",
+        "quaternion about +X"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-rot-y90",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node rotation",
+        "quaternion about +Y",
+        "handedness"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-rot-z90",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node rotation",
+        "quaternion about +Z",
+        "axis-aligned quarter turn"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-trs-order",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "TRS composition order",
+        "scale then rotate then translate"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-matrix-node",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node.matrix",
+        "column-major matrix layout"
+      ],
+      "auditFixture": "f13"
+    },
+    {
+      "id": "xf-matrix-vs-trs",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "matrix vs TRS equivalence",
+        "two authorings of one transform"
+      ],
+      "auditFixture": null
     },
     {
       "id": "xf-parent-child",
@@ -655,7 +782,7 @@
       "auditFixture": "f2"
     },
     {
-      "id": "xf-matrix-node",
+      "id": "xf-deep-chain",
       "owningGroup": "transforms",
       "referencingGroups": [],
       "validatedLayers": [
@@ -665,25 +792,8 @@
         "L4"
       ],
       "features": [
-        "node.matrix",
-        "column-major matrix layout"
-      ],
-      "auditFixture": "f13"
-    },
-    {
-      "id": "xf-scale-nonuniform",
-      "owningGroup": "transforms",
-      "referencingGroups": [],
-      "validatedLayers": [
-        "L1",
-        "L2",
-        "L3",
-        "L4"
-      ],
-      "features": [
-        "node.scale non-uniform",
-        "normal matrix",
-        "inverse-transpose normal transform"
+        "five-deep node chain",
+        "accumulating composition"
       ],
       "auditFixture": null
     },
@@ -720,6 +830,57 @@
         "mirroring",
         "hierarchical composition",
         "mesh instancing"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-shared-mesh",
+      "owningGroup": "transforms",
+      "referencingGroups": [
+        "scenes"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "node.translation",
+        "mesh instancing",
+        "two scene roots"
+      ],
+      "auditFixture": "f1"
+    },
+    {
+      "id": "xf-transform-only",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "transform-only node",
+        "mesh on a child"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "xf-multi-root",
+      "owningGroup": "transforms",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "three scene roots",
+        "multi-root scene"
       ],
       "auditFixture": null
     },
@@ -3728,6 +3889,31 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "xf-deep-chain.expected.json",
+      "bytes": 6554,
+      "sha256": "ecc50f88d816dd1794e6f473c088e91ebfe0c0d8446e2cbd23af6ec3e4c456ae"
+    },
+    {
+      "path": "xf-deep-chain.glb",
+      "bytes": 1052,
+      "sha256": "3b039fc35e554dba6bae3a376eaee9695d48b21eb4fdff9cc83a3bc361d12b90"
+    },
+    {
+      "path": "xf-deep-chain.gltf",
+      "bytes": 2069,
+      "sha256": "1a905138ff36db046ed1e97d273b07ea0535f7258593af68c9026b0c494ee81a"
+    },
+    {
+      "path": "xf-deep-chain.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-deep-chain.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "xf-identity.expected.json",
       "bytes": 6373,
       "sha256": "b28ae7554920985effc1249f9c8291a21b4fbcd655f8c919802a58af12aef60b"
@@ -3778,6 +3964,31 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "xf-matrix-vs-trs.expected.json",
+      "bytes": 7799,
+      "sha256": "3c0056fc5c28b4717f677aa780bb2eaac5481c7bf9a90be64a3e1b4834f15e4e"
+    },
+    {
+      "path": "xf-matrix-vs-trs.glb",
+      "bytes": 1012,
+      "sha256": "dd1c0857489144ebf3444762a3e2d1db6303f2b1258dc4bc80fa955e5f3fa0de"
+    },
+    {
+      "path": "xf-matrix-vs-trs.gltf",
+      "bytes": 1979,
+      "sha256": "b70cb884ff58c321ac0f3190ad98a1de08a9a67459a4a1f3ac44a4c47d433bfc"
+    },
+    {
+      "path": "xf-matrix-vs-trs.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-matrix-vs-trs.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "xf-mirror-child.expected.json",
       "bytes": 7973,
       "sha256": "ac236fa7e15e314fe60497f1391e646fb573eef21a7e28ebc35a94338c1ed2d5"
@@ -3799,6 +4010,31 @@
     },
     {
       "path": "xf-mirror-child.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "xf-multi-root.expected.json",
+      "bytes": 7779,
+      "sha256": "10615ca60db20d4e901cb519925e2a48b47614a6173599699d3511f8fa3b5d02"
+    },
+    {
+      "path": "xf-multi-root.glb",
+      "bytes": 892,
+      "sha256": "b55470a4f0f6895e273396889a27aabf7bb17a670544a8cba120a8d27126daa4"
+    },
+    {
+      "path": "xf-multi-root.gltf",
+      "bytes": 1687,
+      "sha256": "8790a96ff7d31b3c8883e586d8d00e91017388222fdf5c4b34235b0289ed13e2"
+    },
+    {
+      "path": "xf-multi-root.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-multi-root.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
@@ -3853,6 +4089,81 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "xf-rot-x90.expected.json",
+      "bytes": 6574,
+      "sha256": "2e5524653721afcf982cd0ad2edd5a9ddeae35bb5e570a2e9ca76d0b35ecdee1"
+    },
+    {
+      "path": "xf-rot-x90.glb",
+      "bytes": 840,
+      "sha256": "5daac4c7af9e943e5a537b9cfd3129552f5682c744eb68dd0f0574a212a9dadd"
+    },
+    {
+      "path": "xf-rot-x90.gltf",
+      "bytes": 1531,
+      "sha256": "15c2b5605d43e7228900fe5de34fc0a3562f83611cb7ab7468e19741d322a874"
+    },
+    {
+      "path": "xf-rot-x90.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-rot-x90.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "xf-rot-y90.expected.json",
+      "bytes": 6561,
+      "sha256": "abc1f3b54891a9c3620b2b3b54b7dc629529b472a546951596c2c602a18c2556"
+    },
+    {
+      "path": "xf-rot-y90.glb",
+      "bytes": 840,
+      "sha256": "6d9090c033f02492ab0cc0a157d4824e11c8781af5b658a94ef7444ce1ac7c5c"
+    },
+    {
+      "path": "xf-rot-y90.gltf",
+      "bytes": 1531,
+      "sha256": "7fa3084552c5857d2bde4c720e2f7a77cb69d0b2e48dcf5c494e2f32c3278da1"
+    },
+    {
+      "path": "xf-rot-y90.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-rot-y90.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "xf-rot-z90.expected.json",
+      "bytes": 6678,
+      "sha256": "81dc0ae7fe7c330fcde49ba5d53b3c2a8187d58df538eb38f9fa9115d50b2e8e"
+    },
+    {
+      "path": "xf-rot-z90.glb",
+      "bytes": 840,
+      "sha256": "8e3fd931417e9a60b39613984024fa863966c86973c54f8bb13a293950767f65"
+    },
+    {
+      "path": "xf-rot-z90.gltf",
+      "bytes": 1531,
+      "sha256": "2f3fba74ec3e87d8cb7a6aa22698b299e70aa0ea69cfc080fce1677100fd7ff2"
+    },
+    {
+      "path": "xf-rot-z90.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-rot-z90.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "xf-scale-nonuniform.expected.json",
       "bytes": 6710,
       "sha256": "5cd7083c291dcdf599efeb0b6300af687d9f64b2583518ac919a64e682c834c2"
@@ -3878,6 +4189,31 @@
       "sha256": "188749347a148d3d53d4e2b7d26661d101d1623dc25e1d2e6855a1c6d7a1bbff"
     },
     {
+      "path": "xf-scale-uniform.expected.json",
+      "bytes": 6575,
+      "sha256": "987b1ea2ac666294149acb3d02c7ecd3b55fdd7d2f385f22de7744f98993cc8e"
+    },
+    {
+      "path": "xf-scale-uniform.glb",
+      "bytes": 804,
+      "sha256": "12aff3aff67f41c854935e70bf98f5d8aa9afb608ad21e5f23b395245b44b6bc"
+    },
+    {
+      "path": "xf-scale-uniform.gltf",
+      "bytes": 1485,
+      "sha256": "c0e6dfe816ac71ce50d4a742182269dd47b19a791f65831c65fc899724c5770c"
+    },
+    {
+      "path": "xf-scale-uniform.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-scale-uniform.vb.bin",
+      "bytes": 144,
+      "sha256": "188749347a148d3d53d4e2b7d26661d101d1623dc25e1d2e6855a1c6d7a1bbff"
+    },
+    {
       "path": "xf-shared-mesh.expected.json",
       "bytes": 9322,
       "sha256": "d4715685af04be99ffcb805cb03022f4dc759d3bbda85bb2af7e61baf2f233a2"
@@ -3899,6 +4235,81 @@
     },
     {
       "path": "xf-shared-mesh.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "xf-transform-only.expected.json",
+      "bytes": 6488,
+      "sha256": "b22695ef057fd281ade506ebf8653741ad7b8f07a0e1db25eae46663dcd4f8df"
+    },
+    {
+      "path": "xf-transform-only.glb",
+      "bytes": 872,
+      "sha256": "f671639e763641245041e86e15c9c3a0784312da7c9af73f561a1645675d1594"
+    },
+    {
+      "path": "xf-transform-only.gltf",
+      "bytes": 1638,
+      "sha256": "57da20b2f06d25ef22fa01fc4a820e02e3cae96522b454c36614d083a4d72de2"
+    },
+    {
+      "path": "xf-transform-only.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-transform-only.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "xf-translation.expected.json",
+      "bytes": 6370,
+      "sha256": "1659b955d038580403be1cce98f53c7e01feda94cc9206df5c26b95e20a01757"
+    },
+    {
+      "path": "xf-translation.glb",
+      "bytes": 808,
+      "sha256": "4725dd39816bd729f123d4a1d42147e84639627eae7e744ea795b868e8736965"
+    },
+    {
+      "path": "xf-translation.gltf",
+      "bytes": 1491,
+      "sha256": "f624f0b45052b60fb9fed475246ea3478651b8801ebca232da7bc3aec4c97fb0"
+    },
+    {
+      "path": "xf-translation.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-translation.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "xf-trs-order.expected.json",
+      "bytes": 6694,
+      "sha256": "eb72d478a851a163c6393dd067ed719458d1581c208d7c82022c8e743740a710"
+    },
+    {
+      "path": "xf-trs-order.glb",
+      "bytes": 892,
+      "sha256": "39e3b34ab75c62eeddcd197f142286356c62111ad8ec6f3c6c03a4aecbd40c77"
+    },
+    {
+      "path": "xf-trs-order.gltf",
+      "bytes": 1665,
+      "sha256": "541964d5f3f06e9dab5955ada0eae7be0a2ed8c3e65388f60a2fe6c6fc4bc73f"
+    },
+    {
+      "path": "xf-trs-order.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "xf-trs-order.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     }
