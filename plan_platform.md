@@ -573,6 +573,31 @@ This plan is complete when **all** of the following hold:
 8. `docs/platform-abstraction.md` documents the contract well enough that a second implementation
    could be written from it without reading `Sdl3Platform`'s source.
 
+### Completion record — 2026-08-13
+
+The task ledger is closed: **154 of 155 decisions are implemented**, with **zero open rows**. The
+remaining row, PLAT-45, is deliberately marked ❌ rather than incomplete: the measured inventory
+proved CNA has no dynamic-library caller for such a service, so implementing it would add an
+unused abstraction contrary to this plan's evidence-first rule.
+
+Final verification was repeated from the completed tree rather than inferred from the individual
+task notes:
+
+| Gate | Final evidence |
+|---|---|
+| Strict platform builds | `CnaTests` builds with `CNA_PLATFORM_RATCHET_STRICT=ON` for the SDL3, HEADLESS and TERMINAL selections. |
+| Shared contract and event oracle | SDL3: **80 passed / 1 applicable surface-presentation skip**; HEADLESS: **54/54 passed**; TERMINAL: **54/54 passed**. |
+| Broad SDL3 regression run | With the five socket-dependent suites excluded because this sandbox forbids their bind/socket operations: **6,521 passed / 55 capability skips**. Six preference/storage tests initially hit the sandbox's read-only home directory and then passed **6/6** with an isolated writable `XDG_DATA_HOME`. No product failure remained unexplained. |
+| Display-independent regression run | Earlier complete HEADLESS execution, with the same five sandbox-blocked network suites excluded: **6,356 passed / 53 capability skips / 0 failed**. |
+| Contract boundary | **623/623** public declarations documented; all **28** contract headers covered by the SDL-free probe; all **921** SDL identifiers classified; renderer allowlist exactly `fna3d`, `freedirect`, `sdl-gpu`, `sdl-renderer`; production ratchet **0 files / 0 references** outside the allowlist. |
+| Hot paths and native integration | **0** platform calls inside hot loops across **1,279** production sources and **175** contract methods; the non-production manifest is exact at **273 files / 2,256 references**. |
+| Performance | PLAT-7/120's paired p50/p95 CI gate passes all **16/16** comparisons. No slowdown is distinguishable from baseline noise; see [`docs/platform-performance.md`](docs/platform-performance.md). |
+
+The five excluded network suites are `ENetBackendTest`, `ENetDiscoveryServiceTest`,
+`ENetHostHandleTest`, `TwoProcessLoopbackTest` and `NetworkSessionTest` (**63 tests** in the prior
+unfiltered run). They failed only at sandbox-denied network operations and remain part of normal
+unrestricted CI; they were excluded here, not reclassified as passing or removed from the suite.
+
 ---
 
 ## 12. Possible future implementations (NOT in scope)
