@@ -6,6 +6,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
+#include <SDL3/SDL_stdinc.h>
+
 #include <algorithm>
 #include <cstring>
 #include <limits>
@@ -297,22 +299,32 @@ namespace CNA::Internal::Renderers::Fna3d
                                      MOJOSHADER_textureFilterType min,
                                      MOJOSHADER_textureFilterType mip)
         {
-            if (mag == MOJOSHADER_TEXTUREFILTER_ANISOTROPIC ||
-                min == MOJOSHADER_TEXTUREFILTER_ANISOTROPIC)
-            {
-                return FNA3D_TEXTUREFILTER_ANISOTROPIC;
-            }
-            const bool magLinear = mag == MOJOSHADER_TEXTUREFILTER_LINEAR;
-            const bool minLinear = min == MOJOSHADER_TEXTUREFILTER_LINEAR;
+            // Effect.cs treats anisotropic tokens as linear components when an effect changes
+            // an individual filter axis. Preserve that behavior instead of manufacturing an
+            // anisotropic aggregate state which the original XNA/FNA path would not select.
+            const bool magPoint = mag == MOJOSHADER_TEXTUREFILTER_POINT;
+            const bool minPoint = min == MOJOSHADER_TEXTUREFILTER_POINT;
+            const bool magLinear = mag == MOJOSHADER_TEXTUREFILTER_LINEAR ||
+                                   mag == MOJOSHADER_TEXTUREFILTER_ANISOTROPIC;
+            const bool minLinear = min == MOJOSHADER_TEXTUREFILTER_LINEAR ||
+                                   min == MOJOSHADER_TEXTUREFILTER_ANISOTROPIC;
+            const bool mipPoint = mip == MOJOSHADER_TEXTUREFILTER_NONE ||
+                                  mip == MOJOSHADER_TEXTUREFILTER_POINT;
             const bool mipLinear = mip == MOJOSHADER_TEXTUREFILTER_LINEAR ||
                                    mip == MOJOSHADER_TEXTUREFILTER_ANISOTROPIC;
+            if ((!magPoint && !magLinear) || (!minPoint && !minLinear) ||
+                (!mipPoint && !mipLinear))
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: unsupported sampler filter component.");
+            }
             if (magLinear && minLinear)
                 return mipLinear ? FNA3D_TEXTUREFILTER_LINEAR :
                                    FNA3D_TEXTUREFILTER_LINEAR_MIPPOINT;
-            if (!magLinear && !minLinear)
+            if (magPoint && minPoint)
                 return mipLinear ? FNA3D_TEXTUREFILTER_POINT_MIPLINEAR :
                                    FNA3D_TEXTUREFILTER_POINT;
-            if (!magLinear && minLinear)
+            if (magPoint && minLinear)
                 return mipLinear ? FNA3D_TEXTUREFILTER_MINLINEAR_MAGPOINT_MIPLINEAR :
                                    FNA3D_TEXTUREFILTER_MINLINEAR_MAGPOINT_MIPPOINT;
             return mipLinear ? FNA3D_TEXTUREFILTER_MINPOINT_MAGLINEAR_MIPLINEAR :
@@ -389,10 +401,25 @@ namespace CNA::Internal::Renderers::Fna3d
             // Several MojoShader parse failures are represented by static sentinel objects.
             // Their callback context is zeroed and MOJOSHADER_deleteEffect is not safe for all of
             // them in the FNA3D-pinned revision. A normally allocated parse tree always owns a
-            // resolved free callback. This guard avoids turning malformed game content into a
-            // cleanup crash; the tiny FNA3D driver wrapper is intentionally abandoned only for a
-            // sentinel result because the public FNA3D API exposes no wrapper-only free call.
+            // resolved free callback.
             return effect != nullptr && effect->ctx.f != nullptr;
+        }
+
+        void DisposeFailedNativeEffect(FNA3D_Device* device, FNA3D_Effect* effect,
+                                       const MOJOSHADER_effect* effectData)
+        {
+            if (effect == nullptr) return;
+            if (CanSafelyDisposeNativeEffect(effectData))
+            {
+                FNA3D_AddDisposeEffect(device, effect);
+                return;
+            }
+
+            // Every effect wrapper in CNA's pinned FNA3D drivers is allocated with SDL_malloc.
+            // Calling the public disposal entry point for an unexpected-EOF sentinel would make
+            // FNA3D call MOJOSHADER_deleteEffect on static storage. Free only the driver wrapper
+            // in this narrowly identified failure case; no shaders or parser allocations exist.
+            SDL_free(effect);
         }
     }
 
@@ -419,8 +446,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         catch (...)
         {
-            if (effect_ != nullptr && CanSafelyDisposeNativeEffect(effectData_))
-                FNA3D_AddDisposeEffect(device_, effect_);
+            DisposeFailedNativeEffect(device_, effect_, effectData_);
             effect_ = nullptr;
             effectData_ = nullptr;
             throw;
@@ -444,8 +470,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         catch (...)
         {
-            if (effect_ != nullptr && CanSafelyDisposeNativeEffect(effectData_))
-                FNA3D_AddDisposeEffect(device_, effect_);
+            DisposeFailedNativeEffect(device_, effect_, effectData_);
             effect_ = nullptr;
             effectData_ = nullptr;
             throw;
@@ -718,6 +743,9 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_BlendState blend = renderer_.blendState_;
         FNA3D_DepthStencilState depth = renderer_.depthStencilState_;
         FNA3D_RasterizerState rasterizer = renderer_.rasterizerState_;
+        bool separateAlphaBlend =
+            blend.colorBlendFunction != blend.alphaBlendFunction ||
+            blend.colorDestinationBlend != blend.alphaDestinationBlend;
         bool blendChanged = false;
         bool depthChanged = false;
         bool rasterizerChanged = false;
@@ -754,15 +782,19 @@ namespace CNA::Internal::Renderers::Fna3d
                     break;
                 case MOJOSHADER_RS_ZWRITEENABLE:
                     depth.depthBufferWriteEnable =
-                        state.value.valuesI[0] != 0;
+                        state.value.valuesI[0] == 1;
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_SRCBLEND:
                     blend.colorSourceBlend = ToBlend(*state.value.valuesBM);
+                    if (!separateAlphaBlend)
+                        blend.alphaSourceBlend = blend.colorSourceBlend;
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_DESTBLEND:
                     blend.colorDestinationBlend = ToBlend(*state.value.valuesBM);
+                    if (!separateAlphaBlend)
+                        blend.alphaDestinationBlend = blend.colorDestinationBlend;
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_CULLMODE:
@@ -785,7 +817,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     }
                     break;
                 case MOJOSHADER_RS_STENCILENABLE:
-                    depth.stencilEnable = state.value.valuesI[0] != 0;
+                    depth.stencilEnable = state.value.valuesI[0] == 1;
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILFAIL:
@@ -820,7 +852,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     break;
                 case MOJOSHADER_RS_MULTISAMPLEANTIALIAS:
                     rasterizer.multiSampleAntiAlias =
-                        state.value.valuesI[0] != 0;
+                        state.value.valuesI[0] == 1;
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_MULTISAMPLEMASK:
@@ -838,7 +870,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_SCISSORTESTENABLE:
-                    rasterizer.scissorTestEnable = state.value.valuesI[0] != 0;
+                    rasterizer.scissorTestEnable = state.value.valuesI[0] == 1;
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_SLOPESCALEDEPTHBIAS:
@@ -847,7 +879,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     break;
                 case MOJOSHADER_RS_TWOSIDEDSTENCILMODE:
                     depth.twoSidedStencilMode =
-                        state.value.valuesI[0] != 0;
+                        state.value.valuesI[0] == 1;
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_CCW_STENCILFAIL:
@@ -889,11 +921,12 @@ namespace CNA::Internal::Renderers::Fna3d
                 {
                     const std::uint32_t color =
                         static_cast<std::uint32_t>(state.value.valuesI[0]);
+                    // Match FNA Effect.cs exactly, including its historical byte ordering.
                     blend.blendFactor = {
+                        static_cast<std::uint8_t>((color >> 24) & 0xFF),
                         static_cast<std::uint8_t>((color >> 16) & 0xFF),
                         static_cast<std::uint8_t>((color >> 8) & 0xFF),
-                        static_cast<std::uint8_t>(color & 0xFF),
-                        static_cast<std::uint8_t>((color >> 24) & 0xFF)
+                        static_cast<std::uint8_t>(color & 0xFF)
                     };
                     blendChanged = true;
                     break;
@@ -903,6 +936,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_SEPARATEALPHABLENDENABLE:
+                    separateAlphaBlend = state.value.valuesI[0] == 1;
                     break;
                 case MOJOSHADER_RS_SRCBLENDALPHA:
                     blend.alphaSourceBlend = ToBlend(*state.value.valuesBM);
@@ -1004,7 +1038,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     case MOJOSHADER_SAMP_MAXMIPLEVEL:
                         sampler.maxMipLevel = state.value.valuesI[0]; break;
                     case MOJOSHADER_SAMP_MAXANISOTROPY:
-                        sampler.maxAnisotropy = std::max(state.value.valuesI[0], 1); break;
+                        sampler.maxAnisotropy = state.value.valuesI[0]; break;
                     default:
                         throw std::runtime_error(
                             "FNA3D compiled effect: unsupported sampler state " +

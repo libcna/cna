@@ -5,7 +5,7 @@
 - Target branch: `feature/fx`
 - Scope of this document: architecture, implementation checklist, and current delivery status
 
-## Implementation snapshot (2026-08-13)
+## Implementation snapshot (2026-08-14)
 
 The first production backend is now implemented, not merely parser-prototyped. FNA3D owns the
 native MojoShader effect; the common graphics layer owns the reflected XNA object graph and mutable
@@ -26,6 +26,15 @@ Delivered task groups:
   payload tests, plus an end-to-end ContentManager/XNB/render pixel test (`FX-040`–`FX-043`);
 - dedicated false-by-default capability gating for every non-FNA3D renderer and bounded common,
   native-reflection, pass-state and sampler-state graphs (`FX-036`, partial `FX-050`).
+
+The FNA3D state mapping has also been audited token-by-token against FNA's `Effect.cs`, including
+its historical blend-factor byte order, separate-alpha propagation rules, boolean interpretation,
+and the way anisotropic filter components collapse into the eight XNA aggregate filters. The
+targeted ASan/UBSan build executes all 27 FX/XNB/capability tests without an address-sanitizer
+failure. `FX-052` remains open because LeakSanitizer cannot operate under this managed environment's
+ptrace policy and the pinned upstream MojoShader itself reports known UBSan findings in float
+formatting and zero-length clone copies; these are recorded rather than misrepresented as a clean
+third-party sanitizer gate.
 
 Still open before the FNA3D slice can satisfy every aspirational exit criterion in this plan:
 
