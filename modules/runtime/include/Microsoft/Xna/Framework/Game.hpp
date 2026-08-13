@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Platform/PlatformCapabilities.hpp"
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollectionEventArgs.hpp"
@@ -274,6 +275,16 @@ namespace Microsoft::Xna::Framework
          */
         CNAEXT [[nodiscard]] CNA::Platform::IPlatform& GetPlatformEXT() const;
 
+        /**
+         * @brief Gets the capabilities captured from this game's platform during construction.
+         *
+         * Games use this to select optional UI/input paths once at startup.  It deliberately
+         * returns a cached value: platform capability discovery may probe a host terminal, so it
+         * must never become a per-frame virtual query.
+         */
+        CNAEXT [[nodiscard]] const CNA::Platform::PlatformCapabilities&
+        GetPlatformCapabilitiesEXT() const;
+
         /** @brief Internal loop flag matching the FNA/XNA Game implementation shape. */
         CNAEXT bool RunApplication;
 
@@ -368,6 +379,7 @@ namespace Microsoft::Xna::Framework
         // during their own construction or teardown, so the platform's lifetime has to strictly
         // contain theirs. Member order is the only thing that guarantees that.
         std::unique_ptr<CNA::Platform::IPlatform> platform_;
+        CNA::Platform::PlatformCapabilities platformCapabilities_;
         std::unique_ptr<PlatformEventBatch> eventBatch_;
 
         GameComponentCollection Components_;

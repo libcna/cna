@@ -170,6 +170,7 @@ namespace Microsoft::Xna::Framework
 
     Game::Game(std::unique_ptr<CNA::Platform::IPlatform> platform)
         : platform_(InstallPlatform(std::move(platform))),
+          platformCapabilities_(platform_->GetCapabilities()),
           eventBatch_(std::make_unique<PlatformEventBatch>()),
           Components_(),
           GraphicsDevice_(),
@@ -228,6 +229,11 @@ namespace Microsoft::Xna::Framework
     CNA::Platform::IPlatform& Game::GetPlatformEXT() const
     {
         return *platform_;
+    }
+
+    const CNA::Platform::PlatformCapabilities& Game::GetPlatformCapabilitiesEXT() const
+    {
+        return platformCapabilities_;
     }
 
     GameComponentCollection& Game::getComponentsProperty()

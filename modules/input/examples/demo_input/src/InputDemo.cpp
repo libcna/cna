@@ -13,7 +13,6 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "System/TimeSpan.hpp"
-#include "CNA/Platform/CurrentPlatform.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
@@ -74,7 +73,7 @@ InputDemo::~InputDemo()
 
 void InputDemo::LoadContent()
 {
-    platformCapabilities_ = CNA::Platform::GetCurrentPlatform().GetCapabilities();
+    platformCapabilities_ = GetPlatformCapabilitiesEXT();
     spriteBatch_ = new Graphics::SpriteBatch(getGraphicsDeviceProperty());
 
     // Create a 1×1 white pixel used for all rectangle drawing.
