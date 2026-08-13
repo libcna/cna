@@ -23,7 +23,9 @@ Target platforms: anything with a C99 compiler and OpenMP. No platform gate is d
 `cmake/RendererSelection.cmake`, matching `PORTABLEGL`.
 
 Pinned upstream: commit `36a7987e7bebfda19615ea33341b1cc0ff9c3b13` (2023-11-04), fetched and built
-from source by `cmake/ThirdPartyTinyGL.cmake`.
+from source by `cmake/ThirdPartyTinyGL.cmake`. TinyGL is zlib-style licensed with one clause plain
+zlib does not have — an acknowledgment in the product **and its documentation** is *required* — so
+`THIRD_PARTY_NOTICES.md` carries that acknowledgment and must not be dropped.
 
 ## Status
 

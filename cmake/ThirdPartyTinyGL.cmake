@@ -7,8 +7,9 @@
 #
 # Pinned at commit 36a7987e7bebfda19615ea33341b1cc0ff9c3b13 (2023-11-04, the C-Chads fork's own
 # HEAD when the TINYGL renderer landed), verified via `git ls-remote https://github.com/C-Chads/tinygl`.
-# TinyGL carries Fabrice Bellard's original permissive BSD-style licence plus the fork's additions;
-# see the upstream LICENSE file and THIRD_PARTY_NOTICES.md.
+# TinyGL is zlib-style licensed, but with one clause plain zlib does not have: an acknowledgment in
+# the product AND its documentation is REQUIRED. THIRD_PARTY_NOTICES.md carries that acknowledgment;
+# see the upstream LICENSE file for the complete text.
 #
 # Offline / air-gapped builds: pass -DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/tinygl to point at an
 # existing checkout. That is CMake's own built-in per-dependency override, so no CNA-specific

@@ -111,3 +111,25 @@ project (MIT licensed). The generated header checked in at
 `src/CNA/Internal/Backends/Sokol/shaders/sokol_shaders.hpp` is machine-generated output derived
 from CNA's own shader sources; the `sokol-shdc` binary itself is not vendored and is not required
 for an ordinary build.
+
+## TinyGL (TINYGL renderer dependency)
+
+The `TINYGL` graphics renderer uses TinyGL, originally by Fabrice Bellard and currently maintained
+as the [C-Chads/tinygl](https://github.com/C-Chads/tinygl) fork by Gek (DMHSW) and the C-Chads.
+CNA's CMake integration (`cmake/ThirdPartyTinyGL.cmake`) fetches an unmodified upstream checkout at
+a pinned commit at configure time and builds its own `tinygl-static` target; no TinyGL source is
+copied into the CNA source tree. See `LICENSE` in the fetched upstream checkout for the complete
+license text.
+
+TinyGL is distributed under a zlib-style license with one clause that differs from plain zlib and is
+the reason this section is required rather than merely courteous:
+
+> Copyright (C) 1997-2021 Fabrice Bellard, Gek (DMHSW), C-Chads
+>
+> The origin of this software must not be misrepresented; you must not claim that you wrote the
+> original software. If you use this software in a product, an acknowledgment in the product and its
+> documentation *is* required.
+
+This section, together with `docs/tinygl-renderer.md` and `plan_tinygl.md`, is that acknowledgment.
+A build configured with any other `CNA_GRAPHICS_RENDERER` value does not fetch, build or link
+TinyGL at all.
