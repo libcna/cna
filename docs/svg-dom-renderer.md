@@ -5,8 +5,9 @@ output as real SVG namespace elements — one `<svg id="cna-svg-dom-root">` surf
 document-ordered `<g>` "flush slot" per distinct clip state a frame actually used, each holding one
 pooled `<g>` per visible sprite (a nested `<svg>` cropping an `<image>`, or a `<pattern>`-filled
 `<rect>` for tiled draws) — rather than rasterizing into a `<canvas>` (`CANVAS`) or CSS-transforming
-pooled `<div>`s with `background-image` (`HTML_DOM`). Per-sprite tint is applied with a native SVG
-`feColorMatrix` filter instead of a pre-tinted cached bitmap variant.
+pooled `<div>`s with `background-image` (`HTML_DOM`). Per-sprite RGB tint is applied with a native
+SVG `feColorMatrix` filter instead of a pre-tinted cached bitmap variant; alpha is applied through
+the sprite group's `opacity`, so alpha-only animation stays off the SVG-filter path.
 
 **Status legend** (this project's convention, refined for this remediation pass):
 
@@ -41,6 +42,7 @@ at their root cause. Each is referenced by its investigation code below.
 | SVGDOM-D | A `RenderTarget2D::SetData` call updated only the C++ CPU buffer, never the JS-side canvas; a canvas-composited draw made after `SetData` could composite against stale pre-`SetData` pixels. | `SvgDomRenderTargetRenderer::UpdatePixels` never touched `Module['cnaSvgDomTextures'][id].canvas`. | `UpdatePixels` now pushes the new pixels into the canvas immediately (`CNA_SvgDom_WriteTargetPixels`), and `EnsureFreshEXT()` always re-reads the canvas while the target is the one *currently bound* (not only when a `dirty_` flag says so), so repeated modify/sample cycles on the same target can never observe stale data regardless of call order. |
 | SVGDOM-E | Drawing a `RenderTarget2D` as an ordinary `SpriteBatch.Draw()` source texture was undefined behaviour in **every** build (not only Emscripten): `SvgDomSpriteBatchRenderer::QueueDraw`/`Flush` used `static_cast<const SvgDomTextureRenderer&>(texture)`, silently reinterpreting a `SvgDomRenderTargetRenderer`'s memory (a sibling class, not a subclass) as the wrong concrete type. On the SVG backbuffer path this additionally crashed in JS: `CNA_SvgDom_RegisterTextureVariant` assumed a pre-existing registry entry always had `variants`/`variantDims`, which a render target's own `{canvas, ctx, isRenderTarget}` entry never had. | Two independent bugs stacked on the same feature: an unsafe C++ downcast, and a JS registry shape mismatch. | Replaced the `static_cast` with the `dynamic_cast`-based dispatch pattern `HtmlDom` already uses for the identical sibling-class shape (`AsRenderTargetEXT`/`CanvasIdOfEXT`/`PixelsOfEXT`/`DataUriOfEXT`). Made `CNA_SvgDom_RegisterTextureVariant` additively extend whatever entry shape already exists instead of assuming one. Added `SvgDomRenderTargetRenderer::EnsureFreshEXT()`-gated `GetPixelsEXT()`/`GetDataUriEXT()` passthroughs so sampling a render target as a texture is never stale. |
 | SVGDOM-F | `SvgDomRenderer::SetViewport` discarded `Width`/`Height`, keeping only the `(X,Y)` translation — violating this project's own cross-renderer `SpriteBatch` contract (`spritebatch_custom_viewport_test.cpp`), which requires a smaller `Viewport` to clip rendering to its own rectangle unconditionally, independent of `RasterizerState.ScissorTestEnable`. | `Width`/`Height` parameters were explicitly discarded (`(void)w; (void)h;`). | `SvgDomState::SetCurrentViewportRectEXT` now records the full rectangle; `ComputeEffectiveClipRectEXT` intersects it with any active scissor rect into one effective clip, applied identically on both the SVG backbuffer and render-target-bound paths. |
+| SVGDOM-5 | A real Mobile Eggbert run loaded but ignored input and made Firefox/the desktop severely sluggish, especially during the rotating alpha-fade loading animation. | `visibility:hidden` removed SDL's canvas from pointer hit testing while the SVG overlay accepted events. Separately, XNA's premultiplied AlphaBlend draw colour was treated as straight RGB+A inside one `feColorMatrix`: every alpha step created another cached SVG filter and darkened the fade twice. `Present()` also reassigned unchanged root geometry every frame, invalidating a large SVG tree. | The SDL canvas now remains hit-testable at `opacity:0`; the SVG root uses `pointer-events:none`. AlphaBlend tint RGB is un-premultiplied once, alpha uses dirty-diffed group `opacity`, and RGB-only filters no longer vary with alpha. Clear colour and surface geometry writes are dirty-diffed, so steady frames do not repeatedly mutate the root. |
 | — | `SvgDomTextureRenderer`'s destructor was `= default` and never deleted its JS registry entry, despite its own header doc claiming it did — a genuine, unbounded memory leak (cached base64 PNG strings) for every destroyed `Texture2D`. | Missing `CNA_SvgDom_DestroyTexture` call. | Added the JS deletion call, mirroring the render-target path's own `CNA_SvgDom_DestroyTargetCanvas`. |
 | — | `GetData` bounds checks (`x + w > width_`, `dataLength < w * h * 4`) used plain 32-bit `int` arithmetic that can overflow on caller-controlled input, letting an out-of-bounds region slip past validation — on Emscripten/wasm32 specifically, `int` and `size_t` are both 32-bit, so this is not merely a native-build styling concern. | No overflow-safe arithmetic. | Bounds checks now compute in `int64_t`; texture construction also rejects a `width*height*4` byte count that would not fit a 32-bit `int`, since this renderer's own buffer-size/length surface is `int` throughout. |
 | — | **(Cross-renderer, not SVG_DOM-specific)** `GameWindow::queryClientBoundsFromSDL()` threw whenever `SDL_GetWindowSize` failed, including a real Emscripten startup race: SDL3's Emscripten video backend can report "not initialized" for the first one or two event-loop ticks after `SDL_CreateWindow()` already returned a valid window. | The browser-side canvas/context setup `SDL_GetWindowSize` depends on finishes asynchronously, strictly after control has already returned to C++. | Falls back to the last-known bounds for that one tick instead of throwing (`modules/runtime/src/GameWindow.cpp`) — found and fixed while investigating why no CNA Emscripten renderer had ever completed a real browser run before (reproduces identically for `HTML_DOM`). |
@@ -51,20 +53,22 @@ at their root cause. Each is referenced by its investigation code below.
 
 ## How it draws
 
-One `<svg id="cna-svg-dom-root">` is created over the `<canvas>` SDL3 already owns (the canvas stays
-in the layout, hidden, so SDL keeps sizing it and delivering input through it). 🌐 **Verified in
-browser**: the full pipeline this section describes — root creation, the standard `Game` loop
+One `<svg id="cna-svg-dom-root">` is created over the `<canvas>` SDL3 already owns. The canvas stays
+in layout and browser hit testing at `opacity:0`, while the visible SVG root is pointer-transparent;
+SDL therefore keeps sizing the canvas and receives mouse/touch input on the element where its
+Emscripten driver installed handlers. The full pipeline this section describes — root creation, the standard `Game` loop
 reaching `Draw()`, `SpriteBatch` output landing as real per-flush-slot `<g>` elements, tint,
-blending, scissor/viewport clipping, and render-target round-trips — runs end-to-end in headless
-Chromium via the `smoke`/`pixel`/`scissor-order` test pages (34 checks total, all passing; see
-"Validation performed" below), not merely inferred from source review.
+blending, scissor/viewport clipping, and render-target round-trips — has run end-to-end in headless
+Chromium via the `smoke`/`pixel`/`scissor-order` test pages; see "Validation performed" below for
+the distinction between the previously executed baseline and the new SVGDOM-5 checks.
 
 | XNA concept | SVG realization |
 |---|---|
 | destination position, rotation, scale, flip | one collapsed affine `transform="matrix(a,b,c,d,e,f)"` on the wrapping `<g>` (computed in C++, ✅ unit-tested numerically — `SvgDomSpriteBatchRenderer::BuildDrawCommandEXT`) |
 | `Texture2D` + in-bounds `sourceRectangle` | the nested `<svg>`'s own `width`/`height`/`viewBox` crop an `<image>` sized to the full texture |
 | `Texture2D` + out-of-bounds `sourceRectangle` under `Wrap`/symmetric `Mirror` | a `<rect>` filled by a per-pool-slot `<pattern patternUnits="userSpaceOnUse">`, phase-offset to line up with the requested source origin; `Mirror` reuses `Wrap`'s plain `repeat` against a pre-built quadrant-mirrored texture variant |
-| tint (RGB and A together) | a cached `feColorMatrix` filter, omitted entirely for `Color.White` with a non-`Opaque` blend |
+| tint RGB | a cached RGB-only `feColorMatrix` filter, omitted entirely for straight-white tint with a non-`Opaque` blend |
+| tint alpha | dirty-diffed `opacity` on the sprite `<g>`; an AlphaBlend alpha-only fade uses no filter and cannot grow the filter cache |
 | `BlendState.Additive` | `mix-blend-mode: plus-lighter` on the sprite's own wrapping `<g>` |
 | `BlendState.Opaque` | the filter's alpha row forced to `0 0 0 0 1` (accepted alpha-stripped deviation — SVG/CSS compositing has no per-element Porter-Duff "replace") |
 | `SpriteBatch` draw order | **DOM document order — now provably equal to actual flush order for every clip-state interleaving (SVGDOM-A)**, not merely the common unscissored case |
@@ -87,7 +91,7 @@ uses. A whole batch crosses the wasm/JS boundary in **one** call.
 | Feature | Status | Notes |
 |---|---|---|
 | `Draw(texture, x, y)` / full overload with rotation/origin/effects | ✅ (geometry) | Pivot/rotation/flip placement is unit-tested numerically (identity, scale, origin-pivot, 90° rotation, flip-flag). |
-| Colour + alpha tint | ✅ (algorithm) | `feColorMatrix` per-channel linear multiply, exact by construction. The identical multiply used by the render-target Canvas2D path (`PrepareSpritePixelsEXT`) is unit-tested. |
+| Colour + alpha tint | ✅ (algorithm) | AlphaBlend's premultiplied XNA tint is converted to straight RGB; RGB uses `feColorMatrix` and A uses group `opacity`. The identical straight-tint input reaches the render-target Canvas2D path (`PrepareSpritePixelsEXT`) and is unit-tested. |
 | `transformMatrix` in `Begin()` | ✅ (composition) | Composed onto each sprite's own collapsed matrix before it reaches JS, so two batches with different transforms coexist in one frame. |
 | Custom `Effect` via `Begin(effect)` | ⛔ throws-by-design | Neither SVG nor CSS compositing has a programmable shader stage. |
 | `SpriteSortMode` sequencing, `Immediate` mode | ✅ | Renderer-agnostic sort in shared `SpriteBatch.cpp`; document order realizes the result. `Immediate` flushes each `Draw()` as its own single-sprite flush — correctly participates in the SVGDOM-A ordered-slot/coalescing scheme like any other flush. |
@@ -230,13 +234,13 @@ could not execute — now run for real. See "Validation performed" below for the
 
 | What | How | Result |
 |---|---|---|
-| Renderer-identity registry (42 public identities preserved) | `python3 scripts/check_renderer_identities.py` | ✅ `OK: 42 public renderer identities preserved in both registries` |
-| Pure-C++ pixel/geometry pipeline, all fixes above | Native GTest binary, `CNA_BUILD_SVG_DOM_HOST_TESTS=ON` | ✅ **97/97** `cna_test_svgdom_host` cases pass natively |
+| Renderer-identity registry (46 public identities preserved) | `python3 scripts/check_renderer_identities.py` | ✅ `OK: 46 public renderer identities preserved in both registries` |
+| Pure-C++ pixel/geometry pipeline, including SVGDOM-5 tint normalization | Native GTest binary, `CNA_BUILD_SVG_DOM_HOST_TESTS=ON` | ✅ **100/100** `cna_test_svgdom_host` cases pass natively |
 | Cross-renderer native regression (`CnaTests`, HEADLESS, real X server via `xvfb-run`) | Full native build/run | ✅ 6032/6079 pass, 46 legitimately skipped (unrelated hardware/permission gates), one unrelated pre-existing `HeadlessRenderer` MRT-test failure confirmed unaffected by anything touched here |
 | `-DCNA_GRAPHICS_RENDERER=SVG_DOM` Emscripten configure/compile/link, all three test pages | `emcmake cmake` + `cmake --build`, emsdk 6.0.3 verified | ✅ compiles and links cleanly |
 | Real SVG DOM root creation, live document insertion | Headless Chromium via Playwright | 🌐 verified |
-| Structural smoke checks: `SVGSVGElement` root, canvas hidden, tint `feColorMatrix`, `Additive` `mix-blend-mode`, render-target `Clear`+`GetData` round-trip, backbuffer-readback-throws contract | `scripts/run-svgdom-browser-test.sh smoke` (headless Chromium via Playwright) | 🌐 **13/13 checks passed** |
-| SVGDOM-B/D/E/F pixel-exact verification: RT scissor, RT `SetData`/canvas coherence, RT-as-texture sampling (including re-modify-after-sample), viewport clip | `scripts/run-svgdom-browser-test.sh pixel` (real `RenderTarget2D::GetData()` readbacks) | 🌐 **20/20 checks passed** |
+| Structural smoke checks: `SVGSVGElement` root, preserved SDL input surface, tint filter, filter-free alpha opacity, `Additive`, render-target round trip, readback-throws contract | `scripts/run-svgdom-browser-test.sh smoke` (headless Chromium via Playwright) | 🌐 Previous 13-check baseline passed; expanded **15-check SVGDOM-5 suite compiles**, browser rerun pending in an environment with an available browser |
+| SVGDOM-B/D/E/F/5 pixel-exact verification: RT scissor, coherence, RT-as-texture sampling, viewport clip, AlphaBlend tint | `scripts/run-svgdom-browser-test.sh pixel` (real `RenderTarget2D::GetData()` readbacks) | 🌐 Previous **20/20** baseline passed; expanded 21-check suite compiles, new SVGDOM-5 browser check pending |
 | SVGDOM-A cross-region draw-order fix, real screenshot pixel proof | `scripts/run-svgdom-browser-test.sh scissor-order` (real page screenshot, 4-point pixel sampling) | 🌐 **1/1 checks passed** |
 | Sibling renderer cross-check: the same Emscripten `Game::BeginDraw()` fix, applied generically (not `SVG_DOM`-specific) | `HTML_DOM`'s full existing browser suite (smoke/pixel/dispose/memory/stress) | 🌐 **137/137 checks passed**, all newly unblocked by the same fix |
 

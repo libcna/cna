@@ -628,6 +628,55 @@ TEST(SvgDomDrawCommand, ColorIsPackedRgbaAndOpSelectsVariantAndFlags)
     EXPECT_TRUE(additive.flags & SvgFlagAdditive);
 }
 
+TEST(SvgDomDrawCommand, AlphaBlendConvertsPremultipliedTintToStraightRgb)
+{
+    const Color premultiplied = Color::FromNonPremultiplied(255, 128, 64, 128);
+    const auto cmd = BuildDrawCommandEXT(
+        1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), premultiplied,
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::AlphaBlend);
+
+    EXPECT_EQ(cmd.packedColor & 0xFFu, 255u);
+    EXPECT_EQ((cmd.packedColor >> 8) & 0xFFu, 128u);
+    EXPECT_EQ((cmd.packedColor >> 16) & 0xFFu, 64u);
+    EXPECT_EQ((cmd.packedColor >> 24) & 0xFFu, 128u);
+    EXPECT_EQ(cmd.variantMode, 1);
+}
+
+TEST(SvgDomDrawCommand, AlphaOnlyFadeKeepsWhiteRgbAcrossEveryAlphaStep)
+{
+    for (const int alpha : {255, 192, 128, 64, 1})
+    {
+        const auto cmd = BuildDrawCommandEXT(
+            1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8),
+            Color::FromNonPremultiplied(255, 255, 255, alpha),
+            0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1,
+            DomCompositeOp::AlphaBlend);
+        EXPECT_EQ(cmd.packedColor & 0x00FFFFFFu, 0x00FFFFFFu);
+        EXPECT_EQ((cmd.packedColor >> 24) & 0xFFu, static_cast<std::uint32_t>(alpha));
+    }
+
+    const auto transparent = BuildDrawCommandEXT(
+        1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8),
+        Color::FromNonPremultiplied(12, 34, 56, 0),
+        0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1,
+        DomCompositeOp::AlphaBlend);
+    EXPECT_EQ(transparent.packedColor, 0x00FFFFFFu);
+}
+
+TEST(SvgDomDrawCommand, NonAlphaBlendModesKeepRawTintChannels)
+{
+    const Color raw(17, 34, 51, 68);
+    for (const DomCompositeOp op : {DomCompositeOp::Opaque,
+                                    DomCompositeOp::NonPremultiplied,
+                                    DomCompositeOp::Additive})
+    {
+        const auto cmd = BuildDrawCommandEXT(
+            1, 8, 8, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), raw,
+            0.0f, Vector2(0, 0), SpriteEffects::None, true, 1, 1, op);
+        EXPECT_EQ(cmd.packedColor, 0x44332211u);
+    }
+}
+
 TEST(SvgDomDrawCommand, PointFilteringClearsTheSmoothingFlag)
 {
     const auto cmd = BuildDrawCommandEXT(

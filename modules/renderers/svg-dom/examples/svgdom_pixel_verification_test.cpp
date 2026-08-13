@@ -281,6 +281,30 @@ class SvgDomPixelVerificationTest : public Game
               "Viewport clip: just past the viewport rect's far edge (6,6) stays Clear");
     }
 
+    // ---------------------------------------------------------------------------------------
+    // SVGDOM-5: AlphaBlend draw colours are premultiplied by XNA. The SVG and Canvas2D paths both
+    // consume straight RGB plus independent alpha, so the tint must be un-premultiplied before
+    // either path uses it. Before the fix this white 50% fade produced ~64 grey, not ~128 grey.
+    // ---------------------------------------------------------------------------------------
+    void CheckAlphaBlendTintOnRenderTarget(GraphicsDevice& dev)
+    {
+        auto rt = std::make_unique<RenderTarget2D>(dev, 1, 1);
+        dev.SetRenderTarget(rt.get());
+        dev.Clear(Color(0, 0, 0, 255));
+        {
+            SpriteBatch sb(dev);
+            SamplerState point = SamplerState::PointClamp;
+            sb.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, nullptr);
+            sb.Draw(whiteTex_, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1),
+                    Color::FromNonPremultiplied(255, 255, 255, 128));
+            sb.End();
+        }
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        check(CloseColor(Sample(*rt, 0, 0), 128, 128, 128, 255),
+              "SVGDOM-5: AlphaBlend alpha-only tint changes opacity without double-darkening RGB");
+    }
+
 protected:
     void LoadContent() override
     {
@@ -298,6 +322,7 @@ protected:
         CheckUpdatePixelsCanvasCoherence(dev);
         CheckRenderTargetAsTexture(dev);
         CheckViewportClipOnRenderTarget(dev);
+        CheckAlphaBlendTintOnRenderTarget(dev);
 
         std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);
         std::fflush(stdout);

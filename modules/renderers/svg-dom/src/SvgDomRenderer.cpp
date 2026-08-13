@@ -18,10 +18,10 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_svg_dom.md design decision 1/6: creates the SVG surface over the <canvas> SDL3's
-// Emscripten video driver owns -- same host-integration shape as HtmlDom's own root (canvas stays
-// in the layout, hidden, so SDL keeps sizing it and delivering input through it), but the surface
-// itself is a real <svg> element (SVG namespace), not a CSS-styled <div>.
+// plan_svg_dom.md design decision 1/6 and SVGDOM-5: creates the SVG surface over the <canvas>
+// SDL3's Emscripten video driver owns. The canvas remains in layout AND in pointer hit testing
+// (opacity:0, not visibility:hidden), because SDL registered its mouse/touch handlers on that exact
+// element. The visible SVG surface is pointer-transparent, so events fall through to the canvas.
 EM_JS(void, CNA_SvgDom_EnsureRoot, (), {
     if (typeof document === 'undefined') return;
     Module['cnaSvgDomRefCount'] = (Module['cnaSvgDomRefCount'] || 0) + 1;
@@ -36,7 +36,8 @@ EM_JS(void, CNA_SvgDom_EnsureRoot, (), {
     const svgNS = 'http://www.w3.org/2000/svg';
     const root = document.createElementNS(svgNS, 'svg');
     root.id = 'cna-svg-dom-root';
-    root.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;';
+    root.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;pointer-events:none;';
+    root.setAttribute('pointer-events', 'none');
     const defs = document.createElementNS(svgNS, 'defs');
     const bg = document.createElementNS(svgNS, 'rect');
     bg.setAttribute('x', 0); bg.setAttribute('y', 0);
@@ -44,13 +45,15 @@ EM_JS(void, CNA_SvgDom_EnsureRoot, (), {
     root.appendChild(defs);
     root.appendChild(bg);
     (canvas.parentNode || document.body).insertBefore(root, canvas.nextSibling);
-    Module['cnaSvgDomOriginalCanvasVisibility'] = canvas.style.visibility;
-    canvas.style.visibility = 'hidden';
+    Module['cnaSvgDomOriginalCanvasOpacity'] = canvas.style.opacity;
+    canvas.style.opacity = '0';
     Module['cnaSvgDomRoot'] = root;
     Module['cnaSvgDomDefs'] = defs;
     Module['cnaSvgDomBackgroundRect'] = bg;
     Module['cnaSvgDomBoundCtx'] = null;
     Module['cnaSvgDomFilterCache'] = {};
+    Module['cnaSvgDomBackgroundFill'] = null;
+    Module['cnaSvgDomSurfaceGeometry'] = {};
 
     // SVGDOM-A (was: sibling containers keyed by CLIP-RECT IDENTITY, so cross-region paint order
     // followed each region's own first-CREATION order rather than the actual per-flush draw
@@ -109,7 +112,7 @@ EM_JS(void, CNA_SvgDom_EnsureRoot, (), {
                      frameToken: -1 };
             slots[idx] = slot;
         }
-        if (slot.container.style.display === 'none') slot.container.style.display = '';
+        if (slot.container.style.display === 'none') slot.container.style.removeProperty('display');
 
         const frameToken = Module['cnaSvgDomFrameToken'];
         if (slot.frameToken !== frameToken) {
@@ -158,12 +161,14 @@ EM_JS(void, CNA_SvgDom_DestroyRoot, (), {
     if (root && root.parentNode) root.parentNode.removeChild(root);
     const canvas = Module['canvas'] ||
                    (typeof document === 'undefined' ? null : document.querySelector('canvas'));
-    if (canvas) canvas.style.visibility = Module['cnaSvgDomOriginalCanvasVisibility'] || "";
-    Module['cnaSvgDomOriginalCanvasVisibility'] = null;
+    if (canvas) canvas.style.opacity = Module['cnaSvgDomOriginalCanvasOpacity'] || "";
+    Module['cnaSvgDomOriginalCanvasOpacity'] = null;
     Module['cnaSvgDomRoot'] = null;
     Module['cnaSvgDomDefs'] = null;
     Module['cnaSvgDomBackgroundRect'] = null;
     Module['cnaSvgDomFilterCache'] = null;
+    Module['cnaSvgDomBackgroundFill'] = null;
+    Module['cnaSvgDomSurfaceGeometry'] = null;
     Module['cnaSvgDomFlushSlots'] = null;
     Module['cnaSvgDomFlushCursor'] = 0;
     Module['cnaSvgDomFlushHighWater'] = 0;
@@ -195,8 +200,12 @@ EM_JS(void, CNA_SvgDom_Clear, (double r, double g, double b, double a), {
     }
     const bg = Module['cnaSvgDomBackgroundRect'];
     if (!bg) return;
-    bg.setAttribute('fill', 'rgba(' + Math.round(r * 255) + ',' + Math.round(g * 255) + ',' +
-                    Math.round(b * 255) + ',' + a + ')');
+    const fill = 'rgba(' + Math.round(r * 255) + ',' + Math.round(g * 255) + ',' +
+                 Math.round(b * 255) + ',' + a + ')';
+    if (Module['cnaSvgDomBackgroundFill'] !== fill) {
+        bg.setAttribute('fill', fill);
+        Module['cnaSvgDomBackgroundFill'] = fill;
+    }
     // GraphicsDevice.Clear is a real OPERATION, not merely a "frame start" convention: it must erase
     // everything drawn so far into the active target while leaving anything drawn AFTER it alone
     // (Draw, Clear, Draw, Present must show only the second Draw's content -- both for the
@@ -248,21 +257,48 @@ EM_JS(void, CNA_SvgDom_PresentFrame, (), {
     }
 });
 
-// Records the backbuffer's own logical geometry and physical placement (offset + scale). V1:
-// applied unconditionally every Present() (see SvgDomRenderer::Present's own comment) rather than
-// diffed against the previous frame -- a real, smaller-scope-than-HtmlDom simplification.
+// Records the backbuffer's own logical geometry and physical placement (offset + scale). SVGDOM-5:
+// Present still checks the geometry every frame so host-page resize/layout changes are observed,
+// but unchanged fields do not get written back. Reassigning width/height/viewBox/styles on a large
+// live SVG tree can invalidate layout and painting in Firefox even when the string value is equal.
 EM_JS(void, CNA_SvgDom_ApplySurfaceGeometry, (int logicalW, int logicalH,
                                               double offsetX, double offsetY,
                                               double scaleX, double scaleY), {
     const root = Module['cnaSvgDomRoot'];
     if (!root) return;
-    root.setAttribute('width', logicalW);
-    root.setAttribute('height', logicalH);
-    root.setAttribute('viewBox', '0 0 ' + logicalW + ' ' + logicalH);
-    root.style.left = offsetX + 'px';
-    root.style.top = offsetY + 'px';
-    root.style.width = (logicalW * scaleX) + 'px';
-    root.style.height = (logicalH * scaleY) + 'px';
+    const geometry = Module['cnaSvgDomSurfaceGeometry'] ||
+                     (Module['cnaSvgDomSurfaceGeometry'] = {});
+    if (geometry.logicalW !== logicalW) {
+        root.setAttribute('width', logicalW);
+        geometry.logicalW = logicalW;
+    }
+    if (geometry.logicalH !== logicalH) {
+        root.setAttribute('height', logicalH);
+        geometry.logicalH = logicalH;
+    }
+    const viewBox = '0 0 ' + logicalW + ' ' + logicalH;
+    if (geometry.viewBox !== viewBox) {
+        root.setAttribute('viewBox', viewBox);
+        geometry.viewBox = viewBox;
+    }
+    if (geometry.offsetX !== offsetX) {
+        root.style.left = offsetX + 'px';
+        geometry.offsetX = offsetX;
+    }
+    if (geometry.offsetY !== offsetY) {
+        root.style.top = offsetY + 'px';
+        geometry.offsetY = offsetY;
+    }
+    const physicalW = logicalW * scaleX;
+    const physicalH = logicalH * scaleY;
+    if (geometry.physicalW !== physicalW) {
+        root.style.width = physicalW + 'px';
+        geometry.physicalW = physicalW;
+    }
+    if (geometry.physicalH !== physicalH) {
+        root.style.height = physicalH + 'px';
+        geometry.physicalH = physicalH;
+    }
     // cnaSvgDomClaimFlushSlot's own "does this rect already cover the whole surface"
     // collapse-to-'full' check (SVGDOM-A/F) needs the CURRENT logical size -- stashed here rather
     // than re-queried from the SDL window, mirroring HtmlDom's own cnaDomLogicalW/H.

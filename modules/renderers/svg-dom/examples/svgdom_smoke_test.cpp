@@ -44,7 +44,7 @@ using namespace CNA::Internal::Renderers::SvgDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 13;
+    constexpr int kExpectedChecks = 15;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(int, JsSurfaceExists, (), {
@@ -52,9 +52,12 @@ namespace
         return (el && el.tagName.toLowerCase() === 'svg') ? 1 : 0;
     });
 
-    EM_JS(int, JsCanvasHidden, (), {
+    EM_JS(int, JsInputSurfacePreserved, (), {
         const canvas = Module['canvas'] || document.querySelector('canvas');
-        return canvas && canvas.style.visibility === 'hidden' ? 1 : 0;
+        const root = Module['cnaSvgDomRoot'];
+        return canvas && root && canvas.style.opacity === '0' &&
+               canvas.style.visibility !== 'hidden' && root.style.pointerEvents === 'none' &&
+               root.getAttribute('pointer-events') === 'none' ? 1 : 0;
     });
 
     // SVGDOM-A: sprites now live inside per-FLUSH ordered slots (Module['cnaSvgDomFlushSlots']),
@@ -90,6 +93,14 @@ namespace
         return slot0.container.children[i].getAttribute('filter') ? 1 : 0;
     });
 
+    EM_JS(int, JsSpriteHasOpacity, (int i, double expected), {
+        const slots = Module['cnaSvgDomFlushSlots'];
+        const slot0 = slots && slots[0];
+        if (!slot0 || !slot0.container.children[i]) return 0;
+        const opacity = Number(slot0.container.children[i].style.opacity || 1);
+        return Math.abs(opacity - expected) < 0.000001 ? 1 : 0;
+    });
+
     /// 1 when sprite `i` (in flush slot 0)'s own wrapping <g> has mix-blend-mode: plus-lighter.
     EM_JS(int, JsSpriteIsAdditive, (int i), {
         const slots = Module['cnaSvgDomFlushSlots'];
@@ -111,10 +122,11 @@ namespace
     });
 #else
     int JsSurfaceExists() { return 0; }
-    int JsCanvasHidden() { return 0; }
+    int JsInputSurfacePreserved() { return 0; }
     int JsFlushSlot0ChildCount() { return -1; }
     int JsSpriteHasImageWithPngHref(int) { return 0; }
     int JsSpriteHasFilter(int) { return 0; }
+    int JsSpriteHasOpacity(int, double) { return 0; }
     int JsSpriteIsAdditive(int) { return 0; }
     int JsSupportsPlusLighter() { return 0; }
     void JsPublishResult(int, int, int) {}
@@ -163,7 +175,8 @@ protected:
             check(renderer.GetRendererInternal() == nullptr,
                   "GetRendererInternal() is null -- no SDL_Renderer exists on this renderer");
             check(JsSurfaceExists() == 1, "a real <svg id=\"cna-svg-dom-root\"> surface was created");
-            check(JsCanvasHidden() == 1, "the SDL <canvas> is hidden, so only the SVG surface shows");
+            check(JsInputSurfacePreserved() == 1,
+                  "the transparent SDL canvas remains the input target while SVG ignores pointer events");
             check(JsSupportsPlusLighter() == 1,
                   "this test browser genuinely supports mix-blend-mode: plus-lighter -- the "
                   "Additive check below is exercising the real CSS blend");
@@ -202,6 +215,17 @@ protected:
             spriteBatch_->End();
             check(JsSpriteIsAdditive(2) == 1,
                   "BlendState::Additive sets mix-blend-mode: plus-lighter on the sprite element");
+
+            // SVGDOM-5: a pure AlphaBlend fade is the high-frequency Mobile Eggbert loading path.
+            // It must not allocate/use an SVG filter; only the pooled sprite's opacity changes.
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend);
+            spriteBatch_->Draw(*texture_, Vector2(0, 0),
+                               Color::FromNonPremultiplied(255, 255, 255, 128));
+            spriteBatch_->End();
+            check(JsSpriteHasFilter(3) == 0,
+                  "an alpha-only fade carries no feColorMatrix filter");
+            check(JsSpriteHasOpacity(3, 128.0 / 255.0) == 1,
+                  "an alpha-only fade is represented by the pooled sprite's opacity");
 
             // Render target: draw a solid colour into it and read it back for real.
             dev.SetRenderTarget(renderTarget_.get());
