@@ -96,7 +96,7 @@
         "bufferViewByteStride": null,
         "values": [
           0,
-          9,
+          200,
           0,
           0,
           0,
@@ -387,7 +387,7 @@
       "jointsAsAuthored": [
         [
           0,
-          9,
+          200,
           0,
           0
         ],

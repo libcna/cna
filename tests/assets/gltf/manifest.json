@@ -4904,18 +4904,18 @@
     },
     {
       "path": "skin-joint-index-padding.expected.json",
-      "bytes": 9682,
-      "sha256": "fe0901bf08afd306a8ff2cf10cba0af4b517c356c32720a7c620496410b0947b"
+      "bytes": 9686,
+      "sha256": "01cf2e9d1dc8a22a6ed039c06e401ed6fc929f319de1e2d34495ceec3e526941"
     },
     {
       "path": "skin-joint-index-padding.glb",
       "bytes": 1296,
-      "sha256": "3fdb9a65e19f710f19cfdac609bd377090fc0121b246b7157cc96166dee252b4"
+      "sha256": "854b68132f4562435b3d6c3b407291d423594c4721d630774af699cf0c09ddd3"
     },
     {
       "path": "skin-joint-index-padding.gltf",
       "bytes": 2287,
-      "sha256": "2f24489e8e761e592c02dcb7ef87b1489f183d6f4848ab091644cc81f263c7bc"
+      "sha256": "2ad73e919075a2c47a8ed0d4f8ed86ad48bdb0b4d405b2a66fa9a8661f0299cd"
     },
     {
       "path": "skin-joint-index-padding.ib.bin",

@@ -158,7 +158,7 @@ _STRAY_WEIGHTS = [(1.0, 0.0, 0.0, 0.0), (0.6, 0.4, 0.0, 0.0), (1.0, 0.0, 0.0, 0.
 
 #: The same file with vertex 1's stray influence de-weighted. Every out-of-range index is now
 #: unweighted, so nothing is refused and the mesh imports.
-_PADDED_JOINTS = [(0, 9, 0, 0), (0, 5, 0, 0), (1, 9, 0, 0)]
+_PADDED_JOINTS = [(0, 200, 0, 0), (0, 5, 0, 0), (1, 9, 0, 0)]
 _PADDED_WEIGHTS = [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
 #: What CNA imports: every out-of-range index clamped to joint 0. Stated separately from the
 #: authored values for the same reason `skin-unnormalized` states its renormalised weights -- L2

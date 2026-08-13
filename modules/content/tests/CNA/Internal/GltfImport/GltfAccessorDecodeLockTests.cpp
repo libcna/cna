@@ -220,20 +220,87 @@ TEST(GltfAccessorDecodeLock, Mat4InverseBindMatrixAccessorDecodesExactly)
         << "the translation lives in the last column of a column-major matrix";
 }
 
-TEST(GltfAccessorDecodeLock, NonNormalizedJointIndicesStayIntegral)
+TEST(GltfAccessorDecodeLock, UnsignedByteAndUnsignedShortJointIndicesDecodeAndPackExactly)
 {
-    // plan_gltf.md GLTF-057: JOINTS_0 must NOT be normalized -- a joint index of 2 decodes to
-    // 2.0, never to 2/255.
-    const LoadedFixture fixture("skin-armature-ancestor");
-    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-    const AccessorDump joints = DumpByUsage(fixture, "JOINTS_0");
-    ASSERT_TRUE(joints.decoded) << joints.error;
-    EXPECT_FALSE(joints.normalized);
-    for (const float value : joints.values)
+    // plan_gltf.md GLTF-057/GLTF-093. The old version of this test used
+    // skin-armature-ancestor, whose every joint index is ZERO: both 0 and normalized 0/255 are
+    // zero, so the test could not distinguish the exact bug its name claimed to lock. These two
+    // fixtures carry non-zero values in both legal component widths, and their palettes already
+    // use file order, making the L2 accessor values directly comparable with L3 BlendIndices.
+    struct Case
     {
-        EXPECT_NEAR(static_cast<double>(value), std::round(static_cast<double>(value)), kTolerance)
-            << "a joint index decoded to a fractional value, which means it was normalized";
+        const char* id;
+        int componentType;
+        const char* componentTypeName;
+        int discriminatingValue;
+    };
+    const std::vector<Case> cases = {
+        {"skin-four-weighted", 5121, "UNSIGNED_BYTE", 3},
+        {"skin-ushort-joint-indices", 5123, "UNSIGNED_SHORT", 2},
+    };
+
+    for (const Case& c : cases)
+    {
+        SCOPED_TRACE(c.id);
+        const LoadedFixture fixture(c.id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        ExpectDecodedEquals(fixture, "JOINTS_0");
+
+        const AccessorDump joints = DumpByUsage(fixture, "JOINTS_0");
+        ASSERT_TRUE(joints.decoded) << joints.error;
+        EXPECT_EQ(c.componentType, joints.componentType);
+        EXPECT_EQ(c.componentTypeName, joints.componentTypeName);
+        EXPECT_FALSE(joints.normalized);
+        EXPECT_NE(joints.values.end(),
+                  std::find(joints.values.begin(), joints.values.end(),
+                            static_cast<float>(c.discriminatingValue)))
+            << "the fixture lost the non-zero value that distinguishes integer decoding from "
+               "normalized decoding";
+        for (const float value : joints.values)
+        {
+            EXPECT_NEAR(static_cast<double>(value),
+                        std::round(static_cast<double>(value)), kTolerance)
+                << "a joint index decoded to a fractional value, which means it was normalized";
+        }
+
+        const std::vector<ExtractedPrimitive> extracted =
+            ExtractSceneMeshesEXT(fixture.Data());
+        ASSERT_EQ(1u, extracted.size());
+        ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
+        const MeshOutDump& mesh = extracted[0].dump;
+        ASSERT_EQ(joints.count, mesh.joints.size());
+        ASSERT_EQ(joints.values.size(), mesh.joints.size() * 4u);
+        for (std::size_t i = 0; i < joints.values.size(); ++i)
+        {
+            EXPECT_EQ(static_cast<int>(joints.values[i]),
+                      static_cast<int>(mesh.joints[i / 4u][i % 4u]))
+                << "component " << i
+                << " changed between the L2 accessor and the production L3 BlendIndices pack";
+        }
     }
+
+    // GLTF-057's exact high-value acceptance is deliberately separate from the pack-exact
+    // cases above: 200 is legal in the UNSIGNED_BYTE accessor but outside this fixture's skin
+    // palette. It occupies a zero-weight padding slot, so L2 must preserve 200 exactly while the
+    // production policy must replace it with the harmless palette index 0 before packing.
+    const LoadedFixture padding("skin-joint-index-padding");
+    ASSERT_TRUE(padding.Ok()) << padding.Error();
+    ExpectDecodedEquals(padding, "JOINTS_0");
+    const AccessorDump paddedJoints = DumpByUsage(padding, "JOINTS_0");
+    ASSERT_TRUE(paddedJoints.decoded) << paddedJoints.error;
+    ASSERT_EQ(5121, paddedJoints.componentType);
+    ASSERT_FALSE(paddedJoints.normalized);
+    ASSERT_GE(paddedJoints.values.size(), 2u);
+    EXPECT_FLOAT_EQ(200.0f, paddedJoints.values[1])
+        << "a non-normalized UNSIGNED_BYTE joint index was divided by 255";
+
+    const std::vector<ExtractedPrimitive> paddedExtracted =
+        ExtractSceneMeshesEXT(padding.Data());
+    ASSERT_EQ(1u, paddedExtracted.size());
+    ASSERT_TRUE(paddedExtracted[0].extracted) << paddedExtracted[0].error;
+    ASSERT_FALSE(paddedExtracted[0].dump.joints.empty());
+    EXPECT_EQ(0, static_cast<int>(paddedExtracted[0].dump.joints[0][1]))
+        << "an out-of-palette zero-weight padding index reached the byte pack";
 }
 
 // --- GLTF-062: sparse values are tightly packed even over an interleaved base ---------------------
