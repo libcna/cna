@@ -8,9 +8,6 @@
 #include <filesystem>
 #include <stdexcept>
 
-#include "CNA/Platform/CurrentPlatform.hpp"
-#include "CNA/Platform/PlatformException.hpp"
-
 #include <cstdlib>
 
 #include "CNA/Internal/PathContainment.hpp"
@@ -76,44 +73,42 @@ namespace Microsoft::Xna::Framework::Storage
 
         const std::string app = appName_.empty() ? "game" : appName_;
 
-        try
-        {
-            // The platform's preferences path is documented to create the directory, so a
-            // successful call means a usable location, not merely a name.
-            storageRoot_ =
-                CNA::Platform::GetCurrentPlatform().GetFileSystem()->GetPreferencesPath(std::string(), app);
-
-            // Strip the trailing separator so StorageContainer can append its own components
-            // cleanly -- the platform contract returns one, as the previous
-            // implementation's path source did.
-            while (!storageRoot_.empty() &&
-                   (storageRoot_.back() == '/' || storageRoot_.back() == '\\'))
-            {
-                storageRoot_.pop_back();
-            }
-            return storageRoot_;
-        }
-        catch (const CNA::Platform::PlatformException&)
-        {
-            // Fall through to the environment-based fallback below, exactly as the previous
-            // implementation did when its path source returned nothing.
-        }
-
-        // Fallback: XDG_DATA_HOME or HOME/.local/share/<app>. Read through the standard library
-        // rather than through the platform -- reading an environment variable never needed a
-        // platform abstraction, and routing it through one would be abstraction for its own sake.
+        // Storage is intentionally independent of the selected windowing platform.  Resolve a
+        // conventional per-user data root directly, then ensure it exists before returning it.
+        // This also makes saved games follow the same policy under SDL3, HEADLESS and TERMINAL.
+        fs::path root;
         if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg != nullptr && *xdg != '\0')
         {
-            storageRoot_ = (fs::path(xdg) / app).string();
-            return storageRoot_;
+            root = fs::path(xdg) / app;
         }
-        if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0')
+        else if (const char* localAppData = std::getenv("LOCALAPPDATA");
+                 localAppData != nullptr && *localAppData != '\0')
         {
-            storageRoot_ = (fs::path(home) / ".local" / "share" / app).string();
-            return storageRoot_;
+            root = fs::path(localAppData) / app;
+        }
+        else if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0')
+        {
+#if defined(__APPLE__)
+            root = fs::path(home) / "Library" / "Application Support" / app;
+#else
+            root = fs::path(home) / ".local" / "share" / app;
+#endif
+        }
+        else
+        {
+            root = fs::current_path() / app;
         }
 
-        storageRoot_ = fs::current_path().string();
+        std::error_code code;
+        fs::create_directories(root, code);
+        if (code)
+        {
+            throw StorageDeviceNotConnectedException(
+                "Unable to create the storage directory.",
+                std::make_exception_ptr(std::filesystem::filesystem_error(
+                    "create_directories", root, code)));
+        }
+        storageRoot_ = root.string();
         return storageRoot_;
     }
 
