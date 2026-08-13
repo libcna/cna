@@ -2,13 +2,12 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 #include "MagnumBuffers.hpp"
 #include "MagnumRenderTargets.hpp"
 #include "MagnumStateMapping.hpp"
 #include "MagnumStockShaders.hpp"
 #include "MagnumTextures.hpp"
-
-#include <SDL3/SDL.h>
 
 #include <array>
 #include <memory>
@@ -20,30 +19,21 @@ namespace CNA::Internal::Renderers::Magnum
     /**
      * @brief CNA's graphics renderer expressed through Magnum's typed OpenGL wrappers.
      *
-     * SDL3 stays the window and GL-context owner, exactly as in every other windowed CNA renderer;
-     * Magnum is given that already-current context through `Platform::GLContext` and from then on
-     * every resource, state change and draw goes through `Magnum::GL`.
+     * The platform owns the window and supplies the native GL context service. Magnum is given
+     * that already-current context through `Platform::GLContext`; every resource, state change
+     * and draw then goes through `Magnum::GL`.
      */
     class MagnumRenderer : public IGraphicsRenderer
     {
     public:
         /**
-         * @brief Creates the GL context on @p window and initializes Magnum against it.
+         * @brief Creates a platform GL context and initializes Magnum against it.
          *
-         * @param window           SDL window to render into; borrowed, never owned.
-         * @param virtualWidth     Virtual (game-logic) width, or 0 for none.
-         * @param virtualHeight    Virtual (game-logic) height, or 0 for none.
-         * @param mode             Presentation/scaling policy.
-         * @param multiSampleCount Requested back-buffer sample count (1 = no MSAA).
-         * @param swapInterval     Swap interval: 0 immediate, 1 vsync, 2 half refresh rate.
-         * @throw std::runtime_error if @p window is null or the GL context cannot be created.
+         * @param args Platform surface, GL service and renderer settings.
+         * @throw CNA::Platform::PlatformException if the surface or context is unavailable.
+         * @throw std::runtime_error if Magnum cannot initialize against the current context.
          */
-        MagnumRenderer(SDL_Window* window,
-                              int virtualWidth,
-                              int virtualHeight,
-                              CnaPresentationMode mode,
-                              int multiSampleCount,
-                              int swapInterval);
+        explicit MagnumRenderer(const GraphicsRendererCreateArgs& args);
         ~MagnumRenderer() override;
 
         /**
@@ -78,6 +68,8 @@ namespace CNA::Internal::Renderers::Magnum
          * @param height Receives the logical height.
          */
         void GetViewportSize(int& width, int& height) override;
+        /** @brief Refreshes drawable size and display scale for the same platform window. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /**
          * @brief Sets the virtual (game-logic) resolution the renderer presents at.
          *
@@ -567,8 +559,9 @@ namespace CNA::Internal::Renderers::Magnum
                             const Matrix& world, const Matrix& view, const Matrix& projection,
                             const GpuDrawParams& params, bool instanced);
 
-        SDL_Window* window_ = nullptr;
-        SDL_GLContext glContext_ = nullptr;
+        // These precede Magnum and renderer GL resources so both contexts outlive those objects.
+        std::unique_ptr<PlatformGlContextOwner> platformContext_;
+        PlatformGlSurfaceState surface_;
         std::unique_ptr<::Magnum::Platform::GLContext> magnumContext_;
 
         int virtualWidth_ = 0;

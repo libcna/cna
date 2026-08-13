@@ -10,8 +10,8 @@
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 2 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
 | `cpu-presentation` | 2 | CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service. |
-| `migratable` | 27 | Uses platform services only (native handle, GL/Vulkan, window, events). |
-| `sdl-free` | 9 | No SDL references at all. |
+| `migratable` | 26 | Uses platform services only (native handle, GL/Vulkan, window, events). |
+| `sdl-free` | 10 | No SDL references at all. |
 
 ## Per-family detail
 
@@ -29,7 +29,6 @@
 | `gdi` | GDI | `migratable` | 39 / 36 | `native-handle`, `event`, `window` | — |
 | `webgpu` | WEBGPU | `migratable` | 39 / 38 | `native-handle`, `gl-vulkan-interop`, `window`, `display` | — |
 | `bgfx` | BGFX | `migratable` | 36 / 33 | `native-handle`, `window`, `display` | — |
-| `magnum` | MAGNUM | `migratable` | 33 / 32 | `gl-vulkan-interop`, `window` | — |
 | `svg-dom` | SVG_DOM | `migratable` | 27 / 24 | `native-handle`, `window`, `filesystem` | — |
 | `vulkan` | VULKAN | `migratable` | 25 / 19 | `gl-vulkan-interop`, `window` | — |
 | `llgl` | LLGL | `migratable` | 24 / 21 | `native-handle`, `window`, `display` | — |
@@ -52,6 +51,7 @@
 | `glide` | GLIDE | `migratable` | 4 / 4 | `native-handle` | — |
 | `easygl` | OPENGL33 OPENGLES2 OPENGLES3 WEBGL1 WEBGL2 | `sdl-free` | 0 / 0 | — | — |
 | `headless` | HEADLESS | `sdl-free` | 0 / 0 | — | — |
+| `magnum` | MAGNUM | `sdl-free` | 0 / 0 | — | — |
 | `opengl1` | OPENGL1 | `sdl-free` | 0 / 0 | — | — |
 | `opengl2` | OPENGL2 | `sdl-free` | 0 / 0 | — | — |
 | `opengl4` | OPENGL4 | `sdl-free` | 0 / 0 | — | — |

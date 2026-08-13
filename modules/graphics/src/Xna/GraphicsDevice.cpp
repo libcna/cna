@@ -141,10 +141,8 @@ namespace Microsoft::Xna::Framework::Graphics
             requirements.renderIntent = CNA::Platform::WindowRenderIntent::OpenGl;
 #endif
 
-            // plan_magnum.md MAGNUM-3: Magnum renders through an OpenGL context CNA creates on
-            // this same SDL window, so the window needs the identical OpenGL flag EasyGL asks for
-            // just above -- SDL cannot attach a GL context to a window that was not created with
-            // it.
+            // Magnum renders through a platform GL context on this same window, so its render
+            // intent must be fixed before the platform creates the native surface.
 #ifdef CNA_RENDERER_MAGNUM
             requirements.renderIntent = CNA::Platform::WindowRenderIntent::OpenGl;
 #endif
@@ -2306,14 +2304,16 @@ namespace Microsoft::Xna::Framework::Graphics
         description.renderIntent = requirements.renderIntent;
 
 #if defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGL2) || \
-    defined(CNA_RENDERER_OPENGL4) || defined(CNA_RENDERER_OPENGLES1)
+    defined(CNA_RENDERER_OPENGL4) || defined(CNA_RENDERER_OPENGLES1) || \
+    defined(CNA_RENDERER_MAGNUM)
         // A desktop GLX visual fixes these attributes when the window is created, before the
         // renderer asks IPlatformGlContext for a context. Supplying them at this boundary also
         // keeps the equivalent EGL selection deterministic on ES hosts.
         description.openGlFramebuffer.depthBits = 24;
         description.openGlFramebuffer.stencilBits = 8;
         description.openGlFramebuffer.doubleBuffered = true;
-#if defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGLES1)
+#if defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGLES1) || \
+    defined(CNA_RENDERER_MAGNUM)
         description.openGlFramebuffer.samples =
             presentationParameters_.getMultiSampleCountProperty();
 #endif
@@ -2371,7 +2371,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 #if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL1) || \
     defined(CNA_RENDERER_OPENGL2) || defined(CNA_RENDERER_OPENGL4) || \
-    defined(CNA_RENDERER_OPENGLES1)
+    defined(CNA_RENDERER_OPENGLES1) || defined(CNA_RENDERER_MAGNUM)
         // Context-backed renderers receive only the narrow GL service plus the surface value
         // snapshot. They never resolve a native window or reach through IPlatform.
         args.glContext = platform_->GetGlContext();

@@ -68,12 +68,12 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1120** |
-| Files referencing SDL (all) | **497** |
-| Production files (`src/` + `include/`) referencing SDL | **186** |
-| …of which are renderer production files | **78** |
+| Files referencing SDL (all) | **495** |
+| Production files (`src/` + `include/`) referencing SDL | **184** |
+| …of which are renderer production files | **76** |
 | Test/example files referencing SDL | **311** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
-| Renderer families reaching for `SDL_GL_*` directly | **6** |
+| Renderer families reaching for `SDL_GL_*` directly | **5** |
 
 Production SDL surface per module (`src/` + `include/` only):
 
@@ -91,7 +91,7 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/core` | 1 | `Logger`, `Entrypoint` (`SDL_main`), `GraphicsRendererType` |
 | `modules/graphics-ext` | 1 | ASCII post-process effect |
 | `modules/runtime` | 1 | `Game` loop, `GameWindow`, `GraphicsDeviceManager` |
-| `modules/renderers/*` | 78 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (33 families) |
+| `modules/renderers/*` | 76 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (32 families) |
 
 The native-window properties actually consumed today — these define the minimum
 `NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:
@@ -109,7 +109,7 @@ SDL_PROP_WINDOW_X11_WINDOW_NUMBER
 Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatformGlContext`:
 
 ```text
-diligent magnum metal openvg skia sokol
+diligent metal openvg skia sokol
 ```
 
 <!-- END GENERATED: tools/platform/sdl_inventory.py -->
@@ -395,7 +395,7 @@ task builds and verifies a coherent group.
 | PLAT-66 | Migrate the coordinate-conversion contract | ✅ | `IGraphicsRenderer` now defines window↔logical conversion entirely between the platform window's logical client units and the renderer's game units; density, presentation viewport and letterbox/crop offsets belong to the renderer. The `WindowId` registry is the sole input lookup path in both directions. `Mouse` no longer includes SDL, stores a native view or resolves an id; its strict-XNA integer handle is interpreted only by `IPlatform::AdoptWindowHandle`, while the runtime publishes the stable id directly. `PlatformInputBridge` likewise removed its SDL renderer fast path. Normalized touch events now carry their platform-captured client size, eliminating the last native window lookup from shared coordinate conversion. The allowlisted SDL renderer registers itself and implements the common methods with its offset-aware native transform. SDL-free tests pin registry use, a 50-pixel letterbox offset, exact `GetState`/`SetPosition` inversion and touch client-size scaling under every platform selection. All three existing `CnaTests` configurations build; focused coverage passes **46 / 47 + one environment-only video skip** under SDL3 and **45 / 46 + one selection-only skip** under HEADLESS and TERMINAL. A temporary real `SDL_RENDERER` selection compiled its updated implementation before the debug cache was restored to `HEADLESS`/`CNA_DEVICES=OFF`. Contract: **27 headers / 529 documented declarations**; inventory, classification and hot-path gates pass; ratchet: **163 files / 2266 references**, down one file and 38 references. |
 | PLAT-67 | Migrate the EasyGL family | ✅ | All five public identities (`OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2`) now create, bind, recreate, present and configure their context through `IPlatformGlContext`, supplied as the only applicable narrow service in `GraphicsRendererCreateArgs`. The service uses stable `WindowId` values and exposes a C-compatible entry-point loader, so EasyGL production code and its target contain **zero SDL identifiers, headers or direct link inputs**. A first-declared RAII context owner keeps the context current until every GL resource has been destroyed and transactionally cleans up both make-current and later constructor failures. `EasyGLSurfaceState` consumes only `RendererSurfaceInfo`: drawable pixels remain physical, input coordinates remain logical client units, and resize/display-scale events refresh the snapshot through `IGraphicsRenderer::OnSurfaceChanged`. SDL-free fakes pin failed creation, late-failure cleanup, selected profile attributes, missing-capability refusal and non-1.0-scale resize transforms. Full `CnaTests` builds and **10/10** focused tests pass for OPENGLES2 and OPENGLES3; the OPENGL33 production target builds; WEBGL1/2 share the same source but require the unavailable Emscripten toolchain. SDL3/HEADLESS/TERMINAL compatibility builds pass their focused lifecycle/contract coverage, including the captured SDL event oracle. Contract: **27 headers / 531 documented declarations**; inventory, classification, renderer audit and hot-path gates pass; ratchet: **161 files / 2206 references**, down two files and 60 references. |
 | PLAT-68 | Migrate `OPENGL1` / `OPENGL2` / `OPENGL4` / `OPENGLES1` | ✅ | All four standalone families now create, bind, recreate, present, configure swap interval and resolve extension entry points exclusively through `IPlatformGlContext`; their production sources, headers and renderer target definitions contain **zero SDL identifiers or direct SDL link inputs**. The shared `PlatformGlContextOwner` keeps the context alive until renderer-owned GL resources are gone and transactionally destroys a context whose initial bind fails; `PlatformGlSurfaceState` keeps stable `WindowId` registration, physical drawable dimensions and logical input units distinct across high-DPI surface updates. The exact profiles remain explicit: GL 1.1 compatibility (optional MSAA), GL 2.1 compatibility, GL 4.1 core and ES 1.1 (with a transactional no-MSAA retry). OPENGL1/2/4 and OPENGLES1 each build the full `CnaTests` target; shared fake-service coverage passes **8/8** in each selected GL build and the broader ownership/profile slice passes **11/11** under both HEADLESS and TERMINAL. Contract: **27 headers / 531 documented declarations**; inventory and hot-path gates pass, the generated renderer audit moves all four families to `sdl-free`, and the ratchet tightens to **147 files / 1984 references**, down fourteen files and 222 references. |
-| PLAT-69 | Migrate `MAGNUM` | ⬜ | Desktop GL via Magnum; see `docs/magnum-renderer.md` for its boundary. |
+| PLAT-69 | Migrate `MAGNUM` | ✅ | MAGNUM now receives the platform surface snapshot and `IPlatformGlContext` directly, requests its GL 3.3 core/depth-24/stencil-8/MSAA context through the narrow service, and constructs `Magnum::Platform::GLContext` only after that context is current. Destruction is deliberately layered in reverse: renderer-owned Magnum GL objects, Magnum's loader context, then the platform context, so no Magnum destructor can consult a dead `GL::Context`. Presentation, swap interval, granted MSAA, stable-window registration, drawable size and high-DPI coordinate transforms no longer cross a native-window edge. Production sources, headers and the target definition contain **zero SDL identifiers or direct SDL link inputs**. The full MAGNUM `CnaTests` target builds; its context-free suite plus shared platform-GL coverage passes **79/79**, and all **8/8** real-context pixel/integration tests pass under Mesa/Xvfb. The generated audit moves MAGNUM to `sdl-free`; inventory, contract and hot-path gates pass, and the ratchet tightens to **145 files / 1950 references**, down two files and 34 references. See `docs/magnum-renderer.md` for the updated boundary. |
 | PLAT-70 | Migrate `SKIA` / `OPENVG` / `SOKOL` | ⬜ | Remaining `SDL_GL_*` consumers. `SKIA` is the larger of the two `cpu-presentation` families PLAT-3 found (83 SDL references in code): its presentation path moves to `IPlatformSurfacePresenter` (PLAT-127), not to a GL context. |
 | PLAT-71 | Migrate `VULKAN` | ⬜ | Via `IPlatformVulkanSurface`. |
 | PLAT-72 | Migrate `DILIGENT` / `LLGL` / `WICKED` | ⬜ | Runtime-selected or multi-API renderers; `LlglSdlSurface.cpp` is replaced by a native-handle surface. |
