@@ -98,6 +98,15 @@ if(CNA_SANITIZE)
 endif()
 
 set(SHARP_RUNTIME_BUILD_TESTS OFF CACHE BOOL "Build sharp-runtime tests" FORCE)
+# Load CNA's component closure before adding the sibling. Without an explicit selection the
+# modular sharp-runtime defaults to `All`, which instantiates unrelated optional components such
+# as System.Diagnostics.Process. Besides wasting build time, those host-process APIs are not
+# available in an iOS application sandbox and currently do not compile against Apple's SDK.
+include(cmake/SharpRuntimeConsumption.cmake)
+if(NOT DEFINED SHARP_RUNTIME_COMPONENTS OR SHARP_RUNTIME_COMPONENTS STREQUAL "")
+    set(SHARP_RUNTIME_COMPONENTS "${CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS}" CACHE STRING
+        "Sharp Runtime components required by CNA")
+endif()
 # sharp-runtime is a SIBLING repository checkout, not a git submodule of this
 # repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
 # It must be cloned next to this repo's own directory, so that
@@ -120,8 +129,15 @@ add_subdirectory("${CNA_SHARP_RUNTIME_ROOT}" SHARP_RUNTIME)
 
 # Detect which sharp-runtime shape this build consumes (monolithic archive vs modular
 # components) and provide cna_link_sharp_runtime() for the CNA module targets.
-include(cmake/SharpRuntimeConsumption.cmake)
 cna_detect_sharp_runtime_shape()
+
+# A large set of historical examples/tests still names the old umbrella target explicitly.
+# Recreate it over CNA's narrow component closure when consuming modular sharp-runtime; this
+# preserves source compatibility without asking sharp-runtime to instantiate its optional `All`.
+if(CNA_SHARP_RUNTIME_IS_MODULAR AND NOT TARGET SHARP_RUNTIME)
+    add_library(SHARP_RUNTIME INTERFACE)
+    cna_link_sharp_runtime(SHARP_RUNTIME INTERFACE)
+endif()
 
 #find_package(SDL3_ttf REQUIRED)
 
