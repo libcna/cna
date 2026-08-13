@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 140,
+  "distinctAssetCount": 141,
   "owningGroupCounts": {
     "container": 8,
     "accessors": 13,
@@ -20,7 +20,7 @@
     "topology": 8,
     "normals": 6,
     "transforms": 17,
-    "materials": 13,
+    "materials": 14,
     "textures": 10,
     "skinning": 16,
     "animation": 23,
@@ -30,7 +30,7 @@
     "draco": 0,
     "robustness": 8
   },
-  "targetDistinctAssetCount": 144,
+  "targetDistinctAssetCount": 145,
   "targetOwningGroupCounts": {
     "container": 8,
     "accessors": 13,
@@ -38,7 +38,7 @@
     "topology": 8,
     "normals": 6,
     "transforms": 17,
-    "materials": 13,
+    "materials": 14,
     "textures": 10,
     "skinning": 16,
     "animation": 23,
@@ -1371,6 +1371,25 @@
         "no texture maps"
       ],
       "auditFixture": "f8"
+    },
+    {
+      "id": "mat-basecolor-factor-times-texture",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "baseColorFactor times baseColorTexture",
+        "sRGB mid-grey sample",
+        "linear-space material multiplication",
+        "analytic L7 byte 92"
+      ],
+      "auditFixture": null
     },
     {
       "id": "mat-emissive-factor",
@@ -3696,6 +3715,31 @@
       "path": "mat-authored-tangent.vb.bin",
       "bytes": 144,
       "sha256": "51d2fe984e9cef9a12cbbe1ed50d92593146b3d2dda4f88504e3c0f00ae19caf"
+    },
+    {
+      "path": "mat-basecolor-factor-times-texture.expected.json",
+      "bytes": 9122,
+      "sha256": "1fba8fad3cb8c88f6ae658bd98e31bbdf62e25e0e173adf2f17fa366b9770ab7"
+    },
+    {
+      "path": "mat-basecolor-factor-times-texture.glb",
+      "bytes": 1532,
+      "sha256": "fea9d403bd01b126f63fa519c3371940bb601a4ea0cd2f91fea5829b57513d60"
+    },
+    {
+      "path": "mat-basecolor-factor-times-texture.gltf",
+      "bytes": 2616,
+      "sha256": "611e461857583fcf69deb574e2808ee621ab0e61abc68917ba2befd33a225bd4"
+    },
+    {
+      "path": "mat-basecolor-factor-times-texture.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-basecolor-factor-times-texture.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
     },
     {
       "path": "mat-default.expected.json",

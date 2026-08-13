@@ -598,7 +598,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**132 of the 140** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**133 of the 141** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
@@ -729,12 +729,15 @@ as byte 90 instead of 212. Both focused oracles pass on OPENGLES2 and OPENGLES3.
 also has the first fixture-driven pilot: `EasyGL_Gltf_SkinnedPbrNonUniformJoint` loads the committed
 `skin-nonuniform-joint-scale.gltf`, verifies its stride-selected effect and non-identity bind palette,
 then renders it through `Model::Draw` twice. Thus L1-L6 and focused framebuffer evidence now meet on
-one generated asset rather than only on equivalent hand-built geometry.
+one generated asset rather than only on equivalent hand-built geometry. A second pilot,
+`EasyGL_Gltf_BaseColorFactorTexture`, does the same for the generated
+`mat-basecolor-factor-times-texture.gltf`: it verifies the imported texture and factor remain
+independent, then obtains analytic byte 92 twice on OPENGLES2 and OPENGLES3.
 
-What those focused tests do **not** provide is the corpus rung: beyond that one pilot, generated
+What those focused tests do **not** provide is the corpus rung: beyond those two pilots, generated
 fixtures still need fixed camera/light rigs, a documented per-renderer tolerance, a reproducible
-PNG capture path and the independent two-process determinism check. Registering one successful
-asset as `CnaGltfConformanceL7` would make the ladder look complete without testing the corpus.
+PNG capture path and the independent two-process determinism check. Registering two successful
+assets as `CnaGltfConformanceL7` would make the ladder look complete without testing the corpus.
 `STUB` still cannot be used as a shortcut:
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
 bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.
@@ -870,6 +873,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `xf-multi-root` | transforms | L1, L2, L3, L4 | three scene roots; multi-root scene |
 | `mat-default` | materials | L1, L2, L3 | no material; glTF default material; metallic-roughness by default |
 | `mat-factor-only-gold` | materials | L1, L2, L3 | pbrMetallicRoughness factors; baseColorFactor; alphaMode BLEND; doubleSided; no texture maps |
+| `mat-basecolor-factor-times-texture` | materials | L1, L2, L3, L4, L5 | baseColorFactor times baseColorTexture; sRGB mid-grey sample; linear-space material multiplication; analytic L7 byte 92 |
 | `mat-emissive-factor` | materials | L1, L2, L3 | emissiveFactor without the strength extension; dark base colour |
 | `mat-emissive-strength` | materials | L1, L2, L3 | KHR_materials_emissive_strength; emissiveFactor; HDR emissive above 1; no texture maps |
 | `mat-vertex-color-pbr` | materials | L1, L2, L3 | COLOR_0 with a PBR material; unsupported material model; import report |

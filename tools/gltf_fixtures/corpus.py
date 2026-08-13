@@ -26,7 +26,8 @@ from .manifest import OPEN_DEFECT_STATUSES, Fixture, dumps
 #: Later tasks deliberately changed the plan written in 2025: the topology group gained a morphing
 #: strip, cameras and lights became separate groups with two additional discriminating assets, and
 #: GLTF-316 established that ten (not eleven) animation fixtures are sufficient.  Together with
-#: the 13 morph fixtures housed in the same generator module, the reconciled target is 143.
+#: the 13 morph fixtures housed in the same generator module, plus GLTF-218's deliberately
+#: discriminating factor-times-texture material witness, the reconciled target is 145.
 TARGET_ASSET_IDS_BY_GROUP: dict[str, tuple[str, ...]] = {
     "container": (
         "glb-basic",
@@ -103,6 +104,7 @@ TARGET_ASSET_IDS_BY_GROUP: dict[str, tuple[str, ...]] = {
     "materials": (
         "mat-default",
         "mat-factor-only-gold",
+        "mat-basecolor-factor-times-texture",
         "mat-emissive-factor",
         "mat-emissive-strength",
         "mat-vertex-color-pbr",

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from ..builder import TRIANGLES, UNSIGNED_BYTE, UNSIGNED_SHORT, GltfBuilder
 from ..manifest import Defect, Fixture, l3_primitive, world_positions
+from ..png import encode_png
 from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
 
 #: A gold-ish, half-transparent base colour. Deliberately not white, not opaque, and not a value
@@ -32,6 +33,15 @@ _IOR = 2.0
 _SPECULAR_FACTOR = 0.3
 _SPECULAR_COLOR_FACTOR = [0.25, 1.0, 12.0]
 _DIELECTRIC_F0 = [1.0 / 120.0, 1.0 / 30.0, 0.3]
+
+#: GLTF-218's two independent operands. The texture is encoded mid-grey, so its linear value is
+#: about 0.21586 rather than 0.5; the factor is already linear and must not be decoded. Their
+#: product encodes to byte 92. Applying the factor after output encoding gives 64, ignoring it
+#: gives 128, and decoding it as though it were a texture gives 61, so one pixel distinguishes all
+#: four orders.
+_FACTOR_TEXTURE_BASE_COLOR = [0.5, 0.5, 0.5, 1.0]
+_FACTOR_TEXTURE_TEXCOORDS = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+_FACTOR_TEXTURE_TANGENTS = [(1.0, 0.0, 0.0, 1.0)] * 3
 
 
 def mat_factor_only_gold() -> Fixture:
@@ -175,6 +185,87 @@ def mat_factor_only_gold() -> Fixture:
                         "The surface rendered opaque white under default lighting.",
             },
         )],
+    )
+
+
+def mat_basecolor_factor_times_texture() -> Fixture:
+    """GLTF-218 -- baseColorFactor multiplies the decoded baseColorTexture sample."""
+    b = GltfBuilder("mat-basecolor-factor-times-texture")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS,
+                                   accessor_type="VEC3")
+    tangent = b.add_packed_accessor(usage="TANGENT", values=_FACTOR_TEXTURE_TANGENTS,
+                                    accessor_type="VEC4")
+    texcoord = b.add_packed_accessor(usage="TEXCOORD_0", values=_FACTOR_TEXTURE_TEXCOORDS,
+                                     accessor_type="VEC2")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    image = b.add_image(encode_png(1, 1, [[(128, 128, 128, 255)]]), name="MidGrey")
+    texture = b.add_texture(source=image, name="MidGreyBaseColor")
+    material = b.add_material({
+        "name": "HalfMidGrey",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": _FACTOR_TEXTURE_BASE_COLOR,
+            "baseColorTexture": {"index": texture},
+            "metallicFactor": 0.0,
+            "roughnessFactor": 1.0,
+        },
+    })
+    mesh = b.add_mesh([{
+        "attributes": {
+            "POSITION": position,
+            "NORMAL": normal,
+            "TANGENT": tangent,
+            "TEXCOORD_0": texcoord,
+        },
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="FactorTimesTextureTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    expected_material = {
+        "index": material,
+        "name": "HalfMidGrey",
+        "baseColorFactor": list(_FACTOR_TEXTURE_BASE_COLOR),
+        "metallicFactor": 0.0,
+        "roughnessFactor": 1.0,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": True,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return Fixture(
+        id="mat-basecolor-factor-times-texture", audit_fixture=None,
+        owning_group="materials",
+        description="A one-pixel sRGB mid-grey base-colour texture multiplied by a linear 0.5 "
+                    "baseColorFactor. The correct linear-space product encodes to byte 92; "
+                    "dropping either operand or applying either transfer in the wrong order "
+                    "produces a different byte.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["baseColorFactor times baseColorTexture", "sRGB mid-grey sample",
+                  "linear-space material multiplication", "analytic L7 byte 92"],
+        spec_anchors=["metallic-roughness-material", "textures"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="FactorTimesTextureTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+            tangents=_FACTOR_TEXTURE_TANGENTS, texcoords=_FACTOR_TEXTURE_TEXCOORDS,
+            indices=TRIANGLE_INDICES, material=expected_material)]},
+        l4={**world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+            "baseColorComposition": {
+                "textureByteSrgb": 128,
+                "decodedTextureLinear": 0.21586050011389926,
+                "factorLinear": 0.5,
+                "productLinear": 0.10793025005694963,
+                "encodedProductByte": 92,
+            }},
     )
 
 
@@ -1313,7 +1404,8 @@ def mat_specular_glossiness() -> Fixture:
     )
 
 
-FIXTURES = [mat_default, mat_factor_only_gold, mat_emissive_factor, mat_emissive_strength,
+FIXTURES = [mat_default, mat_factor_only_gold, mat_basecolor_factor_times_texture,
+            mat_emissive_factor, mat_emissive_strength,
             mat_vertex_color_pbr,
             mat_normal_occlusion_scale, mat_alpha_mask_cutoff, mat_unimplemented_extensions,
             mat_material_variants, mat_unlit, mat_unlit_vertex_color_alpha,
