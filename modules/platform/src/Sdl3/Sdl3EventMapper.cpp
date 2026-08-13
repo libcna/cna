@@ -184,6 +184,16 @@ namespace CNA::Platform::Sdl3 {
                 touch.x = source.tfinger.x;
                 touch.y = source.tfinger.y;
                 touch.pressure = source.tfinger.pressure;
+                if (SDL_Window* window = SDL_GetWindowFromID(source.tfinger.windowID))
+                {
+                    int width = 0;
+                    int height = 0;
+                    if (SDL_GetWindowSize(window, &width, &height) && width > 0 && height > 0)
+                    {
+                        touch.clientWidth = width;
+                        touch.clientHeight = height;
+                    }
+                }
                 switch (source.type)
                 {
                     case SDL_EVENT_FINGER_DOWN:     touch.kind = TouchEventKind::Down; break;

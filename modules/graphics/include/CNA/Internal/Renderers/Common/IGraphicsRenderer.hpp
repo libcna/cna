@@ -1392,15 +1392,17 @@ namespace CNA::Internal::Renderers
         }
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
-        /// Converts a point from SDL window-coordinate space to logical (virtual) game
-        /// coordinates. A renderer whose drawable pixel size differs from SDL_GetWindowSize()
-        /// must account for that density internally. Returns true on success. Default: no-op.
+        /// Converts a point from the platform window's logical client-coordinate space to the
+        /// renderer's virtual game-coordinate space. Presentation scale, crop/letterbox offsets
+        /// and any difference between logical client units and drawable pixels are entirely the
+        /// renderer's responsibility. Returns true when a logical counterpart exists. Default:
+        /// no transform (returns false and leaves the outputs untouched).
         virtual bool TransformWindowToLogical(float windowX, float windowY,
                                               float& logX, float& logY) const { return false; }
-        /// Converts a point from logical (virtual) game coordinates to SDL window-coordinate
-        /// space — the inverse of TransformWindowToLogical. Returns true on success. Default:
-        /// no-op (returns false), i.e. window == logical (no scaling). Used by Mouse::SetPosition
-        /// to place the OS cursor correctly on a scaled/letterboxed window.
+        /// Converts a point from logical game coordinates to the platform window's logical client
+        /// coordinates -- the inverse of TransformWindowToLogical for points in the presentation
+        /// viewport. Returns true on success. Default: no transform (returns false and leaves the
+        /// outputs untouched); callers may then use a 1:1 fallback.
         virtual bool TransformLogicalToWindow(float logX, float logY,
                                               float& windowX, float& windowY) const { return false; }
         virtual std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) = 0;
@@ -1873,10 +1875,9 @@ namespace CNA::Internal::Renderers
         virtual void DebugRestoreContext() {}
 
         // ---- Window id → renderer registry ----
-        // Renderers that implement TransformWindowToLogical register themselves here so input
-        // can map physical coordinates to logical ones even when the renderer has no native
-        // coordinate-conversion API. WindowId keeps this common interface independent of the
-        // selected platform's native window representation.
+        // Renderers that implement coordinate conversion register themselves here so input can
+        // map platform window-client coordinates without knowing or resolving a native window.
+        // WindowId is the sole identity crossing this common boundary.
 
         static void RegisterForWindow(CNA::Platform::WindowId window, IGraphicsRenderer* renderer)
         {
@@ -2025,10 +2026,8 @@ namespace CNA::Internal::Renderers
     {
         /** @brief Platform-neutral description of the renderer's presentation surface. */
         RendererSurfaceInfo surface;
-        /// Virtual (game-logic) resolution the renderer should present at.
-        /// SDL_SetRenderLogicalPresentation will be set to this size so that
-        /// the game always draws in its own coordinate space and the renderer
-        /// scales to the real surface automatically.
+        /// Virtual (game-logic) resolution the renderer should present at. A renderer maps this
+        /// coordinate space onto the actual platform surface according to presentationMode.
         /// 0 means "unset"; the renderer should ignore logical presentation.
         int virtualWidth = 0;
         int virtualHeight = 0;

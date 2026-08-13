@@ -462,13 +462,33 @@ namespace CNA::Internal::Renderers::SdlRenderer
                      "default and can be changed to warn-once safe stubs with "
                      "Unsupported3DGraphicsCallBehavior::WarnAndStub; "
                      "SurfaceFormat: Color only (Task 176)" << std::endl;
+
+        registeredWindowId_ = SDL_GetWindowID(window);
+        IGraphicsRenderer::RegisterForWindow(registeredWindowId_, this);
     }
 
     SdlRenderer::~SdlRenderer()
     {
+        IGraphicsRenderer::UnregisterForWindow(registeredWindowId_);
         if (renderer) SDL_DestroyRenderer(renderer);
         // window is NOT owned by the renderer.
         // No SDL_Quit or subsystem shutdown here - managed centrally.
+    }
+
+    bool SdlRenderer::TransformWindowToLogical(const float windowX, const float windowY,
+                                                float& logicalX, float& logicalY) const
+    {
+        return renderer != nullptr &&
+               SDL_RenderCoordinatesFromWindow(
+                   renderer, windowX, windowY, &logicalX, &logicalY);
+    }
+
+    bool SdlRenderer::TransformLogicalToWindow(const float logicalX, const float logicalY,
+                                                float& windowX, float& windowY) const
+    {
+        return renderer != nullptr &&
+               SDL_RenderCoordinatesToWindow(
+                   renderer, logicalX, logicalY, &windowX, &windowY);
     }
 
     void SdlRenderer::Clear(float r, float g, float b, float a)

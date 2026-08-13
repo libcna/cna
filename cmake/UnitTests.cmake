@@ -241,6 +241,9 @@ if(CNA_BUILD_TESTS)
             # reachable from outside its own module. Deliberately NOT in any module's public
             # include tree -- a production build has no business including scaffolding.
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform/tests
+            # PLAT-66: shared SDL-free coordinate-transform renderer used by the input bridge and
+            # public Mouse tests. Test-only for the same reason as the platform fixtures above.
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/input/tests
             # PLAT-94: implementation test only; Sdl3AudioDevice remains out of public headers.
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src
     )

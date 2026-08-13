@@ -4,57 +4,23 @@
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
-#include <SDL3/SDL.h>
+#include "CNA/Platform/PlatformException.hpp"
 
 #include <span>
 
 namespace
 {
-    [[nodiscard]] CNA::Platform::WindowId window_id(SDL_Window* window)
-    {
-        return window != nullptr ? SDL_GetWindowID(window) : 0;
-    }
-
-    /// Resolves the window Mouse operates on: the published WindowHandle if set,
-    /// otherwise the currently focused window (matches the fallback pattern used
-    /// throughout SdlInputBridge.cpp).
-    SDL_Window* resolve_mouse_window(const std::uintptr_t windowHandle)
-    {
-        return windowHandle != 0
-            ? reinterpret_cast<SDL_Window*>(windowHandle)
-            : SDL_GetMouseFocus();
-    }
-
-    /// Converts a point from logical (game/render) coordinates to physical window coordinates —
-    /// the inverse of SdlInputBridge::to_logical_position, so SetPosition warps the OS cursor to
-    /// the right pixel on a scaled window (plan.md a-0001). Two renderer paths:
-    ///   - SDL_Renderer: SDL_RenderCoordinatesToWindow — fully offset-aware, so true-letterbox
-    ///     modes (bars) map correctly, including the centering offset (verified, task 858).
-    ///   - Other renderers: IGraphicsRenderer::TransformLogicalToWindow — for EasyGL this is a
-    ///     uniform height-scale with no offset, which is exact for its FixedHeightDynamicWidth
-    ///     model (the logical viewport fills the window; no bars, so no offset).
-    /// Falls back to pass-through (window == logical) when no scaling transform is available —
-    /// correct when window size == render resolution.
-    void logical_to_window(SDL_Window* window, float logX, float logY, float& outX, float& outY)
+    /// Converts logical game coordinates to the active platform window's client-coordinate
+    /// space. The renderer owns presentation geometry (including letterbox offsets); input knows
+    /// only the stable WindowId used to find it. With no renderer or transform the coordinates
+    /// pass through, which is the correct 1:1/windowless fallback.
+    void logical_to_window(const CNA::Platform::WindowId window, const float logX,
+                           const float logY, float& outX, float& outY)
     {
         outX = logX;
         outY = logY;
-        if (window == nullptr)
-            return;
 
-        if (SDL_Renderer* renderer = SDL_GetRenderer(window))
-        {
-            float wx = logX, wy = logY;
-            if (SDL_RenderCoordinatesToWindow(renderer, logX, logY, &wx, &wy))
-            {
-                outX = wx;
-                outY = wy;
-                return;
-            }
-        }
-
-        if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(
-                window_id(window)))
+        if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(window))
         {
             float wx = logX, wy = logY;
             if (renderer->TransformLogicalToWindow(logX, logY, wx, wy))
@@ -65,31 +31,16 @@ namespace
         }
     }
 
-    /// Converts the platform contract's window-client coordinates back into the logical game
-    /// coordinates MouseState exposes. This is the inverse of logical_to_window above.
-    void window_to_logical(SDL_Window* window, const CNA::Platform::WindowId windowId,
+    /// Converts platform window-client coordinates back into the logical game coordinates
+    /// MouseState exposes. This is the inverse of logical_to_window above and uses the same
+    /// renderer selected solely by stable platform identity.
+    void window_to_logical(const CNA::Platform::WindowId window,
                            const float windowX, const float windowY, float& outX, float& outY)
     {
         outX = windowX;
         outY = windowY;
 
-        if (window != nullptr)
-        {
-            if (SDL_Renderer* renderer = SDL_GetRenderer(window))
-            {
-                float logicalX = windowX;
-                float logicalY = windowY;
-                if (SDL_RenderCoordinatesFromWindow(
-                        renderer, windowX, windowY, &logicalX, &logicalY))
-                {
-                    outX = logicalX;
-                    outY = logicalY;
-                    return;
-                }
-            }
-        }
-
-        if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(windowId))
+        if (auto* renderer = CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(window))
         {
             float logicalX = windowX;
             float logicalY = windowY;
@@ -119,7 +70,6 @@ namespace Microsoft::Xna::Framework::Input
 {
     std::uintptr_t Mouse::windowHandle_ = 0;
     std::uint32_t Mouse::windowId_ = 0;
-    std::uintptr_t Mouse::nativeWindowHandle_ = 0;
     // DEC-06: ClickedEXT is multicast (MulticastAction<int>), matching FNA's Action<int>.
     System::MulticastAction<int> Mouse::ClickedEXT;
 
@@ -131,8 +81,25 @@ namespace Microsoft::Xna::Framework::Input
     void Mouse::setWindowHandleProperty(const std::uintptr_t value)
     {
         windowHandle_ = value;
-        nativeWindowHandle_ = value;
-        windowId_ = window_id(reinterpret_cast<SDL_Window*>(value));
+        windowId_ = 0;
+        if (value == 0)
+        {
+            return;
+        }
+
+        // WindowHandle is a compatibility token, not necessarily an address. Only the selected
+        // platform may interpret it; Mouse retains the resulting stable id and discards the
+        // temporary non-owning wrapper immediately.
+        try
+        {
+            const auto window = CNA::Platform::GetCurrentPlatform().AdoptWindowHandle(value);
+            windowId_ = window != nullptr ? window->GetId() : 0;
+        }
+        catch (const CNA::Platform::PlatformException&)
+        {
+            // Preserve the legacy setter's tolerant invalid/no-window behaviour. The public token
+            // still round-trips, while platform operations safely fall back to snapshot identity.
+        }
     }
 
     void Mouse::INTERNAL_setWindow(
@@ -140,8 +107,6 @@ namespace Microsoft::Xna::Framework::Input
     {
         windowHandle_ = handle;
         windowId_ = handle != 0 ? windowId : 0;
-        nativeWindowHandle_ = reinterpret_cast<std::uintptr_t>(
-            windowId_ != 0 ? SDL_GetWindowFromID(static_cast<SDL_WindowID>(windowId_)) : nullptr);
     }
 
     // Coordinate model: IPlatformMouse owns a window-client snapshot. The public XNA surface maps
@@ -170,9 +135,8 @@ namespace Microsoft::Xna::Framework::Input
         {
             float logicalX = static_cast<float>(snapshot.x);
             float logicalY = static_cast<float>(snapshot.y);
-            SDL_Window* nativeWindow = resolve_mouse_window(nativeWindowHandle_);
             const CNA::Platform::WindowId window = windowId_ != 0 ? windowId_ : snapshot.window;
-            window_to_logical(nativeWindow, window, logicalX, logicalY, logicalX, logicalY);
+            window_to_logical(window, logicalX, logicalY, logicalX, logicalY);
             x = static_cast<int>(logicalX);
             y = static_cast<int>(logicalY);
         }
@@ -203,13 +167,12 @@ namespace Microsoft::Xna::Framework::Input
         // Convert logical -> window so the cursor lands at the correct physical pixel on a
         // scaled/letterboxed window. A zero WindowId asks the service to record the position but
         // not hand a native API an invalid window.
-        SDL_Window* window = resolve_mouse_window(nativeWindowHandle_);
-        float windowX = static_cast<float>(x);
-        float windowY = static_cast<float>(y);
-        logical_to_window(window, static_cast<float>(x), static_cast<float>(y), windowX, windowY);
         const CNA::Platform::WindowId target = windowId_ != 0
             ? windowId_
             : mouse->GetSnapshot().window;
+        float windowX = static_cast<float>(x);
+        float windowY = static_cast<float>(y);
+        logical_to_window(target, static_cast<float>(x), static_cast<float>(y), windowX, windowY);
         mouse->SetPosition(target, static_cast<int>(windowX), static_cast<int>(windowY));
     }
 
@@ -280,7 +243,7 @@ namespace Microsoft::Xna::Framework::Input
     void Mouse::GetGlobalPositionEXT(int& x, int& y)
     {
         // Zeroed first, so a platform with no desktop pointer answers (0, 0) rather than
-        // leaving the caller's own values in place -- the previous SDL call always wrote both.
+        // leaving the caller's own values in place -- the previous native backend always wrote both.
         x = 0;
         y = 0;
 
@@ -317,7 +280,6 @@ namespace Microsoft::Xna::Framework::Input
     {
         windowHandle_ = 0;
         windowId_ = 0;
-        nativeWindowHandle_ = 0;
         ClickedEXT    = nullptr;
     }
 }

@@ -213,12 +213,18 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
   Missing services return a rest state or no-op. SDL3 and Terminal share the same snapshot shape;
   Terminal truthfully refuses warp/relative mode while still publishing cell-quantised state.
 - `SetPosition` converts the caller's logical coordinates to window space before the warp
-  (INPUT-MOUSE-002 (decision a-0001)), so the OS cursor lands at the correct pixel on a scaled window: the
-  SDL_Renderer path uses `SDL_RenderCoordinatesToWindow` (**offset-aware**, so true-letterbox bars
-  map correctly — verified for a 200×100 window in task 858), and EasyGL uses its
-  `TransformLogicalToWindow` (a uniform height-scale with no offset, which is exact for EasyGL's
-  `FixedHeightDynamicWidth` model — the logical width tracks the window aspect, so there are no
-  bars to offset). Vulkan/bgfx pass through (no logical-presentation scaling).
+  (INPUT-MOUSE-002 (decision a-0001)), so the OS cursor lands at the correct client coordinate on
+  a scaled window. `GetState` applies the inverse. PLAT-66 made the `WindowId` renderer registry
+  the single authoritative path for both operations: the input layer never looks up a native
+  window or special-cases one renderer. Renderer implementations own their presentation geometry;
+  the SDL renderer delegates locally to its offset-aware native transform, while other renderers
+  implement the same platform-client↔logical contract in their own terms. A deterministic
+  200×100-client / 100×100-logical test pins the 50-pixel letterbox offset and round trip under all
+  platform selections.
+- Normalized touch events carry the logical client width/height captured by the platform event
+  edge. The shared input bridge first scales into client coordinates and then uses the same
+  `WindowId` renderer transform as mouse input. This removes its former per-event native window
+  lookup without changing the gesture path's FNA-compatible `DisplayWidth`/`DisplayHeight` basis.
 - `MouseCursor` (custom + 11 stock system cursors) is a MonoGame-derived `CNAEXT` extension — FNA
   has no `MouseCursor` type at all. Kept as a deliberate, documented status decision (task 754),
   since `Mouse::SetCursor(MouseCursor&)` depends on it and it's the standard way

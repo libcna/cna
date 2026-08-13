@@ -243,66 +243,37 @@ namespace
         fingerIdToTouchId.erase(fingerId);
     }
 
-    /// Converts window-space coordinates to logical (renderer) coordinates.
-    /// When SDL_SetRenderLogicalPresentation is active (letterbox on Android),
-    /// this maps physical coords into the game's virtual coordinate space.
-    /// Falls back to the raw coords if no renderer is available.
+    /// Converts platform window-client coordinates to logical renderer coordinates. WindowId is
+    /// the whole cross-module identity: platform-specific renderer implementations own any native
+    /// presentation details, including high-DPI scale and letterbox offsets. Falls back to raw
+    /// coordinates if no renderer or transform is registered.
     Microsoft::Xna::Framework::Vector2 to_logical_position(
         const CNA::Platform::WindowId windowId, const float windowX, const float windowY)
     {
-        SDL_Window* window = windowId != 0
-                                 ? SDL_GetWindowFromID(static_cast<SDL_WindowID>(windowId))
-                                 : SDL_GetMouseFocus();
-        if (window != nullptr)
+        if (auto* renderer =
+                CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(windowId))
         {
-            // SDL_Renderer path: use SDL's built-in logical-presentation transform.
-            SDL_Renderer* renderer = SDL_GetRenderer(window);
-            if (renderer != nullptr)
+            float logX = windowX;
+            float logY = windowY;
+            if (renderer->TransformWindowToLogical(windowX, windowY, logX, logY))
             {
-                float logX = windowX, logY = windowY;
-                if (SDL_RenderCoordinatesFromWindow(renderer, windowX, windowY, &logX, &logY))
-                {
-                    return Microsoft::Xna::Framework::Vector2(logX, logY);
-                }
-            }
-            // Other renderers (e.g. EasyGL): use the renderer's own transform if registered.
-            auto* graphicsRenderer =
-                CNA::Internal::Renderers::IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window));
-            if (graphicsRenderer != nullptr)
-            {
-                float logX = windowX, logY = windowY;
-                if (graphicsRenderer->TransformWindowToLogical(windowX, windowY, logX, logY))
-                    return Microsoft::Xna::Framework::Vector2(logX, logY);
+                return Microsoft::Xna::Framework::Vector2(logX, logY);
             }
         }
         return Microsoft::Xna::Framework::Vector2(windowX, windowY);
     }
 
-    // INPUT-TOUCH-024: touch-state coord basis. Scales the normalized SDL coord by the SDL window size
-    // then maps to logical space; the gesture path scales by DisplayWidth/Height (linear, FNA-matching).
-    // Both target the logical space; they differ only inside letterbox bars (accepted).
+    // INPUT-TOUCH-024 / PLAT-66: the platform event carries the logical client size that defines
+    // its normalized coordinates. Scale into window-client units, then use the same renderer
+    // registry transform as mouse input; no native window lookup belongs in this common bridge.
+    // The gesture path still scales by DisplayWidth/Height (linear, FNA-matching). Both target the
+    // logical space; they differ only inside letterbox bars (accepted).
     Microsoft::Xna::Framework::Vector2 to_touch_pixel_position(
-        const CNA::Platform::WindowId windowId, const float normalizedX, const float normalizedY)
+        const CNA::Platform::WindowId windowId, const int clientWidth, const int clientHeight,
+        const float normalizedX, const float normalizedY)
     {
-        SDL_Window* window = nullptr;
-        if (windowId != 0)
-        {
-            window = SDL_GetWindowFromID(static_cast<SDL_WindowID>(windowId));
-        }
-        if (window == nullptr)
-        {
-            window = SDL_GetMouseFocus();
-        }
-
-        // SDL touch coords are normalized 0..1 relative to the window in points.
-        // Convert to window-point coordinates first, then map to logical coords.
-        int winW = 1, winH = 1;
-        if (window != nullptr)
-        {
-            SDL_GetWindowSize(window, &winW, &winH);
-        }
-        const float windowX = normalizedX * static_cast<float>(winW);
-        const float windowY = normalizedY * static_cast<float>(winH);
+        const float windowX = normalizedX * static_cast<float>(std::max(clientWidth, 1));
+        const float windowY = normalizedY * static_cast<float>(std::max(clientHeight, 1));
 
         return to_logical_position(windowId, windowX, windowY);
     }
@@ -980,7 +951,9 @@ namespace CNA::Internal::Input
                                         : get_or_create_touch_id(fingerId);
                 Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_setTouchState(
                     touchId, state,
-                    to_touch_pixel_position(platformEvent.window, platformEvent.x, platformEvent.y),
+                    to_touch_pixel_position(
+                        platformEvent.window, platformEvent.clientWidth, platformEvent.clientHeight,
+                        platformEvent.x, platformEvent.y),
                     platformEvent.pressure);
                 Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(
                     touchId, state, platformEvent.x, platformEvent.y,

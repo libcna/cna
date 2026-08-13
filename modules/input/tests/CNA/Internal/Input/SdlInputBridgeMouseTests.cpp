@@ -6,10 +6,10 @@
 
 #include <gtest/gtest.h>
 
-#include <SDL3/SDL.h>
-
+#include "CNA/Internal/Input/CoordinateTransformTestRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
@@ -184,47 +184,27 @@ TEST(PlatformInputBridgeMouseTest, MotionEventUpdatesAbsolutePosition)
     InputManager::ResetForTests();
 }
 
-// P3-039: to_logical_position's SDL_Renderer branch (SDL_RenderCoordinatesFromWindow) is the read
-// side of the exact transform MouseInputTests.cpp's SetPositionConvertsLogicalToWindowForLetterboxedRenderer
-// already proves for the write side (SDL_RenderCoordinatesToWindow) — a motion event delivered in
-// *window*-space coordinates on a letterboxed renderer must report back in *logical* space, not raw
-// window pixels, so a DPI/logical-presentation scale doesn't leak into Mouse::GetState().
-TEST(PlatformInputBridgeMouseTest, MotionEventConvertsWindowCoordinatesToLogicalForLetterboxedRenderer)
+// PLAT-66: the bridge uses WindowId -> IGraphicsRenderer as its sole coordinate-conversion path.
+// A motion event in platform client coordinates must account for both scale and letterbox offset.
+TEST(PlatformInputBridgeMouseTest, MotionEventUsesRegisteredPlatformCoordinateTransform)
 {
     InputManager::ResetForTests();
 
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-    SDL_Window* window = SDL_CreateWindow("SdlInputBridgeMouseMotionDpiTest", 200, 200, SDL_WINDOW_HIDDEN);
-    if (!window)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
-    if (!renderer)
-    {
-        SDL_DestroyWindow(window);
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateRenderer failed: " << SDL_GetError();
-    }
-
-    // Logical 100x100 presented into a 200x200 window -> a uniform 2x scale (square, no bars).
-    SDL_SetRenderLogicalPresentation(renderer, 100, 100, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+    constexpr WindowId Window = 0x7ffe1001u;
+    CNA::Internal::Input::Testing::CoordinateTransformTestRenderer renderer(
+        100.0f, 100.0f, 50.0f, 0.0f, 100.0f, 100.0f);
+    CNA::Internal::Renderers::IGraphicsRenderer::RegisterForWindow(Window, &renderer);
 
     PlatformInputBridge::ProcessEvent(
-        MouseMotionEvent{SDL_GetWindowID(window), 100.0f, 100.0f, 0.0f, 0.0f});
+        MouseMotionEvent{Window, 100.0f, 50.0f, 0.0f, 0.0f});
 
-    // Window (100,100) -> logical (50,50) at 2x scale, matching the write-side test's inverse.
+    // The 100x100 logical viewport occupies x=50..150 in a 200x100 client area.
     const auto state = Mouse::GetState();
-    EXPECT_NEAR(state.getXProperty(), 50, 1);
-    EXPECT_NEAR(state.getYProperty(), 50, 1);
+    EXPECT_EQ(state.getXProperty(), 50);
+    EXPECT_EQ(state.getYProperty(), 50);
+    EXPECT_EQ(renderer.WindowToLogicalCalls(), 1);
 
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    CNA::Internal::Renderers::IGraphicsRenderer::UnregisterForWindow(Window);
     InputManager::ResetForTests();
 }
 

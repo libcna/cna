@@ -132,9 +132,12 @@ self-move-assignment guard now covered by a regression test.
   a system-shape value or copied RGBA pixels, and `Mouse::SetCursor` sends that description through
   `IPlatformMouse`. This intentionally supersedes P3-037: keeping the raw accessor would preserve an
   SDL type in the public input API and make non-SDL platforms impossible to implement honestly.
-- **Logical→window scaling:** CNA converts logical→window at `SetPosition` time via the graphics
-  backend (`TransformLogicalToWindow` / `SDL_RenderCoordinatesToWindow`); FNA scales at `GetState`
-  read time. Equivalent for the common case (see INPUT-MOUSE-002 (decision a-0001)).
+- **Logical↔window scaling (PLAT-66):** CNA converts through the active graphics renderer at
+  `GetState`/`SetPosition` time. Both directions use the renderer registered for the platform's
+  stable `WindowId`; input never resolves or interprets a native window. The contract's window
+  side is the platform window's logical client-coordinate space, and each renderer owns its
+  presentation scale/crop/letterbox offsets. FNA performs the equivalent scaling at `GetState`
+  read time (see INPUT-MOUSE-002 (decision a-0001)).
 - **`ClickedEXT` is multicast (DEC-06, fixed 2026-07-05):** now a `System::MulticastAction<int>` matching
   FNA's `public static Action<int>` — `+=` adds subscribers, `=` replaces, `= nullptr` clears. (Was a
   single `std::function`; the second-subscriber-lost gap is closed.)

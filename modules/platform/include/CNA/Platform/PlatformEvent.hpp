@@ -218,6 +218,10 @@ namespace CNA::Platform {
         float deltaY = 0.0f;
         /** @brief Normalised pressure in [0, 1]. */
         float pressure = 0.0f;
+        /** @brief Logical client width whose normalised coordinate system x uses. */
+        int clientWidth = 1;
+        /** @brief Logical client height whose normalised coordinate system y uses. */
+        int clientHeight = 1;
     };
 
     /** @brief The class of device an add/remove event refers to. */

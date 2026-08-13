@@ -106,8 +106,8 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **164 files / 2304 references** of direct SDL coupling outside the PLAT-3 allowlist, down
-from the 253 / 3641 baseline. Contract: 27 headers, 527 documented declarations, all SDL-free.
+Ratchet: **163 files / 2266 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+from the 253 / 3641 baseline. Contract: 27 headers, 529 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
 `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` failure was fixed —
@@ -131,7 +131,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**125 ✅ · 3 🟨 · 26 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — **81 %** of the 155
+**126 ✅ · 3 🟨 · 25 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — **81 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -148,7 +148,9 @@ task rows complete.
   `Texture2D`/`TextureCube`; PLAT-65 replaced the final SDL3_image backend with the already-vendored
   stb decoder/encoder and a CNA bilinear scaler. The stale raw-window transition was also closed:
   `GraphicsDevice` now carries only `IPlatformWindow`, creation requirements are typed contract
-  values, and `cna_graphics_core` has no direct SDL/SDL3_image link. Continue at PLAT-66. 46
+  values, and `cna_graphics_core` has no direct SDL/SDL3_image link. PLAT-66 made platform
+  client-coordinate↔logical-game conversion a `WindowId`-registry contract and removed native
+  window resolution from mouse/touch conversion. Continue at PLAT-67. 46
   renderer identities remain in scope.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — five redundant backends are deleted; `Keyboard`, `Mouse` and `MouseCursor`
@@ -265,13 +267,12 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Migrate the coordinate-conversion contract (PLAT-66).** `Mouse` now receives the active
-   platform `WindowId`, but its temporary SDL-native view still exists solely to implement
-   `IGraphicsRenderer`'s window↔logical conversion wording and the SDL_Renderer fast path. Restate
-   the common conversion contract entirely in logical platform-window coordinates, make the
-   renderer registry path authoritative, and remove the input module's need to resolve an SDL
-   window from the id. Preserve letterbox offsets and the inverse relation between `GetState()`
-   and `SetPosition()`; the current mouse scaling/warp tests are the behavioral baseline.
+1. **Migrate the EasyGL family (PLAT-67).** Move `easygl` and the five profiles it serves
+   (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) from the renderer-only SDL window
+   resolver onto `IPlatformGlContext` plus `RendererSurfaceInfo`. Keep context creation/currentness,
+   swap, resize, display scale and the PLAT-66 client↔logical coordinate contract behaviorally
+   intact. This is the highest-leverage renderer family because all six identities share the same
+   implementation.
 
 2. **Completed Phase 6 reference.** PLAT-91…99 now provide independent SDL-free playback and
    recording contracts, orthogonal `SDL3`/`NULL` selection, an SDL3 device edge, and a paced

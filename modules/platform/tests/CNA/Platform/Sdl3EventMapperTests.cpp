@@ -392,6 +392,8 @@ TEST(Sdl3EventMapperTests, TouchEventsMapToTheirKinds)
         EXPECT_FLOAT_EQ(touch.deltaX, isMotion ? -0.125f : 0.0f);
         EXPECT_FLOAT_EQ(touch.deltaY, isMotion ? 0.0625f : 0.0f);
         EXPECT_FLOAT_EQ(touch.pressure, 0.5f);
+        EXPECT_EQ(touch.clientWidth, 1);
+        EXPECT_EQ(touch.clientHeight, 1);
     }
 }
 

@@ -17,7 +17,9 @@
 
 #include <SDL3/SDL.h>
 
+#include "CNA/Internal/Input/CoordinateTransformTestRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Platform/CannedMouse.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -492,107 +494,39 @@ TEST_F(MousePlatformInputTest, SetCursorIsSafeNoOpWithoutMouseService)
     EXPECT_EQ(platform.Canned().CursorCalls(), 0);
 }
 
-TEST(MouseTest, SetPositionConvertsLogicalToWindowForLetterboxedRenderer)
+TEST_F(MousePlatformInputTest, CoordinateTransformPreservesLetterboxOffsetAndInverse)
 {
-#if !defined(CNA_PLATFORM_SDL3)
-    GTEST_SKIP() << "requires the SDL3 platform mouse service";
-#endif
-    // Task 847 / a-0001: on a scaled/letterboxed window the OS cursor must land at the correct
-    // *window* pixel — SetPosition converts the caller's logical coords back to window space. This
-    // exercises the SDL_Renderer path (SDL_RenderCoordinatesToWindow) that logical_to_window uses.
-    ResetMouseState();
+    constexpr CNA::Platform::WindowId Window = 0x7ffe1002u;
+    constexpr std::uintptr_t LegacyToken = 0xfedcba98u;
+    CNA::Internal::Input::Testing::CoordinateTransformTestRenderer renderer(
+        100.0f, 100.0f, 50.0f, 0.0f, 100.0f, 100.0f);
+    CNA::Internal::Renderers::IGraphicsRenderer::RegisterForWindow(Window, &renderer);
+    Mouse::INTERNAL_setWindow(LegacyToken, Window);
 
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = Window;
+    snapshot.x = 100;
+    snapshot.y = 50;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
 
-    SDL_Window* window = SDL_CreateWindow("MouseWarpTest", 200, 200, SDL_WINDOW_HIDDEN);
-    if (!window)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
-    if (!renderer)
-    {
-        SDL_DestroyWindow(window);
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateRenderer failed: " << SDL_GetError();
-    }
+    EXPECT_EQ(Mouse::getWindowHandleProperty(), LegacyToken);
+    const auto initial = Mouse::GetState();
+    EXPECT_EQ(initial.getXProperty(), 50);
+    EXPECT_EQ(initial.getYProperty(), 50);
 
-    // Logical 100x100 presented into a 200x200 window → a uniform 2x scale (square, no bars).
-    SDL_SetRenderLogicalPresentation(renderer, 100, 100, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+    Mouse::SetPosition(25, 75);
+    EXPECT_EQ(platform.Canned().GetSnapshot().window, Window);
+    EXPECT_EQ(platform.Canned().GetSnapshot().x, 75) << "50px letterbox offset must be applied";
+    EXPECT_EQ(platform.Canned().GetSnapshot().y, 75);
 
-    // The exact conversion Mouse::SetPosition applies for the renderer path: logical (50,50) center
-    // maps to window (100,100). This is what gets fed to SDL_WarpMouseInWindow.
-    float wx = 0.0f, wy = 0.0f;
-    ASSERT_TRUE(SDL_RenderCoordinatesToWindow(renderer, 50.0f, 50.0f, &wx, &wy));
-    EXPECT_NEAR(wx, 100.0f, 1.0f);
-    EXPECT_NEAR(wy, 100.0f, 1.0f);
+    const auto roundTrip = Mouse::GetState();
+    EXPECT_EQ(roundTrip.getXProperty(), 25);
+    EXPECT_EQ(roundTrip.getYProperty(), 75);
+    EXPECT_EQ(renderer.LogicalToWindowCalls(), 1);
+    EXPECT_EQ(renderer.WindowToLogicalCalls(), 2);
 
-    // SetPosition keeps GetState() reporting the *logical* position the caller set (the warp target
-    // is window-space; the OS-cursor landing itself is verified manually — global-mouse readback is
-    // Wayland-restricted here, see docs/input-manual-verification-results.md).
-    Mouse::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
-    Mouse::SetPosition(50, 50);
-    const auto state = Mouse::GetState();
-    EXPECT_EQ(state.getXProperty(), 50);
-    EXPECT_EQ(state.getYProperty(), 50);
-
-    Mouse::setWindowHandleProperty(0);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
-    ResetMouseState();
-}
-
-TEST(MouseTest, SetPositionHandlesLetterboxOffsetNotJustScale)
-{
-    // Task 858: prove OFFSET handling, not just uniform scale. A 100×100 logical presentation
-    // LETTERBOXed into a NON-square 200×100 window (aspect 2:1) fits the square content to the
-    // 100px height and centers it horizontally → 50px bars on each side. So logical center (50,50)
-    // maps to window (100,50) — NOT (50,50): the +50px horizontal offset must be applied.
-    // Mouse::SetPosition uses SDL_RenderCoordinatesToWindow, which is offset-aware.
-    ResetMouseState();
-
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    SDL_Window* window = SDL_CreateWindow("MouseLetterboxTest", 200, 100, SDL_WINDOW_HIDDEN);
-    if (!window)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
-    if (!renderer)
-    {
-        SDL_DestroyWindow(window);
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateRenderer failed: " << SDL_GetError();
-    }
-
-    SDL_SetRenderLogicalPresentation(renderer, 100, 100, SDL_LOGICAL_PRESENTATION_LETTERBOX);
-
-    float wx = 0.0f, wy = 0.0f;
-    // Center: 50px left bar + 50px (scale 1.0) → x=100; no vertical bars → y=50.
-    ASSERT_TRUE(SDL_RenderCoordinatesToWindow(renderer, 50.0f, 50.0f, &wx, &wy));
-    EXPECT_NEAR(wx, 100.0f, 1.0f) << "horizontal letterbox offset not applied";
-    EXPECT_NEAR(wy, 50.0f, 1.0f);
-    EXPECT_GT(wx, 60.0f) << "if wx≈50 the offset was ignored (scale-only, wrong)";
-
-    // Top-left logical corner lands at the left bar edge, not the window origin.
-    ASSERT_TRUE(SDL_RenderCoordinatesToWindow(renderer, 0.0f, 0.0f, &wx, &wy));
-    EXPECT_NEAR(wx, 50.0f, 1.0f);
-    EXPECT_NEAR(wy, 0.0f, 1.0f);
-
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
-    ResetMouseState();
+    CNA::Internal::Renderers::IGraphicsRenderer::UnregisterForWindow(Window);
 }
 
 // ===========================================================================

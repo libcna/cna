@@ -120,7 +120,5 @@ namespace Microsoft::Xna::Framework::Input
         static std::uintptr_t windowHandle_;
         /** @brief Platform event id corresponding to WindowHandle, or zero. */
         static std::uint32_t windowId_;
-        /** @brief SDL-native view resolved inside the still-SDL-backed input module. */
-        static std::uintptr_t nativeWindowHandle_;
     };
 }

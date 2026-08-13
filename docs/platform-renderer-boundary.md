@@ -129,8 +129,15 @@ primitive, vertex, pixel or input event.
   already-known SDL window inside the SDL-dependent renderer module instead.
 - PLAT-60 removes `SDL_Texture*` from `ITextureRenderer`; it is not part of this boundary.
 - PLAT-61 keys the registry by `WindowId`, matching both this snapshot and `PlatformEvent`.
-- PLAT-66 restates coordinate conversion in logical window coordinates using the authoritative
-  drawable size and scale, without calling `SDL_GetWindowSize()`.
+- PLAT-66 defines the two sides of coordinate conversion as platform logical-client units and
+  renderer logical-game units. The renderer registry keyed by `WindowId` is authoritative for
+  both directions; input never resolves a native window and falls back to a 1:1 mapping when no
+  transform is registered. Each renderer accounts for its own presentation viewport, density and
+  letterbox/crop offsets. The SDL renderer remains an allowed implementation edge and performs its
+  native offset-aware conversion inside that module, not in input or the common interface.
+- Normalized touch coordinates cross the event boundary together with the client size that defines
+  them. Scaling to client units therefore also stays platform-neutral and requires no per-event
+  window query in the consumer.
 - GL, Vulkan and CPU-presentation migrations use their narrow services. Other renderer families
   use `NativeWindowHandle` and their own API directly.
 

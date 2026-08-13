@@ -97,6 +97,24 @@ TEST_F(PlatformInputBridgeTouchGestureTest, GestureAndTouchStateShareTheLogicalC
     EXPECT_FLOAT_EQ(gesturePos.Y, ny * static_cast<float>(DisplaySize));
 }
 
+TEST_F(PlatformInputBridgeTouchGestureTest, TouchStateUsesPlatformEventClientSize)
+{
+    TouchEvent event{};
+    event.kind = TouchEventKind::Down;
+    event.fingerId = 6002;
+    event.x = 0.25f;
+    event.y = 0.75f;
+    event.clientWidth = 200;
+    event.clientHeight = 100;
+
+    PlatformInputBridge::ProcessEvent(event);
+
+    const TouchCollection state = TouchPanel::GetState();
+    ASSERT_EQ(state.getCountProperty(), 1);
+    EXPECT_FLOAT_EQ(state[0].getPositionProperty().X, 50.0f);
+    EXPECT_FLOAT_EQ(state[0].getPositionProperty().Y, 75.0f);
+}
+
 // P5-014: at startup, before GraphicsDevice publishes the display size, TouchPanel.DisplayWidth/Height
 // are 0. Touch PRESENCE must still be tracked (the bridge records it via window/normalized coords,
 // independent of the display metric), but GESTURES must be suppressed until a valid display size exists —
