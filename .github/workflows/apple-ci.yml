@@ -44,6 +44,8 @@ on:
       - 'modules/runtime/tests/Microsoft/Xna/Framework/GameTests.cpp'
       - 'modules/graphics/src/Xna/GraphicsDevice.cpp'
       - 'modules/audio/tests/CNA/Internal/Audio/AudioMixerTests.cpp'
+      - 'modules/devices/tests/Microsoft/Devices/Detail/DevicesShutdownOrderingTests.cpp'
+      - 'modules/net/tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp'
       - 'modules/content/src/Xna/ContentManager.cpp'
       - 'modules/storage/src/StorageDevice.cpp'
       - 'scripts/check-apple-platform-cmake.sh'
@@ -300,6 +302,7 @@ jobs:
 
       - name: Launch the smoke application in the iOS simulator
         if: matrix.simulator == 'ON'
+        timeout-minutes: 10
         working-directory: cna
         run: |
           set -euo pipefail
@@ -311,6 +314,26 @@ jobs:
           codesign --force --deep --sign - "$app"
           xcrun simctl install "$udid" "$app"
           xcrun simctl spawn "$udid" launchctl setenv SDL_AUDIODRIVER dummy
-          output="$(xcrun simctl launch --console "$udid" com.openeggbert.cna.cna-ios-smoke 2>&1)"
-          echo "$output"
-          grep -q 'CNA_APPLE_SMOKE_OK' <<< "$output"
+          log_file="$RUNNER_TEMP/cna-ios-smoke.log"
+
+          # UIKit owns the application process lifetime; returning from SDL_main need not make
+          # `simctl launch --console` return. Stream it in the background, require the flushed
+          # one-frame marker within a bounded interval, then terminate the app ourselves.
+          xcrun simctl launch --console "$udid" com.openeggbert.cna.cna-ios-smoke >"$log_file" 2>&1 &
+          launch_pid=$!
+          smoke_ok=0
+          for _attempt in {1..60}; do
+            if grep -q 'CNA_APPLE_SMOKE_OK' "$log_file"; then
+              smoke_ok=1
+              break
+            fi
+            if ! kill -0 "$launch_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          xcrun simctl terminate "$udid" com.openeggbert.cna.cna-ios-smoke >/dev/null 2>&1 || true
+          wait "$launch_pid" || true
+          cat "$log_file"
+          test "$smoke_ok" -eq 1

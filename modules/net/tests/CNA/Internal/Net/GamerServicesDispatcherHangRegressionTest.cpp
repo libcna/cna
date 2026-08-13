@@ -17,6 +17,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <thread>

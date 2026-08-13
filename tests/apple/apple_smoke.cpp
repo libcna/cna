@@ -23,6 +23,7 @@ int main(int /*argc*/, char* /*argv*/[])
         graphics.setSupportedOrientationsProperty(DisplayOrientation::LandscapeLeft);
         game.RunOneFrame();
         std::puts("CNA_APPLE_SMOKE_OK");
+        std::fflush(stdout);
         return 0;
     }
     catch (const std::exception& error)
