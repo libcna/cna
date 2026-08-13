@@ -2,7 +2,13 @@
 # audio stream list, and audio/media/runtime all call INTO it (ownership follows dependency
 # direction; assigning it to runtime would create a runtime<->audio link cycle for nothing).
 file(GLOB_RECURSE CNA_AUDIO_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+# The independent audio selection owns its native edge. NULL's implementation arrives in
+# PLAT-99; until then it must not accidentally compile or construct the SDL3 implementation.
+if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL3")
+    list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Platform/Sdl3/.*\\.cpp$")
+endif()
 cna_add_module(cna_audio Audio ${CNA_AUDIO_SOURCES})
+target_include_directories(cna_audio PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(cna_audio PUBLIC cna_core cna_math)
 cna_link_sharp_runtime(cna_audio PUBLIC Core.Base IO Runtime)
 target_link_libraries(cna_audio PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)

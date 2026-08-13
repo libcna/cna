@@ -58,14 +58,16 @@ namespace CNA::Audio::Platform {
     /**
      * @brief Supplies one complete interleaved PCM buffer to a playback device.
      *
-     * The callback is deliberately buffer-shaped: one virtual dispatch fills one native request,
-     * never one dispatch per sample. `sampleCount` counts scalar interleaved samples, not frames;
-     * it is therefore a multiple of the negotiated channel count and `output.size()` is exactly
-     * `sampleCount * BytesPerSample(negotiatedFormat.sampleFormat)`.
+     * The callback is deliberately buffer-shaped: one virtual dispatch fills one complete
+     * backend-owned buffer, never one dispatch per sample. A backend may split a larger native
+     * request into bounded preallocated buffers. `sampleCount` counts scalar interleaved samples,
+     * not frames; it is therefore a multiple of the negotiated channel count and `output.size()`
+     * is exactly `sampleCount * BytesPerSample(negotiatedFormat.sampleFormat)`.
      *
      * Implementations may invoke this method on a real-time/native audio thread. It must not
      * block, allocate, or throw. It must initialize the complete output span; silence is all-zero
-     * bits in both currently supported representations.
+     * bits in both currently supported representations. Device lifecycle methods must not be
+     * called from this callback; `Stop` and `Close` may wait for an in-flight callback to finish.
      */
     class IAudioBufferCallback
     {
@@ -88,8 +90,10 @@ namespace CNA::Audio::Platform {
      * `Open` retains shared ownership of the callback until `Close` returns. On success it returns
      * the actual PCM format the callback must produce; a device may negotiate a different rate,
      * channel count, or representation from the request, but it must never silently report the
-     * request when a different format is delivered. The callback is not invoked before `Open`
-     * returns, and after `Close` returns it will never be invoked again.
+     * request when a different format is delivered. A newly opened device is paused: the callback
+     * is not invoked until `Start`. `Stop` is a callback barrier, and after it returns no callback
+     * is active or begins until the next `Start`. After `Close` returns the callback will never be
+     * invoked again.
      *
      * Invalid requests, a null callback, opening an already-open device, and device-open failures
      * are exceptional. A failed `Open` leaves the device closed. `Close` is idempotent and may be
@@ -102,7 +106,7 @@ namespace CNA::Audio::Platform {
         virtual ~IAudioDevice() = default;
 
         /**
-         * @brief Opens playback and installs its whole-buffer callback.
+         * @brief Opens playback paused and installs its whole-buffer callback.
          * @param requested Preferred application-side PCM format; must satisfy `IsValid`.
          * @param callback Callback retained through the matching `Close`; must not be null.
          * @return The actual format subsequently passed to the callback.
@@ -111,11 +115,20 @@ namespace CNA::Audio::Platform {
             const AudioFormat& requested,
             std::shared_ptr<IAudioBufferCallback> callback) = 0;
 
+        /** @brief Starts or resumes callbacks. Idempotent while already running. */
+        virtual void Start() = 0;
+
+        /** @brief Pauses playback and waits for any in-flight callback. Safe to call repeatedly. */
+        virtual void Stop() noexcept = 0;
+
         /** @brief Stops callbacks and closes the device. Safe to call repeatedly. */
         virtual void Close() noexcept = 0;
 
         /** @brief Returns whether the device is currently open. */
         [[nodiscard]] virtual bool IsOpen() const noexcept = 0;
+
+        /** @brief Returns whether an open device currently permits callbacks. */
+        [[nodiscard]] virtual bool IsRunning() const noexcept = 0;
 
         /**
          * @brief Returns the negotiated format, or an invalid default format while closed.

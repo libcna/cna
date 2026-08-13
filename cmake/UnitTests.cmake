@@ -52,6 +52,14 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl3.*\\.cpp$")
     endif()
 
+    # plan_platform.md PLAT-94: like the general platform implementation above, the native
+    # SDL3 audio test directly exercises a private implementation compiled only for its selected
+    # audio platform. Contract/selection tests remain implementation-neutral.
+    if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL3")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/audio/tests/.*/Sdl3AudioDeviceTests\\.cpp$")
+    endif()
+
     # plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
     # both it and its tests are POSIX-only -- excluded on Windows for the same reason the
     # implementation directory is (modules/platform/CMakeLists.txt), not gated line-by-line.
@@ -231,6 +239,8 @@ if(CNA_BUILD_TESTS)
             # reachable from outside its own module. Deliberately NOT in any module's public
             # include tree -- a production build has no business including scaffolding.
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform/tests
+            # PLAT-94: implementation test only; Sdl3AudioDevice remains out of public headers.
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src
     )
 
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
@@ -461,7 +471,7 @@ if(CNA_BUILD_TESTS)
     # contract visible as a dedicated CTest; future SDL3 and NULL conformance cases join this
     # filter in PLAT-94/99.
     cna_register_renderer_test(NAME CnaAudioPlatformTests
-        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:AudioPlatformSelectionCompileTests.* --gtest_shuffle --gtest_repeat=3
+        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:AudioPlatformSelectionCompileTests.*:Sdl3AudioDeviceTests.* --gtest_shuffle --gtest_repeat=3
         LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     # plan_platform.md PLAT-93: test the cache default, both implemented values, every reserved

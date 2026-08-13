@@ -65,8 +65,23 @@ public:
         return negotiated_;
     }
 
+    void Start() override
+    {
+        if (!open_)
+        {
+            throw std::logic_error("audio device is closed");
+        }
+        running_ = true;
+    }
+
+    void Stop() noexcept override
+    {
+        running_ = false;
+    }
+
     void Close() noexcept override
     {
+        Stop();
         open_ = false;
         callback_.reset();
     }
@@ -76,6 +91,11 @@ public:
         return open_;
     }
 
+    [[nodiscard]] bool IsRunning() const noexcept override
+    {
+        return running_;
+    }
+
     [[nodiscard]] AudioFormat GetFormat() const noexcept override
     {
         return open_ ? negotiated_ : AudioFormat{};
@@ -83,9 +103,9 @@ public:
 
     void RequestBuffer(const std::size_t sampleCount)
     {
-        if (!open_)
+        if (!running_)
         {
-            throw std::logic_error("audio device is closed");
+            throw std::logic_error("audio device is not running");
         }
         if (sampleCount % negotiated_.channels != 0)
         {
@@ -112,6 +132,7 @@ private:
     std::shared_ptr<IAudioBufferCallback> callback_;
     std::vector<std::byte> buffer_;
     bool open_ = false;
+    bool running_ = false;
 };
 
 TEST(AudioDeviceContractTests, SampleFormatsHaveStableScalarWidths)
@@ -140,6 +161,7 @@ TEST(AudioDeviceContractTests, OpenReportsNegotiatedFormatAndRetainsCallback)
 
     EXPECT_EQ(device.Open(requested, callback), negotiated);
     EXPECT_TRUE(device.IsOpen());
+    EXPECT_FALSE(device.IsRunning());
     EXPECT_EQ(device.GetFormat(), negotiated);
     EXPECT_EQ(device.RequestedFormat(), requested);
 
@@ -157,6 +179,7 @@ TEST(AudioDeviceContractTests, OneDispatchFillsOneWholeInterleavedBuffer)
     ContractAudioDevice device(format);
     auto callback = std::make_shared<RecordingBufferCallback>();
     ASSERT_EQ(device.Open(format, callback), format);
+    device.Start();
 
     constexpr std::size_t stereoFrames = 256;
     constexpr std::size_t scalarSamples = stereoFrames * format.channels;
@@ -182,6 +205,8 @@ TEST(AudioDeviceContractTests, InvalidOpenAndIncompleteFrameAreRefused)
 
     ASSERT_EQ(device.Open(valid, callback), valid);
     EXPECT_THROW(device.Open(valid, callback), std::logic_error);
+    EXPECT_THROW(device.RequestBuffer(4), std::logic_error);
+    device.Start();
     EXPECT_THROW(device.RequestBuffer(3), std::invalid_argument);
     EXPECT_EQ(callback->callCount, 0u);
 }
@@ -192,6 +217,16 @@ TEST(AudioDeviceContractTests, CloseIsIdempotentAndStopsFutureCallbacks)
     ContractAudioDevice device(format);
     auto callback = std::make_shared<RecordingBufferCallback>();
     ASSERT_EQ(device.Open(format, callback), format);
+    device.Start();
+    device.RequestBuffer(32);
+
+    device.Stop();
+    device.Stop();
+    EXPECT_TRUE(device.IsOpen());
+    EXPECT_FALSE(device.IsRunning());
+    EXPECT_THROW(device.RequestBuffer(32), std::logic_error);
+
+    device.Start();
     device.RequestBuffer(32);
 
     device.Close();
@@ -199,7 +234,7 @@ TEST(AudioDeviceContractTests, CloseIsIdempotentAndStopsFutureCallbacks)
 
     EXPECT_FALSE(device.IsOpen());
     EXPECT_THROW(device.RequestBuffer(32), std::logic_error);
-    EXPECT_EQ(callback->callCount, 1u);
+    EXPECT_EQ(callback->callCount, 2u);
 }
 
 } // namespace
