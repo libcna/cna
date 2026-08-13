@@ -157,6 +157,11 @@ include(cmake/ToolGltfToCnj.cmake)
 
 include(cmake/UnitTests.cmake)
 
+# A real UIKit/SDL_main/Game final-link product for the iOS device and simulator CI legs.
+# Unlike the module archives or the command-line content tool, this target proves the application
+# entry point, native framework closure, selected renderer and generated bundle all link together.
+include(cmake/AppleSmoke.cmake)
+
 # Minimal-link module probes + renderer-identity registry gate (MODULARIZATION_PLAN.md §4).
 include(cmake/Tests/ModuleProbes.cmake)
 

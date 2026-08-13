@@ -90,6 +90,25 @@ cmake -P "${script}" 2>&1 | grep -q "PROBE-OK escape-hatch" || {
 }
 
 # ---------------------------------------------------------------------------
+# 4b. A renderer stays allow-listed only while the real Apple workflow builds it. SDL_GPU needs
+#     an iOS libshaderc and EasyGL needs two additional sibling repositories, neither of which is
+#     currently supplied by that workflow; accepting them would only postpone a known failure.
+# ---------------------------------------------------------------------------
+for renderer in SDL_GPU OPENGLES2 OPENGLES3 HEADLESS SOFTWARE STUB; do
+    cat > "${script}" <<EOF
+set(CMAKE_SOURCE_DIR "${repo_root}")
+include("${repo_root}/cmake/ApplePlatform.cmake")
+set(CNA_APPLE_IOS ON)
+cna_apple_validate_renderer("${renderer}")
+message(STATUS "PROBE-ACCEPTED ${renderer}")
+EOF
+    if cmake -P "${script}" >/dev/null 2>&1; then
+        echo "FAIL: ${renderer} was accepted although Apple CI does not build it" >&2
+        exit 1
+    fi
+done
+
+# ---------------------------------------------------------------------------
 # 5. The Info.plist templates the bundle configuration points at must exist and be well-formed
 #    enough to name the CMake substitutions the target properties provide.
 # ---------------------------------------------------------------------------

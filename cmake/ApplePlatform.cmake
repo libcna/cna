@@ -118,6 +118,11 @@ function(cna_apple_configure_bundle target)
     if(CNA_APPLE_MACOS AND NOT CNA_APPLE_BUNDLE_MACOS_EXECUTABLES)
         return()
     endif()
+    get_target_property(_already_configured ${target} CNA_APPLE_BUNDLE_CONFIGURED)
+    if(_already_configured)
+        return()
+    endif()
+    set_property(TARGET ${target} PROPERTY CNA_APPLE_BUNDLE_CONFIGURED TRUE)
 
     # CFBundleIdentifier must be a valid reverse-DNS string: only alphanumerics, '-' and '.'.
     # CNA target names use underscores (cna_house3d_demo), which Apple rejects.
@@ -217,14 +222,8 @@ endfunction()
 # the renderer has been observed producing correct pixels on a device or simulator — see
 # docs/apple-platforms.md for the per-renderer evidence boundary.
 set(CNA_APPLE_IOS_RENDERERS
-    "HEADLESS"      # no window, no GPU — portable by construction
-    "SOFTWARE"      # CPU rasterizer into an SDL surface
-    "STUB"          # records calls, draws nothing
     "SDL_RENDERER"  # SDL3's own 2D renderer; Metal-backed on iOS
-    "SDL_GPU"       # SDL3 GPU API; Metal-backed on iOS
-    "OPENGLES2"     # EasyGL over an SDL GL ES context
-    "OPENGLES3"     # EasyGL over an SDL GL ES context
-    CACHE INTERNAL "Renderers CNA wires up for an iOS build")
+    CACHE INTERNAL "Renderers CNA wires up for an iOS build" FORCE)
 
 option(CNA_APPLE_ALLOW_UNVALIDATED_RENDERER
     "Allow selecting a renderer outside the iOS allow-list (experimentation only; expect build failures)"

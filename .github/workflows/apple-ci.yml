@@ -20,6 +20,8 @@ on:
       - '.github/workflows/apple-ci.yml'
       - 'CMakeLists.txt'
       - 'cmake/ApplePlatform.cmake'
+      - 'cmake/AppleSmoke.cmake'
+      - 'cmake/FixupMacOSBundle.cmake'
       - 'cmake/AppleInfo.*.plist.in'
       - 'cmake/toolchains/ios.cmake'
       - 'cmake/ThirdPartySDL.cmake'
@@ -35,6 +37,7 @@ on:
       - 'modules/runtime/tests/Microsoft/Xna/Framework/GameWindowTests.cpp'
       - 'modules/storage/src/StorageDevice.cpp'
       - 'scripts/check-apple-platform-cmake.sh'
+      - 'tests/apple/ios_smoke.cpp'
   pull_request:
   workflow_dispatch:
 
@@ -148,8 +151,9 @@ jobs:
         run: brew install ccache
 
       # Tests and examples are off: CnaTests is a console gtest binary that an app-sandboxed iOS
-      # process cannot run the way CI would need to, and the examples' fixtures assume a
-      # desktop filesystem layout. What this leg proves is that the library itself cross-compiles.
+      # process cannot run the way CI would need to, and the examples' fixtures assume a desktop
+      # filesystem layout. CNA_BUILD_APPLE_SMOKE_APP remains on by default for iOS: it is a real,
+      # minimal UIKit/SDL_main/Game product that final-links the selected renderer.
       - name: Configure
         working-directory: cna
         run: >
@@ -159,6 +163,7 @@ jobs:
           -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
           -DCNA_BUILD_TESTS=OFF
           -DCNA_BUILD_EXAMPLES=OFF
+          -DCNA_BUILD_APPLE_SMOKE_APP=ON
           -DCNA_ENABLE_NET=OFF
           -DCNA_USE_CCACHE=ON
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -166,8 +171,8 @@ jobs:
           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       # The default target, not `--target CNA`: the CNA umbrella is an INTERFACE library and has
-      # no build rule of its own. With tests and examples off, the default target is exactly the
-      # set of module archives plus the selected renderer.
+      # no build rule of its own. The default target also links cna_ios_smoke.app, deliberately:
+      # archive-only builds cannot expose missing UIKit frameworks or dynamic SDL dependencies.
       - name: Build CNA
         working-directory: cna
         run: cmake --build ${{ matrix.build_dir }} --parallel 3
@@ -196,3 +201,51 @@ jobs:
             echo "expected $expected in the Mach-O build-version load command" >&2
             exit 1
           }
+
+      - name: Verify the final iOS application bundle
+        working-directory: cna
+        run: |
+          set -euo pipefail
+          app="$(find ${{ matrix.build_dir }} -type d -name 'cna_ios_smoke.app' -print -quit)"
+          if [ -z "$app" ]; then
+            echo "cna_ios_smoke.app not found under ${{ matrix.build_dir }}" >&2
+            exit 1
+          fi
+          executable="$app/cna_ios_smoke"
+          test -x "$executable"
+          plutil -lint "$app/Info.plist"
+
+          platform="$(otool -l "$executable" | grep -m1 -A3 LC_BUILD_VERSION | grep platform || true)"
+          case "${{ matrix.simulator }}" in
+            ON)  expected='platform 7' ;;   # PLATFORM_IOSSIMULATOR
+            OFF) expected='platform 2' ;;   # PLATFORM_IOS
+          esac
+          echo "$platform" | grep -q "$expected"
+
+          symbols="$(nm "$executable")"
+          echo "$symbols" | grep -Eq ' [Tt] _main$'
+          echo "$symbols" | grep -Eq ' [Tt] _SDL_main$'
+
+          dependencies="$(otool -L "$executable")"
+          echo "$dependencies"
+          if echo "$dependencies" | grep -Eq '(\.sdl-prebuilt|/opt/homebrew|/usr/local|libSDL3(_image|_mixer)?[^/]*)'; then
+            echo "iOS smoke app contains a non-system dynamic SDL/build-machine dependency" >&2
+            exit 1
+          fi
+
+      - name: Launch the smoke application in the iOS simulator
+        if: matrix.simulator == 'ON'
+        working-directory: cna
+        run: |
+          set -euo pipefail
+          app="$(find ${{ matrix.build_dir }} -type d -name 'cna_ios_smoke.app' -print -quit)"
+          udid="$(xcrun simctl list devices available -j | python3 -c 'import json, sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime, devices in data["devices"].items() if ".iOS-" in runtime for device in devices if device["name"].startswith("iPhone") and device["isAvailable"]))')"
+          trap 'xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true' EXIT
+          xcrun simctl boot "$udid" >/dev/null 2>&1 || true
+          xcrun simctl bootstatus "$udid" -b
+          codesign --force --deep --sign - "$app"
+          xcrun simctl install "$udid" "$app"
+          xcrun simctl spawn "$udid" launchctl setenv SDL_AUDIODRIVER dummy
+          output="$(xcrun simctl launch --console "$udid" com.openeggbert.cna.cna-ios-smoke 2>&1)"
+          echo "$output"
+          echo "$output" | grep -q 'CNA_IOS_SMOKE_OK'
