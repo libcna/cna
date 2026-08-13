@@ -192,11 +192,12 @@ TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
 
 TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindow)
 {
-#if defined(CNA_PLATFORM_SDL3)
-    GTEST_SKIP() << "the HEADLESS renderer intentionally creates no window under the SDL3 selection";
-#else
     Game game;
     GameWindow& window = game.getWindowProperty();
+    if (window.GetNativeWindowHandleEXT().system == CNA::Platform::NativeWindowSystem::Unknown)
+    {
+        GTEST_SKIP() << "The selected renderer intentionally creates no platform window.";
+    }
 
     EXPECT_EQ(window.getTitleProperty(), "Game");
     EXPECT_TRUE(window.getAllowUserResizingProperty());
@@ -214,5 +215,4 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
     EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 320, 240));
     EXPECT_NO_THROW(window.MinimizeEXT());
     EXPECT_NO_THROW(window.RestoreEXT());
-#endif
 }
