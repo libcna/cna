@@ -2,6 +2,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -47,6 +49,21 @@ namespace CNA::Platform {
         GyroscopeRight
     };
 
+    /** @brief Current clockwise display rotation relative to the device's natural orientation. */
+    enum class SensorDisplayRotation
+    {
+        /** @brief The platform cannot report the rotation. */
+        Unknown,
+        /** @brief Natural orientation. */
+        Degrees0,
+        /** @brief Rotated clockwise by 90 degrees. */
+        Degrees90,
+        /** @brief Rotated clockwise by 180 degrees. */
+        Degrees180,
+        /** @brief Rotated clockwise by 270 degrees. */
+        Degrees270
+    };
+
     /** @brief One enumerated sensor. */
     struct SensorInfo
     {
@@ -56,6 +73,24 @@ namespace CNA::Platform {
         SensorKind kind = SensorKind::Unknown;
         /** @brief The sensor's human-readable name, or empty when the platform reports none. */
         std::string name;
+    };
+
+    /** @brief Callback invoked when an opened sensor publishes a new reading. */
+    using SensorReadingCallback = std::function<void(const SensorReading&)>;
+
+    /** @brief One independently owned sensor stream. */
+    class IPlatformSensorSession
+    {
+    public:
+        /** @brief Stops delivery and closes the native sensor. */
+        virtual ~IPlatformSensorSession() = default;
+
+        /**
+         * @brief Gets the most recent reading without blocking.
+         * @param reading Receives the reading; untouched when unavailable.
+         * @return True when the session has a current reading.
+         */
+        [[nodiscard]] virtual bool TryGetReading(SensorReading& reading) const = 0;
     };
 
     /**
@@ -90,6 +125,29 @@ namespace CNA::Platform {
          * @return True if the device exposes it.
          */
         [[nodiscard]] virtual bool IsAvailable(SensorKind kind) const = 0;
+
+        /**
+         * @brief Gets current display rotation for consumers that expose display-relative axes.
+         * @return The rotation, or Unknown when it cannot be queried.
+         */
+        [[nodiscard]] virtual SensorDisplayRotation GetDisplayRotation() const = 0;
+
+        /**
+         * @brief Opens an independent stream for the first sensor of a kind.
+         *
+         * The optional callback may run on a platform-owned thread. Destroying the returned
+         * session is a barrier: after its destructor returns, callbacks on other threads are no
+         * longer running and no new callback will be invoked. Reentrant destruction by the
+         * callback itself cannot wait for its own stack frame; that frame may finish normally but
+         * must not invoke the callback again. The caller must keep the sensor subsystem acquired
+         * until after the session is destroyed.
+         *
+         * @param kind Which sensor.
+         * @param callback Callback for new readings, or empty for polling only.
+         * @return A stream, or null when no matching device can be opened.
+         */
+        [[nodiscard]] virtual std::unique_ptr<IPlatformSensorSession> OpenSensor(
+            SensorKind kind, SensorReadingCallback callback) = 0;
 
         /**
          * @brief Begins delivering readings for a sensor.

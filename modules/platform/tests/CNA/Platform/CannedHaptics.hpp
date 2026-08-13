@@ -5,6 +5,7 @@
 #include "CNA/Platform/Input/IPlatformHaptics.hpp"
 
 #include <map>
+#include <optional>
 #include <utility>
 
 namespace CNA::Platform::Testing {
@@ -30,6 +31,17 @@ namespace CNA::Platform::Testing {
                 result.push_back(info);
             }
             return result;
+        }
+
+        /** @brief Gets the explicitly selected canned vibration device. */
+        [[nodiscard]] std::optional<HapticInfo> GetDefaultVibrationDevice() const override
+        {
+            if (!defaultVibrationId.has_value())
+            {
+                return std::nullopt;
+            }
+            const auto item = devices_.find(*defaultVibrationId);
+            return item != devices_.end() ? std::optional<HapticInfo>(item->second) : std::nullopt;
         }
 
         /** @brief Gets whether the id is connected. */
@@ -65,10 +77,30 @@ namespace CNA::Platform::Testing {
             return IsConnected(id) && SupportsRumble(id) && playResult;
         }
 
+        /** @brief Records a two-motor request and returns the configured answer. */
+        bool PlayLeftRight(const DeviceId id, const float largeMotor, const float smallMotor,
+                           const std::uint32_t durationMilliseconds) override
+        {
+            ++leftRightCalls;
+            lastId = id;
+            lastLargeMotor = largeMotor;
+            lastSmallMotor = smallMotor;
+            lastDurationMilliseconds = durationMilliseconds;
+            return IsConnected(id) && leftRightResult;
+        }
+
         /** @brief Records a stop request and returns the configured answer. */
         bool StopRumble(const DeviceId id) override
         {
             ++stopCalls;
+            lastId = id;
+            return IsConnected(id) && stopResult;
+        }
+
+        /** @brief Records a stop-all request and returns the configured answer. */
+        bool StopAll(const DeviceId id) override
+        {
+            ++stopAllCalls;
             lastId = id;
             return IsConnected(id) && stopResult;
         }
@@ -79,6 +111,10 @@ namespace CNA::Platform::Testing {
         bool initializeResult = true;
         /** @brief Answer returned after connection validation. */
         bool stopResult = true;
+        /** @brief Answer returned by two-motor requests after connection validation. */
+        bool leftRightResult = true;
+        /** @brief Device returned by GetDefaultVibrationDevice, or no value for unsupported. */
+        std::optional<DeviceId> defaultVibrationId;
         /** @brief Number of capability queries. */
         mutable int supportsCalls = 0;
         /** @brief Number of play calls. */
@@ -87,10 +123,18 @@ namespace CNA::Platform::Testing {
         int initializeCalls = 0;
         /** @brief Number of stop calls. */
         int stopCalls = 0;
+        /** @brief Number of two-motor calls. */
+        int leftRightCalls = 0;
+        /** @brief Number of stop-all calls. */
+        int stopAllCalls = 0;
         /** @brief Last addressed id. */
         DeviceId lastId = 0;
         /** @brief Last requested strength. */
         float lastStrength = 0.0f;
+        /** @brief Last requested low-frequency motor strength. */
+        float lastLargeMotor = 0.0f;
+        /** @brief Last requested high-frequency motor strength. */
+        float lastSmallMotor = 0.0f;
         /** @brief Last requested duration. */
         std::uint32_t lastDurationMilliseconds = 0;
 

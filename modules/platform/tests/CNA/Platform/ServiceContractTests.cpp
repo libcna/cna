@@ -30,6 +30,7 @@ TEST(ServiceContractTests, EveryServiceInterfaceHasAVirtualDestructor)
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformJoystick>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformTextInput>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformSensors>);
+    EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformSensorSession>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformClipboard>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformDisplays>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformDialogs>);
@@ -50,6 +51,7 @@ TEST(ServiceContractTests, EveryServiceInterfaceIsAbstract)
     EXPECT_TRUE(std::is_abstract_v<IPlatformJoystick>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformTextInput>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformSensors>);
+    EXPECT_TRUE(std::is_abstract_v<IPlatformSensorSession>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformClipboard>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformDisplays>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformDialogs>);

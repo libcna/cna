@@ -5,6 +5,8 @@
 #include "CNA/Platform/Input/IPlatformSensors.hpp"
 
 #include <map>
+#include <memory>
+#include <mutex>
 #include <vector>
 
 namespace CNA::Platform::Sdl3 {
@@ -27,6 +29,11 @@ namespace CNA::Platform::Sdl3 {
          * @return True if the device exposes it.
          */
         [[nodiscard]] bool IsAvailable(SensorKind kind) const override;
+        /** @brief Gets the primary display's current rotation. */
+        [[nodiscard]] SensorDisplayRotation GetDisplayRotation() const override;
+        /** @brief Opens an independently owned sensor stream. */
+        [[nodiscard]] std::unique_ptr<IPlatformSensorSession> OpenSensor(
+            SensorKind kind, SensorReadingCallback callback) override;
         /**
          * @brief Opens a sensor and begins delivering readings.
          * @param kind Which sensor.
@@ -50,6 +57,8 @@ namespace CNA::Platform::Sdl3 {
 
     private:
         void CloseAll();
+        std::shared_ptr<std::recursive_mutex> nativeMutex_ =
+            std::make_shared<std::recursive_mutex>();
         std::map<SensorKind, void*> open_;
     };
 
@@ -62,6 +71,8 @@ namespace CNA::Platform::Sdl3 {
 
         /** @brief Gets connected haptic descriptors in ascending id order. */
         [[nodiscard]] std::vector<HapticInfo> GetHaptics() const override;
+        /** @brief Gets the first suitable non-gamepad vibration device. */
+        [[nodiscard]] std::optional<HapticInfo> GetDefaultVibrationDevice() const override;
         /** @brief Gets whether an id is currently connected. */
         [[nodiscard]] bool IsConnected(DeviceId id) const override;
         /**
@@ -81,12 +92,17 @@ namespace CNA::Platform::Sdl3 {
          */
         bool PlayRumble(DeviceId id, float strength,
                         std::uint32_t durationMilliseconds) override;
+        /** @brief Plays a two-motor effect, when the device supports one. */
+        bool PlayLeftRight(DeviceId id, float largeMotor, float smallMotor,
+                           std::uint32_t durationMilliseconds) override;
         /**
          * @brief Stops a rumble effect.
          * @param id The device to stop.
          * @return True if accepted.
          */
         bool StopRumble(DeviceId id) override;
+        /** @brief Stops every active effect owned by this service. */
+        bool StopAll(DeviceId id) override;
 
         /** @brief Closes cached handles before the haptic subsystem's final release. */
         void Deactivate();
@@ -99,9 +115,12 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] std::vector<DeviceId> EnumerateIds() const;
         void RetireMissing(const std::vector<DeviceId>& ids) const;
         [[nodiscard]] bool ProbeRumble(DeviceId id) const;
+        void DestroyLeftRight(DeviceId id);
 
         mutable std::map<DeviceId, void*> open_;
         mutable std::map<DeviceId, bool> rumbleInitialized_;
+        mutable std::map<DeviceId, int> leftRightEffects_;
+        mutable std::recursive_mutex mutex_;
     };
 
 } // namespace CNA::Platform::Sdl3

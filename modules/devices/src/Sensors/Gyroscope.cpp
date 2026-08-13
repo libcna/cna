@@ -10,33 +10,27 @@
 #include <string>
 #include <utility>
 
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_init.h>
-#include <SDL3/SDL_sensor.h>
-
+#include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/TargetPlatform.hpp"
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp"
-#include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
+#include "Microsoft/Devices/Sensors/Detail/PlatformSensorSubsystem.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Devices::Sensors
 {
-    Detail::SdlSensorSubsystem<Gyroscope>& Gyroscope::GetSubsystem()
+    Detail::PlatformSensorSubsystem<Gyroscope>& Gyroscope::GetSubsystem()
     {
-        // Task P5-4: function-local static, not a class-static member —
-        // keeps SDL_Sensor*/SDL_SensorType and everything else
-        // SdlSensorSubsystem.hpp touches out of Gyroscope.hpp entirely,
-        // same discipline this class already used for its previous
-        // `void* g_sensor_`.
-        static Detail::SdlSensorSubsystem<Gyroscope> subsystem;
+        // Function-local static keeps the shared registration/session state private to this
+        // translation unit while retaining one manager for every Gyroscope instance.
+        static Detail::PlatformSensorSubsystem<Gyroscope> subsystem;
         return subsystem;
     }
 
-    int Gyroscope::GetSdlSensorType()
+    CNA::Platform::SensorKind Gyroscope::GetPlatformSensorKind()
     {
-        return static_cast<int>(SDL_SENSOR_GYRO);
+        return CNA::Platform::SensorKind::Gyroscope;
     }
 
     bool Gyroscope::getIsSupportedProperty()
@@ -52,13 +46,11 @@ namespace Microsoft::Devices::Sensors
 
         // Task P7-1: see Accelerometer::getIsSupportedProperty()'s
         // identical fix for the full rationale — this class's own
-        // subsystem.mutex_ (as P6-9 used it) does not serialize against
-        // Accelerometer's identical real SDL sensor-subsystem calls, which
-        // lock a *different* mutex. ProbeIsSupported() touches no per-class
-        // subsystem state, so this now locks only the shared global SDL
-        // sensor mutex.
-        std::lock_guard<std::mutex> lock(Detail::GetGlobalSdlSensorMutex());
-        return Detail::SdlSensorSubsystem<Gyroscope>::ProbeIsSupported(lock);
+        // subsystem.mutex_ (as P6-9 used it) did not serialize against
+        // Accelerometer's identical native subsystem calls. ProbeIsSupported() touches no
+        // per-class state; process-wide serialization now belongs to the selected platform.
+        return Detail::PlatformSensorSubsystem<Gyroscope>::ProbeIsSupported(
+            GetPlatformSensorKind());
     }
 
     SensorState Gyroscope::getStateProperty() const
@@ -81,7 +73,7 @@ namespace Microsoft::Devices::Sensors
         // Task P6-1: see Accelerometer::Accelerometer()'s identical fix for
         // the full rationale — the check+increment must be atomic with
         // Dispose()'s decrement (already under this same lock), and the
-        // lock must be released before the slow SDL probe below.
+        // lock must be released before the slow platform probe below.
         {
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
 
@@ -136,58 +128,41 @@ namespace Microsoft::Devices::Sensors
         // full rationale — only a subsystem hold newly acquired by *this*
         // call is released on failure below.
         bool acquiredSubsystemThisCall = false;
-
-        {
-            // Task P7-1: see Accelerometer::Start()'s identical fix for the
-            // full rationale.
-            std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
-
-            if (!subsystemHeld_)
-            {
-                if (!Detail::SdlSensorSubsystem<Gyroscope>::EnsureSubsystemInitialized(sdlLock))
-                {
-                    state_ = SensorState::NotSupported;
-                    throw SensorFailedException(
-                        "Failed to start gyroscope data acquisition. SDL sensor subsystem initialization failed.");
-                }
-
-                subsystemHeld_ = true;
-                acquiredSubsystemThisCall = true;
-            }
-
-            if (subsystem.OpenDefaultSensorLocked(sdlLock) == nullptr)
-            {
-                state_ = SensorState::NotSupported;
-
-                // Task P6-2: previously left subsystemHeld_ true here forever
-                // (until this instance's eventual Dispose()) even though
-                // Start() itself failed — a real subsystem-hold leak.
-                if (acquiredSubsystemThisCall)
-                {
-                    SDL_QuitSubSystem(SDL_INIT_SENSOR);
-                    subsystemHeld_ = false;
-                }
-
-                throw SensorFailedException(
-                    "Failed to start gyroscope data acquisition. No default sensor found.");
-            }
-        }
-
-        // Task SDLCORE-003 (2026-07-17): see Accelerometer::Start()'s
-        // identical fix for the full rationale.
-        if (!subsystem.RegisterEventWatchIfNeededLocked())
+        CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+        if (subsystemHeld_ && acquiredPlatform_ != &platform)
         {
             state_ = SensorState::NotSupported;
+            throw SensorFailedException(
+                "Failed to start gyroscope data acquisition: selected platform changed "
+                "while this sensor still owns its previous subsystem reference.");
+        }
+        if (!subsystemHeld_)
+        {
+            try
+            {
+                platform.AcquireSubsystem(CNA::Platform::PlatformSubsystem::Sensor);
+            }
+            catch (const CNA::Platform::PlatformException& ex)
+            {
+                state_ = SensorState::NotSupported;
+                throw SensorFailedException(ex.what());
+            }
+            subsystemHeld_ = true;
+            acquiredPlatform_ = &platform;
+            acquiredSubsystemThisCall = true;
+        }
 
+        if (!subsystem.EnsureSessionLocked(GetPlatformSensorKind()))
+        {
+            state_ = SensorState::NotSupported;
             if (acquiredSubsystemThisCall)
             {
-                std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
-                SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                platform.ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Sensor);
                 subsystemHeld_ = false;
+                acquiredPlatform_ = nullptr;
             }
-
             const std::string message =
-                "Failed to start gyroscope data acquisition. Failed to register the sensor event watch: "
+                "Failed to start gyroscope data acquisition: "
                 + subsystem.lastEventWatchError_;
             throw SensorFailedException(message.c_str());
         }
@@ -208,17 +183,17 @@ namespace Microsoft::Devices::Sensors
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Gyroscope");
 
         auto& subsystem = GetSubsystem();
-        std::lock_guard<std::mutex> lock(subsystem.mutex_);
-
-        if (started_)
+        std::unique_ptr<CNA::Platform::IPlatformSensorSession> inactive;
         {
-            subsystem.UnregisterStartedInstanceLocked(this);
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            if (started_)
+            {
+                subsystem.UnregisterStartedInstanceLocked(this);
+            }
+            started_ = false;
+            state_ = SensorState::Disabled;
+            inactive = subsystem.TakeInactiveSessionLocked();
         }
-
-        started_ = false;
-        state_ = SensorState::Disabled;
-
-        subsystem.UnregisterEventWatchIfNeededLocked();
     }
 
     void Gyroscope::Dispose(bool disposing)
@@ -290,33 +265,17 @@ namespace Microsoft::Devices::Sensors
             assert(subsystem.instanceCount_ >= 0
                 && "Gyroscope::instanceCount_ underflowed -- Dispose(bool) ran more than once for one instance");
 
-            // Task P7-1: see Accelerometer::Dispose(bool)'s identical fix
-            // for the full rationale.
-            std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
-
             if (subsystem.instanceCount_ == 0)
             {
                 subsystem.startedInstances_.clear();
-                subsystem.UnregisterEventWatchIfNeededLocked();
-
-                if (subsystem.sensor_ != nullptr)
-                {
-                    SDL_CloseSensor(subsystem.sensor_);
-                    subsystem.sensor_ = nullptr;
-                    subsystem.sensorId_ = 0;
-                }
             }
+        }
 
-            // Balances this instance's own EnsureSubsystemInitialized()
-            // call from Start() (if any) 1:1, independent of
-            // instanceCount_ — SDL's internal ref-count (not this class)
-            // decides whether this is the last holder across both
-            // Accelerometer and Gyroscope (Task P4-8).
-            if (subsystemHeld_)
-            {
-                SDL_QuitSubSystem(SDL_INIT_SENSOR);
-                subsystemHeld_ = false;
-            }
+        if (subsystemHeld_ && acquiredPlatform_ != nullptr)
+        {
+            acquiredPlatform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Sensor);
+            subsystemHeld_ = false;
+            acquiredPlatform_ = nullptr;
         }
 
         // Task P7-2: only the winning caller reaches here, after cleanup
@@ -326,7 +285,7 @@ namespace Microsoft::Devices::Sensors
 
 #ifdef __ANDROID__
     /**
-     * Converts raw SDL3 gyroscope data (portrait device frame) to the XNA Windows
+     * Converts raw gyroscope data (portrait device frame) to the XNA Windows
      * Phone landscape coordinate convention, for both allowed landscape rotations
      * (ROTATION_90 or ROTATION_270 — not an `android:screenOrientation` manifest
      * attribute; see `Detail::AndroidSensorLandscapeOrientation`'s doc comment,
@@ -339,25 +298,21 @@ namespace Microsoft::Devices::Sensors
      * kept enabled by default for existing CNA games/demos; see
      * `Detail::SetAndroidLandscapeRemapEnabled()` for the opt-out.
      *
-     * @param rawX  SDL gyroscope X, in radians/second.
-     * @param rawY  SDL gyroscope Y, in radians/second.
-     * @param rawZ  SDL gyroscope Z, in radians/second.
+     * @param rawX Platform gyroscope X, in radians/second.
+     * @param rawY Platform gyroscope Y, in radians/second.
+     * @param rawZ Platform gyroscope Z, in radians/second.
      * @return      Rotation rate vector in XNA landscape coordinate convention.
      */
     static Microsoft::Xna::Framework::Vector3 ConvertAndroidGyroscopeToXnaLandscape(
         float rawX, float rawY, float rawZ)
     {
-        const SDL_DisplayOrientation orient =
-            SDL_GetCurrentDisplayOrientation(SDL_GetPrimaryDisplay());
-
-        // Task P5-7: the actual sign-remap math is a pure function shared
-        // with Accelerometer.cpp (identical for both), moved to
-        // Detail::ConvertAndroidPortraitToXnaLandscape() so it can be unit
-        // tested on any platform. This function's only remaining job is
-        // mapping SDL's live display orientation to that function's
-        // platform-independent enum.
+        CNA::Platform::IPlatformSensors* sensors =
+            CNA::Platform::GetCurrentPlatform().GetSensors();
+        const CNA::Platform::SensorDisplayRotation rotation = sensors != nullptr
+            ? sensors->GetDisplayRotation()
+            : CNA::Platform::SensorDisplayRotation::Unknown;
         const Detail::AndroidSensorLandscapeOrientation mappedOrientation =
-            (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
+            (rotation == CNA::Platform::SensorDisplayRotation::Degrees270)
                 ? Detail::AndroidSensorLandscapeOrientation::Rotation270
                 : Detail::AndroidSensorLandscapeOrientation::Rotation90;
 
@@ -376,25 +331,17 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        // Task P6-3: see Accelerometer::ProcessSensorUpdateEvent()'s
-        // identical fix for the full rationale.
-        std::int64_t currentSensorId;
         {
             auto& subsystem = GetSubsystem();
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
-            if (!started_ || subsystem.sensor_ == nullptr)
+            if (!started_)
             {
                 return;
             }
-            currentSensorId = subsystem.sensorId_;
         }
+        (void)sensorId;
 
-        if (sensorId != currentSensorId)
-        {
-            return;
-        }
-
-        // Task GYRO-004/SDL-SENSOR-002: see Accelerometer::ProcessSensorUpdateEvent()'s
+        // See Accelerometer::ProcessSensorUpdateEvent()'s
         // identical fix for the full rationale. std::chrono::steady_clock,
         // not wall-clock time (2026-07-06 stabilization pass) -- see
         // ShouldAcceptUpdateAt()'s own doc comment.
@@ -410,33 +357,8 @@ namespace Microsoft::Devices::Sensors
     {
         GyroscopeReading gyroscopeReading;
 
-        // Task GYRO-002 (re-verified 2026-07-06): no unit conversion here,
-        // deliberately -- SDL3 documents its own SDL_SENSOR_GYRO output as
-        // "the current rate of rotation in radians per second"
-        // (third_party/SDL/include/SDL3/SDL_sensor.h), and the real WP7
-        // GyroscopeReading.RotationRate is documented identically: "Gets
-        // the rotational velocity around each axis of the device, in
-        // radians per second" (archived MSDN `hh239090(v=vs.105)`). Both
-        // sides already agree on the same unit, so a straight pass-through
-        // is correct.
-        //
-        // Task SDL-SENSOR-001 (2026-07-06): axis convention for the raw
-        // x/y/z parameters is documented directly above `SDL_SensorType`
-        // (third_party/SDL/include/SDL3/SDL_sensor.h, "Gyroscope sensor
-        // notes"): values[0]/[1]/[2] are angular speed around the
-        // x/y/z axes (pitch/yaw/roll) of a device in natural (portrait)
-        // orientation, positive = counter-clockwise viewed from a positive
-        // point on that axis, and "the gyroscope axis data is not changed
-        // when the device is rotated" -- raw, device-frame axes, exactly
-        // what ConvertAndroidGyroscopeToXnaLandscape() below assumes it is
-        // remapping *from*. Confirmed by reading both real backends this
-        // project targets: SDL_androidsensor.c passes the NDK
-        // ASensorEvent's raw values through with no axis reordering;
-        // SDL_windowssensor.c maps Windows' own
-        // SENSOR_DATA_TYPE_ANGULAR_VELOCITY_{X,Y,Z}_DEGREES_PER_SECOND
-        // values to values[0]/[1]/[2] in the same X/Y/Z order, only scaling
-        // degrees-per-second to radians-per-second -- neither backend
-        // reorders or negates axes.
+        // IPlatformSensors and WP7 both define gyroscope values as radians per second around the
+        // natural-orientation device axes, so no unit conversion is needed here.
         // Task BASE2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
         // see Accelerometer::DispatchSensorReading()'s identical fix for the
         // full rationale -- checked directly as the local `valid` from here
@@ -447,7 +369,7 @@ namespace Microsoft::Devices::Sensors
         if (valid)
         {
 #ifdef __ANDROID__
-            // On Android, remap raw SDL portrait-frame axes to the XNA landscape
+            // On Android, remap raw portrait-frame axes to the XNA landscape
             // convention so that the game layer remains platform-agnostic -- unless
             // Task ACCEL-008's opt-out has been used to request real WP7's raw,
             // unremapped, device-fixed axes instead (see
@@ -462,12 +384,8 @@ namespace Microsoft::Devices::Sensors
 
             gyroscopeReading.setRotationRateProperty(rotationRate);
 
-            // Wall-clock time of this reading (Task P4-7). Previously derived
-            // from SDL_GetTicksNS() (monotonic ns since SDL init) fed into a
-            // DateTime(ticks) constructor that expects ticks since the .NET
-            // epoch (0001-01-01) — always produced a bogus near-year-1 value,
-            // never the actual reading time. Re-confirmed as this project's
-            // one consistent cross-sensor-class policy, Task READINGS-003 —
+            // Wall-clock time of this reading (Task P4-7), rather than the platform session's
+            // arbitrary monotonic epoch. This is the project-wide cross-sensor policy —
             // see docs/devices-api-coverage.md's "Timestamp policy" section.
             gyroscopeReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
@@ -566,12 +484,12 @@ namespace Microsoft::Devices::Sensors
     void Gyroscope::DispatchToInstancesForTesting(
         const std::vector<Gyroscope*>& instances, float x, float y, float z)
     {
-        // Task SDLCORE-004: see Accelerometer::DispatchToInstancesForTesting()'s
+        // See Accelerometer::DispatchToInstancesForTesting()'s
         // identical comment -- DispatchToInstances() now takes a snapshot of
         // DispatchRegistration nodes, not raw pointers.
         auto& subsystem = GetSubsystem();
 
-        std::vector<std::shared_ptr<Detail::SdlSensorSubsystem<Gyroscope>::DispatchRegistration>> registrations;
+        std::vector<std::shared_ptr<Detail::PlatformSensorSubsystem<Gyroscope>::DispatchRegistration>> registrations;
         {
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
             for (Gyroscope* instance : instances)
@@ -616,8 +534,7 @@ namespace Microsoft::Devices::Sensors
 
     bool Gyroscope::IsSensorConnectedForTesting(std::int64_t sensorId)
     {
-        std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
-        return Detail::SdlSensorSubsystem<Gyroscope>::IsSensorConnected(sensorId, sdlLock);
+        return Detail::PlatformSensorSubsystem<Gyroscope>::IsSensorConnected(sensorId);
     }
 
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")

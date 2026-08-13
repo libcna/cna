@@ -14,9 +14,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <limits>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -132,6 +134,21 @@ TEST_F(Sdl3DeviceServicesTest, SensorReadingDefaultsAreZero)
     EXPECT_EQ(reading.timestampNanoseconds, 0u);
 }
 
+TEST_F(Sdl3DeviceServicesTest, OpeningAnAbsentSensorReturnsNoSession)
+{
+    IPlatformSensors* sensors = platform_->GetSensors();
+    ASSERT_NE(sensors, nullptr);
+    const SensorKind absent = sensors->IsAvailable(SensorKind::Accelerometer)
+        ? SensorKind::Gyroscope
+        : SensorKind::Accelerometer;
+    if (sensors->IsAvailable(absent))
+    {
+        GTEST_SKIP() << "both common sensor kinds are present; absent-session path unavailable";
+    }
+    EXPECT_EQ(sensors->OpenSensor(absent, {}), nullptr);
+    EXPECT_NO_THROW((void)sensors->GetDisplayRotation());
+}
+
 // --- haptics (PLAT-84) ------------------------------------------------------------------------
 
 TEST_F(Sdl3DeviceServicesTest, HapticEnumerationIsSafeWithoutSubsystemOwnership)
@@ -170,8 +187,11 @@ TEST_F(Sdl3DeviceServicesTest, EveryOperationOnAnUnknownIdIsSafe)
         EXPECT_FALSE(haptics->SupportsRumble(id)) << "id " << id;
         EXPECT_FALSE(haptics->InitializeRumble(id)) << "id " << id;
         EXPECT_FALSE(haptics->PlayRumble(id, 1.0f, 10)) << "id " << id;
+        EXPECT_FALSE(haptics->PlayLeftRight(id, 1.0f, 1.0f, 10)) << "id " << id;
         EXPECT_FALSE(haptics->StopRumble(id)) << "id " << id;
+        EXPECT_FALSE(haptics->StopAll(id)) << "id " << id;
     }
+    EXPECT_NO_THROW((void)haptics->GetDefaultVibrationDevice());
 }
 
 TEST_F(Sdl3DeviceServicesTest, OutOfRangeStrengthIsAcceptedRatherThanRejected)
@@ -222,6 +242,50 @@ TEST_F(Sdl3DeviceServicesTest, ServicesOutliveRepeatedUseAndAreDestroyedCleanly)
         sensors->Stop(SensorKind::Accelerometer);
     }
     SUCCEED();
+}
+
+TEST_F(Sdl3DeviceServicesTest, SensorAndHapticQueriesAreSerializedAcrossThreads)
+{
+    IPlatformSensors* sensors = platform_->GetSensors();
+    IPlatformHaptics* haptics = platform_->GetHaptics();
+    ASSERT_NE(sensors, nullptr);
+    ASSERT_NE(haptics, nullptr);
+
+    std::atomic<bool> failed{false};
+    std::vector<std::thread> workers;
+    for (int worker = 0; worker < 4; ++worker)
+    {
+        workers.emplace_back([&, worker]
+        {
+            try
+            {
+                for (int iteration = 0; iteration < 100; ++iteration)
+                {
+                    if ((worker % 2) == 0)
+                    {
+                        (void)sensors->GetSensors();
+                        (void)sensors->IsAvailable(SensorKind::Accelerometer);
+                        (void)sensors->GetDisplayRotation();
+                    }
+                    else
+                    {
+                        (void)haptics->GetHaptics();
+                        (void)haptics->GetDefaultVibrationDevice();
+                        (void)haptics->IsConnected(std::numeric_limits<DeviceId>::max());
+                    }
+                }
+            }
+            catch (...)
+            {
+                failed.store(true, std::memory_order_relaxed);
+            }
+        });
+    }
+    for (auto& worker : workers)
+    {
+        worker.join();
+    }
+    EXPECT_FALSE(failed.load(std::memory_order_relaxed));
 }
 
 } // namespace

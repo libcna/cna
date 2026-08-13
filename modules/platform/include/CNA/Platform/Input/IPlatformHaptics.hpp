@@ -4,6 +4,7 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,18 @@ namespace CNA::Platform {
         [[nodiscard]] virtual std::vector<HapticInfo> GetHaptics() const = 0;
 
         /**
+         * @brief Gets the platform's preferred non-gamepad vibration device.
+         *
+         * This is deliberately selected by the platform rather than by `VibrateController`:
+         * identifying a phone vibration motor while excluding haptics owned by connected
+         * gamepads requires native device correlation that must not leak into `Microsoft::Devices`.
+         * The query does not retain an opened device or start an effect.
+         *
+         * @return The preferred device, or no value when the host has no suitable rumble device.
+         */
+        [[nodiscard]] virtual std::optional<HapticInfo> GetDefaultVibrationDevice() const = 0;
+
+        /**
          * @brief Gets whether an id currently names a connected haptic device.
          * @param id The device to query.
          * @return True while the device is connected.
@@ -81,12 +94,34 @@ namespace CNA::Platform {
                                 std::uint32_t durationMilliseconds) = 0;
 
         /**
+         * @brief Plays a two-motor low/high-frequency effect.
+         *
+         * Any simple-rumble or previous two-motor effect owned by this service on the same device
+         * is stopped first, so the two paths never layer unintentionally.
+         *
+         * @param id The device to rumble.
+         * @param largeMotor Low-frequency motor intensity in [0, 1]; clamped by the implementation.
+         * @param smallMotor High-frequency motor intensity in [0, 1]; clamped by the implementation.
+         * @param durationMilliseconds How long to rumble for.
+         * @return True if the device accepted the effect; false when unsupported or disconnected.
+         */
+        virtual bool PlayLeftRight(DeviceId id, float largeMotor, float smallMotor,
+                                   std::uint32_t durationMilliseconds) = 0;
+
+        /**
          * @brief Stops a rumble effect in progress.
          *
          * @param id The device to stop.
          * @return True if the device accepted the request.
          */
         virtual bool StopRumble(DeviceId id) = 0;
+
+        /**
+         * @brief Stops every effect owned by this service on one device.
+         * @param id The device to stop.
+         * @return True if the device accepted the request.
+         */
+        virtual bool StopAll(DeviceId id) = 0;
     };
 
 } // namespace CNA::Platform

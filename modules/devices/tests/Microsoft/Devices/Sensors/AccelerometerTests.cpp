@@ -1263,8 +1263,8 @@ TEST(AccelerometerTests, ThrowingHandlerDuringDispatchIsAlsoRecordedByTheSharedN
 
     EXPECT_EQ(NativeDiagnosticSink::GetRecordCountForTesting(), countBefore + 1);
     const auto last = NativeDiagnosticSink::GetLastRecordForTesting();
-    EXPECT_EQ(last.Backend, "SDL");
-    EXPECT_EQ(last.Operation, "SdlSensorSubsystem dispatch callback");
+    EXPECT_EQ(last.Backend, "Platform");
+    EXPECT_EQ(last.Operation, "PlatformSensorSubsystem dispatch callback");
     EXPECT_EQ(last.NativeMessage, "shared sink migration test");
 
     EXPECT_NO_THROW(a->Dispose());

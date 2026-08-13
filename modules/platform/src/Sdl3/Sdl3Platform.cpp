@@ -62,6 +62,7 @@ namespace CNA::Platform::Sdl3 {
         // SDL_Quit(): PLAT-4 established that global SDL lifetime belongs to the host
         // application, and calling it here would tear down subsystems the host still holds.
         // Cached native handles must close before the subsystems that own them.
+        std::lock_guard<std::mutex> lock(subsystemMutex_);
         sensors_.Deactivate();
         haptics_.Deactivate();
         for (const auto& [subsystem, count] : ownedRefCounts_)
@@ -133,6 +134,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::AcquireSubsystem(const PlatformSubsystem subsystem)
     {
+        std::lock_guard<std::mutex> lock(subsystemMutex_);
         if (!SDL_InitSubSystem(ToSdlFlag(subsystem)))
         {
             throw PlatformException("AcquireSubsystem(" + ToString(subsystem) + ")", LastSdlError());
@@ -142,6 +144,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::ReleaseSubsystem(const PlatformSubsystem subsystem)
     {
+        std::lock_guard<std::mutex> lock(subsystemMutex_);
         // An unpaired release is a documented no-op, not an error: cleanup may follow partial
         // initialization even though successful owners balance every acquisition.
         const auto it = ownedRefCounts_.find(subsystem);
@@ -167,6 +170,7 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3Platform::IsSubsystemInitialized(const PlatformSubsystem subsystem) const
     {
+        std::lock_guard<std::mutex> lock(subsystemMutex_);
         const SDL_InitFlags flag = ToSdlFlag(subsystem);
         return (SDL_WasInit(flag) & flag) != 0;
     }

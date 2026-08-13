@@ -44,10 +44,10 @@ Only five, all acquired lazily on first need:
 
 | Subsystem | Refs | Acquired by | Released by |
 |---|---:|---|---|
-| `SDL_INIT_SENSOR` | 22 | `Detail::SdlSensorSubsystem<T>` (RAII) | RAII destructor + explicit calls in `Accelerometer`/`Gyroscope` |
+| `SDL_INIT_SENSOR` | 22 | `Sdl3Platform::AcquireSubsystem(Sensor)` | `Sdl3Platform::ReleaseSubsystem(Sensor)` after the last platform session/reference |
 | `SDL_INIT_VIDEO` | 14 | `GraphicsDevice` constructor | `GraphicsDevice::Dispose()` |
 | `SDL_INIT_AUDIO` | 12 | `AudioMixer` (permanent pin), `Microphone`, `VideoPlayer` | `VideoPlayer` only — see below |
-| `SDL_INIT_HAPTIC` | 11 | `SdlHapticVibrateBackend` | `SdlHapticVibrateBackend` destructor |
+| `SDL_INIT_HAPTIC` | 11 | `Sdl3Platform::AcquireSubsystem(Haptic)` | `Sdl3Platform::ReleaseSubsystem(Haptic)` after the last platform client |
 | `SDL_INIT_GAMEPAD` | 9 | `SdlInputBridge` (guarded by `SDL_WasInit`) | `SdlInputBridge` |
 
 `SDL_INIT_EVENTS` is never named explicitly: it is initialised implicitly as a dependency of
@@ -94,12 +94,13 @@ This is the least uniform subsystem and needs the most care:
 So the audio subsystem's refcount is intentionally never driven to zero once the mixer has
 started. A platform contract that assumes symmetric acquire/release per caller would change this.
 
-### `SDL_INIT_SENSOR` — RAII plus a process-wide mutex
+### `SDL_INIT_SENSOR` — platform sessions plus a process-wide mutex
 
-`Detail::SdlSensorSubsystem<TSensor>` (`modules/devices/include/.../SdlSensorSubsystem.hpp:246`)
-acquires in its constructor and releases in its destructor, and `Accelerometer`/`Gyroscope` also
-call `SDL_QuitSubSystem(SDL_INIT_SENSOR)` explicitly at three sites each. Serialised by
-`Detail::SdlSubsystemMutex`, a **process-wide** mutex shared with the haptic backend.
+> **PLAT-108 update:** `Accelerometer` and `Gyroscope` now acquire
+> `PlatformSubsystem::Sensor` and open an independently owned `IPlatformSensorSession` through
+> `IPlatformSensors`. `Detail::PlatformSensorSubsystem<TSensor>` owns only platform-neutral
+> registration, callback barriers and per-type sharing; all native init/enumerate/open/close/quit
+> operations live in `Sdl3Platform`/`Sdl3Sensors`.
 
 `CNA::Input::Sensors` now participates through PLAT-29's platform refcount: each static
 enumeration/read acquires and releases one `PlatformSubsystem::Sensor` reference, and a read closes
@@ -107,7 +108,8 @@ its `IPlatformSensors` handle before releasing that reference. SDL's own refcoun
 aggregates it with the independent `Microsoft::Devices` holds instead of either surface using
 `SDL_WasInit()` as an ownership shortcut.
 
-`SdlSubsystemMutex`'s own header documents why it is a mutex rather than main-thread dispatch:
+`Sdl3Platform::subsystemMutex_` preserves the former process-wide serialization. It remains a
+mutex rather than main-thread dispatch because
 `SDL_RunOnMainThread(..., wait_complete=true)` is drained only by `SDL_RunMainThreadCallbacks()`,
 which runs only from `SDL_PumpEventsInternal()` — so routing subsystem calls through it would
 hang whenever nothing is pumping events, which is exactly what CNA's own concurrent
@@ -115,10 +117,12 @@ hang whenever nothing is pumping events, which is exactly what CNA's own concurr
 subsystem calls onto the main thread.** `Microsoft::Devices` classes are usable standalone with
 no `Game`/`GraphicsDeviceManager` at all, so there may be no event pump running.
 
-### `SDL_INIT_HAPTIC` — `SdlHapticVibrateBackend`
+### `SDL_INIT_HAPTIC` — platform haptics
 
-`modules/devices/src/Detail/SdlHapticVibrateBackend.cpp:230` acquires, `:217` releases. Shares
-`SdlSubsystemMutex` with the sensor path.
+> **PLAT-108 update:** `VibrateController` now uses a private `PlatformVibrateBackend` adapter.
+> Device selection, non-gamepad correlation, simple rumble, two-motor effects and native handle
+> ownership all live in `IPlatformHaptics`/`Sdl3Haptics`. `Sdl3Platform::subsystemMutex_`
+> serializes its native subsystem acquire/release with the sensor path.
 
 ### `SDL_INIT_GAMEPAD` — `SdlInputBridge`
 
@@ -131,10 +135,11 @@ equivalent "is this subsystem already up?" query.
 
 The subtlest constraint, and the one most likely to be broken by a naive port.
 
-`VibrateController::getDefaultProperty()` returns a function-local static whose destructor makes
-real `SDL_CloseHaptic()`/`SDL_QuitSubSystem()` calls. Function-local statics are destroyed after
-`main()` returns — i.e. **after** an application's own `SDL_Quit()`. Reading SDL's implementation,
-the two calls have genuinely different outcomes, which the coordinator's header records honestly:
+`VibrateController::getDefaultProperty()` returns a function-local static whose platform adapter
+can retain an `IPlatformHaptics` handle and subsystem reference. Function-local statics are
+destroyed after `main()` returns — potentially **after** an application's own `SDL_Quit()`.
+Reading SDL's implementation, the underlying native close/quit operations have genuinely
+different outcomes:
 
 - `SDL_CloseHaptic()` on a handle `SDL_Quit()` already freed is a **real heap-use-after-free**
   (`CHECK_HAPTIC_MAGIC` dereferences to validate). Reasoned from SDL's source and *documented as
@@ -144,8 +149,12 @@ the two calls have genuinely different outcomes, which the coordinator's header 
   it is gated by `SDL_ShouldQuitSubsystem()`, a refcount check.
 
 `DevicesShutdownCoordinator::Shutdown()` is the application's opt-in fix, to be called before its
-own `SDL_Quit()`. PLAT-29 must keep this escape hatch: any platform implementation whose shutdown
-runs at static-teardown time inherits the same hazard, and it is not SDL-specific.
+own `SDL_Quit()`. PLAT-108 strengthened it: it destroys the controller's platform adapter
+*before* publishing the shutdown flag, so retained effects/devices close and the platform
+reference is balanced while native services are still valid. The controller is inert afterward
+and its eventual static destructor has no platform resource left to release. Any platform
+implementation whose shutdown runs at static-teardown time inherits the same hazard, so this
+escape hatch remains platform-neutral.
 
 ## Regression tests that pin this behaviour
 

@@ -222,14 +222,14 @@ namespace Microsoft::Devices::Sensors::Detail
          * background thread — never the calling thread. May throw: any
          * exception escaping this callback is caught and silently
          * discarded here (mirrors
-         * Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()'s
+         * Detail::PlatformSensorSubsystem<TSensor>::DispatchToInstances()'s
          * identical per-instance exception-swallowing policy, Task P8-5) —
          * an exception left to escape a `std::thread`'s entry point would
          * otherwise call `std::terminate()` and crash the whole process,
          * which is strictly worse than swallowing it. A game's own
          * `CurrentValueChanged`/`Calibrate` handler should not rely on an
          * exception it throws propagating anywhere — it never will, same
-         * as the SDL-backed sensors.
+         * as the platform-backed sensors.
          * @return true if sensor delivery genuinely started (the platform
          * sensor queue was created and enabled); false if this sensor type
          * is unavailable, if delivery could not actually be started, or if

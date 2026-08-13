@@ -8,7 +8,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <condition_variable>
 #include <limits>
+#include <mutex>
+#include <thread>
 
 namespace CNA::Platform::Sdl3 {
 
@@ -43,6 +46,18 @@ namespace CNA::Platform::Sdl3 {
             }
         }
 
+        SensorDisplayRotation ToSensorDisplayRotation(const SDL_DisplayOrientation orientation)
+        {
+            switch (orientation)
+            {
+                case SDL_ORIENTATION_PORTRAIT:           return SensorDisplayRotation::Degrees0;
+                case SDL_ORIENTATION_LANDSCAPE:          return SensorDisplayRotation::Degrees90;
+                case SDL_ORIENTATION_PORTRAIT_FLIPPED:   return SensorDisplayRotation::Degrees180;
+                case SDL_ORIENTATION_LANDSCAPE_FLIPPED:  return SensorDisplayRotation::Degrees270;
+                default:                                 return SensorDisplayRotation::Unknown;
+            }
+        }
+
         /// Finds the first connected sensor of a type. Returns 0 when none is present -- SDL uses
         /// 0 as its invalid instance id, so it doubles as the not-found answer.
         SDL_SensorID FindSensor(const SensorKind kind)
@@ -68,13 +83,206 @@ namespace CNA::Platform::Sdl3 {
             return found;
         }
 
+        bool IsGamepadHapticDevice(const SDL_HapticID hapticId)
+        {
+            int count = 0;
+            SDL_JoystickID* ids = SDL_GetJoysticks(&count);
+            if (ids == nullptr)
+            {
+                return false;
+            }
+
+            bool matched = false;
+            for (int index = 0; index < count && !matched; ++index)
+            {
+                SDL_Joystick* joystick = SDL_OpenJoystick(ids[index]);
+                if (joystick == nullptr)
+                {
+                    continue;
+                }
+                SDL_Haptic* haptic = SDL_OpenHapticFromJoystick(joystick);
+                if (haptic != nullptr)
+                {
+                    matched = SDL_GetHapticID(haptic) == hapticId;
+                    SDL_CloseHaptic(haptic);
+                }
+                SDL_CloseJoystick(joystick);
+            }
+            SDL_free(ids);
+            return matched;
+        }
+
+        float SanitizeHapticStrength(const float strength)
+        {
+            return std::isnan(strength) ? 0.0f : std::clamp(strength, 0.0f, 1.0f);
+        }
+
+        Uint16 ToHapticMagnitude(const float strength)
+        {
+            return static_cast<Uint16>(SanitizeHapticStrength(strength) * 65535.0f);
+        }
+
+        class Sdl3SensorSession final : public IPlatformSensorSession
+        {
+            struct State final : std::enable_shared_from_this<State>
+            {
+                State(SDL_Sensor* nativeSensor, const SDL_SensorID sensorId,
+                      SensorReadingCallback readingCallback,
+                      std::shared_ptr<std::recursive_mutex> serviceMutex)
+                    : sensor(nativeSensor), id(sensorId), callback(std::move(readingCallback)),
+                      nativeMutex(std::move(serviceMutex)) {}
+
+                ~State()
+                {
+                    if (sensor != nullptr)
+                    {
+                        std::lock_guard<std::recursive_mutex> lock(*nativeMutex);
+                        SDL_CloseSensor(sensor);
+                    }
+                }
+
+                SDL_Sensor* sensor = nullptr;
+                SDL_SensorID id = 0;
+                SensorReadingCallback callback;
+                std::shared_ptr<std::recursive_mutex> nativeMutex;
+                std::mutex mutex;
+                std::condition_variable finished;
+                std::vector<std::thread::id> activeCallbackThreads;
+                bool closing = false;
+            };
+
+        public:
+            Sdl3SensorSession(SDL_Sensor* sensor, const SDL_SensorID id,
+                              SensorReadingCallback callback,
+                              std::shared_ptr<std::recursive_mutex> nativeMutex)
+                : state_(std::make_shared<State>(sensor, id, std::move(callback),
+                                                 std::move(nativeMutex)))
+            {
+                if (state_->callback && !SDL_AddEventWatch(&Sdl3SensorSession::EventWatch,
+                                                           state_.get()))
+                {
+                    state_.reset();
+                    throw PlatformException("Sensors::OpenSensor", SDL_GetError());
+                }
+                watchRegistered_ = static_cast<bool>(state_->callback);
+            }
+
+            ~Sdl3SensorSession() override
+            {
+                std::shared_ptr<State> state = std::move(state_);
+                if (state == nullptr)
+                {
+                    return;
+                }
+                {
+                    std::lock_guard<std::mutex> lock(state->mutex);
+                    state->closing = true;
+                }
+                if (watchRegistered_)
+                {
+                    SDL_RemoveEventWatch(&Sdl3SensorSession::EventWatch, state.get());
+                }
+                {
+                    const std::thread::id current = std::this_thread::get_id();
+                    std::unique_lock<std::mutex> lock(state->mutex);
+                    state->finished.wait(lock, [&state, current]
+                    {
+                        return std::none_of(state->activeCallbackThreads.begin(),
+                                            state->activeCallbackThreads.end(),
+                                            [current](const std::thread::id id)
+                                            {
+                                                return id != current;
+                                            });
+                    });
+                }
+                // A sensor handler is allowed to dispose its own sender. In that reentrant case
+                // the current callback's shared State reference closes the native sensor after
+                // the callback returns; all callbacks on other threads have already drained.
+            }
+
+            [[nodiscard]] bool TryGetReading(SensorReading& reading) const override
+            {
+                const std::shared_ptr<State> state = state_;
+                float values[3] = {};
+                if (state == nullptr)
+                {
+                    return false;
+                }
+                std::lock_guard<std::recursive_mutex> lock(*state->nativeMutex);
+                if (state->sensor == nullptr || !SDL_GetSensorData(state->sensor, values, 3))
+                {
+                    return false;
+                }
+                reading = {values[0], values[1], values[2], SDL_GetTicksNS()};
+                return true;
+            }
+
+        private:
+            static bool SDLCALL EventWatch(void* userdata, SDL_Event* event)
+            {
+                auto* state = static_cast<State*>(userdata);
+                if (state == nullptr || event == nullptr || event->type != SDL_EVENT_SENSOR_UPDATE)
+                {
+                    return true;
+                }
+
+                std::shared_ptr<State> keepAlive;
+                const std::thread::id current = std::this_thread::get_id();
+                {
+                    std::lock_guard<std::mutex> lock(state->mutex);
+                    if (state->closing || event->sensor.which != state->id)
+                    {
+                        return true;
+                    }
+                    keepAlive = state->shared_from_this();
+                    state->activeCallbackThreads.push_back(current);
+                }
+
+                const SensorReading reading{event->sensor.data[0], event->sensor.data[1],
+                                            event->sensor.data[2],
+                                            event->sensor.sensor_timestamp};
+                try
+                {
+                    keepAlive->callback(reading);
+                }
+                catch (...)
+                {
+                    // Never unwind C++ exceptions through SDL's C callback frame. Public sensor
+                    // dispatch records user-handler exceptions at the consumer boundary.
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(keepAlive->mutex);
+                    const auto active = std::find(keepAlive->activeCallbackThreads.begin(),
+                                                  keepAlive->activeCallbackThreads.end(), current);
+                    if (active != keepAlive->activeCallbackThreads.end())
+                    {
+                        keepAlive->activeCallbackThreads.erase(active);
+                    }
+                }
+                keepAlive->finished.notify_all();
+                return true;
+            }
+
+            std::shared_ptr<State> state_;
+            bool watchRegistered_ = false;
+        };
+
     } // namespace
 
     // --- sensors (PLAT-85) ----------------------------------------------------------------------
 
-    Sdl3Sensors::~Sdl3Sensors() { CloseAll(); }
+    Sdl3Sensors::~Sdl3Sensors()
+    {
+        std::lock_guard<std::recursive_mutex> lock(*nativeMutex_);
+        CloseAll();
+    }
 
-    void Sdl3Sensors::Deactivate() { CloseAll(); }
+    void Sdl3Sensors::Deactivate()
+    {
+        std::lock_guard<std::recursive_mutex> lock(*nativeMutex_);
+        CloseAll();
+    }
 
     void Sdl3Sensors::CloseAll()
     {
@@ -91,6 +299,7 @@ namespace CNA::Platform::Sdl3 {
 
     std::vector<SensorInfo> Sdl3Sensors::GetSensors() const
     {
+        std::lock_guard<std::recursive_mutex> lock(*nativeMutex_);
         int count = 0;
         SDL_SensorID* ids = SDL_GetSensors(&count);
         if (ids == nullptr)
@@ -115,14 +324,40 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3Sensors::IsAvailable(const SensorKind kind) const
     {
+        std::lock_guard<std::recursive_mutex> lock(*nativeMutex_);
         // Unknown is a classification, not a request: a caller asking whether an unclassifiable
         // sensor is present is asking a question with no answer, and reporting true would let it
         // then Start() something the type lookup cannot find.
         return kind != SensorKind::Unknown && FindSensor(kind) != 0;
     }
 
+    SensorDisplayRotation Sdl3Sensors::GetDisplayRotation() const
+    {
+        std::lock_guard<std::recursive_mutex> lock(*nativeMutex_);
+        const SDL_DisplayID primary = SDL_GetPrimaryDisplay();
+        return primary != 0
+            ? ToSensorDisplayRotation(SDL_GetCurrentDisplayOrientation(primary))
+            : SensorDisplayRotation::Unknown;
+    }
+
+    std::unique_ptr<IPlatformSensorSession> Sdl3Sensors::OpenSensor(
+        const SensorKind kind, SensorReadingCallback callback)
+    {
+        std::lock_guard<std::recursive_mutex> lock(*nativeMutex_);
+        const SDL_SensorID id = FindSensor(kind);
+        if (id == 0)
+        {
+            return nullptr;
+        }
+        SDL_Sensor* sensor = SDL_OpenSensor(id);
+        return sensor != nullptr
+            ? std::make_unique<Sdl3SensorSession>(sensor, id, std::move(callback), nativeMutex_)
+            : nullptr;
+    }
+
     void Sdl3Sensors::Start(const SensorKind kind)
     {
+        std::lock_guard<std::recursive_mutex> lock(*nativeMutex_);
         if (open_.find(kind) != open_.end())
         {
             return;  // already started; starting twice is not an error
@@ -146,6 +381,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Sensors::Stop(const SensorKind kind)
     {
+        std::lock_guard<std::recursive_mutex> lock(*nativeMutex_);
         const auto it = open_.find(kind);
         if (it == open_.end())
         {
@@ -160,6 +396,7 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3Sensors::TryGetReading(const SensorKind kind, SensorReading& reading) const
     {
+        std::lock_guard<std::recursive_mutex> lock(*nativeMutex_);
         const auto it = open_.find(kind);
         if (it == open_.end() || it->second == nullptr)
         {
@@ -181,9 +418,17 @@ namespace CNA::Platform::Sdl3 {
 
     // --- haptics (PLAT-84) ----------------------------------------------------------------------
 
-    Sdl3Haptics::~Sdl3Haptics() { CloseAll(); }
+    Sdl3Haptics::~Sdl3Haptics()
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        CloseAll();
+    }
 
-    void Sdl3Haptics::Deactivate() { CloseAll(); }
+    void Sdl3Haptics::Deactivate()
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        CloseAll();
+    }
 
     void Sdl3Haptics::CloseAll()
     {
@@ -196,6 +441,7 @@ namespace CNA::Platform::Sdl3 {
         }
         open_.clear();
         rumbleInitialized_.clear();
+        leftRightEffects_.clear();
     }
 
     std::vector<DeviceId> Sdl3Haptics::EnumerateIds() const
@@ -235,6 +481,7 @@ namespace CNA::Platform::Sdl3 {
                 SDL_CloseHaptic(static_cast<SDL_Haptic*>(item->second));
             }
             rumbleInitialized_.erase(item->first);
+            leftRightEffects_.erase(item->first);
             item = open_.erase(item);
         }
     }
@@ -264,6 +511,7 @@ namespace CNA::Platform::Sdl3 {
 
     std::vector<HapticInfo> Sdl3Haptics::GetHaptics() const
     {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
         const std::vector<DeviceId> ids = EnumerateIds();
         std::vector<HapticInfo> result;
         result.reserve(ids.size());
@@ -276,20 +524,56 @@ namespace CNA::Platform::Sdl3 {
         return result;
     }
 
+    std::optional<HapticInfo> Sdl3Haptics::GetDefaultVibrationDevice() const
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        const std::vector<DeviceId> ids = EnumerateIds();
+        for (const DeviceId id : ids)
+        {
+            if (id > std::numeric_limits<SDL_HapticID>::max()
+                || IsGamepadHapticDevice(static_cast<SDL_HapticID>(id)))
+            {
+                continue;
+            }
+
+            const auto existing = open_.find(id);
+            SDL_Haptic* haptic = existing != open_.end()
+                ? static_cast<SDL_Haptic*>(existing->second)
+                : SDL_OpenHaptic(static_cast<SDL_HapticID>(id));
+            if (haptic == nullptr)
+            {
+                continue;
+            }
+
+            const char* nativeName = SDL_GetHapticName(haptic);
+            HapticInfo info{id, nativeName != nullptr ? std::string(nativeName) : std::string(),
+                            SDL_HapticRumbleSupported(haptic)};
+            if (existing == open_.end())
+            {
+                SDL_CloseHaptic(haptic);
+            }
+            return info;
+        }
+        return std::nullopt;
+    }
+
     bool Sdl3Haptics::IsConnected(const DeviceId id) const
     {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
         const std::vector<DeviceId> ids = EnumerateIds();
         return std::binary_search(ids.begin(), ids.end(), id);
     }
 
     bool Sdl3Haptics::SupportsRumble(const DeviceId id) const
     {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
         const std::vector<DeviceId> ids = EnumerateIds();
         return std::binary_search(ids.begin(), ids.end(), id) && ProbeRumble(id);
     }
 
     bool Sdl3Haptics::InitializeRumble(const DeviceId id)
     {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
         SDL_Haptic* haptic = static_cast<SDL_Haptic*>(Acquire(id));
         if (haptic == nullptr || !SDL_HapticRumbleSupported(haptic))
         {
@@ -332,6 +616,7 @@ namespace CNA::Platform::Sdl3 {
     bool Sdl3Haptics::PlayRumble(const DeviceId id, const float strength,
                                  const std::uint32_t durationMilliseconds)
     {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
         SDL_Haptic* haptic = static_cast<SDL_Haptic*>(Acquire(id));
         if (haptic == nullptr)
         {
@@ -345,15 +630,66 @@ namespace CNA::Platform::Sdl3 {
             return false;
         }
 
+        DestroyLeftRight(id);
+
         // Clamped before the call for the same reason gamepad rumble is: an out-of-range value
         // would be reinterpreted rather than saturated.
-        const float clamped = std::isnan(strength) ? 0.0f
-                                                   : std::clamp(strength, 0.0f, 1.0f);
-        return SDL_PlayHapticRumble(haptic, clamped, durationMilliseconds);
+        return SDL_PlayHapticRumble(haptic, SanitizeHapticStrength(strength),
+                                    durationMilliseconds);
+    }
+
+    void Sdl3Haptics::DestroyLeftRight(const DeviceId id)
+    {
+        const auto effect = leftRightEffects_.find(id);
+        if (effect == leftRightEffects_.end())
+        {
+            return;
+        }
+        const auto device = open_.find(id);
+        if (device != open_.end() && device->second != nullptr && effect->second >= 0)
+        {
+            SDL_DestroyHapticEffect(static_cast<SDL_Haptic*>(device->second), effect->second);
+        }
+        leftRightEffects_.erase(effect);
+    }
+
+    bool Sdl3Haptics::PlayLeftRight(const DeviceId id, const float largeMotor,
+                                    const float smallMotor,
+                                    const std::uint32_t durationMilliseconds)
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        SDL_Haptic* haptic = static_cast<SDL_Haptic*>(Acquire(id));
+        if (haptic == nullptr || (SDL_GetHapticFeatures(haptic) & SDL_HAPTIC_LEFTRIGHT) == 0)
+        {
+            return false;
+        }
+
+        (void)SDL_StopHapticRumble(haptic);
+        DestroyLeftRight(id);
+
+        SDL_HapticEffect effect{};
+        effect.leftright.type = SDL_HAPTIC_LEFTRIGHT;
+        effect.leftright.length = durationMilliseconds;
+        effect.leftright.large_magnitude = ToHapticMagnitude(largeMotor);
+        effect.leftright.small_magnitude = ToHapticMagnitude(smallMotor);
+
+        const int effectId = SDL_CreateHapticEffect(haptic, &effect);
+        if (effectId < 0)
+        {
+            return false;
+        }
+        leftRightEffects_[id] = effectId;
+        if (!SDL_RunHapticEffect(haptic, effectId, 1))
+        {
+            DestroyLeftRight(id);
+            return false;
+        }
+        return true;
     }
 
     bool Sdl3Haptics::StopRumble(const DeviceId id)
     {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
         const std::vector<DeviceId> ids = EnumerateIds();
         if (!std::binary_search(ids.begin(), ids.end(), id))
         {
@@ -365,6 +701,24 @@ namespace CNA::Platform::Sdl3 {
             return false;
         }
         return SDL_StopHapticRumble(static_cast<SDL_Haptic*>(it->second));
+    }
+
+    bool Sdl3Haptics::StopAll(const DeviceId id)
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        const std::vector<DeviceId> ids = EnumerateIds();
+        if (!std::binary_search(ids.begin(), ids.end(), id))
+        {
+            return false;
+        }
+        const auto it = open_.find(id);
+        if (it == open_.end() || it->second == nullptr)
+        {
+            return false;
+        }
+        const bool stopped = SDL_StopHapticEffects(static_cast<SDL_Haptic*>(it->second));
+        DestroyLeftRight(id);
+        return stopped;
     }
 
 } // namespace CNA::Platform::Sdl3

@@ -17,6 +17,29 @@
 
 namespace CNA::Platform::Testing {
 
+    /** @brief Polling view over one scripted reading. */
+    class CannedSensorSession final : public IPlatformSensorSession
+    {
+    public:
+        /** @brief Stores callbacks into the owning canned service. */
+        CannedSensorSession(std::function<bool(SensorReading&)> read,
+                            std::function<void()> onDestroy)
+            : read_(std::move(read)), onDestroy_(std::move(onDestroy)) {}
+
+        /** @brief Removes the associated callback registration. */
+        ~CannedSensorSession() override { onDestroy_(); }
+
+        /** @brief Returns the scripted reading. */
+        [[nodiscard]] bool TryGetReading(SensorReading& reading) const override
+        {
+            return read_(reading);
+        }
+
+    private:
+        std::function<bool(SensorReading&)> read_;
+        std::function<void()> onDestroy_;
+    };
+
     /** @brief A sensor service that reports whatever a test put in it. */
     class CannedSensors final : public IPlatformSensors
     {
@@ -47,6 +70,7 @@ namespace CNA::Platform::Testing {
             started_.clear();
             startCalls_.clear();
             stopCalls_.clear();
+            callbacks_.clear();
         }
 
         /** @brief Gets how many times a sensor was started. @param kind Which sensor. @return The count. */
@@ -78,6 +102,78 @@ namespace CNA::Platform::Testing {
         {
             return readings_.find(kind) != readings_.end();
         }
+
+        /** @brief Gets the scripted display rotation. */
+        [[nodiscard]] SensorDisplayRotation GetDisplayRotation() const override { return rotation; }
+
+        /** @brief Opens a canned stream and retains its callback for explicit test dispatch. */
+        [[nodiscard]] std::unique_ptr<IPlatformSensorSession> OpenSensor(
+            const SensorKind kind, SensorReadingCallback callback) override
+        {
+            const auto found = readings_.find(kind);
+            if (found == readings_.end())
+            {
+                return nullptr;
+            }
+            const std::uint64_t token = nextCallbackToken_++;
+            callbacks_[kind][token] = std::move(callback);
+            return std::make_unique<CannedSensorSession>(
+                [this, kind](SensorReading& reading)
+                {
+                    const auto current = readings_.find(kind);
+                    if (current == readings_.end())
+                    {
+                        return false;
+                    }
+                    reading = current->second;
+                    return true;
+                },
+                [this, kind, token]
+                {
+                    const auto group = callbacks_.find(kind);
+                    if (group == callbacks_.end())
+                    {
+                        return;
+                    }
+                    group->second.erase(token);
+                    if (group->second.empty())
+                    {
+                        callbacks_.erase(group);
+                    }
+                });
+        }
+
+        /** @brief Delivers one scripted reading through an opened stream's callback. */
+        void Dispatch(const SensorKind kind)
+        {
+            const auto callbackGroup = callbacks_.find(kind);
+            const auto reading = readings_.find(kind);
+            if (callbackGroup == callbacks_.end() || reading == readings_.end())
+            {
+                return;
+            }
+
+            // Copy before invocation: a handler may destroy its own or another session, which
+            // mutates the registered callback map while this call is still on the stack.
+            const SensorReading value = reading->second;
+            std::vector<SensorReadingCallback> deliveries;
+            deliveries.reserve(callbackGroup->second.size());
+            for (const auto& [token, callback] : callbackGroup->second)
+            {
+                (void)token;
+                if (callback)
+                {
+                    deliveries.push_back(callback);
+                }
+            }
+            for (const auto& delivery : deliveries)
+            {
+                delivery(value);
+            }
+        }
+
+        /** @brief Scripted current display rotation. */
+        SensorDisplayRotation rotation = SensorDisplayRotation::Unknown;
 
         /**
          * @brief Records a start, refusing for a sensor that was never scripted.
@@ -126,6 +222,8 @@ namespace CNA::Platform::Testing {
         std::set<SensorKind> started_;
         std::map<SensorKind, int> startCalls_;
         std::map<SensorKind, int> stopCalls_;
+        std::map<SensorKind, std::map<std::uint64_t, SensorReadingCallback>> callbacks_;
+        std::uint64_t nextCallbackToken_ = 1;
         std::vector<SensorInfo> enumeration_;
     };
 
@@ -133,6 +231,14 @@ namespace CNA::Platform::Testing {
     class CannedSensorPlatform final : public PlatformTestDecorator
     {
     public:
+        /** @brief Reports the scripted sensor service as available. */
+        [[nodiscard]] PlatformCapabilities GetCapabilities() const override
+        {
+            PlatformCapabilities capabilities = PlatformTestDecorator::GetCapabilities();
+            capabilities.sensors = true;
+            return capabilities;
+        }
+
         /** @brief Tracks and forwards sensor-subsystem acquisition. */
         void AcquireSubsystem(const PlatformSubsystem subsystem) override
         {

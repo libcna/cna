@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <string>
 
 namespace CNA::Platform::Sdl3 {
@@ -134,6 +135,7 @@ namespace CNA::Platform::Sdl3 {
         /// refcount; this one exists so the destructor can release exactly what it acquired and
         /// no more, which matters when the host application holds subsystems of its own.
         std::map<PlatformSubsystem, int> ownedRefCounts_;
+        mutable std::mutex subsystemMutex_;
 
         /// Services are owned by the platform and outlive every caller's use of them, which is
         /// what makes returning a raw pointer safe: a caller never owns what it is handed.
