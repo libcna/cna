@@ -23,7 +23,7 @@ pass in two of them while not being compiled *at all* in the third.
 | `cmake-build-debug` | default (`CNA_PLATFORM=SDL3`, `CNA_GRAPHICS_RENDERER=HEADLESS`) | the SDL3 platform implementation |
 | `cmake-build-headless` | `-DCNA_PLATFORM=HEADLESS` | the second platform implementation; the conformance suite's other arm |
 | `cmake-build-devices` | `-DCNA_DEVICES=ON -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_PLATFORM=SDL3` | **all of `modules/devices-ext` and `modules/devices`** |
-| `cmake-build-terminal` | `-DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=HEADLESS` | the terminal platform *as the selected one* (PLAT-130) |
+| `cmake-build-terminal` | `-DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_AUDIO_PLATFORM=NULL` | terminal selection plus the SDL-free audio refusal path |
 
 `TerminalPlatform` itself is compiled in **every** POSIX configuration, not only that last one —
 same arrangement as `HeadlessPlatform`, so the conformance suite always has three implementations
@@ -124,8 +124,8 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**99 ✅ · 9 🟨 · 44 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **66 %** of the 149
-actionable rows done, counting partials.
+**114 ✅ · 3 🟨 · 35 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **74 %** of the 155
+task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
 - **Phase 1** (the contract) — done. 24 headers under `modules/platform/include/CNA/Platform/`.
@@ -140,8 +140,9 @@ actionable rows done, counting partials.
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by
   the selected platform and no SDL cursor type remains in the public input API.
   `PlatformInputBridge` consumes the complete event vocabulary in the production path.
-- **Phase 6** (audio) — PLAT-91…95 complete: independent playback/recording contracts, selection,
-  the SDL3 playback device, and contract-driven `AudioMixer` output. Continue at PLAT-96.
+- **Phase 6** (audio) — PLAT-91…96 complete: independent playback/recording contracts, selection,
+  the SDL3 playback device, contract-driven `AudioMixer` output, and SDL-free XNA sound-effect /
+  queued-stream ownership. Continue at PLAT-97 (`Microphone`).
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
@@ -298,11 +299,12 @@ each, zero difference). The round trip is now checked before it is trusted.
    the selected SDL3 playback device with paused-open, explicit start/stop, bounded callback chunks
    and a real stream-lock shutdown barrier. PLAT-95 made `AudioMixer` memory-backed and feeds its
    `MIX_Generate` output through that device; NULL refuses without fallback until PLAT-99.
-   Continue with **PLAT-96**: remove SDL device/stream and IO ownership from `SoundEffect`,
-   `SoundEffectInstance`, and `DynamicSoundEffectInstance`. Keep SDL_mixer's internal track engine,
-   but move independently-owned stream lifecycle behind the audio contract and route in-memory
-   decode away from public SDL IO objects. Once those streams own no SDL subsystem state, remove
-   `AudioMixer`'s explicitly temporary compatibility pin.
+   PLAT-96 moved `SoundEffect`, `SoundEffectInstance` and `DynamicSoundEffectInstance` behind the
+   private opaque `MixerEngine` facade. In-memory decode exposes no SDL IO object, raw/encoded
+   source lifetime is engine-owned, surviving sound resources reload across mixer generations,
+   and dynamic queued-stream lifecycle is no longer owned by the XNA layer. Continue with
+   **PLAT-97**: migrate `Microphone` to `IAudioRecordingDevice`; then remove `AudioMixer`'s
+   explicitly temporary SDL subsystem compatibility pin.
 
 ---
 

@@ -39,31 +39,31 @@ namespace CNA::Internal::Audio
 
     /// Destroys the shared mixer and selected playback device.
     ///
-    /// P9-AUDIT-003/AUDIO-002: still no caller anywhere in this codebase today -- the MIX_Init()/
-    /// MIX_Quit() refcount and the SDL audio device are otherwise only reclaimed by the OS on
-    /// process exit. A future caller wiring real shutdown (e.g. into Game's dispose path) MUST
+    /// P9-AUDIT-003/AUDIO-002: still no production caller anywhere in this codebase today; native
+    /// mixer state and the selected audio device are otherwise only reclaimed by the OS on
+    /// process exit. A future caller wiring real shutdown (e.g. into Game's dispose path) must
     /// first ensure no live SoundEffectInstance, DynamicSoundEffectInstance, Microphone, or
-    /// AudioEngine/Cue/SoundBank/WaveBank still depends on SDL audio -- this function only
+    /// AudioEngine/Cue/SoundBank/WaveBank is actively using audio. This function only
     /// serializes the mixer pointer itself against a concurrent GetMixer() call, it has no way to
     /// know about (or wait on) those higher-level objects' own lifetimes. A GetMixer() call after
     /// this one simply recreates the mixer from scratch, the same as the very first call ever
     /// made.
     ///
-    /// AUD-04-008/009: every MIX_Track/MIX_Audio the destroyed mixer owned is freed as part of
-    /// this call (confirmed against real SDL3_mixer source, MIX_DestroyMixer -> MIX_DestroyTrack),
-    /// so any SoundEffectInstance/DynamicSoundEffectInstance that still holds one becomes a
-    /// dangling pointer. This function bumps the counter GetMixerGeneration() returns so those
-    /// instances can detect the invalidation instead of dereferencing freed memory -- see
+    /// AUD-04-008/009: every native track is freed as part of this call, so any live instance's
+    /// borrowed track handle becomes stale. This function bumps the counter returned by
+    /// GetMixerGeneration() before teardown so those instances detect invalidation instead of
+    /// dereferencing freed memory -- see
     /// SoundEffectInstance::GetLiveTrackHandle().
     ///
     /// The device is stopped first, making its callback barrier complete before tracks and mixer
-    /// memory are freed. The temporary SDL3 compatibility pin remains until PLAT-96 migrates the
-    /// independently-owned DynamicSoundEffectInstance streams; it is not a playback device.
+    /// memory are freed. PLAT-96 retired the dynamic playback stream; the temporary SDL3
+    /// compatibility pin remains only for Microphone until its PLAT-97 migration and is not a
+    /// playback device.
     void DestroyMixer();
 
     /// AUD-04-008/009: monotonically increases by exactly one every time DestroyMixer() actually
     /// destroys a mixer (never on a call where no mixer existed, since nothing was invalidated).
-    /// SoundEffectInstance captures this value when it creates a MIX_Track (Play()) and compares
+    /// SoundEffectInstance captures this value when it creates a track in Play() and compares
     /// it before every later use, so a track orphaned by a DestroyMixer() call is detected instead
     /// of dereferenced. Not tied to GetMixer()'s creation -- only destruction invalidates
     /// previously-issued tracks.

@@ -13,9 +13,7 @@
 #include <iostream>
 
 #ifdef SOUND_ENABLED
-#include <SDL3/SDL.h>
-#include <SDL3_mixer/SDL_mixer.h>
-#include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "Internal/MixerEngine.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Audio
@@ -23,19 +21,25 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
     namespace
     {
-        MIX_Track*        AsTrackD(void* p) { return static_cast<MIX_Track*>(p); }
-        SDL_AudioStream*  AsStream(void* p) { return static_cast<SDL_AudioStream*>(p); }
+        CNA::Internal::Audio::MixerTrack* AsTrackD(void* p)
+        {
+            return static_cast<CNA::Internal::Audio::MixerTrack*>(p);
+        }
+        CNA::Internal::Audio::MixerStream* AsStream(void* p)
+        {
+            return static_cast<CNA::Internal::Audio::MixerStream*>(p);
+        }
 
         // P9-HARDWARE-002: see SoundEffect.cpp's identically-named/documented helper --
         // DynamicSoundEffectInstance's constructor never touches the mixer (unlike FNA's, which
         // eagerly calls SoundEffect.Device()), so Play() here is this class's own first-possible
         // GetMixer() failure point, needing the same std::runtime_error -> NoAudioHardwareException
         // conversion.
-        MIX_Mixer* GetMixerOrThrowXna()
+        void EnsureMixerOrThrowXna()
         {
             try
             {
-                return CNA::Internal::Audio::GetMixer();
+                CNA::Internal::Audio::EnsureMixer();
             }
             catch (const std::exception& ex)
             {
@@ -88,10 +92,10 @@ namespace Microsoft::Xna::Framework::Audio
     SoundState DynamicSoundEffectInstance::getStateProperty() const
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrackD(GetLiveTrackHandle());
+        auto* track = AsTrackD(GetLiveTrackHandle());
         if (!track) return SoundState::Stopped;
-        if (MIX_TrackPaused(track)) return SoundState::Paused;
-        if (MIX_TrackPlaying(track)) return SoundState::Playing;
+        if (CNA::Internal::Audio::IsMixerTrackPaused(track)) return SoundState::Paused;
+        if (CNA::Internal::Audio::IsMixerTrackPlaying(track)) return SoundState::Playing;
 #endif
         return State_;
     }
@@ -134,10 +138,10 @@ namespace Microsoft::Xna::Framework::Audio
         if (current == SoundState::Paused)
         {
 #ifdef SOUND_ENABLED
-            MIX_Track* track = AsTrackD(GetLiveTrackHandle());
+            auto* track = AsTrackD(GetLiveTrackHandle());
             if (track)
             {
-                MIX_ResumeTrack(track);
+                CNA::Internal::Audio::ResumeMixerTrack(track);
                 State_   = SoundState::Playing;
                 playing_ = true;
             }
@@ -153,32 +157,34 @@ namespace Microsoft::Xna::Framework::Audio
         // Stopped — set up fresh playback.
 
 #ifdef SOUND_ENABLED
+        // Establish the selected output before allocating a mixer-specific queued source. This is
+        // load-bearing for CNA_AUDIO_PLATFORM=NULL: its refusal must not create a native object as
+        // a hidden side effect on the way to reporting NoAudioHardwareException.
+        EnsureMixerOrThrowXna();
         EnsureStream();
 
-        // AUD-02-007/AUD-07-007: SDL_CreateAudioStream (inside EnsureStream()) can fail (e.g.
-        // invalid spec, allocation failure); MIX_SetTrackAudioStream(track, nullptr) is
+        // AUD-02-007/AUD-07-007: queued-source creation can fail (e.g. invalid format or
+        // allocation failure); attaching a null source is
         // documented as *legal* -- it detaches the track's input rather than failing -- so
         // without this check a failed EnsureStream() would silently attach no input at all and
         // fall through to a false "Playing" state below with total silence, not caught by any
         // downstream return-value check.
         if (!audioStream_)
         {
-            std::cerr << "[DynamicSoundEffectInstance] SDL_CreateAudioStream failed: "
-                      << SDL_GetError() << "\n";
+            std::cerr << "[DynamicSoundEffectInstance] queued stream creation failed: "
+                      << CNA::Internal::Audio::GetMixerError() << "\n";
             return;
         }
 
-        MIX_Mixer* mixer = GetMixerOrThrowXna();
-
         // Destroy previous track if any.
-        MIX_Track* track = AsTrackD(GetLiveTrackHandle());
+        auto* track = AsTrackD(GetLiveTrackHandle());
         if (!track)
         {
-            track = MIX_CreateTrack(mixer);
+            track = CNA::Internal::Audio::CreateMixerTrack();
             if (!track)
             {
-                std::cerr << "[DynamicSoundEffectInstance] MIX_CreateTrack failed: "
-                          << SDL_GetError() << "\n";
+                std::cerr << "[DynamicSoundEffectInstance] track creation failed: "
+                          << CNA::Internal::Audio::GetMixerError() << "\n";
                 return;
             }
             // AUD-15-006: track_/trackMixerGeneration_ are also read (via getStateProperty())
@@ -192,19 +198,19 @@ namespace Microsoft::Xna::Framework::Audio
                 // AUD-04-008/009: see SoundEffectInstance::Play()'s identical capture -- lets
                 // GetLiveTrackHandle() detect an AudioMixer::DestroyMixer() call that frees this
                 // track out from under this instance.
-                trackMixerGeneration_ = CNA::Internal::Audio::GetMixerGeneration();
+                trackMixerGeneration_ = CNA::Internal::Audio::GetMixerEngineGeneration();
             }
         }
 
-        if (!MIX_SetTrackAudioStream(track, AsStream(audioStream_)))
+        if (!CNA::Internal::Audio::SetMixerTrackStream(track, AsStream(audioStream_)))
         {
-            std::cerr << "[DynamicSoundEffectInstance] MIX_SetTrackAudioStream failed: "
-                      << SDL_GetError() << "\n";
+            std::cerr << "[DynamicSoundEffectInstance] stream attachment failed: "
+                      << CNA::Internal::Audio::GetMixerError() << "\n";
             return;
         }
 
-        // P13-DYNAMIC-001: was a direct `MIX_SetTrackGain(track, getVolumeProperty())` (master
-        // volume itself is still applied globally via MIX_SetMixerGain, not baked in here -- CP-16,
+        // P13-DYNAMIC-001: this used to set the track gain directly (master volume itself is
+        // still applied globally at the mixer, not baked in here -- CP-16,
         // see SoundEffect::setMasterVolumeProperty) -- now shares the same composition routine
         // Play()/Apply3D()/the Volume/Pitch/Pan setters use on a static SoundEffectInstance, so any
         // Volume/Pitch/Pan/Apply3D state set on this instance before this first real Play() (e.g.
@@ -212,29 +218,20 @@ namespace Microsoft::Xna::Framework::Audio
         // one of those setters happens to be called again afterward.
         INTERNAL_applyComposedTrackProperties();
 
-        SDL_PropertiesID props = SDL_CreateProperties();
-        bool played;
-        if (props != 0)
-        {
-            // Don't halt the track when the stream runs dry; we'll keep feeding it.
-            SDL_SetBooleanProperty(props, MIX_PROP_PLAY_HALT_WHEN_EXHAUSTED_BOOLEAN, false);
-            SDL_SetNumberProperty(props, MIX_PROP_PLAY_LOOPS_NUMBER, -1);
-            played = MIX_PlayTrack(track, props);
-            SDL_DestroyProperties(props);
-        }
-        else
-        {
-            played = MIX_PlayTrack(track, 0);
-        }
+        // Don't halt the track when the stream runs dry; we'll keep feeding it.
+        CNA::Internal::Audio::MixerPlayOptions playOptions;
+        playOptions.haltWhenExhausted = false;
+        playOptions.loopCount = -1;
+        const bool played = CNA::Internal::Audio::PlayMixerTrack(track, playOptions);
 
-        // AUD-02-009/AUD-07-010: a failed MIX_PlayTrack must never be followed by a public
+        // AUD-02-009/AUD-07-010: failed mixer playback must never be followed by a public
         // Playing state -- without this check, a track that failed to start (e.g. the mixer
         // rejected the track for some backend reason) would still report SoundState::Playing
         // and be registered with FrameworkDispatcher::Streams as if audio were flowing.
         if (!played)
         {
-            std::cerr << "[DynamicSoundEffectInstance] MIX_PlayTrack failed: "
-                      << SDL_GetError() << "\n";
+            std::cerr << "[DynamicSoundEffectInstance] track playback failed: "
+                      << CNA::Internal::Audio::GetMixerError() << "\n";
             return;
         }
 
@@ -288,24 +285,24 @@ namespace Microsoft::Xna::Framework::Audio
     {
 #ifdef SOUND_ENABLED
         // AUD-04-008/009: GetLiveTrackHandle() returns nullptr (and already clears track_) if
-        // the mixer that owned this track was destroyed since it was created -- MIX_StopTrack/
-        // MIX_DestroyTrack must never run against that freed pointer. track_ is explicitly
+        // the mixer that owned this track was destroyed since it was created -- stop/destroy
+        // must never run against that freed pointer. track_ is explicitly
         // cleared again below regardless, matching this function's pre-existing "always end up
         // with no track" contract for both the live and already-stale cases.
         //
         // AUD-15-006: this whole block (destroying the track and clearing track_) must run
         // under queueMutex_ -- a producer thread's SubmitBuffer() reads track_ (via
         // getStateProperty(), under the same lock as of this task's fix) to decide whether to
-        // submit immediately; without this lock here, MIX_DestroyTrack() could free the track
-        // while that read was using it, a real ASan-reproduced use-after-free (SDL_LockAudioStream
+        // submit immediately; without this lock here, destruction could free the track
+        // while that read was using it, a real sanitizer-reproduced use-after-free (stream lock
         // segfaulting on a track already freed by this function running concurrently).
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
-            MIX_Track* track = AsTrackD(GetLiveTrackHandle());
+            auto* track = AsTrackD(GetLiveTrackHandle());
             if (track)
             {
-                MIX_StopTrack(track, 0);
-                MIX_DestroyTrack(track);
+                CNA::Internal::Audio::StopMixerTrack(track);
+                CNA::Internal::Audio::DestroyMixerTrack(track);
             }
             track_ = nullptr;
         }
@@ -332,7 +329,7 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
         Stop();                          // stops/destroys track_ and deregisters from the dispatcher
-        DestroyStream();                 // frees the SDL audio stream
+        DestroyStream();                 // frees the queued mixer stream
         // track_ is already null by the time this runs (Stop() above nulled it via
         // StopInternal()), so DestroyTrackSafe(track_) is a no-op here; this call's only real
         // effect is marking the instance disposed.
@@ -412,7 +409,7 @@ namespace Microsoft::Xna::Framework::Audio
         // block). Doing this check *after* releasing the lock let a producer thread's
         // getStateProperty()/SubmitQueuedToStream() call race a concurrent Stop() destroying
         // track_/audioStream_ out from under it -- a real, ASan-reproduced use-after-free crash
-        // (SDL_LockAudioStream on a track MIX_DestroyTrack() had already freed).
+        // (locking a stream on a track that destruction had already freed).
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
             queuedBuffers_.push_back(std::move(chunk));
@@ -497,10 +494,10 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
 #ifdef SOUND_ENABLED
-        SDL_AudioStream* stream = AsStream(audioStream_);
+        auto* stream = AsStream(audioStream_);
         if (stream)
         {
-            SDL_ClearAudioStream(stream);
+            CNA::Internal::Audio::ClearMixerStream(stream);
         }
 #endif
     }
@@ -518,11 +515,11 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
         // A submitted chunk only counts as consumed once the stream reports it no longer holds
         // that many bytes queued as input (matches FNA polling the native voice's real
-        // BuffersQueued state) -- not the instant it was handed to SDL.
-        SDL_AudioStream* stream = AsStream(audioStream_);
+        // BuffersQueued state) -- not the instant it was handed to the mixer engine.
+        auto* stream = AsStream(audioStream_);
         if (stream)
         {
-            const int queuedBytes = SDL_GetAudioStreamQueued(stream);
+            const int queuedBytes = CNA::Internal::Audio::GetMixerStreamQueuedBytes(stream);
             if (queuedBytes >= 0)
             {
                 std::lock_guard<std::mutex> lock(queueMutex_);
@@ -574,13 +571,10 @@ namespace Microsoft::Xna::Framework::Audio
             DestroyStream();
         }
 
-        SDL_AudioSpec spec{};
-        spec.format   = isFloat_ ? SDL_AUDIO_F32LE : SDL_AUDIO_S16LE;
-        spec.channels = static_cast<int>(channels_);
-        spec.freq     = sampleRate_;
-
-        // dst_spec nullptr → SDL3 uses the device's native format for output conversion.
-        audioStream_ = SDL_CreateAudioStream(&spec, nullptr);
+        audioStream_ = CNA::Internal::Audio::CreateMixerStream({
+            sampleRate_, static_cast<int>(channels_),
+            isFloat_ ? CNA::Internal::Audio::MixerSampleFormat::Float32
+                     : CNA::Internal::Audio::MixerSampleFormat::Signed16});
         streamIsFloat_ = isFloat_;
 #endif
     }
@@ -592,10 +586,10 @@ namespace Microsoft::Xna::Framework::Audio
         // SubmitQueuedToStreamLocked() (reachable from a producer thread via SubmitBuffer())
         // reads audioStream_ under queueMutex_, so freeing it must happen under the same lock.
         std::lock_guard<std::mutex> lock(queueMutex_);
-        SDL_AudioStream* stream = AsStream(audioStream_);
+        auto* stream = AsStream(audioStream_);
         if (stream)
         {
-            SDL_DestroyAudioStream(stream);
+            CNA::Internal::Audio::DestroyMixerStream(stream);
             audioStream_ = nullptr;
         }
 #endif
@@ -616,7 +610,7 @@ namespace Microsoft::Xna::Framework::Audio
         // this file -- Dispose()'s DestroyStream() now takes this same lock around freeing it,
         // so a caller (e.g. SubmitBuffer() from a producer thread) that reads it here while
         // holding the lock can never observe a freed/mid-teardown stream.
-        SDL_AudioStream* stream = AsStream(audioStream_);
+        auto* stream = AsStream(audioStream_);
         if (!stream) return;
 
         std::vector<std::vector<SharpRuntime::bytecs>> toSubmit;
@@ -624,18 +618,18 @@ namespace Microsoft::Xna::Framework::Audio
 
         for (const auto& chunk : toSubmit)
         {
-            // AUD-02-008/AUD-07-009: a failed SDL_PutAudioStreamData must not be counted as
-            // submitted -- SDL guarantees no partial data is queued on failure, so crediting the
+            // AUD-02-008/AUD-07-009: a failed queued-source submit must not be counted as
+            // submitted -- the engine guarantees no partial data is queued on failure, so crediting the
             // chunk to submittedChunkSizes_ anyway would corrupt PendingBufferCount forever (the
             // stream never actually receives those bytes, so Update()'s consumed-byte accounting
             // would never reach far enough to pop it).
-            if (!SDL_PutAudioStreamData(
-                stream,
-                chunk.data(),
-                static_cast<int>(chunk.size())))
+            const auto* first = reinterpret_cast<const std::byte*>(chunk.data());
+            if (!CNA::Internal::Audio::PutMixerStreamData(
+                stream, std::span<const std::byte>(first, chunk.size())))
             {
-                std::cerr << "[DynamicSoundEffectInstance] SDL_PutAudioStreamData failed ("
-                          << chunk.size() << " bytes dropped): " << SDL_GetError() << "\n";
+                std::cerr << "[DynamicSoundEffectInstance] stream submit failed ("
+                          << chunk.size() << " bytes dropped): "
+                          << CNA::Internal::Audio::GetMixerError() << "\n";
                 continue;
             }
 

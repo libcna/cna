@@ -16,9 +16,7 @@
 #include "System/NotSupportedException.hpp"
 
 #ifdef SOUND_ENABLED
-#include <SDL3/SDL.h>
-#include <SDL3_mixer/SDL_mixer.h>
-#include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "Internal/MixerEngine.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Audio
@@ -27,7 +25,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
     public:
 #ifdef SOUND_ENABLED
-        std::shared_ptr<MIX_Audio> audio;
+        CNA::Internal::Audio::MixerAudioPtr audio;
         SharpRuntime::intcs sampleRate = 44100;
         SharpRuntime::uintcs channels  = 2;
 #endif
@@ -71,12 +69,12 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // P11-PAN-002 (RFC-1 for the fire-and-forget path): minimal per-track pan-only state.
         // Unlike SoundEffectInstance's FilterState (P11-PAN-001), a fire-and-forget track never
-        // has a filter to share the single SDL3_mixer cooked-callback slot with -- none of
+        // has a filter to share the single mixer cooked-callback slot with -- none of
         // P11-PAN-001's original shared-slot regression risk applies here at all, so this is
         // intentionally much smaller: just the crossfeed matrix. Holds the already-computed
         // 4 coefficients (not just `pan`) because the matrix is only ever computed once, at
         // Play() time, by a SoundEffect member function (a friend of SoundEffectInstance) --
-        // FireAndForgetPanCallback below is a free-function SDL trampoline, not a class member,
+        // FireAndForgetPanCallback below is a free-function mixer trampoline, not a class member,
         // so it can't call the private, friended INTERNAL_calculatePanCrossfeedMatrix itself.
         // Heap-allocated with a lifetime tied to the track itself, freed in
         // OnFireAndForgetStopped below (which already runs exactly once, when this track is
@@ -138,11 +136,12 @@ namespace Microsoft::Xna::Framework::Audio
         // SoundEffectInstance.cpp. Only meaningful for `channels == 2`; `!active` (pan == 0.0f at
         // Play() time, the common case -- most fire-and-forget sounds never pan) skips the
         // transform entirely.
-        void SDLCALL FireAndForgetPanCallback(void* userdata, MIX_Track* /*track*/,
-                                               const SDL_AudioSpec* spec, float* pcm, int samples)
+        void FireAndForgetPanCallback(void* userdata,
+                                      CNA::Internal::Audio::MixerTrack* /*track*/,
+                                      int channels, float* pcm, int samples)
         {
             const auto* state = static_cast<const FireAndForgetPanState*>(userdata);
-            if (spec->channels != 2 || !state->active) return;
+            if (channels != 2 || !state->active) return;
 
             for (int i = 0; i + 2 <= samples; i += 2)
             {
@@ -155,17 +154,17 @@ namespace Microsoft::Xna::Framework::Audio
 
         // P11-PAN-002: NOT freed directly in OnFireAndForgetStopped below -- caught by a real,
         // reproducible ASan heap-use-after-free during this task's own verification pass.
-        // SDL3_mixer's MixerCallback (SDL_mixer.c) can invoke the STOPPED callback *partway
+        // The mixer's callback can invoke the STOPPED callback *partway
         // through* pulling a track's FINAL buffer of audio (when the track's underlying data
-        // runs dry mid-pull, inside SDL_GetAudioStreamData on the track's output_stream), then
+        // runs dry while pulling the track's output stream), then
         // still deliver that already-pulled final buffer to the COOKED callback
         // (FireAndForgetPanCallback above) moments later, in the same synchronous mixer-thread
         // call -- so the cooked callback can genuinely still read this track's userdata AFTER
-        // the stopped callback already ran. MIX_DestroyTrack's own documented behavior
+        // the stopped callback already ran. Deferred track destruction's documented behavior
         // ("destroying a track from the mixer thread itself... will cause it to be destroyed as
-        // soon as this iteration of the mixer thread is not using it") is SDL3_mixer solving this
+        // soon as this iteration of the mixer thread is not using it") solves this
         // exact problem for the *track* -- panState needs the same deferred treatment, which
-        // SDL3_mixer has no API for app-owned userdata, so it's deferred manually to the next
+        // the engine has no equivalent API for app-owned userdata, so it is deferred to the next
         // fire-and-forget Play() call instead (DrainPendingPanStateCleanup, below), which is
         // always safely later than any mixer-thread activity for this track/iteration.
         //
@@ -175,7 +174,7 @@ namespace Microsoft::Xna::Framework::Audio
         // call to opportunistically drain them, would show up as a real (if tiny and harmless)
         // ASan leak report, which this project's testing culture treats as a bar worth clearing.
         //
-        // AUD-15-008: Queue() runs from OnFireAndForgetStopped, a real SDL3_mixer track-stopped
+        // AUD-15-008: Queue() runs from OnFireAndForgetStopped, a real mixer track-stopped
         // callback that fires on the mixer thread (see that function's own comment) -- real-time
         // audio code must not block on a mutex or allocate. The original implementation did both
         // (std::mutex + std::vector::push_back, which can reallocate). Rewritten as a classic
@@ -222,10 +221,10 @@ namespace Microsoft::Xna::Framework::Audio
 
         PendingPanStateCleanup g_pendingPanStateCleanup;
 
-        void SDLCALL OnFireAndForgetStopped(void* userdata, MIX_Track* track)
+        void OnFireAndForgetStopped(void* userdata, CNA::Internal::Audio::MixerTrack* track)
         {
             g_pendingPanStateCleanup.Queue(static_cast<FireAndForgetPanState*>(userdata));
-            MIX_DestroyTrack(track);
+            CNA::Internal::Audio::DestroyMixerTrack(track);
         }
 
         // P9-HARDWARE-002: CNA::Internal::Audio::GetMixer() throws a raw std::runtime_error on
@@ -235,11 +234,11 @@ namespace Microsoft::Xna::Framework::Audio
         // converts that failure into NoAudioHardwareException at the XNA-facing entry points
         // that can be the very first GetMixer() call in the process, matching FNA's
         // SoundEffect.Device() throwing the identical exception from the identical failure.
-        MIX_Mixer* GetMixerOrThrowXna()
+        void EnsureMixerOrThrowXna()
         {
             try
             {
-                return CNA::Internal::Audio::GetMixer();
+                CNA::Internal::Audio::EnsureMixer();
             }
             catch (const std::exception& ex)
             {
@@ -267,23 +266,21 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
 #ifdef SOUND_ENABLED
-        MIX_Mixer* mixer = GetMixerOrThrowXna();
-
-        MIX_Audio* raw = MIX_LoadAudio(mixer, assetName.c_str(), true);
-        if (!raw)
+        EnsureMixerOrThrowXna();
+        impl_->audio = CNA::Internal::Audio::LoadMixerAudioFile(assetName);
+        if (!impl_->audio)
         {
             throw System::NotSupportedException(
-                "Failed to load sound: " + assetName + " — " + SDL_GetError()
+                "Failed to load sound: " + assetName + " — "
+                + CNA::Internal::Audio::GetMixerError()
             );
         }
 
-        impl_->audio = {raw, [](MIX_Audio* p) { if (p) MIX_DestroyAudio(p); }};
-
-        SDL_AudioSpec spec{};
-        if (MIX_GetAudioFormat(raw, &spec))
+        const auto format = CNA::Internal::Audio::GetMixerAudioFormat(impl_->audio.get());
+        if (format.sampleRate > 0 && format.channels > 0)
         {
-            impl_->sampleRate = spec.freq;
-            impl_->channels   = static_cast<SharpRuntime::uintcs>(spec.channels);
+            impl_->sampleRate = format.sampleRate;
+            impl_->channels   = static_cast<SharpRuntime::uintcs>(format.channels);
         }
 #else
         (void)assetName;
@@ -350,27 +347,20 @@ namespace Microsoft::Xna::Framework::Audio
                       << "constructor instead of raw PCM16LE samples.\n";
         }
 
-        SDL_AudioSpec spec{};
-        spec.format   = SDL_AUDIO_S16LE;
-        spec.channels = static_cast<int>(channels);
-        spec.freq     = sampleRate;
-
-        MIX_Mixer* mixer = GetMixerOrThrowXna();
-
-        MIX_Audio* raw = MIX_LoadRawAudio(
-            mixer,
-            buffer.data() + offset,
-            static_cast<std::size_t>(count),
-            &spec
-        );
-        if (!raw)
+        EnsureMixerOrThrowXna();
+        const auto* first = reinterpret_cast<const std::byte*>(buffer.data() + offset);
+        impl_->audio = CNA::Internal::Audio::LoadMixerRawAudio(
+            std::span<const std::byte>(first, static_cast<std::size_t>(count)),
+            {sampleRate, static_cast<int>(channels),
+             CNA::Internal::Audio::MixerSampleFormat::Signed16});
+        if (!impl_->audio)
         {
             throw System::NotSupportedException(
-                std::string("Failed to create sound from buffer: ") + SDL_GetError()
+                std::string("Failed to create sound from buffer: ")
+                + CNA::Internal::Audio::GetMixerError()
             );
         }
 
-        impl_->audio      = {raw, [](MIX_Audio* p) { if (p) MIX_DestroyAudio(p); }};
         impl_->sampleRate = sampleRate;
         impl_->channels   = static_cast<SharpRuntime::uintcs>(channels);
 #else
@@ -390,7 +380,8 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
         if (impl_ && impl_->audio && impl_->sampleRate > 0)
         {
-            Sint64 frames = MIX_GetAudioDuration(impl_->audio.get());
+            const std::int64_t frames =
+                CNA::Internal::Audio::GetMixerAudioDuration(impl_->audio.get());
             if (frames > 0)
             {
                 return System::TimeSpan::FromSeconds(
@@ -425,10 +416,11 @@ namespace Microsoft::Xna::Framework::Audio
     float SoundEffect::getMasterVolumeProperty()
     {
 #ifdef SOUND_ENABLED
-        // CP-16: query the real SDL3_mixer master gain (matches FNA, which likewise always
+        // CP-16: query the real mixer-engine master gain (matches FNA, which likewise always
         // queries the live FAudio master voice rather than a cached value) so this reflects
-        // MIX_SetMixerGain's actual current value, not a value that could drift from it.
-        return MIX_GetMixerGain(GetMixerOrThrowXna());
+        // the mixer engine's actual current value, not a value that could drift from it.
+        EnsureMixerOrThrowXna();
+        return CNA::Internal::Audio::GetMixerMasterGain();
 #else
         return MasterVolume_;
 #endif
@@ -437,11 +429,12 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffect::setMasterVolumeProperty(const float& v)
     {
 #ifdef SOUND_ENABLED
-        // CP-16: SDL3_mixer's mixer gain is a real global, applied to every track (including
+        // CP-16: the mixer engine's gain is a real global, applied to every track (including
         // already-playing ones) at mix time -- unlike the old per-track-baked-in approach, this
         // needs no per-instance re-application. FNA passes the value straight through, without
-        // clamping; MIX_SetMixerGain does the same (only rejects negative values as an error).
-        MIX_SetMixerGain(GetMixerOrThrowXna(), v);
+        // clamping; the mixer engine does the same (only rejects negative values as an error).
+        EnsureMixerOrThrowXna();
+        CNA::Internal::Audio::SetMixerMasterGain(v);
 #else
         MasterVolume_ = v;
 #endif
@@ -525,35 +518,33 @@ namespace Microsoft::Xna::Framework::Audio
         // heap-use-after-free otherwise).
         g_pendingPanStateCleanup.Drain();
 
-        auto* audio = static_cast<MIX_Audio*>(getNativeAudioHandle());
+        auto* audio = static_cast<CNA::Internal::Audio::MixerAudio*>(getNativeAudioHandle());
         if (!audio)
         {
             return false;
         }
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
-        MIX_Track* track = MIX_CreateTrack(mixer);
+        CNA::Internal::Audio::MixerTrack* track = CNA::Internal::Audio::CreateMixerTrack();
         if (!track)
         {
             return false;
         }
 
-        if (!MIX_SetTrackAudio(track, audio))
+        if (!CNA::Internal::Audio::SetMixerTrackAudio(track, audio))
         {
-            MIX_DestroyTrack(track);
+            CNA::Internal::Audio::DestroyMixerTrack(track);
             return false;
         }
 
-        // CP-16: master volume is applied once, globally, via MIX_SetMixerGain (the mixer's own
+        // CP-16: master volume is applied once, globally, via the mixer's own
         // master gain stage) -- not baked into each track's own gain, which would double-apply it.
-        MIX_SetTrackGain(track, volume);
+        CNA::Internal::Audio::SetMixerTrackGain(track, volume);
 
-        // P11-PAN-002 (RFC-1 for the fire-and-forget path): SDL3_mixer's own per-channel stereo
+        // P11-PAN-002 (RFC-1 for the fire-and-forget path): the engine's per-channel stereo
         // gain has no crossfeed term (CHECKLIST.md CP-19), so it's fixed to unity here and this
         // track's own pan state (FireAndForgetPanCallback above) owns 100% of the stereo image
         // instead, matching P11-PAN-001's design for SoundEffectInstance.
-        static const MIX_StereoGains kUnityStereo{1.0f, 1.0f};
-        MIX_SetTrackStereo(track, &kUnityStereo);
+        CNA::Internal::Audio::SetMixerTrackStereoUnity(track);
 
         auto* panState = new FireAndForgetPanState{};
         if (pan != 0.0f)
@@ -566,7 +557,8 @@ namespace Microsoft::Xna::Framework::Audio
             SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix(
                 pan, panState->ll, panState->rl, panState->lr, panState->rr);
         }
-        MIX_SetTrackCookedCallback(track, FireAndForgetPanCallback, panState);
+        CNA::Internal::Audio::SetMixerTrackMixCallback(
+            track, FireAndForgetPanCallback, panState);
 
         if (pitch != 0.0f)
         {
@@ -575,18 +567,20 @@ namespace Microsoft::Xna::Framework::Audio
             // conversion helper -- NOT a linear multiplier (this call site previously duplicated
             // the same wrong formula setPitchProperty()/ApplyTrackProperties() also had).
             const float ratio = SoundEffectInstance::INTERNAL_calculatePitchRatio(pitch);
-            MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
+            CNA::Internal::Audio::SetMixerTrackFrequencyRatio(
+                track, ratio < 0.01f ? 0.01f : ratio);
         }
 
         // Auto-destroy track (and free panState) when playback finishes.
-        MIX_SetTrackStoppedCallback(track, OnFireAndForgetStopped, panState);
+        CNA::Internal::Audio::SetMixerTrackStoppedCallback(
+            track, OnFireAndForgetStopped, panState);
 
-        if (!MIX_PlayTrack(track, 0))
+        if (!CNA::Internal::Audio::PlayMixerTrack(track))
         {
-            // MIX_PlayTrack failing means the track never actually started, so
+            // A failed play means the track never actually started, so
             // OnFireAndForgetStopped will never fire for it -- free panState here instead.
             delete panState;
-            MIX_DestroyTrack(track);
+            CNA::Internal::Audio::DestroyMixerTrack(track);
             return false;
         }
 
@@ -665,8 +659,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // CP-17: FNA's FromStream hand-parses the WAV file and scans for an optional "smpl"
         // chunk (RIFF metadata, not audio data) to recover an authored loop region. CNA's
-        // FromStream instead delegates the actual audio decode to MIX_LoadAudio_IO, but the
-        // smpl chunk still needs this small, independent, SDL-free scan to recover
+        // FromStream instead delegates the actual audio decode to the internal mixer engine, but the
+        // smpl chunk still needs this small, independent, platform-free scan to recover
         // loopStart/loopLength for SoundEffectInstance::Play() to apply. Returns false (leaving
         // loopStart/loopLength untouched) if the stream isn't a WAV file or has no smpl chunk.
         bool TryParseWavSmplChunk(const std::vector<char>& bytes,
@@ -734,31 +728,24 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
 #ifdef SOUND_ENABLED
-        SDL_IOStream* io = SDL_IOFromConstMem(bytes.data(), bytes.size());
-        if (!io)
-        {
-            throw System::NotSupportedException(
-                std::string("SoundEffect::FromStream: SDL_IOFromConstMem failed: ") + SDL_GetError()
-            );
-        }
-
-        MIX_Mixer* mixer = GetMixerOrThrowXna();
-        MIX_Audio* raw   = MIX_LoadAudio_IO(mixer, io, true, true); // predecode=true, closeio=true
-        if (!raw)
-        {
-            throw System::NotSupportedException(
-                std::string("SoundEffect::FromStream: MIX_LoadAudio_IO failed: ") + SDL_GetError()
-            );
-        }
-
+        EnsureMixerOrThrowXna();
         auto implPtr = std::make_shared<Impl>();
-        implPtr->audio = {raw, [](MIX_Audio* p) { if (p) MIX_DestroyAudio(p); }};
-
-        SDL_AudioSpec spec{};
-        if (MIX_GetAudioFormat(raw, &spec))
+        const auto* first = reinterpret_cast<const std::byte*>(bytes.data());
+        implPtr->audio = CNA::Internal::Audio::LoadMixerAudioMemory(
+            std::span<const std::byte>(first, bytes.size()));
+        if (!implPtr->audio)
         {
-            implPtr->sampleRate = spec.freq;
-            implPtr->channels   = static_cast<SharpRuntime::uintcs>(spec.channels);
+            throw System::NotSupportedException(
+                std::string("SoundEffect::FromStream: audio decode failed: ")
+                + CNA::Internal::Audio::GetMixerError()
+            );
+        }
+
+        const auto format = CNA::Internal::Audio::GetMixerAudioFormat(implPtr->audio.get());
+        if (format.sampleRate > 0 && format.channels > 0)
+        {
+            implPtr->sampleRate = format.sampleRate;
+            implPtr->channels   = static_cast<SharpRuntime::uintcs>(format.channels);
         }
 
         auto* result = new SoundEffect(std::move(implPtr));

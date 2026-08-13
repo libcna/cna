@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "Internal/MixerEngine.hpp"
 #include "CNA/Audio/Platform/IAudioDevice.hpp"
 #include "Platform/AudioDeviceFactory.hpp"
 
@@ -48,9 +49,10 @@ namespace CNA::Internal::Audio
         // AUD-04-008/009: an extra, permanently-held SDL_INIT_AUDIO reference, acquired once
         // (guarded by g_mixerMutex, same as g_mixer) and never released. Before PLAT-95,
         // MIX_DestroyMixer() could drop the global audio refcount to zero; now the same hazard
-        // occurs when the selected SDL3 IAudioDevice is closed. Legacy DynamicSoundEffectInstance
-        // and Microphone streams do not yet own subsystem leases themselves, so retain this
-        // compatibility pin until their PLAT-96/97 migrations. NULL never takes it.
+        // occurs when the selected SDL3 IAudioDevice is closed. PLAT-96 removed the independently
+        // owned DynamicSoundEffectInstance stream from the XNA layer; Microphone capture still
+        // lacks its PLAT-97 recording-device ownership, so retain this pin until that migration.
+        // NULL never takes it.
         bool g_audioSubsystemPinned = false;
 
         class MixerBufferCallback final : public CNA::Audio::Platform::IAudioBufferCallback
@@ -171,9 +173,9 @@ namespace CNA::Internal::Audio
         std::lock_guard<std::mutex> lock(g_mixerMutex);
 
         // AUD-04-008/009: acquire the temporary permanent subsystem pin (see
-        // g_audioSubsystemPinned's own comment) before legacy independent SDL streams can exist.
-        // NULL must never touch SDL audio merely because it was selected; PLAT-99 will provide
-        // its device after PLAT-96 has retired those independent streams.
+        // g_audioSubsystemPinned's own comment) before the legacy Microphone stream can exist.
+        // NULL must never touch SDL audio merely because it was selected; PLAT-99 supplies its
+        // device only through the selected-device factory.
 #if defined(CNA_AUDIO_PLATFORM_SDL3)
         // Acquire the permanent subsystem pin (see g_audioSubsystemPinned's own
         // comment) before anything else touches the audio subsystem below -- retried on every
@@ -247,7 +249,9 @@ namespace CNA::Internal::Audio
                 }
                 if (mixer)
                 {
+                    BeginMixerEngineShutdown();
                     MIX_DestroyMixer(mixer);
+                    EndMixerEngineShutdown();
                 }
                 MIX_Quit();
                 throw;
@@ -261,22 +265,25 @@ namespace CNA::Internal::Audio
         std::lock_guard<std::mutex> lock(g_mixerMutex);
         if (g_mixer)
         {
+            // Invalidate every borrowed track and facade-owned native audio pointer before the
+            // selected device or mixer starts tearing them down. MIX_Quit below destroys all
+            // remaining MIX_Audio objects; PLAT-96 reloads them lazily from facade-owned source
+            // data if their SoundEffect survives this generation.
+            g_mixerGeneration.fetch_add(1, std::memory_order_acq_rel);
             if (g_audioDevice)
             {
                 g_audioDevice->Stop();
                 g_audioDevice->Close();
             }
+            BeginMixerEngineShutdown();
             MIX_DestroyMixer(g_mixer);
+            EndMixerEngineShutdown();
             g_mixer = nullptr;
             g_mixerCallback.reset();
             g_audioDevice.reset();
             g_generatedBytes.store(0, std::memory_order_release);
             g_outputError.store(false, std::memory_order_release);
             MIX_Quit();
-            // AUD-04-008/009: every track this mixer owned was just freed by MIX_DestroyMixer
-            // above -- bump the generation so any instance still holding one of those tracks
-            // detects the invalidation on its next access instead of dereferencing freed memory.
-            g_mixerGeneration.fetch_add(1, std::memory_order_release);
         }
     }
 
