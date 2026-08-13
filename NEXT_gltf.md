@@ -44,7 +44,7 @@ Expected as of this writing:
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite | **6 324 passed, 18 failed** |
-| generator `--check` | **109 assets, 534 files — byte-identical** |
+| generator `--check` | **111 assets, 544 files — byte-identical** |
 | `*Gltf*` on `STUB` / `HEADLESS` | **439 passed, 23 skipped** / **462 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
@@ -177,7 +177,7 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
 1. **`GLTF-399` — finish the corpus (109 of 136).** This is now the highest-value *mechanical*
    work, and four groups are already complete (transforms 17/17, component types 8/8, accessors
    12/13, morph 12). What is left, in the order it is worth doing:
-   - **skinning 10/16** and **materials 10/12** and **scenes 1/3** and **robustness 7/8** — ordinary
+   - **skinning 10/16**, **materials 10/12** and **robustness 7/8** (scenes is now 3/3) — ordinary
      work with existing machinery. Start here.
    - **textures 3/10** — needs real images; `tools/gltf_fixtures/png.py` already emits PNGs, so
      this is closer than it looks.

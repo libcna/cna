@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 109,
+  "distinctAssetCount": 111,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 12,
@@ -26,7 +26,7 @@
     "animation": 23,
     "cameras": 5,
     "lights": 2,
-    "scenes": 1,
+    "scenes": 3,
     "robustness": 7
   },
   "promotedAuditFixtures": {
@@ -1997,6 +1997,40 @@
       "auditFixture": "f14"
     },
     {
+      "id": "scene-two-roots",
+      "owningGroup": "scenes",
+      "referencingGroups": [
+        "transforms"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "two scene roots",
+        "root with a child"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "scene-no-scenes",
+      "owningGroup": "scenes",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "no scenes array",
+        "scene-less fallback"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "bad-accessor-out-of-bounds",
       "owningGroup": "robustness",
       "referencingGroups": [],
@@ -3766,6 +3800,56 @@
       "path": "scene-default-selection.vb.bin",
       "bytes": 144,
       "sha256": "e18e1b490de1b904c1d5c05e4092db07c4493fcd7545d6c16793bf4064efdf62"
+    },
+    {
+      "path": "scene-no-scenes.expected.json",
+      "bytes": 6578,
+      "sha256": "2275dc2a864ed14ce47319d29c39bc3b77799e6b36e0fe73f7b2c29ddbc131ec"
+    },
+    {
+      "path": "scene-no-scenes.glb",
+      "bytes": 780,
+      "sha256": "d64a70e75fbb11b25f341ce3f1da955f9a2757636b749183fcb12ca995ab34ce"
+    },
+    {
+      "path": "scene-no-scenes.gltf",
+      "bytes": 1412,
+      "sha256": "4387f7b233345636d0778f6b372d14ceb10817b2fd4ddcbcaf123cb5e4557142"
+    },
+    {
+      "path": "scene-no-scenes.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "scene-no-scenes.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "scene-two-roots.expected.json",
+      "bytes": 7897,
+      "sha256": "29eb75ee5190e8a45fc63a75ccef1afe2e1494577bc7386639a62c31209464fc"
+    },
+    {
+      "path": "scene-two-roots.glb",
+      "bytes": 924,
+      "sha256": "a2032aa190c5b951442626fbef9f2f34d3c3363f175d6b5a6c1486a57e689466"
+    },
+    {
+      "path": "scene-two-roots.gltf",
+      "bytes": 1732,
+      "sha256": "abf2bc2411a47a13f6d3076722fe4655065695a09b36a866af30de0dbaec660e"
+    },
+    {
+      "path": "scene-two-roots.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "scene-two-roots.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "skin-73-joints.expected.json",

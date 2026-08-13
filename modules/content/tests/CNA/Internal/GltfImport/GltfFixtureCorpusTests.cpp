@@ -440,9 +440,21 @@ TEST(GltfConformanceL1, ContainerStructureMatchesTheManifest)
 
         // The default scene is the one the importer must use; getting it wrong is how a decoy
         // mesh gets imported.
+        // §3.5 permits a file with no `scenes` array at all, and `scene-no-scenes` is the fixture
+        // for it -- so "-1" is a legitimate expectation here rather than a fixture that forgot to
+        // state one. What must not happen is a file declaring a scene index and not having it.
         const long long expectedScene = static_cast<long long>(NumberOr(l1, "defaultScene", -1));
-        ASSERT_NE(nullptr, data.scene) << "file declares no default scene";
-        EXPECT_EQ(expectedScene, static_cast<long long>(data.scene - data.scenes));
+        if (expectedScene < 0)
+        {
+            EXPECT_EQ(nullptr, data.scene)
+                << "the manifest states no default scene and the file has one";
+            EXPECT_EQ(0u, data.scenes_count);
+        }
+        else
+        {
+            ASSERT_NE(nullptr, data.scene) << "file declares no default scene";
+            EXPECT_EQ(expectedScene, static_cast<long long>(data.scene - data.scenes));
+        }
 
         EXPECT_EQ(Strings(Member(l1, "extensionsRequired")).size(),
                   static_cast<std::size_t>(data.extensions_required_count));

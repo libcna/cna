@@ -3018,7 +3018,6 @@ namespace CNA::Internal::GltfImport
         const cgltf_scene* scene = data->scene
             ? data->scene
             : (data->scenes_count > 0 ? &data->scenes[0] : nullptr);
-        if (!scene) { return graph; } // no scenes at all -- caller falls back to "every mesh"
 
         // Explicit stack rather than recursion: a pathological file may nest nodes thousands deep,
         // and CollectSceneReachableNodes already established that convention for this traversal.
@@ -3026,10 +3025,32 @@ namespace CNA::Internal::GltfImport
         struct PendingNode { const cgltf_node* node; int parentIndex; };
         std::vector<PendingNode> stack;
         stack.reserve(data->nodes_count + 1);
-        for (cgltf_size i = scene->nodes_count; i > 0; --i)
+        if (scene != nullptr)
         {
-            stack.push_back(PendingNode{scene->nodes[i - 1], 0});
+            for (cgltf_size i = scene->nodes_count; i > 0; --i)
+            {
+                stack.push_back(PendingNode{scene->nodes[i - 1], 0});
+            }
         }
+        else
+        {
+            // plan_gltf.md GLTF-399 / `scene-no-scenes`. §3.5 permits a file with no `scenes` array
+            // and says nothing is *required* to be rendered -- which is not "nothing may be", and
+            // CNA's own decision (docs/gltf-conventions.md) is to import everything. This used to
+            // return an EMPTY graph here, so the caller's "fall back to every mesh" imported the
+            // geometry with **no placement at all**: every mesh at the origin, node transforms
+            // discarded. That is defect D1's failure mode surviving in the one corner the scene
+            // traversal never covered. Walking the roots instead keeps the fallback's reach and
+            // gives every mesh the transform the file authored.
+            for (cgltf_size i = data->nodes_count; i > 0; --i)
+            {
+                if (data->nodes[i - 1].parent == nullptr)
+                {
+                    stack.push_back(PendingNode{&data->nodes[i - 1], 0});
+                }
+            }
+        }
+        if (stack.empty()) { return graph; }
 
         while (!stack.empty())
         {

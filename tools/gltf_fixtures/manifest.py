@@ -294,9 +294,17 @@ def scene_mesh_instances(builder: GltfBuilder) -> list[MeshInstance]:
     doc = builder.document
     nodes = doc.get("nodes", [])
     scenes = doc.get("scenes", [])
-    if not scenes:
-        return []
     default_scene = doc.get("scene", 0)
+    if not scenes:
+        # §3.5 permits a file with no `scenes` at all and defines it as "nothing is REQUIRED to be
+        # rendered" -- which is not "nothing may be". CNA's decision is to import every root node,
+        # the reading every viewer takes, and the oracle mirrors it deliberately rather than
+        # returning nothing: an expectation of zero instances would make `scene-no-scenes` assert
+        # that CNA does the opposite of what it documents.
+        child_indices = {c for node in nodes for c in node.get("children", [])}
+        roots = [i for i in range(len(nodes)) if i not in child_indices]
+        scenes = [{"nodes": roots}]
+        default_scene = 0
     instances: list[MeshInstance] = []
 
     def visit(index: int, parent_world: Matrix, path: list[int]) -> None:

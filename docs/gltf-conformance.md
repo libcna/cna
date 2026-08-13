@@ -594,7 +594,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**101 of the 109** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**103 of the 111** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. The seven without one are the fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`); their manifests record
@@ -860,6 +860,8 @@ written for this document: two descriptions of the same fixture are two things t
 | `lights-kinds-and-reach` | lights | L1, L2, L3, L4 | KHR_lights_punctual; directional light; point light; spot light; light range ignored; cone angles ignored |
 | `lights-over-budget` | lights | L1, L2, L3, L4 | KHR_lights_punctual; more lights than XNA can bind; light ordering; photometric intensity clamped |
 | `scene-default-selection` | scenes | L1, L3, L4 | scene != 0; unreferenced decoy mesh; multiple scenes |
+| `scene-two-roots` | scenes | L1, L2, L3, L4 | two scene roots; root with a child |
+| `scene-no-scenes` | scenes | L1, L2, L3, L4 | no scenes array; scene-less fallback |
 | `bad-accessor-out-of-bounds` | robustness | L1 | accessor beyond bufferView; structural validation; import rejection |
 | `bad-accessor-count-overflow` | robustness | L1 | accessor count overflow; size_t wrap; structural validation; import rejection |
 | `bad-index-out-of-range` | robustness | L1, L2 | index beyond vertex count; index range validation; import rejection |

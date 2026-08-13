@@ -98,6 +98,27 @@ Fixed in three places: the ladder now matches a suite whose name **contains** `G
 carries `RuntimeGltfModelTest.*`, and the CI job filters on `*Gltf*`. The four cases now assert the
 effect the material model selects, and say why in a comment.
 
+## A file with no `scenes` array imported every mesh at the origin — FIXED 2026-08-13
+
+Found by `scene-no-scenes`, a fixture written while completing `plan_gltf.md` `GLTF-399`'s scene
+group. §3.5 permits a glTF file with **no `scenes` array at all** and says nothing is *required* to
+be rendered — which is not "nothing may be", and CNA's own documented decision is to import
+everything.
+
+`BuildSceneGraph` returned an **empty graph** in that case, with the comment "caller falls back to
+'every mesh'". The caller does exactly that, so the geometry arrived — **with no placement**. Every
+mesh sat at the origin and every node transform was discarded.
+
+That is defect **D1**'s failure mode surviving in the one corner the scene traversal never covered:
+`GLTF-113`/`GLTF-114` fixed placement *for nodes reached through a scene*, and a file with no scenes
+reaches none. The corpus had no such asset, so nothing could have caught it.
+
+Fixed by walking the **root nodes** (`parent == nullptr`) when there is no scene, which keeps the
+fallback's reach and gives every mesh the transform the file authored. The L4 oracle and the corpus
+generator now make the same fallback explicit rather than returning nothing, so all three agree —
+and `scene-no-scenes` asserts it at L1 (no default scene is a legitimate manifest value of `-1`),
+L3 and L4.
+
 ## A morph target with no POSITION was indistinguishable from one full of zeros — FIXED 2026-08-13
 
 Found while building `GLTF-292`'s morph fixture family, by a fixture authored specifically to have

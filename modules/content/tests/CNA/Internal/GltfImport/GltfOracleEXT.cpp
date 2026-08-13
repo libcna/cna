@@ -766,7 +766,20 @@ namespace CnaTest::GltfOracle
 
         const cgltf_scene* scene = data.scene != nullptr
             ? data.scene : (data.scenes_count > 0 ? &data.scenes[0] : nullptr);
-        if (scene == nullptr) { return positions; }
+        // §3.5 permits a file with no `scenes` array at all, and defines that as "nothing is
+        // REQUIRED to be rendered" -- which is not "nothing may be". CNA imports every root node
+        // in that case, which is the reading every viewer takes, and the oracle mirrors the
+        // decision deliberately: returning nothing here would make `scene-no-scenes` assert that
+        // CNA does the opposite of what it documents (plan_gltf.md GLTF-399).
+        std::vector<const cgltf_node*> fallbackRoots;
+        if (scene == nullptr)
+        {
+            for (cgltf_size i = 0; i < data.nodes_count; ++i)
+            {
+                if (data.nodes[i].parent == nullptr) { fallbackRoots.push_back(&data.nodes[i]); }
+            }
+            if (fallbackRoots.empty()) { return positions; }
+        }
 
         struct Walker
         {
@@ -825,9 +838,16 @@ namespace CnaTest::GltfOracle
         };
 
         Walker walker{data, positions, {}};
-        for (cgltf_size i = 0; i < scene->nodes_count; ++i)
+        if (scene == nullptr)
         {
-            walker.Visit(*scene->nodes[i], IdentityMatrix());
+            for (const cgltf_node* root : fallbackRoots) { walker.Visit(*root, IdentityMatrix()); }
+        }
+        else
+        {
+            for (cgltf_size i = 0; i < scene->nodes_count; ++i)
+            {
+                walker.Visit(*scene->nodes[i], IdentityMatrix());
+            }
         }
         AccumulateBounds(positions);
         return positions;

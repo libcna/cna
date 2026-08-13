@@ -726,7 +726,11 @@ class GltfBuilder:
         """
         return {
             "assetVersion": "2.0",
-            "defaultScene": self._default_scene if self._default_scene is not None else 0,
+            # -1 when the asset declares no scenes at all (§3.5 permits it, and `scene-no-scenes`
+            # is the fixture for it). Reporting 0 there would claim a default scene the file does
+            # not have, and the L1 sweep would then assert CNA finds one.
+            "defaultScene": (self._default_scene if self._default_scene is not None
+                             else (0 if self._scenes else -1)),
             "sceneCount": len(self._scenes),
             "nodeCount": len(self._nodes),
             "meshCount": len(self._meshes),
