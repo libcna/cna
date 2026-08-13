@@ -12,7 +12,7 @@ Date: 2026-08-13
 
 Authoritative companions:
 
-- `docs/renderer-registry.md` — the **live** 46 public identities (canonical; this file never
+- `docs/renderer-registry.md` — the **live** 47 public identities (canonical; this file never
   overrides it).
 - `FUTURE.md` §"Phase 2 — renderer expansion" — the already-planned, owner-visible additions.
 - `docs/graphics-renderer-feature-matrix.md` — what the established renderers actually prove.
@@ -21,12 +21,12 @@ Authoritative companions:
 
 ## 1. What CNA supports today
 
-**46 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
+**47 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
 against `modules/core/include/CNA/GraphicsRendererType.hpp` and `cmake/RendererSelection.cmake`
-(`OK: 46 public renderer identities preserved in both registries`). Selected at configure time via
+(`OK: 47 public renderer identities preserved in both registries`). Selected at configure time via
 `-DCNA_GRAPHICS_RENDERER=<selector>`; implementations live in `modules/renderers/<family>/`.
 
-The 46 map to 42 concrete factories, because the five GL profiles (`OPENGLES2`, `OPENGLES3`,
+The 47 map to 43 concrete factories, because the five GL profiles (`OPENGLES2`, `OPENGLES3`,
 `OPENGL33`, `WEBGL1`, `WEBGL2`) share the internal EasyGL implementation while keeping distinct
 public contracts (context, shader profile, platform).
 
@@ -34,11 +34,11 @@ public contracts (context, shader profile, platform).
 |---|---|---:|
 | No pixels (validation/no-op) | `HEADLESS`, `STUB` | 2 |
 | 2D-oriented | `SDL_RENDERER`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `SKIA`, `BLEND2D`, `OPENVG`, `FREEDIRECT`, `DIRECTX1`, `DIRECT2D`, `GDI` | 11 |
-| CPU 3D | `SOFTWARE`, `PORTABLEGL` | 2 |
+| CPU 3D | `SOFTWARE`, `PORTABLEGL`, `TINYGL` | 3 |
 | Legacy / fixed-function 3D | `OPENGLES1`, `OPENGL1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8`, `GLIDE` | 9 |
 | Programmable / modern | `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`, `OPENGL2`, `OPENGL4`, `VULKAN`, `WEBGPU`, `METAL`, `DIRECTX9`, `DIRECTX10`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU` | 15 |
 | Abstraction / engine RHI | `BGFX`, `MAGNUM`, `WICKED`, `SOKOL`, `DILIGENT`, `LLGL`, `FNA3D` | 7 |
-| **Total** | | **46** |
+| **Total** | | **47** |
 
 Notes that must not be misstated anywhere: `WEBGPU`, `SOKOL`, `DILIGENT`, `LLGL` and `WICKED` are
 experimental with bounded verified surfaces; `SKIA` is CPU-raster 2D only; the `ASCII` identity was
@@ -60,11 +60,14 @@ over anything in §3 unless the owner says otherwise.
 | `THORVG` | ThorVG | 2D vector |
 | `REACT_DOM` | React/DOM | Web DOM — only if it can truthfully satisfy a graphics contract |
 
-Live 46 + these 8 = the current **54** roadmap ceiling.
+Live 47 + these 8 = the current **55** roadmap ceiling.
 
 ## 3. New candidates
 
-**41 candidate identities**, none of which duplicates a live identity or a §2 entry. Each row states
+**41 candidate identities** as first catalogued, none of which duplicated a live identity or a §2
+entry. One — **A2 `TINYGL`** — has since been implemented and is now a live identity; it is left in
+place below, marked DELIVERED, so the catalog stays readable as a record rather than silently
+shrinking. **40 remain open.** Each row states
 the one thing it proves that no existing CNA identity proves — that column is the admission test,
 because `docs/renderer-registry.md` forbids counting a conceptual alias of an existing identity.
 
@@ -78,7 +81,7 @@ copyleft or version-dependent and could be disqualifying.
 | # | Identity | Upstream / API | Class | Proves what nothing else proves | Gate | Effort | Risk | License |
 |---:|---|---|---|---|---|---|---|---|
 | A1 | `OSMESA` | Mesa `libOSMesa` | CPU GL 4.x | Real, spec-complete desktop GL executed with **zero GPU and zero display server** — the only way to run the full EasyGL/`OPENGL4` feature matrix in CI. `PORTABLEGL` is a partial GL 3.x reimplementation, not Mesa. | none (CPU) | S | low | MIT |
-| A2 | `TINYGL` | TinyGL (Bellard lineage) | CPU fixed-function | Fixed-function GL 1.x **on CPU**. `OPENGL1` needs a driver; `PORTABLEGL` is shader-era; `SOFTWARE` is CNA's own rasterizer. | none | S | low | BSD-like |
+| A2 | `TINYGL` | C-Chads/tinygl (Bellard lineage) | CPU fixed-function | **DELIVERED 2026-08-13.** Fixed-function GL 1.x **on CPU**. `OPENGL1` needs a driver; `PORTABLEGL` is shader-era; `SOFTWARE` is CNA's own rasterizer. See `tinygl-renderer.md` / `../plan_tinygl.md`. | none | S | low | BSD-like |
 | A3 | `SWIFTSHADER` | google/swiftshader | CPU Vulkan | A conformant **Vulkan** API surface with no GPU — lets the `VULKAN` renderer's contract be regression-tested on GPU-less machines without claiming it as `VULKAN`. | none | M | med | Apache-2.0 |
 | A4 | `CAIRO` | cairo | 2D vector | A third, independent 2D vector model next to `SKIA`/`BLEND2D` — and the only one with a *device-agnostic* backend set (image, X11, PDF, SVG) behind one API. | system pkg | M | med | LGPL-2.1 / MPL-1.1 — **verify** |
 | A5 | `XLIB` | X11 `XImage`/MIT-SHM | 2D presentation | The Linux peer of `GDI`: CPU pixels pushed straight to a bare X server, no SDL, no GL, no toolkit. | Linux + X11 | S | low | MIT |
@@ -185,17 +188,18 @@ one textured quad before any renderer code is written. The `dx9-spike/` preceden
 
 ## 6. Suggested sequencing (if and when authorized)
 
-A defensible first wave is **A1 `OSMESA`, A5 `XLIB`, A2 `TINYGL`, A6 `NANOVG`, A10 `SIXEL`** — all
+A2 `TINYGL` was delivered first, on 2026-08-13. The rest of a defensible first wave is
+**A1 `OSMESA`, A5 `XLIB`, A6 `NANOVG`, A10 `SIXEL`** — all
 Tier S/low-risk, all Linux-dev-loop verifiable without a GPU, and three of them directly improve CI
 coverage of *existing* renderers. `A9 OPENGLES32` is the highest-value non-trivial one, because it is
 the first CNA identity that could truthfully report compute-shader capability.
 
 ## 7. Arithmetic
 
-    46 live today
-     + 8 planned but unstarted (FUTURE.md Phase 2)               = 54
-     + 41 candidates catalogued here                             = 95 theoretical ceiling
+    47 live today (46 at first writing, + TINYGL)
+     + 8 planned but unstarted (FUTURE.md Phase 2)               = 55
+     + 40 candidates still open here                             = 95 theoretical ceiling
 
 **95 is not a target and not a plan.** It is the size of the surveyed option space. The only number
 that may ever be published as CNA's renderer count is the one
-`scripts/check_renderer_identities.py` prints for the actual tree — today, **46**.
+`scripts/check_renderer_identities.py` prints for the actual tree — today, **47**.

@@ -14,9 +14,12 @@ on it) rather than assuming either way.
   "is X still broken" over any dated snapshot below.
 - **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status
   (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does renderer X support feature Y."
-- **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the **46** public
+- **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the **47** public
   renderer identities (enum, CMake selector, compile definition, factory, platform/dependency
   gate). Start here for "which renderers does CNA have."
+- **[`tinygl-renderer.md`](tinygl-renderer.md)** — capability boundary for `TINYGL`, the
+  fixed-function CPU OpenGL renderer (C-Chads/tinygl); task breakdown in `../plan_tinygl.md`, and
+  the pre-implementation probe in `../tinygl-spike/README.md`.
 - **[`renderer-expansion-candidates.md`](renderer-expansion-candidates.md)** — surveyed catalog of
   **41** possible future renderer identities, screened against the live registry and against the
   "no alias identities" rule, plus the list of things that must *not* become identities. A
