@@ -4,6 +4,8 @@
 
 #include "CNA/Platform/PlatformException.hpp"
 
+#include <limits>
+
 namespace CNA::Platform {
 
     std::unique_ptr<IPlatformWindow> IPlatform::AdoptWindow(const WindowId windowId)
@@ -11,6 +13,16 @@ namespace CNA::Platform {
         throw PlatformException(
             "AdoptWindow(" + std::to_string(windowId) + ")",
             "external window adoption is unsupported by " + GetName());
+    }
+
+    std::unique_ptr<IPlatformWindow> IPlatform::AdoptWindowHandle(const std::uintptr_t handle)
+    {
+        if (handle == 0 || handle > std::numeric_limits<WindowId>::max())
+        {
+            throw PlatformException(
+                "AdoptWindowHandle", "window handle is not a valid platform window id");
+        }
+        return AdoptWindow(static_cast<WindowId>(handle));
     }
 
     const std::string& ToString(const PlatformSubsystem subsystem)

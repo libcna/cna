@@ -36,6 +36,19 @@ namespace CNA::Platform {
         ExclusiveFullscreen
     };
 
+    /** @brief Creation-time framebuffer attributes for an OpenGL-capable window. */
+    struct OpenGlFramebufferDescription
+    {
+        /** @brief Requested depth-buffer precision in bits; zero leaves the platform default. */
+        int depthBits = 0;
+        /** @brief Requested stencil-buffer precision in bits; zero leaves the platform default. */
+        int stencilBits = 0;
+        /** @brief Whether the window visual must support double buffering. */
+        bool doubleBuffered = false;
+        /** @brief Requested sample count; zero or one disables multisampling. */
+        int samples = 0;
+    };
+
     /**
      * @brief The parameters a window is created with.
      *
@@ -89,6 +102,13 @@ namespace CNA::Platform {
 
         /** @brief What the window will be used to draw with. Must be correct at creation time. */
         WindowRenderIntent renderIntent = WindowRenderIntent::None;
+
+        /**
+         * @brief OpenGL framebuffer requirements that must be fixed before window creation.
+         *
+         * Used only when @ref renderIntent is `OpenGl`; other render intents ignore it.
+         */
+        OpenGlFramebufferDescription openGlFramebuffer;
     };
 
     /**

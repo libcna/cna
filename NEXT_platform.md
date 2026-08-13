@@ -106,8 +106,8 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **166 files / 2445 references** of direct SDL coupling outside the PLAT-3 allowlist, down
-from the 253 / 3641 baseline. Contract: 27 headers, 521 documented declarations, all SDL-free.
+Ratchet: **164 files / 2304 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+from the 253 / 3641 baseline. Contract: 27 headers, 527 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
 `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` failure was fixed —
@@ -131,7 +131,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**124 ✅ · 3 🟨 · 27 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — **80 %** of the 155
+**125 ✅ · 3 🟨 · 26 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — **81 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -144,10 +144,12 @@ task rows complete.
   `NativeWindowHandle` without an alias.
 - **Phase 4** (renderers) — PLAT-57's boundary decision, PLAT-58/59/60/61's common-interface
   cleanup, PLAT-62's platform-owned `GraphicsDevice` window and PLAT-63's display-service-backed
-  `GraphicsAdapter` are complete. PLAT-64 also removed every SDL surface, pixel-format and image-IO
-  operation from `Texture2D`/`TextureCube`; those XNA types now cross only an RGBA8 `ImageLoader`
-  facade. Renderer creation receives a complete platform-value snapshot rather than a native
-  pointer; implementation continues at PLAT-65. 46 renderer identities remain in scope.
+  `GraphicsAdapter` are complete. PLAT-64 removed native image operations from
+  `Texture2D`/`TextureCube`; PLAT-65 replaced the final SDL3_image backend with the already-vendored
+  stb decoder/encoder and a CNA bilinear scaler. The stale raw-window transition was also closed:
+  `GraphicsDevice` now carries only `IPlatformWindow`, creation requirements are typed contract
+  values, and `cna_graphics_core` has no direct SDL/SDL3_image link. Continue at PLAT-66. 46
+  renderer identities remain in scope.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — five redundant backends are deleted; `Keyboard`, `Mouse` and `MouseCursor`
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by
@@ -263,14 +265,13 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Migrate `ImageLoader` (PLAT-65).** PLAT-64 deliberately concentrated the remaining image
-   backend in `modules/graphics/src/Internal/ImageLoader.cpp`: decode from file/memory, RGBA8
-   conversion, FNA fit/cover resize, exact resize and PNG/JPEG encode. Decide between a narrow
-   platform image-codec service and a vendored decoder/encoder, then remove the direct SDL and
-   SDL3_image links from `modules/graphics/CMakeLists.txt`. Do not move native image types back
-   into `Texture2D`; its new RGBA8-only boundary and the **69-test** cross-selection regression
-   slice are the acceptance baseline. The repository already vendors stb, so inspect its enabled
-   components and format/encoding parity before adding a new dependency or service.
+1. **Migrate the coordinate-conversion contract (PLAT-66).** `Mouse` now receives the active
+   platform `WindowId`, but its temporary SDL-native view still exists solely to implement
+   `IGraphicsRenderer`'s window↔logical conversion wording and the SDL_Renderer fast path. Restate
+   the common conversion contract entirely in logical platform-window coordinates, make the
+   renderer registry path authoritative, and remove the input module's need to resolve an SDL
+   window from the id. Preserve letterbox offsets and the inverse relation between `GetState()`
+   and `SetPosition()`; the current mouse scaling/warp tests are the behavioral baseline.
 
 2. **Completed Phase 6 reference.** PLAT-91…99 now provide independent SDL-free playback and
    recording contracts, orthogonal `SDL3`/`NULL` selection, an SDL3 device edge, and a paced

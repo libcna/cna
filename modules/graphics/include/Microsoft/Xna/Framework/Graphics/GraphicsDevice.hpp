@@ -39,8 +39,6 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
-struct SDL_Window;
-
 namespace CNA::Platform
 {
     class IPlatform;
@@ -1111,9 +1109,6 @@ namespace Microsoft::Xna::Framework::Graphics
         // GraphicsDevice). The platform outlives both the window and this device.
         CNA::Platform::IPlatform* platform_;
         std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow_;
-        // Transitional SDL view used only by the still-unmigrated renderer creation boundary and
-        // GameWindow. PLAT-58 and PLAT-50 remove it; ownership always stays in platformWindow_.
-        SDL_Window* window_;
         bool videoSubsystemAcquired_;
         std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
         bool rendererStartupNameLogged_ = false;
@@ -1245,7 +1240,7 @@ namespace Microsoft::Xna::Framework::Graphics
             int numVertices, const IndexT* indexData, int indexOffset, int primitiveCount,
             const VertexDeclaration& vertexDeclaration);
 
-        [[nodiscard]] SDL_Window* GetWindowInternal() const;
+        [[nodiscard]] std::uintptr_t GetWindowHandleInternal() const;
         [[nodiscard]] CNA::Platform::IPlatformWindow* GetPlatformWindowInternal() const;
 
         void createOrAttachWindow();

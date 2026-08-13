@@ -47,7 +47,14 @@ namespace CNA::Platform::Sdl3 {
 
     } // namespace
 
-    Sdl3Platform::Sdl3Platform() = default;
+    Sdl3Platform::Sdl3Platform()
+    {
+#ifdef __ANDROID__
+        // Android's back button is framework navigation input. Keep the SDL-specific hint at the
+        // platform edge rather than making GraphicsDevice depend on the native toolkit.
+        SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+#endif
+    }
 
     Sdl3Platform::~Sdl3Platform()
     {
@@ -183,6 +190,22 @@ namespace CNA::Platform::Sdl3 {
             case WindowRenderIntent::None:   break;
         }
 
+        if (description.renderIntent == WindowRenderIntent::OpenGl)
+        {
+            const OpenGlFramebufferDescription& framebuffer = description.openGlFramebuffer;
+            if (framebuffer.depthBits > 0)
+                SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, framebuffer.depthBits);
+            if (framebuffer.stencilBits > 0)
+                SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, framebuffer.stencilBits);
+            if (framebuffer.doubleBuffered)
+                SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+            if (framebuffer.samples > 1)
+            {
+                SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+                SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, framebuffer.samples);
+            }
+        }
+
         if (description.fullscreenMode != WindowFullscreenMode::Windowed)
         {
             flags |= SDL_WINDOW_FULLSCREEN;
@@ -232,6 +255,23 @@ namespace CNA::Platform::Sdl3 {
             throw PlatformException(
                 "AdoptWindow(" + std::to_string(windowId) + ")",
                 "no SDL window has that id");
+        }
+        return std::make_unique<Sdl3Window>(raw, false);
+    }
+
+    std::unique_ptr<IPlatformWindow> Sdl3Platform::AdoptWindowHandle(
+        const std::uintptr_t handle)
+    {
+        if (handle == 0)
+        {
+            throw PlatformException("AdoptWindowHandle", "window handle must be non-zero");
+        }
+
+        auto* raw = reinterpret_cast<SDL_Window*>(handle);
+        const SDL_WindowID id = SDL_GetWindowID(raw);
+        if (id == 0 || SDL_GetWindowFromID(id) != raw)
+        {
+            throw PlatformException("AdoptWindowHandle", "no SDL window has that handle");
         }
         return std::make_unique<Sdl3Window>(raw, false);
     }

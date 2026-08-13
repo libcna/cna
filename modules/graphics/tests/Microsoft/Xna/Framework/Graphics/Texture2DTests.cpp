@@ -969,7 +969,7 @@ TEST_F(ContextRecoveryTest, PartialUpdateNeverThrowsWithRecoveryEnabledByDefault
 //
 // Round-trips through Texture2D::SaveAsPng/SaveAsJpeg (PNG/JPEG) and a
 // hand-built minimal file (BMP) to empirically confirm which encoded
-// formats Texture2D::FromStream can decode via the linked SDL3_image build.
+// formats Texture2D::FromStream can decode via the vendored stb image backend.
 // -----------------------------------------------------------------------
 
 namespace

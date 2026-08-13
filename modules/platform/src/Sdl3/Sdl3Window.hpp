@@ -37,6 +37,9 @@ namespace CNA::Platform::Sdl3 {
         /** @brief Gets the window's id. @return The SDL window id. */
         [[nodiscard]] WindowId GetId() const override;
 
+        /** @brief Gets the legacy SDL window token. @return The non-owning pointer as an integer. */
+        [[nodiscard]] std::uintptr_t GetWindowHandle() const override;
+
         /** @brief Gets the native handle for a renderer. @return The handle for this window system. */
         [[nodiscard]] NativeWindowHandle GetNativeHandle() const override;
 

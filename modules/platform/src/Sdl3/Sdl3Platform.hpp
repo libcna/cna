@@ -61,6 +61,14 @@ namespace CNA::Platform::Sdl3 {
          */
         [[nodiscard]] std::unique_ptr<IPlatformWindow> AdoptWindow(WindowId windowId) override;
 
+        /**
+         * @brief Wraps an existing SDL window supplied through the legacy integer-handle API.
+         * @param handle The non-owning SDL window pointer encoded as an integer.
+         * @return A non-owning platform window wrapper.
+         */
+        [[nodiscard]] std::unique_ptr<IPlatformWindow> AdoptWindowHandle(
+            std::uintptr_t handle) override;
+
         /** @brief Drains pending events. @param destination Receives this frame's events. */
         void PollEvents(std::vector<PlatformEvent>& destination) override;
 

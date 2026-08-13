@@ -55,9 +55,10 @@ namespace CNA::Internal::Renderers::Fna3d
 
     namespace Detail
     {
-        std::uint64_t PrepareWindowFlags()
+        bool PrepareWindowNeedsOpenGl()
         {
-            return static_cast<std::uint64_t>(FNA3D_PrepareWindowAttributes());
+            const std::uint32_t flags = FNA3D_PrepareWindowAttributes();
+            return (flags & SDL_WINDOW_OPENGL) != 0;
         }
     }
 
@@ -94,7 +95,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         // GraphicsDevice already called FNA3D_PrepareWindowAttributes() before creating the
-        // window (Detail::PrepareWindowFlags), which is also what selected the driver. Calling it
+        // window (Detail::PrepareWindowNeedsOpenGl), which is also what selected the driver. Calling it
         // again here would re-run driver selection after the window's visual is fixed.
         int windowWidth = 0;
         int windowHeight = 0;

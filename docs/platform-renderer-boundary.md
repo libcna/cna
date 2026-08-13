@@ -63,6 +63,11 @@ still sees the same `RendererSurfaceInfo`; it never interprets
 `PresentationParameters::DeviceWindowHandle` itself. A platform that cannot adopt the supplied
 kind refuses explicitly instead of casting an integer to its own native type.
 
+The strict XNA integer window property round-trips through `IPlatformWindow::GetWindowHandle()`
+and `IPlatform::AdoptWindowHandle()`. It is an opaque, non-owning compatibility token, distinct
+from `NativeWindowHandle`: only the creating platform may interpret it. New renderer and interop
+code uses the typed native handle instead.
+
 The native handle is immutable for one renderer lifetime. If a platform must replace the native
 window, `GraphicsDevice` tears down and recreates the renderer. Mutating a stored handle underneath
 a live swapchain or context is forbidden.
@@ -104,6 +109,12 @@ IPlatform::PollEvents(batch)
   -> GraphicsDevice refreshes the snapshot
   -> IGraphicsRenderer::OnSurfaceChanged(snapshot, reason)
 ```
+
+`WindowDescription` also carries the small set of framebuffer requirements that genuinely must
+be selected before an OpenGL window exists (depth, stencil, double buffering and samples).
+`GraphicsDevice` describes those requirements; only the platform backend maps them to its native
+windowing API. This keeps pre-window visual selection from becoming a hidden toolkit call in the
+graphics module.
 
 This keeps the draw path `Game -> GraphicsDevice -> Renderer`. It does not become
 `Game -> GraphicsDevice -> Platform -> Renderer`, and there is no platform virtual call per

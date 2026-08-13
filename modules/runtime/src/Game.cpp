@@ -221,7 +221,7 @@ namespace Microsoft::Xna::Framework
 
         Window_.setWindowInternal(
             GraphicsDevice_.GetPlatformWindowInternal(),
-            reinterpret_cast<SharpRuntime::IntPtr>(GraphicsDevice_.GetWindowInternal()));
+            GraphicsDevice_.GetWindowHandleInternal());
         Content_.setGraphicsDevice(GraphicsDevice_);
 
         FrameworkDispatcher::Update();

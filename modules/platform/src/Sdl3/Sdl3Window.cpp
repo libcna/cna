@@ -64,6 +64,11 @@ namespace CNA::Platform::Sdl3 {
         return static_cast<WindowId>(SDL_GetWindowID(window_));
     }
 
+    std::uintptr_t Sdl3Window::GetWindowHandle() const
+    {
+        return reinterpret_cast<std::uintptr_t>(window_);
+    }
+
     NativeWindowHandle Sdl3Window::GetNativeHandle() const
     {
         NativeWindowHandle handle;

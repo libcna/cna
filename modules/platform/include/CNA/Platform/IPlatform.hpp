@@ -154,6 +154,21 @@ namespace CNA::Platform {
          */
         [[nodiscard]] virtual std::unique_ptr<IPlatformWindow> AdoptWindow(WindowId windowId);
 
+        /**
+         * @brief Validates and wraps a window identified by a legacy integer-handle token.
+         *
+         * Tokens come from `IPlatformWindow::GetWindowHandle()` or from an application using the
+         * platform's compatibility API. The returned wrapper is non-owning. Implementations that
+         * use their stable `WindowId` as the token inherit the default round trip; implementations
+         * with a distinct toolkit handle override this method and interpret it locally.
+         *
+         * @param handle The non-zero platform-specific token.
+         * @return A non-owning platform-window wrapper.
+         * @throws PlatformException If the token is invalid or adoption is unsupported.
+         */
+        [[nodiscard]] virtual std::unique_ptr<IPlatformWindow> AdoptWindowHandle(
+            std::uintptr_t handle);
+
         // --- Events ------------------------------------------------------------------------
 
         /**

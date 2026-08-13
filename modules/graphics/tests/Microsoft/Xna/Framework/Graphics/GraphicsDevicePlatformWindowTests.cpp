@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -29,20 +30,22 @@ struct WindowOwnershipTrace
 {
     std::vector<std::string> events;
     WindowDescription description;
+    std::uintptr_t adoptedHandle = 0;
     bool throwFromSync = false;
 };
 
 class TracedWindow final : public IPlatformWindow
 {
 public:
-    explicit TracedWindow(WindowOwnershipTrace& trace)
-        : trace_(trace)
+    explicit TracedWindow(WindowOwnershipTrace& trace, const std::uintptr_t handle = 0x6200u)
+        : trace_(trace), handle_(handle)
     {
     }
 
     ~TracedWindow() override { trace_.events.emplace_back("window-destroyed"); }
 
     [[nodiscard]] WindowId GetId() const override { return 0x6200u; }
+    [[nodiscard]] std::uintptr_t GetWindowHandle() const override { return handle_; }
     [[nodiscard]] NativeWindowHandle GetNativeHandle() const override
     {
         NativeWindowHandle handle;
@@ -97,6 +100,7 @@ public:
 
 private:
     WindowOwnershipTrace& trace_;
+    std::uintptr_t handle_;
     std::string title_ = "Game";
     int width_ = 1;
     int height_ = 1;
@@ -138,6 +142,14 @@ public:
         trace_.events.emplace_back("window-created");
         trace_.description = description;
         return std::make_unique<TracedWindow>(trace_);
+    }
+
+    [[nodiscard]] std::unique_ptr<IPlatformWindow> AdoptWindowHandle(
+        const std::uintptr_t handle) override
+    {
+        trace_.events.emplace_back("window-adopted");
+        trace_.adoptedHandle = handle;
+        return std::make_unique<TracedWindow>(trace_, handle);
     }
 
 private:
@@ -186,6 +198,35 @@ TEST(GraphicsDevicePlatformWindowTests,
     EXPECT_THROW((void)GraphicsDevice(), std::runtime_error);
     EXPECT_EQ(trace.events, (std::vector<std::string>{
         "video-acquired", "window-created", "fullscreen-applied",
+        "size-requested", "window-synced", "window-destroyed", "video-released"}));
+#endif
+}
+
+TEST(GraphicsDevicePlatformWindowTests,
+     ExternalWindowTokenIsInterpretedOnlyByThePlatform)
+{
+#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL))
+    GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
+#else
+    constexpr std::uintptr_t token = 0xCAFE1234u;
+    WindowOwnershipTrace trace;
+    TracedPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    parameters.setDeviceWindowHandleProperty(token);
+    {
+        GraphicsDevice device(
+            Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach,
+            parameters);
+        EXPECT_EQ(trace.adoptedHandle, token);
+        EXPECT_EQ(
+            device.getPresentationParametersProperty().getDeviceWindowHandleProperty(), token);
+    }
+
+    EXPECT_EQ(trace.events, (std::vector<std::string>{
+        "video-acquired", "window-adopted", "fullscreen-applied",
         "size-requested", "window-synced", "window-destroyed", "video-released"}));
 #endif
 }

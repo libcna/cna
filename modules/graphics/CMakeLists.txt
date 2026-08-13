@@ -8,9 +8,9 @@ cna_add_module(cna_graphics_core GraphicsCore ${CNA_GRAPHICS_CORE_SOURCES})
 # interface too; the platform module itself depends only on cna_core_headers, so this adds no cycle.
 target_link_libraries(cna_graphics_core PUBLIC cna_math cna_core cna_platform)
 cna_link_sharp_runtime(cna_graphics_core PUBLIC Core.Base IO Collections.Core Text)
-# PLAT-64 confines image decode, resize and encode to ImageLoader.cpp. PLAT-65 replaces this
-# remaining backend dependency so the graphics core can drop both libraries entirely.
-target_link_libraries(cna_graphics_core PRIVATE SDL3::SDL3 SDL3_image::SDL3_image)
+# PLAT-65: generic image decode/encode uses CNA's already-vendored single-header stb copy. Keep it
+# private: no stb type crosses ImageLoader's RGBA8 boundary.
+target_include_directories(cna_graphics_core PRIVATE ${CMAKE_SOURCE_DIR}/third_party/stb)
 # Genuine XNA-semantic static-archive cycle (kept, not redesigned): GraphicsDevice updates
 # TouchPanel display metrics and Mouse/TextInputEXT window binding, while Input::MouseCursor
 # builds on Graphics::Texture2D. Declared on both targets so CMake repeats the archives.

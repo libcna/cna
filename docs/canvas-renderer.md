@@ -46,7 +46,7 @@ passed. Real visual verification needs a human with a browser — see
 | `RenderTargetUsage::DiscardContents` vs `PreserveContents` | ✅ | Confirmed a framework-layer (`GraphicsDevice.cpp`) concern, not a per-renderer one — zero renderer-specific code needed. |
 | `ReadBackbuffer`/`GetBackBufferData` | ✅ | Real, genuinely synchronous `ctx.getImageData(x,y,w,h)` against whichever context is currently bound. |
 | `SetRenderTargets` (MRT, 2+ targets) | ✅ throws-by-design | A `CanvasRenderingContext2D` is inherently single-target — same conclusion `SDL_RENDERER`'s Task 709 reached. |
-| `Texture2D::FromStream` (PNG/JPEG/DDS) decode | ✅ | Confirmed fully renderer-agnostic (`DxtUtil`/SDL3_image) before ever reaching this renderer's `putImageData` upload. |
+| `Texture2D::FromStream` (PNG/JPEG/DDS) decode | ✅ | Confirmed fully renderer-agnostic (`DxtUtil`/vendored `stb_image`) before ever reaching this renderer's `putImageData` upload. |
 
 ## 3. BlendState
 

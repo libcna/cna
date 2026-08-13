@@ -119,6 +119,7 @@ namespace Microsoft::Xna::Framework::Input
 {
     std::uintptr_t Mouse::windowHandle_ = 0;
     std::uint32_t Mouse::windowId_ = 0;
+    std::uintptr_t Mouse::nativeWindowHandle_ = 0;
     // DEC-06: ClickedEXT is multicast (MulticastAction<int>), matching FNA's Action<int>.
     System::MulticastAction<int> Mouse::ClickedEXT;
 
@@ -130,7 +131,17 @@ namespace Microsoft::Xna::Framework::Input
     void Mouse::setWindowHandleProperty(const std::uintptr_t value)
     {
         windowHandle_ = value;
+        nativeWindowHandle_ = value;
         windowId_ = window_id(reinterpret_cast<SDL_Window*>(value));
+    }
+
+    void Mouse::INTERNAL_setWindow(
+        const std::uintptr_t handle, const std::uint32_t windowId)
+    {
+        windowHandle_ = handle;
+        windowId_ = handle != 0 ? windowId : 0;
+        nativeWindowHandle_ = reinterpret_cast<std::uintptr_t>(
+            windowId_ != 0 ? SDL_GetWindowFromID(static_cast<SDL_WindowID>(windowId_)) : nullptr);
     }
 
     // Coordinate model: IPlatformMouse owns a window-client snapshot. The public XNA surface maps
@@ -159,7 +170,7 @@ namespace Microsoft::Xna::Framework::Input
         {
             float logicalX = static_cast<float>(snapshot.x);
             float logicalY = static_cast<float>(snapshot.y);
-            SDL_Window* nativeWindow = resolve_mouse_window(windowHandle_);
+            SDL_Window* nativeWindow = resolve_mouse_window(nativeWindowHandle_);
             const CNA::Platform::WindowId window = windowId_ != 0 ? windowId_ : snapshot.window;
             window_to_logical(nativeWindow, window, logicalX, logicalY, logicalX, logicalY);
             x = static_cast<int>(logicalX);
@@ -192,7 +203,7 @@ namespace Microsoft::Xna::Framework::Input
         // Convert logical -> window so the cursor lands at the correct physical pixel on a
         // scaled/letterboxed window. A zero WindowId asks the service to record the position but
         // not hand a native API an invalid window.
-        SDL_Window* window = resolve_mouse_window(windowHandle_);
+        SDL_Window* window = resolve_mouse_window(nativeWindowHandle_);
         float windowX = static_cast<float>(x);
         float windowY = static_cast<float>(y);
         logical_to_window(window, static_cast<float>(x), static_cast<float>(y), windowX, windowY);
@@ -306,6 +317,7 @@ namespace Microsoft::Xna::Framework::Input
     {
         windowHandle_ = 0;
         windowId_ = 0;
+        nativeWindowHandle_ = 0;
         ClickedEXT    = nullptr;
     }
 }

@@ -22,6 +22,10 @@ TEST(WindowDescriptionTests, DefaultsProduceAVisibleResizableWindowedWindow)
     EXPECT_FALSE(description.borderless);
     EXPECT_EQ(description.fullscreenMode, WindowFullscreenMode::Windowed);
     EXPECT_EQ(description.renderIntent, WindowRenderIntent::None);
+    EXPECT_EQ(description.openGlFramebuffer.depthBits, 0);
+    EXPECT_EQ(description.openGlFramebuffer.stencilBits, 0);
+    EXPECT_FALSE(description.openGlFramebuffer.doubleBuffered);
+    EXPECT_EQ(description.openGlFramebuffer.samples, 0);
     EXPECT_GT(description.width, 0);
     EXPECT_GT(description.height, 0);
 }

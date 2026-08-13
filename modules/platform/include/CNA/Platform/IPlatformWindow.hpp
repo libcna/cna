@@ -5,6 +5,7 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Platform/WindowDescription.hpp"
 
+#include <cstdint>
 #include <string>
 
 namespace CNA::Platform {
@@ -55,6 +56,20 @@ namespace CNA::Platform {
          * @return A non-zero id, stable for the window's lifetime.
          */
         [[nodiscard]] virtual WindowId GetId() const = 0;
+
+        /**
+         * @brief Gets the implementation-specific integer token used by legacy window APIs.
+         *
+         * The token owns nothing and is meaningful only to the platform instance that created
+         * it. New interop code should use @ref GetNativeHandle; this round-trip token exists for
+         * XNA-compatible integer-handle properties and external-window adoption.
+         *
+         * @return A non-zero token while the window is alive.
+         */
+        [[nodiscard]] virtual std::uintptr_t GetWindowHandle() const
+        {
+            return static_cast<std::uintptr_t>(GetId());
+        }
 
         /**
          * @brief Gets the native handle a renderer initializes against.

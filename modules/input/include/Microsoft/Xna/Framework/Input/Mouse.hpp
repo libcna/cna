@@ -102,6 +102,13 @@ namespace Microsoft::Xna::Framework::Input
         CNAEXT static void INTERNAL_onClicked(int button);
 
         /**
+         * @brief Internal: publishes a platform window without requiring graphics to interpret it.
+         * @param handle The legacy integer token exposed through WindowHandle.
+         * @param windowId The stable platform event id used by renderer and mouse services.
+         */
+        CNAEXT static void INTERNAL_setWindow(std::uintptr_t handle, std::uint32_t windowId);
+
+        /**
          * @brief Test-only: resets Mouse's process-wide static state (window ids, ClickedEXT).
          *
          * Does not touch the cursor or platform mouse snapshot (reset those separately).
@@ -113,5 +120,7 @@ namespace Microsoft::Xna::Framework::Input
         static std::uintptr_t windowHandle_;
         /** @brief Platform event id corresponding to WindowHandle, or zero. */
         static std::uint32_t windowId_;
+        /** @brief SDL-native view resolved inside the still-SDL-backed input module. */
+        static std::uintptr_t nativeWindowHandle_;
     };
 }

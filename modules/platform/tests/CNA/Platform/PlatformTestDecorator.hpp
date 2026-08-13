@@ -110,6 +110,17 @@ namespace CNA::Platform::Testing {
             return inner_->AdoptWindow(windowId);
         }
 
+        /**
+         * @brief Adopts a legacy window token through the inner platform.
+         * @param handle The existing platform-specific token.
+         * @return The non-owning wrapper.
+         */
+        [[nodiscard]] std::unique_ptr<IPlatformWindow> AdoptWindowHandle(
+            const std::uintptr_t handle) override
+        {
+            return inner_->AdoptWindowHandle(handle);
+        }
+
         /** @brief Polls the inner platform's events. @param destination Receives the batch. */
         void PollEvents(std::vector<PlatformEvent>& destination) override
         {

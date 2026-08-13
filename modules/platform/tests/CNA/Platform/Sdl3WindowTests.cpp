@@ -114,6 +114,20 @@ TEST_F(Sdl3WindowTest, AdoptedWindowIsValidatedAndRemainsCallerOwned)
         << "destroying the adopted wrapper must not destroy the caller-owned window";
 }
 
+TEST_F(Sdl3WindowTest, LegacyWindowHandleRoundTripsWithoutTransferringOwnership)
+{
+    const std::uintptr_t handle = window_->GetWindowHandle();
+    ASSERT_NE(handle, 0u);
+
+    std::unique_ptr<IPlatformWindow> adopted = platform_->AdoptWindowHandle(handle);
+    ASSERT_NE(adopted, nullptr);
+    EXPECT_EQ(adopted->GetWindowHandle(), handle);
+    EXPECT_EQ(adopted->GetId(), window_->GetId());
+
+    adopted.reset();
+    EXPECT_EQ(window_->GetWindowHandle(), handle);
+}
+
 TEST_F(Sdl3WindowTest, AdoptionRejectsAnUnknownWindowId)
 {
     EXPECT_THROW(

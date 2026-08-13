@@ -191,6 +191,8 @@ TEST(IPlatformTests, UnsupportedExternalWindowAdoptionRefusesExplicitly)
 {
     FakePlatform platform;
     EXPECT_THROW((void)platform.AdoptWindow(1), PlatformException);
+    EXPECT_THROW((void)platform.AdoptWindowHandle(1), PlatformException);
+    EXPECT_THROW((void)platform.AdoptWindowHandle(0), PlatformException);
 }
 
 TEST(IPlatformTests, SubsystemsAreIndependent)
