@@ -77,6 +77,18 @@ if(CNA_BUILD_EXAMPLES)
     endif()
 endif()
 
+# A full terminal-platform smoke test.  The Python runner owns a pseudo-terminal so the real demo
+# receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.  It is kept
+# to the one tuple that has a CPU presenter capable of reaching a terminal.
+if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "TERMINAL"
+   AND CNA_GRAPHICS_RENDERER STREQUAL "BLEND2D" AND TARGET Python3::Interpreter)
+    add_test(NAME TerminalBlend2DDemoIntegration
+        COMMAND Python3::Interpreter
+            "${CMAKE_SOURCE_DIR}/tools/platform/terminal_demo_integration_test.py"
+            "$<TARGET_FILE:cna_demo_2d>")
+    set_tests_properties(TerminalBlend2DDemoIntegration PROPERTIES TIMEOUT 25)
+endif()
+
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
         OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"

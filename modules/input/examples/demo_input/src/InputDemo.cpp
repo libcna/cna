@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "System/TimeSpan.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
@@ -73,6 +74,7 @@ InputDemo::~InputDemo()
 
 void InputDemo::LoadContent()
 {
+    platformCapabilities_ = CNA::Platform::GetCurrentPlatform().GetCapabilities();
     spriteBatch_ = new Graphics::SpriteBatch(getGraphicsDeviceProperty());
 
     // Create a 1×1 white pixel used for all rectangle drawing.
@@ -83,6 +85,13 @@ void InputDemo::LoadContent()
     // Text input: collect committed characters and IME composition draft. The window
     // handle is published by GraphicsDevice during initialization, so StartTextInput
     // here targets the real window.
+    if (!platformCapabilities_.textInput)
+    {
+        // Keep the remaining inspector useful on a terminal/headless host without trying to
+        // start an unavailable IME/text service.
+        return;
+    }
+
     TextInputEXT::TextInput = [this](charcs c)
     {
         lastTextChar_ = static_cast<int>(c);
@@ -175,7 +184,7 @@ void InputDemo::Update(GameTime& gameTime)
     }
 
     // F1 toggles text input on/off, exercising StartTextInput / StopTextInput end-to-end.
-    const bool toggle = kb.IsKeyDown(Keys::F1);
+    const bool toggle = platformCapabilities_.textInput && kb.IsKeyDown(Keys::F1);
     if (toggle && !prevToggleKey_)
     {
         textInputActive_ = !textInputActive_;
@@ -186,7 +195,7 @@ void InputDemo::Update(GameTime& gameTime)
 
     // INP-0219: F2 toggles relative mouse mode (pointer lock); F3 warps the cursor. Both exercise the
     // Mouse EXT/warp APIs end-to-end. In relative mode SetPosition is a documented no-op.
-    const bool relKey = kb.IsKeyDown(Keys::F2);
+    const bool relKey = platformCapabilities_.relativeMouse && kb.IsKeyDown(Keys::F2);
     if (relKey && !prevRelKey_)
     {
         relativeMouse_ = !relativeMouse_;
@@ -194,7 +203,7 @@ void InputDemo::Update(GameTime& gameTime)
     }
     prevRelKey_ = relKey;
 
-    const bool warpKey = kb.IsKeyDown(Keys::F3);
+    const bool warpKey = platformCapabilities_.pixelAccurateMouse && kb.IsKeyDown(Keys::F3);
     if (warpKey && !prevWarpKey_)
     {
         Mouse::SetPosition(507, 300); // warp toward the window centre (exercises SetPosition/warp)
@@ -217,23 +226,30 @@ void InputDemo::Update(GameTime& gameTime)
 
     // Drive rumble motors from trigger pressure for every player slot (One..Four), exercising
     // GamePad::SetVibration end-to-end. Harmless no-op (returns false) for disconnected slots.
-    for (int p = 0; p < 4; ++p)
+    if (platformCapabilities_.gamepad && platformCapabilities_.gamepadRumble)
     {
-        const auto playerIndex = static_cast<PlayerIndex>(p);
-        const auto& trig = GamePad::GetState(playerIndex).getTriggersProperty();
-        GamePad::SetVibration(playerIndex, trig.getLeftProperty(), trig.getRightProperty());
+        for (int p = 0; p < 4; ++p)
+        {
+            const auto playerIndex = static_cast<PlayerIndex>(p);
+            const auto& trig = GamePad::GetState(playerIndex).getTriggersProperty();
+            GamePad::SetVibration(playerIndex, trig.getLeftProperty(), trig.getRightProperty());
+        }
     }
 
     // INP-0221: cycle Player One's light bar and read its motion sensors. All are capability-gated:
     // no-ops / false when the controller is absent or lacks the feature (harmless on other pads).
+    if (platformCapabilities_.gamepad)
     {
         const auto p1  = PlayerIndex::One;
         const auto hue = static_cast<std::uint8_t>((frame_ * 2) & 0xFF);
         lightBar_ = Color(hue, static_cast<std::uint8_t>(255 - hue), std::uint8_t{128}, std::uint8_t{255});
         GamePad::SetLightBarEXT(p1, lightBar_);
-        Vector3 g, a;
-        haveGyro_  = GamePad::GetGyroEXT(p1, g);          if (haveGyro_)  gyro_  = g;
-        haveAccel_ = GamePad::GetAccelerometerEXT(p1, a); if (haveAccel_) accel_ = a;
+        if (platformCapabilities_.gamepadSensors)
+        {
+            Vector3 g, a;
+            haveGyro_  = GamePad::GetGyroEXT(p1, g);          if (haveGyro_)  gyro_  = g;
+            haveAccel_ = GamePad::GetAccelerometerEXT(p1, a); if (haveAccel_) accel_ = a;
+        }
     }
 }
 
@@ -591,7 +607,8 @@ void InputDemo::DrawTextPanel(int ox, int oy, int w, int h)
 
     // Active indicator — reflects SDL's real text-input state (falls back to the toggle
     // flag when no window is available).
-    const bool active = TextInputEXT::IsTextInputActive() || textInputActive_;
+    const bool active = platformCapabilities_.textInput &&
+                        (TextInputEXT::IsTextInputActive() || textInputActive_);
     DrawRect(ox + 12, oy + 12, 26, 26, active ? HEADER_ON : HEADER_OFF);
 
     // Most recent TextInput byte as 8 bit-LEDs (MSB..LSB) so the actual value is verifiable

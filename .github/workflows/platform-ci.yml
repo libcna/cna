@@ -29,14 +29,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # One GPU and one CPU renderer keep SDL3's window/surface seams honest without
-          # multiplying all 46 renderers by every platform implementation.
-          - name: SDL3 + EasyGL (GPU)
+          # GPU profiles exercise separate context/surface paths; the CPU cells prove that a
+          # game does not accidentally inherit SDL3 or a window-system requirement.
+          - name: SDL3 + OpenGLES3
             platform: SDL3
-            renderer: EASYGL
+            renderer: OPENGLES3
             audio: SDL3
             display: true
-          - name: SDL3 + Software (CPU raster)
+          - name: SDL3 + Vulkan
+            platform: SDL3
+            renderer: VULKAN
+            audio: SDL3
+            display: true
+          - name: SDL3 + Software
             platform: SDL3
             renderer: SOFTWARE
             audio: SDL3
@@ -46,6 +51,13 @@ jobs:
           - name: Headless + Headless + Null audio
             platform: HEADLESS
             renderer: HEADLESS
+            audio: "NULL"
+            display: false
+          # A pseudo-TTY test runs a real 2D game, keyboard byte, resize and terminal restore;
+          # no X11/Wayland service is involved.
+          - name: Terminal + Blend2D + Null audio
+            platform: TERMINAL
+            renderer: BLEND2D
             audio: "NULL"
             display: false
     env:
@@ -74,7 +86,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
-            libvulkan-dev \
+            libvulkan-dev mesa-vulkan-drivers \
             libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
@@ -123,13 +135,13 @@ jobs:
             -DCNA_GRAPHICS_RENDERER=${{ matrix.renderer }} \
             -DCNA_AUDIO_PLATFORM=${{ matrix.audio }} \
             -DCNA_BUILD_TESTS=ON \
-            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_BUILD_EXAMPLES=ON \
             -DCNA_ENABLE_NET=OFF \
             -DCNA_USE_CCACHE=ON \
             -DCNA_TEST_DISPLAY=:99
 
-      - name: Build the contract and consumer test binary
-        run: cmake --build build --target CnaTests --parallel 3
+      - name: Build the contract, consumer tests and 2D integration demo
+        run: cmake --build build --target CnaTests cna_demo_2d --parallel 3
 
       - name: Run platform CTest entries (SDL3 tuples)
         if: matrix.display
@@ -154,6 +166,20 @@ jobs:
         env:
           SDL_AUDIODRIVER: dummy
         run: env -u DISPLAY -u WAYLAND_DISPLAY ./build/CnaTests --gtest_filter='EveryImplementation/GameEventSemanticsGoldenTest.*' --gtest_brief=1
+
+      - name: Run 2D demo through the selected graphical platform
+        if: matrix.display
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: ./build/cna_demo_2d --smoke 6
+
+      - name: Run 2D demo without a display
+        if: matrix.platform == 'HEADLESS'
+        run: env -u DISPLAY -u WAYLAND_DISPLAY ./build/cna_demo_2d --smoke 6
+
+      - name: Run terminal 2D demo integration through a pseudo-TTY
+        if: matrix.platform == 'TERMINAL'
+        run: ctest --test-dir build -R '^TerminalBlend2DDemoIntegration$' --output-on-failure
 
       # Run once rather than three times; configure already invokes the same checks for every
       # matrix cell, while this explicit step keeps their commands visible in the CI log.
