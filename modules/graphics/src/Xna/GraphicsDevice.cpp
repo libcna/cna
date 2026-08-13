@@ -2372,7 +2372,7 @@ namespace Microsoft::Xna::Framework::Graphics
             args.surface.drawableSize = platformWindow_->GetPixelSize();
             args.surface.displayScale = platformWindow_->GetDisplayScale();
         }
-#ifdef CNA_RENDERER_SKIA
+#if defined(CNA_RENDERER_SKIA) || defined(CNA_RENDERER_BLEND2D)
         if (surfacePresenter_ == nullptr && platformWindow_ != nullptr)
             surfacePresenter_ = platform_->CreateSurfacePresenter(*platformWindow_);
         args.surfacePresenter = surfacePresenter_.get();
