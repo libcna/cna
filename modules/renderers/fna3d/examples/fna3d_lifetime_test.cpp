@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
@@ -197,6 +198,8 @@ private:
         // Custom effects: structural, because FNA3D compiles no shader source.
         Check(fna3d->CreateEffectRenderer(std::string(), std::string()) == nullptr,
               "CreateEffectRenderer returns null, matching CustomEffects=false");
+        Check(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects),
+              "compiled Effect Framework bytecode is a separate supported capability");
 
         // A compressed cube is refused by name (FNA3D-19's boundary), and the message says why.
         const bool cubeRefused = Threw(

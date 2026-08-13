@@ -20,6 +20,8 @@ namespace
     constexpr std::uint32_t kMaximumReflectedParameters = 16u * 1024u;
     constexpr std::uint32_t kMaximumReflectedTechniques = 4u * 1024u;
     constexpr std::uint32_t kMaximumEffectObjects = 64u * 1024u;
+    constexpr std::size_t kMaximumReflectionDepth = 32u;
+    constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
 
     std::uint32_t ReadUInt32LittleEndian(
         const std::vector<SharpRuntime::bytecs>& bytes, std::size_t offset)
@@ -86,6 +88,103 @@ namespace
             description.rowCount, description.columnCount,
             description.parameterClass, description.parameterType,
             std::move(data), description.stringValue);
+    }
+
+    void ValidateReflectedValue(
+        const CNA::Internal::Renderers::CompiledEffectValueDescription& value,
+        std::size_t& reflectedValueBytes)
+    {
+        if (value.rowCount < 0 || value.rowCount > 4 ||
+            value.columnCount < 0 || value.columnCount > 4 ||
+            value.elementCount < 0 ||
+            static_cast<std::size_t>(value.elementCount) > kMaximumReflectedItems ||
+            value.rawValue.size() > kMaximumCompiledEffectBytes - reflectedValueBytes ||
+            value.name.size() > kMaximumCompiledEffectBytes ||
+            value.semantic.size() > kMaximumCompiledEffectBytes ||
+            value.stringValue.size() > kMaximumCompiledEffectBytes)
+        {
+            throw System::ArgumentException(
+                "The compiled effect contains invalid or oversized reflection metadata.",
+                "effectCode");
+        }
+        reflectedValueBytes += value.rawValue.size();
+    }
+
+    void ValidateAnnotations(
+        const std::vector<CNA::Internal::Renderers::CompiledEffectAnnotationDescription>& values,
+        std::size_t& itemCount, std::size_t& reflectedValueBytes)
+    {
+        if (values.size() > kMaximumReflectedItems - itemCount)
+        {
+            throw System::ArgumentException(
+                "The compiled effect contains too many reflected annotations.", "effectCode");
+        }
+        itemCount += values.size();
+        for (const auto& value : values)
+            ValidateReflectedValue(value, reflectedValueBytes);
+    }
+
+    void ValidateReflectedParameter(
+        const CNA::Internal::Renderers::CompiledEffectParameterDescription& parameter,
+        std::size_t depth, std::size_t& itemCount, std::size_t& reflectedValueBytes)
+    {
+        if (depth >= kMaximumReflectionDepth || itemCount >= kMaximumReflectedItems)
+        {
+            throw System::ArgumentException(
+                "The compiled effect parameter graph exceeds CNA's reflection limits.",
+                "effectCode");
+        }
+        ++itemCount;
+        ValidateReflectedValue(parameter, reflectedValueBytes);
+        ValidateAnnotations(parameter.annotations, itemCount, reflectedValueBytes);
+        for (const auto& member : parameter.structureMembers)
+            ValidateReflectedParameter(member, depth + 1, itemCount, reflectedValueBytes);
+    }
+
+    void ValidateCompiledDescription(
+        const CNA::Internal::Renderers::CompiledEffectDescription& description)
+    {
+        if (description.parameters.size() > kMaximumReflectedParameters ||
+            description.techniques.empty() ||
+            description.techniques.size() > kMaximumReflectedTechniques)
+        {
+            throw System::ArgumentException(
+                "The compiled effect contains an invalid number of parameters or techniques.",
+                "effectCode");
+        }
+
+        std::size_t itemCount = 0;
+        std::size_t reflectedValueBytes = 0;
+        for (const auto& parameter : description.parameters)
+            ValidateReflectedParameter(parameter, 0, itemCount, reflectedValueBytes);
+
+        for (const auto& technique : description.techniques)
+        {
+            if (itemCount >= kMaximumReflectedItems || technique.passes.empty() ||
+                technique.name.size() > kMaximumCompiledEffectBytes)
+            {
+                throw System::ArgumentException(
+                    "The compiled effect pass graph exceeds CNA's reflection limits.",
+                    "effectCode");
+            }
+            ++itemCount;
+            ValidateAnnotations(technique.annotations, itemCount, reflectedValueBytes);
+            if (technique.passes.size() > kMaximumReflectedItems - itemCount)
+            {
+                throw System::ArgumentException(
+                    "The compiled effect contains too many reflected passes.", "effectCode");
+            }
+            itemCount += technique.passes.size();
+            for (const auto& pass : technique.passes)
+            {
+                if (pass.name.size() > kMaximumCompiledEffectBytes)
+                {
+                    throw System::ArgumentException(
+                        "The compiled effect contains oversized pass metadata.", "effectCode");
+                }
+                ValidateAnnotations(pass.annotations, itemCount, reflectedValueBytes);
+            }
+        }
     }
 }
 
@@ -189,6 +288,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!isDisposed_)
         {
+            if (device_ != nullptr) device_->ClearCurrentEffectIf(this);
             compiledRuntime_.reset();
         }
         GraphicsResource::Dispose(disposing);
@@ -355,11 +455,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Effect::BuildCompiledObjectGraph()
     {
         const auto& description = compiledRuntime_->GetDescription();
-        if (description.techniques.empty())
-        {
-            throw System::ArgumentException(
-                "The compiled effect declares no techniques.", "effectCode");
-        }
+        ValidateCompiledDescription(description);
 
         for (const auto& parameter : description.parameters)
         {

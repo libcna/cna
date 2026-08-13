@@ -181,7 +181,8 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             return result;
         }
-        std::vector<int> r(intData_.begin(), intData_.begin() + std::min(count, (int)intData_.size()));
+        const int resultCount = std::clamp(count, 0, static_cast<int>(intData_.size()));
+        std::vector<int> r(intData_.begin(), intData_.begin() + resultCount);
         return r;
     }
     float EffectParameter::GetValueSingle() const
@@ -207,7 +208,8 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             return result;
         }
-        std::vector<float> r(floatData_.begin(), floatData_.begin() + std::min(count, (int)floatData_.size()));
+        const int resultCount = std::clamp(count, 0, static_cast<int>(floatData_.size()));
+        std::vector<float> r(floatData_.begin(), floatData_.begin() + resultCount);
         return r;
     }
     std::string EffectParameter::GetValueString() const

@@ -1,9 +1,40 @@
 # Compiled XNA Effect Bytecode Support Plan
 
-- Status: **Not started**
+- Status: **In progress — FNA3D vertical slice implemented on `feature/fx`**
 - Planning baseline: `develop` at `a749fdce34a5825eb80a778b5db68e11da9358f8`
 - Target branch: `feature/fx`
-- Scope of this document: analysis and implementation plan only
+- Scope of this document: architecture, implementation checklist, and current delivery status
+
+## Implementation snapshot (2026-08-13)
+
+The first production backend is now implemented, not merely parser-prototyped. FNA3D owns the
+native MojoShader effect; the common graphics layer owns the reflected XNA object graph and mutable
+parameter storage. Direct construction and the canonical XNB reader both work, compiled passes are
+preserved through general primitive and SpriteBatch draws, and unsupported renderers retain an
+explicit `CompiledEffects == false` boundary.
+
+Delivered task groups:
+
+- format boundary/sniffing and provenance-pinned stock fixtures (`FX-001`, `FX-003`, `FX-006`);
+- renderer-neutral runtime, capability, draw token, concrete base `Effect`, reflection object graph,
+  padded values, exact pass identity, dirty upload, clone, and active-effect disposal
+  (`FX-010`–`FX-021`, `FX-024`);
+- FNA3D creation/reflection/value upload/clone/technique/pass, render and sampler translation,
+  draw preservation, truthful capability, 3D/SpriteBatch pixels, malformed-input and lifecycle
+  coverage (`FX-031`–`FX-038`, with sanitizer/reset coverage still open);
+- canonical bounded `EffectReader`, replacement of the unsupported placeholder, and negative
+  payload tests, plus an end-to-end ContentManager/XNB/render pixel test (`FX-040`–`FX-043`);
+- dedicated false-by-default capability gating for every non-FNA3D renderer and bounded common,
+  native-reflection, pass-state and sampler-state graphs (`FX-036`, partial `FX-050`).
+
+Still open before the FNA3D slice can satisfy every aspirational exit criterion in this plan:
+
+- a legally reproducible purpose-built multi-technique/multi-pass/struct/annotation fixture and
+  independent normalized FNA oracle (`FX-004`, `FX-005`);
+- broader state/parameter conformance driven by that fixture, fuzz harnesses, sanitizer/stress
+  runs, and full project regressions (`FX-022`, `FX-023`, `FX-037`, `FX-038`, `FX-050`–`FX-054`);
+- additional renderer implementations (`FX-060`–`FX-069`). Until each passes the shared contract,
+  its correct behavior is an explicit `NotSupportedException`, never a silent stock-shader fallback.
 
 ## 1. Executive conclusion
 
@@ -309,8 +340,9 @@ mutable effect values, textures, selected techniques, or pass state between inst
 
 ## 8. Implementation task list
 
-All implementation tasks are **not started**. Dependencies name the tasks that must be accepted
-before the row can close.
+The table is the complete work breakdown; the implementation snapshot above records which task
+groups are delivered and which acceptance criteria remain open. Dependencies name the tasks that
+must be accepted before a row can close.
 
 ### Phase A - Contract, oracle, and fixtures
 

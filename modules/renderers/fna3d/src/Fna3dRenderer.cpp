@@ -900,7 +900,7 @@ namespace CNA::Internal::Renderers::Fna3d
                 return false;
 
             case CNA::GraphicsCapability::CompiledEffects:
-                return true;
+                return SupportsCompiledEffects();
 
             // Hardware instancing becomes usable with a compiled Effect that declares the
             // per-instance semantics. DrawInstancedPrimitivesEx still rejects the stock-effect

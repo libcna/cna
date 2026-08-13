@@ -1322,6 +1322,7 @@ namespace CNA::Internal::Renderers::Fna3d
          * @return True only when FNA3D and the selected runtime driver actually provide it.
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
 
         /** @brief The largest single-axis texture dimension FNA3D guarantees. */
         [[nodiscard]] int GetMaxTextureDimension() const override;

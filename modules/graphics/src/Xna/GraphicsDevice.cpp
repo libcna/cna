@@ -2209,6 +2209,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
     {
+        // CompiledEffects was appended after many renderer-specific capability switches were
+        // written. Their historical catch-all may return true for unknown enum values, so this
+        // security/compatibility boundary requires a separate explicit renderer opt-in.
+        if (capability == CNA::GraphicsCapability::CompiledEffects)
+            return GetRenderer().SupportsCompiledEffects();
         return GetRenderer().SupportsCapability(capability);
     }
 
@@ -2232,6 +2237,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
     {
         currentEffect_ = effect;
+    }
+
+    void GraphicsDevice::ClearCurrentEffectIf(const Effect* effect) noexcept
+    {
+        if (currentEffect_ == effect) currentEffect_ = nullptr;
     }
 
     const std::string& GraphicsDevice::GetTypeName() const

@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -43,6 +44,22 @@ using Microsoft::Xna::Framework::Vector3;
 
 namespace
 {
+    std::uint32_t ReadUInt32LittleEndian(const std::vector<SharpRuntime::bytecs>& bytes,
+                                         std::size_t offset)
+    {
+        return static_cast<std::uint32_t>(bytes[offset]) |
+            (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+            (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
+            (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+    }
+
+    void WriteUInt32LittleEndian(std::vector<SharpRuntime::bytecs>& bytes,
+                                 std::size_t offset, std::uint32_t value)
+    {
+        for (std::size_t i = 0; i < 4; ++i)
+            bytes[offset + i] = static_cast<SharpRuntime::bytecs>(value >> (i * 8));
+    }
+
     std::vector<SharpRuntime::bytecs> LoadValidCompiledEffectFixture()
     {
         const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
@@ -181,6 +198,18 @@ TEST(EffectTest, RejectsUnsafeXna4WrapperOffsetBeforeNativeParser)
         0, 0, 0, 0, 0, 0, 0, 0
     };
     EXPECT_THROW(TestEffect(gd, malformedWrapper), System::ArgumentException);
+}
+
+TEST(EffectTest, RejectsExcessiveTopLevelReflectionCountBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_GE(bytes.size(), 24u);
+    const std::size_t structure = 8u + ReadUInt32LittleEndian(bytes, 4);
+    ASSERT_LE(structure + 16u, bytes.size());
+    WriteUInt32LittleEndian(bytes, structure, 0xFFFFFFFFu);
+
+    EXPECT_THROW(TestEffect(gd, bytes), System::ArgumentException);
 }
 
 // -----------------------------------------------------------------------

@@ -1501,6 +1501,12 @@ namespace CNA::Internal::Renderers
             return nullptr;
         }
 
+        /// Dedicated opt-in for compiled XNA effects. This separate false-by-default gate is
+        /// intentional: legacy renderer SupportsCapability switches often return true for enum
+        /// values added after they were written. GraphicsDevice consults this method for
+        /// CompiledEffects so an old catch-all cannot accidentally advertise a native runtime.
+        [[nodiscard]] virtual bool SupportsCompiledEffects() const { return false; }
+
         /// Activates a specific face of a cube-map render target for rendering.
         /// Pass nullptr to restore the default back buffer.
         virtual void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
@@ -1831,7 +1837,8 @@ namespace CNA::Internal::Renderers
 
         /// Returns whether this renderer (and, for device-dependent entries, the current runtime
         /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
-        /// returns true except for multi-stream input. Every renderer with a narrower contract --
+        /// returns true except for multi-stream input and compiled effects, both of which require
+        /// explicit renderer opt-in. Every renderer with a narrower contract --
         /// including no-renderer, 2D-only, fixed-function, experimental, or device-dependent
         /// capability gaps -- must override the applicable entries truthfully.
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
@@ -1844,8 +1851,11 @@ namespace CNA::Internal::Renderers
             // would make a renderer that silently renders from stream 0 alone claim otherwise.
             if (capability == CNA::GraphicsCapability::MultiStreamVertexInput)
                 return false;
+            // A bytecode parser alone is insufficient: the backend must own the native shaders,
+            // reflection/value lifecycle, exact passes and state/sampler application before it
+            // can opt in. The corresponding creation default above returns nullptr.
             if (capability == CNA::GraphicsCapability::CompiledEffects)
-                return false;
+                return SupportsCompiledEffects();
             return true;
         }
 

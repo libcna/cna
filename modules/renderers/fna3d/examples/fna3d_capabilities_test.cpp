@@ -13,7 +13,8 @@
 //   GetMaxVertexStreams reports XNA's own ceiling.
 // Check C -- the 3D capabilities this renderer really has are reported true, and each is backed
 //   by a factory that returns a live resource rather than null.
-// Check D -- Instancing tracks FNA3D_SupportsHardwareInstancing rather than being asserted.
+// Check D -- compiled Effect Framework binaries are supported, while instancing additionally
+//   tracks FNA3D_SupportsHardwareInstancing and requires a compatible compiled vertex shader.
 // Check E -- an unknown vertex stride is rejected with a diagnostic instead of being bound as a
 //   plausible-looking layout.
 // Check F -- an out-of-contract state ordinal is rejected rather than cast into an undefined
@@ -96,18 +97,17 @@ public:
         Check(renderer.CreateRenderTargetCube(8, 0, false, false, 0) != nullptr,
               "a cube render target can be created");
 
-        // Check D -- instancing is reported false and refused, with the reason.
+        // Check D -- compiled effects are real; native instancing remains driver-dependent.
         Check(renderer.SupportsCapability(GraphicsCapability::CompiledEffects),
               "CompiledEffects is true: FNA3D executes Effect Framework binaries");
-        const bool nativeInstancing = FNA3D_SupportsHardwareInstancing(renderer.GetDeviceEXT()) != 0;
+        const bool nativeInstancing = FNA3D_SupportsHardwareInstancing(fna3d->GetDeviceEXT()) != 0;
         Check(renderer.SupportsCapability(GraphicsCapability::Instancing) == nativeInstancing,
               "Instancing follows the running FNA3D driver");
         Check(!renderer.SupportsCapability(GraphicsCapability::CustomEffects),
               "and the reason -- no custom-effect compilation -- is reported alongside it");
 
-        // Check D2 -- the refusal itself, so the capability answer is not the only statement of
-        // it. GraphicsDevice rejects an instanced draw before the renderer sees it once the
-        // capability is false, so the renderer method is exercised directly here.
+        // Check D2 -- a stock/no-effect instanced draw is still refused because only a compiled
+        // vertex shader can declare how the per-instance stream is consumed.
         {
             bool refusedInstancedDraw = false;
             std::string instancedMessage;
@@ -128,7 +128,7 @@ public:
             }
             Check(refusedInstancedDraw,
                   "DrawInstancedPrimitivesEx refuses rather than stacking every instance");
-            Check(instancedMessage.find("per-instance vertex input") != std::string::npos,
+            Check(instancedMessage.find("compiled XNA Effect") != std::string::npos,
                   "the instanced refusal names the stock-effect reason");
         }
 

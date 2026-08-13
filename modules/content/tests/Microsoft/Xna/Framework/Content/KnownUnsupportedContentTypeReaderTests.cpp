@@ -15,11 +15,14 @@
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
 
+#include <any>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 using CNA::Internal::Xnb::RegisterEffectXnbReader;
@@ -38,6 +41,28 @@ namespace
             "../../../../../../renderers/fna3d/effects/BasicEffect.fxb";
         std::ifstream file(path, std::ios::binary);
         return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    }
+
+    std::any ReadEffectPayload(ContentManager& manager, const std::string& assetName,
+                               std::int32_t declaredLength,
+                               const std::vector<std::uint8_t>& payload)
+    {
+        System::IO::MemoryStream stream;
+        {
+            System::IO::BinaryWriter writer(&stream, true);
+            writer.Write(declaredLength);
+            if (!payload.empty())
+            {
+                writer.Write(payload.data(), 0,
+                             static_cast<std::int32_t>(payload.size()));
+            }
+        }
+        stream.Seek(0, System::IO::SeekOrigin::Begin);
+        ContentReader input(&manager, &stream, assetName, 5, 'w');
+        auto reader = ContentTypeReaderManager::CreateReader(
+            "Microsoft.Xna.Framework.Content.EffectReader");
+        if (!reader) throw std::runtime_error("EffectReader was not registered in the test");
+        return reader->ReadUntyped(input, std::any{});
     }
 
     class EffectContentTypeReaderTest : public ::testing::Test
@@ -108,5 +133,62 @@ TEST_F(EffectContentTypeReaderTest, RejectsOversizedLengthBeforeAllocating)
     {
         EXPECT_NE(std::string(error.what()).find("effects/bad"), std::string::npos);
         EXPECT_NE(std::string(error.what()).find("length"), std::string::npos);
+    }
+}
+
+TEST_F(EffectContentTypeReaderTest, RejectsNegativeLengthWithAssetContext)
+{
+    try
+    {
+        ReadEffectPayload(manager, "effects/negative", -1, {});
+        FAIL() << "negative bytecode length must be rejected";
+    }
+    catch (const ContentLoadException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("effects/negative"), std::string::npos);
+        EXPECT_NE(std::string(error.what()).find("length"), std::string::npos);
+    }
+}
+
+TEST_F(EffectContentTypeReaderTest, RejectsTruncatedPayloadAsContentLoadException)
+{
+    try
+    {
+        ReadEffectPayload(manager, "effects/truncated", 8, {1, 2, 3, 4});
+        FAIL() << "truncated bytecode must be rejected";
+    }
+    catch (const ContentLoadException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("effects/truncated"), std::string::npos);
+        EXPECT_NE(std::string(error.what()).find("stream ended"), std::string::npos);
+    }
+}
+
+TEST_F(EffectContentTypeReaderTest, RejectsMalformedBytecodeWithAssetContext)
+{
+    try
+    {
+        ReadEffectPayload(manager, "effects/malformed", 4, {1, 2, 3, 4});
+        FAIL() << "malformed bytecode must be rejected";
+    }
+    catch (const ContentLoadException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("effects/malformed"), std::string::npos);
+        EXPECT_NE(std::string(error.what()).find("effect bytecode"), std::string::npos);
+    }
+}
+
+TEST_F(EffectContentTypeReaderTest, RejectsMgfxWithSpecificAssetDiagnostic)
+{
+    const std::vector<std::uint8_t> mgfx{'M', 'G', 'F', 'X', 1, 0, 0, 0};
+    try
+    {
+        ReadEffectPayload(manager, "effects/monogame", 8, mgfx);
+        FAIL() << "MGFX must not be accepted as XNA Effect Framework bytecode";
+    }
+    catch (const ContentLoadException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("effects/monogame"), std::string::npos);
+        EXPECT_NE(std::string(error.what()).find("MGFX"), std::string::npos);
     }
 }

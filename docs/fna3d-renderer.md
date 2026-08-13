@@ -186,8 +186,8 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 |---|---|
 | Native runtime (Linux, Xvfb + Mesa llvmpipe, FNA3D OpenGL driver) | **Performed** — all twelve `Fna3d_*` CTest binaries pass, all pixel oracles |
 | XNA 4.0 oracle corpus (39 scenes vs real XNA reference images) | **Performed** — `Fna3d_XNA_Oracle`; every scene renders, 10/39 exact at the EasyGL baseline. This is the only coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have. See [`fna3d-parity-report.md`](fna3d-parity-report.md) |
-| Unit tests (`CnaTests`, `Fna3d*`) | **Performed** — 41 tests |
-| Sanitizers (ASan + UBSan, all seven example tests) | **Performed** — no CNA-originating defect. UBSan reports one pre-existing upstream signed-overflow in MojoShader's own `mojoshader_common.c:1042` string parser, on every test alike. |
+| Compiled-effect unit/pixel tests (`Fna3dCompiledEffectTest`) | **Performed** — 13 focused tests cover fixture hashes, parse/apply, reflection, padded matrix arrays, clone/disposal, malformed cleanup, general draws, and SpriteBatch pixels |
+| Sanitizers for the new arbitrary compiled-effect path | **Open** — the renderer's older example suite has ASan/UBSan evidence, but the new constructor/reflection/clone/malformed corpus still needs its own sanitizer run before the full `plan_fx.md` production gate can close |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
 | SDL_GPU driver | **Not exercised here**: this container has no Vulkan ICD, so FNA3D declines SDL_GPU and falls through to OpenGL. The code path is driver-agnostic; the gate is external. This is also the only driver on which compressed readback is expected to succeed, so that arm of `Fna3d_Compressed` is unexercised here. |
 | Direct3D 11 driver | **Not exercised here**: Windows-only (or DXVK-native). External gate. |

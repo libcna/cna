@@ -17,6 +17,10 @@ namespace CNA::Internal::Renderers::Fna3d
 {
     namespace
     {
+        constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
+        constexpr std::size_t kMaximumReflectionDepth = 32u;
+        constexpr std::size_t kMaximumReflectedValueBytes = 64u * 1024u * 1024u;
+
         std::string SafeString(const char* value)
         {
             return value != nullptr ? value : "";
@@ -100,7 +104,8 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         CompiledEffectValueDescription DescribeValue(const MOJOSHADER_effect* effect,
-                                                       const MOJOSHADER_effectValue& value)
+                                                       const MOJOSHADER_effectValue& value,
+                                                       std::size_t& reflectedValueBytes)
         {
             CompiledEffectValueDescription result;
             result.name = SafeString(value.name);
@@ -110,13 +115,25 @@ namespace CNA::Internal::Renderers::Fna3d
             result.elementCount = static_cast<int>(value.type.elements);
             result.parameterClass = ToParameterClass(value.type.parameter_class);
             result.parameterType = ToParameterType(value.type.parameter_type);
-            if (value.value_count > std::numeric_limits<std::size_t>::max() / 4)
+            if (value.value_count > kMaximumReflectedValueBytes / 4 ||
+                value.value_count > std::numeric_limits<std::size_t>::max() / 4)
             {
                 throw std::runtime_error(
-                    "FNA3D compiled effect: reflected value size overflowed size_t.");
+                    "FNA3D compiled effect: reflected value exceeds the safety limit.");
             }
             const std::size_t byteCount = static_cast<std::size_t>(value.value_count) * 4;
-            if (byteCount > 0 && value.values != nullptr)
+            if (byteCount > kMaximumReflectedValueBytes - reflectedValueBytes)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: aggregate reflected values exceed the safety limit.");
+            }
+            reflectedValueBytes += byteCount;
+            if (byteCount > 0 && value.values == nullptr)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: reflected value storage is missing.");
+            }
+            if (byteCount > 0)
             {
                 const auto* first = static_cast<const std::uint8_t*>(value.values);
                 result.rawValue.assign(first, first + byteCount);
@@ -127,20 +144,45 @@ namespace CNA::Internal::Renderers::Fna3d
 
         std::vector<CompiledEffectAnnotationDescription> DescribeAnnotations(
             const MOJOSHADER_effect* effect, const MOJOSHADER_effectAnnotation* annotations,
-            unsigned int count)
+            unsigned int count, std::size_t& reflectedItemCount,
+            std::size_t& reflectedValueBytes)
         {
+            if (count > kMaximumReflectedItems - reflectedItemCount)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: annotation count exceeds the safety limit.");
+            }
+            if (count > 0 && annotations == nullptr)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: annotation storage is missing.");
+            }
+            reflectedItemCount += count;
             std::vector<CompiledEffectAnnotationDescription> result;
             result.reserve(count);
             for (unsigned int i = 0; i < count; ++i)
             {
-                result.push_back(DescribeValue(effect, annotations[i]));
+                result.push_back(
+                    DescribeValue(effect, annotations[i], reflectedValueBytes));
             }
             return result;
         }
 
         CompiledEffectParameterDescription DescribeMember(
-            const MOJOSHADER_symbolStructMember& member)
+            const MOJOSHADER_symbolStructMember& member, std::size_t depth,
+            std::size_t& reflectedItemCount)
         {
+            if (depth >= kMaximumReflectionDepth)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: structure nesting exceeds the safety limit.");
+            }
+            if (reflectedItemCount >= kMaximumReflectedItems)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: structure member count exceeds the safety limit.");
+            }
+            ++reflectedItemCount;
             CompiledEffectParameterDescription result;
             result.name = SafeString(member.name);
             result.rowCount = static_cast<int>(member.info.rows);
@@ -148,10 +190,16 @@ namespace CNA::Internal::Renderers::Fna3d
             result.elementCount = static_cast<int>(member.info.elements);
             result.parameterClass = ToParameterClass(member.info.parameter_class);
             result.parameterType = ToParameterType(member.info.parameter_type);
+            if (member.info.member_count > 0 && member.info.members == nullptr)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: structure member storage is missing.");
+            }
             result.structureMembers.reserve(member.info.member_count);
             for (unsigned int i = 0; i < member.info.member_count; ++i)
             {
-                result.structureMembers.push_back(DescribeMember(member.info.members[i]));
+                result.structureMembers.push_back(
+                    DescribeMember(member.info.members[i], depth + 1, reflectedItemCount));
             }
             return result;
         }
@@ -438,7 +486,9 @@ namespace CNA::Internal::Renderers::Fna3d
             std::ostringstream message;
             message << "FNA3D compiled effect: MojoShader reported " << effectData_->error_count
                     << " error(s) while attempting to " << operation << " the bytecode";
-            const int reported = std::min(effectData_->error_count, 8);
+            const int reported = effectData_->errors != nullptr
+                                     ? std::min(effectData_->error_count, 8)
+                                     : 0;
             for (int i = 0; i < reported; ++i)
             {
                 message << (i == 0 ? ": " : "; ")
@@ -446,16 +496,34 @@ namespace CNA::Internal::Renderers::Fna3d
             }
             throw std::runtime_error(message.str());
         }
-        if (effectData_->technique_count < 1 || effectData_->techniques == nullptr)
+        if (effectData_->param_count < 0 ||
+            static_cast<std::size_t>(effectData_->param_count) > kMaximumReflectedItems ||
+            (effectData_->param_count > 0 && effectData_->params == nullptr))
         {
             throw std::runtime_error(
-                "FNA3D compiled effect: bytecode declares no techniques.");
+                "FNA3D compiled effect: parameter table is invalid or exceeds the safety limit.");
+        }
+        if (effectData_->object_count < 0 ||
+            static_cast<std::size_t>(effectData_->object_count) > kMaximumReflectedItems ||
+            (effectData_->object_count > 0 && effectData_->objects == nullptr))
+        {
+            throw std::runtime_error(
+                "FNA3D compiled effect: object table is invalid or exceeds the safety limit.");
+        }
+        if (effectData_->technique_count < 1 ||
+            static_cast<std::size_t>(effectData_->technique_count) > kMaximumReflectedItems ||
+            effectData_->techniques == nullptr)
+        {
+            throw std::runtime_error(
+                "FNA3D compiled effect: technique table is invalid or exceeds the safety limit.");
         }
     }
 
     void Fna3dCompiledEffect::BuildDescription()
     {
         description_ = {};
+        std::size_t reflectedItemCount = 0;
+        std::size_t reflectedValueBytes = 0;
         description_.parameters.reserve(static_cast<std::size_t>(effectData_->param_count));
         for (int i = 0; i < effectData_->param_count; ++i)
         {
@@ -465,15 +533,24 @@ namespace CNA::Internal::Renderers::Fna3d
 
             CompiledEffectParameterDescription result;
             static_cast<CompiledEffectValueDescription&>(result) =
-                DescribeValue(effectData_, parameter.value);
+                DescribeValue(effectData_, parameter.value, reflectedValueBytes);
             result.runtimeIndex = static_cast<std::uint32_t>(i);
             result.annotations = DescribeAnnotations(effectData_, parameter.annotations,
-                                                     parameter.annotation_count);
+                                                     parameter.annotation_count,
+                                                     reflectedItemCount,
+                                                     reflectedValueBytes);
+            if (parameter.value.type.member_count > 0 &&
+                parameter.value.type.members == nullptr)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: top-level structure member storage is missing.");
+            }
             result.structureMembers.reserve(parameter.value.type.member_count);
             for (unsigned int member = 0; member < parameter.value.type.member_count; ++member)
             {
                 result.structureMembers.push_back(
-                    DescribeMember(parameter.value.type.members[member]));
+                    DescribeMember(parameter.value.type.members[member], 0,
+                                   reflectedItemCount));
             }
             description_.parameters.push_back(std::move(result));
         }
@@ -485,7 +562,16 @@ namespace CNA::Internal::Renderers::Fna3d
             CompiledEffectTechniqueDescription reflected;
             reflected.name = SafeString(technique.name);
             reflected.annotations = DescribeAnnotations(effectData_, technique.annotations,
-                                                         technique.annotation_count);
+                                                         technique.annotation_count,
+                                                         reflectedItemCount,
+                                                         reflectedValueBytes);
+            if (technique.pass_count > kMaximumReflectedItems - reflectedItemCount ||
+                (technique.pass_count > 0 && technique.passes == nullptr))
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: pass table is invalid or exceeds the safety limit.");
+            }
+            reflectedItemCount += technique.pass_count;
             reflected.passes.reserve(technique.pass_count);
             for (unsigned int passIndex = 0; passIndex < technique.pass_count; ++passIndex)
             {
@@ -493,7 +579,9 @@ namespace CNA::Internal::Renderers::Fna3d
                 CompiledEffectPassDescription reflectedPass;
                 reflectedPass.name = SafeString(pass.name);
                 reflectedPass.annotations = DescribeAnnotations(effectData_, pass.annotations,
-                                                                 pass.annotation_count);
+                                                                 pass.annotation_count,
+                                                                 reflectedItemCount,
+                                                                 reflectedValueBytes);
                 reflected.passes.push_back(std::move(reflectedPass));
             }
             if (reflected.passes.empty())
@@ -524,8 +612,15 @@ namespace CNA::Internal::Renderers::Fna3d
             const MOJOSHADER_effectValue& sampler = effectData_->params[i].value;
             if (!IsSamplerType(sampler.type.parameter_type)) continue;
             const auto* states = sampler.valuesSS;
+            if (sampler.value_count > kMaximumReflectedItems ||
+                (sampler.value_count > 0 && states == nullptr))
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: sampler state table is invalid or exceeds the "
+                    "safety limit.");
+            }
             for (unsigned int stateIndex = 0;
-                 states != nullptr && stateIndex < sampler.value_count; ++stateIndex)
+                 stateIndex < sampler.value_count; ++stateIndex)
             {
                 const MOJOSHADER_effectValue& value = states[stateIndex].value;
                 if (!IsTextureType(value.type.parameter_type) || value.values == nullptr ||
@@ -595,6 +690,19 @@ namespace CNA::Internal::Renderers::Fna3d
 
         std::memset(&stateChanges_, 0, sizeof(stateChanges_));
         FNA3D_ApplyEffect(device_, effect_, passIndex, &stateChanges_);
+        if (stateChanges_.render_state_change_count > kMaximumReflectedItems ||
+            (stateChanges_.render_state_change_count > 0 &&
+             stateChanges_.render_state_changes == nullptr) ||
+            stateChanges_.sampler_state_change_count > kMaximumReflectedItems ||
+            (stateChanges_.sampler_state_change_count > 0 &&
+             stateChanges_.sampler_state_changes == nullptr) ||
+            stateChanges_.vertex_sampler_state_change_count > kMaximumReflectedItems ||
+            (stateChanges_.vertex_sampler_state_change_count > 0 &&
+             stateChanges_.vertex_sampler_state_changes == nullptr))
+        {
+            throw std::runtime_error(
+                "FNA3D compiled effect: native pass state changes exceed the safety limit.");
+        }
         ApplyRenderStates();
         ApplySamplers(stateChanges_.sampler_state_changes,
                       stateChanges_.sampler_state_change_count, false);
@@ -621,7 +729,11 @@ namespace CNA::Internal::Renderers::Fna3d
             {
                 continue;
             }
-            if (state.value.values == nullptr) continue;
+            if (state.value.values == nullptr || state.value.value_count == 0)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: render state value storage is missing.");
+            }
 
             switch (state.type)
             {
@@ -856,11 +968,22 @@ namespace CNA::Internal::Renderers::Fna3d
             FromFilter(sampler.filter, mag, min, mip);
             bool filterChanged = false;
 
+            if (change.sampler_state_count > kMaximumReflectedItems ||
+                (change.sampler_state_count > 0 && change.sampler_states == nullptr))
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: sampler state changes exceed the safety limit.");
+            }
+
             for (unsigned int stateIndex = 0;
                  stateIndex < change.sampler_state_count; ++stateIndex)
             {
                 const MOJOSHADER_effectSamplerState& state = change.sampler_states[stateIndex];
-                if (state.value.values == nullptr) continue;
+                if (state.value.values == nullptr || state.value.value_count == 0)
+                {
+                    throw std::runtime_error(
+                        "FNA3D compiled effect: sampler state value storage is missing.");
+                }
                 switch (state.type)
                 {
                     case MOJOSHADER_SAMP_TEXTURE: break;

@@ -1210,6 +1210,9 @@ namespace Microsoft::Xna::Framework::Graphics
             const char* parameterName,
             const std::string& parameterValue) const;
 
+        /** Clears a selected effect only when the exact resource is being disposed. */
+        void ClearCurrentEffectIf(const Effect* effect) noexcept;
+
         // REMED-GFX-202: REMED-GFX-118's instance-range gate widened from the first per-instance
         // binding to EVERY one of them. `instanceCount` instances consume
         // `1 + (instanceCount - 1) / InstanceFrequency` records of each per-instance stream,
@@ -1262,6 +1265,7 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class Texture2D;
         friend class RenderTargetCube;
         friend class ShaderEffect;
+        friend class Effect;
         friend class SpriteBatch;
         friend class Microsoft::Xna::Framework::GameWindow;
         friend class Microsoft::Xna::Framework::GraphicsDeviceManager;
