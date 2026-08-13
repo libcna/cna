@@ -297,12 +297,21 @@ TEST_F(Sdl3PlatformTest, PollEventsDiscardsStaleBufferContent)
 {
     // No subsystem acquired on purpose: PollEvents must be safe to call regardless, and
     // asserting the batch comes back EMPTY would be wrong in a shared binary where other tests
-    // can leave real events queued. What the contract promises is that the caller's previous
-    // contents are discarded, so that is what is asserted.
+    // can leave hundreds of real events queued. What the contract promises is that the caller's
+    // previous contents are discarded, so use a payload that no native event can coincidentally
+    // reproduce and assert that it is gone instead of making an assumption about the new size.
+    const std::string sentinel = "CNA stale PlatformEvent sentinel";
+    TextEditingCandidatesEvent stale;
+    stale.candidates = {sentinel};
+
     std::vector<PlatformEvent> batch;
-    batch.resize(5, PlatformEvent{QuitEvent{}});
+    batch.resize(5, PlatformEvent{stale});
     platform_->PollEvents(batch);
-    EXPECT_LT(batch.size(), 5u);
+
+    EXPECT_TRUE(std::none_of(batch.begin(), batch.end(), [&](const PlatformEvent& event) {
+        const auto* candidates = std::get_if<TextEditingCandidatesEvent>(&event);
+        return candidates != nullptr && candidates->candidates == std::vector<std::string>{sentinel};
+    }));
 }
 
 // --- not-yet-implemented surfaces refuse rather than returning something broken ---------------------

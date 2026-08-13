@@ -17,16 +17,16 @@ using namespace CNA::Platform;
 class CurrentPlatformTest : public ::testing::Test
 {
 protected:
-    void SetUp() override { previouslyInstalled_ = HasCurrentPlatform(); }
+    void SetUp() override { ResetCurrentPlatform(); }
 
     void TearDown() override
     {
         // Process-wide state: leaving an installed platform behind would leak a dangling pointer
-        // into every later test in this binary once the local instance is destroyed.
-        SetCurrentPlatform(nullptr);
+        // into every later test in this binary once the local instance is destroyed. Clearing only
+        // the borrowed installation is insufficient: GetCurrentPlatform() may also have created
+        // the owned lazy default, and HasCurrentPlatform() deliberately reports that instance.
+        ResetCurrentPlatform();
     }
-
-    bool previouslyInstalled_ = false;
 };
 
 TEST_F(CurrentPlatformTest, AnInstalledPlatformIsWhatGetReturns)
