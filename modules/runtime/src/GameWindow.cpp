@@ -2,11 +2,7 @@
 
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 
-#include "CNA/Platform/CurrentPlatform.hpp"
-#include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
-
-#include <SDL3/SDL.h>
 
 namespace Microsoft::Xna::Framework
 {
@@ -19,8 +15,7 @@ namespace Microsoft::Xna::Framework
     }
 
     GameWindow::GameWindow()
-        : adoptedWindow_(nullptr),
-          window_(nullptr),
+        : window_(nullptr),
           legacyHandle_(0),
           title_(),
           screenDeviceName_(),
@@ -38,16 +33,10 @@ namespace Microsoft::Xna::Framework
     {
     }
 
-    GameWindow::GameWindow(SDL_Window* window)
+    GameWindow::GameWindow(CNA::Platform::IPlatformWindow* window)
         : GameWindow()
     {
-        if (window != nullptr)
-        {
-            adoptedWindow_ = CNA::Platform::GetCurrentPlatform().AdoptWindow(
-                static_cast<CNA::Platform::WindowId>(SDL_GetWindowID(window)));
-            setWindowInternal(
-                adoptedWindow_.get(), reinterpret_cast<SharpRuntime::IntPtr>(window));
-        }
+        setWindowInternal(window, 0);
     }
 
     GameWindow::~GameWindow() = default;
@@ -92,9 +81,11 @@ namespace Microsoft::Xna::Framework
         return legacyHandle_;
     }
 
-    SDL_Window* GameWindow::GetNativeSdlWindowEXT() const
+    CNA::Platform::NativeWindowHandle GameWindow::GetNativeWindowHandleEXT() const
     {
-        return reinterpret_cast<SDL_Window*>(legacyHandle_);
+        return window_ != nullptr
+            ? window_->GetNativeHandle()
+            : CNA::Platform::NativeWindowHandle{};
     }
 
     const GameWindow::String& GameWindow::getScreenDeviceNameProperty() const
