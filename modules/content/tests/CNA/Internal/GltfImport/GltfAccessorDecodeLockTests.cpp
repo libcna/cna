@@ -108,6 +108,42 @@ TEST(GltfAccessorDecodeLock, InterleavedByteStrideAndBothByteOffsetsDecodeExactl
     EXPECT_EQ(position.bufferView, normal.bufferView);
 }
 
+TEST(GltfAccessorDecodeLock, InterleavedAccessorsAdvanceAtTheirOwnMixedComponentWidths)
+{
+    // GLTF-047 / GLTF-399's last accessor fixture: the same 16-byte vertex record contains
+    // VEC3<FLOAT> at byte 0 and normalized VEC4<UNSIGNED_BYTE> at byte 12. A decoder that derives
+    // the colour's element width from its neighbouring position accessor lands in the next vertex.
+    const LoadedFixture fixture("interleaved-mixed-widths");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ExpectDecodedEquals(fixture, "POSITION");
+    ExpectDecodedEquals(fixture, "COLOR_0");
+
+    const AccessorDump position = DumpByUsage(fixture, "POSITION");
+    const AccessorDump color = DumpByUsage(fixture, "COLOR_0");
+    EXPECT_EQ(5126, position.componentType);  // FLOAT
+    EXPECT_EQ(5121, color.componentType);     // UNSIGNED_BYTE
+    EXPECT_FALSE(position.normalized);
+    EXPECT_TRUE(color.normalized);
+    EXPECT_EQ(16, position.bufferViewByteStride);
+    EXPECT_EQ(position.bufferView, color.bufferView);
+    EXPECT_EQ(0u, position.byteOffset);
+    EXPECT_EQ(12u, color.byteOffset);
+
+    ASSERT_EQ(12u, color.values.size());
+    EXPECT_NEAR(128.0 / 255.0, static_cast<double>(color.values[7]), kTolerance);
+    EXPECT_NEAR(64.0 / 255.0, static_cast<double>(color.values[11]), kTolerance);
+
+    // L3 reaches the production UnpackAccessor -> ExtractMesh path, then CNA repacks these
+    // normalized floats to its four-byte colour field. This must recover the exact authored bytes.
+    const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
+    ASSERT_EQ(1u, extracted.size());
+    ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
+    ASSERT_EQ(3u, extracted[0].dump.colors.size());
+    const std::vector<std::array<std::uint8_t, 4>> expectedBytes = {
+        {255, 32, 0, 255}, {0, 255, 64, 128}, {16, 0, 255, 64}};
+    EXPECT_EQ(expectedBytes, extracted[0].dump.colors);
+}
+
 TEST(GltfAccessorDecodeLock, SparseAttributeAccessorWithNoBaseBufferViewDecodesExactly)
 {
     // plan_gltf.md §1.2 / GLTF-041: the base array initialises to zeros and only the listed

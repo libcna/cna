@@ -44,8 +44,8 @@ Expected as of this writing:
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite | **6 332 passed, 188 skipped, 18 failed** |
-| generator `--check` | **127 assets, 624 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **446 passed, 23 skipped** / **469 passed, 0 skipped** |
+| generator `--check` | **128 assets, 629 files — byte-identical** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **447 passed, 23 skipped** / **470 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -76,7 +76,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 446 passed, 23 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 447 passed, 23 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -174,12 +174,10 @@ The remaining **~39 are doable in this environment.**
 Ordered by value, not by number. Each is a coherent unit with its own tests and one commit.
 Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is superseded.
 
-1. **`GLTF-399` — finish the corpus (127/143 assets today).** Eleven owning groups are complete;
-   accessors are 12/13, normals 2/6, container 1/8 and Draco 0/4. The exact 16 missing IDs are
+1. **`GLTF-399` — finish the corpus (128/143 assets today).** Twelve owning groups are complete;
+   accessors are 13/13, normals 2/6, container 1/8 and Draco 0/4. The exact 15 missing IDs are
    generated into `manifest.json`; current + missing = target is checked per group, so the former
    135/136/141 count disagreement cannot recur. What is left, in the order it is worth doing:
-   - **accessors 12/13** — add `interleaved-mixed-widths`; the former multi-primitive L4 oracle
-     gap is closed and `two-primitives-one-buffer` is again one mesh with two primitives.
    - **normals 2/6** — add the four named tangent/non-uniform-scale witnesses; all generator and
      importer machinery already exists.
    - **container 1/8** — extend the generator to emit external `.bin`/image sidecars. This is the
@@ -248,7 +246,7 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 |---|---|
 | `plan_gltf.md` | The 460-row campaign record. Each closed row carries its own evidence. |
 | `tools/gltf_fixtures/` | The corpus generator. Edit here, never the assets. |
-| `tests/assets/gltf/` | Generated corpus: **127 assets, 624 files**, including `manifest.json`'s defect ledger. Never edited by hand. |
+| `tests/assets/gltf/` | Generated corpus: **128 assets, 629 files**, including `manifest.json`'s defect ledger. Never edited by hand. |
 | `modules/content/src/GltfImport/GltfImportCore.cpp` | The importer. Extraction, skeletons, clips, lights, cameras, the extension registry, the stride table. |
 | `modules/content/src/Xna/ContentManager.cpp` | The runtime `.gltf` loader **and** the `.cnj` reader. Both must agree; several tests assert exactly that. |
 | `tools/gltf_to_cnj/gltf_to_cnj.cpp` | The offline converter — the second loader. |

@@ -12,10 +12,10 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 127,
+  "distinctAssetCount": 128,
   "owningGroupCounts": {
     "container": 1,
-    "accessors": 12,
+    "accessors": 13,
     "component-types": 8,
     "topology": 8,
     "normals": 2,
@@ -76,10 +76,6 @@
     {
       "id": "gltf-uri-percent-encoded",
       "owningGroup": "container"
-    },
-    {
-      "id": "interleaved-mixed-widths",
-      "owningGroup": "accessors"
     },
     {
       "id": "tangent-handedness",
@@ -433,6 +429,23 @@
         "three interleaved attributes",
         "per-accessor byteOffset",
         "byteStride 32"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "interleaved-mixed-widths",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "mixed FLOAT and UNSIGNED_BYTE attributes",
+        "byteStride 16",
+        "normalized interleaved COLOR_0",
+        "no inter-attribute padding"
       ],
       "auditFixture": null
     },
@@ -3132,6 +3145,31 @@
       "path": "gltf-required-extension-unsupported.gltf",
       "bytes": 1551,
       "sha256": "0333a3dc1788d6d4f7902ce8dabe748804130b0421ed4c6dffaa7c7e2d710813"
+    },
+    {
+      "path": "interleaved-mixed-widths.expected.json",
+      "bytes": 6819,
+      "sha256": "dee0d364253d491f8c71811430ac34ce4651a75f99369d5b0a38ec646c5d7605"
+    },
+    {
+      "path": "interleaved-mixed-widths.glb",
+      "bytes": 772,
+      "sha256": "962fba18640597cdc86370b8466e7fc2ff8d4f7d8882335975bd23b0d17eb85c"
+    },
+    {
+      "path": "interleaved-mixed-widths.gltf",
+      "bytes": 1395,
+      "sha256": "3a74620b56ae7becc687d594b524e69d241dfcc661e4a6058150c3e8dacc97cc"
+    },
+    {
+      "path": "interleaved-mixed-widths.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "interleaved-mixed-widths.vb.bin",
+      "bytes": 72,
+      "sha256": "7c3c89e67addfa5e7666811faadb026e32aad075e2f4f636369e9fd2d7a8320c"
     },
     {
       "path": "interleaved-pos-nrm-uv.expected.json",

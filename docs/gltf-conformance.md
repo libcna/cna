@@ -596,7 +596,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**119 of the 127** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**120 of the 128** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
@@ -768,6 +768,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `bufferview-stride-tight` | accessors | L1, L2, L3 | byteStride equal to element size; redundant stride |
 | `interleaved-position-normal` | accessors | L1, L2, L3 | bufferView.byteStride; bufferView.byteOffset; accessor.byteOffset; interleaved attributes |
 | `interleaved-pos-nrm-uv` | accessors | L1, L2, L3 | three interleaved attributes; per-accessor byteOffset; byteStride 32 |
+| `interleaved-mixed-widths` | accessors | L1, L2, L3 | mixed FLOAT and UNSIGNED_BYTE attributes; byteStride 16; normalized interleaved COLOR_0; no inter-attribute padding |
 | `stride-padded` | accessors | L1, L2, L3 | stride larger than the data; inter-vertex padding; sentinel padding |
 | `two-primitives-one-buffer` | accessors | L1, L2, L3, L4 | shared bufferView; shared normal and index accessors; two primitives in one mesh; two windows of one view |
 | `sparse-position` | accessors | L1, L2, L3 | accessor.sparse; absent base bufferView; zero-initialised base array |

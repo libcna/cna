@@ -374,6 +374,15 @@ def mat3_padded() -> Fixture:
 
 _UV = [(0.0, 0.0), (0.75, 0.125), (0.25, 0.875)]
 
+# Raw and specification-decoded COLOR_0 values for the one accessor fixture where a single
+# interleaved vertex record mixes component widths.  The alpha bytes are deliberately neither all
+# zero nor all saturated: 64/255 and 128/255 expose both a decoder using the FLOAT component size
+# to advance COLOR_0 and one normalising by 256.
+_MIXED_COLOR_RAW = [(255, 32, 0, 255), (0, 255, 64, 128), (16, 0, 255, 64)]
+_MIXED_COLOR_DECODED = [
+    tuple(component / 255.0 for component in color) for color in _MIXED_COLOR_RAW
+]
+
 
 def accessor_offset() -> Fixture:
     """A non-zero ``accessor.byteOffset`` into a view whose own offset is zero."""
@@ -528,6 +537,56 @@ def interleaved_pos_nrm_uv() -> Fixture:
     )
 
 
+def interleaved_mixed_widths() -> Fixture:
+    """FLOAT positions and normalized U8 colours share one 16-byte vertex record."""
+    b = GltfBuilder("interleaved-mixed-widths")
+    # Every record is 12 bytes of VEC3<FLOAT> followed immediately by 4 bytes of
+    # VEC4<UNSIGNED_BYTE>.  There is no padding to disguise a component-size error: using the
+    # position accessor's four-byte component width for COLOR_0 walks into the next vertex, while
+    # treating the whole record as bytes destroys POSITION after its first component.
+    interleaved = b"".join(
+        pack(p, FLOAT) + pack(color, UNSIGNED_BYTE)
+        for p, color in zip(TRIANGLE_POSITIONS, _MIXED_COLOR_RAW))
+    offset = b.append_bytes(interleaved, alignment=4)
+    view = b.add_buffer_view(offset, len(interleaved), byte_stride=16)
+    position = b.add_accessor(
+        usage="POSITION", component_type=FLOAT, accessor_type="VEC3", count=3,
+        expected=flatten(TRIANGLE_POSITIONS), buffer_view=view, byte_offset=0,
+        min_=[0.0, 0.0, 0.0], max_=[1.0, 1.0, 0.0])
+    color = b.add_accessor(
+        usage="COLOR_0", component_type=UNSIGNED_BYTE, accessor_type="VEC4", count=3,
+        expected=flatten(_MIXED_COLOR_DECODED), buffer_view=view, byte_offset=12,
+        normalized=True)
+    indices = b.add_packed_accessor(
+        usage="indices", values=TRIANGLE_INDICES, accessor_type="SCALAR",
+        component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "COLOR_0": color},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="MixedWidthTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="interleaved-mixed-widths", audit_fixture=None, owning_group="accessors",
+        description="POSITION as VEC3<FLOAT> and COLOR_0 as normalized "
+                    "VEC4<UNSIGNED_BYTE> occupy the same 16-byte interleaved record at offsets 0 "
+                    "and 12. The record has no padding, so advancing either accessor with the "
+                    "other one's component width immediately reads a neighbouring attribute or "
+                    "vertex.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["mixed FLOAT and UNSIGNED_BYTE attributes", "byteStride 16",
+                  "normalized interleaved COLOR_0", "no inter-attribute padding"],
+        spec_anchors=["accessors", "accessor-data-types", "data-alignment"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="MixedWidthTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, colors=_MIXED_COLOR_DECODED,
+            indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
 def stride_padded() -> Fixture:
     """A stride larger than the attributes it carries -- padding a reader must skip."""
     b = GltfBuilder("stride-padded")
@@ -656,6 +715,7 @@ def accessor_minmax() -> Fixture:
 
 
 FIXTURES = [accessor_offset, bufferview_offset, bufferview_stride_tight,
-            interleaved_position_normal, interleaved_pos_nrm_uv, stride_padded,
+            interleaved_position_normal, interleaved_pos_nrm_uv, interleaved_mixed_widths,
+            stride_padded,
             two_primitives_one_buffer, sparse_position, sparse_indices,
             sparse_interleaved_base, accessor_minmax, mat3_padded]
