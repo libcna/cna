@@ -546,6 +546,114 @@ def mat_alpha_mask_cutoff() -> Fixture:
     )
 
 
+#: The three extensions `mat-unimplemented-extensions` declares. All three are classified
+#: `PARSED_BUT_IGNORED` by the registry, each for a stated reason, and this fixture is what makes
+#: "ignored" mean *reported* rather than *silent* (`GLTF-345`/`GLTF-346`/`GLTF-347`).
+_UNIMPLEMENTED_EXTENSIONS = [
+    "KHR_materials_clearcoat",
+    "KHR_materials_sheen",
+    "KHR_materials_volume",
+]
+
+
+def mat_unimplemented_extensions() -> Fixture:
+    """A material declaring clearcoat, sheen and volume at once. Owns **`GLTF-345`–`GLTF-347`**.
+
+    Each of the three is a BRDF lobe or a volumetric term CNA's stock effects do not have, and each
+    is deliberately **deferred rather than implemented** -- the registry says so with a reason. What
+    the three rows require of a deferral is that it be *reported*: an extension listed in
+    ``extensionsUsed`` and ignored has to produce a warning naming it, because "loaded fine" and
+    "loaded as authored" are different claims and only one of them is true here.
+
+    Declared in ``extensionsUsed`` and **not** in ``extensionsRequired``, which is the whole
+    distinction §3.12 draws: none of the three is claimed, so a file that *required* one would be
+    refused outright (`GLTF-333`) rather than warned about. The material also carries real
+    parameter blocks for each, so the fixture proves cgltf parses them and CNA still ignores them --
+    rather than proving only that an unknown name is passed through.
+    """
+    b = GltfBuilder("mat-unimplemented-extensions")
+    b.declare_extensions(used=_UNIMPLEMENTED_EXTENSIONS)
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "Lacquered",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": [0.6, 0.1, 0.1, 1.0],
+            "metallicFactor": 0.0,
+            "roughnessFactor": 0.4,
+        },
+        "extensions": {
+            # Authored with non-default values throughout: a reader that "supported" these by
+            # reading them and applying nothing would be indistinguishable from one that ignored
+            # them if every value were the extension's own default.
+            "KHR_materials_clearcoat": {"clearcoatFactor": 0.8, "clearcoatRoughnessFactor": 0.05},
+            "KHR_materials_sheen": {"sheenColorFactor": [0.9, 0.7, 0.4],
+                                     "sheenRoughnessFactor": 0.3},
+            "KHR_materials_volume": {"thicknessFactor": 2.5, "attenuationDistance": 1.5,
+                                      "attenuationColor": [0.2, 0.9, 0.6]},
+        },
+    })
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="LacqueredTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    expected_material = {
+        "index": material,
+        "name": "Lacquered",
+        "baseColorFactor": [0.6, 0.1, 0.1, 1.0],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.4,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+        # The deferral, stated as data: what the file asked for, and what arrives instead.
+        "ignoredExtensions": list(_UNIMPLEMENTED_EXTENSIONS),
+        "ignoredExtensionValues": {
+            "KHR_materials_clearcoat": {"clearcoatFactor": 0.8, "clearcoatRoughnessFactor": 0.05},
+            "KHR_materials_sheen": {"sheenColorFactor": [0.9, 0.7, 0.4],
+                                     "sheenRoughnessFactor": 0.3},
+            "KHR_materials_volume": {"thicknessFactor": 2.5, "attenuationDistance": 1.5,
+                                      "attenuationColor": [0.2, 0.9, 0.6]},
+        },
+        "deferralRule": "Each is a BRDF lobe or volumetric term no CNA stock effect has, so each "
+                        "is PARSED_BUT_IGNORED with a reason rather than half-implemented. The "
+                        "requirement the deferral must meet is that it is REPORTED: an ignored "
+                        "extensionsUsed entry produces a warning naming it. None is claimed, so a "
+                        "file that REQUIRED one is refused outright instead (GLTF-333).",
+    }
+    return Fixture(
+        id="mat-unimplemented-extensions", audit_fixture=None, owning_group="materials",
+        description="A metallic-roughness material declaring KHR_materials_clearcoat, "
+                    "KHR_materials_sheen and KHR_materials_volume at once, each with non-default "
+                    "parameters. All three are deferred by decision, and the fixture exists to "
+                    "prove the deferral is reported by name rather than silent -- three warnings, "
+                    "one per extension, while the material itself imports normally.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["KHR_materials_clearcoat", "KHR_materials_sheen", "KHR_materials_volume",
+                  "ignored extension reporting"],
+        spec_anchors=["metallic-roughness-material", "extensions"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="LacqueredTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
 #: A UV set with three distinct, non-degenerate coordinates, so a stride whose TextureCoordinate
 #: slot were mis-offset produces visibly wrong bytes rather than three copies of (0,0).
 _UNLIT_TEXCOORDS = [(0.0, 0.0), (0.75, 0.125), (0.25, 0.875)]
@@ -939,5 +1047,5 @@ def mat_specular_glossiness() -> Fixture:
 
 
 FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr,
-            mat_normal_occlusion_scale, mat_alpha_mask_cutoff, mat_unlit,
-            mat_unlit_vertex_color_alpha, mat_specular_glossiness, mat_authored_tangent]
+            mat_normal_occlusion_scale, mat_alpha_mask_cutoff, mat_unimplemented_extensions,
+            mat_unlit, mat_unlit_vertex_color_alpha, mat_specular_glossiness, mat_authored_tangent]

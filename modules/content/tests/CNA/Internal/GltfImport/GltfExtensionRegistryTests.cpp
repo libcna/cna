@@ -36,6 +36,7 @@ using CNA::Internal::GltfImport::GltfExtensionRecordEXT;
 using CNA::Internal::GltfImport::GltfExtensionRegistryEXT;
 using CNA::Internal::GltfImport::GltfExtensionSupportEXT;
 using CNA::Internal::GltfImport::GltfExtensionSupportNameEXT;
+using CNA::Internal::GltfImport::ValidateGltfEXT;
 using CNA::Internal::GltfImport::IsGltfExtensionSupportedEXT;
 using CnaTest::GltfOracle::LoadedFixture;
 
@@ -320,4 +321,49 @@ TEST(GltfExtensionRegistry, TheNotDesiredExtensionsAreRecordedWithAReasonAndNone
         EXPECT_GT(record->note.size(), 40u)
             << "the note is the whole difference between a decision and an omission";
     }
+}
+
+// --- GLTF-345 / GLTF-346 / GLTF-347: a deferral has to be reported ------------------------------
+
+TEST(GltfExtensionRegistry, EveryDeferredMaterialExtensionIsReportedByNameRatherThanIgnoredSilently)
+{
+    // Clearcoat, sheen and volume are each deferred by decision -- a BRDF lobe or a volumetric term
+    // no CNA stock effect has -- and each row's acceptance is "implemented **or explicitly deferred
+    // with a report entry**". This is the report entry, asserted rather than asserted-to-exist:
+    // `mat-unimplemented-extensions` declares all three with non-default parameters, and validation
+    // must produce a warning naming each one.
+    //
+    // Non-default parameters matter. A reader that "supported" these by parsing them and applying
+    // nothing would be indistinguishable from one that ignored them if every authored value were
+    // the extension's own default.
+    const LoadedFixture fixture("mat-unimplemented-extensions");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    std::vector<std::string> warnings;
+    ASSERT_NO_THROW(ValidateGltfEXT(&fixture.Data(), "mat-unimplemented-extensions", warnings))
+        << "a file that merely USES an unimplemented extension must import, not be refused -- "
+           "extensionsRequired is the normative list, and none of these is on it";
+
+    const std::vector<std::string> deferred{
+        "KHR_materials_clearcoat", "KHR_materials_sheen", "KHR_materials_volume"};
+    for (const std::string& name : deferred)
+    {
+        SCOPED_TRACE(name);
+        const GltfExtensionRecordEXT* record = FindGltfExtensionEXT(name);
+        ASSERT_NE(nullptr, record) << "the registry does not classify " << name;
+        EXPECT_EQ(std::string("PARSED_BUT_IGNORED"), GltfExtensionSupportNameEXT(record->support))
+            << name << " is no longer deferred; if it was implemented, this test and its row are "
+                       "the things to update";
+        EXPECT_FALSE(record->claimed)
+            << name << " is claimed, so a file REQUIRING it would now load -- with the extension "
+                       "still ignored, which is the outcome the claim flag exists to prevent";
+
+        const bool named = std::any_of(warnings.begin(), warnings.end(),
+                                        [&name](const std::string& warning) {
+                                            return warning.find(name) != std::string::npos;
+                                        });
+        EXPECT_TRUE(named) << "the import produced no warning naming " << name
+                           << ", so its contribution is absent from the result and nothing says so";
+    }
+    EXPECT_GE(warnings.size(), deferred.size());
 }

@@ -141,6 +141,41 @@ why the other two stay on this side of it.
 
 ---
 
+## 4.1 `EXT_mesh_gpu_instancing` — the design, and why it is not built (`GLTF-352`)
+
+The one unsupported extension with an obvious implementation, so the sketch is worth writing down
+rather than rediscovering.
+
+**What the file says.** A node carries `EXT_mesh_gpu_instancing` with `TRANSLATION`, `ROTATION` and
+`SCALE` accessors of equal length; the node's mesh is drawn once per element, each with its own
+TRS composed *after* the node's own transform.
+
+**What CNA already has.** `GraphicsDevice::DrawInstancedPrimitives` is real XNA 4.0 API and is
+implemented on every GPU renderer; `GpuDrawParams::instanceCount` and a per-instance
+`VertexBuffer` stream already exist (`plan_cnj.md` §3.3). So the GPU half is not the work.
+
+**The sketch.**
+
+1. `ExtractSceneMeshesEXT` reads the three accessors and emits **one placement carrying N
+   instance transforms**, instead of the one placement it emits today. `NodeGraphReportEXT`
+   already counts such nodes (`gpuInstancedNodeCount`), which is what makes the current loss
+   visible.
+2. The transforms become a per-instance vertex buffer (four `Vector4` rows of a 4×3 affine, the
+   layout `DrawInstancedPrimitives` already streams) built once at import, not per frame.
+3. `ModelMeshPart` grows a CNAEXT instance-buffer property, and `ModelMesh::Draw` calls
+   `DrawInstancedPrimitives` when it is present. That is the API-change-review row, and it is the
+   real cost: a new public member plus a branch in the draw path every XNA application shares.
+4. The fallback matters as much as the path: a renderer without instancing must draw N times or
+   refuse **by name** — never draw once and look nearly right, which is exactly today's failure.
+
+**Why it is not built.** It is `GLTF ROBUST` scope, and every layer that could *verify* it is L7:
+the numbers at L3–L5 are identical whether the instance transforms arrive or not, because they
+describe one mesh either way. Building an instancing path this environment cannot render is how
+`GLTF-157`'s lesson repeats. Until then the loss is counted per file and named here, which is the
+difference between a limitation and a bug.
+
+---
+
 ## 5. Environment-dependent
 
 | Capability | Condition | Behaviour when absent |

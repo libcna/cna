@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf_`, pushed. Never push elsewhere without explicit permission. No pull
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **358 closed (`✔` 237, `✅` 121),
-  84 `⬜` remaining.** The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **364 closed (`✔` 243, `✅` 121),
+  78 `⬜` remaining.** The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 4 `✅/⬜` and 2 `✅/🐛` (landed with a named residue — `GLTF-093`, `252`,
   `265`, `289`, `388`, `449`), 2 `🐛` (open: `GLTF-157`, `421`), and 2 `⛔` (`GLTF-009` and
   `GLTF-439`, each blocked by this environment for a stated reason).
@@ -44,7 +44,7 @@ Expected as of this writing:
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite | **6 324 passed, 18 failed** |
-| generator `--check` | **75 assets, 364 files — byte-identical** |
+| generator `--check` | **76 assets, 369 files — byte-identical** |
 | `*Gltf*` on `STUB` / `HEADLESS` | **437 passed, 23 skipped** / **460 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's

@@ -22,6 +22,65 @@ no third-party binary content is currently bundled in this repository.
   (`.skeleton.bin`/`.clip.bin`) and JSON (`.skinnedmodel.json`) content is intended to ship —
   never the original Mixamo FBX files themselves.
 
+## glTF reference assets — the procedure, and why none is committed (`GLTF-018`/`GLTF-019`)
+
+**No third-party glTF asset is committed to this repository, and none may be without the review
+below.** The conformance corpus is entirely CNA-generated (`tools/gltf_fixtures/`, 76 assets), which
+is a deliberate choice rather than an absence — see the decision at the end of this section.
+
+### The procedure, before any asset is committed
+
+Every one of these, per asset, in the commit that adds it:
+
+1. **Identify the exact source and revision.** A repository plus a commit SHA or release tag — not
+   "downloaded from the Khronos samples". The same file name has carried different licences across
+   revisions of `glTF-Sample-Assets`.
+2. **Record the licence and the required attribution verbatim**, from the asset's own metadata
+   (`asset.copyright`, the sample repository's per-model `LICENSE.md`), not from the repository's
+   top-level licence. `glTF-Sample-Assets` is a mixture: CC0, CC-BY 4.0, CC-BY-SA, and a handful
+   under model-specific terms.
+3. **Add a row to this file** naming the asset, the source, the revision, the licence, and the
+   attribution text a shipped product would have to reproduce.
+4. **Check the licence permits redistribution *in this form*.** CC-BY permits it with attribution;
+   some sample models are licensed for use *with* the sample viewer rather than for redistribution
+   as a standalone asset. If the answer is not clearly yes, the asset does not go in.
+5. **Prefer the smallest asset that proves the point.** A licence-clean 200 KB model that exercises
+   the same path is worth more than a 40 MB one, because it will still be affordable to keep in
+   five years.
+
+An asset that fails any step is **not committed** — it is fetched by a script at development time
+(below) or replaced by a generated fixture that exercises the same feature.
+
+### The decision: generated corpus committed, third-party assets fetched (`GLTF-019`)
+
+**Committed:** CNA's own generated corpus. 76 assets and 369 files at **968 KB total**, every one
+emitted from a Python description, byte-identical across runs, and covered by a size budget
+(`GLTF-419`). It is in the repository because CI must be able to run the whole conformance ladder
+with no network at all, and because a fixture whose expected values were computed from the
+specification is evidence in a way a downloaded model is not.
+
+**Not committed:** the Khronos sample models. Fetched on demand by a script when a developer wants
+them, cached outside the repository, and never a CI dependency.
+
+The reasoning, weighed as the row asks:
+
+| | Commit a curated subset | Fetch on demand |
+|---|---|---|
+| Repository size | `glTF-Sample-Assets` is ~1.5 GB; even a "small" curated subset is tens of MB of binary that every clone pays for, forever, including clones that never touch glTF | nothing |
+| CI reproducibility | perfect | needs a pinned revision and a network step that can fail |
+| Licence exposure | every asset must clear the five steps above, and a licence change upstream is invisible to us | the fetch script records the pin; nothing is redistributed by CNA at all |
+| What it proves | real-world shapes the generator does not produce | the same, when run |
+
+The deciding argument is not size — it is that **a third-party asset is an oracle we do not
+control.** Its expected values cannot be derived from the specification the way a generated
+fixture's can; the most a real model can tell us is "this did not crash and looked right", which is
+exactly the standard this campaign exists to replace. So real models are a *supplementary* check run
+deliberately (`GLTF-405`, `GLTF-411`), not part of the gate.
+
+**The one asset that would change this** is a large one for the performance budgets `GLTF ROBUST`
+§27.2 row 9 asks for — ≥ 50 MB, ≥ 200 k triangles, ≥ 150 joints. Even that should be fetched, not
+committed: it is a benchmark input, not evidence.
+
 ## Microsoft XNA 4.0 Stock Effects HLSL (D3D9 backend)
 
 `src/CNA/Internal/Backends/D3D9/shaders/xna/` contains 10 HLSL source files
