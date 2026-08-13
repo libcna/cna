@@ -63,6 +63,10 @@ The current event/state boundary is split deliberately by device shape:
 - **`CNA::Platform::IPlatformJoystick`** owns the genuinely unmapped view: arbitrary axes,
   buttons, POV hats and trackballs addressed by the same `DeviceId` carried by hotplug events.
   `Game` publishes it once after each event drain; public `Joysticks` only projects that snapshot.
+- **`CNA::Platform::IPlatformHaptics`** owns stable-id standalone enumeration plus simple-rumble
+  initialization/play/stop. Public `Haptics::GetHapticsEXT` and the standalone `HapticDevice`
+  rumble methods use it. The SDL-only internal haptic seam remains solely for the richer arbitrary
+  effect model and joystick/mouse correlation; no SDL handle appears in a public header.
 
 Gesture handling adds another internal class:
 

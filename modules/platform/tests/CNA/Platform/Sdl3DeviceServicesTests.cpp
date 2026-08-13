@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -133,33 +134,43 @@ TEST_F(Sdl3DeviceServicesTest, SensorReadingDefaultsAreZero)
 
 // --- haptics (PLAT-84) ------------------------------------------------------------------------
 
-TEST_F(Sdl3DeviceServicesTest, HapticCountIsNeverNegative)
+TEST_F(Sdl3DeviceServicesTest, HapticEnumerationIsSafeWithoutSubsystemOwnership)
 {
     IPlatformHaptics* haptics = platform_->GetHaptics();
     ASSERT_NE(haptics, nullptr);
-    EXPECT_GE(haptics->GetCount(), 0);
+    EXPECT_NO_THROW((void)haptics->GetHaptics());
 }
 
-TEST_F(Sdl3DeviceServicesTest, HapticCountIsStableAcrossCallsWithNoHotplug)
+TEST_F(Sdl3DeviceServicesTest, HapticEnumerationIsStableAcrossCallsWithNoHotplug)
 {
     IPlatformHaptics* haptics = platform_->GetHaptics();
     ASSERT_NE(haptics, nullptr);
-    EXPECT_EQ(haptics->GetCount(), haptics->GetCount());
-}
-
-TEST_F(Sdl3DeviceServicesTest, EveryOperationOnAnOutOfRangeIndexIsSafe)
-{
-    // Indices come from a count that changes on hotplug, so an out-of-range index is a normal
-    // race, not a programming error. Each of these must answer, not crash and not throw.
-    IPlatformHaptics* haptics = platform_->GetHaptics();
-    ASSERT_NE(haptics, nullptr);
-
-    for (const int index : {-1, haptics->GetCount(), haptics->GetCount() + 7, 4096})
+    const std::vector<HapticInfo> first = haptics->GetHaptics();
+    const std::vector<HapticInfo> second = haptics->GetHaptics();
+    ASSERT_EQ(first.size(), second.size());
+    for (std::size_t index = 0; index < first.size(); ++index)
     {
-        EXPECT_EQ(haptics->GetName(index), std::string()) << "index " << index;
-        EXPECT_FALSE(haptics->SupportsRumble(index)) << "index " << index;
-        EXPECT_FALSE(haptics->PlayRumble(index, 1.0f, 10)) << "index " << index;
-        EXPECT_FALSE(haptics->StopRumble(index)) << "index " << index;
+        EXPECT_EQ(first[index].id, second[index].id);
+        EXPECT_EQ(first[index].name, second[index].name);
+        EXPECT_EQ(first[index].rumbleSupported, second[index].rumbleSupported);
+    }
+}
+
+TEST_F(Sdl3DeviceServicesTest, EveryOperationOnAnUnknownIdIsSafe)
+{
+    // A stale id after hotplug is ordinary control flow. Every operation must answer, not crash
+    // and not throw, and a value wider than SDL's native id must be rejected before a cast.
+    IPlatformHaptics* haptics = platform_->GetHaptics();
+    ASSERT_NE(haptics, nullptr);
+
+    for (const DeviceId id : {DeviceId{0}, DeviceId{4096},
+                              std::numeric_limits<DeviceId>::max()})
+    {
+        EXPECT_FALSE(haptics->IsConnected(id)) << "id " << id;
+        EXPECT_FALSE(haptics->SupportsRumble(id)) << "id " << id;
+        EXPECT_FALSE(haptics->InitializeRumble(id)) << "id " << id;
+        EXPECT_FALSE(haptics->PlayRumble(id, 1.0f, 10)) << "id " << id;
+        EXPECT_FALSE(haptics->StopRumble(id)) << "id " << id;
     }
 }
 
@@ -170,14 +181,15 @@ TEST_F(Sdl3DeviceServicesTest, OutOfRangeStrengthIsAcceptedRatherThanRejected)
     IPlatformHaptics* haptics = platform_->GetHaptics();
     ASSERT_NE(haptics, nullptr);
 
-    if (haptics->GetCount() == 0)
+    const std::vector<HapticInfo> devices = haptics->GetHaptics();
+    if (devices.empty())
     {
         GTEST_SKIP() << "no haptic devices connected";
     }
 
-    EXPECT_NO_THROW((void)haptics->PlayRumble(0, -5.0f, 1));
-    EXPECT_NO_THROW((void)haptics->PlayRumble(0, 5.0f, 1));
-    EXPECT_NO_THROW((void)haptics->StopRumble(0));
+    EXPECT_NO_THROW((void)haptics->PlayRumble(devices.front().id, -5.0f, 1));
+    EXPECT_NO_THROW((void)haptics->PlayRumble(devices.front().id, 5.0f, 1));
+    EXPECT_NO_THROW((void)haptics->StopRumble(devices.front().id));
 }
 
 TEST_F(Sdl3DeviceServicesTest, StoppingADeviceThatWasNeverPlayedReportsFailureRatherThanThrowing)
@@ -185,11 +197,11 @@ TEST_F(Sdl3DeviceServicesTest, StoppingADeviceThatWasNeverPlayedReportsFailureRa
     IPlatformHaptics* haptics = platform_->GetHaptics();
     ASSERT_NE(haptics, nullptr);
 
-    if (haptics->GetCount() != 0)
+    if (!haptics->GetHaptics().empty())
     {
         GTEST_SKIP() << "a device is connected; the never-opened path cannot be exercised";
     }
-    EXPECT_FALSE(haptics->StopRumble(0));
+    EXPECT_FALSE(haptics->StopRumble(1));
 }
 
 TEST_F(Sdl3DeviceServicesTest, ServicesOutliveRepeatedUseAndAreDestroyedCleanly)
@@ -204,8 +216,8 @@ TEST_F(Sdl3DeviceServicesTest, ServicesOutliveRepeatedUseAndAreDestroyedCleanly)
         ASSERT_NE(haptics, nullptr);
         ASSERT_NE(sensors, nullptr);
 
-        (void)haptics->GetCount();
-        (void)haptics->GetName(0);
+        (void)haptics->GetHaptics();
+        (void)haptics->IsConnected(1);
         (void)sensors->IsAvailable(SensorKind::Accelerometer);
         sensors->Stop(SensorKind::Accelerometer);
     }

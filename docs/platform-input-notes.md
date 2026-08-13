@@ -213,3 +213,18 @@ each cell.
 - **Hotplug identity is platform-owned.** `JoystickInfo::id`, `DeviceEvent::device` and the haptic
   joystick correlation use the same `DeviceId`. SDL3 maps its instance id at the native edge; no
   public or platform header exposes `SDL_JoystickID` or `SDL_Joystick*`.
+
+### Standalone haptics (PLAT-84)
+
+- **Stable ids, not enumeration positions.** `IPlatformHaptics::GetHaptics()` returns ascending
+  `DeviceId` descriptors. Cached rumble handles are keyed by that id and retired when enumeration
+  no longer contains it, so removing device A cannot make A's cached handle masquerade as the new
+  device at index zero.
+- **The simple subset is platform-owned.** Standalone enumeration, rumble capability,
+  initialization, play and stop cross `IPlatformHaptics`. `HapticDevice` keeps the selected
+  platform's haptic-subsystem reference until `Dispose`, and the SDL3 platform closes its cached
+  handles before releasing the final subsystem reference.
+- **The rich effect model is preserved deliberately.** SDL3 can still create/update/run arbitrary
+  constant, periodic, condition, ramp, left-right and custom effects through the internal
+  `SdlHapticBackend`. That seam no longer enumerates devices or handles standalone rumble, and the
+  public `HapticDevice` header no longer declares `SDL_Haptic`.

@@ -7,6 +7,8 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace CNA::Platform::Sdl3 {
 
@@ -175,6 +177,8 @@ namespace CNA::Platform::Sdl3 {
 
     Sdl3Haptics::~Sdl3Haptics() { CloseAll(); }
 
+    void Sdl3Haptics::Deactivate() { CloseAll(); }
+
     void Sdl3Haptics::CloseAll()
     {
         for (const auto& [index, handle] : open_)
@@ -185,73 +189,64 @@ namespace CNA::Platform::Sdl3 {
             }
         }
         open_.clear();
+        rumbleInitialized_.clear();
     }
 
-    int Sdl3Haptics::GetCount() const
+    std::vector<DeviceId> Sdl3Haptics::EnumerateIds() const
     {
         int count = 0;
         SDL_HapticID* ids = SDL_GetHaptics(&count);
-        ids_.clear();
+        std::vector<DeviceId> result;
         if (ids != nullptr)
         {
-            ids_.assign(ids, ids + count);
+            result.reserve(static_cast<std::size_t>(std::max(count, 0)));
+            for (int index = 0; index < count; ++index)
+            {
+                if (ids[index] != 0)
+                {
+                    result.push_back(static_cast<DeviceId>(ids[index]));
+                }
+            }
             SDL_free(ids);
         }
-        return static_cast<int>(ids_.size());
+        std::sort(result.begin(), result.end());
+        result.erase(std::unique(result.begin(), result.end()), result.end());
+        RetireMissing(result);
+        return result;
     }
 
-    void* Sdl3Haptics::Acquire(const int index)
+    void Sdl3Haptics::RetireMissing(const std::vector<DeviceId>& ids) const
     {
-        const auto it = open_.find(index);
-        if (it != open_.end())
+        for (auto item = open_.begin(); item != open_.end();)
         {
-            return it->second;
+            if (std::binary_search(ids.begin(), ids.end(), item->first))
+            {
+                ++item;
+                continue;
+            }
+            if (item->second != nullptr)
+            {
+                SDL_CloseHaptic(static_cast<SDL_Haptic*>(item->second));
+            }
+            rumbleInitialized_.erase(item->first);
+            item = open_.erase(item);
         }
-
-        // Refresh the id list so an index means the same thing as the count it came from.
-        (void)GetCount();
-        if (index < 0 || index >= static_cast<int>(ids_.size()))
-        {
-            return nullptr;
-        }
-
-        SDL_Haptic* haptic = SDL_OpenHaptic(ids_[static_cast<std::size_t>(index)]);
-        if (haptic == nullptr)
-        {
-            return nullptr;
-        }
-        open_[index] = haptic;
-        return haptic;
     }
 
-    std::string Sdl3Haptics::GetName(const int index) const
+    bool Sdl3Haptics::ProbeRumble(const DeviceId id) const
     {
-        (void)GetCount();
-        if (index < 0 || index >= static_cast<int>(ids_.size()))
-        {
-            return {};
-        }
-        const char* name = SDL_GetHapticNameForID(ids_[static_cast<std::size_t>(index)]);
-        return name != nullptr ? std::string(name) : std::string();
-    }
-
-    bool Sdl3Haptics::SupportsRumble(const int index) const
-    {
-        // Acquire() is non-const by design (it caches), so this opens transiently rather than
-        // mutating the cache from a const query.
-        (void)GetCount();
-        if (index < 0 || index >= static_cast<int>(ids_.size()))
+        if (id == 0 || id > std::numeric_limits<SDL_HapticID>::max())
         {
             return false;
         }
 
-        const auto it = open_.find(index);
-        if (it != open_.end() && it->second != nullptr)
+        const auto existing = open_.find(id);
+        if (existing != open_.end() && existing->second != nullptr)
         {
-            return SDL_HapticRumbleSupported(static_cast<SDL_Haptic*>(it->second));
+            return SDL_HapticRumbleSupported(static_cast<SDL_Haptic*>(existing->second));
         }
 
-        SDL_Haptic* haptic = SDL_OpenHaptic(ids_[static_cast<std::size_t>(index)]);
+        SDL_Haptic* haptic = SDL_OpenHaptic(static_cast<SDL_HapticID>(id));
         if (haptic == nullptr)
         {
             return false;
@@ -261,10 +256,77 @@ namespace CNA::Platform::Sdl3 {
         return supported;
     }
 
-    bool Sdl3Haptics::PlayRumble(const int index, const float strength,
+    std::vector<HapticInfo> Sdl3Haptics::GetHaptics() const
+    {
+        const std::vector<DeviceId> ids = EnumerateIds();
+        std::vector<HapticInfo> result;
+        result.reserve(ids.size());
+        for (const DeviceId id : ids)
+        {
+            const char* name = SDL_GetHapticNameForID(static_cast<SDL_HapticID>(id));
+            result.push_back({id, name != nullptr ? std::string(name) : std::string(),
+                              ProbeRumble(id)});
+        }
+        return result;
+    }
+
+    bool Sdl3Haptics::IsConnected(const DeviceId id) const
+    {
+        const std::vector<DeviceId> ids = EnumerateIds();
+        return std::binary_search(ids.begin(), ids.end(), id);
+    }
+
+    bool Sdl3Haptics::SupportsRumble(const DeviceId id) const
+    {
+        const std::vector<DeviceId> ids = EnumerateIds();
+        return std::binary_search(ids.begin(), ids.end(), id) && ProbeRumble(id);
+    }
+
+    bool Sdl3Haptics::InitializeRumble(const DeviceId id)
+    {
+        SDL_Haptic* haptic = static_cast<SDL_Haptic*>(Acquire(id));
+        if (haptic == nullptr || !SDL_HapticRumbleSupported(haptic))
+        {
+            return false;
+        }
+        const auto existing = rumbleInitialized_.find(id);
+        if (existing != rumbleInitialized_.end() && existing->second)
+        {
+            return true;
+        }
+        const bool initialized = SDL_InitHapticRumble(haptic);
+        rumbleInitialized_[id] = initialized;
+        return initialized;
+    }
+
+    void* Sdl3Haptics::Acquire(const DeviceId id)
+    {
+        const std::vector<DeviceId> ids = EnumerateIds();
+        if (!std::binary_search(ids.begin(), ids.end(), id)
+            || id > std::numeric_limits<SDL_HapticID>::max())
+        {
+            return nullptr;
+        }
+
+        const auto existing = open_.find(id);
+        if (existing != open_.end())
+        {
+            return existing->second;
+        }
+
+        SDL_Haptic* haptic = SDL_OpenHaptic(static_cast<SDL_HapticID>(id));
+        if (haptic == nullptr)
+        {
+            return nullptr;
+        }
+        open_[id] = haptic;
+        return haptic;
+    }
+
+    bool Sdl3Haptics::PlayRumble(const DeviceId id, const float strength,
                                  const std::uint32_t durationMilliseconds)
     {
-        SDL_Haptic* haptic = static_cast<SDL_Haptic*>(Acquire(index));
+        SDL_Haptic* haptic = static_cast<SDL_Haptic*>(Acquire(id));
         if (haptic == nullptr)
         {
             // A device that vanished on hotplug reports failure rather than throwing: losing a
@@ -272,20 +334,26 @@ namespace CNA::Platform::Sdl3 {
             return false;
         }
 
-        if (!SDL_HapticRumbleSupported(haptic) || !SDL_InitHapticRumble(haptic))
+        if (!InitializeRumble(id))
         {
             return false;
         }
 
         // Clamped before the call for the same reason gamepad rumble is: an out-of-range value
         // would be reinterpreted rather than saturated.
-        const float clamped = std::clamp(strength, 0.0f, 1.0f);
+        const float clamped = std::isnan(strength) ? 0.0f
+                                                   : std::clamp(strength, 0.0f, 1.0f);
         return SDL_PlayHapticRumble(haptic, clamped, durationMilliseconds);
     }
 
-    bool Sdl3Haptics::StopRumble(const int index)
+    bool Sdl3Haptics::StopRumble(const DeviceId id)
     {
-        const auto it = open_.find(index);
+        const std::vector<DeviceId> ids = EnumerateIds();
+        if (!std::binary_search(ids.begin(), ids.end(), id))
+        {
+            return false;
+        }
+        const auto it = open_.find(id);
         if (it == open_.end() || it->second == nullptr)
         {
             return false;

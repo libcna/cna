@@ -54,6 +54,8 @@ namespace CNA::Platform::Sdl3 {
         // Release exactly what this instance acquired, and nothing else. Deliberately no
         // SDL_Quit(): PLAT-4 established that global SDL lifetime belongs to the host
         // application, and calling it here would tear down subsystems the host still holds.
+        // Cached haptic handles must close before the subsystem that owns them.
+        haptics_.Deactivate();
         for (const auto& [subsystem, count] : ownedRefCounts_)
         {
             for (int i = 0; i < count; ++i)
@@ -140,6 +142,12 @@ namespace CNA::Platform::Sdl3 {
             return;
         }
         --it->second;
+        if (subsystem == PlatformSubsystem::Haptic && it->second == 0)
+        {
+            // SDL invalidates native haptic handles when the last subsystem reference goes away.
+            // Empty the service cache first so its destructor cannot later close stale pointers.
+            haptics_.Deactivate();
+        }
         SDL_QuitSubSystem(ToSdlFlag(subsystem));
     }
 

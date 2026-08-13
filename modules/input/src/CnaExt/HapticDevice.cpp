@@ -2,6 +2,8 @@
 #include "CNA/Input/HapticDevice.hpp"
 
 #include "CNA/Internal/Input/SdlHapticBackend.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/Input/IPlatformHaptics.hpp"
 
 #include <type_traits>
 #include <utility>
@@ -11,6 +13,16 @@ namespace CNA::Input
     namespace
     {
         using CNA::Internal::Input::sdl_haptic_backend;
+
+        SDL_Haptic* native_handle(void* handle)
+        {
+            return static_cast<SDL_Haptic*>(handle);
+        }
+
+        CNA::Platform::IPlatformHaptics* haptic_service(CNA::Platform::IPlatform* platform)
+        {
+            return platform != nullptr ? platform->GetHaptics() : nullptr;
+        }
 
         Uint8 to_sdl_direction_type(const HapticDirectionTypeEXT type)
         {
@@ -209,12 +221,22 @@ namespace CNA::Input
         }
     }
 
-    HapticDevice::HapticDevice(SDL_Haptic* handle) : handle_(handle)
+    HapticDevice::HapticDevice(void* effectHandle,
+                               CNA::Platform::IPlatform* platform,
+                               std::optional<std::uint64_t> standaloneId,
+                               std::string standaloneName)
+        : effectHandle_(effectHandle)
+        , platform_(platform)
+        , standaloneId_(standaloneId)
+        , standaloneName_(std::move(standaloneName))
     {
     }
 
     HapticDevice::HapticDevice(HapticDevice&& other) noexcept
-        : handle_(std::exchange(other.handle_, nullptr))
+        : effectHandle_(std::exchange(other.effectHandle_, nullptr))
+        , platform_(std::exchange(other.platform_, nullptr))
+        , standaloneId_(std::exchange(other.standaloneId_, std::nullopt))
+        , standaloneName_(std::move(other.standaloneName_))
         , isDisposed_(std::exchange(other.isDisposed_, true))
     {
     }
@@ -224,7 +246,10 @@ namespace CNA::Input
         if (this != &other)
         {
             Dispose();
-            handle_ = std::exchange(other.handle_, nullptr);
+            effectHandle_ = std::exchange(other.effectHandle_, nullptr);
+            platform_ = std::exchange(other.platform_, nullptr);
+            standaloneId_ = std::exchange(other.standaloneId_, std::nullopt);
+            standaloneName_ = std::move(other.standaloneName_);
             isDisposed_ = std::exchange(other.isDisposed_, true);
         }
         return *this;
@@ -240,124 +265,180 @@ namespace CNA::Input
         if (isDisposed_)
             return;
         isDisposed_ = true;
-        if (handle_ != nullptr)
+        if (standaloneId_.has_value())
         {
-            sdl_haptic_backend().CloseHaptic(handle_);
-            handle_ = nullptr;
+            if (CNA::Platform::IPlatformHaptics* service = haptic_service(platform_))
+            {
+                (void)service->StopRumble(*standaloneId_);
+            }
+            standaloneId_.reset();
+        }
+        if (effectHandle_ != nullptr)
+        {
+            sdl_haptic_backend().CloseHaptic(native_handle(effectHandle_));
+            effectHandle_ = nullptr;
+        }
+        if (platform_ != nullptr)
+        {
+            platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Haptic);
+            platform_ = nullptr;
         }
     }
 
     bool HapticDevice::IsOpenEXT() const
     {
-        return handle_ != nullptr;
+        return effectHandle_ != nullptr || standaloneId_.has_value();
     }
 
     std::string HapticDevice::GetNameEXT() const
     {
-        return handle_ ? sdl_haptic_backend().GetHapticName(handle_) : std::string();
+        if (standaloneId_.has_value())
+            return standaloneName_;
+        return effectHandle_ != nullptr
+            ? sdl_haptic_backend().GetHapticName(native_handle(effectHandle_)) : std::string();
     }
 
     HapticCapabilitiesEXT HapticDevice::GetCapabilitiesEXT() const
     {
-        if (handle_ == nullptr)
+        if (!IsOpenEXT())
             return HapticCapabilitiesEXT{};
 
         HapticCapabilitiesEXT caps;
         caps.isOpen = true;
-        caps.name = sdl_haptic_backend().GetHapticName(handle_);
-        caps.features = to_haptic_features_ext(sdl_haptic_backend().GetHapticFeatures(handle_));
-        caps.axisCount = sdl_haptic_backend().GetNumHapticAxes(handle_);
-        caps.maxEffects = sdl_haptic_backend().GetMaxHapticEffects(handle_);
-        caps.maxEffectsPlaying = sdl_haptic_backend().GetMaxHapticEffectsPlaying(handle_);
-        caps.rumbleSupported = sdl_haptic_backend().HapticRumbleSupported(handle_);
+        caps.name = GetNameEXT();
+        if (standaloneId_.has_value())
+        {
+            CNA::Platform::IPlatformHaptics* service = haptic_service(platform_);
+            caps.rumbleSupported = service != nullptr && service->SupportsRumble(*standaloneId_);
+        }
+        if (effectHandle_ != nullptr)
+        {
+            SDL_Haptic* handle = native_handle(effectHandle_);
+            caps.features = to_haptic_features_ext(sdl_haptic_backend().GetHapticFeatures(handle));
+            caps.axisCount = sdl_haptic_backend().GetNumHapticAxes(handle);
+            caps.maxEffects = sdl_haptic_backend().GetMaxHapticEffects(handle);
+            caps.maxEffectsPlaying = sdl_haptic_backend().GetMaxHapticEffectsPlaying(handle);
+            if (!standaloneId_.has_value())
+            {
+                caps.rumbleSupported = sdl_haptic_backend().HapticRumbleSupported(handle);
+            }
+        }
         return caps;
     }
 
     bool HapticDevice::IsEffectSupportedEXT(const HapticEffectEXT& effect) const
     {
-        if (handle_ == nullptr)
+        if (effectHandle_ == nullptr)
             return false;
         std::vector<Uint16> customDataStorage;
         const SDL_HapticEffect sdlEffect = to_sdl_haptic_effect(effect, customDataStorage);
-        return sdl_haptic_backend().HapticEffectSupported(handle_, &sdlEffect);
+        return sdl_haptic_backend().HapticEffectSupported(native_handle(effectHandle_), &sdlEffect);
     }
 
     bool HapticDevice::InitRumbleEXT()
     {
-        return handle_ != nullptr && sdl_haptic_backend().InitHapticRumble(handle_);
+        if (standaloneId_.has_value())
+        {
+            CNA::Platform::IPlatformHaptics* service = haptic_service(platform_);
+            return service != nullptr && service->InitializeRumble(*standaloneId_);
+        }
+        return effectHandle_ != nullptr
+            && sdl_haptic_backend().InitHapticRumble(native_handle(effectHandle_));
     }
 
     bool HapticDevice::PlayRumbleEXT(const float strength, const std::uint32_t lengthMs)
     {
-        return handle_ != nullptr && sdl_haptic_backend().PlayHapticRumble(handle_, strength, lengthMs);
+        if (standaloneId_.has_value())
+        {
+            CNA::Platform::IPlatformHaptics* service = haptic_service(platform_);
+            return service != nullptr
+                && service->PlayRumble(*standaloneId_, strength, lengthMs);
+        }
+        return effectHandle_ != nullptr && sdl_haptic_backend().PlayHapticRumble(
+            native_handle(effectHandle_), strength, lengthMs);
     }
 
     bool HapticDevice::StopRumbleEXT()
     {
-        return handle_ != nullptr && sdl_haptic_backend().StopHapticRumble(handle_);
+        if (standaloneId_.has_value())
+        {
+            CNA::Platform::IPlatformHaptics* service = haptic_service(platform_);
+            return service != nullptr && service->StopRumble(*standaloneId_);
+        }
+        return effectHandle_ != nullptr
+            && sdl_haptic_backend().StopHapticRumble(native_handle(effectHandle_));
     }
 
     int HapticDevice::CreateEffectEXT(const HapticEffectEXT& effect)
     {
-        if (handle_ == nullptr)
+        if (effectHandle_ == nullptr)
             return -1;
         std::vector<Uint16> customDataStorage;
         const SDL_HapticEffect sdlEffect = to_sdl_haptic_effect(effect, customDataStorage);
-        return sdl_haptic_backend().CreateHapticEffect(handle_, &sdlEffect);
+        return sdl_haptic_backend().CreateHapticEffect(native_handle(effectHandle_), &sdlEffect);
     }
 
     bool HapticDevice::UpdateEffectEXT(const int effectId, const HapticEffectEXT& effect)
     {
-        if (handle_ == nullptr)
+        if (effectHandle_ == nullptr)
             return false;
         std::vector<Uint16> customDataStorage;
         const SDL_HapticEffect sdlEffect = to_sdl_haptic_effect(effect, customDataStorage);
-        return sdl_haptic_backend().UpdateHapticEffect(handle_, effectId, &sdlEffect);
+        return sdl_haptic_backend().UpdateHapticEffect(
+            native_handle(effectHandle_), effectId, &sdlEffect);
     }
 
     bool HapticDevice::RunEffectEXT(const int effectId, const std::uint32_t iterations)
     {
-        return handle_ != nullptr && sdl_haptic_backend().RunHapticEffect(handle_, effectId, iterations);
+        return effectHandle_ != nullptr && sdl_haptic_backend().RunHapticEffect(
+            native_handle(effectHandle_), effectId, iterations);
     }
 
     bool HapticDevice::StopEffectEXT(const int effectId)
     {
-        return handle_ != nullptr && sdl_haptic_backend().StopHapticEffect(handle_, effectId);
+        return effectHandle_ != nullptr && sdl_haptic_backend().StopHapticEffect(
+            native_handle(effectHandle_), effectId);
     }
 
     void HapticDevice::DestroyEffectEXT(const int effectId)
     {
-        if (handle_ != nullptr)
-            sdl_haptic_backend().DestroyHapticEffect(handle_, effectId);
+        if (effectHandle_ != nullptr)
+            sdl_haptic_backend().DestroyHapticEffect(native_handle(effectHandle_), effectId);
     }
 
     bool HapticDevice::GetEffectStatusEXT(const int effectId) const
     {
-        return handle_ != nullptr && sdl_haptic_backend().GetHapticEffectStatus(handle_, effectId);
+        return effectHandle_ != nullptr && sdl_haptic_backend().GetHapticEffectStatus(
+            native_handle(effectHandle_), effectId);
     }
 
     bool HapticDevice::StopAllEffectsEXT()
     {
-        return handle_ != nullptr && sdl_haptic_backend().StopHapticEffects(handle_);
+        return effectHandle_ != nullptr
+            && sdl_haptic_backend().StopHapticEffects(native_handle(effectHandle_));
     }
 
     bool HapticDevice::SetGainEXT(const int gain)
     {
-        return handle_ != nullptr && sdl_haptic_backend().SetHapticGain(handle_, gain);
+        return effectHandle_ != nullptr
+            && sdl_haptic_backend().SetHapticGain(native_handle(effectHandle_), gain);
     }
 
     bool HapticDevice::SetAutocenterEXT(const int autocenter)
     {
-        return handle_ != nullptr && sdl_haptic_backend().SetHapticAutocenter(handle_, autocenter);
+        return effectHandle_ != nullptr
+            && sdl_haptic_backend().SetHapticAutocenter(native_handle(effectHandle_), autocenter);
     }
 
     bool HapticDevice::PauseEXT()
     {
-        return handle_ != nullptr && sdl_haptic_backend().PauseHaptic(handle_);
+        return effectHandle_ != nullptr
+            && sdl_haptic_backend().PauseHaptic(native_handle(effectHandle_));
     }
 
     bool HapticDevice::ResumeEXT()
     {
-        return handle_ != nullptr && sdl_haptic_backend().ResumeHaptic(handle_);
+        return effectHandle_ != nullptr
+            && sdl_haptic_backend().ResumeHaptic(native_handle(effectHandle_));
     }
 }

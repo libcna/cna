@@ -6,14 +6,14 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 
 #include <string>
-#include <vector>
 
 // Internal (CNA) seam over the SDL3 haptic (force-feedback) C API used by CNA::Input::Haptics /
 // HapticDevice.
 //
-// Unlike IPlatformGamepad/IPlatformJoystick, this seam retains SDL's full effect structures: a
-// HapticDevice is opened and closed explicitly by the caller (RAII). Joystick correlation uses a
-// CNA DeviceId, so no SDL_Joystick pointer crosses from the platform service into this seam.
+// Unlike the simple-rumble IPlatformHaptics surface, this seam retains SDL's full effect
+// structures: a HapticDevice is opened and closed explicitly by the caller (RAII). Enumeration
+// and standalone rumble live on the platform service; joystick correlation uses a CNA DeviceId,
+// so no SDL_Joystick pointer crosses from the platform service into this seam.
 //
 // This exists ONLY so haptic runtime behavior (enumeration, capabilities, effect building, rumble)
 // can be unit-tested without real force-feedback hardware: tests inject a fake implementation. It is
@@ -33,11 +33,6 @@ namespace CNA::Internal::Input
     {
     public:
         virtual ~ISdlHapticBackend() = default;
-
-        /** @brief Enumerates connected haptic device instance ids (SDL_GetHaptics). */
-        virtual std::vector<SDL_HapticID> GetHaptics() = 0;
-        /** @brief Human-readable name for an unopened device id, or "" if unknown (SDL_GetHapticNameForID). */
-        virtual std::string GetHapticNameForID(SDL_HapticID instanceId) = 0;
 
         /** @brief Opens the haptic device for the instance id, or nullptr on failure (SDL_OpenHaptic). */
         virtual SDL_Haptic* OpenHaptic(SDL_HapticID instanceId) = 0;

@@ -64,7 +64,7 @@ Three facts follow, and all three matter:
 | `SystemDeviceBackend` | **Deleted after a contract addition** | `GetMice` / `GetKeyboards` / `GetTouchDevices` have no counterpart. See §4. |
 | `SdlJoystickBackend` | **Deleted; replaced by `IPlatformJoystick`** | PLAT-83 moved arbitrary raw axes/buttons/hats/balls into frame snapshots, while `Sdl3Joystick` alone owns native handles. The same physical controller can still appear independently through the mapped gamepad view. |
 | `SdlGamepadBackend` | **Replaced** by `IPlatformGamepad`, extended | 33 methods against `IPlatformGamepad`'s 5. See §3 — most of the gap is real capability, not redundancy. |
-| `SdlHapticBackend` | **Survives, for now** | 28 methods covering the full effect model. `IPlatformHaptics` (PLAT-84) covers rumble only. See §5. |
+| `SdlHapticBackend` | **Narrowed; rich effects survive** | PLAT-84 moved enumeration and standalone rumble to `IPlatformHaptics`; the seam retains only explicit rich-effect handles plus joystick/mouse correlation. See §5. |
 
 Four deletions, two replacements, one extension, one survivor. The four deletions are the point:
 this migration should end with *fewer* abstractions than it started with, not the same number
@@ -121,15 +121,16 @@ and they were written as fallbacks, not as the answer.
 
 ## 5. Haptics: two contracts, one device
 
-`IPlatformHaptics` (PLAT-84) does rumble: play, stop, supported. `SdlHapticBackend` does the full
+`IPlatformHaptics` (PLAT-84) enumerates stable `DeviceId`s and owns the complete standalone simple
+rumble subset: capability, initialization, play and stop. `SdlHapticBackend` still does the full
 SDL effect model — create/update/run/stop/destroy arbitrary effect structures, effect status,
-gain, autocenter, pause/resume, plus feature and capacity queries — and
-`CnaExt/HapticDevice.cpp` uses essentially all of it.
+gain, autocenter, pause/resume, plus feature and capacity queries — and `CnaExt/HapticDevice.cpp`
+uses essentially all of it. Its former enumeration/name methods were removed.
 
 Collapsing the two now would mean either lifting the whole SDL effect struct into the platform
 contract (which puts an SDL data layout in a header whose entire purpose is not having one) or
 deleting a feature CNA already ships. Neither is acceptable as a side effect of a refactor, so
-`SdlHapticBackend` survives this phase and the effect model gets its own design task.
+The narrowed `SdlHapticBackend` survives this phase and the effect model gets its own design task.
 
 ---
 
@@ -169,7 +170,8 @@ handle store first would otherwise have broken `OpenFromJoystickEXT` between com
 3. The four deletions (§2), each re-pointing its XNA-side caller at the platform service.
 4. `SdlGamepadBackend` replacement (**complete, PLAT-82**), followed by the distinct
    `SdlJoystickBackend` replacement (**complete, PLAT-83**).
-5. `SdlHapticBackend`'s effect model, on its own design decision.
+5. Standalone haptics → `IPlatformHaptics` (**complete, PLAT-84**); the remaining rich effect model
+   stays behind its narrowed seam pending its own design decision.
 
 The two renderer examples that call `InputManager::SetKeyState` directly
 (`modules/renderers/easygl/examples/`, `modules/renderers/sdl-renderer/examples/`) use it as a

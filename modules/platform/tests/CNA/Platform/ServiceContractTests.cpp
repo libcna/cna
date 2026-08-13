@@ -2,6 +2,7 @@
 
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
+#include "CNA/Platform/Input/IPlatformHaptics.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "CNA/Platform/Input/IPlatformJoystick.hpp"
 #include "CNA/Platform/Input/IPlatformMouse.hpp"
@@ -24,6 +25,7 @@ TEST(ServiceContractTests, EveryServiceInterfaceHasAVirtualDestructor)
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformKeyboard>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformMouse>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformGamepad>);
+    EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformHaptics>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformJoystick>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformTextInput>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformSensors>);
@@ -39,6 +41,7 @@ TEST(ServiceContractTests, EveryServiceInterfaceIsAbstract)
     EXPECT_TRUE(std::is_abstract_v<IPlatformKeyboard>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformMouse>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformGamepad>);
+    EXPECT_TRUE(std::is_abstract_v<IPlatformHaptics>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformJoystick>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformTextInput>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformSensors>);
@@ -74,6 +77,15 @@ TEST(InputSnapshotTests, SnapshotsDefaultToNothingHeld)
     EXPECT_TRUE(joystick.buttons.empty());
     EXPECT_TRUE(joystick.hats.empty());
     EXPECT_TRUE(joystick.balls.empty());
+
+}
+
+TEST(HapticContractTests, DeviceDescriptorDefaultsToDisconnectedIdentity)
+{
+    const HapticInfo haptic;
+    EXPECT_EQ(haptic.id, 0u);
+    EXPECT_TRUE(haptic.name.empty());
+    EXPECT_FALSE(haptic.rumbleSupported);
 }
 
 TEST(InputSnapshotTests, KeyboardSnapshotIsAWholeKeyboardNotAPerKeyQuery)

@@ -56,43 +56,48 @@ namespace CNA::Platform::Sdl3 {
         /** @brief Closes every device this service opened. */
         ~Sdl3Haptics() override;
 
-        /** @brief Gets the connected device count. @return The count. */
-        [[nodiscard]] int GetCount() const override;
-        /**
-         * @brief Gets a device's name.
-         * @param index The device to name.
-         * @return The name, or empty for an invalid index.
-         */
-        [[nodiscard]] std::string GetName(int index) const override;
+        /** @brief Gets connected haptic descriptors in ascending id order. */
+        [[nodiscard]] std::vector<HapticInfo> GetHaptics() const override;
+        /** @brief Gets whether an id is currently connected. */
+        [[nodiscard]] bool IsConnected(DeviceId id) const override;
         /**
          * @brief Gets whether a device supports simple rumble.
-         * @param index The device to query.
+         * @param id The device to query.
          * @return True if supported.
          */
-        [[nodiscard]] bool SupportsRumble(int index) const override;
+        [[nodiscard]] bool SupportsRumble(DeviceId id) const override;
+        /** @brief Opens and initializes simple rumble for an id. */
+        bool InitializeRumble(DeviceId id) override;
         /**
          * @brief Plays a rumble effect.
-         * @param index The device to rumble.
+         * @param id The device to rumble.
          * @param strength Intensity in [0, 1]; clamped.
          * @param durationMilliseconds How long to rumble.
          * @return True if accepted.
          */
-        bool PlayRumble(int index, float strength, std::uint32_t durationMilliseconds) override;
+        bool PlayRumble(DeviceId id, float strength,
+                        std::uint32_t durationMilliseconds) override;
         /**
          * @brief Stops a rumble effect.
-         * @param index The device to stop.
+         * @param id The device to stop.
          * @return True if accepted.
          */
-        bool StopRumble(int index) override;
+        bool StopRumble(DeviceId id) override;
+
+        /** @brief Closes cached handles before the haptic subsystem's final release. */
+        void Deactivate();
 
     private:
         /// Opened lazily and cached: SDL_OpenHaptic is not cheap, and VibrateController calls
         /// Start/Stop repeatedly on the same device.
-        void* Acquire(int index);
+        void* Acquire(DeviceId id);
         void CloseAll();
+        [[nodiscard]] std::vector<DeviceId> EnumerateIds() const;
+        void RetireMissing(const std::vector<DeviceId>& ids) const;
+        [[nodiscard]] bool ProbeRumble(DeviceId id) const;
 
-        std::map<int, void*> open_;
-        mutable std::vector<std::uint32_t> ids_;
+        mutable std::map<DeviceId, void*> open_;
+        mutable std::map<DeviceId, bool> rumbleInitialized_;
     };
 
 } // namespace CNA::Platform::Sdl3

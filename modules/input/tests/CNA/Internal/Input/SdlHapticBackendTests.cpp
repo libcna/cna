@@ -9,6 +9,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <limits>
 #include <utility>
 
 #include "CNA/Input/HapticCapabilities.hpp"
@@ -18,7 +19,7 @@
 #include "CNA/Input/Haptics.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlHapticBackend.hpp"
-#include "CNA/Platform/CannedJoystick.hpp"
+#include "CNA/Platform/CannedHaptics.hpp"
 
 #include "FakeSdlHapticBackend.hpp"
 
@@ -37,7 +38,8 @@ using CNA::Internal::Input::test_support::FakeHapticConfig;
 using CNA::Internal::Input::test_support::FakeSdlHapticBackend;
 using CNA::Platform::JoystickInfo;
 using CNA::Platform::JoystickKind;
-using CNA::Platform::Testing::CannedJoystickPlatform;
+using CNA::Platform::Testing::CannedHapticsPlatform;
+using CNA::Platform::Testing::PlatformTestDecorator;
 using CNA::Platform::Testing::ScopedCurrentPlatform;
 
 namespace
@@ -45,18 +47,38 @@ namespace
     struct FakeHapticTest : ::testing::Test
     {
         FakeSdlHapticBackend fake;
-        CannedJoystickPlatform platform;
+        CannedHapticsPlatform platform;
         ScopedCurrentPlatform installed{platform};
 
         void SetUp() override
         {
             InputManager::ResetAllForTests();
             SetSdlHapticBackendForTests(&fake);
+            fake.onRegister = [this](const SDL_HapticID id, const FakeHapticConfig& config)
+            {
+                platform.haptics.Connect(
+                    {static_cast<CNA::Platform::DeviceId>(id), config.name,
+                     config.rumbleSupported});
+            };
         }
         void TearDown() override
         {
             SetSdlHapticBackendForTests(nullptr);
             InputManager::ResetAllForTests();
+        }
+    };
+
+    class NoHapticsPlatform final : public PlatformTestDecorator
+    {
+    public:
+        CNA::Platform::IPlatformHaptics* GetHaptics() override { return nullptr; }
+
+        CNA::Platform::PlatformCapabilities GetCapabilities() const override
+        {
+            CNA::Platform::PlatformCapabilities capabilities =
+                PlatformTestDecorator::GetCapabilities();
+            capabilities.haptics = false;
+            return capabilities;
         }
     };
 
@@ -82,11 +104,29 @@ TEST_F(FakeHapticTest, GetHapticsEXTForwardsIdAndName)
     const auto list = Haptics::GetHapticsEXT();
     ASSERT_EQ(list.size(), 1u);
     EXPECT_EQ(list[0], (HapticInfoEXT{5, "Test Wheel"}));
+    EXPECT_EQ(platform.hapticSubsystemBalance, 0);
 }
 
 TEST_F(FakeHapticTest, GetHapticsEXTIsEmptyWhenNoneRegistered)
 {
     EXPECT_TRUE(Haptics::GetHapticsEXT().empty());
+}
+
+TEST_F(FakeHapticTest, GetHapticsEXTDropsIdsThatDoNotFitTheFrozenPublicType)
+{
+    platform.haptics.Connect(
+        {static_cast<CNA::Platform::DeviceId>(std::numeric_limits<std::uint32_t>::max()) + 1u,
+         "Too wide", true});
+    EXPECT_TRUE(Haptics::GetHapticsEXT().empty());
+}
+
+TEST(HapticsPlatformTest, MissingPlatformServiceReturnsNoDevicesAndCannotOpen)
+{
+    NoHapticsPlatform noHaptics;
+    ScopedCurrentPlatform installed(noHaptics);
+
+    EXPECT_TRUE(Haptics::GetHapticsEXT().empty());
+    EXPECT_FALSE(Haptics::OpenEXT(5).IsOpenEXT());
 }
 
 // --- open / close (standalone) ---
@@ -107,13 +147,20 @@ TEST_F(FakeHapticTest, OpenEXTOfUnknownIdFails)
     EXPECT_EQ(fake.openCount, 0);
 }
 
-TEST_F(FakeHapticTest, OpenEXTOfFailingDeviceFails)
+TEST_F(FakeHapticTest, StandaloneRumbleRemainsAvailableWhenTheRicherEffectOpenFails)
 {
     FakeHapticConfig cfg = WheelConfig();
     cfg.openFails = true;
     fake.Register(5, cfg);
     HapticDevice device = Haptics::OpenEXT(5);
-    EXPECT_FALSE(device.IsOpenEXT());
+    EXPECT_TRUE(device.IsOpenEXT());
+    EXPECT_TRUE(device.GetCapabilitiesEXT().rumbleSupported);
+    EXPECT_TRUE(device.InitRumbleEXT());
+    EXPECT_TRUE(device.PlayRumbleEXT(0.5f, 10));
+    EXPECT_EQ(fake.openCount, 0);
+    EXPECT_EQ(fake.playRumbleCalls, 0);
+    EXPECT_EQ(platform.haptics.playCalls, 1);
+    EXPECT_EQ(device.CreateEffectEXT(HapticEffectEXT{}), -1);
 }
 
 TEST_F(FakeHapticTest, DisposeClosesTheDeviceAndIsIdempotent)
@@ -122,6 +169,7 @@ TEST_F(FakeHapticTest, DisposeClosesTheDeviceAndIsIdempotent)
     HapticDevice device = Haptics::OpenEXT(5);
     device.Dispose();
     EXPECT_EQ(fake.closeCount, 1);
+    EXPECT_EQ(platform.hapticSubsystemBalance, 0);
     EXPECT_FALSE(device.IsOpenEXT());
     EXPECT_NO_THROW(device.Dispose()); // idempotent
     EXPECT_EQ(fake.closeCount, 1);
@@ -175,7 +223,7 @@ TEST_F(FakeHapticTest, CapabilitiesReportsFeaturesAxesEffectsAndRumble)
 
 TEST_F(FakeHapticTest, CapabilitiesIsDefaultWhenClosed)
 {
-    HapticDevice device(nullptr);
+    HapticDevice device;
     EXPECT_EQ(device.GetCapabilitiesEXT(), HapticCapabilitiesEXT{});
 }
 
@@ -187,24 +235,43 @@ TEST_F(FakeHapticTest, RumbleRoundTripsThroughBackend)
     HapticDevice device = Haptics::OpenEXT(5);
 
     EXPECT_TRUE(device.InitRumbleEXT());
-    EXPECT_EQ(fake.initRumbleCalls, 1);
+    EXPECT_EQ(platform.haptics.initializeCalls, 1);
+    EXPECT_EQ(fake.initRumbleCalls, 0);
 
     EXPECT_TRUE(device.PlayRumbleEXT(0.75f, 250));
-    EXPECT_EQ(fake.playRumbleCalls, 1);
-    EXPECT_FLOAT_EQ(fake.lastRumbleStrength, 0.75f);
-    EXPECT_EQ(fake.lastRumbleLengthMs, 250u);
+    EXPECT_EQ(platform.haptics.playCalls, 1);
+    EXPECT_EQ(fake.playRumbleCalls, 0);
+    EXPECT_EQ(platform.haptics.lastId, 5u);
+    EXPECT_FLOAT_EQ(platform.haptics.lastStrength, 0.75f);
+    EXPECT_EQ(platform.haptics.lastDurationMilliseconds, 250u);
 
     EXPECT_TRUE(device.StopRumbleEXT());
-    EXPECT_EQ(fake.stopRumbleCalls, 1);
+    EXPECT_EQ(platform.haptics.stopCalls, 1);
+    EXPECT_EQ(fake.stopRumbleCalls, 0);
 }
 
 TEST_F(FakeHapticTest, RumbleIsSafeFalseWhenClosed)
 {
-    HapticDevice device(nullptr);
+    HapticDevice device;
     EXPECT_FALSE(device.InitRumbleEXT());
     EXPECT_FALSE(device.PlayRumbleEXT(1.0f, 100));
     EXPECT_FALSE(device.StopRumbleEXT());
     EXPECT_EQ(fake.initRumbleCalls, 0);
+}
+
+TEST_F(FakeHapticTest, StandaloneRumbleRefusesAfterThePlatformIdDisconnects)
+{
+    fake.Register(5, WheelConfig());
+    HapticDevice device = Haptics::OpenEXT(5);
+    ASSERT_TRUE(device.IsOpenEXT());
+
+    platform.haptics.Disconnect(5);
+    EXPECT_FALSE(device.InitRumbleEXT());
+    EXPECT_FALSE(device.PlayRumbleEXT(0.5f, 20));
+    EXPECT_FALSE(device.StopRumbleEXT());
+    EXPECT_EQ(fake.initRumbleCalls, 0);
+    EXPECT_EQ(fake.playRumbleCalls, 0);
+    EXPECT_EQ(fake.stopRumbleCalls, 0);
 }
 
 // --- effect lifecycle ---
@@ -266,7 +333,7 @@ TEST_F(FakeHapticTest, IsEffectSupportedEXTForwardsBackendAnswer)
 
 TEST_F(FakeHapticTest, EffectMethodsAreSafeWhenClosed)
 {
-    HapticDevice device(nullptr);
+    HapticDevice device;
     HapticEffectEXT effect;
     EXPECT_EQ(device.CreateEffectEXT(effect), -1);
     EXPECT_FALSE(device.UpdateEffectEXT(0, effect));
@@ -518,7 +585,7 @@ TEST_F(FakeHapticTest, GainAutocenterPauseResumeRoundTripThroughBackend)
 
 TEST_F(FakeHapticTest, GainAutocenterPauseResumeAreSafeFalseWhenClosed)
 {
-    HapticDevice device(nullptr);
+    HapticDevice device;
     EXPECT_FALSE(device.SetGainEXT(50));
     EXPECT_FALSE(device.SetAutocenterEXT(50));
     EXPECT_FALSE(device.PauseEXT());
@@ -568,6 +635,21 @@ TEST_F(FakeHapticTest, OpenFromMouseEXTAndIsMouseHapticEXTForwardToBackend)
     HapticDevice device = Haptics::OpenFromMouseEXT();
     EXPECT_TRUE(device.IsOpenEXT());
     EXPECT_EQ(device.GetNameEXT(), "Test Wheel");
+}
+
+TEST_F(FakeHapticTest, MouseBackedRumbleStaysOnTheRichEffectSeam)
+{
+    fake.mouseConfig = WheelConfig();
+    HapticDevice device = Haptics::OpenFromMouseEXT();
+    ASSERT_TRUE(device.IsOpenEXT());
+
+    EXPECT_TRUE(device.InitRumbleEXT());
+    EXPECT_TRUE(device.PlayRumbleEXT(0.25f, 40));
+    EXPECT_TRUE(device.StopRumbleEXT());
+    EXPECT_EQ(fake.initRumbleCalls, 1);
+    EXPECT_EQ(fake.playRumbleCalls, 1);
+    EXPECT_EQ(fake.stopRumbleCalls, 1);
+    EXPECT_EQ(platform.haptics.playCalls, 0);
 }
 
 // --- descriptor equality (no backend needed) ---

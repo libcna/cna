@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
@@ -14,7 +15,7 @@
 #include "CNA/Internal/Input/SdlHapticBackend.hpp"
 
 // Test-only fake implementation of the internal SDL haptic seam. Lets haptic runtime behavior
-// (enumeration, capabilities, effect building/lifecycle, rumble) be exercised with NO real
+// (capabilities, effect building/lifecycle, and non-standalone rumble) be exercised with NO real
 // force-feedback hardware. The opaque SDL_Haptic* handle is just a reinterpret-cast FakeDevice
 // pointer that is only ever handed back to this fake. NOT compiled into production.
 namespace CNA::Internal::Input::test_support
@@ -38,7 +39,16 @@ namespace CNA::Internal::Input::test_support
     {
     public:
         // --- test setup / introspection ---
-        void Register(SDL_HapticID id, FakeHapticConfig cfg) { registered_[id] = std::move(cfg); }
+        void Register(SDL_HapticID id, FakeHapticConfig cfg)
+        {
+            if (onRegister)
+            {
+                onRegister(id, cfg);
+            }
+            registered_[id] = std::move(cfg);
+        }
+
+        std::function<void(SDL_HapticID, const FakeHapticConfig&)> onRegister;
 
         FakeHapticConfig joystickConfig;      // used by OpenHapticFromJoystick
         bool joystickIsHaptic = false;        // used by IsJoystickHaptic
@@ -70,20 +80,6 @@ namespace CNA::Internal::Input::test_support
         std::vector<Uint16> lastUpdatedCustomData;
 
         // --- ISdlHapticBackend ---
-        std::vector<SDL_HapticID> GetHaptics() override
-        {
-            std::vector<SDL_HapticID> ids;
-            for (const auto& [id, cfg] : registered_)
-                ids.push_back(id);
-            return ids;
-        }
-
-        std::string GetHapticNameForID(SDL_HapticID instanceId) override
-        {
-            const auto it = registered_.find(instanceId);
-            return it != registered_.end() ? it->second.name : "";
-        }
-
         SDL_Haptic* OpenHaptic(SDL_HapticID instanceId) override
         {
             const auto it = registered_.find(instanceId);

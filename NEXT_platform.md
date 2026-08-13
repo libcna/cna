@@ -292,12 +292,12 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **Phase 5 input continuation.** PLAT-83 is complete: raw axes/buttons/hats/balls cross the new
-   `IPlatformJoystick`, the duplicate backend/store are gone, and haptic correlation carries only
-   a CNA `DeviceId` with SDL's required handle lifetime retained inside the native backend. Continue
-   with **PLAT-84**, re-pointing the standalone rumble subset of `Haptics`/`HapticDevice` at the
-   existing platform service without weakening the richer effect-model seam. The raw SDL event
-   adapter remains test-only compatibility until PLAT-90 retires keyboard/touch native doubles.
+2. **Phase 5 input continuation.** PLAT-84 is complete: stable-id haptic enumeration and the
+   standalone simple-rumble lifecycle cross `IPlatformHaptics`; the public header no longer names
+   `SDL_Haptic`, while SDL3's richer arbitrary-effect seam remains intact and narrower. Continue
+   with **PLAT-85**, deleting `SystemSensorBackend` as `CNA::Input::Sensors` moves to the existing
+   `IPlatformSensors` service. Preserve PLAT-29 subsystem ownership. The raw SDL event adapter
+   remains test-only compatibility until PLAT-90 retires keyboard/touch native doubles.
 
 ---
 

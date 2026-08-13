@@ -12,23 +12,6 @@ namespace CNA::Internal::Input
         class RealSdlHapticBackend final : public ISdlHapticBackend
         {
         public:
-            std::vector<SDL_HapticID> GetHaptics() override
-            {
-                int count = 0;
-                SDL_HapticID* ids = SDL_GetHaptics(&count);
-                std::vector<SDL_HapticID> result;
-                if (ids != nullptr)
-                {
-                    result.assign(ids, ids + count);
-                    SDL_free(ids);
-                }
-                return result;
-            }
-            std::string GetHapticNameForID(SDL_HapticID instanceId) override
-            {
-                const char* s = SDL_GetHapticNameForID(instanceId);
-                return s ? s : "";
-            }
             SDL_Haptic* OpenHaptic(SDL_HapticID instanceId) override
             {
                 return SDL_OpenHaptic(instanceId);

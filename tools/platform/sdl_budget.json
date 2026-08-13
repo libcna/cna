@@ -1,10 +1,10 @@
 {
   "_comment": "PLAT-8 ratchet budget. Maximum SDL-referencing production files (and total references) allowed outside the PLAT-3 allowlist. This may go DOWN and never UP: each migration task lowers it. Regenerate with 'python3 tools/platform/sdl_ratchet.py --update'. See plan_platform.md.",
-  "max_files": 187,
-  "max_references": 2727,
+  "max_files": 184,
+  "max_references": 2714,
   "by_module_at_last_update": {
-    "input": 24,
     "devices-ext": 22,
+    "input": 21,
     "devices": 17,
     "audio": 11,
     "graphics": 10,
