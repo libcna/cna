@@ -9,9 +9,7 @@
 |---|---:|---|
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 2 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
-| `cpu-presentation` | 1 | CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service. |
-| `migratable` | 5 | Uses platform services only (native handle, GL/Vulkan, window, events). |
-| `sdl-free` | 32 | No SDL references at all. |
+| `sdl-free` | 38 | No SDL references at all. |
 
 ## Per-family detail
 
@@ -21,12 +19,9 @@
 | `sdl-renderer` | SDL_RENDERER | `sdl-native` | 308 / 204 | `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderLogicalPresentationRect`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderReadPixels`, `SDL_RenderTexture`, `SDL_SetRenderClipRect`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderTarget`, `SDL_SetRenderVSync`, `SDL_SetTextureBlendMode`, `SDL_SetTextureScaleMode`, `SDL_UpdateTexture` |
 | `freedirect` | FREEDIRECT | `sdl-upstream` | 19 / 3 | `window` | — |
 | `fna3d` | FNA3D | `sdl-upstream` | 10 / 8 | `window` | — |
-| `blend2d` | BLEND2D | `cpu-presentation` | 50 / 41 | `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderTexture`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderVSync`, `SDL_UpdateTexture` |
-| `webgpu` | WEBGPU | `migratable` | 39 / 38 | `native-handle`, `gl-vulkan-interop`, `window`, `display` | — |
-| `bgfx` | BGFX | `migratable` | 36 / 33 | `native-handle`, `window`, `display` | — |
-| `svg-dom` | SVG_DOM | `migratable` | 27 / 24 | `native-handle`, `window`, `filesystem` | — |
-| `canvas` | CANVAS | `migratable` | 14 / 9 | `window` | — |
-| `html-dom` | HTML_DOM | `migratable` | 10 / 7 | `window` | — |
+| `bgfx` | BGFX | `sdl-free` | 0 / 0 | — | — |
+| `blend2d` | BLEND2D | `sdl-free` | 0 / 0 | — | — |
+| `canvas` | CANVAS | `sdl-free` | 0 / 0 | — | — |
 | `diligent` | DILIGENT | `sdl-free` | 0 / 0 | — | — |
 | `direct2d` | DIRECT2D | `sdl-free` | 0 / 0 | — | — |
 | `directx1` | DIRECTX1 | `sdl-free` | 0 / 0 | — | — |
@@ -44,6 +39,7 @@
 | `gdi` | GDI | `sdl-free` | 0 / 0 | — | — |
 | `glide` | GLIDE | `sdl-free` | 0 / 0 | — | — |
 | `headless` | HEADLESS | `sdl-free` | 0 / 0 | — | — |
+| `html-dom` | HTML_DOM | `sdl-free` | 0 / 0 | — | — |
 | `llgl` | LLGL | `sdl-free` | 0 / 0 | — | — |
 | `magnum` | MAGNUM | `sdl-free` | 0 / 0 | — | — |
 | `metal` | METAL | `sdl-free` | 0 / 0 | — | — |
@@ -57,7 +53,9 @@
 | `software` | SOFTWARE | `sdl-free` | 0 / 0 | — | — |
 | `sokol` | SOKOL | `sdl-free` | 0 / 0 | — | — |
 | `stub` | STUB | `sdl-free` | 0 / 0 | — | — |
+| `svg-dom` | SVG_DOM | `sdl-free` | 0 / 0 | — | — |
 | `vulkan` | VULKAN | `sdl-free` | 0 / 0 | — | — |
+| `webgpu` | WEBGPU | `sdl-free` | 0 / 0 | — | — |
 | `wicked` | WICKED | `sdl-free` | 0 / 0 | — | — |
 
 ## Findings
@@ -67,14 +65,9 @@
    internal `SDL_Renderer` CNA never sees — so no amount of migrating CNA code removes
    their dependency. That is a different kind of exception and is recorded as one.
 
-2. **1 CPU rasterisers present through `SDL_Renderer`:** `blend2d`.
-   They are not SDL renderers by identity — they rasterise on the CPU and then use
-   `SDL_CreateTexture`/`SDL_UpdateTexture`/`SDL_RenderTexture`/`SDL_RenderPresent` purely
-   to get finished pixels onto the window, with letterbox scaling and vsync. The platform
-   contract as originally drafted had nowhere for this to go, which would have left them
-   permanently allowlisted for want of an interface. **Present a CPU pixel buffer to a
-   window** is a genuine platform capability (SDL2 has it, SDL 1.2 has it as a software
-   surface, Win32 has `StretchDIBits`), so it belongs in the contract.
+2. **No CPU rasteriser still presents through `SDL_Renderer`.** CPU renderers hand one
+   finished frame to `IPlatformSurfacePresenter`; native upload, scaling and vsync now
+   remain behind the selected platform implementation.
 
 3. **PLAT-59 closed the interface-only renderer coupling.** `HEADLESS`, `PORTABLEGL`,
    `SOFTWARE` and `STUB` are now SDL-free. `IGraphicsRenderer` exposes neither native

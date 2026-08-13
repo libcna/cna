@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::SvgDom
      * `viewBox` crops the source rectangle) containing one `<image>` per visible sprite, placed
      * with a collapsed affine `transform="matrix(...)"`, tinted with a cached `feColorMatrix`
      * filter -- inside an `<svg id="cna-svg-dom-root">` this renderer creates over the `<canvas>`
-     * SDL3's Emscripten video driver already owns. This is a genuinely different draw route from
+     * the browser platform owns. This is a genuinely different draw route from
      * both `CNA::Internal::Renderers::Canvas` (rasterizes into a `<canvas>` 2D context) and
      * `CNA::Internal::Renderers::HtmlDom` (CSS-transformed `<div>`s with `background-image`): every
      * sprite is real vector content composited by the browser's own SVG renderer, and per-sprite
@@ -38,14 +38,10 @@ namespace CNA::Internal::Renderers::SvgDom
         /**
          * @brief Creates the SVG surface over the given window's canvas element.
          *
-         * @param window        The SDL window whose canvas element this renderer draws over.
-         * @param virtualWidth  Logical (game-coordinate) width; 0 means "unset".
-         * @param virtualHeight Logical (game-coordinate) height; 0 means "unset".
-         * @param mode          Presentation/scaling policy.
-         * @throws std::runtime_error if @p window is null.
+         * @param args Platform surface and presentation configuration.
+         * @throws std::runtime_error if the surface has no stable window id.
          */
-        SvgDomRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                      CnaPresentationMode mode);
+        explicit SvgDomRenderer(const GraphicsRendererCreateArgs& args);
 
         /** @brief Removes the SVG surface and unregisters the renderer from its window. */
         ~SvgDomRenderer() override;
@@ -80,6 +76,7 @@ namespace CNA::Internal::Renderers::SvgDom
          * @throws std::out_of_range if @p mode is not a valid CnaPresentationMode ordinal.
          */
         void SetPresentationMode(int mode) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
 
         /**
          * @brief Converts physical window coordinates to logical game coordinates.
@@ -283,7 +280,7 @@ namespace CNA::Internal::Renderers::SvgDom
         void getLogicalSize(int& width, int& height) const;
         void ApplySurfaceGeometryEXT();
 
-        SDL_Window* window_ = nullptr;
+        RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;

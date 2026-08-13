@@ -3,8 +3,8 @@
 // plan_html_dom.md HTMLDOM-70: GTest coverage for everything on the HTML_DOM renderer that does not
 // need a real DOM -- the blend-state mapping, the addressing-mode validation, the sprite geometry
 // encoder, and the 3D "not yet implemented" surface. Deliberately structured so it runs under this
-// repo's `node CnaTests.js` runner, which has no document, no CSS and no canvas: nothing here
-// creates a texture or touches window_.
+// repo's `node CnaTests.js` runner or the native host-contract target: nothing here requires a
+// document, CSS or a browser canvas.
 //
 // The geometry assertions matter most. BuildDrawCommandEXT is where pivot placement, flip mirroring
 // and source-rectangle clamping are decided, and getting any of them wrong is invisible in a
@@ -38,10 +38,17 @@ using Microsoft::Xna::Framework::Graphics::SpriteEffects;
 
 namespace
 {
-    // Non-null but never dereferenced: the constructor only null-checks its window pointer and
-    // registers it in a pointer-keyed map, and none of the throwing methods exercised below reads
-    // window_ before throwing.
-    SDL_Window* FakeWindow() { return reinterpret_cast<SDL_Window*>(0x1); }
+    GraphicsRendererCreateArgs TestArgs()
+    {
+        GraphicsRendererCreateArgs args;
+        args.surface.windowId = 1;
+        args.surface.nativeHandle.system = CNA::Platform::NativeWindowSystem::Web;
+        args.surface.drawableSize = {800, 480};
+        args.virtualWidth = 800;
+        args.virtualHeight = 480;
+        args.presentationMode = CnaPresentationMode::FixedHeightDynamicWidth;
+        return args;
+    }
 
     struct DummyVertexBuffer final : IVertexBufferRenderer
     {
@@ -490,8 +497,7 @@ TEST(HtmlDomSpriteBatch, SetImmediateModeIsAcceptedAndDoesNotThrow)
 class HtmlDom3DSurfaceTest : public ::testing::Test
 {
 protected:
-    HtmlDomRenderer renderer{FakeWindow(), 800, 480,
-                                   CnaPresentationMode::FixedHeightDynamicWidth};
+    HtmlDomRenderer renderer{TestArgs()};
 };
 
 TEST_F(HtmlDom3DSurfaceTest, DepthAndStencilClearsThrow)

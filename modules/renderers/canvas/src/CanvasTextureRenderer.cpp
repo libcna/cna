@@ -113,7 +113,7 @@ namespace CNA::Internal::Renderers::Canvas
             throw std::runtime_error(
                 "Canvas (HTML Canvas 2D) does not support mip-level texture uploads (level " +
                 std::to_string(level) + "): Canvas2D's drawImage/putImageData API has no native mip "
-                "chain or per-level LOD sampling, same conclusion SDL_RENDERER reached (Task 681). "
+                "chain or per-level LOD sampling, same conclusion the native renderer reached (Task 681). "
                 "Use Texture2D::SetData(level=0, ...) only.");
         (void)levelW; (void)levelH;
         UpdatePixels(rgba, width_ * 4);

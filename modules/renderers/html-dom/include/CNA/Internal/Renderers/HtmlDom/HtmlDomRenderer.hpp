@@ -15,8 +15,8 @@ namespace CNA::Internal::Renderers::HtmlDom
      *
      * Renders `SpriteBatch` output as real DOM elements styled with CSS -- one pooled `<div>` per
      * visible sprite, placed with a CSS `transform`, textured with `background-image`, faded with
-     * `opacity` -- inside a `<div id="cna-dom-root">` this renderer creates over the `<canvas>`
-     * SDL3's Emscripten video driver already owns. Nothing in the sprite path rasterizes into a
+     * `opacity` -- inside a `<div id="cna-dom-root">` this renderer creates over the platform's
+     * `<canvas>`. Nothing in the sprite path rasterizes into a
      * canvas: the browser's compositor does the drawing, so a sprite whose properties did not
      * change costs no CSS write at all (HTMLDOM-110 -- measured, not merely asserted: the JS flush
      * call itself still happens every frame, since a real XNA game keeps resubmitting static
@@ -33,14 +33,10 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief Creates the DOM surface over the given window's canvas element.
          *
-         * @param window        The SDL window whose canvas element this renderer draws over.
-         * @param virtualWidth  Logical (game-coordinate) width; 0 means "unset".
-         * @param virtualHeight Logical (game-coordinate) height; 0 means "unset".
-         * @param mode          Presentation/scaling policy.
-         * @throws std::runtime_error if @p window is null.
+         * @param args Platform surface and presentation configuration.
+         * @throws std::runtime_error if the surface has no stable window id.
          */
-        HtmlDomRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                               CnaPresentationMode mode);
+        explicit HtmlDomRenderer(const GraphicsRendererCreateArgs& args);
 
         /** @brief Removes the DOM surface and unregisters the renderer from its window. */
         ~HtmlDomRenderer() override;
@@ -95,6 +91,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * @throws std::out_of_range if @p mode is not a valid CnaPresentationMode ordinal.
          */
         void SetPresentationMode(int mode) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
 
         /**
          * @brief Converts physical window coordinates to logical game coordinates.
@@ -104,7 +101,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * height-derived uniform scale that only happened to be correct for
          * `FixedHeightDynamicWidth`. Under `Letterbox`, a @p windowX/@p windowY that falls in the
          * letterbox bars (outside the scaled content rectangle) correctly returns false, matching
-         * `SdlGpuRenderer::TransformWindowToLogical`'s own contract.
+         * the shared renderer coordinate-conversion contract.
          *
          * @param windowX Physical X.
          * @param windowY Physical Y.
@@ -144,7 +141,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * plan_html_dom.md HTMLDOM-80 / design decision 13: implemented as a real CSS
          * `clip-path: inset()`. HTMLDOM-102: only actually applied when
          * `RasterizerState.ScissorTestEnable` is true (see `ApplyRasterizerState`) -- an earlier
-         * version applied it unconditionally, matching `SDL_RENDERER`'s own omission (which never
+         * version applied it unconditionally, matching the native 2D renderer's omission (which never
          * overrides `ApplyRasterizerState` at all) but not real XNA fidelity.
          *
          * This call itself only records the rectangle; it does not touch the DOM. The recorded
@@ -176,7 +173,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * @brief Restricts rendering to a sub-rectangle of the current render target.
          *
          * plan_html_dom.md HTMLDOM-98. Confirmed non-gap against every other 2D-only sibling
-         * (`SDL_RENDERER`/`CANVAS`/`DIRECTX3` all leave this as the inherited no-op too), but a real,
+         * (the native 2D renderer, `CANVAS` and `DIRECTX3` all leave this inherited no-op), but a real,
          * closeable one against `EASYGL`, which supports a genuine GL sub-region `Viewport`
          * (split-screen/sub-panel rendering) -- nothing about DOM/CSS compositing rules that out.
          *
@@ -414,7 +411,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * the logical size itself.
          *
          * plan_html_dom.md HTMLDOM-108: the single computation every `CnaPresentationMode` value's
-         * geometry derives from, ported from `SdlGpuRenderer::ComputeLogicalViewport` (the
+         * geometry derives from, ported from the GPU reference viewport computation (the
          * "complete renderer" this task's own row names) rather than re-derived from scratch, so this
          * renderer's Letterbox/Overscan/Stretch/NativeBackBuffer math matches an already-tested
          * reference exactly instead of being its own independent (and, before this task, incomplete)
@@ -447,7 +444,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         /// viewport rectangle.
         void getLogicalSize(int& width, int& height) const;
 
-        SDL_Window* window_ = nullptr;
+        RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;

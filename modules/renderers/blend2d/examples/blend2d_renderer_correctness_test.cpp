@@ -4,14 +4,14 @@
 // DIRECTLY (no Game/GraphicsDeviceManager/SpriteBatch front-end) so every internal EXT hook
 // (ApplyBlendState, SetScissorRect/ApplyRasterizerState, SetSamplerFilter/SetSamplerAddressMode,
 // SetTransformMatrix, DebugSetPresentationOutputSizeEXT) can be driven precisely and
-// deterministically. Needs a real SDL_Window (Blend2DRenderer's constructor creates an
-// SDL_Renderer against it) but not a real display -- SDL_VIDEODRIVER=dummy provides both without
-// any X11/Wayland dependency (see modules/renderers/freedirect/examples/CMakeLists.txt for the
-// established precedent of this exact pattern).
+// deterministically. The test provides an SDL-backed IPlatformSurfacePresenter, but needs no real
+// display -- SDL_VIDEODRIVER=dummy supplies the window/presentation test edge without any
+// X11/Wayland dependency. Production Blend2D code never names SDL.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "CNA/Internal/Renderers/Blend2D/Blend2DRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -73,10 +73,31 @@ namespace
         return window;
     }
 
-    std::unique_ptr<Blend2DRenderer> MakeRenderer(SDL_Window* window, int w, int h,
-                                                  CnaPresentationMode mode = CnaPresentationMode::Letterbox)
+    struct TestRenderer
     {
-        return std::make_unique<Blend2DRenderer>(window, w, h, mode, 0);
+        TestRenderer(SDL_Window* window, int w, int h, CnaPresentationMode mode)
+            : presenter(std::make_unique<CNA::Examples::SdlTestSurfacePresenter>(window))
+            , renderer(std::make_unique<Blend2DRenderer>(CNA::Examples::SdlTestRendererArgs(
+                  window, nullptr, presenter.get(), w, h, mode, 0)))
+        {
+        }
+
+        Blend2DRenderer* operator->() const noexcept { return renderer.get(); }
+        Blend2DRenderer& operator*() const noexcept { return *renderer; }
+        void Reset()
+        {
+            renderer.reset();
+            presenter.reset();
+        }
+
+        std::unique_ptr<CNA::Examples::SdlTestSurfacePresenter> presenter;
+        std::unique_ptr<Blend2DRenderer> renderer;
+    };
+
+    TestRenderer MakeRenderer(SDL_Window* window, int w, int h,
+                              CnaPresentationMode mode = CnaPresentationMode::Letterbox)
+    {
+        return TestRenderer(window, w, h, mode);
     }
 
     ImageData SolidImage(int w, int h, Color c)
@@ -218,6 +239,7 @@ namespace
         }
         Check(tightOk, "Tightly-packed UpdatePixels (stride == width*4) still round-trips exactly");
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -324,6 +346,7 @@ namespace
         CheckPixel(*renderer, 18, 0, red, "Negative destW XOR FlipHorizontally cancels out (TL still red)");
         CheckPixel(*renderer, 19, 0, green, "Negative destW XOR FlipHorizontally cancels out (TR still green)");
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -382,6 +405,7 @@ namespace
         sb->End();
         CheckPixel(*renderer, 0, 0, Color(255, 0, 0, 255), "Clamp-extended one-texel-negative source reproduces the edge texel (red)");
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -421,6 +445,7 @@ namespace
         CheckThrows("SetSamplerAddressMode(-1, 1)", [&] { sb->SetSamplerAddressMode(-1, 1); });
         CheckThrows("SetSamplerAddressMode(1, 3)", [&] { sb->SetSamplerAddressMode(1, 3); });
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -502,6 +527,7 @@ namespace
                             " (NEAREST family) selects one pure stored texel, got " + ColorStr(px));
         }
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -526,6 +552,7 @@ namespace
         // Reset for subsequent tests.
         sb->SetTransformMatrix(Matrix::getIdentityProperty());
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -581,6 +608,7 @@ namespace
         sb->SetTransformMatrix(Matrix::getIdentityProperty());
         renderer->ApplyRasterizerState(0, 0, false);
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -624,6 +652,7 @@ namespace
         CheckPixel(*renderer, 7, 7, Color(255, 128, 0, 255), "Viewport clips: inside the viewport bounds is drawn");
         CheckPixel(*renderer, 13, 13, Color(0, 0, 0, 255), "Viewport clips: a draw extending past the viewport rect is clipped to it");
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -758,6 +787,7 @@ namespace
         });
 
         ApplyStockBlend(*renderer, kBlendOne, kBlendInverseSourceAlpha);
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -861,6 +891,7 @@ namespace
         }
 
         ApplyStockBlend(*renderer, kBlendOne, kBlendInverseSourceAlpha);
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -944,6 +975,7 @@ namespace
         CheckPrgb32Invariant(*renderer, "Additive edge coverage draw");
 
         ApplyStockBlend(*renderer, kBlendOne, kBlendInverseSourceAlpha);
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -980,6 +1012,7 @@ namespace
         CheckPixel(*renderer, 0, 0, Color(128, 0, 0, 255), "ColorWriteChannels Alpha-only: alpha overwritten to opaque, premultiplied colour bytes preserved", 2);
 
         ApplyStockBlend(*renderer, kBlendOne, kBlendInverseSourceAlpha);
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -1054,6 +1087,7 @@ namespace
         }
 
         ApplyStockBlend(*renderer, kBlendOne, kBlendInverseSourceAlpha);
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -1119,6 +1153,7 @@ namespace
         CheckNoThrow("Clear() after the bound render target was destroyed (must have auto-unbound)",
                     [&] { renderer->Clear(0, 0, 0, 1); });
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -1148,6 +1183,7 @@ namespace
         Check(threwInvalidArgument, "Drawing a foreign (non-Blend2D) texture throws std::invalid_argument, not std::bad_cast");
         sb->End();
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -1187,6 +1223,7 @@ namespace
             sb->End();
         });
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -1201,6 +1238,7 @@ namespace
 
         CheckNoThrow("SetCustomEffect(nullptr) is accepted", [&] { sb->SetCustomEffect(nullptr); });
 
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 
@@ -1256,6 +1294,8 @@ namespace
              std::to_string(w));
 
         renderer->DebugClearPresentationOutputSizeEXT();
+        rt.reset();
+        renderer.Reset();
         SDL_DestroyWindow(window);
     }
 } // namespace

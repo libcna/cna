@@ -274,17 +274,24 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
         "   internal `SDL_Renderer` CNA never sees — so no amount of migrating CNA code removes\n"
         "   their dependency. That is a different kind of exception and is recorded as one.\n\n"
     )
-    out.write(
-        f"2. **{len(presenters)} CPU rasterisers present through `SDL_Renderer`:** "
-        + ", ".join(f"`{f}`" for f in presenters)
-        + ".\n   They are not SDL renderers by identity — they rasterise on the CPU and then use\n"
-        "   `SDL_CreateTexture`/`SDL_UpdateTexture`/`SDL_RenderTexture`/`SDL_RenderPresent` purely\n"
-        "   to get finished pixels onto the window, with letterbox scaling and vsync. The platform\n"
-        "   contract as originally drafted had nowhere for this to go, which would have left them\n"
-        "   permanently allowlisted for want of an interface. **Present a CPU pixel buffer to a\n"
-        "   window** is a genuine platform capability (SDL2 has it, SDL 1.2 has it as a software\n"
-        "   surface, Win32 has `StretchDIBits`), so it belongs in the contract.\n\n"
-    )
+    if presenters:
+        out.write(
+            f"2. **{len(presenters)} CPU rasterisers present through `SDL_Renderer`:** "
+            + ", ".join(f"`{f}`" for f in presenters)
+            + ".\n   They are not SDL renderers by identity — they rasterise on the CPU and then use\n"
+            "   `SDL_CreateTexture`/`SDL_UpdateTexture`/`SDL_RenderTexture`/`SDL_RenderPresent` purely\n"
+            "   to get finished pixels onto the window, with letterbox scaling and vsync. The platform\n"
+            "   contract as originally drafted had nowhere for this to go, which would have left them\n"
+            "   permanently allowlisted for want of an interface. **Present a CPU pixel buffer to a\n"
+            "   window** is a genuine platform capability (SDL2 has it, SDL 1.2 has it as a software\n"
+            "   surface, Win32 has `StretchDIBits`), so it belongs in the contract.\n\n"
+        )
+    else:
+        out.write(
+            "2. **No CPU rasteriser still presents through `SDL_Renderer`.** CPU renderers hand one\n"
+            "   finished frame to `IPlatformSurfacePresenter`; native upload, scaling and vsync now\n"
+            "   remain behind the selected platform implementation.\n\n"
+        )
     if leaks:
         out.write(
             f"3. **{len(leaks)} renderers are coupled only by the remaining common boundary:** "

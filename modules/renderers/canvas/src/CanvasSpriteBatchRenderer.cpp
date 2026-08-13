@@ -15,7 +15,7 @@
 // needed). Geometry: translate to (destX,destY), rotate, scale by (destW/sw, destH/sh), then draw
 // the source rect at local offset (-originX,-originY) -- this places `origin` (in source-pixel
 // space) exactly at (destX,destY) invariant under rotation, matching FNA's real GenerateVertexInfo
-// formula (SDL_RENDERER's Task 671 fix derives/verifies the identical placement, just against a
+// formula (the native 2D renderer's Task 671 fix verifies the identical placement, just against a
 // different native rotation API). Flip mirrors the drawn content about the sprite's OWN local
 // center (not the pivot, and not the whole coordinate system) so the destination quad's screen
 // footprint is unaffected by flipping -- matching real XNA/FNA semantics where SpriteEffects only
@@ -208,8 +208,8 @@ namespace CNA::Internal::Renderers::Canvas
     {
         // Sibling concrete classes (not a subclass relationship -- IRenderTargetRenderer :
         // ITextureRenderer and CanvasTextureRenderer : ITextureRenderer are two separate branches),
-        // same underlying problem SDL_RENDERER's Task 705 comment documents for its own two sibling
-        // texture-renderer classes. SDL_Renderer now unifies them through an SDL-only sibling
+        // same underlying problem the native renderer's Task 705 comment documents for its own two
+        // sibling texture-renderer classes. That backend unifies them through a private sibling
         // interface; Canvas2D's "native handle" is a JS-side integer id, so a contained
         // dynamic_cast against the two known concrete Canvas types is the safe equivalent here.
         int CanvasIdOf(const ITextureRenderer& texture)
@@ -319,7 +319,7 @@ namespace CNA::Internal::Renderers::Canvas
 
     void CanvasSpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
-        // Same magnification-dominant reasoning as SdlSpriteBatchRenderer::SetSamplerFilter (Task
+        // Same magnification-dominant reasoning as the native sprite renderer's filter mapping (Task
         // 701): SpriteBatch draws are near-universally magnification-dominant, so the "expand"
         // component of TextureFilter is what visibly matters against Canvas2D's single binary
         // smoothing toggle. Linear=0, Anisotropic=2, LinearMipPoint=3, MinPointMagLinearMipLinear=7,

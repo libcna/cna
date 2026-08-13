@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #if __has_include(<webgpu/webgpu.h>)
@@ -781,8 +782,7 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         };
 
-        WebGPURenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                              CnaPresentationMode presentationMode, int swapInterval);
+        explicit WebGPURenderer(const GraphicsRendererCreateArgs& args);
         ~WebGPURenderer() override;
 
         WebGPURenderer(const WebGPURenderer&) = delete;
@@ -877,6 +877,7 @@ namespace CNA::Internal::Renderers::WebGPU
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// WEBGPU-58: reconfigures this renderer's single GLOBAL MSAA sample count in place --
         /// mirroring VulkanRenderer::ApplyMultiSampleCount()'s own "one value, invalidate
         /// every pipeline cache, rebuild lazily" design (see sampleCount_'s own comment for why
@@ -1522,8 +1523,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // leaving the other 5 faces' mip chains untouched -- called once per face.
         void GenerateMipsCubeFace(WGPUTexture texture, int face, int size, int mipLevels);
 
-        SDL_Window* window_ = nullptr;
-        void* metalView_ = nullptr;
+        PlatformRendererSurfaceState surfaceState_;
+        void* metalSurfaceOwner_ = nullptr;
         WGPUInstance instance_ = nullptr;
         WGPUSurface surface_ = nullptr;
         WGPUAdapter adapter_ = nullptr;
@@ -2217,7 +2218,7 @@ namespace CNA::Internal::Renderers::WebGPU
             ///@{ REMED-GFX-172: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
             /// by value at the public draw call. FNA's EnvironmentMapEffect.fx declares
             /// `DECLARE_TEXTURE(Texture, 0)` and `DECLARE_CUBEMAP(EnvironmentMap, 1)`, so the cube
-            /// has its own public sampler slot; the same field names SDL_GPU's own
+            /// has its own public sampler slot; the same field names the native GPU backend's
             /// EnvMapDrawCommand uses since REMED-GFX-173.
             int envMapFilter = 0;
             int envMapAddressU = 1;

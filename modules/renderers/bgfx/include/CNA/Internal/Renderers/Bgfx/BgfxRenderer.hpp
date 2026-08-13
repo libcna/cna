@@ -1,8 +1,8 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include <bgfx/bgfx.h>
-#include <SDL3/SDL.h>
 #include <array>
 #include <cstdarg>
 #include <cstddef>
@@ -68,7 +68,7 @@ namespace CNA::Internal::Renderers::Bgfx
         // against that view do not follow the target they were aimed at: they resolve against the
         // backbuffer and the target is never written. That is why a RenderTarget2D constructed and
         // rendered into in the same public frame could lose that frame -- this renderer calls
-        // bgfx::reset() the moment it notices the SDL window's size differs from the size bgfx was
+        // bgfx::reset() the moment it notices the platform surface size differs from the size bgfx was
         // initialised with, which for a brand-new target's first bind cycle happens between the
         // bind and the draw. It is not deferred resource creation and not a bgfx frame latency:
         // the texture and framebuffer are both complete before the frame's draws are submitted
@@ -643,7 +643,7 @@ namespace CNA::Internal::Renderers::Bgfx
     class BgfxRenderer : public IGraphicsRenderer
     {
     public:
-        SDL_Window* window = nullptr;
+        PlatformRendererSurfaceState surface_;
         bgfx::ProgramHandle spriteProgram = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle textureSampler = BGFX_INVALID_HANDLE;
         bgfx::ViewId spriteViewId = 0;
@@ -930,7 +930,7 @@ namespace CNA::Internal::Renderers::Bgfx
         /// (metallic-roughness, emissive, occlusion) reuse defaultWhiteTexture3D_ instead.
         bgfx::TextureHandle defaultFlatNormalTexture3D_  = BGFX_INVALID_HANDLE;
 
-        explicit BgfxRenderer(SDL_Window* window, int swapInterval = 1);
+        explicit BgfxRenderer(const GraphicsRendererCreateArgs& args);
         ~BgfxRenderer() override;
         // OcclusionQuery reflects the real, live bgfx::getCaps() device query (BGFX_CAPS_OCCLUSION_QUERY).
         // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
@@ -947,6 +947,7 @@ namespace CNA::Internal::Renderers::Bgfx
         {
         } // no-op: Bgfx has no logical presentation
         void SetSwapInterval(int interval) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

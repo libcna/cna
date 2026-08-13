@@ -97,29 +97,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
         cna_test_htmldom_memory)
 endif()
 
-# Post-audit host-side contract coverage.  This deliberately compiles the HTML DOM implementation
-# itself into a native GTest executable, where every EM_JS body is excluded by __EMSCRIPTEN__.
-# It is not browser/runtime coverage; it exists so configurations without an Emscripten SDK can
-# still exercise the CNA-owned validation, row-packing, draw-command and wrapper-lifetime code.
-option(CNA_BUILD_HTML_DOM_HOST_TESTS
-    "Build native host-side HTML DOM renderer contract tests" OFF)
-
-if(CNA_BUILD_TESTS AND CNA_BUILD_HTML_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
-    add_executable(cna_test_htmldom_host
-        ${CMAKE_SOURCE_DIR}/modules/renderers/html-dom/tests/CNA/Internal/Renderers/HtmlDom/HtmlDomRendererTests.cpp
-        ${CMAKE_SOURCE_DIR}/modules/renderers/html-dom/src/HtmlDomRenderer.cpp
-        ${CMAKE_SOURCE_DIR}/modules/renderers/html-dom/src/HtmlDomRenderTargetRenderer.cpp
-        ${CMAKE_SOURCE_DIR}/modules/renderers/html-dom/src/HtmlDomSpriteBatchRenderer.cpp
-        ${CMAKE_SOURCE_DIR}/modules/renderers/html-dom/src/HtmlDomState.cpp
-        ${CMAKE_SOURCE_DIR}/modules/renderers/html-dom/src/HtmlDomTextureRenderer.cpp)
-    target_compile_definitions(cna_test_htmldom_host PRIVATE CNA_HTML_DOM_HOST_TESTS=1)
-    target_link_libraries(cna_test_htmldom_host PRIVATE CNA SHARP_RUNTIME gtest_main SDL3::SDL3)
-    add_test(NAME HtmlDomHostContracts COMMAND cna_test_htmldom_host)
-    # Historical root-scope registration CWD, preserved (see cna_register_renderer_test).
-    set_tests_properties(HtmlDomHostContracts PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
-    set_tests_properties(HtmlDomHostContracts PROPERTIES LABELS "HTML_DOM;host-only")
-endif()
-
 # Module-local tests get the same headless-safe skip convention the root one-shot
 # gives root-registered tests (see cmake/TestHelpers.cmake).
 cna_apply_skip_convention()
