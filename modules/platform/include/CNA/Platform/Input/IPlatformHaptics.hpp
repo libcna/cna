@@ -42,7 +42,9 @@ namespace CNA::Platform {
     /** @brief Direction of a force-feedback effect. */
     struct HapticDirection
     {
+        /** @brief Coordinate system used to interpret `values`. */
         HapticDirectionType type = HapticDirectionType::Polar;
+        /** @brief Direction components; interpretation and used dimensions depend on `type`. */
         std::array<std::int32_t, 3> values{};
     };
 
@@ -50,50 +52,87 @@ namespace CNA::Platform {
      * @brief Platform-neutral force-feedback descriptor.
      *
      * Only the fields belonging to `type` are consumed. Magnitudes use the portable signed or
-     * unsigned 16-bit ranges; durations are milliseconds. A platform implementation translates
-     * this value into its native representation at the final boundary.
+     * unsigned 16-bit ranges; durations are milliseconds. Constant uses `level`; periodic effects
+     * use `period`, `magnitude`, `offset` and `phase`; Ramp uses `rampStart`/`rampEnd`; condition
+     * effects use the six per-axis arrays; LeftRight uses its two motor magnitudes; Custom uses its
+     * channel, period and sample fields. Constant, periodic, Ramp and Custom may use the envelope.
+     * A platform implementation translates this value into its native representation only at the
+     * final boundary.
      */
     struct HapticEffect
     {
+        /** @brief Effect family selecting which remaining fields are meaningful. */
         HapticEffectType type = HapticEffectType::Constant;
+        /** @brief Direction the force comes from for directional effect families. */
         HapticDirection direction;
+        /** @brief Effect duration in milliseconds; UINT32_MAX means unlimited. */
         std::uint32_t length = 0;
+        /** @brief Delay before effect playback starts, in milliseconds. */
         std::uint16_t delay = 0;
+        /** @brief One-based trigger button index, or zero when there is no trigger button. */
         std::uint16_t button = 0;
+        /** @brief Minimum interval between button-triggered replays, in milliseconds. */
         std::uint16_t interval = 0;
+        /** @brief Signed strength of a Constant effect. */
         std::int16_t level = 0;
+        /** @brief Wave period of a periodic effect, in milliseconds. */
         std::uint16_t period = 0;
+        /** @brief Peak periodic magnitude; a negative value adds 180 degrees of phase. */
         std::int16_t magnitude = 0;
+        /** @brief Mean (DC offset) value of a periodic wave. */
         std::int16_t offset = 0;
+        /** @brief Positive periodic phase shift in hundredths of a degree. */
         std::uint16_t phase = 0;
+        /** @brief Starting signed strength of a Ramp effect. */
         std::int16_t rampStart = 0;
+        /** @brief Ending signed strength of a Ramp effect. */
         std::int16_t rampEnd = 0;
+        /** @brief Per-axis positive-side saturation for a condition effect. */
         std::array<std::uint16_t, 3> rightSaturation{};
+        /** @brief Per-axis negative-side saturation for a condition effect. */
         std::array<std::uint16_t, 3> leftSaturation{};
+        /** @brief Per-axis force growth rate toward the positive side. */
         std::array<std::int16_t, 3> rightCoefficient{};
+        /** @brief Per-axis force growth rate toward the negative side. */
         std::array<std::int16_t, 3> leftCoefficient{};
+        /** @brief Per-axis condition-effect dead-zone size. */
         std::array<std::uint16_t, 3> deadband{};
+        /** @brief Per-axis condition-effect dead-zone center. */
         std::array<std::int16_t, 3> center{};
+        /** @brief Low-frequency motor magnitude for a LeftRight effect. */
         std::uint16_t largeMagnitude = 0;
+        /** @brief High-frequency motor magnitude for a LeftRight effect. */
         std::uint16_t smallMagnitude = 0;
+        /** @brief Number of axes driven by a Custom waveform; zero describes no samples. */
         std::uint8_t customChannels = 0;
+        /** @brief Sample period of a Custom waveform, in milliseconds. */
         std::uint16_t customPeriod = 0;
+        /** @brief Interleaved Custom samples; size is channel count times sample count. */
         std::vector<std::uint16_t> customData;
+        /** @brief Duration of the envelope attack ramp, in milliseconds. */
         std::uint16_t attackLength = 0;
+        /** @brief Effect level at the start of the envelope attack. */
         std::uint16_t attackLevel = 0;
+        /** @brief Duration of the envelope fade ramp, in milliseconds. */
         std::uint16_t fadeLength = 0;
+        /** @brief Effect level at the end of the envelope fade. */
         std::uint16_t fadeLevel = 0;
     };
 
     /** @brief Static capabilities of one opened force-feedback device. */
     struct HapticDeviceCapabilities
     {
+        /** @brief Human-readable native device name, or empty when unavailable. */
         std::string name;
         /** @brief Portable feature bits; values match CNA::Input::HapticFeatureEXT. */
         std::uint32_t features = 0;
+        /** @brief Number of independently addressable force axes, or zero when unknown. */
         int axisCount = 0;
+        /** @brief Maximum uploaded effects, or -1 when the implementation cannot report it. */
         int maxEffects = -1;
+        /** @brief Maximum concurrent effects, or -1 when the implementation cannot report it. */
         int maxEffectsPlaying = -1;
+        /** @brief Whether the simple strength-and-duration rumble path is supported. */
         bool rumbleSupported = false;
     };
 
@@ -102,21 +141,95 @@ namespace CNA::Platform {
     {
     public:
         virtual ~IPlatformHapticDevice() = default;
+
+        /** @brief Gets the immutable capabilities of this opened device. */
         [[nodiscard]] virtual HapticDeviceCapabilities GetCapabilities() const = 0;
+
+        /**
+         * @brief Tests whether the device can represent an effect descriptor.
+         * @param effect Descriptor to test without uploading it.
+         * @return True when the device reports support for the selected family and parameters.
+         */
         [[nodiscard]] virtual bool IsEffectSupported(const HapticEffect& effect) const = 0;
+
+        /** @brief Initializes the simple-rumble path. @return True when rumble is ready. */
         virtual bool InitializeRumble() = 0;
+
+        /**
+         * @brief Plays the initialized simple-rumble effect.
+         * @param strength Normalized strength in [0, 1].
+         * @param durationMilliseconds Playback duration in milliseconds.
+         * @return True when the device accepted the request.
+         */
         virtual bool PlayRumble(float strength, std::uint32_t durationMilliseconds) = 0;
+
+        /** @brief Stops simple rumble. @return True when the device accepted the request. */
         virtual bool StopRumble() = 0;
+
+        /**
+         * @brief Uploads an advanced effect.
+         * @param effect Effect descriptor whose used fields are selected by its type.
+         * @return A non-negative device-local effect id, or -1 on refusal/failure.
+         */
         [[nodiscard]] virtual int CreateEffect(const HapticEffect& effect) = 0;
+
+        /**
+         * @brief Replaces the parameters of an uploaded effect.
+         * @param effectId Id returned by `CreateEffect`.
+         * @param effect Replacement descriptor.
+         * @return True when the update succeeded.
+         */
         virtual bool UpdateEffect(int effectId, const HapticEffect& effect) = 0;
+
+        /**
+         * @brief Plays an uploaded effect.
+         * @param effectId Id returned by `CreateEffect`.
+         * @param iterations Number of repetitions; one plays once.
+         * @return True when playback started.
+         */
         virtual bool RunEffect(int effectId, std::uint32_t iterations) = 0;
+
+        /**
+         * @brief Stops one uploaded effect.
+         * @param effectId Id returned by `CreateEffect`.
+         * @return True when the device accepted the request.
+         */
         virtual bool StopEffect(int effectId) = 0;
+
+        /**
+         * @brief Frees one uploaded effect; the id is invalid afterwards.
+         * @param effectId Id returned by `CreateEffect`.
+         */
         virtual void DestroyEffect(int effectId) = 0;
+
+        /**
+         * @brief Gets whether one uploaded effect is currently playing.
+         * @param effectId Id returned by `CreateEffect`.
+         * @return True only while that effect is playing.
+         */
         [[nodiscard]] virtual bool GetEffectStatus(int effectId) const = 0;
+
+        /** @brief Stops every playing effect on this device. @return True on success. */
         virtual bool StopAllEffects() = 0;
+
+        /**
+         * @brief Sets the device-wide effect gain.
+         * @param gain Gain from 0 (silent) to 100 (maximum).
+         * @return True when the device accepted the value.
+         */
         virtual bool SetGain(int gain) = 0;
+
+        /**
+         * @brief Sets device autocenter strength, such as steering-wheel centering.
+         * @param autocenter Strength from 0 (disabled) to 100 (maximum).
+         * @return True when the device accepted the value.
+         */
         virtual bool SetAutocenter(int autocenter) = 0;
+
+        /** @brief Pauses all effect playback. @return True when the device accepted the request. */
         virtual bool Pause() = 0;
+
+        /** @brief Resumes effect playback after `Pause`. @return True on success. */
         virtual bool Resume() = 0;
     };
 
