@@ -3818,8 +3818,8 @@
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 11824,
-      "sha256": "e2e1735481e35a6c9a08aa7ba62cadda6ebb31016e070134408d80f7e8c955ec"
+      "bytes": 11877,
+      "sha256": "8e5428abcd19a0446dce97a9e24d05effbb3bf311db1920626576274822b044b"
     },
     {
       "path": "mat-factor-only-gold.glb",

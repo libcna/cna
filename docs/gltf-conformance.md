@@ -387,7 +387,7 @@ working directory, which is what CTest is configured to use. The suites are:
 | `GltfLimitationsDoc` | `docs/gltf-limitations.md` against the code: the extension table against the registry, every report field it names against the header, and `CNAEXT.md` §3.2 against the registry's classifications (`GLTF-447`/`GLTF-448`) |
 | `GltfVendoredCgltf` | that `third_party/cgltf/cgltf.h` carries no CNA edit, and that each known cgltf fault still has its CNA-side answer (`GLTF-038`) |
 | `RuntimeGltfModelTest` | the runtime `.gltf` path end to end through `ContentManager::Load<Model>` — the loader a game actually calls |
-| `GltfConformanceLadder` | that every suite whose name contains `Gltf` belongs to exactly one rung of the `gltf-conformance` label (`GLTF-010`), and that §27.1's milestone checklist cites fixtures and suites that exist (`GLTF-403`/`GLTF-413`) |
+| `GltfConformanceLadder` | that every gtest suite whose name contains `Gltf` belongs to exactly one rung of the `gltf-conformance` label (`GLTF-010`), and that §27.1's milestone checklist cites fixtures and evidence names that exist (`GLTF-403`/`GLTF-413`); standalone EasyGL L7 evidence is checked against its exact renderer CTest registration because it cannot be linked into a STUB `CnaTests` binary |
 
 #### The `gltf-conformance` CTest label (`GLTF-010`)
 
@@ -702,12 +702,12 @@ Two entries in the table are honest boundaries rather than coverage:
 
 * **Tangent handedness** is a vertex-stream fact. It has no effect parameter, so it cannot be an L6
   assertion; L5's byte-exact goldens own it and `GLTF-175` extends it to L7.
-* **Alpha state** is *carried, not applied* — `docs/gltf-api-change-review.md` §1.3/§1.4's own
-  decision. The capture records both halves: what the effect carries (`BLEND`, cutoff `0.5`,
-  double-sided) **and** what the GPU block would apply (`alphaTest` still at its `{0,0,1,1}`
-  never-discard default). `AlphaStateIsCarriedOnTheEffectButNotYetInTheParameterBlock` pins that
-  gap deliberately, so it cannot be crossed silently in either direction: when `GLTF-230` wires the
-  blend and cutoff state, that test fails and has to be updated on purpose.
+* **Alpha state** crosses two deliberately different boundaries. `MASK` is applied by the effect's
+  `{cutoff,0,-1,+1}` parameter; `BLEND` is carried by the effect and applied by the application as
+  device state plus back-to-front draw order. The capture records the carried mode and the
+  never-discard `{0,0,1,1}` alpha-test vector for BLEND. `GLTF-230` then proves the public L7 path:
+  application-selected `BlendState::NonPremultiplied` composites the straight PBR output correctly,
+  while `Model::Draw` preserves state and source order rather than sorting or mutating either.
 
 ### 5.3 Why corpus-wide L7 remains open
 
@@ -740,12 +740,15 @@ base-colour sampler on device slot zero.
 `EasyGL_Gltf_TangentHandedness` adds the generated two-primitive tangent witness: its common
 tangent-space approximately-`+Y` normal map becomes world `+Y`/`-Y` solely through the two authored
 `tangent.w` signs, producing analytic bytes 151/0 under one light on both EasyGL profiles.
+`EasyGL_Gltf_AlphaBlend` adds `mat-factor-only-gold`: its straight gold RGB at alpha 0.5 composites
+over blue to `(128,92,168)` with application-selected `NonPremultiplied`, while `Opaque` and the
+wrong premultiplied preset produce distinct `(255,184,80)` and `(255,184,208)` controls.
 
-What those focused tests do **not** provide is the corpus rung: beyond those six fixture
+What those focused tests do **not** provide is the corpus rung: beyond those seven fixture
 witnesses, generated fixtures still need fixed camera/light rigs, a documented per-renderer
 tolerance, a reproducible PNG capture path and the independent two-process determinism check.
-Registering six successful
-assets as `CnaGltfConformanceL7` would make the ladder look complete without testing the corpus.
+Registering seven successful assets as `CnaGltfConformanceL7` would make the ladder look complete
+without testing the corpus.
 `STUB` still cannot be used as a shortcut:
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
 bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.

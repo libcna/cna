@@ -164,8 +164,9 @@ def mat_factor_only_gold() -> Fixture:
                         "byte-exact at stride 48, which is what proves the effect switch rather "
                         "than merely asserting it. One boundary is deliberate and recorded in "
                         "docs/gltf-api-change-review.md §1.4: doubleSided is CARRIED, not applied "
-                        "-- culling is a RasterizerState the application sets, and GLTF-230 owns "
-                        "making it automatic alongside blend state and draw ordering.",
+                        "-- culling is a RasterizerState the application sets. GLTF-230 proves "
+                        "the analogous application-owned blend and draw-order boundary without "
+                        "making Model::Draw seize global device state.",
             },
             prior_actual={
                 "usePbr": False,

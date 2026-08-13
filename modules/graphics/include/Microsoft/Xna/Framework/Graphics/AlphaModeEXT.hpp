@@ -38,8 +38,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief The alpha value composites the source and destination, per the usual over operator.
          *
-         * Correct blending also needs back-to-front draw ordering, which is the application's
-         * responsibility — CNA does not sort by default.
+         * PBR effects emit straight RGB, so the application selects
+         * `BlendState::NonPremultiplied` and draws BLEND parts back-to-front. CNA preserves the
+         * selected state and source part order; it does not sort by default.
          */
         Blend = 2,
     };

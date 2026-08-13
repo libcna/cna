@@ -415,7 +415,7 @@
         "alphaMode": "BLEND",
         "alphaCutoff": 0.5,
         "doubleSided": true,
-        "note": "Not one material property is lost any more. The material selects PbrEffect; the gold base colour reaches DiffuseColor with its 0.5 alpha; the metallic/roughness/emissive factors are read for any metallic-roughness material rather than only one that carried a map; and the alpha and sidedness state reaches AlphaModeEXT/AlphaCutoff/DoubleSided on both PBR effects and through the .cnj. The L5 golden is byte-exact at stride 48, which is what proves the effect switch rather than merely asserting it. One boundary is deliberate and recorded in docs/gltf-api-change-review.md \u00a71.4: doubleSided is CARRIED, not applied -- culling is a RasterizerState the application sets, and GLTF-230 owns making it automatic alongside blend state and draw ordering."
+        "note": "Not one material property is lost any more. The material selects PbrEffect; the gold base colour reaches DiffuseColor with its 0.5 alpha; the metallic/roughness/emissive factors are read for any metallic-roughness material rather than only one that carried a map; and the alpha and sidedness state reaches AlphaModeEXT/AlphaCutoff/DoubleSided on both PBR effects and through the .cnj. The L5 golden is byte-exact at stride 48, which is what proves the effect switch rather than merely asserting it. One boundary is deliberate and recorded in docs/gltf-api-change-review.md \u00a71.4: doubleSided is CARRIED, not applied -- culling is a RasterizerState the application sets. GLTF-230 proves the analogous application-owned blend and draw-order boundary without making Model::Draw seize global device state."
       },
       "priorActual": {
         "usePbr": false,

@@ -337,7 +337,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * application sets per draw, and having `Model::Draw` mutate device state as a side effect
          * would surprise every XNA caller (`docs/gltf-api-change-review.md` §1.4). An application
          * that wants glTF's sidedness honoured reads this and sets `RasterizerState::CullNone`
-         * itself; `GLTF-230` owns making that automatic alongside blend state and draw ordering.
+         * itself. This remains application-owned, like `GLTF-230`'s verified blend-state and draw-
+         * ordering boundary.
          *
          * @return True when the material asks for both faces to be drawn.
          */

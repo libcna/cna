@@ -111,13 +111,17 @@ one both the importer and the renderer already depend on; the data bag depends o
 module, not the reverse.
 
 **Where the carried/applied line now falls** (`GLTF-372`). Carrying these three and *applying* them
-are separate steps, and only one of the three has since crossed the line. The **`MASK` cutoff is
-applied**: it is fragment-program work — every PBR shader already evaluates a `uAlphaTest` vector
+cross different API layers. The **`MASK` cutoff is effect-applied**: it is fragment-program work —
+every PBR shader already evaluates a `uAlphaTest` vector
 and discards on it — not device state, so `PbrEffect`/`SkinnedPbrEffect` fill
 `GpuDrawParams::alphaTest` from `AlphaModeEXT` and the cutoff
 (`CNA::Internal::Graphics::AlphaTestVectorForAlphaModeEXT`, one mapping for both effects).
-`BLEND`'s compositing stays **carried only**, because it is `BlendState` plus a draw order the
-application owns — `GLTF-230` — and so does `OPAQUE`'s "alpha is ignored" rule for the same reason.
+`BLEND`'s compositing is **carried and application-applied**, because it is `BlendState` plus a draw
+order the application owns. `GLTF-230` verifies the complete public path: select
+`BlendState::NonPremultiplied` for the PBR shader's straight RGB output, order BLEND parts
+back-to-front, then call `Model::Draw`. CNA preserves that state and source part order; it does not
+silently sort or mutate global blend state. `OPAQUE`'s "alpha is ignored" rule falls on the same
+device-state side of the boundary.
 An effect whose mode is not `Mask` therefore binds the never-discard `{0,0,1,1}` default, which is
 asserted over the whole corpus rather than only on the mask fixture: an implementation that wrote a
 reference for every material would cut holes in every opaque surface.
@@ -157,16 +161,18 @@ side effect of drawing would be a surprising global change that no XNA applicati
 interacts with `GLTF-230`'s blend-state and draw-ordering work.
 
 So: **the state is carried end-to-end and is provable at L3 and through the `.cnj`; applying it to
-the rasterizer belongs with `GLTF-230`, and its acceptance is an L7 image comparison** (`GLTF-009`),
-which does not exist yet. Recording that boundary here is the point of the gate — otherwise the flag
-would look implemented while nothing honoured it.
+the rasterizer remains the application's responsibility.** `GLTF-230` proves the analogous blend
+boundary with an L7 image comparison, without making `Model::Draw` seize global device state.
+Recording that boundary here is the point of the gate — otherwise the flag would look implemented
+while nothing honoured it.
 
 **Compatibility.** Additive; default `false` is XNA's own `CullCounterClockwise` behaviour.
 
 **Migration.** None.
 
 **Test.** `GLTF-231` (this phase): `mat-factor-only-gold` carries `doubleSided = true` through
-import and the `.cnj`. The rendering half is `GLTF-230` at L7.
+import and the `.cnj`. Applications honour it by selecting `RasterizerState::CullNone` around the
+draw; CNA does not apply it as a hidden `Model::Draw` side effect.
 
 ---
 

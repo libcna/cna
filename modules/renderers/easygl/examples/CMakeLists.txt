@@ -240,6 +240,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-230: a real imported BLEND material remains straight-alpha output;
+        # the application selects NonPremultiplied and owns the draw order around Model::Draw.
+        cna_easygl_test(cna_test_easygl_gltf_alpha_blend
+                        easygl_gltf_alpha_blend_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Gltf_AlphaBlend
+            COMMAND cna_test_easygl_gltf_alpha_blend
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         easygl_render_target_test.cpp)

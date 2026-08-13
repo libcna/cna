@@ -236,9 +236,11 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
     // §27.1 is the CORE 2.0 CORRECT milestone's checklist, and §27.1.1 maps each of its 20 rows to
     // the fixtures that exercise it and the suites that assert it. A milestone citing evidence is
     // only worth as much as the evidence being real, so this checks exactly that: every row
-    // present, every fixture named actually in the corpus, every suite named actually registered
-    // in this binary. A renamed suite or a deleted fixture then fails a test rather than leaving
-    // the declaration pointing at nothing.
+    // present, every fixture named actually in the corpus, and every suite name backed either by
+    // gtest in this binary or by an exact renderer CTest registration. Renderer framebuffer tests
+    // cannot be members of a STUB CnaTests binary, so requiring only the former would make the
+    // sanitizer build reject valid L7 evidence. A renamed suite or a deleted fixture still fails
+    // rather than leaving the declaration pointing at nothing.
     //
     // What it deliberately does NOT check is the State column. Whether a row is green is the
     // judgement `GLTF-458` has to make from the tests themselves; a test asserting its own
@@ -246,13 +248,43 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
     std::ifstream plan(RepositoryRoot() / "plan_gltf.md");
     ASSERT_TRUE(plan.is_open()) << "cannot open plan_gltf.md";
 
-    std::set<std::string> registeredSuites;
+    std::set<std::string> registeredEvidenceNames;
     const ::testing::UnitTest& unitTest = *::testing::UnitTest::GetInstance();
     for (int i = 0; i < unitTest.total_test_suite_count(); ++i)
     {
-        registeredSuites.insert(unitTest.GetTestSuite(i)->name());
+        registeredEvidenceNames.insert(unitTest.GetTestSuite(i)->name());
     }
-    ASSERT_FALSE(registeredSuites.empty());
+    ASSERT_FALSE(registeredEvidenceNames.empty());
+
+    // EasyGL L7 checks are standalone executables registered with CTest, not gtest suites linked
+    // into CnaTests. Read their one authoritative CMake registration rather than maintaining a
+    // second allow-list here. Exact-token extraction still catches a rename or removed test.
+    const std::filesystem::path easyGlTests =
+        RepositoryRoot() / "modules" / "renderers" / "easygl" / "examples" / "CMakeLists.txt";
+    std::ifstream easyGlFile(easyGlTests);
+    ASSERT_TRUE(easyGlFile.is_open()) << "cannot open " << easyGlTests;
+    std::string easyGlSource;
+    std::string cmakeLine;
+    while (std::getline(easyGlFile, cmakeLine))
+    {
+        // A removed registration retained as a comment is not evidence. Strip CMake comments
+        // before matching, including trailing comments after an active command.
+        const std::size_t comment = cmakeLine.find('#');
+        if (comment != std::string::npos) { cmakeLine.resize(comment); }
+        easyGlSource += cmakeLine;
+        easyGlSource.push_back('\n');
+    }
+    const std::regex rendererRegistration(
+        R"(cna_register_renderer_test\s*\(\s*NAME\s+([A-Za-z0-9_]+))");
+    std::size_t rendererTestsFound = 0;
+    for (std::sregex_iterator it(easyGlSource.begin(), easyGlSource.end(), rendererRegistration),
+                              end;
+         it != end; ++it)
+    {
+        registeredEvidenceNames.insert((*it)[1].str());
+        ++rendererTestsFound;
+    }
+    ASSERT_GT(rendererTestsFound, 0u) << "no renderer CTest registrations found in " << easyGlTests;
 
     std::set<std::string> corpusIds;
     for (const std::string& id : CnaTest::GltfOracle::CorpusFixtureIds()) { corpusIds.insert(id); }
@@ -301,16 +333,16 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
             ++fixturesChecked;
         }
 
-        // Every backticked token in the test cell must be a registered suite. This is the half
-        // that rots fastest: a suite renamed in a refactor leaves a milestone citing a test that
-        // no longer runs, and nothing else would notice.
+        // Every backticked token in the test cell must be a registered gtest suite or standalone
+        // renderer CTest. This is the half that rots fastest: a suite renamed in a refactor leaves
+        // a milestone citing a test that no longer runs, and nothing else would notice.
         for (const std::string& token : BacktickedTokens(cells[2]))
         {
             if (token.rfind("GLTF-", 0) == 0) { continue; }
             if (token.find('(') != std::string::npos) { continue; }  // a named case, not a suite
-            EXPECT_NE(registeredSuites.end(), registeredSuites.find(token))
+            EXPECT_NE(registeredEvidenceNames.end(), registeredEvidenceNames.find(token))
                 << "§27.1.1 row " << row << " cites test suite '" << token
-                << "', which is not registered in this binary";
+                << "', which is neither registered in this binary nor as an EasyGL CTest";
             ++suitesChecked;
         }
     }
