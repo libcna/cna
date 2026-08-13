@@ -4,9 +4,6 @@
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
-#include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
-#include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
-#include "Microsoft/Xna/Framework/Vector2.hpp"
 
 namespace CNA::Internal::Input
 {
@@ -25,10 +22,10 @@ namespace CNA::Internal::Input
     /**
      * @brief Internal CNA input state manager.
      *
-     * Keeps event-accumulated compatibility state for the legacy raw bridge and touch path.
+     * Keeps event-accumulated compatibility state for the legacy raw bridge.
      * Public keyboard, mouse and gamepad state read their corresponding platform services instead.
      *
-     * Currently stores mouse, basic keyboard and basic TouchPanel state.
+     * Currently stores basic mouse and keyboard state.
      *
      * Architecturally, this is event-driven rather than poll-driven: FNA's platform layer
      * (e.g. SDL3_FNAPlatform) re-queries SDL fresh on every `Get*State()` call, while this
@@ -88,20 +85,6 @@ namespace CNA::Internal::Input
         static void SetKeyState(Microsoft::Xna::Framework::Input::Keys key, bool pressed);
 
         /**
-         * @brief Updates one touch point in the internal touch state.
-         * @param touchId The touch id.
-         * @param state The touch location state.
-         * @param position The touch position in pixels.
-         * @param pressure CNAEXT/EXT: SDL finger pressure (0..1); surfaced via TouchLocation::getPressureEXT.
-         */
-        static void SetTouchState(
-            int touchId,
-            Microsoft::Xna::Framework::Input::Touch::TouchLocationState state,
-            const Microsoft::Xna::Framework::Vector2& position,
-            float pressure = 0.0f
-        );
-
-        /**
          * @brief Returns a snapshot of current mouse state.
          */
         static Microsoft::Xna::Framework::Input::MouseState GetMouseState();
@@ -112,38 +95,7 @@ namespace CNA::Internal::Input
         static Microsoft::Xna::Framework::Input::KeyboardState GetKeyboardState();
 
         /**
-         * @brief Returns a snapshot of current touch state.
-         *
-         * This is a pure read: it does not advance previous-location tracking, promote a
-         * Pressed touch to Moved, or retire a Released touch. Calling it any number of times
-         * within the same frame returns identical results. See AdvanceTouchFrame() for the
-         * operation that performs those mutations once per frame.
-         */
-        static Microsoft::Xna::Framework::Input::Touch::TouchCollection GetTouchState();
-
-        /**
-         * @brief Advances event-driven touch state by exactly one frame.
-         *
-         * For every tracked touch: records the state/position last reported by GetTouchState()
-         * as its previous location, promotes a still-Pressed touch to Moved, then removes any
-         * touch that was Released as of the last snapshot. Must be called exactly once per game
-         * frame (from TouchPanel::Update(), which FrameworkDispatcher::Update() drives once per
-         * Game::Update() tick) — never from a getter, and never more than once per frame.
-         */
-        static void AdvanceTouchFrame();
-
-        /**
-         * @brief Returns whether any touch point is currently tracked, without mutating state.
-         *
-         * Unlike GetTouchState(), this does not advance previous-location tracking, consume
-         * Released touches, or promote Pressed to Moved. Safe to call from capability queries.
-         *
-         * @return true if at least one touch location is currently tracked.
-         */
-        static bool HasAnyTouch();
-
-        /**
-         * @brief Test-only: resets all accumulated input state (mouse, keyboard and touch) to defaults.
+         * @brief Test-only: resets all accumulated mouse and keyboard state to defaults.
          *
          * The input state is a process-wide singleton shared across the whole test binary, so
          * tests that mutate it (connect a gamepad, press keys, etc.) must reset it to avoid

@@ -119,7 +119,7 @@ match list against the 283-case ground truth above:
 - **Matched 2 unrelated false positives outside `Microsoft::Devices`** —
   `GamePadTest.GetAccelerometerEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected`
   (via the bare `Accelerometer` substring) and
-  `SdlInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick` (via the
+  `PlatformInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick` (via the
   bare `Motion` substring).
 
 The corrected filter below uses the 21 full suite names instead of loose substrings —
@@ -472,7 +472,7 @@ Devices-only test suite, not just written and assumed):
 
 These use the same corrected, exact-suite-name filter as Section 2 above (a bare
 `Accelerometer*`/`Motion*` glob here would pick up the same `GamePadTest`/
-`SdlInputBridgeTouchGestureTest` false positives noted there):
+`PlatformInputBridgeTouchGestureTest` false positives noted there):
 
 ```bash
 # AddressSanitizer — catches use-after-free, heap corruption, buffer overflows.

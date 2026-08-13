@@ -29,8 +29,9 @@ accumulator; whole-device services publish one frame snapshot:
 ```
 IPlatform::PollEvents(batch)  (Game::PollEvents(), once per frame from Game::Tick())
   → CNA::Internal::Input::PlatformInputBridge::ProcessEvent(event) // visit PlatformEvent
-      → CNA::Internal::Input::InputManager::Set*State(...)      // touch + legacy bridge compatibility
+      → CNA::Internal::Input::InputManager::Set*State(...)      // legacy keyboard/mouse compatibility
       → Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_On*(...)   // text input / editing
+      → Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_setTouchState(...)
       → Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_onTouchEvent(...)
           → CNA::Internal::Input::GestureDetector::On{Pressed,Moved,Released}(...)
   → IPlatformKeyboard/Mouse/Gamepad/Joystick::Update()
@@ -45,17 +46,19 @@ The current event/state boundary is split deliberately by device shape:
   (`include/CNA/Internal/Input/PlatformInputBridge.hpp`) — the single production event funnel.
   It consumes CNA's SDL-free `PlatformEvent` vocabulary; native translation is performed once by
   the selected `IPlatform` implementation before the event reaches `Game`.
-- **`CNA::Internal::Input::SdlInputBridge`** retains keyboard/touch compatibility helpers. Its
+- **`CNA::Internal::Input::SdlInputBridge`** retains keyboard/mouse/touch compatibility helpers. Its
   raw `ProcessEvent` overload is only an adapter for
   legacy SDL-shaped tests and delegates to the platform bridge in an SDL3 build; production
   `Game` no longer calls it. PLAT-82/83 removed its mapped-gamepad and raw-joystick queries and
   native handle ownership.
 - **`CNA::Internal::Input::InputManager`** (`include/CNA/Internal/Input/InputManager.hpp`,
-  `src/Input/Internal/InputManager.cpp`) — accumulates per-device state pushed by
-  `PlatformInputBridge` (`Set*State`/`Add*Delta` methods) and hands back state objects for input
-  areas still awaiting their Phase 5 migration. Its keyboard and mouse sets remain internal parts
-  of control-character/click synthesis and raw-adapter tests; public `Keyboard::GetState()` and
-  `Mouse::GetState()` read their platform services instead.
+  `src/Input/Internal/InputManager.cpp`) — retains only the keyboard and mouse accumulators used
+  by control-character/click synthesis and legacy raw-adapter tests. PLAT-86 removed its final
+  public-device state store: touch locations now belong to `TouchPanel`; public `Keyboard` and
+  `Mouse` already read their platform services.
+- **`Microsoft::Xna::Framework::Input::Touch::TouchPanel`** owns the event-driven touch map and
+  gesture queue. `INTERNAL_setTouchState` records logical position, pressure and previous-frame
+  history; `Update()` promotes held touches and retires releases exactly once per frame.
 - **`CNA::Platform::IPlatformGamepad`** owns the four stable player slots, immutable frame
   snapshots, cached capabilities/identity and all mapped-controller actuators. Public
   `GamePad::GetState(playerIndex, deadZoneMode)` projects one raw platform snapshot through the
@@ -86,7 +89,7 @@ Gesture handling adds another internal class:
 `PlatformInputBridge` applies the mapped alternative. This table describes that end-to-end path.
 An SDL event the mapper does not recognise is intentionally omitted from the platform batch.
 
-| SDL event | InputManager / TouchPanel call | XNA-visible effect |
+| SDL event | State sink | XNA-visible effect |
 |---|---|---|
 | `SDL_EVENT_MOUSE_MOTION` | The compatibility bridge still accumulates it; after the event drain `IPlatformMouse::Update()` polls absolute position/buttons and relative displacement | `Mouse::GetState().X/Y`; relative displacement is consumed on the first read, while absolute position is a frame snapshot |
 | `SDL_EVENT_MOUSE_BUTTON_DOWN` / `_UP` | On DOWN, `Mouse::INTERNAL_onClicked(button-1)` fires; the compatibility accumulator mirrors all five buttons | Public held buttons come from the platform snapshot's CNA-owned five-bit mask; `Mouse::ClickedEXT` remains event-driven |
@@ -97,9 +100,9 @@ An SDL event the mapper does not recognise is intentionally omitted from the pla
 | `SDL_EVENT_TEXT_INPUT` | none (bypasses `InputManager`) | `event.text.text` (UTF-8) is decoded to UTF-16 code units (`decode_utf8_to_utf16`) and each is dispatched via `TextInputEXT::INTERNAL_OnTextInput(charcs)` — one UTF-16 code unit per call, astral code points as surrogate pairs, matching FNA's `Encoding.UTF8.GetChars`; suppressed while a synthesized Ctrl+V paste is in flight |
 | `SDL_EVENT_TEXT_EDITING` | none | `TextInputEXT::INTERNAL_OnTextEditing(text, start, length)` — empty/null composition maps to `("", 0, 0)` |
 | `SDL_EVENT_TEXT_EDITING_CANDIDATES` | none | `TextInputEXT::INTERNAL_OnTextEditingCandidates(candidates, selected, horizontal)` — CNAEXT IME candidate-list extension; null candidates dispatch as an empty list |
-| `SDL_EVENT_FINGER_DOWN` | `SetTouchState(id, Pressed, pixelPos)`; also `TouchPanel::setTouchDeviceExistsProperty(true)` and `TouchPanel::INTERNAL_onTouchEvent(id, Pressed, x, y, 0, 0)` | `TouchPanel::GetState()`; `GestureDetector::OnPressed` |
-| `SDL_EVENT_FINGER_MOTION` | `SetTouchState(id, Moved, pixelPos)`; `TouchPanel::INTERNAL_onTouchEvent(id, Moved, x, y, dx, dy)` | `TouchPanel::GetState()`; `GestureDetector::OnMoved` |
-| `SDL_EVENT_FINGER_UP` / `SDL_EVENT_FINGER_CANCELED` | `SetTouchState(id, Released, pixelPos)`; `TouchPanel::INTERNAL_onTouchEvent(id, Released, x, y, 0, 0)` | `TouchPanel::GetState()`; `GestureDetector::OnReleased` — both event types share one `case` fallthrough (P5-034/P6 audit), matching FNA's own `SDL_EVENT_FINGER_UP \|\| SDL_EVENT_FINGER_CANCELED` single branch |
+| `SDL_EVENT_FINGER_DOWN` | `TouchPanel::INTERNAL_setTouchState(id, Pressed, pixelPos, pressure)`; also sets the sticky device flag and calls `INTERNAL_onTouchEvent(id, Pressed, x, y, 0, 0)` | `TouchPanel::GetState()`; `GestureDetector::OnPressed` |
+| `SDL_EVENT_FINGER_MOTION` | `TouchPanel::INTERNAL_setTouchState(id, Moved, pixelPos, pressure)`; `INTERNAL_onTouchEvent(id, Moved, x, y, dx, dy)` | `TouchPanel::GetState()`; `GestureDetector::OnMoved` |
+| `SDL_EVENT_FINGER_UP` / `SDL_EVENT_FINGER_CANCELED` | `TouchPanel::INTERNAL_setTouchState(id, Released, pixelPos, pressure)`; `INTERNAL_onTouchEvent(id, Released, x, y, 0, 0)` | `TouchPanel::GetState()`; `GestureDetector::OnReleased` — up and cancel share the same platform state transition |
 | `SDL_EVENT_GAMEPAD_ADDED` / `_REMOVED` | Mapped for general device notification, but mapped-gamepad ownership is reconciled by `IPlatformGamepad::Update()` after the event drain | `Sdl3Gamepad` preserves existing slots, closes vanished handles and assigns new devices to the first free `PlayerIndex` slot |
 | `SDL_EVENT_GAMEPAD_BUTTON_DOWN` / `_UP` | The event is mapped but does not mutate a second store; `Sdl3Gamepad::Update()` polls the complete held-button mask once per frame | `GamePadState.Buttons`/`.DPad` read one immutable platform snapshot |
 | `SDL_EVENT_GAMEPAD_AXIS_MOTION` | The event is mapped but state is polled with the same CNA-owned axis helper; stick Y is inverted and triggers normalised at the SDL edge | `GamePadState.ThumbSticks`/`.Triggers`; the requested dead zone is applied by public `GamePad::GetState` |
@@ -120,8 +123,8 @@ Touch coordinates: SDL delivers finger position/delta normalized to `[0, 1]` rel
 window. There are two independent scaling paths from that same normalized event, feeding two
 different consumers: `to_touch_pixel_position` (file-local to `SdlInputBridge.cpp`) scales by
 the SDL window's point size (`SDL_GetWindowSize`) then maps through the graphics backend's
-logical-coordinate transform, feeding `InputManager::SetTouchState` (and so
-`TouchPanel::GetState()`'s fallback snapshot, §3); `TouchPanel::INTERNAL_onTouchEvent` instead
+logical-coordinate transform, feeding `TouchPanel::INTERNAL_setTouchState` and its event snapshot;
+`TouchPanel::INTERNAL_onTouchEvent` instead
 scales by `TouchPanel::DisplayWidth`/`DisplayHeight` (set from the real back-buffer size by
 `GraphicsDevice`, task 711), feeding `GestureDetector`. Both match FNA's own
 normalized→pixel intent, just via two different size sources for two different consumers.
@@ -140,8 +143,8 @@ This is the single biggest architectural deviation from FNA:
 - **FNA** re-queries the platform layer fresh on every `Get*State()` call. `Keyboard.GetState()`,
   `Mouse.GetState()`, `GamePad.GetState()`, and `TouchPanel.GetState()` all call into
   `SDL3_FNAPlatform` methods that ask SDL for current state *at call time*.
-- **CNA** publishes input once per frame. Keyboard and mouse are whole-device platform snapshots;
-  gamepad/touch are still accumulated from `PlatformEvent` while their Phase 5 migrations remain.
+- **CNA** publishes input once per frame. Keyboard, mouse, gamepad and joystick are whole-device
+  platform snapshots; touch is accumulated directly by `TouchPanel` from `PlatformEvent`.
   Public `Get*State()` methods read those stored values and never poll a native API.
 
 What keeps CNA's accumulated state current: `Game::Tick()` (`Game.cpp`) unconditionally calls
@@ -161,12 +164,10 @@ Where the difference is actually visible:
   first read consumes accumulated displacement and a second read reports zero.
 - `TouchPanel::GetState()` specifically has its own extra wrinkle: FNA populates its `touches_`
   array from a per-frame poll (`SDL_GetTouchFingers`) via `SetFinger`, but CNA's `SetFinger` has
-  no real caller — `GetState()` instead falls back to `InputManager::GetTouchState()`'s
-  event-accumulated snapshot. Documented in-source in `TouchPanel.cpp` (task 714).
-- `GamePadState.PacketNumber` can't be "bump on state comparison" like FNA's poll loop, since
-  CNA never builds two consecutive `GamePadState`s to diff — instead it's bumped at the raw
-  `InputManager` layer whenever a connection/button/axis value actually changes (task 729,
-  documented in-source in `InputManager.cpp`).
+  no real caller — `GetState()` instead reads the panel's own event-accumulated map. Repeated reads
+  are pure; `TouchPanel::Update()` alone advances previous locations and release retirement.
+- `GamePadState.PacketNumber` is published by `IPlatformGamepad` and changes only when the raw
+  platform snapshot changes, rather than being recomputed by each public getter.
 - Mouse relative-mode delta (`IsRelativeMouseModeEXT`) is collected by `IPlatformMouse::Update()`
   after the native event pump and drained through `ConsumeRelativeDelta()` on each public read,
   matching FNA's `SDL_GetRelativeMouseState` behaviour. Absolute position stays in the snapshot
@@ -248,12 +249,12 @@ Full per-task detail lives in `plan_input.md` (Phases I1–I6) and `AUDIT.md`'s 
   comment ("Windows only notices a touch screen once it's touched").
 - `TouchPanel::GetState()` reports `TouchLocation`s with their previous location preserved for
   Moved/Released touches, so `TryGetPreviousLocation()` works on the real event-driven path —
-  `InputManager` now stores each touch's previous state/position and advances it per snapshot
+  `TouchPanel` stores each touch's previous state/position and advances it once per frame
   (INPUT-TOUCH-007; the Phase I12 event-driven previous-location fix). A new Pressed touch has no
   previous, matching FNA.
-- Known deviation (behaviourally equivalent, not a gap): `GetState()` reads `InputManager`'s
-  event-driven snapshot rather than FNA's per-frame `SetFinger`/`SDL_GetTouchFingers` poll of
-  `touches_` — see §3. The event-driven `InputManager` map is internally unbounded, but
+- Known deviation (behaviourally equivalent, not a gap): `GetState()` reads `TouchPanel`'s
+  event-driven map rather than FNA's per-frame `SetFinger`/`SDL_GetTouchFingers` poll of
+  `touches_` — see §3. The event map is internally unbounded, but
   `GetState()` caps the public snapshot at `MAX_TOUCHES` (8) to match FNA (DEC-10, 2026-07-05).
 - `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and **4** when
   connected, matching FNA's `touchDeviceExists ? 4 : 0` (DEC-09, 2026-07-05 — XNA always reports 4;
@@ -292,7 +293,7 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 `ctest -L input` is the one authoritative way to run the input subset; the token list lives only in
 `CMakeLists.txt` (`CNA_INPUT_TEST_FILTER`) and the **authoritative counts** live in
 `docs/input-build-and-test.md` (§Test counts). Order-dependence in the process-wide static input state
-(`InputManager`, `GestureDetector`, and the `MouseCursor` stock-cursor singletons all persist for the
+(`InputManager`, `TouchPanel`, `GestureDetector`, and the `MouseCursor` stock-cursor singletons persist for the
 process lifetime) is shaken out by the baked-in `--gtest_shuffle --gtest_repeat=5` — the standardized
 determinism gate (INPUT-BUILD-009); bump the repeat higher via a direct binary invocation with the same
 filter variable if you want more iterations.
@@ -306,8 +307,8 @@ other backends (bgfx adds 4 backend-specific, input-unrelated tests). The full s
 ## 6. Thread safety
 
 **Input is a single-threaded (game-loop-thread) API.** All input state described above —
-`InputManager`'s accumulated `InternalInputState`, `GestureDetector`'s state machine,
-`TouchPanel`'s touch arrays and gesture queue, and the static `Mouse::ClickedEXT` /
+`InputManager`'s compatibility state, `GestureDetector`'s state machine,
+`TouchPanel`'s touch arrays, event map and gesture queue, and the static `Mouse::ClickedEXT` /
 `TextInputEXT` callbacks — is plain process-wide static state with **no locking** (verified:
 there is no `mutex`/`atomic`/`thread` anywhere under `src/Input/Internal/` or
 `src/Input/Xna/`). That is deliberate and safe because every access happens on

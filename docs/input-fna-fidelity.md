@@ -258,8 +258,8 @@ from the fake-backend unit tests above.
 | `GetState` previous-location (Pressed/Moved/Released) | Matches FNA (Phase I12). |
 | `TouchLocation` `Equals`/`GetHashCode`/`==`/`!=` | **Matches FNA.** |
 | `SDL_EVENT_FINGER_CANCELED` | **Fixed (task 892):** now released like `FINGER_UP` (was unhandled → stuck touch). |
-| `GetCapabilities()` side effects | **Fixed (task 894):** now uses non-mutating `InputManager::HasAnyTouch()`; no longer consumes a touch frame. |
-| `GetState()` read-frequency dependence | **Fixed (INP-AUD-001, 2026-07-16):** `TouchPanel::GetState()`/`InputManager::GetTouchState()` are now pure reads; see below. |
+| `GetCapabilities()` side effects | **Fixed (task 894/PLAT-86):** now peeks at panel-owned event state without advancing a touch frame. |
+| `GetState()` read-frequency dependence | **Fixed (INP-AUD-001, 2026-07-16):** `TouchPanel::GetState()` is a pure read; see below. |
 | `GetCapabilities()` SDL enumeration | **Fixed (INP-AUD-003, 2026-07-16):** now queries `system_device_backend().GetTouchDevices()` every call, matching FNA; see below. |
 | `TouchCollection::CopyTo` | **Fixed (task 902):** out-of-range index now throws `std::out_of_range` (was UB). |
 | `TouchCollection::FindById` not-found out-param | **Fixed (P1-022):** now writes the `Invalid` sentinel location (`TouchLocation(-1, Invalid, Vector2.Zero)`) on the not-found path — previously left the caller's out-param untouched. Matches FNA `TouchCollection.cs:125-130`. |
@@ -288,38 +288,39 @@ from the fake-backend unit tests above.
   counts. `GetCapabilities` reports `MaximumTouchCount = 4` (FNA: "MaximumTouchCount is completely bogus;
   for any touch device, XNA always reports 4", `SDL3_FNAPlatform.cs`), `0` when disconnected — this is a
   fixed XNA-compat value, NOT the tracking cap. `TouchPanel::GetState()` caps the public snapshot at
-  `MAX_TOUCHES (8)`, matching FNA's fixed `TouchLocation[MAX_TOUCHES]` array (the event-driven
-  `InputManager` map is internally unbounded, but the public state never exceeds 8).
+  `MAX_TOUCHES (8)`, matching FNA's fixed `TouchLocation[MAX_TOUCHES]` array (the panel-owned
+  event map is internally unbounded, but the public state never exceeds 8).
 - **Zero display size at startup (P5-014):** before `GraphicsDevice` publishes the virtual back-buffer
   size, `TouchPanel.DisplayWidth/Height` are `0`. The gesture path (`INTERNAL_onTouchEvent`, TouchPanel.cpp:188)
   **early-returns** when either is `<= 0`, so no touch collapses to a bogus `(0,0)`-corner gesture. Touch
-  **presence** is still tracked, because the bridge records it via `SetTouchState(to_touch_pixel_position(...))`,
+  **presence** is still tracked, because the bridge records it via
+  `TouchPanel::INTERNAL_setTouchState(to_touch_pixel_position(...))`,
   which scales by the SDL **window** size (min 1×1), independent of the display metric. So at startup there is
   an **intentional** divergence — touch tracked, gestures suppressed — that resolves the instant a valid
   display size is published (gestures resume). Pinned by
-  `SdlInputBridgeTouchGestureTest.TouchBeforeDisplaySizeIsKnownTracksTouchButSuppressesGestures` and
+  `PlatformInputBridgeTouchGestureTest.TouchBeforeDisplaySizeIsKnownTracksTouchButSuppressesGestures` and
   `TouchEdgeCaseTest.ScalingProducesNoGestureWhenDisplaySizeIsZero`.
 - **`GetCapabilities` SDL enumeration (INP-AUD-003, fixed 2026-07-16):** `TouchPanel::GetCapabilities()`
-  now queries `CNA::Internal::Input::system_device_backend().GetTouchDevices()` on every call, matching
+  now queries `IPlatformInputDevices::HasDevice(Touch)` on every call, matching
   FNA's `GetTouchCapabilities()` (`SDL_GetTouchDevices()` on every query, `SDL3_FNAPlatform.cs:2265-2280`).
   **Previously** it reported `IsConnected = false` for any touchscreen that had not yet been touched —
   it only ever consulted the sticky `touchDeviceExists_` flag (set on the first `FINGER_DOWN`,
-  `SdlInputBridge.cpp:1428`) or the live `InputManager::HasAnyTouch()` peek, never SDL's own device
+  bridge) or the live panel-state peek, never SDL's own device
   list. That was documented at the time as "intentional and FNA-faithful" by analogy with FNA's note
   that *Windows* only notices a touch screen once it is touched (`SDL3_FNAPlatform.cs:972`) — but FNA's
   own `GetTouchCapabilities()` still calls `SDL_GetTouchDevices()` unconditionally on every platform, so
   a real enumerable-but-untouched device on any non-Windows platform was reported disconnected, which
   was not actually FNA-faithful. The fix makes SDL enumeration the primary source; `touchDeviceExists_`
-  and `HasAnyTouch()` remain as fallbacks specifically for the Windows-style late-enumeration case.
-  Still fully non-mutating (none of the three checks call `GetTouchState()`). Pinned by
+  and the panel-state peek remain as fallbacks specifically for the Windows-style late-enumeration
+  case. Still fully non-mutating. Pinned by
   `GetCapabilitiesIsDisconnectedBeforeAnyTouch`, `GetCapabilitiesIsConnectedOnceTouchDeviceExists`,
-  `GetCapabilitiesIsConnectedViaInputManagerFallbackWhenFlagUnset`, and the
+  `GetCapabilitiesIsConnectedViaPanelStateWhenFlagUnset`, and the
   `TouchCapabilitiesEnumerationTest` fixture (fake-backend enumeration, empty-enumeration-with-sticky-
   flag, empty-enumeration-with-live-touch, and non-mutation cases).
 - **Touch collection ordering (DEC-20, P5-012):** FNA's `TouchPanel.GetState()` iterates its fixed
   `touches[0..MAX_TOUCHES]` array (`TouchPanel.cs:97`), so its collection order is **SDL finger-array slot
-  order**. CNA's event-driven fallback (`InputManager::GetTouchState`) instead orders by **ascending touch
-  id** (`std::sort` of the id set). Both are fully deterministic; because CNA touch ids are a compact
+  order**. CNA's panel-owned event fallback instead orders by **ascending touch id** through its
+  ordered map. Both are fully deterministic; because CNA touch ids are a compact
   sequential appearance-order counter (see above) with lowest-free reuse, ascending-id order tracks
   appearance/slot order the same way FNA's does. Order is opaque to games (they index by finger id, not
   position). Pinned by `TouchInputTest.GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder` and
@@ -332,20 +333,20 @@ from the fake-backend unit tests above.
 - `TryGetPreviousLocation` now writes the out-param on **every** path (DEC-12, fixed 2026-07-05): it
   assigns `TouchLocation(Id, prevState, prevPosition)` and returns `prevState != Invalid`, matching FNA
   exactly (on the `false` path the out-param is the Invalid previous location, not left untouched).
-- **`GetState()`/`GetTouchState()` frame-accurate read (INP-AUD-001, fixed 2026-07-16):** FNA's
+- **`GetState()` frame-accurate read (INP-AUD-001, fixed 2026-07-16; moved in PLAT-86):** FNA's
   `TouchPanel.GetState()` is a pure collection read; its frame advance (`SetFinger`-equivalent
   polling) happens once per frame in FNA's own `Update()`, not inside the getter
-  (`TouchPanel.cs:94-105, 224-228`). CNA's event-driven `InputManager::GetTouchState()` previously
+  (`TouchPanel.cs:94-105, 224-228`). CNA's old event-driven input store previously
   advanced `Pressed`→`Moved` promotion, `Released` retirement, and previous-location tracking
   **inline on every call**, so the reported state depended on how many times application code
   called `GetState()` per frame rather than on the frame boundary (two reads in one frame could
   observe `Pressed` then `Moved`; zero reads in a frame silently skipped a promotion/retirement).
-  Fixed by splitting the operation: `GetTouchState()` is now a pure snapshot read, and a new
-  `InputManager::AdvanceTouchFrame()` performs the previous-state promotion/release retirement
-  exactly once per frame, called from `TouchPanel::Update()` — itself driven once per
+  Fixed by splitting the operation: `TouchPanel::GetState()` is a pure snapshot read and
+  `TouchPanel::Update()` performs the previous-state promotion/release retirement exactly once per
+  frame — itself driven once per
   `Game::Update()` tick via `FrameworkDispatcher::Update()`. Pinned by
-  `GetTouchStateIsPureAndRepeatedReadsWithinAFrameAreIdentical`,
-  `AdvanceTouchFrameWorksEvenWithoutAnIntermediateRead`, and
+  `GetStateIsPureAndRepeatedReadsWithinAFrameAreIdentical`,
+  `UpdateWorksEvenWithoutAnIntermediateRead`, and
   `ReleasedTouchIsVisibleForExactlyOnePostAdvanceReadRegardlessOfPriorReads`
   (`tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`).
 
@@ -354,7 +355,7 @@ from the fake-backend unit tests above.
 ## Gestures
 
 `GestureDetector` reproduces FNA's tap / double-tap / hold / drag / flick / pinch state machine.
-Covered by `GestureDetectorTests` and the end-to-end `SdlInputBridgeTouchGestureTests` (including the
+Covered by `GestureDetectorTests` and the end-to-end `PlatformInputBridgeTouchGestureTest` suite (including the
 new `FINGER_CANCELED` release path). Broader parameterized regression coverage across every gesture
 type + interruption is partial (task 906).
 

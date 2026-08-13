@@ -988,7 +988,7 @@ namespace CNA::Internal::Input
                                         ? try_get_touch_id(fingerId).value_or(
                                               get_or_create_touch_id(fingerId))
                                         : get_or_create_touch_id(fingerId);
-                InputManager::SetTouchState(
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_setTouchState(
                     touchId, state,
                     to_touch_pixel_position(platformEvent.window, platformEvent.x, platformEvent.y),
                     platformEvent.pressure);
@@ -1245,7 +1245,7 @@ namespace CNA::Internal::Input
                 Microsoft::Xna::Framework::Input::Touch::TouchPanel::setTouchDeviceExistsProperty(true);
 
                 const int touchId = get_or_create_touch_id(event.tfinger.fingerID);
-                InputManager::SetTouchState(
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_setTouchState(
                     touchId,
                     TouchLocationState::Pressed,
                     to_touch_pixel_position(event.tfinger),
@@ -1264,7 +1264,7 @@ namespace CNA::Internal::Input
         case SDL_EVENT_FINGER_MOTION:
             {
                 const int touchId = get_or_create_touch_id(event.tfinger.fingerID);
-                InputManager::SetTouchState(
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_setTouchState(
                     touchId,
                     TouchLocationState::Moved,
                     to_touch_pixel_position(event.tfinger),
@@ -1285,14 +1285,14 @@ namespace CNA::Internal::Input
             {
                 // FNA treats a canceled finger identically to a lifted one
                 // (`FINGER_UP || FINGER_CANCELED` -> Released, SDL3_FNAPlatform.cs): both must
-                // release the touch in InputManager, notify TouchPanel/GestureDetector with
+                // release the touch in TouchPanel, notify GestureDetector with
                 // Released, and free the finger-id mapping. Without the CANCELED case the touch
                 // would stay stuck Pressed/Moved forever and leak its id mapping + gesture tracking.
                 const int touchId = try_get_touch_id(event.tfinger.fingerID).value_or(
                     get_or_create_touch_id(event.tfinger.fingerID)
                 );
 
-                InputManager::SetTouchState(
+                Microsoft::Xna::Framework::Input::Touch::TouchPanel::INTERNAL_setTouchState(
                     touchId,
                     TouchLocationState::Released,
                     to_touch_pixel_position(event.tfinger),

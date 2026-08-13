@@ -7,9 +7,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
-#include <vector>
 
 #ifdef __ANDROID__
 #include <SDL3/SDL.h>
@@ -20,7 +18,6 @@ namespace CNA::Internal::Input
     namespace
     {
         using Microsoft::Xna::Framework::Input::ButtonState;
-        using Microsoft::Xna::Framework::Input::Touch::TouchLocationState;
 
         struct InternalMouseState
         {
@@ -42,25 +39,10 @@ namespace CNA::Internal::Input
             float RelativeDeltaY = 0.0f;
         };
 
-        struct InternalTouchLocationState
-        {
-            int Id = 0;
-            TouchLocationState State = TouchLocationState::Invalid;
-            Microsoft::Xna::Framework::Vector2 Position = Microsoft::Xna::Framework::Vector2();
-            bool RemoveAfterSnapshot = false;
-            // Previous-frame location (what the last GetTouchState() reported), so a Moved/Released
-            // touch exposes TryGetPreviousLocation() (task 868–870). Invalid = no previous yet.
-            TouchLocationState PreviousState = TouchLocationState::Invalid;
-            Microsoft::Xna::Framework::Vector2 PreviousPosition = Microsoft::Xna::Framework::Vector2();
-            // CNAEXT/EXT: SDL finger pressure (0..1), surfaced via TouchLocation::getPressureEXT.
-            float Pressure = 0.0f;
-        };
-
         struct InternalInputState
         {
             InternalMouseState Mouse;
             std::unordered_set<Microsoft::Xna::Framework::Input::Keys> PressedKeys;
-            std::unordered_map<int, InternalTouchLocationState> TouchLocations;
         };
 
         InternalInputState& getInternalInputState()
@@ -168,22 +150,6 @@ namespace CNA::Internal::Input
         pressedKeys.erase(key);
     }
 
-    void InputManager::SetTouchState(
-        const int touchId,
-        const TouchLocationState state,
-        const Microsoft::Xna::Framework::Vector2& position,
-        const float pressure
-    )
-    {
-        auto& touchLocations = getInternalInputState().TouchLocations;
-        auto& touchLocation = touchLocations[touchId];
-        touchLocation.Id = touchId;
-        touchLocation.State = state;
-        touchLocation.Position = position;
-        touchLocation.Pressure = pressure;
-        touchLocation.RemoveAfterSnapshot = state == TouchLocationState::Released;
-    }
-
     Microsoft::Xna::Framework::Input::MouseState InputManager::GetMouseState()
     {
         using Microsoft::Xna::Framework::Input::ButtonState;
@@ -230,87 +196,5 @@ namespace CNA::Internal::Input
 #endif
         return Microsoft::Xna::Framework::Input::KeyboardState(pressedKeys);
     }
-
-    bool InputManager::HasAnyTouch()
-    {
-        return !getInternalInputState().TouchLocations.empty();
-    }
-
-    Microsoft::Xna::Framework::Input::Touch::TouchCollection InputManager::GetTouchState()
-    {
-        auto& touchLocations = getInternalInputState().TouchLocations;
-
-        std::vector<int> sortedTouchIds;
-        sortedTouchIds.reserve(touchLocations.size());
-        for (const auto& [touchId, _] : touchLocations)
-        {
-            sortedTouchIds.push_back(touchId);
-        }
-        std::sort(sortedTouchIds.begin(), sortedTouchIds.end());
-
-        std::vector<Microsoft::Xna::Framework::Input::Touch::TouchLocation> snapshot;
-        snapshot.reserve(sortedTouchIds.size());
-
-        for (const int touchId : sortedTouchIds)
-        {
-            const auto touchLocationIterator = touchLocations.find(touchId);
-            if (touchLocationIterator == touchLocations.end())
-            {
-                continue;
-            }
-
-            const auto& touchLocation = touchLocationIterator->second;
-
-            // Expose the previous-frame location for Moved/Released touches (Pressed/new touches
-            // have no previous, matching FNA). Previous is "what AdvanceTouchFrame() last recorded".
-            if (touchLocation.PreviousState != TouchLocationState::Invalid)
-            {
-                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
-                                      touchLocation.PreviousState, touchLocation.PreviousPosition,
-                                      touchLocation.Pressure);
-            }
-            else
-            {
-                snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
-                                      touchLocation.Pressure);
-            }
-        }
-
-        return Microsoft::Xna::Framework::Input::Touch::TouchCollection(std::move(snapshot));
-    }
-
-    void InputManager::AdvanceTouchFrame()
-    {
-        auto& touchLocations = getInternalInputState().TouchLocations;
-
-        std::vector<int> touchIdsToRemove;
-        touchIdsToRemove.reserve(touchLocations.size());
-
-        for (auto& [touchId, touchLocation] : touchLocations)
-        {
-            // Record the location just reported as "previous" for the next snapshot — done before
-            // the Pressed→Moved promotion below, so a promoted touch's previous is the Pressed
-            // location the game actually saw, not the promoted Moved state.
-            touchLocation.PreviousState    = touchLocation.State;
-            touchLocation.PreviousPosition = touchLocation.Position;
-
-            if (touchLocation.RemoveAfterSnapshot)
-            {
-                touchIdsToRemove.push_back(touchId);
-                continue;
-            }
-
-            if (touchLocation.State == TouchLocationState::Pressed)
-            {
-                touchLocation.State = TouchLocationState::Moved;
-            }
-        }
-
-        for (const int touchId : touchIdsToRemove)
-        {
-            touchLocations.erase(touchId);
-        }
-    }
-
 
 }

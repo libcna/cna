@@ -70,11 +70,11 @@ Four deletions, two replacements, one extension, one survivor. The four deletion
 this migration should end with *fewer* abstractions than it started with, not the same number
 wearing new names.
 
-`InputManager` remains a pure in-process state store that makes **no SDL calls at all** — the only
-SDL symbol it reaches at runtime is an `SDL_Log` inside an `#ifdef __ANDROID__` diagnostic, and its
-header has zero SDL symbols. The compatibility bridge still writes keyboard/mouse/touch state there,
-but public `Keyboard`, `Mouse` and `GamePad` now read whole-device platform snapshots. PLAT-82 removed
-the store's mapped-gamepad fields and mutators entirely; touch remains until PLAT-86.
+`InputManager` remains a pure in-process compatibility store that makes **no SDL calls at all** —
+the only SDL symbol it reaches at runtime is an `SDL_Log` inside an `#ifdef __ANDROID__` diagnostic,
+and its header has zero SDL symbols. PLAT-82 removed mapped-gamepad state and PLAT-86 removed its
+final public-device store, touch. It now retains only keyboard/mouse accumulators used by text/click
+synthesis and legacy raw-adapter tests; public state belongs to platform snapshots or `TouchPanel`.
 
 ---
 
@@ -110,7 +110,7 @@ drops the capability. It should not make that decision silently.
 
 **Input device enumeration.** `CNA::Input::InputDevicesEXT` lists connected mice, keyboards and
 touch devices by id and name. `TouchPanel::GetCapabilities` queries the touch-device list on
-*every call*, matching FNA — with a sticky flag and a live touch-state peek as fallbacks for
+*every call*, matching FNA — with a sticky flag and a panel-owned live-state peek as fallbacks for
 platforms that only enumerate a touchscreen after the first interaction. Nothing in `IPlatform`
 enumerates input devices: `DeviceEvent` reports *changes*, but there is no way to ask for the
 current set. A platform that starts with a touchscreen already attached and never fires an add
@@ -175,4 +175,4 @@ handle store first would otherwise have broken `OpenFromJoystickEXT` between com
 
 The two renderer examples that call `InputManager::SetKeyState` directly
 (`modules/renderers/easygl/examples/`, `modules/renderers/sdl-renderer/examples/`) use it as a
-synthetic-input injection seam and are unaffected throughout: `InputManager` does not change.
+synthetic-input injection seam and are unaffected: PLAT-86 removed only the independent touch store.

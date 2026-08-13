@@ -8,7 +8,8 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Input/InputManager.hpp"
-#include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Internal/Input/PlatformInputBridge.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
@@ -53,7 +54,7 @@ TEST(InputResetAllForTests, ClearsTouchPanelDisplayMetricsAndTouches)
 {
     TouchPanel::setDisplayWidthProperty(1234);
     TouchPanel::setDisplayHeightProperty(567);
-    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(3, 4));
+    TouchPanel::INTERNAL_setTouchState(1, TouchLocationState::Pressed, Vector2(3, 4));
 
     InputManager::ResetAllForTests();
 
@@ -153,29 +154,31 @@ TEST(InputResetAllForTests, ClearsAccumulatedMouseButtonsPositionAndWheel)
 
 TEST(InputResetAllForTests, ResetsSequentialTouchIdCounterViaBridge)
 {
-    using CNA::Internal::Input::SdlInputBridge;
+    using CNA::Internal::Input::PlatformInputBridge;
+    using CNA::Platform::TouchEvent;
+    using CNA::Platform::TouchEventKind;
 
-    auto fingerDown = [](SDL_FingerID id) {
-        SDL_Event e{};
-        e.type = SDL_EVENT_FINGER_DOWN;
-        e.tfinger.fingerID = id;
-        e.tfinger.x = 0.5f;
-        e.tfinger.y = 0.5f;
-        SdlInputBridge::ProcessEvent(e);
+    auto fingerDown = [](const std::uint64_t id) {
+        TouchEvent event{};
+        event.fingerId = id;
+        event.kind = TouchEventKind::Down;
+        event.x = 0.5f;
+        event.y = 0.5f;
+        PlatformInputBridge::ProcessEvent(event);
     };
 
     TouchPanel::setDisplayWidthProperty(100);
     TouchPanel::setDisplayHeightProperty(100);
 
     fingerDown(42);
-    const int firstId = InputManager::GetTouchState()[0].getIdProperty();
+    const int firstId = TouchPanel::GetState()[0].getIdProperty();
 
     InputManager::ResetAllForTests();
     TouchPanel::setDisplayWidthProperty(100);
     TouchPanel::setDisplayHeightProperty(100);
 
-    fingerDown(99); // different SDL finger id, but the compact counter restarts at 1 after reset
-    const int afterResetId = InputManager::GetTouchState()[0].getIdProperty();
+    fingerDown(99); // different platform finger id, but the compact counter restarts after reset
+    const int afterResetId = TouchPanel::GetState()[0].getIdProperty();
 
     EXPECT_EQ(firstId, afterResetId)
         << "ResetAllForTests must clear the finger->touch map and restart the id counter";

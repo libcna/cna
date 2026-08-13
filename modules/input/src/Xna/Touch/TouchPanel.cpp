@@ -3,9 +3,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <stdexcept>
 
-#include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/GestureDetector.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
@@ -15,6 +15,48 @@ namespace Microsoft::Xna::Framework::Input::Touch
 {
     using Microsoft::Xna::Framework::DisplayOrientation;
     using Microsoft::Xna::Framework::Vector2;
+
+    namespace
+    {
+        struct EventTouchLocationState
+        {
+            TouchPanel::intcs id = 0;
+            TouchLocationState state = TouchLocationState::Invalid;
+            Vector2 position{};
+            bool removeAfterFrame = false;
+            TouchLocationState previousState = TouchLocationState::Invalid;
+            Vector2 previousPosition{};
+            float pressure = 0.0f;
+        };
+
+        std::map<TouchPanel::intcs, EventTouchLocationState>& eventTouches()
+        {
+            static std::map<TouchPanel::intcs, EventTouchLocationState> touches;
+            return touches;
+        }
+
+        void advanceEventTouches()
+        {
+            auto& touches = eventTouches();
+            for (auto it = touches.begin(); it != touches.end();)
+            {
+                auto& touch = it->second;
+                touch.previousState = touch.state;
+                touch.previousPosition = touch.position;
+
+                if (touch.removeAfterFrame)
+                {
+                    it = touches.erase(it);
+                    continue;
+                }
+                if (touch.state == TouchLocationState::Pressed)
+                {
+                    touch.state = TouchLocationState::Moved;
+                }
+                ++it;
+            }
+        }
+    }
 
     TouchPanel::intcs TouchPanel::displayWidth_ = 0;
     TouchPanel::intcs TouchPanel::displayHeight_ = 0;
@@ -104,14 +146,14 @@ namespace Microsoft::Xna::Framework::Input::Touch
         // INP-AUD-003: query the platform's live device enumeration on every call, matching FNA's
         // GetTouchCapabilities(), which enumerates on every query. Neither this call nor the two
         // fallbacks below mutate touch state, so a capability query never consumes a frame of input.
-        // The sticky touchDeviceExists_ flag and the live HasAnyTouch() peek remain as fallbacks for
+        // The sticky touchDeviceExists_ flag and the live event-state peek remain as fallbacks for
         // platforms (FNA notes Windows) that only enumerate a touch device after first interaction.
         CNA::Platform::IPlatformInputDevices* devices =
             CNA::Platform::GetCurrentPlatform().GetInputDevices();
         const bool isConnected =
             (devices != nullptr && devices->HasDevice(CNA::Platform::InputDeviceKind::Touch)) ||
             touchDeviceExists_ ||
-            CNA::Internal::Input::InputManager::HasAnyTouch();
+            !eventTouches().empty();
         return TouchPanelCapabilities(isConnected, isConnected ? kXnaReportedMaxTouchCount : 0);
     }
 
@@ -134,29 +176,31 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         // Intentional deviation from FNA: FNA populates touches_ exclusively via SetFinger,
         // driven by a per-frame platform poll (FNAPlatform.UpdateTouchPanelState() ->
-        // SDL_GetTouchFingers()) that Update() runs every tick. CNA's SdlInputBridge is
-        // event-driven (dispatches discrete SDL_Event values) rather than poll-driven, so
+        // SDL_GetTouchFingers()) that Update() runs every tick. CNA's PlatformInputBridge is
+        // event-driven (dispatches discrete PlatformEvent values) rather than poll-driven, so
         // SetFinger/touches_ are not fed by the real input path and stay empty in production.
-        // Fall back to InputManager's event-driven touch snapshot so GetState() still reports
-        // real touches. SetFinger/touches_ remain exercised by tests and available for a future
-        // poll-based platform path.
-        TouchCollection fallback = CNA::Internal::Input::InputManager::GetTouchState();
-
-        // DEC-10: cap the public snapshot at MAX_TOUCHES to match FNA, whose TouchPanel tracks a fixed
-        // TouchLocation[MAX_TOUCHES] array (SDL3_FNAPlatform iterates 0..MAX_TOUCHES). InputManager's
-        // event-driven map is unbounded, so a device delivering >MAX_TOUCHES fingers would otherwise
-        // over-report here. Keep the lowest-id touches (InputManager already sorts ascending by id).
-        if (fallback.getCountProperty() > MAX_TOUCHES)
+        // Fall back to the panel-owned event snapshot so GetState() still reports real touches.
+        // The ordered map keeps the public MAX_TOUCHES truncation deterministic by touch id.
+        validTouches_.reserve(static_cast<std::size_t>(MAX_TOUCHES));
+        for (const auto& [_, touch] : eventTouches())
         {
-            std::vector<TouchLocation> capped;
-            capped.reserve(static_cast<std::size_t>(MAX_TOUCHES));
-            for (int i = 0; i < MAX_TOUCHES; ++i)
+            if (validTouches_.size() == static_cast<std::size_t>(MAX_TOUCHES))
             {
-                capped.push_back(fallback[static_cast<std::size_t>(i)]);
+                break;
             }
-            return TouchCollection(std::move(capped));
+
+            if (touch.previousState != TouchLocationState::Invalid)
+            {
+                validTouches_.emplace_back(touch.id, touch.state, touch.position,
+                                           touch.previousState, touch.previousPosition,
+                                           touch.pressure);
+            }
+            else
+            {
+                validTouches_.emplace_back(touch.id, touch.state, touch.position, touch.pressure);
+            }
         }
-        return fallback;
+        return TouchCollection(validTouches_);
     }
 
     GestureSample TouchPanel::ReadGesture()
@@ -221,6 +265,20 @@ namespace Microsoft::Xna::Framework::Input::Touch
         }
     }
 
+    void TouchPanel::INTERNAL_setTouchState(
+        const intcs touchId,
+        const TouchLocationState state,
+        const Vector2& position,
+        const float pressure)
+    {
+        auto& touch = eventTouches()[touchId];
+        touch.id = touchId;
+        touch.state = state;
+        touch.position = position;
+        touch.pressure = pressure;
+        touch.removeAfterFrame = state == TouchLocationState::Released;
+    }
+
     void TouchPanel::SetFinger(intcs index, intcs fingerId, const Vector2& fingerPos)
     {
         if (index < 0 || index >= MAX_TOUCHES)
@@ -244,7 +302,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
                     previous.getPositionProperty()
                 );
 
-                updateInputManagerTouch(
+                INTERNAL_setTouchState(
                     previous.getIdProperty(),
                     TouchLocationState::Released,
                     previous.getPositionProperty()
@@ -270,7 +328,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
                 fingerPos
             );
 
-            updateInputManagerTouch(fingerId, TouchLocationState::Pressed, fingerPos);
+            INTERNAL_setTouchState(fingerId, TouchLocationState::Pressed, fingerPos);
         }
         else
         {
@@ -282,7 +340,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
                 previous.getPositionProperty()
             );
 
-            updateInputManagerTouch(fingerId, TouchLocationState::Moved, fingerPos);
+            INTERNAL_setTouchState(fingerId, TouchLocationState::Moved, fingerPos);
         }
 
         touchDeviceExists_ = true;
@@ -292,12 +350,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
         previousTouches_ = touches_;
 
-        // Advance the event-driven fallback InputManager::GetTouchState() reads from (see
-        // GetState() above) by exactly one frame: promote Pressed->Moved, retire Released, and
-        // record this frame's locations as "previous" for the next snapshot. Must happen here
-        // (once per frame) rather than inside the getter, so repeated/zero reads in a frame no
-        // longer change what is reported.
-        CNA::Internal::Input::InputManager::AdvanceTouchFrame();
+        advanceEventTouches();
 
         CNA::Internal::Input::GestureDetector::OnUpdate();
     }
@@ -306,6 +359,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
         touches_.fill(TouchLocation());
         previousTouches_.fill(TouchLocation());
+        eventTouches().clear();
         validTouches_.clear();
         while (!gestures_.empty())
         {
@@ -323,13 +377,4 @@ namespace Microsoft::Xna::Framework::Input::Touch
         windowHandle_       = 0;
     }
 
-    void TouchPanel::updateInputManagerTouch(intcs fingerId, TouchLocationState state, const Vector2& position)
-    {
-        if (fingerId == NO_FINGER)
-        {
-            return;
-        }
-
-        CNA::Internal::Input::InputManager::SetTouchState(fingerId, state, position);
-    }
 }
