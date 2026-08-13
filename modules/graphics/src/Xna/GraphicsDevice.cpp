@@ -4,6 +4,9 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "CNA/Logger.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformWindow.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
@@ -284,8 +287,10 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsProfile graphicsProfile,
         const PresentationParameters& presentationParameters
     )
-        : window_(nullptr),
-          ownsWindow_(false),
+        : platform_(&CNA::Platform::GetCurrentPlatform()),
+          platformWindow_(nullptr),
+          window_(nullptr),
+          videoSubsystemAcquired_(false),
           renderer_(nullptr),
           viewport_(),
           currentVertexBuffer_(nullptr),
@@ -308,51 +313,44 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
 
-        // plan_headless.md design decision 2 / plan_software.md design decision 4 / plan_stub.md
-        // design decision 1: the Headless, Software, and Stub renderers never create a real window
-        // and never touch SDL's video subsystem at all, so all three can run in CI containers with
-        // no display server present -- not just a headless-but-present one. PortableGL joins them:
-        // it is a CPU software OpenGL 3.x-ish renderer (rswinkle/PortableGL) with the same "no
-        // window, no GPU library, no SDL video subsystem" shape.
-#if !defined(CNA_RENDERER_HEADLESS) && !defined(CNA_RENDERER_SOFTWARE) && !defined(CNA_RENDERER_STUB) && !defined(CNA_RENDERER_PORTABLEGL)
-        // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the compile-time
-        // guard above: a renderer that normally wants a window (D3D12) can be asked for a genuinely
-        // off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what lets such a
-        // device run with no display server at all, not merely without a visible window.
-        if (!presentationParameters_.getHeadlessEXTProperty())
-        {
-            if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-            {
-                throw makeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO)");
-            }
-        }
-#endif
-
         // The Touch Panel needs this for normalized-to-pixel touch coordinate scaling.
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayHeightProperty(virtualHeight_);
 
-        createOrAttachWindow();
-        applyPresentationParametersToWindow();
-        createRenderer();
-        UpdateViewportFromWindow();
+        try
+        {
+            createOrAttachWindow();
+            applyPresentationParametersToWindow();
+            createRenderer();
+            UpdateViewportFromWindow();
 
-        // Task 896/955: blendState_/depthStencilState_/rasterizerState_ above were only ever
-        // set as C++-level fields, never pushed to the renderer's actual GPU state — every
-        // renderer started from its own hardcoded internal default (e.g. EasyGL's depth test is
-        // plain OpenGL, which defaults to disabled, until something explicitly enables it) until
-        // a game explicitly set one of these 3 state properties itself. Real FNA's own
-        // GraphicsDevice constructor does exactly this same 3-line sync unconditionally
-        // (GraphicsDevice.cs: "BlendState = BlendState.Opaque; DepthStencilState =
-        // DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;") —
-        // Task 896 ported only the 3rd line; this now ports the other 2 as well, matching FNA.
-        setBlendStateProperty(blendState_);
-        // A 2D-only renderer has no native depth/stencil state to initialize. Skipping this one
-        // constructor-time synchronization lets such a renderer reject every later public state
-        // assignment consistently, instead of needing a special first-call exception.
-        if (renderer_->SupportsDepthStencil())
-            setDepthStencilStateProperty(depthStencilState_);
-        setRasterizerStateProperty(rasterizerState_);
+            // Task 896/955: blendState_/depthStencilState_/rasterizerState_ above were only ever
+            // set as C++-level fields, never pushed to the renderer's actual GPU state — every
+            // renderer started from its own hardcoded internal default (e.g. EasyGL's depth test is
+            // plain OpenGL, which defaults to disabled, until something explicitly enables it) until
+            // a game explicitly set one of these 3 state properties itself. Real FNA's own
+            // GraphicsDevice constructor does exactly this same 3-line sync unconditionally
+            // (GraphicsDevice.cs: "BlendState = BlendState.Opaque; DepthStencilState =
+            // DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;") —
+            // Task 896 ported only the 3rd line; this now ports the other 2 as well, matching FNA.
+            setBlendStateProperty(blendState_);
+            // A 2D-only renderer has no native depth/stencil state to initialize. Skipping this one
+            // constructor-time synchronization lets such a renderer reject every later public state
+            // assignment consistently, instead of needing a special first-call exception.
+            if (renderer_->SupportsDepthStencil())
+                setDepthStencilStateProperty(depthStencilState_);
+            setRasterizerStateProperty(rasterizerState_);
+        }
+        catch (...)
+        {
+            destroyNativeResources();
+            if (videoSubsystemAcquired_)
+            {
+                platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
+                videoSubsystemAcquired_ = false;
+            }
+            throw;
+        }
     }
 
     GraphicsDevice::~GraphicsDevice()
@@ -679,7 +677,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Disposing.Raise(this, System::EventArgs::Empty);
         destroyNativeResources();
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        if (videoSubsystemAcquired_)
+        {
+            platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
+            videoSubsystemAcquired_ = false;
+        }
         isDisposed_ = true;
     }
 
@@ -2260,16 +2262,25 @@ namespace Microsoft::Xna::Framework::Graphics
         return window_;
     }
 
+    CNA::Platform::IPlatformWindow* GraphicsDevice::GetPlatformWindowInternal() const
+    {
+        return platformWindow_.get();
+    }
+
     void GraphicsDevice::createOrAttachWindow()
     {
-#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)
-        // No real window, ever -- see the constructor's matching guard above.
+#if (defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)) && defined(CNA_PLATFORM_SDL3)
+        // CPU renderers selected beside the SDL3 platform keep their established no-video path:
+        // asking SDL3 for even a hidden window would require a display server they deliberately
+        // do not need. A HEADLESS or TERMINAL platform, however, creates an in-memory/terminal
+        // IPlatformWindow in the ordinary branch below, making the ownership seam testable
+        // without introducing a native display dependency.
         // GraphicsRendererCreateArgs::window stays nullptr; UpdateViewportFromWindow() already
         // falls back to the renderer's own GetViewportSize() first and only touches window_ if
         // that yields nothing, and applyPresentationParametersToWindow() already early-returns
         // when window_ is null, so neither needs its own guard.
+        platformWindow_.reset();
         window_ = nullptr;
-        ownsWindow_ = false;
 #else
         // Runtime opt-in, same effect as the compile-time branch above. Only renderers that can
         // genuinely run without a swap chain support this (D3D12 today) -- see
@@ -2279,16 +2290,24 @@ namespace Microsoft::Xna::Framework::Graphics
         // "this renderer cannot do that" error, not something GraphicsDevice should paper over.
         if (presentationParameters_.getHeadlessEXTProperty())
         {
+            platformWindow_.reset();
             window_ = nullptr;
-            ownsWindow_ = false;
             return;
         }
+
+        platform_->AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);
+        videoSubsystemAcquired_ = true;
 
         const auto requestedHandle = presentationParameters_.getDeviceWindowHandleProperty();
         if (requestedHandle != 0)
         {
+            // PresentationParameters still exposes FNA's SDL-window handle until PLAT-50/51.
+            // Resolve its event id once, then let the active platform validate and wrap it. The
+            // returned IPlatformWindow is non-owning; the caller remains responsible for the
+            // native window while GraphicsDevice owns only the wrapper.
             window_ = reinterpret_cast<SDL_Window*>(requestedHandle);
-            ownsWindow_ = false;
+            platformWindow_ = platform_->AdoptWindow(
+                static_cast<CNA::Platform::WindowId>(SDL_GetWindowID(window_)));
 
             // An attached window is just as much the active input surface as a CNA-owned one.
             // Publishing only windows created below left Mouse::SetPosition and TextInputEXT
@@ -2297,13 +2316,13 @@ namespace Microsoft::Xna::Framework::Graphics
             Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(
                 reinterpret_cast<std::uintptr_t>(window_));
             Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_setWindowId(
-                SDL_GetWindowID(window_));
+                platformWindow_->GetId());
             Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(
                 reinterpret_cast<std::uintptr_t>(window_));
             return;
         }
 
-        SDL_WindowFlags windowFlags = getRendererWindowFlags();
+        const SDL_WindowFlags windowFlags = getRendererWindowFlags();
 
         // OPENGL1 requests a legacy/compatibility (non-ES) GL context, which on X11 goes through
         // GLX rather than EasyGL's EGL path (SDL_GL_CONTEXT_PROFILE_MASK=ES steers SDL to EGL,
@@ -2339,22 +2358,52 @@ namespace Microsoft::Xna::Framework::Graphics
                                ? presentationParameters_.getBackBufferHeightProperty()
                                : 768;
 
-        window_ = SDL_CreateWindow("Game", width, height, windowFlags);
-        if (window_ == nullptr)
+        CNA::Platform::WindowDescription description;
+        description.title = "Game";
+        description.width = width;
+        description.height = height;
+        description.resizable = (windowFlags & SDL_WINDOW_RESIZABLE) != 0;
+        description.highDpi = (windowFlags & SDL_WINDOW_HIGH_PIXEL_DENSITY) != 0;
+
+        const bool requestsOpenGl = (windowFlags & SDL_WINDOW_OPENGL) != 0;
+        const bool requestsVulkan = (windowFlags & SDL_WINDOW_VULKAN) != 0;
+        const bool requestsMetal = (windowFlags & SDL_WINDOW_METAL) != 0;
+        const int renderIntentCount = static_cast<int>(requestsOpenGl)
+            + static_cast<int>(requestsVulkan) + static_cast<int>(requestsMetal);
+        if (renderIntentCount > 1)
         {
-            throw makeSdlError("SDL_CreateWindow");
+            throw std::runtime_error("renderer requested conflicting platform window intents");
+        }
+        if (requestsOpenGl)
+            description.renderIntent = CNA::Platform::WindowRenderIntent::OpenGl;
+        else if (requestsVulkan)
+            description.renderIntent = CNA::Platform::WindowRenderIntent::Vulkan;
+        else if (requestsMetal)
+            description.renderIntent = CNA::Platform::WindowRenderIntent::Metal;
+
+        platformWindow_ = platform_->CreateWindow(description);
+        if (!platformWindow_)
+        {
+            throw std::runtime_error("platform returned a null window");
         }
 
-        ownsWindow_ = true;
-        presentationParameters_.
-            setDeviceWindowHandleProperty(reinterpret_cast<PresentationParameters::IntPtr>(window_));
+        // Transitional bridge only: renderers and GameWindow still take SDL_Window* until
+        // PLAT-58/50. Lookup by the contract's stable WindowId avoids teaching IPlatformWindow an
+        // SDL escape hatch; a non-SDL platform simply has no such borrowed view.
+        window_ = SDL_GetWindowFromID(static_cast<SDL_WindowID>(platformWindow_->GetId()));
+
+        if (window_ != nullptr)
+        {
+            presentationParameters_.setDeviceWindowHandleProperty(
+                reinterpret_cast<PresentationParameters::IntPtr>(window_));
+        }
 
         // Publish the window to the text-input subsystem (mirrors FNA, which sets
         // TextInputEXT.WindowHandle at window creation). Required for StartTextInput etc.
         Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(
             reinterpret_cast<std::uintptr_t>(window_));
         Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_setWindowId(
-            SDL_GetWindowID(window_));
+            platformWindow_->GetId());
 
         // Publish the same window to Mouse (mirrors FNA setting Mouse.WindowHandle at window
         // creation, SDL3_FNAPlatform.cs). Lets SetPosition / relative-mouse-mode target the
@@ -2362,7 +2411,10 @@ namespace Microsoft::Xna::Framework::Graphics
         Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(
             reinterpret_cast<std::uintptr_t>(window_));
 
-        LogWindowDebugState(window_, "after SDL_CreateWindow");
+        if (window_ != nullptr)
+        {
+            LogWindowDebugState(window_, "after platform window creation");
+        }
 #endif
     }
 
@@ -2446,7 +2498,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (window_ != nullptr)
         {
             // Clear shared input handles for both owned and caller-provided windows when they
-            // still point at this device. The ownership flag controls only SDL_DestroyWindow.
+            // still point at this device. Caller-provided windows remain borrowed; an owned
+            // native window is released only by platformWindow_ below.
             if (Microsoft::Xna::Framework::Input::TextInputEXT::getWindowHandleProperty()
                 == reinterpret_cast<std::uintptr_t>(window_))
             {
@@ -2457,12 +2510,10 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(0);
             }
-            if (ownsWindow_)
-                SDL_DestroyWindow(window_);
         }
 
         window_ = nullptr;
-        ownsWindow_ = false;
+        platformWindow_.reset();
     }
 
     void GraphicsDevice::UpdateViewportFromWindow()
@@ -2475,7 +2526,13 @@ namespace Microsoft::Xna::Framework::Graphics
             renderer_->GetViewportSize(width, height);
         }
 
-        if ((width <= 0 || height <= 0) && window_ != nullptr)
+        if ((width <= 0 || height <= 0) && platformWindow_ != nullptr)
+        {
+            const CNA::Platform::WindowBounds bounds = platformWindow_->GetClientBounds();
+            width = bounds.width;
+            height = bounds.height;
+        }
+        else if ((width <= 0 || height <= 0) && window_ != nullptr)
         {
             SDL_GetWindowSize(window_, &width, &height);
         }
@@ -2589,7 +2646,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::applyPresentationParametersToWindow()
     {
-        if (window_ == nullptr)
+        if (platformWindow_ == nullptr && window_ == nullptr)
         {
             return;
         }
@@ -2600,7 +2657,13 @@ namespace Microsoft::Xna::Framework::Graphics
         // matches GraphicsDeviceManager::applyToExistingRenderer()'s identical non-fatal handling
         // (Task 224), which this method now supersedes as the single fullscreen-application path.
         const bool fullScreen = presentationParameters_.getIsFullScreenProperty();
-        if (!SDL_SetWindowFullscreen(window_, fullScreen))
+        if (platformWindow_ != nullptr)
+        {
+            platformWindow_->SetFullscreenMode(
+                fullScreen ? CNA::Platform::WindowFullscreenMode::ExclusiveFullscreen
+                           : CNA::Platform::WindowFullscreenMode::Windowed);
+        }
+        else if (!SDL_SetWindowFullscreen(window_, fullScreen))
         {
             SDL_ClearError();
         }
@@ -2610,8 +2673,12 @@ namespace Microsoft::Xna::Framework::Graphics
         if (width > 0 && height > 0)
         {
 #ifndef __ANDROID__
-
-            if (!SDL_SetWindowSize(window_, width, height))
+            if (platformWindow_ != nullptr)
+            {
+                platformWindow_->SetSize(width, height);
+                platformWindow_->Sync();
+            }
+            else if (!SDL_SetWindowSize(window_, width, height))
             {
                 throw makeSdlError("SDL_SetWindowSize");
             }
@@ -2628,7 +2695,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // session. SDL_SyncWindow() blocks (with an internal timeout) until the resize is
             // actually applied; non-fatal on failure/lack of support (matches the fullscreen
             // handling just above), since some platforms/drivers never need or support it.
-            if (!SDL_SyncWindow(window_))
+            if (platformWindow_ == nullptr && !SDL_SyncWindow(window_))
             {
                 SDL_ClearError();
             }

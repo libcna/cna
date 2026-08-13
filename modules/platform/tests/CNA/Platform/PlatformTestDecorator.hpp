@@ -99,6 +99,17 @@ namespace CNA::Platform::Testing {
             return inner_->CreateWindow(description);
         }
 
+        /**
+         * @brief Adopts a window through the inner platform.
+         * @param windowId The existing window id.
+         * @return The non-owning wrapper.
+         */
+        [[nodiscard]] std::unique_ptr<IPlatformWindow> AdoptWindow(
+            const WindowId windowId) override
+        {
+            return inner_->AdoptWindow(windowId);
+        }
+
         /** @brief Polls the inner platform's events. @param destination Receives the batch. */
         void PollEvents(std::vector<PlatformEvent>& destination) override
         {

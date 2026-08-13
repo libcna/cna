@@ -32,19 +32,21 @@ namespace CNA::Platform {
     };
 
     /**
-     * @brief One window owned by a platform implementation.
+     * @brief One window represented by a platform implementation.
      *
      * The surface `Microsoft::Xna::Framework::GameWindow` is built on. Every member here is
      * something `GameWindow.cpp` or `GraphicsDeviceManager.cpp` does today through SDL; nothing
      * is speculative.
      *
-     * A window is owned by the `IPlatform` that created it and is destroyed through it. A
-     * renderer holds the `NativeWindowHandle` this exposes, not the window itself.
+     * A window returned by `IPlatform::CreateWindow` owns its native window and destroys it with
+     * the wrapper. A wrapper returned by `IPlatform::AdoptWindow` is deliberately non-owning: the
+     * external caller must keep the native window alive. A renderer holds the `NativeWindowHandle`
+     * this exposes, not either kind of wrapper.
      */
     class IPlatformWindow
     {
     public:
-        /** @brief Destroys the window wrapper. Implementations release the native window here. */
+        /** @brief Destroys the wrapper and releases the native window when this wrapper owns it. */
         virtual ~IPlatformWindow() = default;
 
         /**

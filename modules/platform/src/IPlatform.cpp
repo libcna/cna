@@ -2,7 +2,16 @@
 
 #include "CNA/Platform/IPlatform.hpp"
 
+#include "CNA/Platform/PlatformException.hpp"
+
 namespace CNA::Platform {
+
+    std::unique_ptr<IPlatformWindow> IPlatform::AdoptWindow(const WindowId windowId)
+    {
+        throw PlatformException(
+            "AdoptWindow(" + std::to_string(windowId) + ")",
+            "external window adoption is unsupported by " + GetName());
+    }
 
     const std::string& ToString(const PlatformSubsystem subsystem)
     {

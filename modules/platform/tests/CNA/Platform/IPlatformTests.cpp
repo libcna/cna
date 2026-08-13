@@ -177,12 +177,18 @@ TEST(IPlatformTests, SubsystemsAreRefcountedNotBoolean)
 
 TEST(IPlatformTests, UnpairedReleaseIsANoOpNotAnError)
 {
-    // GraphicsDevice::Dispose releases video unconditionally, whether or not the headless path
-    // ever acquired it. docs/platform-sdl-lifecycle-audit.md records that tolerance as
-    // deliberate, so the contract must not tighten it into an error.
+    // Cleanup after partial initialization may still issue an unmatched release even though
+    // GraphicsDevice now records and balances its own acquisition. The contract preserves that
+    // tolerance rather than forcing every failure path to fabricate ownership.
     FakePlatform platform;
     EXPECT_NO_THROW(platform.ReleaseSubsystem(PlatformSubsystem::Video));
     EXPECT_FALSE(platform.IsSubsystemInitialized(PlatformSubsystem::Video));
+}
+
+TEST(IPlatformTests, UnsupportedExternalWindowAdoptionRefusesExplicitly)
+{
+    FakePlatform platform;
+    EXPECT_THROW((void)platform.AdoptWindow(1), PlatformException);
 }
 
 TEST(IPlatformTests, SubsystemsAreIndependent)

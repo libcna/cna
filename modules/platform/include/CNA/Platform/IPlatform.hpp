@@ -110,9 +110,9 @@ namespace CNA::Platform {
         /**
          * @brief Releases a subsystem previously acquired.
          *
-         * Releasing a subsystem that was never acquired is a **no-op, not an error**: CNA has
-         * call sites that release unconditionally (`GraphicsDevice::Dispose` releases video
-         * whether or not the headless path acquired it), and that tolerance is deliberate.
+         * Releasing a subsystem that was never acquired is a **no-op, not an error**. Cleanup
+         * code may legitimately run after partial initialization, so implementations preserve
+         * that tolerance even though normal owners balance every successful acquisition.
          *
          * @param subsystem The subsystem to release.
          */
@@ -139,6 +139,20 @@ namespace CNA::Platform {
          */
         [[nodiscard]] virtual std::unique_ptr<IPlatformWindow> CreateWindow(
             const WindowDescription& description) = 0;
+
+        /**
+         * @brief Validates and wraps a caller-owned window already known to this platform.
+         *
+         * The returned wrapper never takes ownership of the caller's native window. The id must
+         * belong to this platform implementation and remain valid until the wrapper is destroyed.
+         * Implementations that cannot resolve external windows refuse explicitly.
+         *
+         * @param windowId The stable event id of the existing window.
+         * @return A non-owning platform-window wrapper.
+         * @throws PlatformException If the id is invalid, belongs to another implementation, or
+         * external window adoption is unsupported.
+         */
+        [[nodiscard]] virtual std::unique_ptr<IPlatformWindow> AdoptWindow(WindowId windowId);
 
         // --- Events ------------------------------------------------------------------------
 

@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -98,6 +99,26 @@ TEST_F(Sdl3WindowTest, WindowIdsAreDistinctAcrossWindows)
     const std::unique_ptr<IPlatformWindow> second = platform_->CreateWindow(description);
     ASSERT_NE(second, nullptr);
     EXPECT_NE(second->GetId(), window_->GetId());
+}
+
+TEST_F(Sdl3WindowTest, AdoptedWindowIsValidatedAndRemainsCallerOwned)
+{
+    const WindowId id = window_->GetId();
+    std::unique_ptr<IPlatformWindow> adopted = platform_->AdoptWindow(id);
+    ASSERT_NE(adopted, nullptr);
+    EXPECT_EQ(adopted->GetId(), id);
+    EXPECT_EQ(adopted->GetTitle(), window_->GetTitle());
+
+    adopted.reset();
+    EXPECT_EQ(window_->GetId(), id)
+        << "destroying the adopted wrapper must not destroy the caller-owned window";
+}
+
+TEST_F(Sdl3WindowTest, AdoptionRejectsAnUnknownWindowId)
+{
+    EXPECT_THROW(
+        (void)platform_->AdoptWindow(std::numeric_limits<WindowId>::max()),
+        PlatformException);
 }
 
 // --- geometry and state (PLAT-31) -----------------------------------------------------------------

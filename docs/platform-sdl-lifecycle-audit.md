@@ -58,7 +58,11 @@ account for that implicit dependency rather than inheriting it for free.
 
 ### `SDL_INIT_VIDEO` — `GraphicsDevice`
 
-`modules/graphics/src/Xna/GraphicsDevice.cpp:324` acquires, `:682` releases in `Dispose()`.
+> **PLAT-62 update:** the direct calls recorded below were the migration baseline. `GraphicsDevice`
+> now acquires/releases `PlatformSubsystem::Video` through its enclosing `IPlatform`, records a
+> successful acquisition, and balances it after destroying the renderer and its owned
+> `IPlatformWindow`. SDL3 maps that pair onto these same native calls; HEADLESS/TERMINAL only
+> maintain their platform-local reference count.
 
 The acquisition is **conditional**, and the condition is load-bearing:
 
@@ -70,10 +74,9 @@ if (!presentationParameters_.getHeadlessEXTProperty())
 ```
 
 `HeadlessEXT` is what lets a device run with no display server at all — `plan_headless.md`'s
-central promise ("`SDL_INIT_VIDEO` never called") depends on this branch. Note the asymmetry:
-`Dispose()` calls `SDL_QuitSubSystem(SDL_INIT_VIDEO)` **unconditionally**, relying on SDL's
-refcount making the unpaired release a no-op. PLAT-29 must either preserve that tolerance or
-make the release conditional to match; it must not tighten the acquisition into an assertion.
+central promise ("`SDL_INIT_VIDEO` never called") depends on this branch. This historical
+asymmetry was removed by PLAT-62's recorded conditional release, while the platform contract still
+keeps unpaired release tolerant for cleanup after partial initialization.
 
 ### `SDL_INIT_AUDIO` — three different ownership models in one subsystem
 
@@ -162,8 +165,9 @@ PLAT-29 is verified by these passing unchanged, not by inspection:
 2. **Global lifetime stays with the application.** `IPlatform::Initialize()` ≠ `SDL_Init()`.
    Document this explicitly in the contract, or it will be "fixed" later by someone reasonably
    assuming otherwise.
-3. **Tolerate unpaired releases.** `GraphicsDevice` releases video unconditionally; audio is
-   pinned and never released. Both are deliberate.
+3. **Tolerate unpaired releases.** PLAT-62 now balances `GraphicsDevice` video ownership, but
+   cleanup after partial initialization may still release an unacquired subsystem and must remain
+   harmless. (The audio statement was the pre-PLAT-97 baseline; audio now has per-object leases.)
 4. **Never route subsystem calls through a main-thread dispatch.** It deadlocks without an event
    pump, and CNA supports device usage with no pump running.
 5. **Preserve the headless branch.** Skipping video acquisition entirely, not merely hiding a

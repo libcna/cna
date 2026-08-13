@@ -21,13 +21,14 @@ namespace CNA::Platform::Sdl3 {
     {
     public:
         /**
-         * @brief Wraps an already-created SDL window and takes ownership of it.
+         * @brief Wraps an already-created SDL window.
          *
-         * @param window The window to own. Must not be null.
+         * @param window The window to wrap. Must not be null.
+         * @param ownsWindow Whether destruction also destroys the native window.
          */
-        explicit Sdl3Window(SDL_Window* window);
+        explicit Sdl3Window(SDL_Window* window, bool ownsWindow = true);
 
-        /** @brief Destroys the underlying SDL window. */
+        /** @brief Destroys the wrapper and, when owned, the underlying SDL window. */
         ~Sdl3Window() override;
 
         Sdl3Window(const Sdl3Window&) = delete;
@@ -109,6 +110,7 @@ namespace CNA::Platform::Sdl3 {
 
     private:
         SDL_Window* window_;
+        bool ownsWindow_;
     };
 
 } // namespace CNA::Platform::Sdl3

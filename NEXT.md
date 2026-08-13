@@ -2,7 +2,7 @@
 
 > **Active campaign — SDL3/CNA platform separation:** see **`NEXT_platform.md`** and
 > **`plan_platform.md`**. That work introduces `modules/platform` (`CNA::Platform::IPlatform`) and
-> is on branch `claude/cna-platform-sdl3-separation-pxuc33`; do not reconstruct its state from
+> is on branch `feature/platform`; do not reconstruct its state from
 > this file, which predates it.
 >
 > Two things from it belong here because they affect every subsystem.

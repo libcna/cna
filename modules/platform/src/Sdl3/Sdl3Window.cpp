@@ -39,8 +39,9 @@ namespace CNA::Platform::Sdl3 {
 
     } // namespace
 
-    Sdl3Window::Sdl3Window(SDL_Window* window)
+    Sdl3Window::Sdl3Window(SDL_Window* window, const bool ownsWindow)
         : window_(window)
+        , ownsWindow_(ownsWindow)
     {
         if (window_ == nullptr)
         {
@@ -50,7 +51,10 @@ namespace CNA::Platform::Sdl3 {
 
     Sdl3Window::~Sdl3Window()
     {
-        SDL_DestroyWindow(window_);
+        if (ownsWindow_)
+        {
+            SDL_DestroyWindow(window_);
+        }
     }
 
     WindowId Sdl3Window::GetId() const

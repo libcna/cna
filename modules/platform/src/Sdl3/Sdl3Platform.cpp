@@ -135,8 +135,8 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::ReleaseSubsystem(const PlatformSubsystem subsystem)
     {
-        // An unpaired release is a documented no-op, not an error: GraphicsDevice::Dispose
-        // releases video unconditionally whether or not the headless path ever acquired it.
+        // An unpaired release is a documented no-op, not an error: cleanup may follow partial
+        // initialization even though successful owners balance every acquisition.
         const auto it = ownedRefCounts_.find(subsystem);
         if (it == ownedRefCounts_.end() || it->second == 0)
         {
@@ -217,6 +217,23 @@ namespace CNA::Platform::Sdl3 {
         }
 
         return window;
+    }
+
+    std::unique_ptr<IPlatformWindow> Sdl3Platform::AdoptWindow(const WindowId windowId)
+    {
+        if (windowId == 0)
+        {
+            throw PlatformException("AdoptWindow", "window id must be non-zero");
+        }
+
+        SDL_Window* raw = SDL_GetWindowFromID(static_cast<SDL_WindowID>(windowId));
+        if (raw == nullptr)
+        {
+            throw PlatformException(
+                "AdoptWindow(" + std::to_string(windowId) + ")",
+                "no SDL window has that id");
+        }
+        return std::make_unique<Sdl3Window>(raw, false);
     }
 
     void Sdl3Platform::PollEvents(std::vector<PlatformEvent>& destination)

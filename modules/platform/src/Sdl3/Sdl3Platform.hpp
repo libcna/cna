@@ -54,6 +54,13 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] std::unique_ptr<IPlatformWindow> CreateWindow(
             const WindowDescription& description) override;
 
+        /**
+         * @brief Wraps an existing SDL window without taking native ownership.
+         * @param windowId The existing SDL window id.
+         * @return A non-owning platform window wrapper.
+         */
+        [[nodiscard]] std::unique_ptr<IPlatformWindow> AdoptWindow(WindowId windowId) override;
+
         /** @brief Drains pending events. @param destination Receives this frame's events. */
         void PollEvents(std::vector<PlatformEvent>& destination) override;
 

@@ -507,12 +507,13 @@ if(CNA_BUILD_TESTS)
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
     # another suite usually has, so these skip there and would otherwise contribute no coverage
     # at all. Running them as their own ctest, in their own process, is what makes them real.
-    # The window half of the conformance suite (PLAT-116) belongs here rather than with the rest
+    # The window half of the conformance suite (PLAT-116) and GraphicsDevice's platform-window
+    # ownership regression (PLAT-62) belong here rather than with the rest
     # of it: its SDL3 parameterisation skips outright without a video subsystem, so running it in
     # the display-independent suite would have exercised only the implementations that need no
     # display. It ran nowhere at all until PLAT-130 -- the other suite's *PlatformConformance*
     # token does not match the string "PlatformWindowConformance".
-    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:*PlatformWindowConformance*
+    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:GraphicsDevicePlatformWindowTests.*:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
     # The rest of the platform contract is display-independent by construction, so it runs

@@ -99,8 +99,8 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **173 files / 2594 references** of direct SDL coupling outside the PLAT-3 allowlist, down
-from the 253 / 3641 baseline. Contract: 27 headers, 517 documented declarations, all SDL-free.
+Ratchet: **173 files / 2589 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+from the 253 / 3641 baseline. Contract: 27 headers, 518 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
 `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` failure was fixed —
@@ -124,17 +124,19 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**117 ✅ · 3 🟨 · 32 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **75 %** of the 155
+**118 ✅ · 3 🟨 · 32 ⬜ · 1 ⛔ · 1 ❌** across `plan_platform.md` — about **76 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
-- **Phase 1** (the contract) — done. 24 headers under `modules/platform/include/CNA/Platform/`.
+- **Phase 1** (the contract) — done. 27 headers under `modules/platform/include/CNA/Platform/`.
 - **Phase 2** (SDL3 implementation) — largely done.
 - **Phase 3** (runtime) — `Game` owns the platform; timing, cursor and the event loop are migrated;
   `GraphicsDeviceManager` is SDL-free, and PLAT-55's registered golden oracle passes through the
-  new path. PLAT-50/51 remain blocked, see §5.
-- **Phase 4** (renderers) — PLAT-57's boundary decision and PLAT-59/60/61's common-interface cleanup
-  are complete; implementation continues at PLAT-58/62. 46 identities remain in scope.
+  new path. PLAT-62 now gives `GameWindow` a platform window to consume, so PLAT-50 is unblocked;
+  PLAT-51 follows it, see §5.
+- **Phase 4** (renderers) — PLAT-57's boundary decision, PLAT-59/60/61's common-interface cleanup,
+  and PLAT-62's platform-owned `GraphicsDevice` window are complete; implementation continues at
+  PLAT-58. 46 identities remain in scope.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — five redundant backends are deleted; `Keyboard`, `Mouse` and `MouseCursor`
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by
@@ -228,7 +230,7 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 | Task | Blocked on | Why |
 |---|---|---|
-| PLAT-50, PLAT-51 | PLAT-62 | `GameWindow` still wraps the `SDL_Window*` owned by `GraphicsDevice`. Until `GraphicsDevice` owns an `IPlatformWindow` there is no platform window for `GameWindow` to retain. |
+| PLAT-51 | PLAT-50 | Its public native-handle replacement follows the internal `GameWindow` migration so the implementation and every caller change coherently. |
 | PLAT-102 | PLAT-50 | `DisplayInfo` takes a `GameWindow&` and calls `GetNativeSdlWindowEXT()`. Also needs a safe-area concept the contract lacks. |
 
 ---
@@ -251,12 +253,13 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Phase 4 window ownership.** PLAT-61 is complete: the static renderer registry is keyed by
-   `WindowId`, with SDL conversion confined to legacy callers and three platform-neutral lifetime
-   tests. Continue with PLAT-62 (`GraphicsDevice` owns the `IPlatformWindow`) and PLAT-58 (renderer
-   creation receives `WindowId` + native handle + surface information) in the dependency order
-   established by `docs/platform-renderer-boundary.md`. Do not introduce a temporary `void*` or
-   pass `IPlatformWindow*` into renderers; both would violate PLAT-57's accepted boundary.
+1. **Phase 3 window consumer, now unblocked.** PLAT-62 is complete: `GraphicsDevice` owns the
+   `IPlatformWindow`, destroys the renderer before it and releases video last, including constructor
+   failure. Caller-supplied SDL windows are adopted by stable `WindowId` without transferring native
+   ownership. Migrate `GameWindow` in PLAT-50, then its public native-handle extension in PLAT-51.
+   PLAT-58 separately replaces the renderer creation `SDL_Window*` with `WindowId` + native handle +
+   physical size/scale. Do not introduce a temporary `void*` or pass `IPlatformWindow*` into
+   renderers; both would violate PLAT-57's accepted boundary.
 
    **Completed Phase 10 reference.** Everything is under
    `modules/platform/src/Terminal/`:

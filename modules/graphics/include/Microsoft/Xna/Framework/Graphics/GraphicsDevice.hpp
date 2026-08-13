@@ -41,6 +41,12 @@
 
 struct SDL_Window;
 
+namespace CNA::Platform
+{
+    class IPlatform;
+    class IPlatformWindow;
+}
+
 namespace Microsoft::Xna::Framework
 {
     class Game;
@@ -1101,8 +1107,14 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void RecreateRendererForMultiSampleCount(int multiSampleCount);
 
     private:
+        // Borrowed from Game's enclosing platform (or the ambient lazy default for a bare
+        // GraphicsDevice). The platform outlives both the window and this device.
+        CNA::Platform::IPlatform* platform_;
+        std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow_;
+        // Transitional SDL view used only by the still-unmigrated renderer creation boundary and
+        // GameWindow. PLAT-58 and PLAT-50 remove it; ownership always stays in platformWindow_.
         SDL_Window* window_;
-        bool ownsWindow_;
+        bool videoSubsystemAcquired_;
         std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
         bool rendererStartupNameLogged_ = false;
         Viewport viewport_;
@@ -1234,6 +1246,7 @@ namespace Microsoft::Xna::Framework::Graphics
             const VertexDeclaration& vertexDeclaration);
 
         [[nodiscard]] SDL_Window* GetWindowInternal() const;
+        [[nodiscard]] CNA::Platform::IPlatformWindow* GetPlatformWindowInternal() const;
 
         void createOrAttachWindow();
         void createRenderer();
