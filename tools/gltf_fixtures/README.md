@@ -56,8 +56,10 @@ adding a fixture over widening one.
 
 **One canonical identity.** An asset is defined in exactly one `defs/` module, and that module's
 name is its owning group. Other groups may *reference* it (`referencingGroups`), which never
-re-counts it. The distinct-asset total is the sum of the owning-group counts, and `corpus.py`
-enforces both properties at generation time.
+re-counts it. The current distinct-asset total is the sum of the owning-group counts. The final
+GLTF-399 IDs live in `TARGET_ASSET_IDS_BY_GROUP`; `corpus.py` rejects an unplanned generated ID and
+emits every target ID not built yet under `missingAssets`, so current + missing equals the target
+per group and globally.
 
 ## Layout
 

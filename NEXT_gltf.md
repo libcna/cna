@@ -174,14 +174,14 @@ The remaining **~39 are doable in this environment.**
 Ordered by value, not by number. Each is a coherent unit with its own tests and one commit.
 Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is superseded.
 
-1. **`GLTF-399` — finish the corpus (127 assets today).** Eight owning groups are complete:
-   transforms 17/17, component types 8/8, scenes 3/3, materials 12/12, robustness 8/8, skinning
-   16/16 and textures 10/10; accessors are 12/13. What is left, in the order it is worth doing:
-   - **reconcile §24.2's final count first** — its heading says 135, two historical corrections
-     say 136, and the current table arithmetic says 141. `GLTF-399` now records this explicitly;
-     none is a valid CI contract until the named inventory and its later additions agree.
+1. **`GLTF-399` — finish the corpus (127/143 assets today).** Eleven owning groups are complete;
+   accessors are 12/13, normals 2/6, container 1/8 and Draco 0/4. The exact 16 missing IDs are
+   generated into `manifest.json`; current + missing = target is checked per group, so the former
+   135/136/141 count disagreement cannot recur. What is left, in the order it is worth doing:
    - **the accessor oracle gap** — teach L4 and `world_positions` to enumerate per primitive, then
      restore `two-primitives-one-buffer` to one mesh with two primitives.
+   - **normals 2/6** — add the four named tangent/non-uniform-scale witnesses; all generator and
+     importer machinery already exists.
    - **container 1/8** — extend the generator to emit external `.bin`/image sidecars. This is the
      main remaining piece of generator machinery.
    - **Draco 0/4** — `libdraco`-blocked.

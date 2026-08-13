@@ -27,8 +27,93 @@
     "cameras": 5,
     "lights": 2,
     "scenes": 3,
+    "draco": 0,
     "robustness": 8
   },
+  "targetDistinctAssetCount": 143,
+  "targetOwningGroupCounts": {
+    "container": 8,
+    "accessors": 13,
+    "component-types": 8,
+    "topology": 8,
+    "normals": 6,
+    "transforms": 17,
+    "materials": 12,
+    "textures": 10,
+    "skinning": 16,
+    "animation": 23,
+    "cameras": 5,
+    "lights": 2,
+    "scenes": 3,
+    "draco": 4,
+    "robustness": 8
+  },
+  "missingAssets": [
+    {
+      "id": "glb-basic",
+      "owningGroup": "container"
+    },
+    {
+      "id": "glb-bin-chunk-padding",
+      "owningGroup": "container"
+    },
+    {
+      "id": "gltf-external-bin",
+      "owningGroup": "container"
+    },
+    {
+      "id": "gltf-data-uri-bin",
+      "owningGroup": "container"
+    },
+    {
+      "id": "gltf-external-image",
+      "owningGroup": "container"
+    },
+    {
+      "id": "gltf-data-uri-image",
+      "owningGroup": "container"
+    },
+    {
+      "id": "gltf-uri-percent-encoded",
+      "owningGroup": "container"
+    },
+    {
+      "id": "interleaved-mixed-widths",
+      "owningGroup": "accessors"
+    },
+    {
+      "id": "tangent-handedness",
+      "owningGroup": "normals"
+    },
+    {
+      "id": "tangent-absent-generated",
+      "owningGroup": "normals"
+    },
+    {
+      "id": "normal-nonuniform-scale",
+      "owningGroup": "normals"
+    },
+    {
+      "id": "tangent-mirrored",
+      "owningGroup": "normals"
+    },
+    {
+      "id": "draco-triangle",
+      "owningGroup": "draco"
+    },
+    {
+      "id": "draco-vs-uncompressed-pair",
+      "owningGroup": "draco"
+    },
+    {
+      "id": "draco-skinned",
+      "owningGroup": "draco"
+    },
+    {
+      "id": "draco-morph",
+      "owningGroup": "draco"
+    }
+  ],
   "promotedAuditFixtures": {
     "f1": "xf-shared-mesh",
     "f2": "xf-parent-child",

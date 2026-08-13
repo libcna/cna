@@ -232,10 +232,12 @@ fixture CNA can import:
 | `<id>.expected.json` | the inventory record and the **spec-derived** expectations for every layer the asset validates |
 | `<id>.vb.bin` / `<id>.ib.bin` | the L5 golden vertex and index buffers (§3.7). Part 0 of a fixture uses these names; a second part would use `<id>.p1.vb.bin`, so adding one never renames the first |
 
-`tests/assets/gltf/manifest.json` is the corpus-level inventory: the distinct-asset count, and each
+`tests/assets/gltf/manifest.json` is the corpus-level inventory: the current and target distinct-
+asset counts, per-group current and target counts, every still-missing target ID, and each generated
 asset's `id`, `owningGroup`, `referencingGroups[]`, `validatedLayers[]` and `features[]` (§24.1 of
-the plan). One asset has exactly one canonical id and exactly one owning group however many layers or
-phases reference it.
+the plan). One asset has exactly one canonical id and exactly one owning group however many layers
+or phases reference it. The final GLTF-399 target is therefore executable inventory, not a number
+maintained independently in prose.
 
 The corpus is **committed**, not generated at test time: fixtures are diffable review artefacts, and
 `CnaTests` must not require a Python interpreter. `GltfFixtureCorpusTests.cpp` asserts that the

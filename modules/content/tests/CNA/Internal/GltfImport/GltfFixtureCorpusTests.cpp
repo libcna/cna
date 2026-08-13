@@ -273,6 +273,70 @@ TEST(GltfFixtureCorpus, DistinctAssetCountEqualsTheSumOfOwningGroupCounts)
     EXPECT_EQ(uniqueIds.size(), CorpusFixtureIds().size()) << "duplicate canonical fixture id";
 }
 
+TEST(GltfFixtureCorpus, FinalTargetAccountsForEveryGeneratedAndMissingAssetExactlyOnce)
+{
+    // GLTF-399 used three incompatible totals (135, 136 and 141) because later fixture additions
+    // updated prose and arithmetic independently. The generator now owns one exact final inventory:
+    // current assets plus named missing assets must equal its target, per group and globally.
+    const JsonValue& manifest = CorpusManifest();
+    const JsonValue& currentGroups = Member(manifest, "owningGroupCounts");
+    const JsonValue& targetGroups = Member(manifest, "targetOwningGroupCounts");
+    const JsonValue& missing = Member(manifest, "missingAssets");
+    ASSERT_EQ(JsonType::Object, currentGroups.type);
+    ASSERT_EQ(JsonType::Object, targetGroups.type);
+    ASSERT_EQ(JsonType::Array, missing.type);
+
+    std::map<std::string, std::size_t> missingByGroup;
+    const std::vector<std::string> generatedIds = CorpusFixtureIds();
+    std::set<std::string> accountedIds(generatedIds.begin(), generatedIds.end());
+    ASSERT_EQ(accountedIds.size(), generatedIds.size());
+    for (const JsonValue& asset : missing.arrayValue)
+    {
+        const std::string id = StringOr(asset, "id", "");
+        const std::string group = StringOr(asset, "owningGroup", "");
+        ASSERT_FALSE(id.empty()) << "missingAssets entry has no id";
+        ASSERT_EQ(JsonType::Number, Member(targetGroups, group).type)
+            << id << " names unknown target owning group '" << group << "'";
+        EXPECT_TRUE(accountedIds.insert(id).second)
+            << id << " is generated and missing, or appears twice in missingAssets";
+        ++missingByGroup[group];
+    }
+
+    std::size_t targetSum = 0;
+    std::size_t currentSum = 0;
+    for (const auto& [group, targetValue] : targetGroups.objectValue)
+    {
+        ASSERT_EQ(JsonType::Number, targetValue.type) << group;
+        const JsonValue& currentValue = Member(currentGroups, group);
+        ASSERT_EQ(JsonType::Number, currentValue.type)
+            << "target group '" << group << "' has no current count (zero must be explicit)";
+
+        const auto target = static_cast<std::size_t>(targetValue.numberValue);
+        const auto current = static_cast<std::size_t>(currentValue.numberValue);
+        EXPECT_EQ(target, current + missingByGroup[group]) << group;
+        targetSum += target;
+        currentSum += current;
+    }
+
+    EXPECT_EQ(static_cast<std::size_t>(NumberOr(manifest, "targetDistinctAssetCount", -1)),
+              targetSum);
+    EXPECT_EQ(static_cast<std::size_t>(NumberOr(manifest, "distinctAssetCount", -1)), currentSum);
+    EXPECT_EQ(targetSum, accountedIds.size());
+    EXPECT_EQ(targetSum, currentSum + missing.arrayValue.size());
+
+    // The human plan names the generated target rather than carrying a fourth independent number.
+    const std::filesystem::path plan =
+        CorpusDirectory().parent_path().parent_path().parent_path() / "plan_gltf.md";
+    std::ifstream file(plan);
+    ASSERT_TRUE(file.is_open()) << plan.string();
+    const std::string text((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+    const std::string heading = "### 24.2 Target corpus — " + std::to_string(targetSum) +
+                                " distinct synthetic assets";
+    EXPECT_NE(std::string::npos, text.find(heading))
+        << "plan_gltf.md must use the generator's target: " << heading;
+}
+
 TEST(GltfFixtureCorpus, AllFourteenForensicAuditFixturesArePromoted)
 {
     // plan_gltf.md §24.2: f1...f14 are promoted, not re-invented, and each maps to exactly one

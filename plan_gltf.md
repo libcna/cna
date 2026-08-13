@@ -84,7 +84,7 @@ staleness problem: it still uses the pre-2026-08-10 `CNA_GRAPHICS_BACKEND` / `EA
 so **it cannot currently configure against the baseline at all**.
 
 The plan defines two milestones — **GLTF CORE 2.0 CORRECT** and **GLTF ROBUST** — a seven-layer
-numerical oracle hierarchy, a 135-asset conformance corpus, a 24-phase dependency-ordered backlog of
+numerical oracle hierarchy, a 143-asset conformance corpus, a 24-phase dependency-ordered backlog of
 **460 tasks** (`GLTF-001` … `GLTF-460`) organised into **two execution tracks**, and a 19-task
 **P0 center-collapse track** that answers the owner's question before any accessor-breadth,
 material, animation or extension work begins.
@@ -1293,18 +1293,16 @@ transforms is currently vacuous because there are none.
 
 ### 16.3 Morph fixture ladder (L3/L4)
 
-The morph group **owns** 13 assets — every name is written out in full so the §24.2 inventory is
-machine-verifiable rather than inferred from a compressed token:
+The generator's combined animation/morph owning group contains these 13 morph-focused assets (and
+the ten animation-focused assets in §17.2):
 
-`morph-position-single`, `morph-position-two-targets`, `morph-normal-delta-basic` (stride 32),
-`morph-normal-delta-pbr` (stride 48 — **fails today**), `morph-tangent-delta` (fails today),
-`morph-mesh-weights-nonzero`, `morph-node-weights-override` (fails today),
-`morph-weights-animated-linear`, `morph-weights-animated-step`, `morph-weights-animated-cubic`,
-`morph-target-without-position`, `morph-plus-skin`, `morph-shared-mesh-two-nodes`.
+`morph-position-only`, `morph-position-normal`, `morph-position-normal-tangent`,
+`morph-two-targets`, `morph-eight-targets`, `morph-zero-weights`, `morph-overdriven-weight`,
+`morph-normal-only-target`, `morph-mesh-weights-only`, `morph-node-weights-zero`,
+`morph-asymmetric-deltas`, `morph-no-base-normals`, `morph-node-weights-override`.
 
-The three `morph-weights-animated-*` assets are owned here and *referenced* by Phase 14
-(§17.2's `anim-weights-*`); `morph-plus-skin` is owned here and referenced by `GLTF-269`/`GLTF-286`.
-Per §24.1 a reference never re-counts.
+They are consumed by both Phase 13 and Phase 14; per §24.1 that cross-phase use never re-counts an
+asset. The exact owning inventory is executable in `tools/gltf_fixtures/corpus.py`.
 
 ---
 
@@ -1581,66 +1579,48 @@ and fails the release gate if any is found.
 * **One canonical ID, one owning group, many referencing groups.** Every asset has exactly one
   canonical name and is **listed and counted in exactly one owning group** in §24.2. Other phases
   freely *reference* it — `sparse-indices` is owned by the accessor group and referenced by
-  `GLTF-063`; `morph-plus-skin` is owned by the morph group and referenced by `GLTF-269`;
-  `anim-weights-*` are owned by the morph group and referenced by Phase 14. **Referencing never
-  re-counts.** The distinct-asset total is therefore exactly the sum of the owning-group counts.
+  `GLTF-063`; morph and animation fixtures share the generator's `animation` owning group while
+  Phase 14 and Phase 15 both consume them. **Referencing never re-counts.** The distinct-asset total
+  is therefore exactly the sum of the owning-group counts.
 * **The manifest is the authority, not this document.** The generator emits a machine-readable
   inventory (`id`, `owningGroup`, `referencingGroups[]`, `validatedLayers[]`, `features[]`), and
   `GLTF-399` asserts in CI that the emitted distinct-asset count equals the number stated here. If
   the corpus grows, the number in this document is updated from the manifest — never the reverse.
 
-### 24.2 Planned corpus — 135 distinct synthetic assets
+### 24.2 Target corpus — 143 distinct synthetic assets
 
-Counts below are **owning-group** counts per §24.1; no asset is listed twice, so the column sums to
-the distinct-asset total. Each asset additionally ships a `.glb` twin (`GLTF-400`), which is the
-same asset in another container, not another asset.
+Counts are **owning-group** counts per §24.1. Each generated asset additionally ships a `.glb`
+twin (`GLTF-400`), which is the same asset in another container, not another asset. The exact final
+IDs live in `TARGET_ASSET_IDS_BY_GROUP` in `tools/gltf_fixtures/corpus.py`; the generated manifest
+emits the target counts and every missing ID. `GltfFixtureCorpus.FinalTargetAccountsForEveryGeneratedAndMissingAssetExactlyOnce`
+checks the arithmetic per group and also requires this heading to carry the generated total.
 
-> **Count correction (`GLTF-011`).** P0-D raised the skinning group from 13 to 14 (and the total
-> from 135 to 136) when it *generated* `skin-mesh-node-transform`. That asset was new to the
-> corpus but **not** to this plan — §15.4's ladder already listed it among its 13. All five
-> cross-referenced ladders were re-counted and the counts here now match them exactly: transforms
-> 17 (§11.4), skinning 13 (§15.4), morph 13 (§16.3), animation 10 (§17.2, excluding the
-> morph-owned `anim-weights-*`), and the remaining groups enumerated in full below. The generated
-> corpus stands at **43** assets today (`GLTF-072` completed the topology group's seven;
-> `GLTF-021`/`GLTF-023` added the first container and robustness fixtures; `GLTF-267` generated
-> §11.4's `xf-scale-nonuniform`, the corpus's first non-uniform node scale; `GLTF-062` generated
-> `sparse-interleaved-base`, which was planned in the accessor group's 13 all along and turned out
-> to be the only asset in the corpus that can observe §9.3's vendored-parser bug at all;
-> `GLTF-095` generated `skin-eight-influences`, which §15.4 had not foreseen and which is
-> added to the skinning group's own ladder rather than counted against another group;
-> `GLTF-254` generated the `skin-joint-index-out-of-range`/`skin-joint-index-padding` pair,
-> which raises the robustness group from 6 to 8 — a refusal that is conditional needs an
-> asset on each side of the condition, or the condition itself is untested; `GLTF-173`
-> generated `normal-absent`, opening the normals group, which §24.2 had planned at 6 all
-> along and which no fixture had occupied);
-> `GLTF-399` completes the rest.
->
-> **A later, deliberate count change (`GLTF-137`).** The skinning group is **14** and the total
-> **136** — and that is not the correction above being undone. The correction removed a bump made
-> by *generating* an asset §15.4 had already planned. This one adds a row to §15.4 itself:
-> `skin-plus-static-mesh`, a file with a skinned mesh and a static one, which no ladder foresaw and
-> which `GLTF-137` needs because it is the smallest file whose second mesh group the loader used to
-> drop. The ladder and the column still agree, which is the invariant §24.1 actually asks for.
+The original 135, the intermediate 136 and the later hand-summed 141 were all historical snapshots,
+not three defensible targets. The final reconciliation incorporates every deliberate later change:
+`skin-plus-static-mesh`, `skin-eight-influences` and the conditional joint-index pair; the morphing
+triangle-strip topology; separate camera and light groups including the no-aspect and over-budget
+controls; and GLTF-316's finding that the animation ladder needs ten, not eleven, fixtures. Morph and
+animation remain one generator owning group because their extraction paths and fixtures overlap; the
+group contains 13 morph-focused and 10 animation-focused assets without double-counting either use.
 
-| Group | Count | Assets |
-|---|---|---|
-| Container / buffer | 8 | `glb-basic`, `glb-bin-chunk-padding`, `gltf-external-bin`, `gltf-data-uri-bin`, `gltf-external-image`, `gltf-data-uri-image`, `gltf-uri-percent-encoded`, `gltf-required-extension-unsupported` |
-| bufferView / accessor | 13 | `accessor-offset`, `bufferview-offset`, `bufferview-stride-tight`, `interleaved-position-normal`, `interleaved-pos-nrm-uv`, `interleaved-mixed-widths`, `stride-padded`, `two-primitives-one-buffer`, `sparse-position`, `sparse-indices`, `sparse-interleaved-base`, `accessor-minmax`, `mat3-padded` |
-| Component types | 8 | `u8-idx`, `u16-idx`, `u32-idx`, `normalized-u8-color`, `normalized-u16-color`, `float-color`, `normalized-i8-normal`, `u16-joints` |
-| Topology | 7 | `mode-points`, `mode-lines`, `mode-line-loop`, `mode-line-strip`, `mode-triangles`, `mode-triangle-strip`, `mode-triangle-fan` |
-| Transforms | 17 | the `xf-*` ladder in §11.4 |
-| Normals / tangents | 6 | `tangent-authored`, `tangent-handedness`, `tangent-absent-generated`, `normal-absent`, `normal-nonuniform-scale`, `tangent-mirrored` |
-| UV / textures / samplers | 10 | `uv0-checker`, `uv1-material`, `uv-out-of-range-clamp`, `uv-out-of-range-wrap`, `uv-out-of-range-mirror`, `sampler-nearest`, `sampler-trilinear`, `texture-transform-basecolor`, `texture-transform-per-map`, `texture-shared-two-samplers` |
-| Materials / PBR | 12 | `mat-default` (no material), `mat-factor-only-gold`, `mat-basecolor-factor-times-texture`, `mat-metallic-roughness-channels`, `mat-normal-occlusion-scale`, `mat-emissive-factor`, `mat-emissive-strength`, `mat-vertex-color-pbr`, `alpha-opaque`, `alpha-mask`, `alpha-blend`, `double-sided` |
-| Skinning | 16 | the `skin-*` ladder in §15.4, which `GLTF-095` extends with `skin-eight-influences` (two `JOINTS_n`/`WEIGHTS_n` sets — no ladder foresaw one, and the truncation decision needs an asset that authors more than four influences to mean anything) |
-| Morph | 13 | the `morph-*` ladder in §16.3, which **owns** `morph-weights-animated-linear/step/cubic` and `morph-plus-skin` |
-| Animation | 11 | the `anim-*` ladder in §17.2, excluding the `anim-weights-*` fixtures owned by the morph group, plus `morph-node-weights-override` (the node/mesh weight-override rule, `GLTF-281`/`GLTF-282`; it lives here rather than in the morph group because what it asserts is the *override and per-instance* rules, not morph blending) |
-| Scenes | 3 | `scene-default-selection`, `scene-two-roots`, `scene-no-scenes` |
-| Cameras / lights | 5 | `camera-perspective`, `camera-perspective-infinite`, `camera-orthographic`, `camera-animated-node`, `lights-punctual-three` |
-| Draco parity | 4 | `draco-triangle`, `draco-vs-uncompressed-pair`, `draco-skinned`, `draco-morph` |
-| Robustness / malformed | 8 | `bad-accessor-out-of-bounds`, `accessor-count-mismatch` (moved here from the accessor group, whose 14 it was planned in — it is a malformed-input fixture by construction and the robustness group is where the rejection tests look), `bad-index-out-of-range`, `bad-buffer-truncated`, `bad-glb-chunk-length`, `bad-matrix-and-trs`, `bad-version-1.0`, `skin-joint-index-out-of-range`, `skin-joint-index-padding` (`GLTF-254`'s conditional refusal needs an asset on each side of the condition) |
-
-**Total: 8 + 13 + 8 + 7 + 17 + 6 + 10 + 12 + 16 + 13 + 11 + 3 + 5 + 4 + 8 = 141 distinct assets.**
+| Owning group | Target | Generated | Missing IDs |
+|---|---:|---:|---|
+| Container / buffer | 8 | 1 | `glb-basic`, `glb-bin-chunk-padding`, `gltf-external-bin`, `gltf-data-uri-bin`, `gltf-external-image`, `gltf-data-uri-image`, `gltf-uri-percent-encoded` |
+| bufferView / accessor | 13 | 12 | `interleaved-mixed-widths` |
+| Component types | 8 | 8 | — |
+| Topology | 8 | 8 | — |
+| Normals / tangents | 6 | 2 | `tangent-handedness`, `tangent-absent-generated`, `normal-nonuniform-scale`, `tangent-mirrored` |
+| Transforms | 17 | 17 | — |
+| Materials / PBR | 12 | 12 | — |
+| UV / textures / samplers | 10 | 10 | — |
+| Skinning | 16 | 16 | — |
+| Animation / morph | 23 | 23 | — |
+| Cameras | 5 | 5 | — |
+| Lights | 2 | 2 | — |
+| Scenes | 3 | 3 | — |
+| Draco parity | 4 | 0 | `draco-triangle`, `draco-vs-uncompressed-pair`, `draco-skinned`, `draco-morph` |
+| Robustness / malformed | 8 | 8 | — |
+| **Total** | **143** | **127** | **16 named assets** |
 
 > **Materials group, twice adjusted (`GLTF-241`, `GLTF-224`/`GLTF-225`).** `mat-vertex-color-pbr`
 > was added (12 → 13) because no planned fixture carried `COLOR_0` together with a PBR material.
@@ -1651,10 +1631,10 @@ same asset in another container, not another asset.
 > The "declared vs absent" half is covered by `mat-factor-only-gold`, which declares neither, and
 > that is the case that caught cgltf's zeroed-view trap.
 
-> The former combined "Scenes / cameras / lights" row was split in two by `GLTF-317`, which gave
-> the camera fixtures their own owning group: scene *selection* (§3.5) and cameras (§3.10) are
-> different concerns and the generator groups by concern. **No asset moved and the total is
-> unchanged** — 3 + 4 is the 7 that row carried.
+> The former combined "Scenes / cameras / lights" row was split by `GLTF-317`: scene *selection*
+> (§3.5), cameras (§3.10) and lights are separate concerns and separate generator groups. Later
+> no-aspect camera and over-budget light controls deliberately grew those groups. Their final
+> 3 + 5 + 2 target is part of the executable inventory above rather than another prose correction.
 
 Reuse happens along two axes and neither changes that total. An asset is reused **across oracle
 layers** — the same `alpha-mask` file is an L3, L6 and L7 fixture — and **across phases**, where a
@@ -2631,12 +2611,12 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 
 | ID | Title | St | Deps | Scope, evidence → acceptance |
 |---|---|---|---|---|
-| GLTF-399 | Complete the synthetic corpus | ✅/⬜ | GLTF-003 | §24.2's owning-group inventory, each with a `.glb` twin. **Accept:** every owning group's assets exist, are generated and validated, and CI asserts the final distinct-asset count. **127 assets today; eight groups are complete:** transforms **17/17**, component types **8/8**, accessors **12/13**, scenes **3/3**, materials **12/12**, robustness **8/8**, skinning **16/16**, and textures **10/10**. The skinning completion is numerical rather than inventory-only: `GltfSkinLadder` evaluates §3.7.3.3 over every fixture with an `l4.skin` block and checks the six required ladder properties. The scene completion found and fixed a live no-`scenes` placement defect. **The texture group is now complete with seven discriminating additions:** `uv1-material` makes a hard-wired `TEXCOORD_0` wrong at every vertex; the three `uv-out-of-range-*` assets hold geometry and image constant while separating Clamp/Wrap/Mirror; `sampler-trilinear` is the real-file witness for `LINEAR_MIPMAP_LINEAR`; `texture-transform-per-map` makes the single baked-transform limit visible through `unbakedTextureTransformsEXT`; and `texture-shared-two-samplers` proves at L3 and L6 that image caching does not collapse texture-owned sampler state. All seven have generated `.gltf`/`.glb` twins and byte-exact L5 goldens. **What remains:** the container group needs external `.bin`/image sidecar emission, Draco remains `libdraco`-blocked, and the accessor group still has the multi-primitive L4 oracle gap described below. **Count reconciliation is also explicitly open:** §24.2 currently says 135 in its heading, 136 in historical corrections, and 141 in its arithmetic; none is silently promoted to the CI contract until the inventory and its later additions are reconciled. `two-primitives-one-buffer` remains reshaped as two meshes sharing one bufferView until the L4 oracle and generator both enumerate per primitive. A glTF 1.0 rejection remains an inline parser test because vendored cgltf refuses it before a corpus fixture can parse. `bad-matrix-and-trs` remains a deterministic matrix-wins resolution fixture. |
+| GLTF-399 | Complete the synthetic corpus | ✅/⬜ | GLTF-003 | §24.2's owning-group inventory, each with a `.glb` twin. **Accept:** every owning group's assets exist, are generated and validated, and CI asserts the final distinct-asset count. **127/143 assets today; eleven groups are complete.** The target is no longer a prose estimate: `TARGET_ASSET_IDS_BY_GROUP` names all 143 once, the manifest emits `targetOwningGroupCounts` and the 16 exact `missingAssets`, and `FinalTargetAccountsForEveryGeneratedAndMissingAssetExactlyOnce` checks current + missing = target per group, rejects duplicate identities and requires §24.2's heading to carry the same generated total. That reconciles the historical 135/136/141 disagreement permanently. Complete groups are transforms **17/17**, component types **8/8**, topology **8/8**, scenes **3/3**, materials **12/12**, robustness **8/8**, skinning **16/16**, textures **10/10**, animation/morph **23/23**, cameras **5/5** and lights **2/2**; accessors are **12/13**. **What remains:** container **1/8** needs external `.bin`/image sidecar emission, normals/tangents are **2/6**, Draco **0/4** remains `libdraco`-blocked, and the accessor group still has the multi-primitive L4 oracle gap described below. `two-primitives-one-buffer` remains reshaped as two meshes sharing one bufferView until the L4 oracle and generator both enumerate per primitive. A glTF 1.0 rejection remains an inline parser test because vendored cgltf refuses it before a corpus fixture can parse. `bad-matrix-and-trs` remains a deterministic matrix-wins resolution fixture. |
 | GLTF-400 | `.glb` twin for every synthetic asset | ✔ | GLTF-399 | **Accept:** twins agree at L3/L4. **True by construction and asserted per asset.** The generator emits `<id>.gltf` and `<id>.glb` from **one** `GltfBuilder`, so a twin cannot describe a different asset — the failure mode a hand-maintained pair has. What remains checkable is that the container round-trip itself is lossless, and `GltfFixtureCorpus.EveryGlbTwinIsAValidContainerCarryingTheSameAsset` currently checks all **127** assets: the GLB parses, its §4.4 chunk layout holds (JSON first, 4-byte-aligned lengths, JSON padded with **spaces** and BIN with zeros, since the JSON padding is inside the text a parser reads), and the document it carries has the same accessor, mesh and node counts as the `.gltf`. `EveryCommittedGlbFollowsTheChunkLayoutSection44Requires` sweeps the layout separately, so a twin that parses but is malformed still fails. |
 | GLTF-401 | Manifest completeness audit | ✔ | GLTF-399 | **Accept:** every asset declares exactly one `owningGroup`, its `referencingGroups[]`, the layers it validates and the expected values for each; the sum of owning-group counts equals the reported distinct-asset total, checked mechanically rather than by reading. **The arithmetic half was already locked** by `DistinctAssetCountEqualsTheSumOfOwningGroupCounts`; `EveryAssetDeclaresItsGroupItsLayersAndAnExpectationForEachOfThem` adds the descriptive half, and its last clause is the one with teeth: for every layer an asset *declares*, the fixture must carry the matching expectation block. A fixture claiming `L4` with an empty `l4` is compared against nothing at that layer while the inventory reports coverage — worse than declaring nothing. Also asserted: the owning group is one of the counted groups, and a `referencingGroups` entry is a known group that is **not** the asset's own — naming its own would double-count it in exactly the way §24.1's ownership model exists to prevent. A floor over the corpus's declared layers keeps the sweep from shrinking. |
 | GLTF-402 | Corpus runner reports the first divergent layer | ✔ | GLTF-010 | **Accept:** a failure names the layer, the fixture, the field and the delta. **All four, in that order, and `docs/gltf-conformance.md` §3.6 now shows two real failures rather than describing the property.** The **layer** is CTest's own result line, because each rung is its own entry registered lowest-first (`CnaGltfConformanceL5 ... Failed`); the **fixture** is the `SCOPED_TRACE` every sweep sets; the **field** and the **delta** are the assertion itself — `u8-idx VB differs at byte 45 (vertex 1, Normal +1): expected 0x00, actual 0xFF`. The layer comes first because it is the cheapest thing to act on: an L2 failure makes every value above it meaningless, and fixing the L5 golden of a fixture whose accessor decode is wrong wastes the afternoon. Higher rungs still run after a failure — whether a wrong world matrix also corrupted the bound effect parameters is worth knowing in the same run. |
 | GLTF-403 | Corpus coverage matrix vs the §27.1 checklist | ✔ | GLTF-401 | **Accept:** every CORE requirement maps to ≥1 fixture. **§27.1.1 is that matrix**, one row per §27.1 requirement, and it is **checked rather than written**: `EverySection271RowIsTraceableToFixturesAndTestsThatExist` requires all 20 rows to be present and every fixture named to exist in the corpus. It failed on its first run against five fixture names that sounded right and were not (`anim-linear`, `attr-full-set`, `attr-ignored-custom`, `external-buffer-uri`, `bad-index-*`) — which is the whole argument for checking a coverage matrix instead of reading one. A wildcard (`skin-*`) is accepted as naming a family the sweeps cover; anything else must be a real asset. |
-| GLTF-404 | Fixture-count and runtime budget | ✔ | GLTF-402 | **Accept:** the full corpus runs within a stated CI time budget. **Measured and stated in `docs/gltf-performance.md`:** corpus check 0.13 s, determinism check 0.32 s, `*Gltf*` 5.9 s, the ten-rung ladder 9.8 s, and the same selection under ASan+UBSan with leak detection 16.3 s — **under half a minute for the functional gate on 75 assets and 435 tests**. The stated budgets are ~10× the measurements, for the same reason the performance assertions are: a budget tuned to today's number fails on a loaded runner and gets raised until it means nothing. Enforcement already exists and is **per rung** (`TIMEOUT 300` on every `gltf-conformance` entry), so a rung that hangs fails as that rung rather than stalling the job. The ladder costs more than the single filtered run because each rung is its own process — deliberate, since that is what makes CTest's result line name the divergent layer (`GLTF-402`). The extrapolation `GLTF-399` needs is stated too: cost is near-linear in fixture count, so 135 assets is ≈11 s functional and ≈30 s sanitised. |
+| GLTF-404 | Fixture-count and runtime budget | ✔ | GLTF-402 | **Accept:** the full corpus runs within a stated CI time budget. **Measured and stated in `docs/gltf-performance.md`:** corpus check 0.13 s, determinism check 0.32 s, `*Gltf*` 5.9 s, the ten-rung ladder 9.8 s, and the same selection under ASan+UBSan with leak detection 16.3 s — **under half a minute for the functional gate on 75 assets and 435 tests**. The stated budgets are ~10× the measurements, for the same reason the performance assertions are: a budget tuned to today's number fails on a loaded runner and gets raised until it means nothing. Enforcement already exists and is **per rung** (`TIMEOUT 300` on every `gltf-conformance` entry), so a rung that hangs fails as that rung rather than stalling the job. The ladder costs more than the single filtered run because each rung is its own process — deliberate, since that is what makes CTest's result line name the divergent layer (`GLTF-402`). The extrapolation `GLTF-399` needs is stated too: cost is near-linear in fixture count, so 143 assets remains comfortably inside the existing budgets. |
 | GLTF-405 | Real-world asset subset decision executed | ⬜ | GLTF-019 | **Accept:** either a committed, licence-reviewed subset or a fetch script; `THIRD_PARTY_NOTICES.md` updated. |
 | GLTF-406 | Licence review for every committed asset | ⬜ | GLTF-018 | **Accept:** no asset committed without a recorded licence. |
 | GLTF-407 | `ChronographWatch` acceptance criteria | ⬜ | GLTF-405 | §4.4's world-bounds table plus material/animation/transmission criteria. **Accept:** either the asset is licensed and committed, or the criteria are checked against a licence-clean equivalent. |

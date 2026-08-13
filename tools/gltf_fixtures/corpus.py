@@ -17,6 +17,192 @@ from .defs import (accessors, animation, cameras, component_types, container, li
                    transforms)
 from .manifest import OPEN_DEFECT_STATUSES, Fixture, dumps
 
+#: The final §24.2 inventory, stated once in executable form.  A generated fixture must already
+#: have a place in this inventory; adding an unplanned id fails generation instead of silently
+#: moving the campaign's finish line.  Conversely, ``corpus_manifest`` emits every not-yet-built
+#: entry as ``missingAssets``, so the distance to GLTF-399 cannot be reconstructed differently by
+#: the plan, the continuity note and CI again.
+#:
+#: Later tasks deliberately changed the plan written in 2025: the topology group gained a morphing
+#: strip, cameras and lights became separate groups with two additional discriminating assets, and
+#: GLTF-316 established that ten (not eleven) animation fixtures are sufficient.  Together with
+#: the 13 morph fixtures housed in the same generator module, the reconciled target is 143.
+TARGET_ASSET_IDS_BY_GROUP: dict[str, tuple[str, ...]] = {
+    "container": (
+        "glb-basic",
+        "glb-bin-chunk-padding",
+        "gltf-external-bin",
+        "gltf-data-uri-bin",
+        "gltf-external-image",
+        "gltf-data-uri-image",
+        "gltf-uri-percent-encoded",
+        "gltf-required-extension-unsupported",
+    ),
+    "accessors": (
+        "accessor-offset",
+        "bufferview-offset",
+        "bufferview-stride-tight",
+        "interleaved-position-normal",
+        "interleaved-pos-nrm-uv",
+        "interleaved-mixed-widths",
+        "stride-padded",
+        "two-primitives-one-buffer",
+        "sparse-position",
+        "sparse-indices",
+        "sparse-interleaved-base",
+        "accessor-minmax",
+        "mat3-padded",
+    ),
+    "component-types": (
+        "u8-idx",
+        "u16-idx",
+        "u32-idx",
+        "non-indexed-triangles",
+        "normalized-u8-color",
+        "normalized-u16-color",
+        "float-color",
+        "normalized-i8-normal",
+    ),
+    "topology": (
+        "mode-points",
+        "mode-lines",
+        "mode-line-loop",
+        "mode-line-strip",
+        "mode-triangles",
+        "mode-triangle-strip",
+        "mode-triangle-strip-morph",
+        "mode-triangle-fan",
+    ),
+    "normals": (
+        "normal-absent",
+        "normal-quantized",
+        "tangent-handedness",
+        "tangent-absent-generated",
+        "normal-nonuniform-scale",
+        "tangent-mirrored",
+    ),
+    "transforms": (
+        "xf-identity",
+        "xf-translation",
+        "xf-scale-uniform",
+        "xf-scale-nonuniform",
+        "xf-rot-x90",
+        "xf-rot-y90",
+        "xf-rot-z90",
+        "xf-trs-order",
+        "xf-matrix-node",
+        "xf-matrix-vs-trs",
+        "xf-parent-child",
+        "xf-deep-chain",
+        "xf-negative-scale",
+        "xf-mirror-child",
+        "xf-shared-mesh",
+        "xf-transform-only",
+        "xf-multi-root",
+    ),
+    "materials": (
+        "mat-default",
+        "mat-factor-only-gold",
+        "mat-emissive-factor",
+        "mat-emissive-strength",
+        "mat-vertex-color-pbr",
+        "mat-normal-occlusion-scale",
+        "mat-alpha-mask-cutoff",
+        "mat-unimplemented-extensions",
+        "mat-unlit",
+        "mat-unlit-vertex-color-alpha",
+        "mat-specular-glossiness",
+        "mat-authored-tangent",
+    ),
+    "textures": (
+        "tex-reference-checkerboard",
+        "uv1-material",
+        "uv-out-of-range-clamp",
+        "uv-out-of-range-wrap",
+        "uv-out-of-range-mirror",
+        "sampler-trilinear",
+        "tex-texture-transform",
+        "texture-transform-per-map",
+        "texture-shared-two-samplers",
+        "tex-dual-texture-stride",
+    ),
+    "skinning": (
+        "skin-armature-ancestor",
+        "skin-mesh-node-transform",
+        "skin-plus-static-mesh",
+        "skin-unlit",
+        "skin-vertex-color",
+        "skin-mesh-node-parent-transform",
+        "skin-skeleton-hint",
+        "skin-unnormalized",
+        "skin-73-joints",
+        "skin-eight-influences",
+        "skin-two-weighted",
+        "skin-four-weighted",
+        "skin-no-ibm",
+        "skin-nonuniform-joint-scale",
+        "skin-parented-joints",
+        "skin-ushort-joint-indices",
+    ),
+    "animation": (
+        "morph-position-only",
+        "morph-position-normal",
+        "morph-position-normal-tangent",
+        "morph-two-targets",
+        "morph-eight-targets",
+        "morph-zero-weights",
+        "morph-overdriven-weight",
+        "morph-normal-only-target",
+        "morph-mesh-weights-only",
+        "morph-node-weights-zero",
+        "morph-asymmetric-deltas",
+        "morph-no-base-normals",
+        "anim-rigid-node",
+        "anim-nonzero-start",
+        "anim-translation-scale",
+        "anim-step",
+        "anim-cubicspline",
+        "anim-two-clips",
+        "anim-repeated-time",
+        "anim-parent-child",
+        "anim-weights-path",
+        "anim-out-of-scene-target",
+        "morph-node-weights-override",
+    ),
+    "cameras": (
+        "camera-perspective",
+        "camera-perspective-infinite",
+        "camera-perspective-no-aspect",
+        "camera-orthographic",
+        "camera-animated-node",
+    ),
+    "lights": (
+        "lights-kinds-and-reach",
+        "lights-over-budget",
+    ),
+    "scenes": (
+        "scene-default-selection",
+        "scene-two-roots",
+        "scene-no-scenes",
+    ),
+    "draco": (
+        "draco-triangle",
+        "draco-vs-uncompressed-pair",
+        "draco-skinned",
+        "draco-morph",
+    ),
+    "robustness": (
+        "bad-accessor-out-of-bounds",
+        "bad-accessor-count-overflow",
+        "bad-index-out-of-range",
+        "bad-matrix-and-trs",
+        "accessor-count-mismatch",
+        "skin-joint-index-out-of-range",
+        "skin-joint-index-padding",
+        "bad-animation-input-order",
+    ),
+}
+
 #: Owning groups in a fixed order, so the emitted manifest is deterministic. The order follows
 #: the oracle ladder -- container and accessor concerns first, then semantics, then composition.
 _GROUP_MODULES: list[tuple[str, Any]] = [
@@ -77,9 +263,38 @@ def emit(fixtures: list[Fixture]) -> dict[str, bytes]:
 
 def corpus_manifest(fixtures: list[Fixture], files: dict[str, bytes]) -> dict[str, Any]:
     """The corpus-level inventory (`GLTF-003`), including the machine-readable asset count."""
-    group_counts: dict[str, int] = {}
+    group_counts: dict[str, int] = {group: 0 for group in TARGET_ASSET_IDS_BY_GROUP}
     for group, _ in _GROUP_MODULES:
         group_counts[group] = sum(1 for f in fixtures if f.owning_group == group)
+
+    target_owner: dict[str, str] = {}
+    for group, ids in TARGET_ASSET_IDS_BY_GROUP.items():
+        for fixture_id in ids:
+            if fixture_id in target_owner:
+                raise ValueError(
+                    f"target fixture {fixture_id!r} is listed by both {target_owner[fixture_id]!r} "
+                    f"and {group!r} -- one canonical id has exactly one owning group")
+            target_owner[fixture_id] = group
+
+    generated_ids = {fixture.id for fixture in fixtures}
+    for fixture in fixtures:
+        expected_owner = target_owner.get(fixture.id)
+        if expected_owner is None:
+            raise ValueError(
+                f"{fixture.id}: generated but absent from the final GLTF-399 target inventory -- "
+                "add it deliberately instead of silently moving the finish line")
+        if expected_owner != fixture.owning_group:
+            raise ValueError(
+                f"{fixture.id}: target inventory assigns {expected_owner!r}, generated fixture "
+                f"declares {fixture.owning_group!r}")
+
+    target_counts = {group: len(ids) for group, ids in TARGET_ASSET_IDS_BY_GROUP.items()}
+    missing_assets = [
+        {"id": fixture_id, "owningGroup": group}
+        for group, ids in TARGET_ASSET_IDS_BY_GROUP.items()
+        for fixture_id in ids
+        if fixture_id not in generated_ids
+    ]
 
     promoted = {f.audit_fixture: f.id for f in fixtures if f.audit_fixture}
     ordered_promoted = {k: promoted[k] for k in sorted(promoted, key=lambda s: int(s[1:]))}
@@ -130,6 +345,9 @@ def corpus_manifest(fixtures: list[Fixture], files: dict[str, bytes]) -> dict[st
         "specPin": dict(SPEC_PIN),
         "distinctAssetCount": len(fixtures),
         "owningGroupCounts": group_counts,
+        "targetDistinctAssetCount": len(target_owner),
+        "targetOwningGroupCounts": target_counts,
+        "missingAssets": missing_assets,
         "promotedAuditFixtures": ordered_promoted,
         "defectLedger": [defects[k] for k in sorted(defects)],
         "assets": [f.inventory() for f in fixtures],
