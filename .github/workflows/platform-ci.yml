@@ -1,0 +1,167 @@
+name: Platform implementation matrix
+
+on:
+  push:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platform-contract:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One GPU and one CPU renderer keep SDL3's window/surface seams honest without
+          # multiplying all 46 renderers by every platform implementation.
+          - name: SDL3 + EasyGL (GPU)
+            platform: SDL3
+            renderer: EASYGL
+            audio: SDL3
+            display: true
+          - name: SDL3 + Software (CPU raster)
+            platform: SDL3
+            renderer: SOFTWARE
+            audio: SDL3
+            display: true
+          # This is the load-bearing independence cell: no graphical display and no SDL audio
+          # implementation are selected. It must not inherit DISPLAY from runner configuration.
+          - name: Headless + Headless + Null audio
+            platform: HEADLESS
+            renderer: HEADLESS
+            audio: "NULL"
+            display: false
+    env:
+      CC: gcc-14
+      CXX: g++-14
+
+    steps:
+      - name: Checkout CNA (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone public sibling repositories
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
+
+      - name: Install build and native dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build ccache pkg-config xvfb x11-utils \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libvulkan-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
+            wayland-protocols libxkbcommon-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev
+
+      - name: Record SDL submodule commit
+        id: sdlsha
+        run: echo "sha=$(git -C third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache vendored SDL build
+        uses: actions/cache@v4
+        with:
+          path: .sdl-prebuilt-Linux-x86_64
+          key: platform-sdl-${{ runner.os }}-${{ steps.sdlsha.outputs.sha }}
+
+      - name: Cache compiler outputs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: platform-ccache-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.renderer }}-${{ github.sha }}
+          restore-keys: |
+            platform-ccache-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.renderer }}-
+
+      - name: Start an isolated X11 display
+        if: matrix.display
+        run: |
+          set -euo pipefail
+          Xvfb :99 -screen 0 1280x720x24 &
+          disown
+          for i in $(seq 1 40); do
+            if xdpyinfo -display :99 >/dev/null 2>&1; then
+              echo "DISPLAY=:99" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "Xvfb did not become ready" >&2
+          exit 1
+
+      - name: Configure selected platform tuple
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_PLATFORM=${{ matrix.platform }} \
+            -DCNA_GRAPHICS_RENDERER=${{ matrix.renderer }} \
+            -DCNA_AUDIO_PLATFORM=${{ matrix.audio }} \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_NET=OFF \
+            -DCNA_USE_CCACHE=ON \
+            -DCNA_TEST_DISPLAY=:99
+
+      - name: Build the contract and consumer test binary
+        run: cmake --build build --target CnaTests --parallel 3
+
+      - name: Run platform CTest entries (SDL3 tuples)
+        if: matrix.display
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: ctest --test-dir build -R '^CnaPlatform(Tests|WindowTests)$' --output-on-failure
+
+      - name: Run platform CTest entries with no display (Headless tuple)
+        if: matrix.display == false
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build -R '^CnaPlatform(Tests|WindowTests)$' --output-on-failure
+
+      - name: Run cross-implementation event oracle (SDL3 tuples)
+        if: matrix.display
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: ./build/CnaTests --gtest_filter='EveryImplementation/GameEventSemanticsGoldenTest.*' --gtest_brief=1
+
+      - name: Run cross-implementation event oracle with no display (Headless tuple)
+        if: matrix.display == false
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: env -u DISPLAY -u WAYLAND_DISPLAY ./build/CnaTests --gtest_filter='EveryImplementation/GameEventSemanticsGoldenTest.*' --gtest_brief=1
+
+      # Run once rather than three times; configure already invokes the same checks for every
+      # matrix cell, while this explicit step keeps their commands visible in the CI log.
+      - name: Run platform source gates
+        if: matrix.platform == 'HEADLESS'
+        run: |
+          python3 tools/platform/sdl_inventory.py --check
+          python3 tools/platform/sdl_classify.py --check
+          python3 tools/platform/renderer_sdl_audit.py --check
+          python3 tools/platform/sdl_ratchet.py --check
+          python3 tools/platform/hot_path_lint.py
