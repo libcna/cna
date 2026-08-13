@@ -103,7 +103,7 @@ MODULE_CONCERNS = {
     "input": "keyboard, mouse, gamepad, joystick, haptic, sensor, touch, text input",
     "devices-ext": "clipboard, message box, file dialog, tray, camera, locale, power, display, URL",
     "devices": "`Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting",
-    "graphics": "`GraphicsDevice`, `GraphicsAdapter`, `Texture2D`, `ImageLoader`",
+    "graphics": "`GraphicsDevice`, common renderer contracts, `ImageLoader`",
     "audio": "audio device/stream, mixer, microphone",
     "runtime": "`Game` loop, `GameWindow`, `GraphicsDeviceManager`",
     "media": "`MediaPlayer`, `VideoPlayer`, library paths",

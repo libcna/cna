@@ -106,7 +106,7 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **168 files / 2512 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+Ratchet: **166 files / 2445 references** of direct SDL coupling outside the PLAT-3 allowlist, down
 from the 253 / 3641 baseline. Contract: 27 headers, 521 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
@@ -131,7 +131,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**123 ✅ · 3 🟨 · 28 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — about **79 %** of the 155
+**124 ✅ · 3 🟨 · 27 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — **80 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -144,9 +144,10 @@ task rows complete.
   `NativeWindowHandle` without an alias.
 - **Phase 4** (renderers) — PLAT-57's boundary decision, PLAT-58/59/60/61's common-interface
   cleanup, PLAT-62's platform-owned `GraphicsDevice` window and PLAT-63's display-service-backed
-  `GraphicsAdapter` are complete. Renderer creation now receives a complete platform-value
-  snapshot rather than `SDL_Window*`; implementation continues at PLAT-64. 46 identities remain
-  in scope.
+  `GraphicsAdapter` are complete. PLAT-64 also removed every SDL surface, pixel-format and image-IO
+  operation from `Texture2D`/`TextureCube`; those XNA types now cross only an RGBA8 `ImageLoader`
+  facade. Renderer creation receives a complete platform-value snapshot rather than a native
+  pointer; implementation continues at PLAT-65. 46 renderer identities remain in scope.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — five redundant backends are deleted; `Keyboard`, `Mouse` and `MouseCursor`
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by
@@ -262,48 +263,14 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 ## 7. Immediate next steps
 
-1. **Replace the renderer creation pointer (PLAT-58).** `GameWindow` and `GraphicsDevice` now own
-   and expose the platform-neutral pieces needed for the accepted PLAT-57 boundary. Replace the
-   renderer creation `SDL_Window*` with `WindowId` + `NativeWindowHandle` + physical size/scale,
-   family by family but as one mechanical contract change. Do not introduce a temporary `void*` or
-   pass `IPlatformWindow*` into renderers; both would violate PLAT-57's accepted boundary.
-
-   **Completed Phase 10 reference.** Everything is under
-   `modules/platform/src/Terminal/`:
-
-   | File | What it does |
-   |---|---|
-   | `TerminalCapabilityProbe.*` | Detects tty-ness, colour depth and the **Kitty keyboard protocol**. Takes its descriptors as parameters so it is testable under a pty. `hasKittyKeyboard` selects PLAT-137's exact path or PLAT-138's timed fallback. |
-   | `TerminalSession.*`, `TerminalSessionController.*` | The session takes raw mode, alternate screen, hidden cursor, optional Kitty keyboard and optional SGR-1006 mouse, then gives all of it back on **every** exit path. The controller shares the one process session through per-use RAII leases; keyboard, mouse and presenter combine their modes without opening parallel sessions. |
-   | `TerminalKeyboard.*`, `TerminalMouse.*` | One shared exact-Kitty/traditional-keyboard/SGR-mouse decoder, snapshots and ordered event queue. Legacy presses receive one timed synthetic release; keyboard, mouse and `PollEvents` cannot race separate descriptor readers. Mouse coordinates use the same nominal 8×16 cells as terminal resize handling and truthfully keep `pixelAccurateMouse` false. |
-   | `TerminalFrameGrid.*` | RGBA → glyph grid. `TerminalCell` has `operator==` for the diff. |
-   | `TerminalAnsiWriter.*` | Grid → ANSI, all four colour rungs, full frame and diff. |
-   | `TerminalFrameBudget.*` | Median-of-five measured throughput; drops frames rather than blocking. |
-   | `TerminalResizeWatcher.*` | `SIGWINCH` → a flag → a `WindowEvent` at poll time. |
-   | `TerminalSurfacePresenter.*` | Ties them together and holds the presentation lease on the shared session. |
-
-   **The structural decision is now implemented.** `TerminalSessionController` stays dormant at
-   platform construction and owns the process's single session only while a presenter, keyboard
-   or mouse lease exists. Changing the set of users rebuilds the immutable signal-safe restoration
-   record with the union of their modes; the presenter watches a generation counter and forces a
-   full redraw if that rebuild invalidated the alternate screen. PLAT-141 records all 25 general
-   and window cases for Terminal, completing the phase.
-
-   **Testing terminal code in CI.** This environment has no terminal: output is redirected, so
-   `isatty` is false and every interesting path refuses. Two mechanisms already exist and both
-   should be reused:
-   - `PseudoTerminalHarness.hpp` (in `modules/platform/tests/CNA/Platform/`, on `CnaTests`'
-     include path) — `PseudoTerminal`, `PseudoTerminalDrain`, `RunUnderPseudoTerminal`.
-   - Spawned harnesses under `tools/platform/` for anything that insists on the process's own
-     standard descriptors, registered in `cmake/Harnesses.cmake` and given to `CnaTests` as a
-     compile definition in `cmake/UnitTests.cmake`. **Adding one of those definitions rebuilds
-     every test TU**, so expect a long build.
-
-   A test that skips in CI is a test that never runs. This campaign has already been bitten by
-   exactly that once, and both terminal harnesses exist to avoid repeating it.
-
-   **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
-   `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
+1. **Migrate `ImageLoader` (PLAT-65).** PLAT-64 deliberately concentrated the remaining image
+   backend in `modules/graphics/src/Internal/ImageLoader.cpp`: decode from file/memory, RGBA8
+   conversion, FNA fit/cover resize, exact resize and PNG/JPEG encode. Decide between a narrow
+   platform image-codec service and a vendored decoder/encoder, then remove the direct SDL and
+   SDL3_image links from `modules/graphics/CMakeLists.txt`. Do not move native image types back
+   into `Texture2D`; its new RGBA8-only boundary and the **69-test** cross-selection regression
+   slice are the acceptance baseline. The repository already vendors stb, so inspect its enabled
+   components and format/encoding parity before adding a new dependency or service.
 
 2. **Completed Phase 6 reference.** PLAT-91…99 now provide independent SDL-free playback and
    recording contracts, orthogonal `SDL3`/`NULL` selection, an SDL3 device edge, and a paced
