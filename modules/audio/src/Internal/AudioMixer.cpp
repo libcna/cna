@@ -46,15 +46,6 @@ namespace CNA::Internal::Audio
         std::atomic<std::uint64_t> g_generatedBytes{0};
         std::atomic<bool> g_outputError{false};
 
-        // AUD-04-008/009: an extra, permanently-held SDL_INIT_AUDIO reference, acquired once
-        // (guarded by g_mixerMutex, same as g_mixer) and never released. Before PLAT-95,
-        // MIX_DestroyMixer() could drop the global audio refcount to zero; now the same hazard
-        // occurs when the selected SDL3 IAudioDevice is closed. PLAT-96 removed the independently
-        // owned DynamicSoundEffectInstance stream from the XNA layer; Microphone capture still
-        // lacks its PLAT-97 recording-device ownership, so retain this pin until that migration.
-        // NULL never takes it.
-        bool g_audioSubsystemPinned = false;
-
         class MixerBufferCallback final : public CNA::Audio::Platform::IAudioBufferCallback
         {
         public:
@@ -171,21 +162,6 @@ namespace CNA::Internal::Audio
     MIX_Mixer* GetMixer()
     {
         std::lock_guard<std::mutex> lock(g_mixerMutex);
-
-        // AUD-04-008/009: acquire the temporary permanent subsystem pin (see
-        // g_audioSubsystemPinned's own comment) before the legacy Microphone stream can exist.
-        // NULL must never touch SDL audio merely because it was selected; PLAT-99 supplies its
-        // device only through the selected-device factory.
-#if defined(CNA_AUDIO_PLATFORM_SDL3)
-        // Acquire the permanent subsystem pin (see g_audioSubsystemPinned's own
-        // comment) before anything else touches the audio subsystem below -- retried on every
-        // call until it succeeds (e.g. a prior attempt with no audio hardware), same "retry from
-        // scratch" philosophy as g_mixer's own lazy init.
-        if (!g_audioSubsystemPinned)
-        {
-            g_audioSubsystemPinned = SDL_InitSubSystem(SDL_INIT_AUDIO);
-        }
-#endif
 
         if (!g_mixer)
         {

@@ -4,6 +4,7 @@
 
 #if defined(CNA_AUDIO_PLATFORM_SDL3)
 #include "Platform/Sdl3/Sdl3AudioDevice.hpp"
+#include "Platform/Sdl3/Sdl3AudioRecordingDevice.hpp"
 #endif
 
 #include <memory>
@@ -20,6 +21,18 @@ namespace CNA::Audio::Platform {
         // in PLAT-99. Refuse here instead of manufacturing an SDL3 fallback under a NULL build.
         throw std::runtime_error(
             "CNA_AUDIO_PLATFORM=NULL playback is not implemented until PLAT-99");
+#else
+#error "CNA audio platform selection did not define an implementation"
+#endif
+    }
+
+    std::unique_ptr<IAudioRecordingDeviceProvider>
+    CreateSelectedAudioRecordingDeviceProvider()
+    {
+#if defined(CNA_AUDIO_PLATFORM_SDL3)
+        return std::make_unique<Sdl3::Sdl3AudioRecordingDeviceProvider>();
+#elif defined(CNA_AUDIO_PLATFORM_NULL)
+        return nullptr;
 #else
 #error "CNA audio platform selection did not define an implementation"
 #endif

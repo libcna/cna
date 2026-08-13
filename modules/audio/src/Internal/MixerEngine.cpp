@@ -6,6 +6,7 @@
 #include <atomic>
 #include <limits>
 #include <mutex>
+#include <new>
 #include <stdexcept>
 #include <vector>
 
@@ -38,6 +39,13 @@ namespace CNA::Internal::Audio
         std::mutex mutex;
     };
 
+    class MixerStream final
+    {
+    public:
+        SDL_AudioStream* native = nullptr;
+        bool audioSubsystemAcquired = false;
+    };
+
     namespace
     {
         constexpr const char* TrackContextProperty = "CNA.internal.mixerTrackContext";
@@ -54,12 +62,12 @@ namespace CNA::Internal::Audio
 
         [[nodiscard]] SDL_AudioStream* Native(MixerStream* stream) noexcept
         {
-            return reinterpret_cast<SDL_AudioStream*>(stream);
+            return stream ? stream->native : nullptr;
         }
 
         [[nodiscard]] const SDL_AudioStream* Native(const MixerStream* stream) noexcept
         {
-            return reinterpret_cast<const SDL_AudioStream*>(stream);
+            return stream ? stream->native : nullptr;
         }
 
         [[nodiscard]] SDL_AudioFormat ToNativeFormat(const MixerSampleFormat format)
@@ -521,13 +529,32 @@ namespace CNA::Internal::Audio
 
     MixerStream* CreateMixerStream(const MixerFormat& sourceFormat) noexcept
     {
+        if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) return nullptr;
         const SDL_AudioSpec spec = ToNativeSpec(sourceFormat);
-        return reinterpret_cast<MixerStream*>(SDL_CreateAudioStream(&spec, nullptr));
+        SDL_AudioStream* native = SDL_CreateAudioStream(&spec, nullptr);
+        if (!native)
+        {
+            SDL_QuitSubSystem(SDL_INIT_AUDIO);
+            return nullptr;
+        }
+        auto* stream = new (std::nothrow) MixerStream{};
+        if (!stream)
+        {
+            SDL_DestroyAudioStream(native);
+            SDL_QuitSubSystem(SDL_INIT_AUDIO);
+            return nullptr;
+        }
+        stream->native = native;
+        stream->audioSubsystemAcquired = true;
+        return stream;
     }
 
     void DestroyMixerStream(MixerStream* stream) noexcept
     {
-        if (stream) SDL_DestroyAudioStream(Native(stream));
+        if (!stream) return;
+        if (stream->native) SDL_DestroyAudioStream(stream->native);
+        if (stream->audioSubsystemAcquired) SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        delete stream;
     }
 
     void ClearMixerStream(MixerStream* stream) noexcept

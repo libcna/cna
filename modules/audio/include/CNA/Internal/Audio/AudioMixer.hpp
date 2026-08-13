@@ -55,10 +55,9 @@ namespace CNA::Internal::Audio
     /// dereferencing freed memory -- see
     /// SoundEffectInstance::GetLiveTrackHandle().
     ///
-    /// The device is stopped first, making its callback barrier complete before tracks and mixer
-    /// memory are freed. PLAT-96 retired the dynamic playback stream; the temporary SDL3
-    /// compatibility pin remains only for Microphone until its PLAT-97 migration and is not a
-    /// playback device.
+    /// The selected playback device is stopped first, making its callback barrier complete before
+    /// tracks and mixer memory are freed. Playback and recording implementations each balance
+    /// their own subsystem ownership; no permanent compatibility reference remains.
     void DestroyMixer();
 
     /// AUD-04-008/009: monotonically increases by exactly one every time DestroyMixer() actually
