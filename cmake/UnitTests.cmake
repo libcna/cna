@@ -471,7 +471,7 @@ if(CNA_BUILD_TESTS)
     # contract visible as a dedicated CTest; future SDL3 and NULL conformance cases join this
     # filter in PLAT-94/99.
     cna_register_renderer_test(NAME CnaAudioPlatformTests
-        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:AudioPlatformSelectionCompileTests.*:Sdl3AudioDeviceTests.* --gtest_shuffle --gtest_repeat=3
+        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:AudioPlatformSelectionCompileTests.*:Sdl3AudioDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
         LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     # plan_platform.md PLAT-93: test the cache default, both implemented values, every reserved

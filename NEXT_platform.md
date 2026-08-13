@@ -99,7 +99,7 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **181 files / 2643 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+Ratchet: **181 files / 2640 references** of direct SDL coupling outside the PLAT-3 allowlist, down
 from the 253 / 3641 baseline. Contract: 27 headers, 517 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
@@ -140,8 +140,8 @@ actionable rows done, counting partials.
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by
   the selected platform and no SDL cursor type remains in the public input API.
   `PlatformInputBridge` consumes the complete event vocabulary in the production path.
-- **Phase 6** (audio) — PLAT-91…94 complete: independent playback/recording contracts, selection,
-  and the first real SDL3 playback device. Continue with the mixer migration at PLAT-95.
+- **Phase 6** (audio) — PLAT-91…95 complete: independent playback/recording contracts, selection,
+  the SDL3 playback device, and contract-driven `AudioMixer` output. Continue at PLAT-96.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
@@ -296,11 +296,13 @@ each, zero difference). The round trip is now checked before it is trusted.
 2. **Phase 6 audio continuation.** PLAT-91/92 established independent SDL-free playback and
    recording contracts, PLAT-93 added the orthogonal validated selection, and PLAT-94 now provides
    the selected SDL3 playback device with paused-open, explicit start/stop, bounded callback chunks
-   and a real stream-lock shutdown barrier. Continue with **PLAT-95**: migrate `AudioMixer` device
-   acquisition and final buffer submission through the contract while keeping its mixing loops
-   internal. This is also the first production consumer, so selected-device construction/current
-   ownership belongs here; `CNA_AUDIO_PLATFORM=NULL` must not silently construct SDL3 while its
-   actual device is intentionally deferred to PLAT-99.
+   and a real stream-lock shutdown barrier. PLAT-95 made `AudioMixer` memory-backed and feeds its
+   `MIX_Generate` output through that device; NULL refuses without fallback until PLAT-99.
+   Continue with **PLAT-96**: remove SDL device/stream and IO ownership from `SoundEffect`,
+   `SoundEffectInstance`, and `DynamicSoundEffectInstance`. Keep SDL_mixer's internal track engine,
+   but move independently-owned stream lifecycle behind the audio contract and route in-memory
+   decode away from public SDL IO objects. Once those streams own no SDL subsystem state, remove
+   `AudioMixer`'s explicitly temporary compatibility pin.
 
 ---
 

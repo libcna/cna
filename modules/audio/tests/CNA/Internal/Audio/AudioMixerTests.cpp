@@ -102,13 +102,10 @@ namespace {
     }
 }
 
-// AUD-04-001 (2026-07-17 deep audit): the actual negotiated mixer format must be queryable after
-// GetMixer() returns, not just the requested spec CNA itself asked for -- this is what
-// AudioMixer.cpp's own new diagnostic logging (requested vs. actual) depends on being real and
-// available, not merely printed once and forgotten. Also implicitly proves the SDL_AUDIO_S16
-// format actually round-trips through MIX_CreateMixerDevice under the dummy driver (this
-// environment's only available driver), since MIX_GetMixerFormat would otherwise report whatever
-// the (absent) physical device negotiated instead.
+// AUD-04-001 / PLAT-95: the application-side mixer format remains queryable after the physical
+// device was moved behind IAudioDevice. MIX_GetMixerFormat now reports the memory-backed mixer's
+// stable output format; native-device conversion is intentionally the platform implementation's
+// responsibility.
 TEST(AudioMixerTest, ActualMixerFormatIsQueryableAfterCreation) {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     try {
@@ -138,10 +135,9 @@ namespace {
 }
 
 // AUD-04-004: production code always requests the fixed S16 stereo 44100 Hz default; this
-// proves the same GetMixer() path is override-able to other rates/channel counts (foundational
-// for later device-negotiation-adjacent tests, e.g. AUD-04-002/003), and that the SDL dummy
-// driver used throughout this suite actually honors an arbitrary requested spec rather than
-// silently clamping every mixer to one fixed rate regardless of what's requested.
+// proves the same GetMixer() path is override-able to other rates/channel counts. PLAT-95 makes
+// this application format deterministic: the selected device may convert to a different physical
+// format, but the memory-backed mixer's rate/channels remain exactly what its callback produces.
 class AudioMixerSpecOverrideTest : public ::testing::TestWithParam<std::tuple<int, int>> {};
 
 TEST_P(AudioMixerSpecOverrideTest, OverriddenSpecIsActuallyNegotiated) {
@@ -164,20 +160,8 @@ TEST_P(AudioMixerSpecOverrideTest, OverriddenSpecIsActuallyNegotiated) {
         SDL_AudioSpec actual{};
         ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << SDL_GetError();
 
-        // AUD-04-004 finding: SDL itself (OpenPhysicalAudioDevice, third_party/SDL/src/audio/
-        // SDL_audio.c) imposes a floor of S16 stereo 44100 Hz on every physical playback device
-        // it opens -- "We impose a simple minimum on device formats. This prevents something
-        // low quality ... from ruining a music thing playing at CD quality that tries to open
-        // later." (DEFAULT_AUDIO_PLAYBACK_CHANNELS=2, DEFAULT_AUDIO_PLAYBACK_FREQUENCY=44100,
-        // SDL_sysaudio.h). Requests at/above the floor pass through exactly; requests below it
-        // are raised to the floor. This is genuine, documented SDL3 device-open behavior, not a
-        // CNA bug or a resampling step -- CNA's own hard-coded production request (S16 stereo
-        // 44100 Hz) already sits exactly on this floor, so this confirms there is no
-        // *downward* device-negotiation risk in this SDL build; the only device-negotiation
-        // pitch risk direction is upward (e.g. an OS default device that only offers
-        // 48/96/192 kHz -- AUD-04-002/003 territory, still open).
-        EXPECT_EQ(actual.freq, std::max(freq, 44100));
-        EXPECT_EQ(actual.channels, std::max(channels, 2));
+        EXPECT_EQ(actual.freq, freq);
+        EXPECT_EQ(actual.channels, channels);
     } catch (...) {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
@@ -192,15 +176,12 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(48000, 2),
         std::make_tuple(96000, 2)));
 
-// AUD-04-006: a spec SDL considers genuinely invalid at the application-stream level --
+// AUD-04-006: a spec the audio contract/SDL stream considers invalid --
 // freq <= 0, or a channel count outside SDL_IsSupportedChannelCount's documented 1-8 range
 // (third_party/SDL/src/audio/SDL_audiocvt.c) -- must fail mixer creation outright rather than
 // silently substituting some other rate/channel count the caller never asked for and would have
-// no way to detect. This is a DIFFERENT code path from AUD-04-004's device-open floor-clamp
-// (OpenPhysicalAudioDevice, which only raises too-small-but-still-positive/nonzero values): the
-// app-side stream validation runs against the ORIGINAL unclamped request and rejects it before
-// the floor-clamped physical-device spec ever becomes observable, so these values throw --
-// they do not quietly become 44100 Hz stereo the way e.g. 22050 Hz mono does (AUD-04-004).
+// no way to detect. Validation runs against the original application format before a physical
+// device is started, so these values throw instead of being substituted.
 class AudioMixerInvalidSpecThrowsTest : public ::testing::TestWithParam<std::tuple<int, int>> {};
 
 TEST_P(AudioMixerInvalidSpecThrowsTest, RejectedOutrightRatherThanSilentlySubstituting) {
@@ -228,7 +209,7 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(44100, -1), // channels negative
         std::make_tuple(44100, 9))); // channels above SDL's 8-channel support ceiling
 
-// AUD-04-007: repeated device-open failures must not leak a MIX_Init()/MIX_Quit() refcount
+// AUD-04-007: repeated selected-device/mixer failures must not leak a MIX_Init()/MIX_Quit() refcount
 // imbalance -- GetMixer()'s failure branch (AudioMixer.cpp) pairs a MIX_Quit() with the MIX_Init()
 // it made moments earlier specifically so a failed retry never leaks a refcount (IN-11). If that
 // pairing were ever wrong, repeated failures would desynchronize SDL's audio subsystem refcount,

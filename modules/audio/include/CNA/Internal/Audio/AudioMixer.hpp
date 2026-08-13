@@ -9,23 +9,19 @@
 
 namespace CNA::Internal::Audio
 {
-    /// Returns the shared SDL3_mixer device, creating it on first call.
+    /// Returns the shared SDL3_mixer engine, creating it on first call.
     ///
     /// AUD-04-005: the requested spec is always the fixed reference S16 stereo 44100 Hz --
     /// deliberately never native-device or platform-specific. See NEXTaudio.md's "Mixer
     /// output-format policy" for the full rationale.
     ///
-    /// AUDIO-002: thread-safe as of this fix -- first-use creation and DestroyMixer() below now
-    /// share a single mutex, so concurrent first callers can no longer both race through
-    /// MIX_Init()/MIX_CreateMixerDevice(), and a call concurrent with DestroyMixer() can no
-    /// longer observe a half-destroyed pointer. On a create failure, throws std::runtime_error
-    /// and leaves the mixer uncreated, so a later call (from any thread) retries from scratch --
-    /// unchanged from this function's pre-existing single-threaded retry behavior.
+    /// PLAT-95: the mixer is memory-backed (`MIX_CreateMixer`); the selected `IAudioDevice` owns
+    /// native acquisition and requests whole buffers, which `MIX_Generate` fills. SDL_mixer keeps
+    /// its track/decode/mixing loops, but no longer owns or submits to the playback device.
     ///
-    /// AUD-04-001 (2026-07-17 deep audit): the requested spec (S16 stereo 44100 Hz) and the
-    /// actually negotiated device format (queried via MIX_GetMixerFormat right after creation)
-    /// are logged to stderr once, at first creation -- previously completely unobservable, a real
-    /// diagnostic gap when investigating a reported 44.1/48 kHz-family pitch/speed symptom.
+    /// AUDIO-002: first-use creation and `DestroyMixer` share one mutex. On any mixer/device-open
+    /// failure this throws `std::runtime_error`, releases partial state, and a later call retries
+    /// from scratch.
     MIX_Mixer* GetMixer();
 
     /// AUD-04-004: test-only override for the spec `GetMixer()` requests on its next
@@ -41,7 +37,7 @@ namespace CNA::Internal::Audio
     /// production default (S16 stereo 44100 Hz) for the next mixer-creating `GetMixer()` call.
     void ClearMixerSpecOverrideForTests();
 
-    /// Destroys the shared SDL3_mixer device.
+    /// Destroys the shared mixer and selected playback device.
     ///
     /// P9-AUDIT-003/AUDIO-002: still no caller anywhere in this codebase today -- the MIX_Init()/
     /// MIX_Quit() refcount and the SDL audio device are otherwise only reclaimed by the OS on
@@ -60,14 +56,9 @@ namespace CNA::Internal::Audio
     /// instances can detect the invalidation instead of dereferencing freed memory -- see
     /// SoundEffectInstance::GetLiveTrackHandle().
     ///
-    /// AUD-04-008/009: does NOT deinitialize the global SDL audio subsystem, even though the real
-    /// MIX_DestroyMixer() call underneath this does call SDL_QuitSubSystem(SDL_INIT_AUDIO)
-    /// internally -- GetMixer() pins an extra, permanently-held subsystem reference on first use
-    /// specifically so that internal call can never bring the subsystem's own refcount to zero.
-    /// Confirmed necessary via a real crash: without the pin, any independently-owned
-    /// SDL_AudioStream CNA still holds (e.g. DynamicSoundEffectInstance's own audio stream, not
-    /// owned by any MIX_Track) becomes unsafe to destroy the moment this function runs, since
-    /// SDL_DestroyAudioStream's internal unbind logic depends on subsystem-global state.
+    /// The device is stopped first, making its callback barrier complete before tracks and mixer
+    /// memory are freed. The temporary SDL3 compatibility pin remains until PLAT-96 migrates the
+    /// independently-owned DynamicSoundEffectInstance streams; it is not a playback device.
     void DestroyMixer();
 
     /// AUD-04-008/009: monotonically increases by exactly one every time DestroyMixer() actually
@@ -77,5 +68,11 @@ namespace CNA::Internal::Audio
     /// of dereferenced. Not tied to GetMixer()'s creation -- only destruction invalidates
     /// previously-issued tracks.
     std::uint64_t GetMixerGeneration();
+
+    /// Returns bytes successfully generated into selected-device callback buffers since creation.
+    [[nodiscard]] std::uint64_t GetMixerGeneratedByteCount();
+
+    /// Returns whether mixer generation has failed since the current mixer was created.
+    [[nodiscard]] bool HasMixerOutputError();
 }
 #endif

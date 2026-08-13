@@ -6,10 +6,9 @@
 // genuinely thrown when SDL3_mixer's device can't be opened. The shared CnaTests binary cannot
 // exercise this path: CNA::Internal::Audio::AudioMixer.cpp's g_mixer is a process-wide,
 // once-ever-initialized cache, and SDL only reads SDL_AUDIODRIVER the first time SDL_Init
-// (SDL_INIT_AUDIO) runs in a process (see plan_audio.md P9-HARDWARE-002/005's notes; confirmed
-// against third_party/SDL/src/audio/SDL_audio.c's driver-selection loop and
-// third_party/SDL_mixer/src/SDL_mixer.c's MIX_CreateMixerDevice, which is what actually calls
-// SDL_Init(SDL_INIT_AUDIO) -- MIX_Init() itself never touches the audio subsystem).
+// (SDL_INIT_AUDIO) runs in a process (see plan_audio.md P9-HARDWARE-002/005's notes). PLAT-95
+// moved that open from SDL_mixer to the selected Sdl3AudioDevice; MIX_Init itself still never
+// touches the audio subsystem.
 //
 // SoundEffect::getMasterVolumeProperty() is used as the trigger: a static property getter that
 // calls GetMixerOrThrowXna() as its very first action, needing no file/buffer/instance setup at
