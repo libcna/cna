@@ -22,6 +22,10 @@ Delivered task groups:
 - FNA3D creation/reflection/value upload/clone/technique/pass, render and sampler translation,
   draw preservation, truthful capability, 3D/SpriteBatch pixels, malformed-input and lifecycle
   coverage (`FX-031`–`FX-038`, with sanitizer/reset coverage still open);
+- an in-tree, legally reproducible Effect Framework 9.1 conformance binary builder covering
+  defaults, scalar/vector/matrix/array reflection, annotations, two techniques, three exact passes,
+  all supported FNA render-state tokens, the unknown-token policy, clone isolation, and a
+  blend-factor pixel oracle (partial `FX-004`, `FX-022`, and `FX-037`);
 - canonical bounded `EffectReader`, replacement of the unsupported placeholder, and negative
   payload tests, plus an end-to-end ContentManager/XNB/render pixel test (`FX-040`–`FX-043`);
 - dedicated false-by-default capability gating for every non-FNA3D renderer and bounded common,
@@ -30,7 +34,7 @@ Delivered task groups:
 The FNA3D state mapping has also been audited token-by-token against FNA's `Effect.cs`, including
 its historical blend-factor byte order, separate-alpha propagation rules, boolean interpretation,
 and the way anisotropic filter components collapse into the eight XNA aggregate filters. The
-targeted ASan/UBSan build executes all 27 FX/XNB/capability tests without an address-sanitizer
+targeted ASan/UBSan build executes all 31 FX/XNB/capability tests without an address-sanitizer
 failure. `FX-052` remains open because LeakSanitizer cannot operate under this managed environment's
 ptrace policy and the pinned upstream MojoShader itself reports known UBSan findings in float
 formatting and zero-length clone copies; these are recorded rather than misrepresented as a clean
@@ -38,10 +42,12 @@ third-party sanitizer gate.
 
 Still open before the FNA3D slice can satisfy every aspirational exit criterion in this plan:
 
-- a legally reproducible purpose-built multi-technique/multi-pass/struct/annotation fixture and
-  independent normalized FNA oracle (`FX-004`, `FX-005`);
-- broader state/parameter conformance driven by that fixture, fuzz harnesses, sanitizer/stress
-  runs, and full project regressions (`FX-022`, `FX-023`, `FX-037`, `FX-038`, `FX-050`–`FX-054`);
+- a compiler-produced conformance fixture with shaders, structures, textures, and samplers, plus
+  an independent normalized FNA oracle (`FX-004`, `FX-005`); the synthetic state-only fixture
+  already supplies the remaining deterministic reflection/pass/render-state coverage without a
+  proprietary compiler dependency;
+- broader sampler/texture conformance, fuzz harnesses, sanitizer/reset stress runs, performance
+  baselines, and full project regressions (`FX-023`, `FX-038`, `FX-050`–`FX-054`);
 - additional renderer implementations (`FX-060`–`FX-069`). Until each passes the shared contract,
   its correct behavior is an explicit `NotSupportedException`, never a silent stock-shader fallback.
 
@@ -152,10 +158,12 @@ format they supplied instead of returning a generic shader compilation failure.
 
 The six FNA3D stock binaries under `modules/renderers/fna3d/effects/` are genuine `.fxb` files with
 documented upstream provenance. They remove the old plan's basic fixture-acquisition blocker and
-are suitable for parser/reflection smoke tests. They are not sufficient for full parity because
-they do not deliberately cover every public feature. A purpose-built conformance effect is still
-needed with at least two techniques, multiple passes, scalar/vector/matrix/array/structure
-parameters, annotations, textures/samplers, default values, and representative pass states.
+are suitable for parser/reflection and real-shader pixel tests. The FNA3D tests additionally build
+a deterministic Effect Framework 9.1 binary from the format consumed by pinned MojoShader. This
+legally reproducible, state-only fixture covers two techniques, multiple passes, scalar/vector/
+matrix/array defaults, annotations, exact pass identity, and every supported render-state token.
+It deliberately does not impersonate compiler output. A compiler-produced fixture and independent
+FNA oracle are still needed for structures, custom shader programs, textures, and samplers.
 
 ## 4. Corrections to the older FX plans
 

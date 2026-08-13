@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dApi.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -29,6 +30,7 @@
 #include "System/IO/MemoryStream.hpp"
 
 #include <filesystem>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
@@ -45,6 +47,229 @@ using Microsoft::Xna::Framework::Matrix;
 
 namespace
 {
+    struct SyntheticRenderState
+    {
+        std::uint32_t type;
+        std::uint32_t valueBits;
+        bool isFloat = false;
+    };
+
+    void AppendUInt32(std::vector<std::uint8_t>& bytes, std::uint32_t value)
+    {
+        bytes.push_back(static_cast<std::uint8_t>(value));
+        bytes.push_back(static_cast<std::uint8_t>(value >> 8));
+        bytes.push_back(static_cast<std::uint8_t>(value >> 16));
+        bytes.push_back(static_cast<std::uint8_t>(value >> 24));
+    }
+
+    void PatchUInt32(std::vector<std::uint8_t>& bytes, std::size_t offset,
+                     std::uint32_t value)
+    {
+        ASSERT_LE(offset + 4, bytes.size());
+        bytes[offset] = static_cast<std::uint8_t>(value);
+        bytes[offset + 1] = static_cast<std::uint8_t>(value >> 8);
+        bytes[offset + 2] = static_cast<std::uint8_t>(value >> 16);
+        bytes[offset + 3] = static_cast<std::uint8_t>(value >> 24);
+    }
+
+    std::uint32_t AppendEffectString(std::vector<std::uint8_t>& bytes,
+                                     const std::string& value)
+    {
+        const auto offset = static_cast<std::uint32_t>(bytes.size() - 8);
+        AppendUInt32(bytes, static_cast<std::uint32_t>(value.size() + 1));
+        bytes.insert(bytes.end(), value.begin(), value.end());
+        bytes.push_back(0);
+        while ((bytes.size() & 3u) != 0) bytes.push_back(0);
+        return offset;
+    }
+
+    std::uint32_t AppendNumericType(std::vector<std::uint8_t>& bytes,
+                                    MOJOSHADER_symbolType type,
+                                    MOJOSHADER_symbolClass parameterClass,
+                                    std::uint32_t nameOffset,
+                                    std::uint32_t semanticOffset,
+                                    std::uint32_t elementCount,
+                                    std::uint32_t columns,
+                                    std::uint32_t rows)
+    {
+        const auto offset = static_cast<std::uint32_t>(bytes.size() - 8);
+        AppendUInt32(bytes, static_cast<std::uint32_t>(type));
+        AppendUInt32(bytes, static_cast<std::uint32_t>(parameterClass));
+        AppendUInt32(bytes, nameOffset);
+        AppendUInt32(bytes, semanticOffset);
+        AppendUInt32(bytes, elementCount);
+        AppendUInt32(bytes, columns);
+        AppendUInt32(bytes, rows);
+        return offset;
+    }
+
+    std::uint32_t AppendScalarType(std::vector<std::uint8_t>& bytes,
+                                   MOJOSHADER_symbolType type,
+                                   std::uint32_t nameOffset,
+                                   std::uint32_t semanticOffset,
+                                   std::uint32_t elementCount = 0)
+    {
+        return AppendNumericType(bytes, type, MOJOSHADER_SYMCLASS_SCALAR,
+                                 nameOffset, semanticOffset, elementCount, 1, 1);
+    }
+
+    std::uint32_t AppendValueBits(std::vector<std::uint8_t>& bytes, std::uint32_t value)
+    {
+        const auto offset = static_cast<std::uint32_t>(bytes.size() - 8);
+        AppendUInt32(bytes, value);
+        return offset;
+    }
+
+    std::uint32_t FloatBits(float value)
+    {
+        std::uint32_t result = 0;
+        static_assert(sizeof(result) == sizeof(value));
+        std::memcpy(&result, &value, sizeof(result));
+        return result;
+    }
+
+    std::uint32_t AppendFloatValues(std::vector<std::uint8_t>& bytes,
+                                    std::initializer_list<float> values)
+    {
+        const auto offset = static_cast<std::uint32_t>(bytes.size() - 8);
+        for (const float value : values) AppendUInt32(bytes, FloatBits(value));
+        return offset;
+    }
+
+    /**
+     * Builds a small Effect Framework 9.1 container directly from the documented layout consumed
+     * by CNA's pinned MojoShader. It deliberately contains no shader objects: MojoShader permits
+     * state-only passes, which makes this a deterministic conformance fixture for public
+     * reflection, exact pass identity, and every render-state translation without redistributing
+     * a proprietary compiler or compiler-produced program.
+     */
+    std::vector<std::uint8_t> BuildSyntheticConformanceEffect(
+        const std::vector<SyntheticRenderState>& renderStates)
+    {
+        std::vector<std::uint8_t> bytes;
+        AppendUInt32(bytes, 0xFEFF0901u);
+        AppendUInt32(bytes, 0); // structure offset, patched below
+
+        const std::uint32_t empty = static_cast<std::uint32_t>(bytes.size() - 8);
+        AppendUInt32(bytes, 0);
+        const std::uint32_t gainName = AppendEffectString(bytes, "Gain");
+        const std::uint32_t gainSemantic = AppendEffectString(bytes, "SCALAR");
+        const std::uint32_t tintName = AppendEffectString(bytes, "Tint");
+        const std::uint32_t transformName = AppendEffectString(bytes, "Transform");
+        const std::uint32_t weightsName = AppendEffectString(bytes, "Weights");
+        const std::uint32_t visibleName = AppendEffectString(bytes, "Visible");
+        const std::uint32_t qualityName = AppendEffectString(bytes, "Quality");
+        const std::uint32_t passTagName = AppendEffectString(bytes, "PassTag");
+        const std::uint32_t firstTechnique = AppendEffectString(bytes, "FirstTechnique");
+        const std::uint32_t secondTechnique = AppendEffectString(bytes, "SecondTechnique");
+        const std::uint32_t firstPass = AppendEffectString(bytes, "P0");
+        const std::uint32_t statePass = AppendEffectString(bytes, "StatePass");
+        const std::uint32_t secondPass = AppendEffectString(bytes, "P1");
+
+        const std::uint32_t unnamedIntType =
+            AppendScalarType(bytes, MOJOSHADER_SYMTYPE_INT, empty, empty);
+        const std::uint32_t unnamedFloatType =
+            AppendScalarType(bytes, MOJOSHADER_SYMTYPE_FLOAT, empty, empty);
+        const std::uint32_t gainType =
+            AppendScalarType(bytes, MOJOSHADER_SYMTYPE_FLOAT, gainName, gainSemantic);
+        const std::uint32_t tintType = AppendNumericType(
+            bytes, MOJOSHADER_SYMTYPE_FLOAT, MOJOSHADER_SYMCLASS_VECTOR,
+            tintName, empty, 0, 4, 1);
+        const std::uint32_t transformType = AppendNumericType(
+            bytes, MOJOSHADER_SYMTYPE_FLOAT, MOJOSHADER_SYMCLASS_MATRIX_COLUMNS,
+            transformName, empty, 0, 4, 4);
+        const std::uint32_t weightsType =
+            AppendScalarType(bytes, MOJOSHADER_SYMTYPE_FLOAT, weightsName, empty, 2);
+        const std::uint32_t visibleType =
+            AppendScalarType(bytes, MOJOSHADER_SYMTYPE_BOOL, visibleName, empty);
+        const std::uint32_t qualityType =
+            AppendScalarType(bytes, MOJOSHADER_SYMTYPE_INT, qualityName, empty);
+        const std::uint32_t passTagType =
+            AppendScalarType(bytes, MOJOSHADER_SYMTYPE_INT, passTagName, empty);
+
+        const std::uint32_t gainValue = AppendValueBits(bytes, FloatBits(0.25f));
+        const std::uint32_t tintValue =
+            AppendFloatValues(bytes, {0.1f, 0.2f, 0.3f, 0.4f});
+        const std::uint32_t transformValue = AppendFloatValues(bytes, {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f,
+        });
+        const std::uint32_t weightsValue = AppendFloatValues(bytes, {0.2f, 0.8f});
+        const std::uint32_t visibleValue = AppendValueBits(bytes, 1);
+        const std::uint32_t qualityValue = AppendValueBits(bytes, 7);
+        const std::uint32_t passTagValue = AppendValueBits(bytes, 3);
+        std::vector<std::uint32_t> stateValueOffsets;
+        stateValueOffsets.reserve(renderStates.size());
+        for (const auto& state : renderStates)
+            stateValueOffsets.push_back(AppendValueBits(bytes, state.valueBits));
+
+        const auto structureOffset = static_cast<std::uint32_t>(bytes.size() - 8);
+        PatchUInt32(bytes, 4, structureOffset);
+        AppendUInt32(bytes, 4); // parameters
+        AppendUInt32(bytes, 2); // techniques
+        AppendUInt32(bytes, 0); // ignored legacy count
+        AppendUInt32(bytes, 0); // objects
+
+        AppendUInt32(bytes, gainType);
+        AppendUInt32(bytes, gainValue);
+        AppendUInt32(bytes, 0); // flags
+        AppendUInt32(bytes, 1); // annotations
+        AppendUInt32(bytes, visibleType);
+        AppendUInt32(bytes, visibleValue);
+
+        AppendUInt32(bytes, tintType);
+        AppendUInt32(bytes, tintValue);
+        AppendUInt32(bytes, 0); // flags
+        AppendUInt32(bytes, 0); // annotations
+
+        AppendUInt32(bytes, transformType);
+        AppendUInt32(bytes, transformValue);
+        AppendUInt32(bytes, 0); // flags
+        AppendUInt32(bytes, 0); // annotations
+
+        AppendUInt32(bytes, weightsType);
+        AppendUInt32(bytes, weightsValue);
+        AppendUInt32(bytes, 0); // flags
+        AppendUInt32(bytes, 0); // annotations
+
+        AppendUInt32(bytes, firstTechnique);
+        AppendUInt32(bytes, 1); // annotations
+        AppendUInt32(bytes, 2); // passes
+        AppendUInt32(bytes, qualityType);
+        AppendUInt32(bytes, qualityValue);
+
+        AppendUInt32(bytes, firstPass);
+        AppendUInt32(bytes, 0); // annotations
+        AppendUInt32(bytes, 0); // states
+
+        AppendUInt32(bytes, statePass);
+        AppendUInt32(bytes, 1); // annotations
+        AppendUInt32(bytes, static_cast<std::uint32_t>(renderStates.size()));
+        AppendUInt32(bytes, passTagType);
+        AppendUInt32(bytes, passTagValue);
+        for (std::size_t i = 0; i < renderStates.size(); ++i)
+        {
+            AppendUInt32(bytes, renderStates[i].type);
+            AppendUInt32(bytes, 0); // ignored legacy field
+            AppendUInt32(bytes, renderStates[i].isFloat
+                                      ? unnamedFloatType : unnamedIntType);
+            AppendUInt32(bytes, stateValueOffsets[i]);
+        }
+
+        AppendUInt32(bytes, secondTechnique);
+        AppendUInt32(bytes, 0); // annotations
+        AppendUInt32(bytes, 1); // passes
+        AppendUInt32(bytes, secondPass);
+        AppendUInt32(bytes, 0); // annotations
+        AppendUInt32(bytes, 0); // states
+
+        AppendUInt32(bytes, 0); // small objects
+        AppendUInt32(bytes, 0); // large objects
+        return bytes;
+    }
+
     std::vector<SharpRuntime::bytecs> LoadStockEffect(const char* name)
     {
         const std::filesystem::path path =
@@ -149,6 +374,185 @@ TEST(Fna3dCompiledEffectTest, StockFixtureHashesMatchDocumentedFnaRevision)
         ASSERT_FALSE(bytes.empty());
         System::Security::Cryptography::SHA256 sha;
         EXPECT_EQ(HexDigest(sha.ComputeHash(bytes)), expected);
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, SyntheticFixtureReflectsAnnotationsTechniquesAndExactPasses)
+{
+    using System::InvalidOperationException;
+
+    GraphicsDevice device;
+    Effect effect(device, BuildSyntheticConformanceEffect({}));
+
+    ASSERT_EQ(effect.getParametersProperty().getCountProperty(), 4);
+    auto* gain = effect.getParametersProperty()["Gain"];
+    ASSERT_NE(gain, nullptr);
+    EXPECT_EQ(gain->getSemanticProperty(), "SCALAR");
+    EXPECT_FLOAT_EQ(gain->GetValueSingle(), 0.25f);
+    const auto* visible = gain->getAnnotationsProperty()["Visible"];
+    ASSERT_NE(visible, nullptr);
+    EXPECT_TRUE(visible->GetValueBoolean());
+
+    auto* tint = effect.getParametersProperty()["Tint"];
+    ASSERT_NE(tint, nullptr);
+    EXPECT_EQ(tint->getParameterClassProperty(),
+              Microsoft::Xna::Framework::Graphics::EffectParameterClass::Vector);
+    const auto tintValue = tint->GetValueVector4();
+    EXPECT_FLOAT_EQ(tintValue.X, 0.1f);
+    EXPECT_FLOAT_EQ(tintValue.Y, 0.2f);
+    EXPECT_FLOAT_EQ(tintValue.Z, 0.3f);
+    EXPECT_FLOAT_EQ(tintValue.W, 0.4f);
+
+    auto* transform = effect.getParametersProperty()["Transform"];
+    ASSERT_NE(transform, nullptr);
+    EXPECT_EQ(transform->GetValueMatrix(), Matrix::getIdentityProperty());
+
+    auto* weights = effect.getParametersProperty()["Weights"];
+    ASSERT_NE(weights, nullptr);
+    ASSERT_EQ(weights->getElementsProperty().getCountProperty(), 2);
+    const auto weightValues = weights->GetValueSingleArray(2);
+    ASSERT_EQ(weightValues.size(), 2u);
+    EXPECT_FLOAT_EQ(weightValues[0], 0.2f);
+    EXPECT_FLOAT_EQ(weightValues[1], 0.8f);
+    weights->getElementsProperty()[1].SetValue(0.6f);
+    EXPECT_FLOAT_EQ(weights->GetValueSingleArray(2)[1], 0.6f);
+
+    auto& techniques = effect.getTechniquesProperty();
+    ASSERT_EQ(techniques.getCountProperty(), 2);
+    EXPECT_EQ(techniques[0].getNameProperty(), "FirstTechnique");
+    EXPECT_EQ(techniques[1].getNameProperty(), "SecondTechnique");
+    const auto* quality = techniques[0].getAnnotationsProperty()["Quality"];
+    ASSERT_NE(quality, nullptr);
+    EXPECT_EQ(quality->GetValueInt32(), 7);
+    ASSERT_EQ(techniques[0].getPassesProperty().getCountProperty(), 2);
+    ASSERT_EQ(techniques[1].getPassesProperty().getCountProperty(), 1);
+    EXPECT_EQ(techniques[0].getPassesProperty()[0].getNameProperty(), "P0");
+    EXPECT_EQ(techniques[0].getPassesProperty()[1].getNameProperty(), "StatePass");
+    const auto* tag = techniques[0].getPassesProperty()[1].getAnnotationsProperty()["PassTag"];
+    ASSERT_NE(tag, nullptr);
+    EXPECT_EQ(tag->GetValueInt32(), 3);
+
+    EXPECT_NO_THROW(techniques[0].getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(techniques[0].getPassesProperty()[1].Apply());
+    EXPECT_THROW(techniques[1].getPassesProperty()[0].Apply(), InvalidOperationException);
+    effect.setCurrentTechniqueProperty(&techniques[1]);
+    EXPECT_NO_THROW(techniques[1].getPassesProperty()[0].Apply());
+
+    std::unique_ptr<Effect> clone(effect.Clone());
+    ASSERT_NE(clone, nullptr);
+    EXPECT_EQ(clone->getCurrentTechniqueProperty()->getNameProperty(), "SecondTechnique");
+    clone->getParametersProperty()["Gain"]->SetValue(0.75f);
+    EXPECT_FLOAT_EQ(clone->getParametersProperty()["Gain"]->GetValueSingle(), 0.75f);
+    EXPECT_FLOAT_EQ(gain->GetValueSingle(), 0.25f);
+}
+
+TEST(Fna3dCompiledEffectTest, SyntheticFixtureAcceptsEveryFnaRenderStateToken)
+{
+    const std::vector<SyntheticRenderState> states = {
+        {MOJOSHADER_RS_ZENABLE, MOJOSHADER_ZB_TRUE},
+        {MOJOSHADER_RS_FILLMODE, MOJOSHADER_FILL_SOLID},
+        {MOJOSHADER_RS_ZWRITEENABLE, 1},
+        {MOJOSHADER_RS_SRCBLEND, MOJOSHADER_BLEND_ONE},
+        {MOJOSHADER_RS_DESTBLEND, MOJOSHADER_BLEND_ZERO},
+        {MOJOSHADER_RS_CULLMODE, MOJOSHADER_CULL_NONE},
+        {MOJOSHADER_RS_ZFUNC, MOJOSHADER_CMP_ALWAYS},
+        {MOJOSHADER_RS_ALPHABLENDENABLE, 1},
+        {MOJOSHADER_RS_STENCILENABLE, 0},
+        {MOJOSHADER_RS_STENCILFAIL, MOJOSHADER_STENCILOP_KEEP},
+        {MOJOSHADER_RS_STENCILZFAIL, MOJOSHADER_STENCILOP_KEEP},
+        {MOJOSHADER_RS_STENCILPASS, MOJOSHADER_STENCILOP_KEEP},
+        {MOJOSHADER_RS_STENCILFUNC, MOJOSHADER_CMP_ALWAYS},
+        {MOJOSHADER_RS_STENCILREF, 0},
+        {MOJOSHADER_RS_STENCILMASK, 0xFFFFFFFFu},
+        {MOJOSHADER_RS_STENCILWRITEMASK, 0xFFFFFFFFu},
+        {MOJOSHADER_RS_MULTISAMPLEANTIALIAS, 1},
+        {MOJOSHADER_RS_MULTISAMPLEMASK, 0xFFFFFFFFu},
+        {MOJOSHADER_RS_COLORWRITEENABLE, 15},
+        {MOJOSHADER_RS_BLENDOP, MOJOSHADER_BLENDOP_ADD},
+        {MOJOSHADER_RS_SCISSORTESTENABLE, 0},
+        {MOJOSHADER_RS_SLOPESCALEDEPTHBIAS, FloatBits(0.0f), true},
+        {MOJOSHADER_RS_TWOSIDEDSTENCILMODE, 0},
+        {MOJOSHADER_RS_CCW_STENCILFAIL, MOJOSHADER_STENCILOP_KEEP},
+        {MOJOSHADER_RS_CCW_STENCILZFAIL, MOJOSHADER_STENCILOP_KEEP},
+        {MOJOSHADER_RS_CCW_STENCILPASS, MOJOSHADER_STENCILOP_KEEP},
+        {MOJOSHADER_RS_CCW_STENCILFUNC, MOJOSHADER_CMP_ALWAYS},
+        {MOJOSHADER_RS_COLORWRITEENABLE1, 15},
+        {MOJOSHADER_RS_COLORWRITEENABLE2, 15},
+        {MOJOSHADER_RS_COLORWRITEENABLE3, 15},
+        {MOJOSHADER_RS_BLENDFACTOR, 0x10203040u},
+        {MOJOSHADER_RS_DEPTHBIAS, FloatBits(0.0f), true},
+        {MOJOSHADER_RS_SEPARATEALPHABLENDENABLE, 1},
+        {MOJOSHADER_RS_SRCBLENDALPHA, MOJOSHADER_BLEND_ONE},
+        {MOJOSHADER_RS_DESTBLENDALPHA, MOJOSHADER_BLEND_ZERO},
+        {MOJOSHADER_RS_BLENDOPALPHA, MOJOSHADER_BLENDOP_ADD},
+        {178u, 0u}, // Effect compiler's undocumented SetSampler metadata token.
+    };
+
+    GraphicsDevice device;
+    Effect effect(device, BuildSyntheticConformanceEffect(states));
+    ASSERT_EQ(effect.getTechniquesProperty()[0].getPassesProperty().getCountProperty(), 2);
+    EXPECT_NO_THROW(effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply());
+}
+
+TEST(Fna3dCompiledEffectTest, SyntheticBlendFactorStateMatchesFnaByteOrderingInPixels)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    Effect shader(device, LoadStockEffect("BasicEffect.fxb"));
+    shader.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
+    shader.getParametersProperty()["DiffuseColor"]->SetValue(
+        Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    shader.getParametersProperty()["ShaderIndex"]->SetValue(3);
+    shader.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+
+    const std::vector<SyntheticRenderState> states = {
+        {MOJOSHADER_RS_ZENABLE, MOJOSHADER_ZB_FALSE},
+        {MOJOSHADER_RS_CULLMODE, MOJOSHADER_CULL_NONE},
+        {MOJOSHADER_RS_ALPHABLENDENABLE, 1},
+        {MOJOSHADER_RS_BLENDFACTOR, 0x10203040u},
+        {MOJOSHADER_RS_SRCBLEND, MOJOSHADER_BLEND_BLENDFACTOR},
+        {MOJOSHADER_RS_DESTBLEND, MOJOSHADER_BLEND_ZERO},
+        {MOJOSHADER_RS_BLENDOP, MOJOSHADER_BLENDOP_ADD},
+    };
+    Effect stateEffect(device, BuildSyntheticConformanceEffect(states));
+    stateEffect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+
+    device.Clear(Color::Black);
+    const VertexPositionColor vertices[6] = {
+        { Vector3(-1.0f, 1.0f, 0.5f), Color::White },
+        { Vector3(-1.0f, -1.0f, 0.5f), Color::White },
+        { Vector3(1.0f, -1.0f, 0.5f), Color::White },
+        { Vector3(-1.0f, 1.0f, 0.5f), Color::White },
+        { Vector3(1.0f, -1.0f, 0.5f), Color::White },
+        { Vector3(1.0f, 1.0f, 0.5f), Color::White },
+    };
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
+
+    const auto& viewport = device.getViewportProperty();
+    const Rectangle center(viewport.getWidthProperty() / 2,
+                           viewport.getHeightProperty() / 2, 1, 1);
+    Color pixel(0, 0, 0, 0);
+    device.GetBackBufferData(&center, &pixel, 0, 1);
+    EXPECT_NEAR(pixel.getRProperty(), 0x10, 2);
+    EXPECT_NEAR(pixel.getGProperty(), 0x20, 2);
+    EXPECT_NEAR(pixel.getBProperty(), 0x30, 2);
+}
+
+TEST(Fna3dCompiledEffectTest, SyntheticFixtureRejectsUnknownRenderStateTransactionally)
+{
+    GraphicsDevice device;
+    Effect effect(device, BuildSyntheticConformanceEffect({{177u, 0u}}));
+    try
+    {
+        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        FAIL() << "an unknown Effect Framework render state must never be ignored";
+    }
+    catch (const std::runtime_error& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("unsupported render state 177"),
+                  std::string::npos);
     }
 }
 
