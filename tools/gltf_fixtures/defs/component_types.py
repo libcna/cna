@@ -10,7 +10,8 @@ Specification: §3.6.2.2 ``accessor-data-types``, §3.7.2.1 ``meshes-overview``.
 
 from __future__ import annotations
 
-from ..builder import TRIANGLES, UNSIGNED_BYTE, UNSIGNED_INT, GltfBuilder
+from ..builder import (BYTE, FLOAT, TRIANGLES, UNSIGNED_BYTE, UNSIGNED_INT,
+                       UNSIGNED_SHORT, GltfBuilder)
 from ..manifest import Fixture, l3_primitive, world_positions
 from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
 
@@ -188,4 +189,176 @@ def non_indexed_triangles() -> Fixture:
     )
 
 
-FIXTURES = [u8_idx, u32_idx, non_indexed_triangles, normalized_u8_color]
+# --- the remaining §24.2 component-type rungs (`GLTF-399`) ---------------------------------------
+
+#: A `COLOR_0` as 16-bit normalized integers. 65535 -> 1.0 exactly, and 21845/65535 is deliberately
+#: not a short decimal, so a decoder dividing by 65536 diverges in the fourth digit rather than
+#: rounding to the same answer.
+_U16_COLOR_RAW = [(65535, 0, 0, 65535), (0, 65535, 0, 21845), (0, 0, 65535, 0)]
+_U16_COLOR_DECODED = [
+    (1.0, 0.0, 0.0, 1.0),
+    (0.0, 1.0, 0.0, 21845.0 / 65535.0),
+    (0.0, 0.0, 1.0, 0.0),
+]
+
+#: A `COLOR_0` stored as plain floats, including a value ABOVE 1. §3.9.2 does not clamp a float
+#: vertex colour, and CNA repacks to bytes -- so the fixture states the specification's value and
+#: the L3 comparison applies the round-trip, which is where a missing clamp would show.
+_FLOAT_COLOR = [(0.25, 0.5, 0.75, 1.0), (1.0, 0.0, 0.5, 0.5), (0.0, 1.0, 0.25, 0.0)]
+
+#: A `NORMAL` as signed normalized bytes. `-128` is the value §3.6.2.2's `max(c/127, -1)` rule
+#: exists for: divided by 127 it is -1.0079, which is not a unit vector, and the vendored cgltf does
+#: not clamp it (known_bugs.md, `GLTF-056`).
+#:
+#: These are **axis-aligned on purpose**, which is the opposite of this corpus's usual rule, and the
+#: reason is arithmetic rather than laziness: 127 is prime, so no off-axis 8-bit triple decodes to
+#: unit length -- the closest are ~1.002 long, which is a real quantisation artefact but would fail
+#: the corpus's own "every normal is unit length" invariant and drown this fixture's actual subject.
+#: That subject is the clamp, and `-128` versus `-1.0079` is what discriminates: an unclamped
+#: decoder produces a 1.0079-long normal here, which that same invariant then reports.
+_I8_NORMAL_RAW = [(-128, 0, 0), (0, 127, 0), (0, 0, -128)]
+
+
+def u16_idx() -> Fixture:
+    """An ``UNSIGNED_SHORT`` index accessor, named as its own rung."""
+    b = GltfBuilder("u16-idx")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="U16IndexTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="u16-idx", audit_fixture=None, owning_group="component-types",
+        description="A triangle indexed with UNSIGNED_SHORT indices -- the middle width, and the "
+                    "one CNA's own index buffer uses whenever the vertex count fits. It is the "
+                    "rung where the source width and the packed width coincide, which is what "
+                    "makes u8-idx and u32-idx's narrowing and widening legible as changes.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        referencing_groups=["accessors"],
+        features=["UNSIGNED_SHORT indices"],
+        spec_anchors=["accessor-data-types", "meshes-overview"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="U16IndexTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+def normalized_u16_color() -> Fixture:
+    """A 16-bit normalized ``COLOR_0`` -- the divisor is 65535, never 65536."""
+    b = GltfBuilder("normalized-u16-color")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    color = b.add_packed_accessor(usage="COLOR_0", values=_U16_COLOR_RAW, accessor_type="VEC4",
+                                  component_type=UNSIGNED_SHORT, normalized=True)
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "COLOR_0": color},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="U16ColoredTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="normalized-u16-color", audit_fixture=None, owning_group="component-types",
+        description="COLOR_0 as normalized UNSIGNED_SHORT. §3.6.2.2 divides by 65535, and one "
+                    "alpha (21845) is deliberately not a short decimal in that scale -- a decoder "
+                    "dividing by 65536 diverges in the fourth digit instead of rounding to the "
+                    "same answer.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        referencing_groups=["accessors"],
+        features=["normalized UNSIGNED_SHORT", "COLOR_0 VEC4", "65535 divisor"],
+        spec_anchors=["accessor-data-types"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="U16ColoredTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, colors=_U16_COLOR_DECODED, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+def float_color() -> Fixture:
+    """A float ``COLOR_0``, which the specification does not normalise at all."""
+    b = GltfBuilder("float-color")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    color = b.add_packed_accessor(usage="COLOR_0", values=_FLOAT_COLOR, accessor_type="VEC4",
+                                  component_type=FLOAT)
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "COLOR_0": color},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="FloatColoredTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="float-color", audit_fixture=None, owning_group="component-types",
+        description="COLOR_0 stored as plain FLOAT VEC4 -- the third of the three forms §3.6.2.2 "
+                    "allows, and the one with no normalisation step to get wrong. CNA repacks it "
+                    "to bytes, so the fixture states the specification's float and the comparison "
+                    "applies that round-trip, which is where a decoder that normalised an "
+                    "already-normalised value would fail.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        referencing_groups=["accessors"],
+        features=["FLOAT COLOR_0", "no normalisation"],
+        spec_anchors=["accessor-data-types"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="FloatColoredTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, colors=_FLOAT_COLOR, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+def normalized_i8_normal() -> Fixture:
+    """A signed normalized ``NORMAL`` -- the accessor form §3.6.2.2's clamp exists for."""
+    decoded = [tuple(max(c / 127.0, -1.0) for c in v) for v in _I8_NORMAL_RAW]
+    b = GltfBuilder("normalized-i8-normal")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=_I8_NORMAL_RAW, accessor_type="VEC3",
+                                   component_type=BYTE, normalized=True)
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="QuantisedNormalTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="normalized-i8-normal", audit_fixture=None, owning_group="component-types",
+        description="NORMAL as signed normalized BYTE, with -128 in two of the three vertices. "
+                    "That is the value §3.6.2.2's max(c/127, -1) rule exists for: divided by 127 "
+                    "it is -1.0079, which is not a unit vector, and the vendored cgltf does not "
+                    "clamp it -- so this fixture is the corpus's own witness for the "
+                    "ClampNormalizedSigned workaround (known_bugs.md, GLTF-056). The vectors are "
+                    "axis-aligned because 127 is prime and no off-axis 8-bit triple decodes to "
+                    "unit length; an unclamped decode is 1.0079 long, which the corpus's "
+                    "unit-length invariant reports on its own.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        referencing_groups=["accessors", "normals"],
+        features=["normalized BYTE NORMAL", "§3.6.2.2 signed clamp", "cgltf workaround witness"],
+        spec_anchors=["accessor-data-types"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="QuantisedNormalTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=decoded, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+FIXTURES = [u8_idx, u16_idx, u32_idx, non_indexed_triangles, normalized_u8_color,
+            normalized_u16_color, float_color, normalized_i8_normal]

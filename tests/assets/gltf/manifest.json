@@ -12,11 +12,11 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 98,
+  "distinctAssetCount": 102,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 5,
-    "component-types": 4,
+    "component-types": 8,
     "topology": 8,
     "normals": 2,
     "transforms": 17,
@@ -374,6 +374,22 @@
       "auditFixture": "f11"
     },
     {
+      "id": "u16-idx",
+      "owningGroup": "component-types",
+      "referencingGroups": [
+        "accessors"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "UNSIGNED_SHORT indices"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "u32-idx",
       "owningGroup": "component-types",
       "referencingGroups": [
@@ -425,6 +441,60 @@
         "vertex colour round-trip"
       ],
       "auditFixture": "f10"
+    },
+    {
+      "id": "normalized-u16-color",
+      "owningGroup": "component-types",
+      "referencingGroups": [
+        "accessors"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "normalized UNSIGNED_SHORT",
+        "COLOR_0 VEC4",
+        "65535 divisor"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "float-color",
+      "owningGroup": "component-types",
+      "referencingGroups": [
+        "accessors"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "FLOAT COLOR_0",
+        "no normalisation"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "normalized-i8-normal",
+      "owningGroup": "component-types",
+      "referencingGroups": [
+        "accessors",
+        "normals"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "normalized BYTE NORMAL",
+        "\u00a73.6.2.2 signed clamp",
+        "cgltf workaround witness"
+      ],
+      "auditFixture": null
     },
     {
       "id": "mode-points",
@@ -2384,6 +2454,31 @@
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
+      "path": "float-color.expected.json",
+      "bytes": 6563,
+      "sha256": "3f66a13ebf30a9aa8dbdcdaf74b4039e4c0128f43c856abd25f90998a8e95127"
+    },
+    {
+      "path": "float-color.glb",
+      "bytes": 808,
+      "sha256": "341eb9555fcdd678f569af3ea6857de94e2d58c7cba58713f2db06eeb6179509"
+    },
+    {
+      "path": "float-color.gltf",
+      "bytes": 1450,
+      "sha256": "abeb0bed5f4e2063dd736ec149c472274120b059d1e0be737792bdcaf69eb02d"
+    },
+    {
+      "path": "float-color.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "float-color.vb.bin",
+      "bytes": 72,
+      "sha256": "082d494e118e9ca9a84573506c2b39cf26b9a314f8040c07a0397f9546e52ec6"
+    },
+    {
       "path": "gltf-required-extension-unsupported.expected.json",
       "bytes": 5227,
       "sha256": "a9c01f831c78483cae3c93c7ab91e38b3670ec6bf073451f5e44f92e00a8174a"
@@ -3349,6 +3444,56 @@
       "sha256": "c1e3e9bc7b36d436f1ac7babe92209385d06397d526fdac313522e59cecb7512"
     },
     {
+      "path": "normalized-i8-normal.expected.json",
+      "bytes": 6893,
+      "sha256": "5d813d108636baf659e60cee038896dd09af6a1032b9b75c7bab3d43d37adf7f"
+    },
+    {
+      "path": "normalized-i8-normal.glb",
+      "bytes": 788,
+      "sha256": "4215d960775e46f2302f5a9e118ca165a7946564f8a0a262cdf63dd13cda13ce"
+    },
+    {
+      "path": "normalized-i8-normal.gltf",
+      "bytes": 1429,
+      "sha256": "b422427c51c0ee0adf402f735d4fd8932715eaf341a50c4a5bd31a86bd47a968"
+    },
+    {
+      "path": "normalized-i8-normal.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "normalized-i8-normal.vb.bin",
+      "bytes": 144,
+      "sha256": "3ca1c02f8e24cdf74cda1388017ebd650fa16bcbfe6dd5b7b35052a68abe9d43"
+    },
+    {
+      "path": "normalized-u16-color.expected.json",
+      "bytes": 6562,
+      "sha256": "b0bd0e52c17c209a4bb9193661216b7cc2b3c791e2831ca93b7276d21800747d"
+    },
+    {
+      "path": "normalized-u16-color.glb",
+      "bytes": 800,
+      "sha256": "9823182d347424aebb35ae08bf8cb610ae982f04fafeaee52cd198742c23ee87"
+    },
+    {
+      "path": "normalized-u16-color.gltf",
+      "bytes": 1442,
+      "sha256": "615711aa3b08e8eb6edc699d411f508db8c93053b98c104e37d0e6c367a21eba"
+    },
+    {
+      "path": "normalized-u16-color.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "normalized-u16-color.vb.bin",
+      "bytes": 72,
+      "sha256": "e30391b485e4220e22c7bde150cb04833059428ffb5a8501cebd8627c1a4b53c"
+    },
+    {
       "path": "normalized-u8-color.expected.json",
       "bytes": 6575,
       "sha256": "955988d7ddb6ef7ea443aa784057e90d0601fbaaf1aaa70d9c597f943a8b9379"
@@ -3837,6 +3982,31 @@
       "path": "tex-texture-transform.vb.bin",
       "bytes": 192,
       "sha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5"
+    },
+    {
+      "path": "u16-idx.expected.json",
+      "bytes": 6507,
+      "sha256": "c91ed74edc1a95d23890ce8534ee15ea4ce11e54d85994c6b68e5faac35ed92e"
+    },
+    {
+      "path": "u16-idx.glb",
+      "bytes": 788,
+      "sha256": "87c4177778684f2377cfa7626eb139ae3cb3a7bf45de231cd88e446b02a7b069"
+    },
+    {
+      "path": "u16-idx.gltf",
+      "bytes": 1429,
+      "sha256": "cae4b0785a8c4a62a70fe33919cf63f7f8f907b8b66419476ffddaac5448a541"
+    },
+    {
+      "path": "u16-idx.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "u16-idx.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "u32-idx.expected.json",
