@@ -16,6 +16,12 @@
 
 include_guard(GLOBAL)
 
+# Keep paths owned by this module stable when CNA is consumed through add_subdirectory().
+# CMAKE_SOURCE_DIR belongs to the outer application in that shape and must never be used to find
+# CNA's plist templates or to decide which already-defined targets CNA's internal sweep owns.
+get_filename_component(CNA_APPLE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+set(CNA_APPLE_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+
 set(CNA_APPLE OFF)
 set(CNA_APPLE_MACOS OFF)
 set(CNA_APPLE_IOS OFF)
@@ -118,9 +124,9 @@ function(cna_apple_configure_bundle target)
     string(REPLACE "_" "-" _bundle_suffix "${target}")
 
     if(CNA_APPLE_IOS)
-        set(_plist "${CMAKE_SOURCE_DIR}/cmake/AppleInfo.iOS.plist.in")
+        set(_plist "${CNA_APPLE_CMAKE_DIR}/AppleInfo.iOS.plist.in")
     else()
-        set(_plist "${CMAKE_SOURCE_DIR}/cmake/AppleInfo.macOS.plist.in")
+        set(_plist "${CNA_APPLE_CMAKE_DIR}/AppleInfo.macOS.plist.in")
     endif()
 
     set_target_properties(${target} PROPERTIES
@@ -146,6 +152,23 @@ function(cna_apple_configure_bundle target)
                 XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED  "NO"
                 XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY    "")
         endif()
+    else()
+        # A MACOSX_BUNDLE target does not automatically embed non-system dylibs. CNA's vendored
+        # SDL and Homebrew FFmpeg would otherwise remain loadable only on the build machine via
+        # its build RPATH. BundleUtilities copies the complete non-system dependency closure into
+        # Contents/Frameworks and rewrites install names to @executable_path-relative paths.
+        set(_bundle_search_dirs
+            "${CNA_SDL_PREBUILT_ROOT}/install/lib"
+            "/opt/homebrew/lib"
+            "/usr/local/lib")
+        string(REPLACE ";" "\\;" _bundle_search_dirs_arg "${_bundle_search_dirs}")
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCNA_APP_BUNDLE=$<TARGET_BUNDLE_DIR:${target}>"
+                "-DCNA_APP_LIBRARY_DIRS=${_bundle_search_dirs_arg}"
+                -P "${CNA_APPLE_CMAKE_DIR}/FixupMacOSBundle.cmake"
+            COMMENT "Embedding non-system runtime libraries in ${target}.app"
+            VERBATIM)
     endif()
 endfunction()
 
@@ -162,7 +185,10 @@ function(cna_apple_configure_all_bundles)
     if(CNA_APPLE_MACOS AND NOT CNA_APPLE_BUNDLE_MACOS_EXECUTABLES)
         return()
     endif()
-    _cna_apple_configure_bundles_in_directory("${CMAKE_SOURCE_DIR}")
+    # Only sweep targets owned by CNA itself. A parent project commonly defines its application
+    # after add_subdirectory(cna), so an automatic sweep can never reliably see downstream
+    # targets; consumers call cna_apple_configure_bundle(their_target) explicitly instead.
+    _cna_apple_configure_bundles_in_directory("${CNA_APPLE_SOURCE_DIR}")
 endfunction()
 
 function(_cna_apple_configure_bundles_in_directory dir)

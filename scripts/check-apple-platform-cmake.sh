@@ -104,4 +104,27 @@ for plist in AppleInfo.iOS.plist.in AppleInfo.macOS.plist.in; do
     done
 done
 
-echo "OK: cmake/ApplePlatform.cmake parses; iOS allow-list accepts, refuses and overrides as documented; plist templates present."
+# ---------------------------------------------------------------------------
+# 6. Static-only iOS means all three SDL projects must receive their own build-system switch.
+#    SDL3 uses SDL_SHARED/SDL_STATIC; SDL_image and SDL_mixer independently default
+#    BUILD_SHARED_LIBS to ON on Apple platforms, so merely changing SDL3 is insufficient.
+# ---------------------------------------------------------------------------
+third_party_sdl="${repo_root}/cmake/ThirdPartySDL.cmake"
+for required in \
+    '-DSDL_SHARED=${_sdl_shared}' \
+    '-DSDL_STATIC=${_sdl_static}' \
+    '-DBUILD_SHARED_LIBS=${_sdl_shared}' \
+    '-DSDLIMAGE_DEPS_SHARED=${_sdl_shared}' \
+    '-DSDLMIXER_DEPS_SHARED=${_sdl_shared}'; do
+    grep -Fq -- "${required}" "${third_party_sdl}" || {
+        echo "FAIL: ThirdPartySDL.cmake does not propagate ${required}" >&2
+        exit 1
+    }
+done
+
+[ -f "${repo_root}/cmake/FixupMacOSBundle.cmake" ] || {
+    echo "FAIL: missing macOS runtime-library bundle fixup" >&2
+    exit 1
+}
+
+echo "OK: Apple CMake layer parses; renderer gate, plist templates, static iOS SDL and macOS bundle fixup are present."

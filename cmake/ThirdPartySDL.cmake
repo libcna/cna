@@ -23,13 +23,28 @@ if(EMSCRIPTEN)
 else()
     # Keyed by target platform/arch so a cross-build (e.g. Windows via mingw-w64) cannot
     # silently overwrite the native build's cached SDL3 install, and vice versa.
-    set(_cna_sdl_key "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+    set(_cna_sdl_arch_key "${CMAKE_SYSTEM_PROCESSOR}")
+    if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+        # CMAKE_SYSTEM_PROCESSOR describes the host in a native macOS build, not an explicit
+        # -DCMAKE_OSX_ARCHITECTURES override. Use the actual target architecture list so an
+        # x86_64 or universal build on Apple silicon cannot reuse an arm64-only SDL install.
+        set(_cna_sdl_arch_key "${CMAKE_OSX_ARCHITECTURES}")
+    endif()
+    string(REPLACE ";" "-" _cna_sdl_arch_key "${_cna_sdl_arch_key}")
+    set(_cna_sdl_key "${CMAKE_SYSTEM_NAME}-${_cna_sdl_arch_key}")
     # iOS device and iOS simulator are the same (system name, processor) pair on Apple silicon --
     # both "iOS-arm64" -- yet their binaries are not interchangeable (different platform in the
     # Mach-O build-version load command; linking one into the other is a hard error). The sysroot
     # is the only thing that distinguishes them, so it joins the key.
     if(CNA_APPLE_IOS_SIMULATOR)
         set(_cna_sdl_key "${_cna_sdl_key}-simulator")
+    endif()
+    if(APPLE AND CMAKE_OSX_DEPLOYMENT_TARGET)
+        # SDL object files carry their own minimum-OS load command. Reusing an install built for
+        # a newer deployment target can produce a CNA binary that advertises an older floor but
+        # still fails to load there, so the deployment target is part of the persistent key.
+        string(REPLACE "." "_" _cna_sdl_deployment_key "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+        set(_cna_sdl_key "${_cna_sdl_key}-min${_cna_sdl_deployment_key}")
     endif()
     set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-${_cna_sdl_key}")
 endif()
@@ -144,6 +159,8 @@ function(cna_configure_vendored_sdl)
             CMAKE_ARGS
                 "-DCMAKE_PREFIX_PATH=${_prefix}"
                 "-DSDL3_DIR=${_cmake_dir}/SDL3"
+                -DBUILD_SHARED_LIBS=${_sdl_shared}
+                -DSDLIMAGE_DEPS_SHARED=${_sdl_shared}
                 -DSDLIMAGE_INSTALL=ON
                 -DSDLIMAGE_VENDORED=ON
                 -DSDLIMAGE_TESTS=OFF
@@ -164,6 +181,8 @@ function(cna_configure_vendored_sdl)
             CMAKE_ARGS
                 "-DCMAKE_PREFIX_PATH=${_prefix}"
                 "-DSDL3_DIR=${_cmake_dir}/SDL3"
+                -DBUILD_SHARED_LIBS=${_sdl_shared}
+                -DSDLMIXER_DEPS_SHARED=${_sdl_shared}
                 -DSDLMIXER_INSTALL=ON
                 -DSDLMIXER_VENDORED=ON
                 -DSDLMIXER_TESTS=OFF
