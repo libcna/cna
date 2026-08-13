@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 
 #include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -172,6 +173,15 @@ namespace CNA::Internal::Xnb
             // actually needs to find the offending file.
             try
             {
+                // The old direct decoder rejected a zero WAVEFORMATEX rate. The mixer seam may
+                // instead normalize the malformed header to its output rate, which turns corrupt
+                // content into plausible but wrongly-timed audio. Preserve the established XNB
+                // failure contract at the boundary that still owns the original metadata.
+                if (nSamplesPerSec == 0)
+                {
+                    throw std::invalid_argument("Invalid sample rate: zero");
+                }
+
                 std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
                 loaded->setNameProperty(assetName);
                 return std::move(*loaded);

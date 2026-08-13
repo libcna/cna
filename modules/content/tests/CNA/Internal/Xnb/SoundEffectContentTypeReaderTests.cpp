@@ -195,9 +195,9 @@ TEST_F(SoundEffectContentTypeReaderTest, Xma2IsRejected)
 // silently construct a garbage SoundEffect -- it must fail deterministically. CNA's reader itself
 // doesn't add a new sample-rate check (SoundEffectReader.Read() has none in real FNA either, and
 // AUD-05-001's own investigation confirmed CNA deliberately doesn't add C#-level validation FNA
-// itself lacks), but SDL3's own WAV loader validates this ("Invalid sample rate") -- confirmed
-// here that the failure propagates as a clean, catchable exception all the way through
-// SoundEffect::FromStream/BuildViaWavWrapper, not a crash or hang.
+// itself lacks). The decoder used to reject this itself; after the audio mixer seam was introduced
+// a backend may normalize the malformed WAV header to its output rate, so BuildViaWavWrapper now
+// preserves the same rejection at the XNB boundary that still owns the original metadata.
 TEST_F(SoundEffectContentTypeReaderTest, Pcm8WithZeroSampleRateFailsCleanlyRatherThanCrashing)
 {
     std::vector<uint8_t> bytes;
