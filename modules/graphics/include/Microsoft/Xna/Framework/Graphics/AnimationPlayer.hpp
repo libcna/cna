@@ -240,8 +240,12 @@ namespace Microsoft::Xna::Framework::Graphics
      *
      * This computes the palette the same way an application would — an `AnimationPlayer` over
      * @p skinningData with no clip started, which leaves every bone at its bind pose — and pushes
-     * it onto every skinned effect the model carries. Calling it again, or animating afterwards,
-     * simply overwrites the palette; it holds no state of its own.
+     * it onto every matching skinned effect the model carries. When @p model exposes a non-empty
+     * `Model::SkinsEXT` mapping, only the meshes mapped to @p skinningData are touched; this keeps
+     * independent glTF skins from overwriting one another's mutable effect palettes (`GLTF-265`).
+     * Models from older or non-glTF paths have no mapping and retain the historical apply-to-all
+     * behavior. Calling this again, or animating afterwards, simply overwrites the selected
+     * palette; it holds no state of its own.
      *
      * @param model The model whose parts carry `SkinnedEffect` / `SkinnedPbrEffect` instances.
      * @param skinningData The model's skeleton, normally the object on `Model::Tag`.

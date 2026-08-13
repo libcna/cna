@@ -1755,6 +1755,10 @@ namespace Microsoft::Xna::Framework::Content
             // Task 941: owns the skeleton/animation-clip data attached to the returned Model's
             // own Tag property. Null for a rigid, non-skinned model with no skeleton.
             std::unique_ptr<Graphics::SkinningData>               skinningData;
+            // plan_gltf.md GLTF-265: the first skin stays in `skinningData` so Model::Tag keeps
+            // the established XNA sample convention. Every additional runtime glTF skin lives
+            // here and is exposed through Model::SkinsEXT with its own mesh set and palette.
+            std::vector<std::unique_ptr<Graphics::SkinningData>>  additionalSkinningData;
             // plan_gltf.md GLTF-294: owns the rigid (non-joint) animation clips attached to an
             // UNSKINNED model's Tag. Null for a skinned model, whose Tag carries the skeleton --
             // Tag holds one object, and that collision is a recorded limitation (GLTF-295).
@@ -2199,23 +2203,15 @@ namespace Microsoft::Xna::Framework::Content
                     "so the file renders one copy where it describes many (GLTF-146, a documented "
                     "limit).");
             }
-            // plan_gltf.md GLTF-137. This used to be `groups.front()`, and every other group was
-            // dropped without a word: CollectMeshGroups makes one group per distinct skin (plus one
-            // for the unskinned meshes), so a file with a character AND a prop lost whichever of
-            // the two did not come first in the node array. Every group is imported now.
-            //
-            // One limit survives and is REPORTED rather than hidden: `Model::Tag` holds a single
-            // `SkinningData`, so only one skeleton can reach the application. A second skin's
-            // meshes are therefore not imported -- posing them with another rig's palette would be
-            // a fresh silent corruption in place of the old silent drop, which is the same
-            // reasoning `GLTF-295` records for rigid clips on a skinned model. The unskinned group
-            // is never affected: it has no skeleton to collide with.
-            std::size_t skinnedGroupIndex = groups.size();
-            for (std::size_t i = 0; i < groups.size(); ++i)
-            {
-                if (groups[i].skin != nullptr) { skinnedGroupIndex = i; break; }
-            }
-            const bool hasSkin = skinnedGroupIndex < groups.size();
+            // plan_gltf.md GLTF-137/GLTF-265. CollectMeshGroups makes one group per distinct skin
+            // plus one for unskinned placements. Runtime used to retain the first skin only,
+            // because Model::Tag has room for one SkinningData. Model::SkinsEXT now carries the
+            // complete skin-to-mesh mapping while Tag remains the compatibility alias for the
+            // first entry, so every group below can be imported without posing one rig with
+            // another rig's palette.
+            const bool hasSkin = std::any_of(
+                groups.begin(), groups.end(),
+                [](const MeshGroup& group) { return group.skin != nullptr; });
 
             // CNB-97 (Phase 14H): KHR_lights_punctual, approximated as up to 3 directional lights
             // (see ExtractPunctualLightsEXT's own doc comment) -- applied to every mesh part's
@@ -2281,10 +2277,11 @@ namespace Microsoft::Xna::Framework::Content
                     "the whole scene (GLTF-327).");
             }
 
-            SkeletonResult skeleton;
-            if (hasSkin)
+            std::vector<std::optional<SkeletonResult>> groupSkeletons(groups.size());
+            for (std::size_t gi = 0; gi < groups.size(); ++gi)
             {
-                const MeshGroup& group = groups[skinnedGroupIndex];
+                const MeshGroup& group = groups[gi];
+                if (group.skin == nullptr) { continue; }
                 // plan_gltf.md GLTF-245/GLTF-247: the skeleton needs two things the skin alone
                 // cannot supply -- the joints' full scene ancestry, and the world transform of the
                 // node instancing the skinned mesh, which glTF requires to be cancelled. A skin
@@ -2295,7 +2292,8 @@ namespace Microsoft::Xna::Framework::Content
                 {
                     if (placement.skinned) { meshNodeWorld = placement.worldTransform; break; }
                 }
-                skeleton = BuildSkeleton(group.skin, sceneGraph, meshNodeWorld, 1.0f);
+                groupSkeletons[gi] =
+                    BuildSkeleton(group.skin, sceneGraph, meshNodeWorld, 1.0f);
             }
 
             Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
@@ -2322,62 +2320,79 @@ namespace Microsoft::Xna::Framework::Content
                 const int parent = sceneGraph.nodes[i].parentIndex;
                 boneRawPtrs[static_cast<std::size_t>(parent < 0 ? 0 : parent)]->AddChild(boneRawPtrs[i]);
             }
+            std::vector<Graphics::SkinningData*> groupSkinningData(groups.size(), nullptr);
             if (hasSkin)
             {
-                auto skinningData = std::make_unique<Graphics::SkinningData>();
-                const int boneCount = static_cast<int>(skeleton.bones.size());
-                skinningData->BoneCount = boneCount;
-                skinningData->SkeletonHierarchy.resize(static_cast<std::size_t>(boneCount));
-                skinningData->BindPose.resize(static_cast<std::size_t>(boneCount));
-                skinningData->InverseBindPose.resize(static_cast<std::size_t>(boneCount));
-                skinningData->SkeletonRootPrefix.resize(static_cast<std::size_t>(boneCount));
-                for (int i = 0; i < boneCount; ++i)
+                for (std::size_t gi = 0; gi < groups.size(); ++gi)
                 {
-                    const auto ui = static_cast<std::size_t>(i);
-                    skinningData->SkeletonHierarchy[ui] = skeleton.bones[ui].parentIndex;
-                    skinningData->BindPose[ui] = skeleton.bones[ui].bindPoseLocal;
-                    skinningData->InverseBindPose[ui] = skeleton.bones[ui].inverseBindGlobal;
-                    skinningData->SkeletonRootPrefix[ui] = skeleton.bones[ui].parentWorldPrefix;
-                }
-                // plan_gltf.md GLTF-249: the declared rig root, carried so an application can find
-                // it. Read nowhere in the transform arithmetic, by design -- see §15.1.1.
-                skinningData->SkeletonRootNodeIndexEXT = skeleton.declaredSkeletonRootNodeIndex;
-                skinningData->SkeletonRootNameEXT = skeleton.declaredSkeletonRootName;
-
-                std::vector<std::string> warnings;
-                AnimationReportEXT animReport;
-                const std::vector<ClipOut> clips =
-                    ExtractClips(data, skeleton, 1.0f, warnings, &animReport);
-                // These were gathered and then dropped on the floor before GLTF-315: a channel a
-                // skinned import could not place said nothing at all on this path, which is the
-                // same silence D6 was made of.
-                for (const std::string& warning : warnings) { CNA::Logger::Warn(warning); }
-                LogAnimationReport(path, animReport);
-                for (const ClipOut& clip : clips)
-                {
-                    Graphics::AnimationClipEXT outClip;
-                    outClip.Duration = System::TimeSpan::FromSeconds(clip.duration);
-                    outClip.Tracks.reserve(clip.tracks.size());
-                    for (const TrackOut& track : clip.tracks)
+                    if (!groupSkeletons[gi].has_value()) { continue; }
+                    const SkeletonResult& skeleton = *groupSkeletons[gi];
+                    auto skinningData = std::make_unique<Graphics::SkinningData>();
+                    const int boneCount = static_cast<int>(skeleton.bones.size());
+                    skinningData->BoneCount = boneCount;
+                    skinningData->SkeletonHierarchy.resize(static_cast<std::size_t>(boneCount));
+                    skinningData->BindPose.resize(static_cast<std::size_t>(boneCount));
+                    skinningData->InverseBindPose.resize(static_cast<std::size_t>(boneCount));
+                    skinningData->SkeletonRootPrefix.resize(static_cast<std::size_t>(boneCount));
+                    for (int i = 0; i < boneCount; ++i)
                     {
-                        Graphics::BoneTrackEXT outTrack;
-                        outTrack.BoneIndex = track.boneIndex;
-                        outTrack.Keys.reserve(track.keys.size());
-                        for (const KeyframeOut& k : track.keys)
-                        {
-                            Graphics::KeyframeEXT key;
-                            key.Time = System::TimeSpan::FromSeconds(k.time);
-                            key.Translation = k.translation;
-                            key.Rotation = k.rotation;
-                            key.Scale = k.scale;
-                            outTrack.Keys.push_back(key);
-                        }
-                        outClip.Tracks.push_back(std::move(outTrack));
+                        const auto ui = static_cast<std::size_t>(i);
+                        skinningData->SkeletonHierarchy[ui] = skeleton.bones[ui].parentIndex;
+                        skinningData->BindPose[ui] = skeleton.bones[ui].bindPoseLocal;
+                        skinningData->InverseBindPose[ui] = skeleton.bones[ui].inverseBindGlobal;
+                        skinningData->SkeletonRootPrefix[ui] =
+                            skeleton.bones[ui].parentWorldPrefix;
                     }
-                    skinningData->AnimationClips[clip.name] = std::move(outClip);
-                }
+                    // plan_gltf.md GLTF-249: the declared rig root, carried so an application can
+                    // find it. Read nowhere in transform arithmetic, by design -- see §15.1.1.
+                    skinningData->SkeletonRootNodeIndexEXT =
+                        skeleton.declaredSkeletonRootNodeIndex;
+                    skinningData->SkeletonRootNameEXT = skeleton.declaredSkeletonRootName;
 
-                res->skinningData = std::move(skinningData);
+                    std::vector<std::string> warnings;
+                    AnimationReportEXT animReport;
+                    const std::vector<ClipOut> clips =
+                        ExtractClips(data, skeleton, 1.0f, warnings, &animReport);
+                    // These were gathered and then dropped on the floor before GLTF-315: a
+                    // channel a skinned import could not place said nothing at all on this path,
+                    // which is the same silence D6 was made of.
+                    for (const std::string& warning : warnings) { CNA::Logger::Warn(warning); }
+                    LogAnimationReport(path, animReport);
+                    for (const ClipOut& clip : clips)
+                    {
+                        Graphics::AnimationClipEXT outClip;
+                        outClip.Duration = System::TimeSpan::FromSeconds(clip.duration);
+                        outClip.Tracks.reserve(clip.tracks.size());
+                        for (const TrackOut& track : clip.tracks)
+                        {
+                            Graphics::BoneTrackEXT outTrack;
+                            outTrack.BoneIndex = track.boneIndex;
+                            outTrack.Keys.reserve(track.keys.size());
+                            for (const KeyframeOut& k : track.keys)
+                            {
+                                Graphics::KeyframeEXT key;
+                                key.Time = System::TimeSpan::FromSeconds(k.time);
+                                key.Translation = k.translation;
+                                key.Rotation = k.rotation;
+                                key.Scale = k.scale;
+                                outTrack.Keys.push_back(key);
+                            }
+                            outClip.Tracks.push_back(std::move(outTrack));
+                        }
+                        skinningData->AnimationClips[clip.name] = std::move(outClip);
+                    }
+
+                    Graphics::SkinningData* skinningDataPtr = skinningData.get();
+                    if (!res->skinningData)
+                    {
+                        res->skinningData = std::move(skinningData);
+                    }
+                    else
+                    {
+                        res->additionalSkinningData.push_back(std::move(skinningData));
+                    }
+                    groupSkinningData[gi] = skinningDataPtr;
+                }
             }
             else
             {
@@ -2468,32 +2483,25 @@ namespace Microsoft::Xna::Framework::Content
                 return texPtr;
             };
 
-            // GLTF-137: every group's instances, each paired with the skeleton that poses it --
-            // decided once, here, instead of being re-derived inside the loop. A group whose skin
-            // is not the one on Model::Tag contributes nothing and says so.
+            // GLTF-137/GLTF-265: every group's instances, each paired with the skeleton and public
+            // SkinningData that pose it -- decided once here instead of being re-derived inside
+            // the mesh loop. No skin is dropped merely because Model::Tag aliases the first one.
             struct ImportableInstance
             {
                 const MeshInstanceOut* instance;
                 const SkeletonResult* skeleton;
+                Graphics::SkinningData* skinningData;
             };
             std::vector<ImportableInstance> importable;
             for (std::size_t gi = 0; gi < groups.size(); ++gi)
             {
                 const MeshGroup& g = groups[gi];
-                if (g.skin != nullptr && gi != skinnedGroupIndex)
-                {
-                    CNA::Logger::Warn(
-                        "glTF file '" + path + "': skin '" +
-                        std::string(g.skin->name ? g.skin->name : "<unnamed>") + "' drives " +
-                        std::to_string(g.instances.size()) +
-                        " mesh instance(s) that are not imported -- Model::Tag carries one "
-                        "SkinningData and another skin already owns it (GLTF-137).");
-                    continue;
-                }
-                const SkeletonResult* groupSkeleton = (g.skin != nullptr) ? &skeleton : nullptr;
+                const SkeletonResult* groupSkeleton =
+                    groupSkeletons[gi].has_value() ? &*groupSkeletons[gi] : nullptr;
                 for (const MeshInstanceOut& placement : g.instances)
                 {
-                    importable.push_back({&placement, groupSkeleton});
+                    importable.push_back(
+                        {&placement, groupSkeleton, groupSkinningData[gi]});
                 }
             }
 
@@ -2505,6 +2513,10 @@ namespace Microsoft::Xna::Framework::Content
             struct EffectCacheKey
             {
                 const cgltf_material* material = nullptr;
+                // Skinned effects may share material state only inside one skin. Sharing across
+                // skins would give two meshes one mutable uBones palette, so posing either one
+                // would silently overwrite the other (GLTF-265).
+                const Graphics::SkinningData* skinningData = nullptr;
                 bool skinned = false;
                 bool pbr = false;
                 bool dualTexture = false;
@@ -2518,7 +2530,9 @@ namespace Microsoft::Xna::Framework::Content
                     const std::size_t flags =
                         (key.skinned ? 1u : 0u) | (key.pbr ? 2u : 0u) |
                         (key.dualTexture ? 4u : 0u) | (key.colored ? 8u : 0u);
-                    return std::hash<const void*>{}(key.material) * 31u + flags;
+                    const std::size_t materialHash = std::hash<const void*>{}(key.material);
+                    const std::size_t skinHash = std::hash<const void*>{}(key.skinningData);
+                    return (materialHash * 31u + skinHash) * 31u + flags;
                 }
             };
             std::unordered_map<EffectCacheKey, Graphics::Effect*, EffectCacheKeyHash> effectCache;
@@ -2527,11 +2541,14 @@ namespace Microsoft::Xna::Framework::Content
             // KHR_materials_variants override. Keeping it in one cache-backed function matters
             // beyond reducing code: an override is a complete glTF material and must receive the
             // same PBR factors, texture slots, lighting policy and unlit handling as a default.
-            const auto effectForMaterial = [&](const MeshOut& meshOut) -> Graphics::Effect*
+            const auto effectForMaterial = [&](const MeshOut& meshOut,
+                                               Graphics::SkinningData* skinningData)
+                -> Graphics::Effect*
             {
                 const EffectCacheKey effectKey{
-                    meshOut.material.sourceMaterialEXT, meshOut.skinned, meshOut.usePbr,
-                    meshOut.useDualTexture, meshOut.colored};
+                    meshOut.material.sourceMaterialEXT,
+                    meshOut.skinned ? skinningData : nullptr,
+                    meshOut.skinned, meshOut.usePbr, meshOut.useDualTexture, meshOut.colored};
                 if (const auto cached = effectCache.find(effectKey); cached != effectCache.end())
                 {
                     return cached->second;
@@ -2640,6 +2657,8 @@ namespace Microsoft::Xna::Framework::Content
             {
                 ++instanceCountOfMesh[entry.instance->mesh];
             }
+            std::unordered_map<Graphics::SkinningData*, std::vector<Graphics::ModelMesh*>>
+                meshesBySkin;
 
             int meshCounter = 0;
             for (const ImportableInstance& entry : importable)
@@ -3087,7 +3106,8 @@ namespace Microsoft::Xna::Framework::Content
 
                     // GLTF-238: the cache makes the default and variant paths share one Effect per
                     // (source material, import shape), just as the source material is shared.
-                    Graphics::Effect* defaultEffect = effectForMaterial(meshOut);
+                    Graphics::Effect* defaultEffect =
+                        effectForMaterial(meshOut, entry.skinningData);
                     instanceEffects.push_back(defaultEffect);
 
                     // GLTF-341/342: capture the whole default state before constructing sparse
@@ -3169,7 +3189,8 @@ namespace Microsoft::Xna::Framework::Content
 
                             CNA::Internal::Graphics::ModelMaterialVariantPartStateEXT state;
                             state.vertexBuffer = variantVb.get();
-                            state.effect = effectForMaterial(variantMesh);
+                            state.effect = effectForMaterial(
+                                variantMesh, entry.skinningData);
                             state.tag = variantTag;
                             state.numVertices = variantNumVertices;
                             for (std::size_t slot = 0;
@@ -3243,6 +3264,10 @@ namespace Microsoft::Xna::Framework::Content
                         ? 0u : static_cast<std::size_t>(instance.sceneNodeIndex);
                     meshObj->setParentBoneProperty(boneRawPtrs[parentBoneIndex]);
 
+                    if (entry.skinningData != nullptr)
+                    {
+                        meshesBySkin[entry.skinningData].push_back(meshObj.get());
+                    }
                     meshRawPtrs.push_back(meshObj.get());
                     for (std::unique_ptr<Graphics::ModelMeshPart>& part : instanceParts)
                     {
@@ -3259,6 +3284,22 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::Model model(&device, std::move(boneRawPtrs), std::move(meshRawPtrs));
             model.setOwnedResources(res);
+            if (hasSkin)
+            {
+                std::vector<Graphics::ModelSkinEXT> modelSkins;
+                for (std::size_t gi = 0; gi < groups.size(); ++gi)
+                {
+                    Graphics::SkinningData* skinningData = groupSkinningData[gi];
+                    if (skinningData == nullptr) { continue; }
+                    Graphics::ModelSkinEXT skin;
+                    skin.Name = groups[gi].skin != nullptr && groups[gi].skin->name != nullptr
+                        ? groups[gi].skin->name : "";
+                    skin.Data = skinningData;
+                    skin.Meshes = std::move(meshesBySkin[skinningData]);
+                    modelSkins.push_back(std::move(skin));
+                }
+                model.setSkinsEXTProperty(std::move(modelSkins));
+            }
             if (data->variants_count > 0)
             {
                 std::vector<std::string> variantNames;
@@ -3271,7 +3312,9 @@ namespace Microsoft::Xna::Framework::Content
                 CNA::Internal::Graphics::ConfigureModelMaterialVariantsEXT(
                     model, std::move(variantNames), std::move(materialVariantBindings));
             }
-            // plan_gltf.md GLTF-294: an unskinned model's Tag carries its rigid clips instead.
+            // plan_gltf.md GLTF-265/GLTF-294: the first skin stays on Model::Tag for compatibility
+            // with the XNA Skinned Model Sample convention. Model::SkinsEXT carries every skin;
+            // an unskinned model's Tag carries its rigid clips instead.
             if (res->skinningData)      { model.setTagProperty(res->skinningData.get()); }
             else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
             // plan_gltf.md GLTF-262: a skinned effect's palette defaults to identity matrices,
@@ -3282,7 +3325,13 @@ namespace Microsoft::Xna::Framework::Content
             // any later SetBoneTransforms simply overwrites it.
             if (res->skinningData)
             {
-                Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
+                for (const Graphics::ModelSkinEXT& skin : model.getSkinsEXTProperty())
+                {
+                    if (skin.Data != nullptr)
+                    {
+                        Graphics::ApplyBindPoseBoneTransformsEXT(model, *skin.Data);
+                    }
+                }
             }
             // plan_gltf.md GLTF-317 … GLTF-321: the file's own cameras. Projection built from the
             // source's own parameters here rather than at use time, so an application never has to

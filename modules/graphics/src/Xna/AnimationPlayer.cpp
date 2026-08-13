@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -233,6 +234,24 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             const ModelMesh* mesh = meshes[mi];
             if (mesh == nullptr) { continue; }
+
+            // GLTF-265: a runtime glTF Model can carry several independent skins. When its
+            // explicit mapping is present, applying skin A must not overwrite skin B's effect
+            // palette merely because both effects live in the same Model. Models built by older
+            // or non-glTF paths have no mapping and retain the historical apply-to-all behavior.
+            const std::vector<ModelSkinEXT>& skins = model.getSkinsEXTProperty();
+            if (!skins.empty())
+            {
+                bool belongsToSkin = false;
+                for (const ModelSkinEXT& skin : skins)
+                {
+                    if (skin.Data != &skinningData) { continue; }
+                    belongsToSkin = std::find(skin.Meshes.begin(), skin.Meshes.end(), mesh) !=
+                                    skin.Meshes.end();
+                    if (belongsToSkin) { break; }
+                }
+                if (!belongsToSkin) { continue; }
+            }
             const ModelMeshPartCollection& parts = mesh->getMeshPartsProperty();
             for (int pi = 0; pi < parts.getCountProperty(); ++pi)
             {

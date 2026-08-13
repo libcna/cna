@@ -137,6 +137,13 @@ namespace Microsoft::Xna::Framework::Graphics
         cameras_ = std::move(value);
     }
 
+    const std::vector<ModelSkinEXT>& Model::getSkinsEXTProperty() const { return skins_; }
+
+    void Model::setSkinsEXTProperty(std::vector<ModelSkinEXT> value)
+    {
+        skins_ = std::move(value);
+    }
+
     std::optional<BoundingSphere> Model::getBoundingSphereEXTProperty() const
     {
         const int meshCount = meshes_.getCountProperty();

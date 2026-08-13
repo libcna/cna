@@ -1190,6 +1190,53 @@ TEST(GltfToCnjToolTest, ImportsAllSkinsAsSeparateModels)
     ASSERT_NE(dataB, nullptr);
     EXPECT_EQ(dataA->BoneCount, 1);
     EXPECT_EQ(dataB->BoneCount, 1);
+
+    // GLTF-265's runtime half: one direct Load<Model>() must retain both skins rather than
+    // silently dropping every group after the first. Model::Tag remains the first SkinningData
+    // for source compatibility; SkinsEXT is the complete mapping.
+    ContentManager directCm(nullptr, gltfDir.path().string());
+    directCm.setGraphicsDevice(gd);
+    Model direct = directCm.Load<Model>("multiskin");
+    ASSERT_EQ(2, direct.getMeshesProperty().getCountProperty());
+    const std::vector<ModelSkinEXT>& skins = direct.getSkinsEXTProperty();
+    ASSERT_EQ(2u, skins.size());
+    EXPECT_EQ("SkinA", skins[0].Name);
+    EXPECT_EQ("SkinB", skins[1].Name);
+    ASSERT_NE(nullptr, skins[0].Data);
+    ASSERT_NE(nullptr, skins[1].Data);
+    EXPECT_NE(skins[0].Data, skins[1].Data);
+    EXPECT_EQ(direct.getTagProperty(), skins[0].Data)
+        << "the legacy Model::Tag alias must remain the first skin";
+    ASSERT_EQ(1u, skins[0].Meshes.size());
+    ASSERT_EQ(1u, skins[1].Meshes.size());
+    EXPECT_NE(skins[0].Meshes[0], skins[1].Meshes[0]);
+
+    Effect* effectA = skins[0].Meshes[0]->getMeshPartsProperty()[0]->getEffectProperty();
+    Effect* effectB = skins[1].Meshes[0]->getMeshPartsProperty()[0]->getEffectProperty();
+    ASSERT_TRUE(dynamic_cast<SkinnedEffect*>(effectA) != nullptr ||
+                dynamic_cast<SkinnedPbrEffect*>(effectA) != nullptr);
+    ASSERT_TRUE(dynamic_cast<SkinnedEffect*>(effectB) != nullptr ||
+                dynamic_cast<SkinnedPbrEffect*>(effectB) != nullptr);
+    EXPECT_NE(effectA, effectB)
+        << "two skins cannot share one effect's mutable bone palette";
+
+    const auto paletteX = [](Effect* effect)
+    {
+        if (auto* skinned = dynamic_cast<SkinnedEffect*>(effect))
+            return skinned->GetBoneTransforms(1)[0].M41;
+        return dynamic_cast<SkinnedPbrEffect*>(effect)->GetBoneTransforms(1)[0].M41;
+    };
+
+    // Make the otherwise-identity bind poses intentionally distinct after import. Applying one
+    // skin must touch exactly its mapped mesh and leave the other palette unchanged.
+    skins[0].Data->BindPose[0] = Matrix::CreateTranslation(3.0f, 0.0f, 0.0f);
+    skins[1].Data->BindPose[0] = Matrix::CreateTranslation(7.0f, 0.0f, 0.0f);
+    EXPECT_EQ(1u, ApplyBindPoseBoneTransformsEXT(direct, *skins[0].Data));
+    EXPECT_FLOAT_EQ(3.0f, paletteX(effectA));
+    EXPECT_FLOAT_EQ(0.0f, paletteX(effectB));
+    EXPECT_EQ(1u, ApplyBindPoseBoneTransformsEXT(direct, *skins[1].Data));
+    EXPECT_FLOAT_EQ(3.0f, paletteX(effectA));
+    EXPECT_FLOAT_EQ(7.0f, paletteX(effectB));
 }
 
 TEST(GltfToCnjToolTest, StepInterpolatedChannelHoldsValueAcrossAForeignResampleTime)

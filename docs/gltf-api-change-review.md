@@ -668,6 +668,50 @@ stride 48 to unlit stride 32 and includes an unmapped third variant after it, pr
 state swap and stale-state reset. Direct STUB/HEADLESS tests cover defaults, invalid indices and
 copy semantics; a real tool subprocess then compares every direct and offline selection at L6.
 
+### 1.14 `Model` multiple-skin mapping — `GLTF-265`
+
+**Problem.** glTF permits several independent skins in one file. The offline converter already
+emits one `Model` per skin, but runtime `Load<Model>("asset.glb")` has to return one object and the
+XNA Skinned Model Sample convention gives that object only one `Tag` slot. Keeping the first
+`SkinningData` in the slot silently dropped every later skin; putting one rig's data there and
+importing all meshes would be worse, because their local `JOINTS_0` indices would address the wrong
+palette.
+
+**Shape.** One additive CNAEXT record and a read/write `Model` property:
+
+```cpp
+CNAEXT struct ModelSkinEXT {
+    std::string Name;
+    SkinningData* Data;
+    std::vector<ModelMesh*> Meshes;
+};
+CNAEXT const std::vector<ModelSkinEXT>& getSkinsEXTProperty() const;
+CNAEXT void setSkinsEXTProperty(std::vector<ModelSkinEXT> value);
+```
+
+The first record's `Data` remains on `Model::Tag`, preserving every single-skin caller and the
+sample convention. The vector is complete and source-group ordered; each record names exactly the
+meshes whose effects consume that palette. Models from every other content path expose an empty
+vector. Raw pointers follow the rest of `Model`'s collections: the content-owned resources outlive
+the returned model and its copies.
+
+**Why a property, not another Tag convention.** A multi-skin application needs both the independent
+`SkinningData` objects and their mesh partition. `Model::Tag` cannot express either multiplicity or
+mapping, and using `ModelMesh::Tag` would consume the only application-defined slot on every mesh.
+This is the same collision that made cameras, sampler states and material variants real properties.
+
+**Acting on the mapping.** `ApplyBindPoseBoneTransformsEXT(model, skinningData)` retains its old
+apply-to-all behavior for models with no mapping. When `SkinsEXT` is present, it touches only the
+meshes mapped to that exact data pointer. The runtime effect cache also includes the skin identity:
+two skins using the same material cannot share one mutable `uBones` carrier and overwrite each
+other. These are behavior fixes, not merely transported metadata.
+
+**Compatibility and test.** Additive CNAEXT surface; single-skin `Model::Tag`, offline `.cnj`
+outputs and non-glTF models are unchanged. `ImportsAllSkinsAsSeparateModels` now exercises both
+paths: it still loads the two offline models, then loads the source directly as one two-mesh model,
+asserts two named mappings and distinct effects, assigns deliberately different bind translations,
+and proves applying skin A leaves skin B's palette unchanged and vice versa on HEADLESS.
+
 ---
 
 ## 2. Reviewed and deferred

@@ -150,6 +150,27 @@ namespace Microsoft::Xna::Framework::Graphics
 
     class ModelBone;
     class ModelMesh;
+    struct SkinningData;
+
+    /**
+     * @brief One independently posed skin imported into a Model.
+     *
+     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-265`). A glTF file may
+     * contain several skins, while the conventional XNA `Model::Tag` carrier can hold only one
+     * `SkinningData`. The first imported skin remains on `Model::Tag` for compatibility; this
+     * collection is the complete, unambiguous mapping from every skin to the meshes its palette
+     * drives. @ref Data and every mesh pointer are owned by the Model's content resources and
+     * remain valid for the Model's lifetime.
+     */
+    CNAEXT struct ModelSkinEXT
+    {
+        /** @brief The source skin's display name; may be empty. */
+        std::string Name;
+        /** @brief The independent skeleton, bind pose and animation clips for this skin. */
+        SkinningData* Data = nullptr;
+        /** @brief Mesh placements whose skinned effects consume @ref Data's palette. */
+        std::vector<ModelMesh*> Meshes;
+    };
 
     /**
      * @brief A basic 3D model with per-mesh parent bones.
@@ -250,6 +271,25 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setCamerasEXTProperty(std::vector<ModelCameraEXT> value);
 
         /**
+         * @brief Gets every independently posed skin imported with this model.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-265`). Empty for unskinned models
+         * and content paths that do not provide this mapping. A single-skin glTF model has one
+         * entry whose @ref ModelSkinEXT::Data is also exposed through the legacy `Model::Tag`
+         * convention. A multi-skin model keeps only that first pointer in `Tag`; callers must use
+         * this collection to animate each skin and apply its palette only to the listed meshes.
+         *
+         * @return Skin records in source mesh-group order.
+         */
+        CNAEXT [[nodiscard]] const std::vector<ModelSkinEXT>& getSkinsEXTProperty() const;
+
+        /**
+         * @brief Replaces the imported skin-to-mesh mapping.
+         * @param value The complete mapping, normally populated by the glTF content reader.
+         */
+        CNAEXT void setSkinsEXTProperty(std::vector<ModelSkinEXT> value);
+
+        /**
          * @brief Gets one sphere containing every mesh at its current parent-bone placement.
          *
          * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-128`). XNA exposes a
@@ -342,6 +382,7 @@ namespace Microsoft::Xna::Framework::Graphics
             std::vector<CNA::Internal::Graphics::ModelMaterialVariantBindingEXT> bindings);
 
         std::vector<ModelCameraEXT> cameras_;
+        std::vector<ModelSkinEXT> skins_;
         std::shared_ptr<CNA::Internal::Graphics::ModelMaterialVariantsEXT> materialVariants_;
         ModelBoneCollection bones_;
         ModelMeshCollection meshes_;

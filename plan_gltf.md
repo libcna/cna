@@ -10,9 +10,9 @@ Oracle repository: `openeggbert/cna-gltf-viewer` @ `aaa008dc62bcb1127901ca23b75b
 > working record.** The banner it opened with ("nothing in it was implemented") described the
 > planning session of 2026-08-11 only, and is preserved below for provenance.
 >
-> Of 460 rows: **376 are closed (`✔` 252, `✅` 124)** and **64 remain `⬜`**. The other 20 carry a
-> deliberate partial marker — 8 `🔬` (investigation, no implementation owed), 7 `✅/⬜` and 1
-> `✅/🐛` (landed with a named residue), 2 `🐛` (open defect), and 2 `⛔` (`GLTF-009` and
+> Of 460 rows: **377 are closed (`✔` 252, `✅` 125)** and **64 remain `⬜`**. The other 19 carry a
+> deliberate partial marker — 8 `🔬` (investigation, no implementation owed), 7 `✅/⬜`, no
+> `✅/🐛` residue, 2 `🐛` (open defect), and 2 `⛔` (`GLTF-009` and
 > `GLTF-439`, each blocked by this environment for a stated reason). Every closed row carries its
 > own evidence in its Scope cell: what was decided, what
 > it cost, and which fixture or test proves it. All eight audited defects (D1–D8) are `fixed` in
@@ -329,8 +329,9 @@ metallic|roughness` resolve to exactly the files in §2.1 plus documentation. No
 5. draws each model with `model.Draw(Matrix::Identity, view, projection)`.
 
 **It therefore exercises the offline `.cnj` path, not the runtime `Load<Model>(".glb")` path.** Both
-share `GltfImportCore`, so every defect in §1.1 reaches it, but the two paths differ (the offline
-path emits *all* mesh groups; the runtime path emits only the first).
+share `GltfImportCore`, so every defect in §1.1 reaches it, but their output shape differs: the
+offline path emits one `Model` per mesh group; since `GLTF-265`, the runtime path returns one
+`Model` whose `SkinsEXT` mapping carries every independent skin and its exact mesh set.
 
 ### 4.2 Viewer verdict — oracle, not culprit
 
@@ -1234,7 +1235,7 @@ why "the character collapses toward the centre" is the expected symptom of D8 on
 | `MaxBones = 72` | rigs above 72 joints silently exceed the palette | `GLTF-261` |
 | `BlendIndices` `uint8` | rigs above 255 joints wrap the index | `GLTF-254` |
 | Palette ordering | `BuildSkeleton` reorders joints breadth-first and remaps `JOINTS_0` via `oldToNew` ✅ correct **as a palette operation**, and `RuntimeGltfModelTest.LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversedJointOrder` covers it. The risk is Phase 5: the new scene hierarchy must not inherit palette order (§15.1.2) | ✅ / `GLTF-252` |
-| Multiple skins per file | one `MeshGroup` per skin; the offline tool emits one `.cnj` each ✅, the runtime path keeps only the first 🐛 | `GLTF-137` |
+| Multiple skins per file | one `MeshGroup` per skin; the offline tool emits one `.cnj` each and runtime `Model::SkinsEXT` maps every skin to its own meshes and palette ✅ | `GLTF-137`, `GLTF-265` |
 | Non-uniform joint scale | never tested; normals need the inverse-transpose in the skinning shader | `GLTF-268` |
 | Bind pose never applied | `SkinnedEffect` defaults to 72 identity bones; the viewer never calls `SetBoneTransforms`, so a skinned model renders **unskinned** | `GLTF-262`, V-adjacent `GLTF-425` |
 
@@ -2424,7 +2425,7 @@ passes numerically at L4 **and** `GLTF-260` proves no double application.*
 | GLTF-262 | Bind pose must be applied when no clip is playing | ✔ | GLTF-253 | `SkinnedEffect` defaults to 72 identity bones, so an unanimated skinned model renders **unskinned**. **Accept:** loading a skinned model yields a usable bind-pose palette without game-code setup, or the requirement is documented and the viewer satisfies it (`GLTF-425`). **Landed:** the first branch, not the second. An identity palette is not "no skinning" — it means every joint matrix is the identity, so the mesh is posed in joint space and glTF's own `inverse(globalTransform(meshNode))` cancellation (`GLTF-247`) never applies; an unposed skinned model rendered **wrong**, not merely still, and `GLTF-008`'s L6 capture is what turned that from a suspicion into a measurement. Both loaders now call the new `ApplyBindPoseBoneTransformsEXT` once after building the model, which computes the palette exactly the way an application would — an `AnimationPlayer` over the model's own `SkinningData` with no clip started — rather than deriving a second notion of "bind pose" that could disagree with playback at `t = 0`. Any later `SetBoneTransforms` simply overwrites it. Approved through the gate as `docs/gltf-api-change-review.md` §1.6, which records why real XNA's sample gets away without this (its content pipeline bakes the mesh into skeleton space, so *there* the bind pose really is the identity palette — glTF's is not). |
 | GLTF-263 | Bone palette upload | ✔ | GLTF-262 | `SetBoneTransforms` → `uBones[72]`. **Accept:** L6 capture matches `GetSkinTransforms()`. **Landed with `GLTF-008`:** the test performs the application's own step — `AnimationPlayer::GetSkinTransforms()` into `SkinnedPbrEffect::SetBoneTransforms()` — and then asserts the captured palette equals it entry for entry, in `paletteIndex` order (§15.1.2). A companion test measures the *unpopulated* case, which is XNA's own `MaxBones` identity default rather than an empty palette, and proves the fixture's real palette differs from it — so the main assertion cannot be passing on a coincidence. |
 | GLTF-264 | Skinned normals and tangents | ⬜ | GLTF-248 | The skinned shader transforms Position, Normal and Tangent by the palette. **Accept:** `skin-nonuniform-joint-scale` normals correct at L4/L7 (inverse-transpose where required). |
-| GLTF-265 | Multiple skins in one file | ✅/🐛 | GLTF-137 | Offline: one `.cnj` per skin ✅ (`ImportsAllSkinsAsSeparateModels`). Runtime: only the first 🐛. **Accept:** both paths import every skin. |
+| GLTF-265 | Multiple skins in one file | ✅ | GLTF-137 | **Closed on both paths.** The offline tool emits one `.cnj` per skin (`ImportsAllSkinsAsSeparateModels`); direct `Load<Model>` builds one independent `SkeletonResult` and `SkinningData` per group and imports every group's mesh instances. `Model::getSkinsEXTProperty()` exposes the source-ordered skin name, data and exact mesh set; the first data pointer remains on `Model::Tag` for compatibility. Skin identity is part of the skinned-effect cache key, so two skins sharing a material never share one mutable bone palette, and `ApplyBindPoseBoneTransformsEXT` uses the mapping to touch only the selected skin's meshes. The existing test still loads both offline outputs, then on HEADLESS directly loads the same two-skin source, sees two meshes/two named skins/two effects, gives the bind poses distinct translations `3` and `7`, and proves applying either palette cannot overwrite the other. |
 | GLTF-266 | World/View/Projection order for skinned draws | ✔ | GLTF-104 | **Accept:** L6 capture. **Landed with `GLTF-008`:** `BoundWorldMatrixMatchesTheExpectedNodeWorld` asserts the bound world equals the manifest's **L4** node world matrix times the application's own, over every single-instance corpus fixture — compared against L4 rather than against a second walk of the bone hierarchy, so it is a conformance test and not a consistency one. `ViewAndProjectionReachEveryDrawUnaltered` pins the other two against a camera that is nothing like the identity in any of its matrices. |
 | GLTF-267 | `uNormalMatrix` is `transpose(inverse(world3x3))` | ✔ | GLTF-264 | **Accept:** verified under non-uniform scale at L6. **Landed with `GLTF-008`:** the L6 capture records the normal matrix using the identical cofactor/inverse-determinant expression `EasyGLRenderer::BindDrawParams()` uploads, so the assertion is over the number a renderer actually sends; `NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3` checks it across the whole corpus against XNA's own `Matrix::Invert` + `Transpose`. The corpus had **no** non-uniform scale at all, so §11.4's planned `xf-scale-nonuniform` was generated to supply the case that can fail: `scale = [2,3,4]` with normals along `(0.6,0.8,0)`, where the world 3x3 and its inverse transpose send the same normal in visibly different directions. A separate test asserts that separation numerically, so the fixture cannot decay into one that merely agrees. |
 | GLTF-268 | Skinned + PBR combined path | ⬜ | GLTF-264 | Stride 68, `SkinnedPbrEffect`. **Accept:** a skinned PBR fixture correct at L5/L6/L7. |
