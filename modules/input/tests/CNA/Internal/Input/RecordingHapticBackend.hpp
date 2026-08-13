@@ -14,7 +14,7 @@
 
 #include "CNA/Internal/Input/SdlHapticBackend.hpp"
 
-// Test-only fake implementation of the internal SDL haptic seam. Lets haptic runtime behavior
+// Test-only recording implementation of the retained rich haptic-effect seam. It lets behavior
 // (capabilities, effect building/lifecycle, and non-standalone rumble) be exercised with NO real
 // force-feedback hardware. The opaque SDL_Haptic* handle is just a reinterpret-cast FakeDevice
 // pointer that is only ever handed back to this fake. NOT compiled into production.
@@ -35,7 +35,7 @@ namespace CNA::Internal::Input::test_support
         bool openFails = false;        // simulate the corresponding SDL_Open* returning nullptr
     };
 
-    class FakeSdlHapticBackend final : public ISdlHapticBackend
+    class RecordingHapticBackend final : public ISdlHapticBackend
     {
     public:
         // --- test setup / introspection ---

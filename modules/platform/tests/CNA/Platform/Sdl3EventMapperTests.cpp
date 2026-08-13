@@ -9,6 +9,7 @@
 
 #include "../../../src/Sdl3/Sdl3EventMapper.hpp"
 #include "../../../src/Sdl3/Sdl3GamepadControls.hpp"
+#include "../../../src/Sdl3/Sdl3KeyCodes.hpp"
 #include "../../../src/Sdl3/Sdl3Scancodes.hpp"
 
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
@@ -154,6 +155,46 @@ TEST(Sdl3EventMapperTests, KeyUpIsNotAPress)
     PlatformEvent mapped;
     ASSERT_TRUE(MapSdlEvent(source, mapped));
     EXPECT_FALSE(std::get<KeyEvent>(mapped).pressed);
+}
+
+TEST(Sdl3EventMapperTests, NativeKeycodesCoverEveryContractKeyFamily)
+{
+    const struct Case { SDL_Keycode native; KeyCode expected; } cases[] = {
+        {SDLK_A, KeyCode::A}, {SDLK_D, KeyCode::D},
+        {SDLK_0, KeyCode::D0}, {SDLK_1, KeyCode::D1},
+        {SDLK_KP_1, KeyCode::NumPad1}, {SDLK_KP_PLUS, KeyCode::Add},
+        {SDLK_SEMICOLON, KeyCode::OemSemicolon}, {SDLK_COMMA, KeyCode::OemComma},
+        {SDLK_LSHIFT, KeyCode::LeftShift}, {SDLK_RSHIFT, KeyCode::RightShift},
+        {SDLK_LCTRL, KeyCode::LeftControl}, {SDLK_RCTRL, KeyCode::RightControl},
+        {SDLK_LALT, KeyCode::LeftAlt}, {SDLK_RALT, KeyCode::RightAlt},
+        {SDLK_CAPSLOCK, KeyCode::CapsLock}, {SDLK_NUMLOCKCLEAR, KeyCode::NumLock},
+        {SDLK_SCROLLLOCK, KeyCode::Scroll},
+        {SDLK_F1, KeyCode::F1}, {SDLK_F13, KeyCode::F13}, {SDLK_F24, KeyCode::F24},
+        {SDLK_UP, KeyCode::Up}, {SDLK_SPACE, KeyCode::Space},
+        {SDLK_RETURN, KeyCode::Enter}, {SDLK_ESCAPE, KeyCode::Escape},
+        {SDLK_VOLUMEUP, KeyCode::VolumeUp}, {SDLK_APPLICATION, KeyCode::Apps},
+        {SDLK_SLEEP, KeyCode::Sleep},
+    };
+
+    for (const Case& testCase : cases)
+        EXPECT_EQ(ToKeyCode(testCase.native), testCase.expected)
+            << static_cast<unsigned>(testCase.native);
+}
+
+TEST(Sdl3EventMapperTests, LocaleAndMediaKeycodePolicyIsAppliedAtTheSdlEdge)
+{
+    EXPECT_EQ(ToKeyCode(SDL_Keycode{0x00E6}), KeyCode::OemQuotes);     // Norwegian æ
+    EXPECT_EQ(ToKeyCode(SDL_Keycode{0x00F8}), KeyCode::OemSemicolon); // Norwegian ø
+    EXPECT_EQ(ToKeyCode(SDL_Keycode{0x00E9}), KeyCode::None);         // accented text uses TextInput
+    EXPECT_EQ(ToKeyCode(SDL_Keycode{0x4E2D}), KeyCode::None);         // unnamed CJK codepoint
+
+    EXPECT_EQ(ToKeyCode(SDLK_VOLUMEUP), KeyCode::VolumeUp);
+    EXPECT_EQ(ToKeyCode(SDLK_VOLUMEDOWN), KeyCode::VolumeDown);
+    EXPECT_EQ(ToKeyCode(SDLK_MEDIA_NEXT_TRACK), KeyCode::None);
+    EXPECT_EQ(ToKeyCode(SDLK_MEDIA_PLAY_PAUSE), KeyCode::None);
+    EXPECT_EQ(ToKeyCode(SDLK_AC_HOME), KeyCode::None);
+    EXPECT_EQ(ToKeyCode(SDLK_AC_BACK), KeyCode::Escape); // DEC-17
+    EXPECT_EQ(ToKeyCode(SDLK_UNKNOWN), KeyCode::None);
 }
 
 TEST(Sdl3EventMapperTests, EventTypeWinsOverStaleNativeDownFields)

@@ -89,7 +89,7 @@ byte-for-byte by INPUT-KBD-009/010):
   there was no property to route horizontal scroll to. N-005 added a CNAEXT/EXT field instead: `wheel.x`
   is now scaled to the same 120-unit notch and surfaced via
   `MouseState::getHorizontalScrollWheelValueEXTProperty()`
-  (`InputManager::AddHorizontalScrollWheelDelta`, wired in `SdlInputBridge::ProcessEvent`). It is
+  (`InputManager::AddHorizontalScrollWheelDelta`, wired in `PlatformInputBridge::ProcessEvent`). It is
   deliberately excluded from `Equals`/`GetHashCode`/`ToString`/`==`/`!=` so those stay byte-identical to
   FNA. Tested in `SdlInputBridgeMouseTests.cpp` (horizontal-wheel delta/accumulation tests) and
   `MouseInputTests.cpp` (`NineArgConstructorAlsoSetsHorizontalScrollWheelEXT`,
@@ -451,7 +451,7 @@ else in this section is FNA-required behavior, not CNA scope creep.
   call under the FNA-fidelity principle. A beyond-FNA `ClearTransientState()` on focus loss was considered
   and **rejected** (it would silently diverge from the reference); the XNA-standard mitigation is for the
   game to gate input on `Game.IsActive`. Pinned by
-  `SdlInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchingFna`.
+  `PlatformInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchingFna`.
 - **`Game.IsActive` on desktop focus change (INP-AUD-002, fixed 2026-07-16):** the "gate on
   `Game.IsActive`" mitigation described just above only works if `IsActive` is actually correct.
   Until this fix, `Game::PollEvents()` handled the mobile-style

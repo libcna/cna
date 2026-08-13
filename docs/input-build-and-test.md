@@ -151,8 +151,9 @@ Notes:
 - **Updated 2026-07-17 (`plan_input.md` P9-027):** the input-filter count grew from the 2026-07-16
   baseline of 496 to **524** across the `feature/input` audit. The Phase 1-9 sessions covered by this
   update added 7 tests directly (`KeyboardStateTest.GetPressedKeysHasNoDuplicateWhenSameKeyGivenTwice`
-  P2-011; `SdlInputBridgeKeyboardTest.SimultaneousModifierAndLockKeyCombinationTracksAllIndependently`
-  P2-056; `SdlInputBridgeMouseTest.MotionEventUpdatesAbsolutePosition`,
+  P2-011; the former P2-056 modifier combination is now covered by
+  `PlatformInputBridgeKeyboardTest.ModifierAndLockKeysStayDistinct`;
+  `PlatformInputBridgeMouseTest.MotionEventUpdatesAbsolutePosition`,
   `.MotionEventRelativeDeltaReachesInputManagerThroughBridge`, and
   `.MotionEventConvertsWindowCoordinatesToLogicalForLetterboxedRenderer` P3-013/P3-039;
   `GestureDetectorTest.GestureTimestampIsNonNegativeAndAdvancesWithTheClock` P6-012;

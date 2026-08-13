@@ -444,7 +444,7 @@ if(CNA_BUILD_TESTS)
     # CI select the subset via `ctest -L input` (see docs/input-build-and-test.md). When you add an input
     # test suite whose name matches none of these tokens, extend this one string.
     set(CNA_INPUT_TEST_FILTER
-        "*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*:*CnaInput*:*Joystick*:*Haptic*")
+        "*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*PlatformInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*:*CnaInput*:*Joystick*:*Haptic*")
     # INPUT-BUILD-009: `--gtest_shuffle --gtest_repeat=5` is the standardized order-independence gate.
     # The input state is a process-wide singleton (InputManager / GestureDetector / MouseCursor stock
     # cursors persist for the whole binary), so a static-state leak would reintroduce order dependence;

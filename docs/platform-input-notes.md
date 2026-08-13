@@ -78,8 +78,8 @@ See also [`docs/input-backend.md`](input-backend.md) (architecture) and
 ## Browser / Emscripten (WebAssembly)
 
 CNA builds for Emscripten (EasyGL backend = WebGL 2 / OpenGL ES 3.0). Input flows through SDL3's
-Emscripten backend, which bridges browser DOM events to the same `SdlInputBridge::ProcessEvent` path used
-everywhere else, so no browser-specific input code exists in CNA. Browser-specific behavior to be aware of:
+Emscripten backend, which maps browser DOM events into the same `PlatformInputBridge::ProcessEvent`
+path used everywhere else, so no browser-specific input code exists in CNA. Browser-specific behavior:
 
 - **Exceptions are enabled.** Several input paths throw (`TouchCollection`/`TouchPanel::SetFinger` →
   `std::out_of_range`, `TouchPanel::ReadGesture` → `System::InvalidOperationException`). Emscripten disables

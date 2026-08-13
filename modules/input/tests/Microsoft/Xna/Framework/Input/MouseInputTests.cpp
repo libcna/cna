@@ -390,6 +390,9 @@ TEST_F(MousePlatformInputTest, RelativeModeAccumulatesDeltaAndDrainsOnRead)
 
 TEST(MouseTest, IsRelativeMouseModeEXTRoundTripsThroughRealWindow)
 {
+#if !defined(CNA_PLATFORM_SDL3)
+    GTEST_SKIP() << "requires the SDL3 platform mouse service";
+#endif
     ResetMouseState();
 
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
@@ -491,6 +494,9 @@ TEST_F(MousePlatformInputTest, SetCursorIsSafeNoOpWithoutMouseService)
 
 TEST(MouseTest, SetPositionConvertsLogicalToWindowForLetterboxedRenderer)
 {
+#if !defined(CNA_PLATFORM_SDL3)
+    GTEST_SKIP() << "requires the SDL3 platform mouse service";
+#endif
     // Task 847 / a-0001: on a scaled/letterboxed window the OS cursor must land at the correct
     // *window* pixel — SetPosition converts the caller's logical coords back to window space. This
     // exercises the SDL_Renderer path (SDL_RenderCoordinatesToWindow) that logical_to_window uses.

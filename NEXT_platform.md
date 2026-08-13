@@ -292,13 +292,13 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **Phase 5 input continuation.** PLAT-87 is complete: `TextInputEXT` lifecycle, screen-keyboard
-   queries, all nine type hints and IME-area control now use `IPlatformTextInput`; the raw native
-   handle is retained only as the frozen public property and paired internally with `WindowId`.
-   Continue with **PLAT-90**, inventorying and retiring the remaining `FakeSdl*Backend` doubles.
-   Keep only fakes that implement a surviving platform interface, preserve their behavioural
-   coverage, and leave the raw event adapter only where a still-unmigrated production caller
-   genuinely requires it.
+2. **Phase 6 audio continuation.** Phase 5 is complete through PLAT-90. All event-state tests now
+   drive `PlatformInputBridge`; the unused `SDL_Event` compatibility adapter and its non-SDL
+   fallback are deleted, native mapping coverage lives at the SDL3 edge, and the sole retained
+   full-effect haptic recorder is explicitly documented as PLAT-77/84's narrow survivor rather
+   than a platform-service substitute. Continue with **PLAT-91**, defining the independent
+   whole-buffer `CNA::Audio::Platform::IAudioDevice` contract without putting per-sample calls
+   behind a virtual interface.
 
 ---
 

@@ -21,7 +21,7 @@
 #include "CNA/Internal/Input/SdlHapticBackend.hpp"
 #include "CNA/Platform/CannedHaptics.hpp"
 
-#include "FakeSdlHapticBackend.hpp"
+#include "RecordingHapticBackend.hpp"
 
 using CNA::Input::HapticCapabilitiesEXT;
 using CNA::Input::HapticDevice;
@@ -35,7 +35,7 @@ using CNA::Input::Haptics;
 using CNA::Internal::Input::InputManager;
 using CNA::Internal::Input::SetSdlHapticBackendForTests;
 using CNA::Internal::Input::test_support::FakeHapticConfig;
-using CNA::Internal::Input::test_support::FakeSdlHapticBackend;
+using CNA::Internal::Input::test_support::RecordingHapticBackend;
 using CNA::Platform::JoystickInfo;
 using CNA::Platform::JoystickKind;
 using CNA::Platform::Testing::CannedHapticsPlatform;
@@ -46,7 +46,7 @@ namespace
 {
     struct FakeHapticTest : ::testing::Test
     {
-        FakeSdlHapticBackend fake;
+        RecordingHapticBackend fake;
         CannedHapticsPlatform platform;
         ScopedCurrentPlatform installed{platform};
 

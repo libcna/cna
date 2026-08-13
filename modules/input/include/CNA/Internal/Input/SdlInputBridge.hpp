@@ -1,37 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#include <SDL3/SDL.h>
-#include <cstdint>
 #include <string>
-#include <vector>
 
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 
 namespace CNA::Internal::Input
 {
     /**
-     * @brief Bridge between SDL3 events and CNA internal input state.
-     *
-     * This bridge knows SDL types, but exposes them only internally.
+     * @brief SDL-backed key-name helpers and input-state test controls.
      */
     class SdlInputBridge
     {
     public:
-        /**
-         * @brief Compatibility adapter for legacy SDL-shaped input tests.
-         *
-         * Input events are converted to `PlatformEvent` and delegated to `PlatformInputBridge`.
-         * `Game` consumes `PlatformEvent` directly; this remains only while PLAT-90 retires the
-         * remaining keyboard/touch native-shaped tests.
-         */
-        static void ProcessEvent(const SDL_Event& event);
-
-        /**
-         * @brief Translates a US-layout Keys value to the Keys value the current keyboard
-         * layout produces at that same physical key position. Returns Keys::None if no
-         * mapping exists in either direction.
-         */
         /**
          * @brief Test-only: forces scancode mode on/off, overriding the cached
          *        `FNA_KEYBOARD_USE_SCANCODES` env value (which can't be changed in-process).
