@@ -2,8 +2,9 @@
 
 ## Project Overview
 
-**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on SDL3 and a pluggable graphics renderer
-layer. It is a framework/runtime and abstraction layer — not a game — designed to preserve XNA-style APIs
+**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on a CNA-owned platform abstraction
+(SDL3 is the default implementation) and a pluggable graphics renderer layer. It is a framework/runtime and
+abstraction layer — not a game — designed to preserve XNA-style APIs
 (`Microsoft::Xna::Framework`) while using modern C++23 internals.
 
 ### Source Reference
@@ -449,6 +450,41 @@ individual task. Do not push unless the user explicitly asks to push.
 | Renderer contracts         | `modules/graphics/include/CNA/Internal/Renderers/Common/…`       | `IGraphicsRenderer` etc.        |
 | Renderer implementations   | `modules/renderers/<family>/{src,include}/…`                    | Hidden from XNA API            |
 | CNA utilities/extensions  | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | CNAEXT helpers, logging, etc.   |
+
+## Platform Boundary
+
+Platform, renderer and audio selection are three independent CMake axes:
+
+- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `HEADLESS`, or
+  `TERMINAL`; SDL2/SDL12 are reserved but not implemented).
+- `CNA_GRAPHICS_RENDERER` selects the renderer.
+- `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3` or `NULL`).
+
+New production code must use `CNA::Platform::IPlatform` and its narrow services. Do **not** include
+SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
+
+- `modules/platform/src/Sdl3/`;
+- `modules/audio/src/Platform/Sdl3/` and the mixer implementation isolated inside audio;
+- renderer families `sdl-renderer`, `sdl-gpu`, `fna3d`, and `freedirect`.
+
+A genuinely SDL3-specific test belongs with the SDL3 platform implementation. Consumer tests use
+canned platform services or the parameterized conformance suite, not native event injection.
+Capabilities are promises: unsupported behavior refuses explicitly, and a service is non-null
+exactly when its presence capability is true. Poll events and update input once per frame; never
+put platform calls in a draw/audio/input inner loop.
+
+Run the boundary gates after relevant changes:
+
+```bash
+python3 tools/platform/sdl_inventory.py --check
+python3 tools/platform/sdl_classify.py --check
+python3 tools/platform/renderer_sdl_audit.py --check
+python3 tools/platform/sdl_ratchet.py --check
+python3 tools/platform/hot_path_lint.py
+```
+
+See `docs/platform-abstraction.md` for the contract and implementation checklist. The migration
+task/evidence log is `plan_platform.md`.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |

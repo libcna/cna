@@ -1,21 +1,23 @@
 # NEXT.md
 
-> **Active campaign — SDL3/CNA platform separation:** see **`NEXT_platform.md`** and
-> **`plan_platform.md`**. That work introduces `modules/platform` (`CNA::Platform::IPlatform`) and
-> is on branch `feature/platform`; do not reconstruct its state from
-> this file, which predates it.
+> **Active campaign — CNA platform separation (`feature/platform`):** `plan_platform.md` is the
+> authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
+> guide, and `NEXT_platform.md` carries detailed continuity notes.
 >
-> Two things from it belong here because they affect every subsystem.
+> Platform, graphics and audio are independent build choices:
+> `CNA_PLATFORM={SDL3,HEADLESS,TERMINAL}`, `CNA_GRAPHICS_RENDERER=<renderer>`, and
+> `CNA_AUDIO_PLATFORM={SDL3,NULL}`. `CNA_PLATFORM` selects window/events/input/host services; it
+> does not imply a renderer or audio backend.
 >
-> **`CNA_DEVICES` defaults to OFF**, so `modules/devices-ext` and `modules/devices` compile to
-> nothing and their tests pass vacuously unless you configure a build with `-DCNA_DEVICES=ON`.
-> See `NEXT_platform.md` §1.
+> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3
+> implementation, the isolated SDL3/audio mixer implementation, and the four audited renderer
+> exceptions (`sdl-renderer`, `sdl-gpu`, `fna3d`, `freedirect`).** Use `IPlatform` services,
+> explicit capabilities/refusals, batched events and cached input snapshots. Run the inventory,
+> classification, renderer-audit, ratchet and hot-path gates from `tools/platform/`.
 >
-> **A full `ctest` run has three failures that `./CnaTests` alone never shows** —
-> `ModuleLinkClosure_probe_storage`, `Headless_Smoke`, `Headless_PresentLifecycle`. All three
-> reproduce on an unmodified tree, so they belong to nobody's current change; validating with the
-> gtest binary alone (what most subsystem campaigns do) hides them. Diagnoses in
-> `NEXT_platform.md` §2.
+> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`, and
+> `cmake-build-terminal`; do not create another full tree without a distinct configuration need.
+> `CNA_DEVICES` defaults to OFF, so a devices change must be compiled with it explicitly enabled.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

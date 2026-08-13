@@ -13,6 +13,25 @@
 
 ---
 
+## 0. Current checkpoint (supersedes stale counts below)
+
+Phase 8 is complete through PLAT-119. PLAT-118 runs the same 26-scenario event transcript through
+every compiled implementation (**43/43** focused tests across the three build profiles). PLAT-119
+ran the HEADLESS-selected binary with both display environment variables absent: all non-network
+tests passed; the only 63 full-run failures were the five ENet/UDP suites blocked from creating
+sockets by the execution sandbox. The display-free rerun excluding those suites was **6356 passed /
+53 skipped / 0 failed**, and platform conformance was **52/52**.
+
+PLAT-29 is also closed: SDL subsystem lifecycle serialization is process-wide across platform
+instances, its two-instance regression passes, and the pre-`SDL_Quit()` devices shutdown harness
+has been reverified. Phase 9 documentation now starts at `docs/platform-abstraction.md`.
+
+The measured ratchet is **48 files / 657 references** outside the allowlist. Any larger counts or
+"continue at" directions later in this historical continuity file predate this checkpoint; use
+`plan_platform.md` statuses and `git log --oneline` for current task state.
+
+---
+
 ## 1. READ THIS FIRST — the build-configuration trap
 
 There are **three current** build directories and they are not interchangeable. A change can
