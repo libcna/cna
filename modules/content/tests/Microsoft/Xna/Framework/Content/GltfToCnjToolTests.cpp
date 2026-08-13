@@ -1406,7 +1406,7 @@ TEST(GltfToCnjToolTest, AMultiPrimitiveMeshRoundTripsAsOneModelMeshWithTwoParts)
   "asset": { "version": "2.0" },
   "scene": 0,
   "scenes": [ { "nodes": [0] } ],
-  "nodes": [ { "name": "TwoMaterialNode", "mesh": 0 } ],
+  "nodes": [ { "name": "TwoMaterialNode", "mesh": 0, "translation": [10, 20, 30] } ],
   "materials": [
     { "name": "Red",  "pbrMetallicRoughness": { "baseColorFactor": [1, 0, 0, 1] } },
     { "name": "Blue", "pbrMetallicRoughness": { "baseColorFactor": [0, 0, 1, 1] } }
@@ -1449,6 +1449,30 @@ TEST(GltfToCnjToolTest, AMultiPrimitiveMeshRoundTripsAsOneModelMeshWithTwoParts)
     EXPECT_EQ(2, model.getMeshesProperty()[0]->getMeshPartsProperty().getCountProperty());
     EXPECT_EQ(2, model.getMeshesProperty()[0]->getEffectsProperty().getCountProperty())
         << "the two materials collapsed, or an effect never registered on its owning mesh";
+
+    // GLTF-128: bounds are derived independently by the direct loader and the offline .cnj
+    // reader, then transformed through the node hierarchy by Model itself. The non-identity node
+    // makes an implementation that returns only the local mesh sphere fail unmistakably.
+    ContentManager directCm(nullptr, gltfDir.path().string());
+    directCm.setGraphicsDevice(gd);
+    Model direct = directCm.Load<Model>("two");
+    const auto offlineBounds = model.getBoundingSphereEXTProperty();
+    const auto directBounds = direct.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(offlineBounds.has_value());
+    ASSERT_TRUE(directBounds.has_value());
+    EXPECT_EQ(directBounds->Center, offlineBounds->Center);
+    EXPECT_FLOAT_EQ(directBounds->Radius, offlineBounds->Radius);
+
+    const std::vector<Vector3> expectedWorldPositions{
+        Vector3(10.0f, 20.0f, 30.0f), Vector3(11.0f, 20.0f, 30.0f),
+        Vector3(10.0f, 21.0f, 30.0f), Vector3(15.0f, 20.0f, 30.0f),
+        Vector3(16.0f, 20.0f, 30.0f), Vector3(15.0f, 21.0f, 30.0f),
+    };
+    for (const Vector3& position : expectedWorldPositions)
+    {
+        EXPECT_LE(Vector3::Distance(directBounds->Center, position),
+                  directBounds->Radius + 1e-5f);
+    }
 }
 
 // plan_gltf.md GLTF-272: the two loaders must produce the SAME SkinningData.
@@ -2151,6 +2175,26 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
     float z0;
     std::memcpy(&z0, blendedAtDefault.data() + 2 * sizeof(float), sizeof(float));
     EXPECT_NEAR(z0, 0.5f, 1e-5f);
+
+    // GLTF-128: the imported mesh sphere describes the default pose that was actually uploaded,
+    // not the all-zero base pose hidden in MorphTargetDataEXT. All three vertices moved to z=.5.
+    const auto offlineBounds = model.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(offlineBounds.has_value());
+    for (const Vector3& position : std::vector<Vector3>{
+             Vector3(0.0f, 0.0f, 0.5f), Vector3(1.0f, 0.0f, 0.5f),
+             Vector3(0.0f, 1.0f, 0.5f)})
+    {
+        EXPECT_LE(Vector3::Distance(offlineBounds->Center, position),
+                  offlineBounds->Radius + 1e-5f);
+    }
+
+    ContentManager directCm(nullptr, gltfDir.path().string());
+    directCm.setGraphicsDevice(gd);
+    Model direct = directCm.Load<Model>("morph");
+    const auto directBounds = direct.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(directBounds.has_value());
+    EXPECT_EQ(directBounds->Center, offlineBounds->Center);
+    EXPECT_FLOAT_EQ(directBounds->Radius, offlineBounds->Radius);
 
     // Weight animation: LINEAR 0.0 at t=0 -> 1.0 at t=1.
     ASSERT_EQ(morph->WeightTrack.Keys.size(), 2u);

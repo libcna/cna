@@ -1876,6 +1876,28 @@ namespace Microsoft::Xna::Framework::Content
             return vb;
         }
 
+        // plan_gltf.md GLTF-128: every imported layout starts with a tightly-packed float3
+        // Position. Keep the extraction here, next to the one upload helper that owns that ABI,
+        // so the runtime and .cnj paths cannot invent separate offset tables while constructing
+        // the local ModelMesh::BoundingSphere that XNA callers expect.
+        void AppendPositionsForMeshBoundsEXT(const std::vector<std::uint8_t>& vertexBytes,
+                                             int stride,
+                                             std::vector<Vector3>& destination)
+        {
+            if (stride < static_cast<int>(sizeof(float) * 3u)) { return; }
+            const std::size_t vertexCount =
+                vertexBytes.size() / static_cast<std::size_t>(stride);
+            destination.reserve(destination.size() + vertexCount);
+            for (std::size_t vertex = 0; vertex < vertexCount; ++vertex)
+            {
+                float position[3]{};
+                std::memcpy(position,
+                            vertexBytes.data() + vertex * static_cast<std::size_t>(stride),
+                            sizeof(position));
+                destination.emplace_back(position[0], position[1], position[2]);
+            }
+        }
+
         // CNB-97 (Phase 14H): applies up to 3 KHR_lights_punctual-derived directional lights
         // (see GltfImportCore::ExtractPunctualLightsEXT's own doc comment) to any effect
         // implementing IEffectLights -- a single dynamic_cast against the interface covers
@@ -2514,6 +2536,10 @@ namespace Microsoft::Xna::Framework::Content
                 // objects.
                 std::vector<std::unique_ptr<Graphics::ModelMeshPart>> instanceParts;
                 std::vector<Graphics::ModelMeshPart*> instancePartPtrs;
+                // One local bound for the whole glTF mesh placement, not one per primitive.
+                // Keeping this outside the primitive loop is the bounds half of GLTF-139's
+                // one-ModelMesh-per-placement shape.
+                std::vector<Vector3> instanceBoundsPositions;
                 // A ModelMeshPart registers its effect on the mesh that OWNS it, and it only
                 // learns its owner when that mesh is constructed around it. The parts here are
                 // built before their mesh exists, so the effect is held until afterwards --
@@ -2526,6 +2552,7 @@ namespace Microsoft::Xna::Framework::Content
                         ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
                         : ("mesh" + std::to_string(meshCounter));
                     MeshOut meshOut = ExtractMesh(data, mesh->primitives[p], partName, entry.skeleton, 1.0f);
+                    std::vector<std::uint8_t> boundsVertexBytes = meshOut.vertexBytes;
 
                     const int numVertices = meshOut.stride > 0
                         ? static_cast<int>(meshOut.vertexBytes.size()) / meshOut.stride : 0;
@@ -2912,9 +2939,16 @@ namespace Microsoft::Xna::Framework::Content
                         if (hasNonZeroDefault)
                         {
                             Graphics::SetMorphWeightsEXT(*partPtr, morph->Weights);
+                            // The imported mesh sphere describes what a freshly loaded model
+                            // actually draws, including authored mesh/node default weights.
+                            boundsVertexBytes =
+                                Graphics::BlendMorphTargetsEXT(*morph, morph->Weights);
                         }
                         res->morphOwners.push_back(std::move(morph));
                     }
+
+                    AppendPositionsForMeshBoundsEXT(
+                        boundsVertexBytes, meshOut.stride, instanceBoundsPositions);
 
                     // plan_gltf.md GLTF-238: two primitives with the same material, imported the
                     // same way, share one Effect. A file whose every primitive got its own was
@@ -3128,6 +3162,14 @@ namespace Microsoft::Xna::Framework::Content
 
                     auto meshObj = std::make_unique<Graphics::ModelMesh>(
                         &device, meshName, instancePartPtrs);
+
+                    // ModelMesh::BoundingSphere is mesh-local; Model's GLTF-128 accessor applies
+                    // the current parent-bone transform and merges these placement by placement.
+                    if (!instanceBoundsPositions.empty())
+                    {
+                        meshObj->setBoundingSphereProperty(
+                            BoundingSphere::CreateFromPoints(instanceBoundsPositions));
+                    }
 
                     // Now that each part has an owner, the effects can be attached -- see the
                     // declaration of instanceEffects above for why this is not done inline.
@@ -3429,6 +3471,7 @@ namespace Microsoft::Xna::Framework::Content
                     int group = -1;
                     int parentBone = 0;
                     std::vector<Graphics::ModelMeshPart*> parts;
+                    std::vector<Vector3> boundsPositions;
                     // Held until the mesh exists, for the same reason as the .gltf path above: a
                     // part registers its effect on its owning mesh, and it has no owner yet.
                     std::vector<Graphics::Effect*> effects;
@@ -3579,6 +3622,7 @@ namespace Microsoft::Xna::Framework::Content
 
                             const auto vertBytes = ReadBinaryFile(vertPath);
                             const auto idxBytes  = ReadBinaryFile(idxPath);
+                            std::vector<std::uint8_t> boundsVertexBytes = vertBytes;
 
                             if (stride <= 0) continue;
                             const int numVertices = static_cast<int>(vertBytes.size()) / stride;
@@ -3719,9 +3763,15 @@ namespace Microsoft::Xna::Framework::Content
                                 if (hasNonZeroDefault)
                                 {
                                     Graphics::SetMorphWeightsEXT(*partPtr, morph->Weights);
+                                    boundsVertexBytes =
+                                        Graphics::BlendMorphTargetsEXT(*morph, morph->Weights);
                                 }
                                 res->morphOwners.push_back(std::move(morph));
                             }
+
+                            std::vector<Vector3> partBoundsPositions;
+                            AppendPositionsForMeshBoundsEXT(
+                                boundsVertexBytes, stride, partBoundsPositions);
 
                             // plan_gltf.md GLTF-139: the .cnj "meshes" array is per PRIMITIVE, and
                             // XNA's shape is one ModelMesh per mesh with one part per primitive.
@@ -3736,6 +3786,9 @@ namespace Microsoft::Xna::Framework::Content
                                 pendingMeshes.back().group == partOfMesh)
                             {
                                 pendingMeshes.back().parts.push_back(partPtr);
+                                pendingMeshes.back().boundsPositions.insert(
+                                    pendingMeshes.back().boundsPositions.end(),
+                                    partBoundsPositions.begin(), partBoundsPositions.end());
                             }
                             else
                             {
@@ -3744,6 +3797,7 @@ namespace Microsoft::Xna::Framework::Content
                                 pending.group = partOfMesh;
                                 pending.parentBone = JsonInt(mg, "parentBone", 0);
                                 pending.parts.push_back(partPtr);
+                                pending.boundsPositions = std::move(partBoundsPositions);
                                 pendingMeshes.push_back(std::move(pending));
                             }
 
@@ -3974,6 +4028,11 @@ namespace Microsoft::Xna::Framework::Content
                         {
                             auto mesh = std::make_unique<Graphics::ModelMesh>(
                                 &device, pending.name, pending.parts);
+                            if (!pending.boundsPositions.empty())
+                            {
+                                mesh->setBoundingSphereProperty(
+                                    BoundingSphere::CreateFromPoints(pending.boundsPositions));
+                            }
                             for (std::size_t e = 0; e < pending.parts.size(); ++e)
                             {
                                 pending.parts[e]->setEffectProperty(pending.effects[e]);

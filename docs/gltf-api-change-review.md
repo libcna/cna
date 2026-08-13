@@ -557,6 +557,75 @@ new `CNAEXT` struct. Nothing in the XNA 4.0 surface changes, and a `Model` from 
 simply has an empty list — which is also what a glTF file with no camera produces, deliberately, so
 "no camera" and "a default camera" are never confused.
 
+### 1.12 Whole-model bounding sphere — `GLTF-128`
+
+**Problem.** `ModelMesh` exposes XNA's per-mesh `BoundingSphere`, but `Model` exposes no union of
+them. A caller framing or culling the whole imported glTF scene therefore has to know the private
+vertex-sidecar format, re-read every position and duplicate the node-hierarchy composition the
+loader already performed. The viewer does exactly that today. It is both a layer violation and a
+second transform implementation waiting to drift from `Model::Draw`.
+
+**Why not internal.** Framing and whole-model culling are application decisions. An internal value
+would leave the viewer on the same sidecar-dependent path, while putting glTF-specific bounds in
+`Model::Tag` would collide with `SkinningData` and `ModelAnimationsEXT` and would not help ordinary
+XNB or hand-built models whose meshes already carry XNA bounding spheres.
+
+**Shape.** One computed property on `Model`, reusing XNA's existing type:
+
+```cpp
+// Microsoft::Xna::Framework::Graphics::Model
+CNAEXT [[nodiscard]] std::optional<BoundingSphere>
+getBoundingSphereEXTProperty() const;
+```
+
+The property transforms every `ModelMesh::BoundingSphere` by the same current absolute parent-bone
+matrix `Model::Draw` uses, then merges the results with `BoundingSphere::CreateMerged`. It is
+therefore **live for rigid/node animation**, not an import-time snapshot. A composed hierarchy can
+contain shear (a rotated child below a non-uniformly scaled parent), where XNA's ordinary
+`BoundingSphere::Transform` longest-basis rule is not conservative; the accessor bounds the
+matrix's largest stretch by the maximum absolute row sum of `A*A^T`, which stays exact for an
+orthogonal TRS basis and cannot exclude geometry under shear. The result is in model root space:
+for a glTF model that is the file's composed scene space, after all node transforms, but before the
+caller-provided `world` matrix passed to `Model::Draw` (which the model cannot know). The
+no-`ParentBone` case follows `Model::Draw` and uses bone zero when there is one, otherwise the
+identity. A model with no meshes returns `std::nullopt`; a zero-radius sphere is valid geometry and
+is not overloaded as an empty sentinel.
+
+**Why a sphere, not a new bounds struct or an AABB.** The source data already has one sphere per
+`ModelMesh`, XNA already supplies exact two-sphere merging, and a centre plus radius is precisely
+what a framing camera consumes. An AABB reconstructed from the spheres would be looser without
+recovering the source vertices; reading vertex-buffer shadows inside `Model` would bypass the
+existing mesh-bounds abstraction and would fail for write-only or GPU-generated data. No new type
+is justified.
+
+**Required importer repair.** Both glTF loaders currently leave every mesh sphere at its default
+zero value. They must build one local-space sphere from the positions of **all** primitives grouped
+into that `ModelMesh`; doing it per primitive would reintroduce the shape bug `GLTF-139` removed.
+This is internal wiring, not another public member. The offline `.cnj` reader derives the same
+sphere from its vertex sidecars, so old and new `.cnj` files need no format or version change.
+
+**Boundary.** This property has exactly the semantics of the mesh spheres it aggregates. Changing a
+bone transform is reflected on the next call. GPU skinning and a later CPU morph re-upload do not
+magically rewrite `ModelMesh::BoundingSphere`; a caller that deforms geometry outside its imported
+mesh sphere must update that existing read-write XNA property, just as it must for per-mesh culling.
+The glTF loaders initialise the sphere from the imported default vertex pose, including authored
+default morph weights, but cannot predict arbitrary future or overdriven animation.
+
+**Compatibility.** Additive and CNAEXT. Existing draw behaviour and every existing mesh sphere are
+unchanged. XNB and hand-built models participate automatically through the property they already
+have; an empty model now has an explicit no-result rather than a fabricated origin sphere.
+
+**Migration.** None. A caller doing private sidecar traversal can replace it with the one property
+read. A caller that needs application world space transforms the returned sphere by its own `world`
+matrix, the same matrix it passes to `Model::Draw`.
+
+**Test.** Graphics unit tests use two hand-built mesh spheres on different bones to discriminate
+bone composition, merge order and a live pose change, plus the empty-model result. A separate
+sheared absolute transform proves the sphere remains conservative where the ordinary longest-basis
+rule does not. A two-primitive glTF proves one mesh sphere covers both parts; a translated placement
+proves the whole-model sphere contains every independent L4 world position. The offline tool's
+`.cnj` result and the direct glTF result must have component-identical centre and radius.
+
 ---
 
 ## 2. Reviewed and deferred

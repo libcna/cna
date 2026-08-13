@@ -131,6 +131,32 @@ unmirrored node shares a single index buffer and a single vertex buffer, so reve
 or flipping `TANGENT.w`, which mirroring also inverts — at import would fix one placement by
 breaking the other. Both are per-draw raster decisions, the same boundary `doubleSided` sits behind.
 
+### Bounds follow the same placement
+
+`plan_gltf.md` `GLTF-128`. Each glTF loader initialises the ordinary XNA
+`ModelMesh::BoundingSphere` in **mesh-local space**, from the positions of every primitive grouped
+into that mesh. The direct and offline paths both use the vertex pose that is initially uploaded,
+including authored non-zero `mesh.weights` or `node.weights`; the `.cnj` format needs no additional
+bounds field because its existing vertex sidecars contain the same positions.
+
+`Model::getBoundingSphereEXTProperty()` then follows the transform pipeline above rather than
+re-reading those sidecars: it transforms each mesh sphere by the mesh's **current absolute parent
+bone transform** and merges the placed spheres. The result therefore moves immediately with rigid
+node animation. A rotated child below a non-uniformly scaled parent can make that composed matrix
+sheared, so the radius uses a conservative upper bound on its largest stretch rather than the
+longest-basis shortcut that is exact only for an orthogonal TRS basis. No meshes means
+`std::nullopt`; a zero-radius sphere remains valid point geometry.
+
+The result is in **model-root space**. For an imported glTF this is the composed scene space that
+`SceneNodeOut::worldTransform` calls world, but it deliberately excludes the caller's application
+`world` matrix passed to `Model::Draw`, which the model cannot know. A caller needing final
+application-world bounds transforms the returned sphere by that same matrix.
+
+This has the existing mesh-sphere deformation boundary, not a second hidden geometry tracker. GPU
+skinning and a later morph re-upload do not rewrite `ModelMesh::BoundingSphere`; if either moves
+vertices outside the imported default-pose sphere, the application updates that read-write XNA
+property. The whole-model accessor will use the updated value on its next call.
+
 ## `KHR_texture_transform`: baked, not shader-side
 
 `plan_gltf.md` `GLTF-186`. The extension gives each texture reference its own offset/rotation/scale
@@ -259,9 +285,11 @@ change. The decision and its cost, recorded together:
 * **What it costs.** One full vertex-buffer upload per weight change, per morphed primitive. For a
   face rig driven every frame that is the dominant cost of the feature, and it scales with the
   mesh rather than with the number of targets.
-* **What it buys beyond portability.** The blended buffer is what *everything* sees, not just the
-  draw — a CPU-side bounds computation, a picking ray, a `.cnj` re-export. A GPU blend would leave
-  all of those reading the rest pose.
+* **What it buys beyond portability.** The blended buffer is what every consumer that reads the
+  buffer sees, not just the draw — a CPU-side geometry scan, a picking ray, a `.cnj` re-export. A
+  GPU blend would leave all of those reading the rest pose. The stored `ModelMesh::BoundingSphere`
+  is deliberately not such a scan and must be updated by the caller after a later morph, as the
+  bounds section above records.
 * **Status.** GPU morphing is explicitly **GLTF ROBUST**, not a gap in CORE conformance: the
   rendered result is identical, only the path differs.
 

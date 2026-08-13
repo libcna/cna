@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **370 closed (`✔` 249, `✅` 121),
-  67 `⬜` remaining.** The other 23 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **371 closed (`✔` 250, `✅` 121),
+  66 `⬜` remaining.** The other 23 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 9 `✅/⬜` and 2 `✅/🐛` (landed with a named residue), 2 `🐛` (open:
   `GLTF-157`, `421`), and 2 `⛔` (`GLTF-009` and
   `GLTF-439`, each blocked by this environment for a stated reason).
@@ -153,7 +153,7 @@ These are not style preferences; they are what made the campaign find things.
 
 ## What is blocked in this environment, and why
 
-**46 of the 82 remaining rows cannot be finished here.** Do not mark them done, and do not work
+**45 of the 81 remaining rows cannot be finished here.** Do not mark them done, and do not work
 around them by weakening their acceptance. Recounted 2026-08-13: `HEADLESS` was added as a second
 renderer, which moved several rows out of the "second renderer" bucket, and `GLTF-404`/`GLTF-419`
 turned out not to need CI at all.
@@ -163,7 +163,7 @@ turned out not to need CI at all.
 | **L7 / rendered image** | 18 — `GLTF-016`, `175`, `176`, `182`, `189`, `213`, `218`, `230`, `244`, `264`, `268`, `340`, `343`, `344`, `386`, `387`, `390`, `397` | Needs a renderer with a real 3D pipeline. This environment builds `STUB` and `HEADLESS`, neither of which rasterises. `GLTF-343`/`344` now reach shader-ready F0/F90 at L6; consuming those values in every renderer is the blocked residue. |
 | **second/third renderer** | 10 — `GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs the comparison; `OPENGLES3`/`VULKAN` need sibling checkouts and a GPU. `GLTF-017`/`382`/`383`/`388` were closable *because* `HEADLESS` builds here. |
 | **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
-| **`cna-gltf-viewer` repo** | 11 — `GLTF-128`, `323`, `342`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
+| **`cna-gltf-viewer` repo** | 13 — `GLTF-323`, `342`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
 | **third-party assets** | 6 — `GLTF-013`, `014`, `018`, `341`, `405`–`407`, `411` | Needs pinned, licence-reviewed external sample models. |
 | **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
 | **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |

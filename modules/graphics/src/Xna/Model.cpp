@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include <stdexcept>
@@ -14,6 +15,51 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    namespace
+    {
+        BoundingSphere TransformModelBoundsSphereEXT(const BoundingSphere& sphere,
+                                                      const Matrix& matrix)
+        {
+            BoundingSphere result;
+            result.Center = Vector3::Transform(sphere.Center, matrix);
+
+            // BoundingSphere::Transform follows XNA and uses the longest transformed basis
+            // vector. That is exact for one TRS, whose basis is orthogonal, but a hierarchy can
+            // compose a rotated child below a non-uniformly scaled parent and thereby create
+            // shear. Under shear the longest basis vector can be shorter than the matrix's true
+            // maximum stretch, so a nominal "bound" can exclude vertices.
+            //
+            // The squared maximum stretch is the largest eigenvalue of A*A^T. The maximum
+            // absolute row sum of that symmetric matrix is a conservative upper bound on the
+            // eigenvalue (and remains exact for an orthogonal scaled basis). This keeps the
+            // ordinary XNA result for rotation/scale while making composed glTF placements safe.
+            const double b11 = static_cast<double>(matrix.M11) * matrix.M11 +
+                               static_cast<double>(matrix.M12) * matrix.M12 +
+                               static_cast<double>(matrix.M13) * matrix.M13;
+            const double b22 = static_cast<double>(matrix.M21) * matrix.M21 +
+                               static_cast<double>(matrix.M22) * matrix.M22 +
+                               static_cast<double>(matrix.M23) * matrix.M23;
+            const double b33 = static_cast<double>(matrix.M31) * matrix.M31 +
+                               static_cast<double>(matrix.M32) * matrix.M32 +
+                               static_cast<double>(matrix.M33) * matrix.M33;
+            const double b12 = static_cast<double>(matrix.M11) * matrix.M21 +
+                               static_cast<double>(matrix.M12) * matrix.M22 +
+                               static_cast<double>(matrix.M13) * matrix.M23;
+            const double b13 = static_cast<double>(matrix.M11) * matrix.M31 +
+                               static_cast<double>(matrix.M12) * matrix.M32 +
+                               static_cast<double>(matrix.M13) * matrix.M33;
+            const double b23 = static_cast<double>(matrix.M21) * matrix.M31 +
+                               static_cast<double>(matrix.M22) * matrix.M32 +
+                               static_cast<double>(matrix.M23) * matrix.M33;
+            const double stretchSquared = std::max(
+                b11 + std::abs(b12) + std::abs(b13),
+                std::max(b22 + std::abs(b12) + std::abs(b23),
+                         b33 + std::abs(b13) + std::abs(b23)));
+            result.Radius = sphere.Radius *
+                static_cast<float>(std::sqrt(std::max(0.0, stretchSquared)));
+            return result;
+        }
+    }
 
     Matrix CreateInfinitePerspectiveFieldOfViewEXT(float fieldOfView, float aspectRatio,
                                                     float nearPlaneDistance)
@@ -59,6 +105,37 @@ namespace Microsoft::Xna::Framework::Graphics
     void Model::setCamerasEXTProperty(std::vector<ModelCameraEXT> value)
     {
         cameras_ = std::move(value);
+    }
+
+    std::optional<BoundingSphere> Model::getBoundingSphereEXTProperty() const
+    {
+        const int meshCount = meshes_.getCountProperty();
+        if (meshCount == 0) { return std::nullopt; }
+
+        const int boneCount = bones_.getCountProperty();
+        std::vector<Matrix> absoluteBoneTransforms(static_cast<std::size_t>(boneCount));
+        if (boneCount > 0) { CopyAbsoluteBoneTransformsTo(absoluteBoneTransforms); }
+
+        std::optional<BoundingSphere> result;
+        for (int i = 0; i < meshCount; ++i)
+        {
+            const ModelMesh* mesh = meshes_[i];
+            Matrix placement = Matrix::getIdentityProperty();
+            if (boneCount > 0)
+            {
+                // Match Model::Draw exactly: a mesh with no explicit ParentBone uses bone zero.
+                const ModelBone* parent = mesh->getParentBoneProperty();
+                const int boneIndex = parent != nullptr ? parent->getIndexProperty() : 0;
+                placement = absoluteBoneTransforms.at(static_cast<std::size_t>(boneIndex));
+            }
+
+            const BoundingSphere placed =
+                TransformModelBoundsSphereEXT(mesh->getBoundingSphereProperty(), placement);
+            result = result.has_value()
+                ? BoundingSphere::CreateMerged(*result, placed)
+                : placed;
+        }
+        return result;
     }
     thread_local std::vector<Matrix> Model::sharedDrawBoneMatrices_;
 

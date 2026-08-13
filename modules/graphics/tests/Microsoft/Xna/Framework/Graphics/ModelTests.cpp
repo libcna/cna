@@ -276,6 +276,91 @@ TEST(ModelTest, FiveArgConstructorEmptyBonesLeavesRootNullEvenWithDefaultIndex)
     EXPECT_EQ(model.getRootProperty(), nullptr);
 }
 
+// --- plan_gltf.md GLTF-128: one live whole-model bounding sphere -----------------------------
+
+TEST(ModelTest, BoundingSphereEXTIsEmptyOnlyWhenTheModelHasNoMeshes)
+{
+    Model model(nullptr, {}, {});
+    EXPECT_FALSE(model.getBoundingSphereEXTProperty().has_value());
+
+    // A zero-radius mesh is valid point geometry, not the empty sentinel.
+    ModelMesh point(nullptr, {});
+    point.setBoundingSphereProperty(BoundingSphere(Vector3(2.0f, 3.0f, 4.0f), 0.0f));
+    Model pointModel(nullptr, {}, {&point});
+    const auto bounds = pointModel.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(bounds.has_value());
+    EXPECT_TRUE(VectorNear(bounds->Center, Vector3(2.0f, 3.0f, 4.0f)));
+    EXPECT_FLOAT_EQ(0.0f, bounds->Radius);
+}
+
+TEST(ModelTest, BoundingSphereEXTMergesMeshBoundsAfterTheirCurrentAbsoluteBoneTransforms)
+{
+    ModelBone root{0, "Root"};
+    ModelBone left{1, "Left"};
+    ModelBone right{2, "Right"};
+    root.AddChild(&left);
+    root.AddChild(&right);
+
+    // The root scale makes this a real absolute-transform test rather than two translations that
+    // would look the same if the parent chain were skipped. In XNA's row-vector convention the
+    // children land at -10 and +14; their radii become 2 and 4.
+    root.setTransformProperty(Matrix::CreateScale(2.0f));
+    left.setTransformProperty(Matrix::CreateTranslation(-5.0f, 0.0f, 0.0f));
+    right.setTransformProperty(Matrix::CreateTranslation(7.0f, 0.0f, 0.0f));
+
+    ModelMesh leftMesh(nullptr, {});
+    ModelMesh rightMesh(nullptr, {});
+    leftMesh.setBoundingSphereProperty(BoundingSphere(Vector3::Zero, 1.0f));
+    rightMesh.setBoundingSphereProperty(BoundingSphere(Vector3::Zero, 2.0f));
+    Model model(nullptr, {&root, &left, &right}, {&leftMesh, &rightMesh},
+                {&left, &right});
+
+    const auto first = model.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(first.has_value());
+    EXPECT_TRUE(VectorNear(first->Center, Vector3(3.0f, 0.0f, 0.0f)));
+    EXPECT_NEAR(15.0f, first->Radius, 1e-5f);
+
+    // The accessor is deliberately live for rigid animation. A cached import-time sphere would
+    // keep returning (3, 15); recomposition after this pose change yields (13, 25).
+    right.setTransformProperty(Matrix::CreateTranslation(17.0f, 0.0f, 0.0f));
+    const auto posed = model.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(posed.has_value());
+    EXPECT_TRUE(VectorNear(posed->Center, Vector3(13.0f, 0.0f, 0.0f)));
+    EXPECT_NEAR(25.0f, posed->Radius, 1e-5f);
+}
+
+TEST(ModelTest, BoundingSphereEXTStaysConservativeForAShearedAbsoluteBoneTransform)
+{
+    // A rotated child below a non-uniformly scaled parent can produce shear in a perfectly valid
+    // glTF hierarchy. This explicit equivalent has basis lengths sqrt(2) and sqrt(1.81), but it
+    // stretches the unit direction (1,1,0)/sqrt(2) to length about 1.95. Using only the longest
+    // basis vector -- XNA BoundingSphere::Transform's ordinary TRS rule -- returns about 1.41 and
+    // excludes that point.
+    Matrix shear = Matrix::getIdentityProperty();
+    shear.M11 = 1.0f;
+    shear.M12 = 1.0f;
+    shear.M21 = 1.0f;
+    shear.M22 = 0.9f;
+
+    ModelBone root{0, "Root"};
+    root.setTransformProperty(shear);
+    ModelMesh mesh(nullptr, {});
+    mesh.setBoundingSphereProperty(BoundingSphere(Vector3::Zero, 1.0f));
+    Model model(nullptr, {&root}, {&mesh}, {&root});
+
+    const auto bounds = model.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(bounds.has_value());
+    constexpr float inverseSqrtTwo = 0.7071067811865475f;
+    const Vector3 pointOnLocalSphere(inverseSqrtTwo, inverseSqrtTwo, 0.0f);
+    const Vector3 transformed = Vector3::Transform(pointOnLocalSphere, shear);
+    EXPECT_LE(Vector3::Distance(bounds->Center, transformed), bounds->Radius)
+        << "the whole-model sphere stopped being a bound after hierarchy composition introduced "
+           "shear";
+    EXPECT_GT(bounds->Radius,
+              mesh.getBoundingSphereProperty().Transform(shear).Radius)
+        << "the test no longer distinguishes a shear-safe radius from XNA's single-TRS rule";
+}
+
 // --- plan_gltf.md GLTF-444: Model::Draw's shared bone scratch buffer ----------------------------
 //
 // FNA's Model.Draw shares one static Matrix[] across every Model in the process. Two threads

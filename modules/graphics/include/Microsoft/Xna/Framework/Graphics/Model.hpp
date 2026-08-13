@@ -2,8 +2,10 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -230,6 +232,28 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param value The cameras, normally in scene-node order.
          */
         CNAEXT void setCamerasEXTProperty(std::vector<ModelCameraEXT> value);
+
+        /**
+         * @brief Gets one sphere containing every mesh at its current parent-bone placement.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-128`). XNA exposes a
+         * sphere on each `ModelMesh`, but no whole-model union; consumers otherwise have to walk
+         * private vertex sidecars and duplicate `Model::Draw`'s bone composition just to frame or
+         * cull an imported scene.
+         *
+         * The result is recomputed from the current absolute bone transforms, so rigid/node
+         * animation is reflected immediately. It is in model-root space — glTF's composed scene
+         * space after node transforms, but before the caller's `world` argument to `Model::Draw`.
+         * Transform the returned sphere by that matrix when application world space is required.
+         *
+         * This has the same deformation contract as the mesh spheres it aggregates. GPU skinning
+         * or a morph that moves vertices outside an imported mesh sphere requires the caller to
+         * update that existing read-write `ModelMesh::BoundingSphere` property.
+         *
+         * @return The merged sphere, or `std::nullopt` when the model has no meshes.
+         */
+        CNAEXT [[nodiscard]] std::optional<BoundingSphere>
+        getBoundingSphereEXTProperty() const;
 
         /**
          * @brief Copies bone transforms relative to all parent bones to a given vector.

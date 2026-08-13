@@ -37,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 using namespace CNA::Internal::GltfImport;
 using CnaTest::GltfOracle::CorpusDirectory;
@@ -45,6 +46,7 @@ using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Model;
 using Microsoft::Xna::Framework::Graphics::ModelMesh;
+using Microsoft::Xna::Framework::Vector3;
 
 namespace
 {
@@ -195,6 +197,40 @@ TEST(GltfModelShape, AMultiPrimitiveMeshBecomesOneModelMeshWithOnePartPerPrimiti
     // effect never reached it draws with whatever matrices the effect happened to hold.
     EXPECT_EQ(2, mesh->getEffectsProperty().getCountProperty())
         << "an effect never registered on its owning mesh; Model::Draw would bind it nothing";
+}
+
+TEST(GltfModelShape, AModelMeshBoundingSphereCoversAllOfItsPrimitives)
+{
+    const ScratchDir dir;
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, dir.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = LoadModel(dir, TwoPrimitiveDocument(), gd, cm);
+
+    ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+    const auto local = mesh->getBoundingSphereProperty();
+
+    // The far triangle is what catches the tempting per-primitive implementation: a sphere made
+    // only from primitive zero (at x=[0,1]) is nowhere near x=[5,6].
+    const std::vector<Vector3> positions{
+        Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f),
+        Vector3(0.0f, 1.0f, 0.0f), Vector3(5.0f, 0.0f, 0.0f),
+        Vector3(6.0f, 0.0f, 0.0f), Vector3(5.0f, 1.0f, 0.0f),
+    };
+    for (const Vector3& position : positions)
+    {
+        // CreateFromPoints and Contains both operate in float, but Contains has no epsilon: a
+        // point mathematically on the surface can compare a few ulps outside after radius² is
+        // recomputed. L4's established 1e-5 tolerance is the contract we care about here.
+        EXPECT_LE(Vector3::Distance(local.Center, position), local.Radius + 1e-5f);
+    }
+
+    // This placement's node is identity, so the whole-model accessor must preserve the one local
+    // mesh sphere component-for-component rather than inventing another bounds computation.
+    const auto whole = model.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(whole.has_value());
+    EXPECT_EQ(local, *whole);
 }
 
 // --- GLTF-140: deterministic ordering ------------------------------------------------------------
