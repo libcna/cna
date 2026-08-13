@@ -14,6 +14,13 @@ on it) rather than assuming either way.
   "is X still broken" over any dated snapshot below.
 - **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status
   (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does renderer X support feature Y."
+- **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the **46** public
+  renderer identities (enum, CMake selector, compile definition, factory, platform/dependency
+  gate). Start here for "which renderers does CNA have."
+- **[`renderer-expansion-candidates.md`](renderer-expansion-candidates.md)** — surveyed catalog of
+  **41** possible future renderer identities, screened against the live registry and against the
+  "no alias identities" rule, plus the list of things that must *not* become identities. A
+  catalog only: it authorizes nothing, exactly like `../FUTURE.md`.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
   limitations for the experimental fifth renderer; detailed remaining work is in `../plan_webgpu.md`.
 - **[`sokol-renderer.md`](sokol-renderer.md)** — capability boundary, build options and known
