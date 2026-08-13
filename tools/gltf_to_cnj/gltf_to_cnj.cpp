@@ -18,11 +18,10 @@
 // sidecars. This file now keeps only what's genuinely CLI-specific: writing the extracted bytes
 // out as .cnj JSON + binary sidecar files, and the command-line entry point.
 //
-// Known, deliberate MVP scope cuts (see GltfImportCore.hpp's own doc comments and plan_cnj.md
-// CNB-50/51/55/67/73's notes for the full list): only the base-color and occlusion textures are
-// extracted (no normal/metallic-roughness/emissive maps, no PBR factor values); vertex color and
-// DualTextureEffect's Texture2 are each mutually exclusive with the other and, for Texture2, with
-// skinning.
+// The original MVP material scope cuts named by CNB-50/51/55/67/73 are closed: the complete
+// MaterialOut record (five texture slots, factors/scalars, alpha state and samplers) now survives
+// the .cnj path, locked by plan_gltf.md GLTF-236/GLTF-237. Current representation limits are
+// reported by GltfImportCore rather than copied into this CLI-specific file.
 //
 // plan_cnj.md CNB-82/83 (Phase 14C): morph target position/normal deltas (GltfImportCore::
 // ExtractMesh always extracts them), the default blend weights, and an optional weight animation
@@ -221,17 +220,11 @@ namespace
             // name. Absent from a .cnj written before this, which could only ever hold a triangle
             // list -- so the reader's default is TRIANGLES and an older asset is unaffected.
             std::string primitiveTopology = "TRIANGLES";
-            // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
+            // plan_gltf.md GLTF-236/GLTF-237: the same complete carrier the runtime loader
+            // consumes. Keeping another loose copy here was exactly how four fields fell out of
+            // the .cnj path while the direct path stayed correct.
             std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile, pbrOcclusionMapFile;
-            float metallicFactor = 1.0f, roughnessFactor = 1.0f;
-            Vector3 emissiveFactor;
-            // plan_gltf.md GLTF-216: baseColorFactor, carried as PbrEffect's own DiffuseColor
-            // (RGB) and Alpha (A), which the .cnj reader already consumes for every effect.
-            Vector4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
-            // plan_gltf.md GLTF-228/GLTF-229/GLTF-231: the material's alpha and sidedness state.
-            std::string alphaMode = "OPAQUE";
-            float alphaCutoff = 0.5f;
-            bool doubleSided = false;
+            MaterialOut material;
             // Morph target CLI/.cnj serialization: morphFile is the binary sidecar path (empty =
             // no morph targets on this primitive), morphWeights are the default blend weights, and
             // morphWeightTrack (optional) is the "weights" animation channel, if any.
@@ -375,23 +368,23 @@ namespace
                 WriteBinaryFile(outputDir / idxFile, meshOut.indexBytes);
 
                 std::string textureFile;
-                if (meshOut.baseColorImage)
+                if (meshOut.material.baseColorImage)
                 {
-                    auto cached = writtenTextures.find(meshOut.baseColorImage);
+                    auto cached = writtenTextures.find(meshOut.material.baseColorImage);
                     if (cached != writtenTextures.end())
                     {
                         textureFile = cached->second;
                     }
-                    else if (auto img = ExtractImage(meshOut.baseColorImage, gltfDir))
+                    else if (auto img = ExtractImage(meshOut.material.baseColorImage, gltfDir))
                     {
                         textureFile = outName + "_tex" + std::to_string(writtenTextures.size()) + "." + img->extension;
                         WriteBinaryFile(outputDir / textureFile, img->bytes);
-                        writtenTextures[meshOut.baseColorImage] = textureFile;
+                        writtenTextures[meshOut.material.baseColorImage] = textureFile;
                     }
                 }
 
                 std::string texture2File;
-                if (meshOut.useDualTexture && meshOut.occlusionImage)
+                if (meshOut.useDualTexture && meshOut.material.occlusionImage)
                 {
                     // CNB-88 (Phase 14E): DualTextureEffect's own occlusion-as-lightmap blend
                     // expects "0.5 = neutral", not glTF's own real "1.0 = fully visible"
@@ -401,12 +394,12 @@ namespace
                     // writtenTextures: the SAME image could in principle also be referenced,
                     // unmodified, as a different primitive's PbrEffect::OcclusionMap elsewhere in
                     // this same file, and that must not observe the remapped bytes (or vice versa).
-                    auto cached = remappedOcclusionTextures.find(meshOut.occlusionImage);
+                    auto cached = remappedOcclusionTextures.find(meshOut.material.occlusionImage);
                     if (cached != remappedOcclusionTextures.end())
                     {
                         texture2File = cached->second;
                     }
-                    else if (auto img = ExtractImage(meshOut.occlusionImage, gltfDir))
+                    else if (auto img = ExtractImage(meshOut.material.occlusionImage, gltfDir))
                     {
                         auto remapped = RemapOcclusionImageForDualTextureEXT(*img);
                         if (!remapped)
@@ -426,7 +419,7 @@ namespace
                         texture2File = outName + "_texocc" + std::to_string(remappedOcclusionTextures.size())
                                      + "." + remapped->extension;
                         WriteBinaryFile(outputDir / texture2File, remapped->bytes);
-                        remappedOcclusionTextures[meshOut.occlusionImage] = texture2File;
+                        remappedOcclusionTextures[meshOut.material.occlusionImage] = texture2File;
                     }
                 }
 
@@ -450,10 +443,11 @@ namespace
                 std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile, pbrOcclusionMapFile;
                 if (meshOut.usePbr)
                 {
-                    normalMapFile            = extractCached(meshOut.normalImage);
-                    metallicRoughnessMapFile = extractCached(meshOut.metallicRoughnessImage);
-                    emissiveMapFile          = extractCached(meshOut.emissiveImage);
-                    pbrOcclusionMapFile      = extractCached(meshOut.occlusionImage);
+                    normalMapFile            = extractCached(meshOut.material.normalImage);
+                    metallicRoughnessMapFile =
+                        extractCached(meshOut.material.metallicRoughnessImage);
+                    emissiveMapFile          = extractCached(meshOut.material.emissiveImage);
+                    pbrOcclusionMapFile      = extractCached(meshOut.material.occlusionImage);
                 }
 
                 MeshEntry entry;
@@ -488,14 +482,8 @@ namespace
                 entry.metallicRoughnessMapFile = metallicRoughnessMapFile;
                 entry.emissiveMapFile = emissiveMapFile;
                 entry.pbrOcclusionMapFile = pbrOcclusionMapFile;
-                entry.metallicFactor = meshOut.metallicFactor;
-                entry.roughnessFactor = meshOut.roughnessFactor;
-                entry.emissiveFactor = meshOut.emissiveFactor;
-                entry.baseColorFactor = meshOut.baseColorFactor;
+                entry.material = meshOut.material;
                 entry.primitiveTopology = PrimitiveTopologyName(meshOut.topology);
-                entry.alphaMode = AlphaModeEXTName(meshOut.alphaMode);
-                entry.alphaCutoff = meshOut.alphaCutoff;
-                entry.doubleSided = meshOut.doubleSided;
                 entry.vertexColorEnabled = meshOut.colored;
                 // plan_gltf.md GLTF-337: KHR_materials_unlit. Carried through the .cnj so the two
                 // loaders agree -- the runtime path turns lighting off from MeshOut directly,
@@ -726,9 +714,10 @@ namespace
             if (e.unlit)
             {
                 json << ", \"unlit\": true"
-                     << ", \"diffuseColor\": [" << e.baseColorFactor.X << ", " << e.baseColorFactor.Y
-                     << ", " << e.baseColorFactor.Z << "]"
-                     << ", \"alpha\": " << e.baseColorFactor.W;
+                     << ", \"diffuseColor\": [" << e.material.baseColorFactor.X << ", "
+                     << e.material.baseColorFactor.Y << ", " << e.material.baseColorFactor.Z
+                     << "]"
+                     << ", \"alpha\": " << e.material.baseColorFactor.W;
             }
             // Only written when it is not the default, so an ordinary triangle-list asset's .cnj
             // is byte-identical to what it was before GLTF-073.
@@ -736,25 +725,62 @@ namespace
             {
                 json << ", \"primitiveTopology\": \"" << JsonEscape(e.primitiveTopology) << "\"";
             }
+            // plan_gltf.md GLTF-237: sampler state is part of the material as it reaches a draw,
+            // even though glTF declares it on the texture object. The direct path already stores
+            // all five slots on ModelMeshPart; preserve non-default states in .cnj as well. An
+            // explicit LinearWrap serialises to nothing because it is observationally identical
+            // to the ModelMeshPart default.
+            for (std::size_t slot = 0; slot < e.material.samplers.size(); ++slot)
+            {
+                const SamplerOut& sampler = e.material.samplers[slot];
+                const std::string prefix = "sampler" + std::to_string(slot);
+                if (sampler.filter != Microsoft::Xna::Framework::Graphics::TextureFilter::Linear)
+                {
+                    json << ", \"" << prefix << "Filter\": "
+                         << static_cast<int>(sampler.filter);
+                }
+                if (sampler.addressU !=
+                    Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap)
+                {
+                    json << ", \"" << prefix << "AddressU\": "
+                         << static_cast<int>(sampler.addressU);
+                }
+                if (sampler.addressV !=
+                    Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap)
+                {
+                    json << ", \"" << prefix << "AddressV\": "
+                         << static_cast<int>(sampler.addressV);
+                }
+            }
             if (e.effect == "PbrEffect" || e.effect == "SkinnedPbrEffect")
             {
                 if (!e.normalMapFile.empty()) { json << ", \"normalMap\": \"" << JsonEscape(e.normalMapFile) << "\""; }
                 if (!e.metallicRoughnessMapFile.empty()) { json << ", \"metallicRoughnessMap\": \"" << JsonEscape(e.metallicRoughnessMapFile) << "\""; }
                 if (!e.emissiveMapFile.empty()) { json << ", \"emissiveMap\": \"" << JsonEscape(e.emissiveMapFile) << "\""; }
                 if (!e.pbrOcclusionMapFile.empty()) { json << ", \"occlusionMap\": \"" << JsonEscape(e.pbrOcclusionMapFile) << "\""; }
-                json << ", \"metallicFactor\": " << e.metallicFactor
-                     << ", \"roughnessFactor\": " << e.roughnessFactor
-                     << ", \"emissiveFactor\": [" << e.emissiveFactor.X << ", " << e.emissiveFactor.Y << ", " << e.emissiveFactor.Z << "]"
-                     // GLTF-216: the base colour reaches the shader through the fields the reader
-                     // already understands, so no .cnj schema addition is needed for it.
-                     << ", \"diffuseColor\": [" << e.baseColorFactor.X << ", " << e.baseColorFactor.Y
-                     << ", " << e.baseColorFactor.Z << "]"
-                     << ", \"alpha\": " << e.baseColorFactor.W;
+                json << ", \"metallicFactor\": " << e.material.metallicFactor
+                     << ", \"roughnessFactor\": " << e.material.roughnessFactor
+                     << ", \"emissiveFactor\": [" << e.material.emissiveFactor.X << ", "
+                     << e.material.emissiveFactor.Y << ", " << e.material.emissiveFactor.Z << "]"
+                     // GLTF-216/GLTF-237: these fields predated the complete material round-trip;
+                     // GLTF-237 fixed the PBR reader that previously ignored them.
+                     << ", \"diffuseColor\": [" << e.material.baseColorFactor.X << ", "
+                     << e.material.baseColorFactor.Y << ", " << e.material.baseColorFactor.Z
+                     << "]"
+                     << ", \"alpha\": " << e.material.baseColorFactor.W;
+                // GLTF-224/225 were correct only on direct .gltf loads. These two schema fields
+                // close the offline loss; omitted defaults keep older/simple .cnj byte-stable.
+                if (e.material.normalScale != 1.0f)
+                    json << ", \"normalScale\": " << e.material.normalScale;
+                if (e.material.occlusionStrength != 1.0f)
+                    json << ", \"occlusionStrength\": " << e.material.occlusionStrength;
                 // Written only when not the glTF default, so an ordinary opaque material's .cnj is
                 // byte-identical to what it was before GLTF-228.
-                if (e.alphaMode != "OPAQUE") { json << ", \"alphaMode\": \"" << e.alphaMode << "\""; }
-                if (e.alphaCutoff != 0.5f)   { json << ", \"alphaCutoff\": " << e.alphaCutoff; }
-                if (e.doubleSided)           { json << ", \"doubleSided\": true"; }
+                const std::string alphaMode = AlphaModeEXTName(e.material.alphaMode);
+                if (alphaMode != "OPAQUE") { json << ", \"alphaMode\": \"" << alphaMode << "\""; }
+                if (e.material.alphaCutoff != 0.5f)
+                    json << ", \"alphaCutoff\": " << e.material.alphaCutoff;
+                if (e.material.doubleSided) { json << ", \"doubleSided\": true"; }
             }
             if (!e.morphFile.empty())
             {

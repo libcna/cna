@@ -36,6 +36,7 @@
 //   - kMultiSkinGltf: two independent one-bone skins, each with its own mesh node -- proves the
 //     tool no longer silently imports only the first skin in a file.
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <optional>
@@ -65,6 +66,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "../../../../CNA/Internal/GltfImport/GltfDrawParamsOracleEXT.hpp"
 
 extern char** environ;
 
@@ -729,10 +731,9 @@ namespace
   ]
 })GLTF";
 
-    // CNB-56/59 (Phase 13A): an unskinned triangle with base-color + normal + metallic-roughness
-    // + emissive maps, an explicit TANGENT accessor, and non-default factor values -- proves the
-    // offline CLI tool's own .cnj/binary-sidecar serialization of PbrEffect (unlike morph targets,
-    // which the CLI tool deliberately does not serialize -- see gltf_to_cnj.cpp's own docs).
+    // CNB-56/59 + plan_gltf.md GLTF-236/237: an unskinned triangle with all five material slots,
+    // an explicit TANGENT accessor, and deliberately non-default factor/scalar/alpha/sampler state
+    // -- proves the offline CLI tool's complete .cnj material serialization.
     const char* kPbrGltf = R"GLTF({
   "asset": { "version": "2.0" },
   "scene": 0,
@@ -744,15 +745,23 @@ namespace
   "materials": [ {
     "pbrMetallicRoughness": {
       "baseColorTexture": { "index": 0 },
+      "baseColorFactor": [0.25, 0.5, 0.75, 0.4],
       "metallicRoughnessTexture": { "index": 2 },
       "metallicFactor": 0.5,
       "roughnessFactor": 0.3
     },
-    "normalTexture": { "index": 1 },
+    "normalTexture": { "index": 1, "scale": 0.35 },
+    "occlusionTexture": { "index": 3, "strength": 0.65 },
     "emissiveTexture": { "index": 3 },
-    "emissiveFactor": [0.1, 0.2, 0.3]
+    "emissiveFactor": [0.1, 0.2, 0.3],
+    "alphaMode": "MASK",
+    "alphaCutoff": 0.73,
+    "doubleSided": true
   } ],
-  "textures": [ { "source": 0 }, { "source": 1 }, { "source": 2 }, { "source": 3 } ],
+  "textures": [
+    { "source": 0, "sampler": 0 }, { "source": 1 }, { "source": 2 }, { "source": 3 }
+  ],
+  "samplers": [ { "magFilter": 9728, "minFilter": 9728, "wrapS": 33071, "wrapT": 33648 } ],
   "images": [
     { "bufferView": 4, "mimeType": "image/png" },
     { "bufferView": 5, "mimeType": "image/png" },
@@ -892,6 +901,69 @@ namespace
         int status = 0;
         waitpid(pid, &status, 0);
         return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    }
+
+    // GLTF-237 compares the material contract only. Mesh naming, hierarchy and transforms have
+    // their own runtime/offline parity sweeps; including them here made a perfectly equal material
+    // fail on the offline tool's intentionally different generated mesh name. Floats use the same
+    // 1e-5 tolerance as the L6 oracle: .cnj is decimal JSON, so a float such as 1 - 0.8 may parse
+    // back one ULP away without being a material divergence.
+    void ExpectL6MaterialStateEqual(
+        const CnaTest::GltfOracle::DrawParamsDump& runtime,
+        const CnaTest::GltfOracle::DrawParamsDump& offline)
+    {
+        constexpr float kTolerance = 1e-5f;
+        const auto expectArrayNear = [&](const auto& expected, const auto& actual,
+                                         const char* field)
+        {
+            ASSERT_EQ(expected.size(), actual.size()) << field;
+            for (std::size_t i = 0; i < expected.size(); ++i)
+            {
+                EXPECT_NEAR(expected[i], actual[i], kTolerance) << field << '[' << i << ']';
+            }
+        };
+
+        EXPECT_EQ(runtime.effectTypeName, offline.effectTypeName);
+        ASSERT_EQ(runtime.samplers.size(), offline.samplers.size());
+        for (std::size_t slot = 0; slot < runtime.samplers.size(); ++slot)
+        {
+            EXPECT_EQ(runtime.samplers[slot].filter, offline.samplers[slot].filter)
+                << "sampler slot " << slot;
+            EXPECT_EQ(runtime.samplers[slot].addressU, offline.samplers[slot].addressU)
+                << "sampler slot " << slot;
+            EXPECT_EQ(runtime.samplers[slot].addressV, offline.samplers[slot].addressV)
+                << "sampler slot " << slot;
+        }
+
+        expectArrayNear(runtime.diffuseColor, offline.diffuseColor, "diffuseColor");
+        EXPECT_NEAR(runtime.metallicFactor, offline.metallicFactor, kTolerance);
+        EXPECT_NEAR(runtime.roughnessFactor, offline.roughnessFactor, kTolerance);
+        EXPECT_NEAR(runtime.normalScale, offline.normalScale, kTolerance);
+        EXPECT_NEAR(runtime.occlusionStrength, offline.occlusionStrength, kTolerance);
+        expectArrayNear(runtime.emissiveColor, offline.emissiveColor, "emissiveColor");
+        expectArrayNear(runtime.ambientColor, offline.ambientColor, "ambientColor");
+
+        EXPECT_EQ(runtime.hasBaseColorMap, offline.hasBaseColorMap);
+        EXPECT_EQ(runtime.hasNormalMap, offline.hasNormalMap);
+        EXPECT_EQ(runtime.hasMetallicRoughnessMap, offline.hasMetallicRoughnessMap);
+        EXPECT_EQ(runtime.hasOcclusionMap, offline.hasOcclusionMap);
+        EXPECT_EQ(runtime.hasEmissiveMap, offline.hasEmissiveMap);
+        EXPECT_EQ(runtime.baseColorTextureIsSrgb, offline.baseColorTextureIsSrgb);
+        EXPECT_EQ(runtime.emissiveTextureIsSrgb, offline.emissiveTextureIsSrgb);
+        EXPECT_EQ(runtime.encodeOutputToSrgb, offline.encodeOutputToSrgb);
+
+        expectArrayNear(runtime.alphaTest, offline.alphaTest, "alphaTest");
+        EXPECT_EQ(runtime.carriesAlphaState, offline.carriesAlphaState);
+        EXPECT_EQ(runtime.alphaMode, offline.alphaMode);
+        EXPECT_NEAR(runtime.alphaCutoff, offline.alphaCutoff, kTolerance);
+        EXPECT_EQ(runtime.doubleSided, offline.doubleSided);
+
+        EXPECT_EQ(runtime.pbr, offline.pbr);
+        EXPECT_EQ(runtime.skinned, offline.skinned);
+        EXPECT_EQ(runtime.dualTexture, offline.dualTexture);
+        EXPECT_EQ(runtime.lightingEnabled, offline.lightingEnabled);
+        EXPECT_EQ(runtime.textureEnabled, offline.textureEnabled);
+        EXPECT_EQ(runtime.vertexColorEnabled, offline.vertexColorEnabled);
     }
 }
 
@@ -1746,9 +1818,10 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEf
     EXPECT_TRUE(skinnedFx->VertexColorEnabled);
 }
 
-// CNB-56/59: the offline CLI tool must serialize PbrEffect's 4 maps + factor values to real
-// .cnj/binary-sidecar files (stride 48), and ModelTypeReader's own .cnj JSON path must read them
-// back correctly -- unlike morph targets, which the CLI tool deliberately does not serialize.
+// plan_gltf.md GLTF-236/GLTF-237: every core material field must survive the offline .cnj path,
+// including the four values that used to be dropped there (base colour/alpha, normal scale and
+// occlusion strength). The direct and offline effects are compared at L6, not just against another
+// JSON parser, and deliberately non-default sampler/alpha state makes a missing field observable.
 TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
 {
     ScratchDir gltfDir;
@@ -1763,6 +1836,20 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "pbr_tex1.png"));
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "pbr_tex2.png"));
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "pbr_tex3.png"));
+
+    std::ifstream cnjFile(contentRoot.path() / "pbr.cnj");
+    const std::string cnj((std::istreambuf_iterator<char>(cnjFile)),
+                          std::istreambuf_iterator<char>());
+    EXPECT_NE(std::string::npos, cnj.find("\"normalScale\": 0.35"));
+    EXPECT_NE(std::string::npos, cnj.find("\"occlusionStrength\": 0.65"));
+    EXPECT_NE(std::string::npos, cnj.find("\"diffuseColor\": [0.25, 0.5, 0.75]"));
+    EXPECT_NE(std::string::npos, cnj.find("\"alpha\": 0.4"));
+    EXPECT_NE(std::string::npos, cnj.find("\"alphaMode\": \"MASK\""));
+    EXPECT_NE(std::string::npos, cnj.find("\"alphaCutoff\": 0.73"));
+    EXPECT_NE(std::string::npos, cnj.find("\"doubleSided\": true"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler0Filter\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler0AddressU\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler0AddressV\": 2"));
 
     const std::filesystem::path vertsPath = contentRoot.path() / "pbr_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
@@ -1781,6 +1868,11 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ContentManager runtimeCm(nullptr, gltfDir.path().string());
+    runtimeCm.setGraphicsDevice(gd);
+    Model runtimeModel = runtimeCm.Load<Model>("pbr");
+
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("pbr");
@@ -1793,12 +1885,144 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     ASSERT_NE(pbrFx->getNormalMapProperty(), nullptr);
     ASSERT_NE(pbrFx->getMetallicRoughnessMapProperty(), nullptr);
     ASSERT_NE(pbrFx->getEmissiveMapProperty(), nullptr);
+    ASSERT_NE(pbrFx->getOcclusionMapProperty(), nullptr);
     EXPECT_NEAR(pbrFx->getMetallicFactorProperty(), 0.5f, 1e-5f);
     EXPECT_NEAR(pbrFx->getRoughnessFactorProperty(), 0.3f, 1e-5f);
     const Vector3 emissiveFactor = pbrFx->getEmissiveFactorProperty();
     EXPECT_NEAR(emissiveFactor.X, 0.1f, 1e-5f);
     EXPECT_NEAR(emissiveFactor.Y, 0.2f, 1e-5f);
     EXPECT_NEAR(emissiveFactor.Z, 0.3f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getNormalScaleEXTProperty(), 0.35f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getOcclusionStrengthEXTProperty(), 0.65f, 1e-5f);
+    const Vector3 diffuse = pbrFx->getDiffuseColorProperty();
+    EXPECT_NEAR(diffuse.X, 0.25f, 1e-5f);
+    EXPECT_NEAR(diffuse.Y, 0.5f, 1e-5f);
+    EXPECT_NEAR(diffuse.Z, 0.75f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getAlphaProperty(), 0.4f, 1e-5f);
+    EXPECT_EQ(pbrFx->getAlphaModeEXTProperty(), AlphaModeEXT::Mask);
+    EXPECT_NEAR(pbrFx->getAlphaCutoffEXTProperty(), 0.73f, 1e-5f);
+    EXPECT_TRUE(pbrFx->getDoubleSidedEXTProperty());
+
+    const auto& sampler = mesh->getMeshPartsProperty()[0]->getSamplerStatesEXTProperty()[0];
+    EXPECT_EQ(TextureFilter::Point, sampler.getFilterProperty());
+    EXPECT_EQ(TextureAddressMode::Clamp, sampler.getAddressUProperty());
+    EXPECT_EQ(TextureAddressMode::Mirror, sampler.getAddressVProperty());
+
+    const Matrix identity = Matrix::getIdentityProperty();
+    const auto runtimeDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+        runtimeModel, identity, identity, identity);
+    const auto offlineDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+        model, identity, identity, identity);
+    ASSERT_EQ(runtimeDraws.size(), offlineDraws.size());
+    ASSERT_EQ(runtimeDraws.size(), 1u);
+    ExpectL6MaterialStateEqual(runtimeDraws.front(), offlineDraws.front());
+
+    // A pre-GLTF-216 or hand-written PBR .cnj may omit diffuseColor/alpha. Removing both from the
+    // rich output must retain the effect's historical white/opaque defaults rather than taking
+    // JsonFloatArray3's generic zero fallback and rendering the material black.
+    std::string legacyCnj = cnj;
+    const auto eraseArrayField = [&](const std::string& field) {
+        const std::string prefix = ", \"" + field + "\": [";
+        const std::size_t begin = legacyCnj.find(prefix);
+        ASSERT_NE(begin, std::string::npos);
+        const std::size_t end = legacyCnj.find(']', begin + prefix.size());
+        ASSERT_NE(end, std::string::npos);
+        legacyCnj.erase(begin, end - begin + 1);
+    };
+    const auto eraseScalarField = [&](const std::string& field) {
+        const std::string prefix = ", \"" + field + "\": ";
+        const std::size_t begin = legacyCnj.find(prefix);
+        ASSERT_NE(begin, std::string::npos);
+        const std::size_t end = legacyCnj.find_first_of(",}", begin + prefix.size());
+        ASSERT_NE(end, std::string::npos);
+        legacyCnj.erase(begin, end - begin);
+    };
+    eraseArrayField("diffuseColor");
+    eraseScalarField("alpha");
+    WriteFile(contentRoot.path() / "legacy.cnj", legacyCnj);
+
+    Model legacy = cm.Load<Model>("legacy");
+    ASSERT_EQ(legacy.getMeshesProperty().getCountProperty(), 1);
+    auto* legacyFx = dynamic_cast<PbrEffect*>(
+        legacy.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(legacyFx, nullptr);
+    EXPECT_EQ(legacyFx->getDiffuseColorProperty(), Vector3(1.0f, 1.0f, 1.0f));
+    EXPECT_FLOAT_EQ(legacyFx->getAlphaProperty(), 1.0f);
+}
+
+// plan_gltf.md GLTF-237 and the L6 half of GLTF-244: one rich probe can prove that every schema
+// field exists, but not that each effect-selection/material shape reaches it. Sweep the complete
+// generated `mat-*` group and compare the draw parameter record, including map presence, factors,
+// alpha state and all five sampler slots. The floor stops a renamed/shrunk group from passing.
+TEST(GltfToCnjToolTest, OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForTheCorpus)
+{
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    if (!std::filesystem::exists(corpus)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    std::vector<std::string> ids;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(corpus))
+    {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("mat-", 0) == 0 && entry.path().extension() == ".gltf")
+        {
+            ids.push_back(entry.path().stem().string());
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+    ASSERT_GE(ids.size(), 12u) << "the material sweep silently lost corpus coverage";
+
+    std::size_t comparedParts = 0;
+    for (const std::string& id : ids)
+    {
+        SCOPED_TRACE(id);
+        ScratchDir contentRoot;
+        ASSERT_EQ(0, RunGltfToCnjTool((corpus / (id + ".gltf")).string(),
+                                      contentRoot.path().string(), "material"));
+
+        std::string modelAsset;
+        for (const std::filesystem::directory_entry& out :
+             std::filesystem::directory_iterator(contentRoot.path()))
+        {
+            if (out.path().extension() != ".cnj") { continue; }
+            std::ifstream cnjFile(out.path());
+            const std::string text((std::istreambuf_iterator<char>(cnjFile)),
+                                   std::istreambuf_iterator<char>());
+            if (text.find("\"type\": \"Model\"") != std::string::npos)
+            {
+                ASSERT_TRUE(modelAsset.empty()) << "material fixture emitted multiple Models";
+                modelAsset = out.path().stem().string();
+            }
+        }
+        ASSERT_FALSE(modelAsset.empty()) << "the tool wrote no Model .cnj";
+
+        ContentManager runtimeCm(nullptr, corpus.string());
+        runtimeCm.setGraphicsDevice(gd);
+        Model runtime = runtimeCm.Load<Model>(id);
+
+        ContentManager offlineCm(nullptr, contentRoot.path().string());
+        offlineCm.setGraphicsDevice(gd);
+        Model offline = offlineCm.Load<Model>(modelAsset);
+
+        const Matrix identity = Matrix::getIdentityProperty();
+        const auto runtimeDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+            runtime, identity, identity, identity);
+        const auto offlineDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(
+            offline, identity, identity, identity);
+        ASSERT_EQ(runtimeDraws.size(), offlineDraws.size());
+        ASSERT_FALSE(runtimeDraws.empty()) << "fixture produced no drawable material state";
+        comparedParts += runtimeDraws.size();
+        for (std::size_t part = 0; part < runtimeDraws.size(); ++part)
+        {
+            SCOPED_TRACE("draw " + std::to_string(part));
+            ExpectL6MaterialStateEqual(runtimeDraws[part], offlineDraws[part]);
+        }
+    }
+    EXPECT_GE(comparedParts, ids.size()) << "the sweep compared fewer parts than fixtures";
 }
 
 // PBR + skinning combo: the offline CLI tool must serialize a skinned, PBR-mapped mesh through

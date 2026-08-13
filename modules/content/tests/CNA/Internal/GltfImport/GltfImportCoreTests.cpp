@@ -496,9 +496,9 @@ TEST(GltfImportCoreTest, ExtractMeshAppliesTextureTransformAndEmissiveStrength)
     // KHR_materials_emissive_strength: [0.2,0.3,0.1] * 3.0 = [0.6,0.9,0.3], not clamped to [0,1]
     // (unlike ExtractPunctualLightsEXT's own DiffuseColor) -- glTF's emissive-strength extension
     // exists specifically to allow real HDR emissive values beyond 1.0.
-    EXPECT_NEAR(out.emissiveFactor.X, 0.6f, 1e-5f);
-    EXPECT_NEAR(out.emissiveFactor.Y, 0.9f, 1e-5f);
-    EXPECT_NEAR(out.emissiveFactor.Z, 0.3f, 1e-5f);
+    EXPECT_NEAR(out.material.emissiveFactor.X, 0.6f, 1e-5f);
+    EXPECT_NEAR(out.material.emissiveFactor.Y, 0.9f, 1e-5f);
+    EXPECT_NEAR(out.material.emissiveFactor.Z, 0.3f, 1e-5f);
 
     // KHR_texture_transform (offset=[0.1,0.2], scale=[2.0,0.5], rotation=0): u'=u*2.0+0.1,
     // v'=v*0.5+0.2. Stride 48 = Position(12)+Normal(12)+Tangent(16)+UV(8); UV is the last 8 bytes.

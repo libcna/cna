@@ -320,6 +320,6 @@ TEST(GltfKnownDefect, GLTF241_VertexColouredPbrIsReportedByNameRatherThanSilentl
     // And the material's own factors survived into MeshOut even though no effect will consume
     // them (GLTF-219/221 ungated them). That distinction is worth pinning: the importer
     // understood the material perfectly and the vertex layout is what could not carry it.
-    EXPECT_NEAR(0.85f, extracted.metallicFactor, 1e-5f);
-    EXPECT_NEAR(0.15f, extracted.roughnessFactor, 1e-5f);
+    EXPECT_NEAR(0.85f, extracted.material.metallicFactor, 1e-5f);
+    EXPECT_NEAR(0.15f, extracted.material.roughnessFactor, 1e-5f);
 }

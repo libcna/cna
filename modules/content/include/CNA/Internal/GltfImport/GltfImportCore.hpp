@@ -195,7 +195,6 @@ namespace CNA::Internal::GltfImport
         TriangleFan = 6,
     };
 
-    /** @brief One extracted mesh primitive's vertex/index bytes plus its effect-relevant flags. */
     /**
      * @brief The XNA sampler state one glTF `sampler` maps to (plan_gltf.md `GLTF-202`/`GLTF-203`).
      *
@@ -240,7 +239,8 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
-     * @brief The material texture slots CNA imports, and the index space `MeshOut::samplers` uses.
+     * @brief The material texture slots CNA imports, and the index space `MaterialOut::samplers`
+     * uses.
      *
      * Deliberately an enum rather than bare indices: a sampler array indexed by an untyped `int`
      * is exactly the kind of thing that silently acquires an off-by-one when a slot is added.
@@ -257,6 +257,57 @@ namespace CNA::Internal::GltfImport
         Emissive = 3,
         /** @brief `occlusionTexture`. */
         Occlusion = 4,
+    };
+
+    /**
+     * @brief One decoded glTF material, independent of the effect class that will consume it.
+     *
+     * @note CNAEXT — internal import data, not new public API. plan_gltf.md `GLTF-236` used to
+     * scatter every §13.1 value across `MeshOut`; the runtime loader and the offline `.cnj` writer
+     * then selected their own subsets, which is how `normalTexture.scale`,
+     * `occlusionTexture.strength`, `baseColorFactor` and alpha were silently lost on the offline
+     * path. One carrier makes the contract explicit: both paths receive the same complete record,
+     * and effect selection (`MeshOut::usePbr`) remains a separate policy decision.
+     *
+     * A primitive that declares no material still owns this record with glTF's default
+     * metallic-roughness values. `sourceMaterialEXT` is null in that case; it is identity for
+     * effect de-duplication, never a signal that the other values are absent.
+     */
+    struct MaterialOut
+    {
+        /** @brief Source material identity, or nullptr for glTF's implicit default material. */
+        const cgltf_material* sourceMaterialEXT = nullptr;
+
+        /** @brief Decoded texture images for the five core material slots, or nullptr. */
+        const cgltf_image* baseColorImage = nullptr;
+        const cgltf_image* normalImage = nullptr;
+        const cgltf_image* metallicRoughnessImage = nullptr;
+        const cgltf_image* occlusionImage = nullptr;
+        const cgltf_image* emissiveImage = nullptr;
+
+        /** @brief `normalTexture.scale` (glTF default 1). */
+        float normalScale = 1.0f;
+        /** @brief `occlusionTexture.strength` (glTF default 1). */
+        float occlusionStrength = 1.0f;
+        /** @brief One sampler per @ref TextureSlotEXT, including defaults for absent slots. */
+        std::array<SamplerOut, 5> samplers{};
+
+        /** @brief `pbrMetallicRoughness.baseColorFactor` (glTF default white/opaque). */
+        Microsoft::Xna::Framework::Vector4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
+        /** @brief `pbrMetallicRoughness.metallicFactor` (glTF default 1). */
+        float metallicFactor = 1.0f;
+        /** @brief `pbrMetallicRoughness.roughnessFactor` (glTF default 1). */
+        float roughnessFactor = 1.0f;
+        /** @brief `emissiveFactor` after any supported emissive-strength multiplier. */
+        Microsoft::Xna::Framework::Vector3 emissiveFactor;
+
+        /** @brief `alphaMode` (glTF default `OPAQUE`). */
+        Microsoft::Xna::Framework::Graphics::AlphaModeEXT alphaMode =
+            Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Opaque;
+        /** @brief `alphaCutoff` (glTF default 0.5). */
+        float alphaCutoff = 0.5f;
+        /** @brief `doubleSided` (glTF default false). */
+        bool doubleSided = false;
     };
 
     /**
@@ -378,15 +429,13 @@ namespace CNA::Internal::GltfImport
          */
         std::vector<std::string> ignoredCustomAttributesEXT;
         /**
-         * @brief The glTF material this primitive uses, or nullptr when it declares none.
+         * @brief The complete decoded material record (plan_gltf.md `GLTF-236`).
          *
-         * @note CNAEXT — not part of the XNA 4.0 API. plan_gltf.md `GLTF-238`: carried so a
-         * loader can give two primitives of the *same* material one shared `Effect` instead of an
-         * identical copy each. It is the material's identity that matters, not its contents, which
-         * is why this is the pointer rather than a decoded record — two materials with identical
-         * factors are still two materials, and a file that repeats one is the case worth sharing.
+         * Kept separate from the flags below that choose an effect/layout: the file's material is
+         * data, while `usePbr`/`useDualTexture` are CNA representation policy. Both the runtime
+         * loader and offline `.cnj` writer consume this same record.
          */
-        const cgltf_material* materialEXT = nullptr;
+        MaterialOut material;
         /**
          * @brief Names the material model this primitive could not be imported with, or empty.
          *
@@ -607,39 +656,6 @@ namespace CNA::Internal::GltfImport
         float worstWeightSumDeviationEXT = 0.0f;
         /** @brief True when this mesh should be imported through DualTextureEffect (CNB-72/73). */
         bool useDualTexture = false;
-        /** @brief The material's base-color texture image, or nullptr if none. */
-        const cgltf_image* baseColorImage = nullptr;
-        /** @brief The material's occlusion texture image, or nullptr if none. */
-        const cgltf_image* occlusionImage = nullptr;
-        /**
-         * @brief `normalTexture.scale` — how far the normal map perturbs the surface (§3.9.3).
-         *
-         * plan_gltf.md `GLTF-224`. Never read before: a material that dialled its normal map down
-         * to a subtle 0.2 got the full-strength 1.0 instead, which is not a subtle difference.
-         * Scales the sampled tangent-space normal's x and y before the basis is applied, so 0
-         * flattens the map to the geometric normal and values above 1 exaggerate it — the
-         * specification puts no upper bound on it.
-         */
-        float normalScale = 1.0f;
-        /**
-         * @brief `occlusionTexture.strength` — how far the occlusion map darkens (§3.9.3).
-         *
-         * plan_gltf.md `GLTF-225`. Never read before. Applied as
-         * `1 + strength * (sampled - 1)`, the specification's own formula: at `strength = 0` the
-         * result is 1 (no occlusion at all) whatever the map says, and at 1 it is the map.
-         */
-        float occlusionStrength = 1.0f;
-        /**
-         * @brief The sampler state of each material texture, by slot (plan_gltf.md `GLTF-202`).
-         *
-         * Indexed by @ref TextureSlotEXT. Per slot rather than per material because glTF attaches a
-         * sampler to a *texture*: a material may legitimately clamp its base colour and repeat its
-         * normal map, and one shared value could not express that.
-         *
-         * A slot whose texture is absent still carries glTF's default (repeat + linear) with
-         * `declared` false, so a consumer never has to special-case a missing entry.
-         */
-        std::array<SamplerOut, 5> samplers{};
         /**
          * @brief Per-target, per-vertex position deltas: morphPositionDeltas[target][vertex],
          * already unit-scaled. Empty if the primitive has no morph targets.
@@ -670,40 +686,6 @@ namespace CNA::Internal::GltfImport
          * rule).
          */
         bool usePbr = false;
-        /** @brief The material's normal map image, or nullptr if none. */
-        const cgltf_image* normalImage = nullptr;
-        /** @brief The material's metallic-roughness map image, or nullptr if none. */
-        const cgltf_image* metallicRoughnessImage = nullptr;
-        /** @brief The material's emissive map image, or nullptr if none. */
-        const cgltf_image* emissiveImage = nullptr;
-        /**
-         * @brief The material's base colour factor, RGBA (glTF default `(1,1,1,1)`).
-         *
-         * @note CNAEXT — not part of the XNA 4.0 API. Multiplies the base-colour texture when
-         * there is one, and stands alone when there is not (`GLTF-216`/`GLTF-218`). Never read at
-         * all before `GLTF-216`: a gold factor-only material rendered as opaque white, which was
-         * half of defect D7.
-         */
-        Microsoft::Xna::Framework::Vector4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
-        /** @brief The material's metallic factor [0,1] (glTF default 1.0). */
-        float metallicFactor = 1.0f;
-        /** @brief The material's roughness factor [0,1] (glTF default 1.0). */
-        float roughnessFactor = 1.0f;
-        /** @brief The material's emissive factor (glTF default black/zero). */
-        Microsoft::Xna::Framework::Vector3 emissiveFactor;
-        /**
-         * @brief The material's alpha-coverage mode (glTF default `OPAQUE`).
-         *
-         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-228`). `MeshOut` had no field for this
-         * at all, which was the last part of defect D7: an `alphaMode BLEND` material imported as
-         * opaque with nothing anywhere recording that it had asked not to be.
-         */
-        Microsoft::Xna::Framework::Graphics::AlphaModeEXT alphaMode =
-            Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Opaque;
-        /** @brief The alpha threshold a `Mask` material is cut at (glTF default 0.5, `GLTF-229`). */
-        float alphaCutoff = 0.5f;
-        /** @brief Whether the material asks for its back faces to be drawn (`GLTF-231`). */
-        bool doubleSided = false;
         /**
          * @brief The material's `KHR_materials_transmission` factor, or 0 (`GLTF-339`).
          *

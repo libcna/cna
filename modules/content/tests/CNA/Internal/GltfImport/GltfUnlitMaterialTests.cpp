@@ -267,17 +267,17 @@ TEST(GltfUnlitMaterial, ASpecularGlossinessMaterialIsConvertedToMetallicRoughnes
 
     const std::vector<double> base = Numbers(Member(expected, "convertedBaseColorFactor"));
     ASSERT_EQ(4u, base.size());
-    EXPECT_NEAR(static_cast<float>(base[0]), out.baseColorFactor.X, kTolerance);
-    EXPECT_NEAR(static_cast<float>(base[1]), out.baseColorFactor.Y, kTolerance);
-    EXPECT_NEAR(static_cast<float>(base[2]), out.baseColorFactor.Z, kTolerance);
-    EXPECT_NEAR(static_cast<float>(base[3]), out.baseColorFactor.W, kTolerance);
+    EXPECT_NEAR(static_cast<float>(base[0]), out.material.baseColorFactor.X, kTolerance);
+    EXPECT_NEAR(static_cast<float>(base[1]), out.material.baseColorFactor.Y, kTolerance);
+    EXPECT_NEAR(static_cast<float>(base[2]), out.material.baseColorFactor.Z, kTolerance);
+    EXPECT_NEAR(static_cast<float>(base[3]), out.material.baseColorFactor.W, kTolerance);
 
     EXPECT_NEAR(static_cast<float>(NumberOr(expected, "convertedMetallicFactor", -1.0)),
-                out.metallicFactor, kTolerance);
+                out.material.metallicFactor, kTolerance);
     // Glossiness 0.8 gives roughness 0.2 -- neither the glTF default (1.0) nor the un-inverted
     // 0.8, so "forgot to invert" and "forgot entirely" are both separable from correct.
     EXPECT_NEAR(static_cast<float>(NumberOr(expected, "convertedRoughnessFactor", -1.0)),
-                out.roughnessFactor, kTolerance);
+                out.material.roughnessFactor, kTolerance);
 
     // The loss, with its size: near 0 means the material was effectively dielectric and the
     // conversion is close to exact; near 1 means a strongly coloured specular went missing.

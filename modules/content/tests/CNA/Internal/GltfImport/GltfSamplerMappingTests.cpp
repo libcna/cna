@@ -216,7 +216,7 @@ TEST(GltfSamplerMapping, TextureCorpusCarriesAuthoredSamplerStatePerTextureSlot)
 
         const MeshOut mesh = CNA::Internal::GltfImport::ExtractMesh(
             &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", nullptr, 1.0f);
-        const SamplerOut& actual = mesh.samplers[static_cast<std::size_t>(row.slot)];
+        const SamplerOut& actual = mesh.material.samplers[static_cast<std::size_t>(row.slot)];
         EXPECT_EQ(row.filter, actual.filter);
         EXPECT_EQ(row.addressU, actual.addressU);
         EXPECT_EQ(row.addressV, actual.addressV);

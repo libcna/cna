@@ -535,17 +535,21 @@ namespace CnaTest::GltfOracle
         dump.colored = mesh.colored;
         dump.usePbr = mesh.usePbr;
         dump.useDualTexture = mesh.useDualTexture;
-        dump.metallicFactor = mesh.metallicFactor;
-        dump.roughnessFactor = mesh.roughnessFactor;
-        dump.emissiveFactor = {mesh.emissiveFactor.X, mesh.emissiveFactor.Y, mesh.emissiveFactor.Z};
-        dump.hasBaseColorImage = mesh.baseColorImage != nullptr;
-        dump.hasOcclusionImage = mesh.occlusionImage != nullptr;
-        dump.hasNormalImage = mesh.normalImage != nullptr;
-        dump.hasMetallicRoughnessImage = mesh.metallicRoughnessImage != nullptr;
-        dump.hasEmissiveImage = mesh.emissiveImage != nullptr;
+        dump.metallicFactor = mesh.material.metallicFactor;
+        dump.roughnessFactor = mesh.material.roughnessFactor;
+        dump.emissiveFactor = {mesh.material.emissiveFactor.X,
+                               mesh.material.emissiveFactor.Y,
+                               mesh.material.emissiveFactor.Z};
+        dump.hasBaseColorImage = mesh.material.baseColorImage != nullptr;
+        dump.hasOcclusionImage = mesh.material.occlusionImage != nullptr;
+        dump.hasNormalImage = mesh.material.normalImage != nullptr;
+        dump.hasMetallicRoughnessImage = mesh.material.metallicRoughnessImage != nullptr;
+        dump.hasEmissiveImage = mesh.material.emissiveImage != nullptr;
         dump.morphTargetCount = mesh.morphPositionDeltas.size();
-        dump.baseColorFactor = {mesh.baseColorFactor.X, mesh.baseColorFactor.Y,
-                                mesh.baseColorFactor.Z, mesh.baseColorFactor.W};
+        dump.baseColorFactor = {mesh.material.baseColorFactor.X,
+                                mesh.material.baseColorFactor.Y,
+                                mesh.material.baseColorFactor.Z,
+                                mesh.material.baseColorFactor.W};
         // GLTF-071 gave MeshOut a real topology member, so the source primitive's mode now reaches
         // L3 instead of being assumed. Reading it back here is what lets an L3 comparison assert
         // the topology rather than infer it from an index count.

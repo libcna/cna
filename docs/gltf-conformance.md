@@ -667,6 +667,14 @@ byte.
 | Alpha mode / cutoff | `AlphaStateIsCarriedOnTheEffectButNotYetInTheParameterBlock` | L3 `material.alphaMode` / `alphaCutoff` |
 | Double-sided | same | L3 `material.doubleSided` — *carried*, see below |
 
+`GLTF-237` applies the same L6 contract across the loader boundary. The offline converter and
+direct runtime loader both start from `MaterialOut`; the former serialises it through `.cnj`, then
+`OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForTheCorpus` compares every material-bearing
+draw for all 12 generated `mat-*` fixtures. The comparison covers effect selection, five map
+bindings, every factor/scalar, alpha state and five sampler slots. A separate rich probe authors
+every value non-default so an omitted field cannot accidentally agree through defaults. This is
+the L6 half of `GLTF-244`; its L7/two-rasterising-renderer half remains open.
+
 Every comparison is against a value **another layer already established independently**, never
 against a second walk of the same code. That is what makes a green L6 mean "the value survived the
 whole trip" rather than "two copies of the same mistake agree".

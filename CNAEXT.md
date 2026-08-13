@@ -133,7 +133,7 @@ loss at run time — is `docs/gltf-limitations.md`.
 | Capability | Status | Notes and evidence |
 |---|---|---|
 | Runtime load — `Content.Load<Model>("character.glb")` | ✅ | No offline step. `ContentManager`'s `ModelTypeReader` resolves `.gltf`/`.glb` through `CNA::Internal::GltfImport::GltfImportCore`. |
-| Offline conversion — `tools/gltf_to_cnj` | ✅ | Produces `.cnj` + sidecars (`.skeleton.bin`, `_morph.bin`, textures). The two loaders are held to the same output by a per-fixture parity sweep (`GltfToCnjToolTest`). |
+| Offline conversion — `tools/gltf_to_cnj` | ✅ | Produces `.cnj` + sidecars (`.skeleton.bin`, `_morph.bin`, textures). The two loaders are held to the same output by per-fixture parity sweeps (`GltfToCnjToolTest`), including all 12 material fixtures at the L6 effect boundary. |
 | Geometry: `POSITION`, `NORMAL`, `TEXCOORD_0`, indices | ✅ | Byte-exact against committed L5 goldens for every corpus fixture. |
 | Topology: `TRIANGLE_STRIP`, `TRIANGLE_FAN`, `LINE_LOOP` | ✅ | Converted to lists at import, exactly (same triangles, same winding); the source mode is carried so the conversion is checkable. `LINES`/`LINE_STRIP`/`POINTS` keep their own `PrimitiveTypeEXT`. |
 | Missing `NORMAL` | ✅ | A real geometric normal is computed per face; a vertex shared between differently-oriented faces is averaged rather than duplicated, and the count is reported. |
@@ -463,6 +463,13 @@ additive to §3.1's direct‑light BRDF and is the one place PBR meaningfully gr
 
 `PbrMaterial` (in `CNA::Graphics`) predates `PbrEffect` and currently has **no consumer** — the real
 material data lives on `PbrEffect` in the XNA namespace. The final decision:
+
+- **It is not the imported `Model`'s material carrier.** glTF import uses internal
+  `CNA::Internal::GltfImport::MaterialOut` to keep all decoded slots/factors together until they
+  are bound; the public model then carries the resulting `PbrEffect`/`SkinnedPbrEffect` on each
+  part. Exposing `PbrMaterial` there would create two mutable truths for one material and make
+  graphics-core depend on this optional graphics-ext layer. This is the `GLTF-236` API-gate
+  decision; no new public surface was needed.
 
 - **Keep `PbrMaterial` as the engine‑layer, serialization‑friendly material description** (a plain
   data bag: texture slots + factors + alpha mode), and add a **binding helper** rather than a second

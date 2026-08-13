@@ -1963,14 +1963,15 @@ namespace Microsoft::Xna::Framework::Content
                 }
             };
 
-            const Vector3 baseColor(meshOut.baseColorFactor.X, meshOut.baseColorFactor.Y,
-                                     meshOut.baseColorFactor.Z);
+            const Vector3 baseColor(meshOut.material.baseColorFactor.X,
+                                    meshOut.material.baseColorFactor.Y,
+                                    meshOut.material.baseColorFactor.Z);
             if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(&fx))
             {
                 basicFx->setLightingEnabledProperty(false);
                 parkLights(*basicFx);
                 basicFx->setDiffuseColorProperty(baseColor);
-                basicFx->setAlphaProperty(meshOut.baseColorFactor.W);
+                basicFx->setAlphaProperty(meshOut.material.baseColorFactor.W);
             }
             else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(&fx))
             {
@@ -1983,13 +1984,13 @@ namespace Microsoft::Xna::Framework::Content
                 parkLights(*skinnedFx);
                 skinnedFx->setAmbientLightColorProperty(Vector3::One);
                 skinnedFx->setDiffuseColorProperty(baseColor);
-                skinnedFx->setAlphaProperty(meshOut.baseColorFactor.W);
+                skinnedFx->setAlphaProperty(meshOut.material.baseColorFactor.W);
             }
             else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(&fx))
             {
                 // No lighting term at all, so it is already unlit; only the colour is missing.
                 dualFx->setDiffuseColorProperty(baseColor);
-                dualFx->setAlphaProperty(meshOut.baseColorFactor.W);
+                dualFx->setAlphaProperty(meshOut.material.baseColorFactor.W);
             }
             return true;
         }
@@ -2818,9 +2819,9 @@ namespace Microsoft::Xna::Framework::Content
                     // slot. Without this every imported texture drew with whatever the device
                     // happened to have -- LinearWrap -- so a CLAMP_TO_EDGE asset with UVs outside
                     // [0,1] tiled instead of clamping.
-                    for (std::size_t slot = 0; slot < meshOut.samplers.size(); ++slot)
+                    for (std::size_t slot = 0; slot < meshOut.material.samplers.size(); ++slot)
                     {
-                        const SamplerOut& sampler = meshOut.samplers[slot];
+                        const SamplerOut& sampler = meshOut.material.samplers[slot];
                         Graphics::SamplerState state;
                         state.setFilterProperty(sampler.filter);
                         state.setAddressUProperty(sampler.addressU);
@@ -2924,7 +2925,8 @@ namespace Microsoft::Xna::Framework::Content
                     // of one material still need separate effects when one is skinned and the
                     // other is not, because they are not even the same type.
                     const EffectCacheKey effectKey{
-                        meshOut.materialEXT, meshOut.skinned, meshOut.usePbr, meshOut.useDualTexture,
+                        meshOut.material.sourceMaterialEXT, meshOut.skinned, meshOut.usePbr,
+                        meshOut.useDualTexture,
                         meshOut.colored};
                     if (const auto cached = effectCache.find(effectKey); cached != effectCache.end())
                     {
@@ -2952,7 +2954,7 @@ namespace Microsoft::Xna::Framework::Content
                     else if (meshOut.useDualTexture) { fx = std::make_shared<Graphics::DualTextureEffect>(device); }
                     else { fx = std::make_shared<Graphics::BasicEffect>(device); }
 
-                    if (Graphics::Texture2D* tex = loadTexture(meshOut.baseColorImage))
+                    if (Graphics::Texture2D* tex = loadTexture(meshOut.material.baseColorImage))
                     {
                         if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
                             basicFx->setTextureProperty(tex);
@@ -2970,7 +2972,8 @@ namespace Microsoft::Xna::Framework::Content
 
                     if (meshOut.useDualTexture)
                     {
-                        if (Graphics::Texture2D* tex2 = loadOcclusionTextureForDualTextureEXT(meshOut.occlusionImage))
+                        if (Graphics::Texture2D* tex2 =
+                                loadOcclusionTextureForDualTextureEXT(meshOut.material.occlusionImage))
                         {
                             if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
                                 dualFx->setTexture2Property(tex2);
@@ -2982,62 +2985,74 @@ namespace Microsoft::Xna::Framework::Content
                     {
                         if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get()))
                         {
-                            if (Graphics::Texture2D* normalTex = loadTexture(meshOut.normalImage))
+                            if (Graphics::Texture2D* normalTex =
+                                    loadTexture(meshOut.material.normalImage))
                                 pbrFx->setNormalMapProperty(normalTex);
-                            if (Graphics::Texture2D* mrTex = loadTexture(meshOut.metallicRoughnessImage))
+                            if (Graphics::Texture2D* mrTex =
+                                    loadTexture(meshOut.material.metallicRoughnessImage))
                                 pbrFx->setMetallicRoughnessMapProperty(mrTex);
-                            if (Graphics::Texture2D* emissiveTex = loadTexture(meshOut.emissiveImage))
+                            if (Graphics::Texture2D* emissiveTex =
+                                    loadTexture(meshOut.material.emissiveImage))
                                 pbrFx->setEmissiveMapProperty(emissiveTex);
-                            // MeshOut::occlusionImage is shared with useDualTexture's own
+                            // MeshOut::material.occlusionImage is shared with useDualTexture's own
                             // Texture2 approximation (CNB-72/73) -- the two are mutually
                             // exclusive per-mesh (useDualTexture is forced false whenever usePbr
                             // is true), so reusing the same field here is unambiguous.
-                            if (Graphics::Texture2D* occlusionTex = loadTexture(meshOut.occlusionImage))
+                            if (Graphics::Texture2D* occlusionTex =
+                                    loadTexture(meshOut.material.occlusionImage))
                                 pbrFx->setOcclusionMapProperty(occlusionTex);
-                            pbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
-                            pbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
-                            pbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
+                            pbrFx->setMetallicFactorProperty(meshOut.material.metallicFactor);
+                            pbrFx->setRoughnessFactorProperty(meshOut.material.roughnessFactor);
+                            pbrFx->setEmissiveFactorProperty(meshOut.material.emissiveFactor);
                             // plan_gltf.md GLTF-224/GLTF-225: never read before, so a material that
                             // dialled its normal map down to a subtle 0.2 got the full 1.0 instead.
-                            pbrFx->setNormalScaleEXTProperty(meshOut.normalScale);
-                            pbrFx->setOcclusionStrengthEXTProperty(meshOut.occlusionStrength);
+                            pbrFx->setNormalScaleEXTProperty(meshOut.material.normalScale);
+                            pbrFx->setOcclusionStrengthEXTProperty(
+                                meshOut.material.occlusionStrength);
                             // plan_gltf.md GLTF-216: baseColorFactor multiplies the base-colour
                             // texture, or stands alone when there is none. Never read before.
-                            pbrFx->setDiffuseColorProperty(Vector3(meshOut.baseColorFactor.X,
-                                                                    meshOut.baseColorFactor.Y,
-                                                                    meshOut.baseColorFactor.Z));
-                            pbrFx->setAlphaProperty(meshOut.baseColorFactor.W);
+                            pbrFx->setDiffuseColorProperty(Vector3(
+                                meshOut.material.baseColorFactor.X,
+                                meshOut.material.baseColorFactor.Y,
+                                meshOut.material.baseColorFactor.Z));
+                            pbrFx->setAlphaProperty(meshOut.material.baseColorFactor.W);
                             // plan_gltf.md GLTF-228/GLTF-229/GLTF-231.
-                            pbrFx->setAlphaModeEXTProperty(meshOut.alphaMode);
-                            pbrFx->setAlphaCutoffEXTProperty(meshOut.alphaCutoff);
-                            pbrFx->setDoubleSidedEXTProperty(meshOut.doubleSided);
+                            pbrFx->setAlphaModeEXTProperty(meshOut.material.alphaMode);
+                            pbrFx->setAlphaCutoffEXTProperty(meshOut.material.alphaCutoff);
+                            pbrFx->setDoubleSidedEXTProperty(meshOut.material.doubleSided);
                         }
                         else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get()))
                         {
-                            if (Graphics::Texture2D* normalTex = loadTexture(meshOut.normalImage))
+                            if (Graphics::Texture2D* normalTex =
+                                    loadTexture(meshOut.material.normalImage))
                                 skinnedPbrFx->setNormalMapProperty(normalTex);
-                            if (Graphics::Texture2D* mrTex = loadTexture(meshOut.metallicRoughnessImage))
+                            if (Graphics::Texture2D* mrTex =
+                                    loadTexture(meshOut.material.metallicRoughnessImage))
                                 skinnedPbrFx->setMetallicRoughnessMapProperty(mrTex);
-                            if (Graphics::Texture2D* emissiveTex = loadTexture(meshOut.emissiveImage))
+                            if (Graphics::Texture2D* emissiveTex =
+                                    loadTexture(meshOut.material.emissiveImage))
                                 skinnedPbrFx->setEmissiveMapProperty(emissiveTex);
-                            if (Graphics::Texture2D* occlusionTex = loadTexture(meshOut.occlusionImage))
+                            if (Graphics::Texture2D* occlusionTex =
+                                    loadTexture(meshOut.material.occlusionImage))
                                 skinnedPbrFx->setOcclusionMapProperty(occlusionTex);
-                            skinnedPbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
-                            skinnedPbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
-                            skinnedPbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
+                            skinnedPbrFx->setMetallicFactorProperty(meshOut.material.metallicFactor);
+                            skinnedPbrFx->setRoughnessFactorProperty(meshOut.material.roughnessFactor);
+                            skinnedPbrFx->setEmissiveFactorProperty(meshOut.material.emissiveFactor);
                             // plan_gltf.md GLTF-224/GLTF-225: never read before, so a material that
                             // dialled its normal map down to a subtle 0.2 got the full 1.0 instead.
-                            skinnedPbrFx->setNormalScaleEXTProperty(meshOut.normalScale);
-                            skinnedPbrFx->setOcclusionStrengthEXTProperty(meshOut.occlusionStrength);
+                            skinnedPbrFx->setNormalScaleEXTProperty(meshOut.material.normalScale);
+                            skinnedPbrFx->setOcclusionStrengthEXTProperty(
+                                meshOut.material.occlusionStrength);
                             // GLTF-216, on the skinned twin: the same base colour, so a skinned
                             // and an unskinned primitive of one material shade alike.
-                            skinnedPbrFx->setDiffuseColorProperty(Vector3(meshOut.baseColorFactor.X,
-                                                                          meshOut.baseColorFactor.Y,
-                                                                          meshOut.baseColorFactor.Z));
-                            skinnedPbrFx->setAlphaProperty(meshOut.baseColorFactor.W);
-                            skinnedPbrFx->setAlphaModeEXTProperty(meshOut.alphaMode);
-                            skinnedPbrFx->setAlphaCutoffEXTProperty(meshOut.alphaCutoff);
-                            skinnedPbrFx->setDoubleSidedEXTProperty(meshOut.doubleSided);
+                            skinnedPbrFx->setDiffuseColorProperty(Vector3(
+                                meshOut.material.baseColorFactor.X,
+                                meshOut.material.baseColorFactor.Y,
+                                meshOut.material.baseColorFactor.Z));
+                            skinnedPbrFx->setAlphaProperty(meshOut.material.baseColorFactor.W);
+                            skinnedPbrFx->setAlphaModeEXTProperty(meshOut.material.alphaMode);
+                            skinnedPbrFx->setAlphaCutoffEXTProperty(meshOut.material.alphaCutoff);
+                            skinnedPbrFx->setDoubleSidedEXTProperty(meshOut.material.doubleSided);
                         }
                     }
 
@@ -3436,27 +3451,87 @@ namespace Microsoft::Xna::Framework::Content
                             const std::string textureFile = ExtractJsonStringField(mg, "texture");
                             const std::string texture2File = ExtractJsonStringField(mg, "texture2");
                             const bool vertexColorEnabled = JsonBool(mg, "vertexColorEnabled", false);
-                            // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
+                            // plan_gltf.md GLTF-236/GLTF-237: rebuild the same coherent material
+                            // carrier the direct glTF path consumes. Defaults are glTF's own, so a
+                            // .cnj written before an optional field existed keeps its old meaning.
                             const std::string normalMapFile = ExtractJsonStringField(mg, "normalMap");
                             const std::string metallicRoughnessMapFile = ExtractJsonStringField(mg, "metallicRoughnessMap");
                             const std::string emissiveMapFile = ExtractJsonStringField(mg, "emissiveMap");
                             const std::string occlusionMapFile = ExtractJsonStringField(mg, "occlusionMap");
-                            const float metallicFactor  = JsonFloat(mg, "metallicFactor", 1.0f);
-                            const float roughnessFactor = JsonFloat(mg, "roughnessFactor", 1.0f);
+                            CNA::Internal::GltfImport::MaterialOut material;
+                            material.metallicFactor = JsonFloat(mg, "metallicFactor", 1.0f);
+                            material.roughnessFactor = JsonFloat(mg, "roughnessFactor", 1.0f);
                             const auto emissiveFactorArr = JsonFloatArray3(mg, FindKeyArray(mg, "emissiveFactor"));
+                            material.emissiveFactor = Vector3(emissiveFactorArr[0],
+                                                               emissiveFactorArr[1],
+                                                               emissiveFactorArr[2]);
+                            material.normalScale = JsonFloat(mg, "normalScale", 1.0f);
+                            material.occlusionStrength =
+                                JsonFloat(mg, "occlusionStrength", 1.0f);
                             // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Absent from a .cnj written
                             // before them, whose defaults are glTF's own -- so an older asset loads
                             // as the opaque, single-sided material it could only ever have been.
-                            const auto alphaMode = CNA::Internal::GltfImport::AlphaModeEXTFromName(
+                            material.alphaMode = CNA::Internal::GltfImport::AlphaModeEXTFromName(
                                 ExtractJsonStringField(mg, "alphaMode"));
-                            const float alphaCutoff = JsonFloat(mg, "alphaCutoff", 0.5f);
-                            const bool doubleSided = JsonBool(mg, "doubleSided", false);
+                            material.alphaCutoff = JsonFloat(mg, "alphaCutoff", 0.5f);
+                            material.doubleSided = JsonBool(mg, "doubleSided", false);
                             // plan_gltf.md GLTF-337: KHR_materials_unlit, carried so the two
                             // loaders agree. Absent from a .cnj written before it, whose default is
                             // "lit" -- which is what such a file could only ever have meant.
                             const bool unlit = JsonBool(mg, "unlit", false);
-                            const auto unlitDiffuseArr = JsonFloatArray3(mg, FindKeyArray(mg, "diffuseColor"));
-                            const float unlitAlpha = JsonFloat(mg, "alpha", 1.0f);
+                            const std::size_t diffuseColorArray =
+                                FindKeyArray(mg, "diffuseColor");
+                            if (diffuseColorArray != std::string::npos)
+                            {
+                                const auto diffuseArr =
+                                    JsonFloatArray3(mg, diffuseColorArray);
+                                material.baseColorFactor = Vector4(
+                                    diffuseArr[0], diffuseArr[1], diffuseArr[2],
+                                    JsonFloat(mg, "alpha", 1.0f));
+                            }
+                            else
+                            {
+                                // Older/hand-written PBR .cnj files may omit diffuseColor. The
+                                // effect's historical default is white, which is also glTF's
+                                // baseColorFactor default; JsonFloatArray3's generic zero default
+                                // would silently turn such a material black.
+                                material.baseColorFactor.W = JsonFloat(mg, "alpha", 1.0f);
+                            }
+                            for (std::size_t slot = 0; slot < material.samplers.size(); ++slot)
+                            {
+                                auto& sampler = material.samplers[slot];
+                                const std::string prefix = "sampler" + std::to_string(slot);
+                                const int filter = JsonInt(
+                                    mg, prefix + "Filter",
+                                    static_cast<int>(Graphics::TextureFilter::Linear));
+                                const int addressU = JsonInt(
+                                    mg, prefix + "AddressU",
+                                    static_cast<int>(Graphics::TextureAddressMode::Wrap));
+                                const int addressV = JsonInt(
+                                    mg, prefix + "AddressV",
+                                    static_cast<int>(Graphics::TextureAddressMode::Wrap));
+                                if (filter < static_cast<int>(Graphics::TextureFilter::Linear) ||
+                                    filter > static_cast<int>(
+                                                 Graphics::TextureFilter::MinPointMagLinearMipPoint) ||
+                                    addressU < static_cast<int>(Graphics::TextureAddressMode::Wrap) ||
+                                    addressU > static_cast<int>(Graphics::TextureAddressMode::Mirror) ||
+                                    addressV < static_cast<int>(Graphics::TextureAddressMode::Wrap) ||
+                                    addressV > static_cast<int>(Graphics::TextureAddressMode::Mirror))
+                                {
+                                    throw ContentLoadException(
+                                        "Model mesh '" + meshName +
+                                        "' has an invalid serialized sampler state: " + path);
+                                }
+                                sampler.filter = static_cast<Graphics::TextureFilter>(filter);
+                                sampler.addressU =
+                                    static_cast<Graphics::TextureAddressMode>(addressU);
+                                sampler.addressV =
+                                    static_cast<Graphics::TextureAddressMode>(addressV);
+                                sampler.declared =
+                                    filter != static_cast<int>(Graphics::TextureFilter::Linear) ||
+                                    addressU != static_cast<int>(Graphics::TextureAddressMode::Wrap) ||
+                                    addressV != static_cast<int>(Graphics::TextureAddressMode::Wrap);
+                            }
                             // Morph target CLI/.cnj serialization: "morphTargets" is the binary
                             // sidecar path (BuildMorphBytes' own format, see gltf_to_cnj.cpp),
                             // "morphWeights" the default blend weights, and "morphWeightTrack"
@@ -3526,6 +3601,15 @@ namespace Microsoft::Xna::Framework::Content
                                 vb.get(), ib.get(), numVertices, primCount, 0, 0);
                             part->setPrimitiveTypeEXTProperty(
                                 CNA::Internal::GltfImport::PrimitiveTypeForTopology(topology));
+                            for (std::size_t slot = 0; slot < material.samplers.size(); ++slot)
+                            {
+                                const auto& sampler = material.samplers[slot];
+                                Graphics::SamplerState state;
+                                state.setFilterProperty(sampler.filter);
+                                state.setAddressUProperty(sampler.addressU);
+                                state.setAddressVProperty(sampler.addressV);
+                                part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
+                            }
                             Graphics::ModelMeshPart* partPtr = part.get();
 
                             // Morph target CLI/.cnj serialization: read BuildMorphBytes' own
@@ -3740,7 +3824,8 @@ namespace Microsoft::Xna::Framework::Content
                                 }
                             }
 
-                            // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
+                            // GLTF-236/237: apply the complete material carrier reconstructed
+                            // above, including the four PBR maps and every factor/scalar.
                             if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
                                 auto loadPbrMap = [&](const std::string& file,
                                                       const char* field) -> Graphics::Texture2D* {
@@ -3762,13 +3847,19 @@ namespace Microsoft::Xna::Framework::Content
                                     pbrFx->setEmissiveMapProperty(t);
                                 if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile, "occlusionMap"))
                                     pbrFx->setOcclusionMapProperty(t);
-                                pbrFx->setMetallicFactorProperty(metallicFactor);
-                                pbrFx->setRoughnessFactorProperty(roughnessFactor);
-                                pbrFx->setEmissiveFactorProperty(Vector3(
-                                    emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
-                                pbrFx->setAlphaModeEXTProperty(alphaMode);
-                                pbrFx->setAlphaCutoffEXTProperty(alphaCutoff);
-                                pbrFx->setDoubleSidedEXTProperty(doubleSided);
+                                pbrFx->setMetallicFactorProperty(material.metallicFactor);
+                                pbrFx->setRoughnessFactorProperty(material.roughnessFactor);
+                                pbrFx->setEmissiveFactorProperty(material.emissiveFactor);
+                                pbrFx->setNormalScaleEXTProperty(material.normalScale);
+                                pbrFx->setOcclusionStrengthEXTProperty(
+                                    material.occlusionStrength);
+                                pbrFx->setDiffuseColorProperty(Vector3(
+                                    material.baseColorFactor.X, material.baseColorFactor.Y,
+                                    material.baseColorFactor.Z));
+                                pbrFx->setAlphaProperty(material.baseColorFactor.W);
+                                pbrFx->setAlphaModeEXTProperty(material.alphaMode);
+                                pbrFx->setAlphaCutoffEXTProperty(material.alphaCutoff);
+                                pbrFx->setDoubleSidedEXTProperty(material.doubleSided);
                             } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
                                 auto loadPbrMap = [&](const std::string& file,
                                                       const char* field) -> Graphics::Texture2D* {
@@ -3790,13 +3881,19 @@ namespace Microsoft::Xna::Framework::Content
                                     skinnedPbrFx->setEmissiveMapProperty(t);
                                 if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile, "occlusionMap"))
                                     skinnedPbrFx->setOcclusionMapProperty(t);
-                                skinnedPbrFx->setMetallicFactorProperty(metallicFactor);
-                                skinnedPbrFx->setRoughnessFactorProperty(roughnessFactor);
-                                skinnedPbrFx->setEmissiveFactorProperty(Vector3(
-                                    emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
-                                skinnedPbrFx->setAlphaModeEXTProperty(alphaMode);
-                                skinnedPbrFx->setAlphaCutoffEXTProperty(alphaCutoff);
-                                skinnedPbrFx->setDoubleSidedEXTProperty(doubleSided);
+                                skinnedPbrFx->setMetallicFactorProperty(material.metallicFactor);
+                                skinnedPbrFx->setRoughnessFactorProperty(material.roughnessFactor);
+                                skinnedPbrFx->setEmissiveFactorProperty(material.emissiveFactor);
+                                skinnedPbrFx->setNormalScaleEXTProperty(material.normalScale);
+                                skinnedPbrFx->setOcclusionStrengthEXTProperty(
+                                    material.occlusionStrength);
+                                skinnedPbrFx->setDiffuseColorProperty(Vector3(
+                                    material.baseColorFactor.X, material.baseColorFactor.Y,
+                                    material.baseColorFactor.Z));
+                                skinnedPbrFx->setAlphaProperty(material.baseColorFactor.W);
+                                skinnedPbrFx->setAlphaModeEXTProperty(material.alphaMode);
+                                skinnedPbrFx->setAlphaCutoffEXTProperty(material.alphaCutoff);
+                                skinnedPbrFx->setDoubleSidedEXTProperty(material.doubleSided);
                             }
 
                             // Task 1115 / CNB-67 (Phase 13C): a "vertexStride": 24
@@ -3823,8 +3920,7 @@ namespace Microsoft::Xna::Framework::Content
                             {
                                 CNA::Internal::GltfImport::MeshOut unlitOut;
                                 unlitOut.unlitEXT = true;
-                                unlitOut.baseColorFactor = Vector4(unlitDiffuseArr[0], unlitDiffuseArr[1],
-                                                                    unlitDiffuseArr[2], unlitAlpha);
+                                unlitOut.material = material;
                                 ApplyUnlitMaterialEXT(*fx, unlitOut);
                             }
                             else

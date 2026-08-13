@@ -132,7 +132,7 @@ TEST(GltfUnsupportedTexture, BasisuWithNoFallbackSourceIsReportedAndTheMapIsDrop
         R"({ "sampler": 0, "extensions": { "KHR_texture_basisu": { "source": 0 } } })",
         R"([ { "uri": "base.ktx2", "mimeType": "image/ktx2" } ])"));
 
-    EXPECT_EQ(nullptr, out.baseColorImage);
+    EXPECT_EQ(nullptr, out.material.baseColorImage);
     ASSERT_EQ(1u, out.unsupportedTextureSourcesEXT.size())
         << "an unreadable base-colour texture was dropped without a word";
     EXPECT_NE(out.unsupportedTextureSourcesEXT[0].find("base color"), std::string::npos)
@@ -152,7 +152,7 @@ TEST(GltfUnsupportedTexture, BasisuWithAPlainFallbackSourceUsesTheFallbackAndRep
         R"([ { "uri": "base.ktx2", "mimeType": "image/ktx2" },
              { "uri": "base.png", "mimeType": "image/png" } ])"));
 
-    ASSERT_NE(nullptr, out.baseColorImage) << "the authored PNG fallback was not used";
+    ASSERT_NE(nullptr, out.material.baseColorImage) << "the authored PNG fallback was not used";
     EXPECT_TRUE(out.unsupportedTextureSourcesEXT.empty())
         << "nothing was lost, so nothing should have been reported: "
         << (out.unsupportedTextureSourcesEXT.empty() ? "" : out.unsupportedTextureSourcesEXT[0]);
@@ -167,7 +167,7 @@ TEST(GltfUnsupportedTexture, WebpWithNoFallbackSourceIsReportedByName)
         R"({ "sampler": 0, "extensions": { "EXT_texture_webp": { "source": 0 } } })",
         R"([ { "uri": "base.webp", "mimeType": "image/webp" } ])"));
 
-    EXPECT_EQ(nullptr, out.baseColorImage);
+    EXPECT_EQ(nullptr, out.material.baseColorImage);
     ASSERT_EQ(1u, out.unsupportedTextureSourcesEXT.size());
     EXPECT_NE(out.unsupportedTextureSourcesEXT[0].find("EXT_texture_webp"), std::string::npos)
         << "the report has to name the extension, or it says nothing a user can act on: "
@@ -186,7 +186,7 @@ TEST(GltfUnsupportedTexture, APlainSourceWithAnUndecodableMimeTypeIsReportedAtIm
         R"({ "sampler": 0, "source": 0 })",
         R"([ { "uri": "base.webp", "mimeType": "image/webp" } ])"));
 
-    EXPECT_EQ(nullptr, out.baseColorImage);
+    EXPECT_EQ(nullptr, out.material.baseColorImage);
     ASSERT_EQ(1u, out.unsupportedTextureSourcesEXT.size());
     EXPECT_NE(out.unsupportedTextureSourcesEXT[0].find("image/webp"), std::string::npos)
         << out.unsupportedTextureSourcesEXT[0];
@@ -419,9 +419,10 @@ TEST(GltfUnsupportedTexture, FullTransmissionBecomesAFullyBlendedSurfaceRatherTh
 
     EXPECT_TRUE(out.transmissionApproximatedEXT);
     EXPECT_NEAR(1.0f, out.transmissionFactorEXT, 1e-6f);
-    EXPECT_EQ(Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Blend, out.alphaMode)
+    EXPECT_EQ(Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Blend,
+              out.material.alphaMode)
         << "a transmissive material left on OPAQUE draws as glass that hides what is behind it";
-    EXPECT_NEAR(0.0f, out.baseColorFactor.W, 1e-6f);
+    EXPECT_NEAR(0.0f, out.material.baseColorFactor.W, 1e-6f);
 }
 
 TEST(GltfUnsupportedTexture, PartialTransmissionMultipliesIntoTheMaterialsOwnAlpha)
@@ -434,7 +435,7 @@ TEST(GltfUnsupportedTexture, PartialTransmissionMultipliesIntoTheMaterialsOwnAlp
         R"("baseColorFactor": [1, 1, 1, 0.5])"));
 
     EXPECT_TRUE(out.transmissionApproximatedEXT);
-    EXPECT_NEAR(0.25f, out.baseColorFactor.W, 1e-6f)
+    EXPECT_NEAR(0.25f, out.material.baseColorFactor.W, 1e-6f)
         << "the transmission replaced the material's own alpha instead of compounding with it";
 }
 
@@ -447,8 +448,9 @@ TEST(GltfUnsupportedTexture, ATransmissionFactorOfZeroLeavesTheMaterialCompletel
         R"(, "extensions": { "KHR_materials_transmission": { "transmissionFactor": 0.0 } })"));
 
     EXPECT_FALSE(out.transmissionApproximatedEXT);
-    EXPECT_EQ(Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Opaque, out.alphaMode);
-    EXPECT_NEAR(1.0f, out.baseColorFactor.W, 1e-6f);
+    EXPECT_EQ(Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Opaque,
+              out.material.alphaMode);
+    EXPECT_NEAR(1.0f, out.material.baseColorFactor.W, 1e-6f);
 }
 
 TEST(GltfUnsupportedTexture, ATransmissionTextureIsFlaggedSeparatelyFromTheFactor)

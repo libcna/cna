@@ -2067,7 +2067,7 @@ namespace CNA::Internal::GltfImport
                 out.ignoredCustomAttributesEXT.emplace_back(attribute.name);
             }
         }
-        out.baseColorImage = FindBaseColorImage(prim, &out.unsupportedTextureSourcesEXT);
+        out.material.baseColorImage = FindBaseColorImage(prim, &out.unsupportedTextureSourcesEXT);
         // An unskinned, uncolored primitive with both a base-color and an occlusion texture is
         // imported through DualTextureEffect (Texture=base color, Texture2=occlusion) instead of
         // BasicEffect -- real XNA's DualTextureEffect always samples both texture slots (no
@@ -2086,9 +2086,10 @@ namespace CNA::Internal::GltfImport
         // useDualTexture below when both would otherwise apply (a material with both an
         // occlusion map AND a normal/metallic-roughness map is unambiguously meant for real PBR
         // rendering, not the DualTextureEffect occlusion-as-lightmap approximation).
-        out.normalImage = FindNormalImage(prim, &out.unsupportedTextureSourcesEXT);
-        out.metallicRoughnessImage = FindMetallicRoughnessImage(prim, &out.unsupportedTextureSourcesEXT);
-        out.emissiveImage = FindEmissiveImage(prim, &out.unsupportedTextureSourcesEXT);
+        out.material.normalImage = FindNormalImage(prim, &out.unsupportedTextureSourcesEXT);
+        out.material.metallicRoughnessImage =
+            FindMetallicRoughnessImage(prim, &out.unsupportedTextureSourcesEXT);
+        out.material.emissiveImage = FindEmissiveImage(prim, &out.unsupportedTextureSourcesEXT);
         // PBR + skinning combo: a skinned primitive with a normal/metallic-roughness map is
         // imported through SkinnedPbrEffect (stride 68) instead of plain SkinnedEffect -- the
         // vertex-color combo (usePbr && colored) is still not attempted, matching PbrEffect's own
@@ -2127,7 +2128,7 @@ namespace CNA::Internal::GltfImport
         // to be shaded, which is the same class of silent wrongness as leaving unlit lit.
         out.unlitEXT = (prim.material != nullptr) && (prim.material->unlit != 0);
         // GLTF-238: the material's identity, for effect sharing in the loaders.
-        out.materialEXT = prim.material;
+        out.material.sourceMaterialEXT = prim.material;
         // plan_gltf.md GLTF-241: `colored && metallicRoughnessMaterial` is the one combination the
         // rule above refuses, and refusing it silently is what the task is about. No CNA vertex
         // layout carries a Color alongside a Tangent and no PBR shader reads a colour stream, so
@@ -2141,16 +2142,16 @@ namespace CNA::Internal::GltfImport
         }
         // GLTF-219/GLTF-221: the factors are read for ANY metallic-roughness material, not only
         // one that also selected PBR. They were assigned inside the old `usePbr` guard, so a
-        // factor-only material left them at MeshOut's defaults -- the second half of D7, and the
+        // factor-only material left them at MaterialOut's defaults -- the second half of D7, and the
         // reason f8 lost its metallic/roughness/emissive as well as its base colour.
         if (prim.material && prim.material->has_pbr_metallic_roughness)
         {
-            out.metallicFactor  = prim.material->pbr_metallic_roughness.metallic_factor;
-            out.roughnessFactor = prim.material->pbr_metallic_roughness.roughness_factor;
+            out.material.metallicFactor  = prim.material->pbr_metallic_roughness.metallic_factor;
+            out.material.roughnessFactor = prim.material->pbr_metallic_roughness.roughness_factor;
             // GLTF-216: baseColorFactor multiplies the base-colour texture (or stands alone when
             // there is none). Never read anywhere before this.
             const cgltf_float* base = prim.material->pbr_metallic_roughness.base_color_factor;
-            out.baseColorFactor = Vector4(base[0], base[1], base[2], base[3]);
+            out.material.baseColorFactor = Vector4(base[0], base[1], base[2], base[3]);
         }
         // plan_gltf.md GLTF-349: KHR_materials_pbrSpecularGlossiness, converted rather than
         // refused. Khronos archived it, but it is what a decade of older assets are authored in,
@@ -2169,10 +2170,12 @@ namespace CNA::Internal::GltfImport
             !prim.material->has_pbr_metallic_roughness)
         {
             const cgltf_pbr_specular_glossiness& sg = prim.material->pbr_specular_glossiness;
-            out.baseColorFactor = Vector4(sg.diffuse_factor[0], sg.diffuse_factor[1],
-                                           sg.diffuse_factor[2], sg.diffuse_factor[3]);
-            out.metallicFactor = 0.0f;
-            out.roughnessFactor = std::clamp(1.0f - sg.glossiness_factor, 0.0f, 1.0f);
+            out.material.baseColorFactor = Vector4(
+                sg.diffuse_factor[0], sg.diffuse_factor[1], sg.diffuse_factor[2],
+                sg.diffuse_factor[3]);
+            out.material.metallicFactor = 0.0f;
+            out.material.roughnessFactor =
+                std::clamp(1.0f - sg.glossiness_factor, 0.0f, 1.0f);
             out.convertedFromSpecularGlossinessEXT = true;
             out.droppedSpecularStrengthEXT = std::max(
                 sg.specular_factor[0], std::max(sg.specular_factor[1], sg.specular_factor[2]));
@@ -2185,13 +2188,19 @@ namespace CNA::Internal::GltfImport
             using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
             switch (prim.material->alpha_mode)
             {
-                case cgltf_alpha_mode_mask:  out.alphaMode = AlphaModeEXT::Mask;  break;
-                case cgltf_alpha_mode_blend: out.alphaMode = AlphaModeEXT::Blend; break;
+                case cgltf_alpha_mode_mask:
+                    out.material.alphaMode = AlphaModeEXT::Mask;
+                    break;
+                case cgltf_alpha_mode_blend:
+                    out.material.alphaMode = AlphaModeEXT::Blend;
+                    break;
                 case cgltf_alpha_mode_opaque:
-                default:                     out.alphaMode = AlphaModeEXT::Opaque; break;
+                default:
+                    out.material.alphaMode = AlphaModeEXT::Opaque;
+                    break;
             }
-            out.alphaCutoff = prim.material->alpha_cutoff;
-            out.doubleSided = prim.material->double_sided != 0;
+            out.material.alphaCutoff = prim.material->alpha_cutoff;
+            out.material.doubleSided = prim.material->double_sided != 0;
 
             // plan_gltf.md GLTF-339. KHR_materials_transmission was read by nobody, so a glass
             // material imported fully opaque -- the ChronographWatch defect, where the crystal
@@ -2220,11 +2229,11 @@ namespace CNA::Internal::GltfImport
                 if (out.transmissionFactorEXT > 0.0f)
                 {
                     out.transmissionApproximatedEXT = true;
-                    out.alphaMode = AlphaModeEXT::Blend;
+                    out.material.alphaMode = AlphaModeEXT::Blend;
                     // Multiplied into whatever alpha the material already asked for, rather than
                     // replacing it: a material that is both partly transparent and transmissive
                     // should end up more transparent than either alone, not lose one of them.
-                    out.baseColorFactor.W *= (1.0f - out.transmissionFactorEXT);
+                    out.material.baseColorFactor.W *= (1.0f - out.transmissionFactorEXT);
                 }
             }
             // plan_gltf.md GLTF-224/GLTF-225. Read for ANY material, not only one that selected
@@ -2244,25 +2253,25 @@ namespace CNA::Internal::GltfImport
                 const bool declared = (view.texture != nullptr) || (view.scale != 0.0f);
                 return declared ? view.scale : 1.0f;
             };
-            out.normalScale = viewScalar(prim.material->normal_texture);
-            out.occlusionStrength = viewScalar(prim.material->occlusion_texture);
+            out.material.normalScale = viewScalar(prim.material->normal_texture);
+            out.material.occlusionStrength = viewScalar(prim.material->occlusion_texture);
 
             // plan_gltf.md GLTF-202: one sampler per texture slot, read from the texture each view
             // names. A slot with no texture keeps glTF's default with `declared` false.
             const auto slot = [](TextureSlotEXT s) { return static_cast<std::size_t>(s); };
             if (prim.material->has_pbr_metallic_roughness)
             {
-                out.samplers[slot(TextureSlotEXT::BaseColor)] =
+                out.material.samplers[slot(TextureSlotEXT::BaseColor)] =
                     SamplerForTextureView(prim.material->pbr_metallic_roughness.base_color_texture);
-                out.samplers[slot(TextureSlotEXT::MetallicRoughness)] =
+                out.material.samplers[slot(TextureSlotEXT::MetallicRoughness)] =
                     SamplerForTextureView(
                         prim.material->pbr_metallic_roughness.metallic_roughness_texture);
             }
-            out.samplers[slot(TextureSlotEXT::Normal)] =
+            out.material.samplers[slot(TextureSlotEXT::Normal)] =
                 SamplerForTextureView(prim.material->normal_texture);
-            out.samplers[slot(TextureSlotEXT::Emissive)] =
+            out.material.samplers[slot(TextureSlotEXT::Emissive)] =
                 SamplerForTextureView(prim.material->emissive_texture);
-            out.samplers[slot(TextureSlotEXT::Occlusion)] =
+            out.material.samplers[slot(TextureSlotEXT::Occlusion)] =
                 SamplerForTextureView(prim.material->occlusion_texture);
 
             // CNB-97 (Phase 14H): KHR_materials_emissive_strength extends EmissiveFactor's own
@@ -2270,9 +2279,10 @@ namespace CNA::Internal::GltfImport
             // the emissive texture (if any) is applied -- glTF's own spec order.
             const float emissiveStrength = prim.material->has_emissive_strength
                 ? prim.material->emissive_strength.emissive_strength : 1.0f;
-            out.emissiveFactor = Vector3(prim.material->emissive_factor[0],
-                                          prim.material->emissive_factor[1],
-                                          prim.material->emissive_factor[2]) * emissiveStrength;
+            out.material.emissiveFactor = Vector3(prim.material->emissive_factor[0],
+                                                   prim.material->emissive_factor[1],
+                                                   prim.material->emissive_factor[2]) *
+                                          emissiveStrength;
         }
 
         // occlusionImage is populated whenever eligible (unskinned, uncolored) regardless of
@@ -2284,10 +2294,11 @@ namespace CNA::Internal::GltfImport
         // primitives (needed for SkinnedPbrEffect's own OcclusionMap), but useDualTexture stays
         // gated to unskinned primitives -- SkinnedEffect has no Texture2 slot, so a skinned
         // non-PBR mesh with an occlusion+base-color pair simply leaves occlusionImage unused.
-        out.occlusionImage =
+        out.material.occlusionImage =
             (!out.colored) ? FindOcclusionImage(prim, &out.unsupportedTextureSourcesEXT) : nullptr;
         out.useDualTexture = (!out.usePbr) && (!out.skinned) &&
-                              (out.occlusionImage != nullptr) && (out.baseColorImage != nullptr);
+                             (out.material.occlusionImage != nullptr) &&
+                             (out.material.baseColorImage != nullptr);
 
         // Each of a glTF material's texture references (baseColorTexture, normalTexture,
         // metallicRoughnessTexture, emissiveTexture, occlusionTexture) can independently select

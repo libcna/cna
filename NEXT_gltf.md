@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **366 closed (`✔` 245, `✅` 121),
-  73 `⬜` remaining.** The other 21 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **368 closed (`✔` 247, `✅` 121),
+  71 `⬜` remaining.** The other 21 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 7 `✅/⬜` and 2 `✅/🐛` (landed with a named residue), 2 `🐛` (open:
   `GLTF-157`, `421`), and 2 `⛔` (`GLTF-009` and
   `GLTF-439`, each blocked by this environment for a stated reason).
@@ -45,7 +45,7 @@ Expected as of this writing:
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite | **6 332 passed, 188 skipped, 18 failed** |
 | generator `--check` | **139 assets, 689 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **454 passed, 23 skipped** / **477 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **454 passed, 24 skipped** / **478 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -76,7 +76,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 454 passed, 23 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 454 passed, 24 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -189,20 +189,15 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
    `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
    without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —
    that is the single most useful thing to tell whoever asks why the milestone is still open.
-3. **`GLTF-236` + `GLTF-237` — the material data model.** The largest structural row left here.
-   Note the distinction the review gate turns on: a **`CNA::Graphics::PbrMaterial`** is new public
-   API and needs a `docs/gltf-api-change-review.md` §1 entry first; a purely **internal** grouping
-   inside `CNA::Internal::GltfImport` does not, and would be churn without a behavioural change.
-   Decide which one the row actually wants before writing any of it.
-4. **`GLTF-343` + `GLTF-344` — `KHR_materials_ior` / `_specular`.** Both are `F0` plumbing sharing
+3. **`GLTF-343` + `GLTF-344` — `KHR_materials_ior` / `_specular`.** Both are `F0` plumbing sharing
    one shader change. **Read this first:** the shader half cannot be verified here — EasyGL needs
    sibling `../easy-gl` and `../meta-gl` checkouts, and `GLTF-157`'s lesson is that an unverified
    renderer change is not a fix. A defensible split is import + effect + `GpuDrawParams` with an
    analytic L6 check, leaving the shader to a session that can run it, but say so in the row.
-5. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
+4. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
    `apt-get install libdraco-dev` — the *cheapest* unblock on the list if the owner allows it, and
    it turns eight blocked rows into ordinary work.
-6. **Second-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
+5. **Second-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
    `398`). `scripts/gltf-renderer-parity.sh` already does the comparison; what is missing is a
    third and fourth renderer to point it at.
 

@@ -343,7 +343,7 @@ TEST(GltfMirroring, MirroringAndDoubleSidednessAreCarriedIndependentlyOfEachOthe
 
         const MeshOut mesh =
             ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
-        EXPECT_EQ(expectDoubleSided, mesh.doubleSided)
+        EXPECT_EQ(expectDoubleSided, mesh.material.doubleSided)
             << "the material's own sidedness was changed by the placement's mirroring";
     }
 }
