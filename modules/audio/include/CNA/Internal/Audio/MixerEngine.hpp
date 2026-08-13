@@ -45,6 +45,8 @@ namespace CNA::Internal::Audio
     using MixerTrackMixCallback = void (*)(void* userdata, MixerTrack* track,
                                             int channels, float* pcm, int samples);
     using MixerTrackStoppedCallback = void (*)(void* userdata, MixerTrack* track);
+    using MixerPostMixCallback = void (*)(void* userdata, int channels,
+                                           float* pcm, int samples);
 
     /** @brief Ensures the shared memory-backed mixer and selected output device exist. */
     void EnsureMixer();
@@ -78,7 +80,13 @@ namespace CNA::Internal::Audio
         void* mixer_ = nullptr;
     };
 
-    [[nodiscard]] MixerAudioPtr LoadMixerAudioFile(const std::string& path);
+    /**
+     * @brief Loads an audio file behind an engine-owned handle.
+     * @param path File to load.
+     * @param predecode True to decode eagerly; false to stream long-form media.
+     */
+    [[nodiscard]] MixerAudioPtr LoadMixerAudioFile(const std::string& path,
+                                                   bool predecode = true);
     [[nodiscard]] MixerAudioPtr LoadMixerAudioMemory(std::span<const std::byte> encodedData);
     [[nodiscard]] MixerAudioPtr LoadMixerRawAudio(std::span<const std::byte> pcm,
                                                   const MixerFormat& format);
@@ -88,6 +96,16 @@ namespace CNA::Internal::Audio
     [[nodiscard]] float GetMixerMasterGain();
     void SetMixerMasterGain(float gain);
     [[nodiscard]] int GetMixerSampleRate();
+
+    /**
+     * @brief Installs or removes the final mixed-output callback.
+     *
+     * The callback runs on the audio thread and must not allocate, lock, or throw. Passing null
+     * removes it. Replacement/removal is a callback barrier: the old callback has returned when
+     * this function succeeds.
+     */
+    [[nodiscard]] bool SetMixerPostMixCallback(MixerPostMixCallback callback,
+                                               void* userdata);
 
     [[nodiscard]] MixerTrack* CreateMixerTrack();
     void DestroyMixerTrack(MixerTrack* track) noexcept;
@@ -110,8 +128,15 @@ namespace CNA::Internal::Audio
     [[nodiscard]] bool IsMixerTrackPlaying(const MixerTrack* track) noexcept;
 
     [[nodiscard]] MixerStream* CreateMixerStream(const MixerFormat& sourceFormat) noexcept;
+    /** @brief Creates a queued stream connected to the selected playback device, initially paused. */
+    [[nodiscard]] MixerStream* CreateMixerPlaybackStream(
+        const MixerFormat& sourceFormat) noexcept;
     void DestroyMixerStream(MixerStream* stream) noexcept;
     void ClearMixerStream(MixerStream* stream) noexcept;
+    void SetMixerStreamGain(MixerStream* stream, float gain) noexcept;
+    void PauseMixerStream(MixerStream* stream) noexcept;
+    void ResumeMixerStream(MixerStream* stream) noexcept;
+    [[nodiscard]] bool IsMixerStreamPaused(const MixerStream* stream) noexcept;
     [[nodiscard]] int GetMixerStreamQueuedBytes(const MixerStream* stream) noexcept;
     [[nodiscard]] bool PutMixerStreamData(MixerStream* stream,
                                           std::span<const std::byte> data) noexcept;

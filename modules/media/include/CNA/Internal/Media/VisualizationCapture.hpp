@@ -11,7 +11,7 @@ namespace CNA::Internal::Media
     /// Microsoft::Xna::Framework::Media::MediaPlayer::GetVisualizationData (plan_media.md
     /// MEDIA-186).
     ///
-    /// SDL3_mixer delivers the post-mix buffer on the **audio thread**, so Push() must be
+    /// The mixer delivers the post-mix buffer on the **audio thread**, so Push() must be
     /// real-time safe: no allocation, no locking, no exceptions. A single-producer/single-consumer
     /// ring buffer with one atomic write cursor satisfies that -- the audio thread only ever
     /// advances the cursor, and the game thread only ever reads behind it.
@@ -36,7 +36,7 @@ namespace CNA::Internal::Media
 
         /// Appends interleaved float PCM, downmixing to mono. Called from the audio thread.
         ///
-        /// @param pcm      Interleaved float32 samples as delivered by SDL3_mixer.
+        /// @param pcm      Interleaved float32 samples as delivered by the mixer.
         /// @param samples  Total float count in `pcm` (frames * channels).
         /// @param channels Channel count; values below 1 are treated as mono.
         void Push(const float* pcm, int samples, int channels) noexcept;

@@ -358,7 +358,7 @@ namespace CNA::Internal::Media
                     // by external code review, plan_media.md MEDIA-131). The bool return (found by
                     // a later external review, plan_media.md MEDIA-154) lets VideoPlayer skip its
                     // own downstream reconfiguration entirely when this was a true no-op, instead
-                    // of tearing down and reopening the SDL stream for a switch that never happened.
+                    // of tearing down and reopening the audio stream for a switch that never happened.
                     // Propagate OpenAudioStreamByIndex()'s own result rather than assuming success
                     // (found by external code review, plan_media.md MEDIA-158) -- it builds the new
                     // codec context before touching audioCtx_/audioStream_, so on failure (bad

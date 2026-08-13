@@ -13,7 +13,7 @@
 #include <iostream>
 
 #ifdef SOUND_ENABLED
-#include "Internal/MixerEngine.hpp"
+#include "CNA/Internal/Audio/MixerEngine.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Audio

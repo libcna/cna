@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/AudioMixer.hpp"
-#include "Internal/MixerEngine.hpp"
+#include "CNA/Internal/Audio/MixerEngine.hpp"
 #include "CNA/Audio/Platform/IAudioDevice.hpp"
 #include "Platform/AudioDeviceFactory.hpp"
 

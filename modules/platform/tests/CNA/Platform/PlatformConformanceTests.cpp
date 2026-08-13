@@ -338,6 +338,15 @@ TEST_P(PlatformConformance, MissingFileReturnsFalseWithTheOutputUntouched)
     EXPECT_EQ(data.size(), 3u);
 }
 
+TEST_P(PlatformConformance, UserFoldersAreUnavailableOrHaveContractSeparator)
+{
+    for (const UserFolder folder : {UserFolder::Music, UserFolder::Pictures})
+    {
+        const std::string path = platform_->GetFileSystem()->GetUserFolder(folder);
+        EXPECT_TRUE(path.empty() || path.back() == '/' || path.back() == '\\') << path;
+    }
+}
+
 TEST_P(PlatformConformance, SystemInfoAnswersWithoutFabricating)
 {
     // Unknown must stay distinguishable from a real value. A platform that cannot tell reports

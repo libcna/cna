@@ -80,6 +80,15 @@ TEST_F(Sdl3ServiceTest, PreferencesPathIsCreatedAndWritable)
     std::filesystem::remove(probe);
 }
 
+TEST_F(Sdl3ServiceTest, UserFoldersAreUnavailableOrHaveContractSeparator)
+{
+    for (const UserFolder folder : {UserFolder::Music, UserFolder::Pictures})
+    {
+        const std::string path = platform_->GetFileSystem()->GetUserFolder(folder);
+        EXPECT_TRUE(path.empty() || path.back() == '/' || path.back() == '\\') << path;
+    }
+}
+
 TEST_F(Sdl3ServiceTest, LoadFileReadsContentsExactly)
 {
     const std::filesystem::path temporary =

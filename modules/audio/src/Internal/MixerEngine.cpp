@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#include "Internal/MixerEngine.hpp"
+#include "CNA/Internal/Audio/MixerEngine.hpp"
 
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
@@ -32,6 +32,7 @@ namespace CNA::Internal::Audio
         std::vector<std::byte> data;
         std::size_t dataLength = 0;
         MixerFormat rawFormat{};
+        bool predecode = true;
         MixerFormat decodedFormat{};
         std::int64_t durationFrames = -1;
         MIX_Audio* native = nullptr;
@@ -43,6 +44,7 @@ namespace CNA::Internal::Audio
     {
     public:
         SDL_AudioStream* native = nullptr;
+        MixerTrack* playbackTrack = nullptr;
         bool audioSubsystemAcquired = false;
     };
 
@@ -110,7 +112,7 @@ namespace CNA::Internal::Audio
             switch (audio.source)
             {
                 case MixerAudioSource::File:
-                    return MIX_LoadAudio(mixer, audio.path.c_str(), true);
+                    return MIX_LoadAudio(mixer, audio.path.c_str(), audio.predecode);
                 case MixerAudioSource::EncodedMemory:
                     return LoadEncodedNative(
                         mixer, std::span<const std::byte>(audio.data.data(), audio.dataLength));
@@ -165,6 +167,27 @@ namespace CNA::Internal::Audio
             std::atomic<bool> stoppedCallbackActive{false};
             std::atomic<bool> destructionDeferred{false};
         };
+
+        struct PostMixContext
+        {
+            MixerPostMixCallback callback = nullptr;
+            void* userdata = nullptr;
+        };
+
+        // These synchronization/lifetime holders deliberately survive C++ static teardown. The
+        // output device can still be running while unrelated translation-unit statics are being
+        // destroyed; releasing callback userdata before its device barrier would be a UAF.
+        std::mutex& PostMixMutex()
+        {
+            static auto* mutex = new std::mutex();
+            return *mutex;
+        }
+
+        std::unique_ptr<PostMixContext>& PostMixContextOwner()
+        {
+            static auto* owner = new std::unique_ptr<PostMixContext>();
+            return *owner;
+        }
 
         std::atomic<TrackContext*> g_deferredTrackDestruction{nullptr};
         std::atomic<bool> g_mixerShuttingDown{false};
@@ -238,6 +261,16 @@ namespace CNA::Internal::Audio
             context->stoppedCallbackActive.store(false, std::memory_order_release);
         }
 
+        void SDLCALL PostMixCallback(void* userdata, MIX_Mixer*,
+                                     const SDL_AudioSpec* spec, float* pcm, int samples)
+        {
+            const auto* context = static_cast<const PostMixContext*>(userdata);
+            if (context && context->callback)
+            {
+                context->callback(context->userdata, spec ? spec->channels : 0, pcm, samples);
+            }
+        }
+
     }
 
     MixerAudio::~MixerAudio()
@@ -303,11 +336,12 @@ namespace CNA::Internal::Audio
         if (mixer_) MIX_UnlockMixer(static_cast<MIX_Mixer*>(mixer_));
     }
 
-    MixerAudioPtr LoadMixerAudioFile(const std::string& path)
+    MixerAudioPtr LoadMixerAudioFile(const std::string& path, const bool predecode)
     {
         auto audio = std::make_shared<MixerAudio>();
         audio->source = MixerAudioSource::File;
         audio->path = path;
+        audio->predecode = predecode;
         return FinalizeAudioLoad(std::move(audio));
     }
 
@@ -359,6 +393,27 @@ namespace CNA::Internal::Audio
     {
         SDL_AudioSpec spec{};
         return MIX_GetMixerFormat(GetMixer(), &spec) ? spec.freq : 0;
+    }
+
+    bool SetMixerPostMixCallback(const MixerPostMixCallback callback, void* userdata)
+    {
+        std::lock_guard<std::mutex> lock(PostMixMutex());
+        MIX_Mixer* mixer = GetMixer();
+        auto& current = PostMixContextOwner();
+
+        if (!callback)
+        {
+            if (!MIX_SetPostMixCallback(mixer, nullptr, nullptr)) return false;
+            current.reset();
+            return true;
+        }
+
+        auto replacement = std::make_unique<PostMixContext>();
+        replacement->callback = callback;
+        replacement->userdata = userdata;
+        if (!MIX_SetPostMixCallback(mixer, PostMixCallback, replacement.get())) return false;
+        current = std::move(replacement);
+        return true;
     }
 
     MixerTrack* CreateMixerTrack()
@@ -549,9 +604,34 @@ namespace CNA::Internal::Audio
         return stream;
     }
 
+    MixerStream* CreateMixerPlaybackStream(const MixerFormat& sourceFormat) noexcept
+    {
+        MixerStream* stream = CreateMixerStream(sourceFormat);
+        if (!stream) return nullptr;
+
+        stream->playbackTrack = CreateMixerTrack();
+        MixerPlayOptions options;
+        options.haltWhenExhausted = false;
+        if (!stream->playbackTrack
+            || !SetMixerTrackStream(stream->playbackTrack, stream)
+            || !PlayMixerTrack(stream->playbackTrack, options))
+        {
+            DestroyMixerStream(stream);
+            return nullptr;
+        }
+        PauseMixerTrack(stream->playbackTrack);
+        return stream;
+    }
+
     void DestroyMixerStream(MixerStream* stream) noexcept
     {
         if (!stream) return;
+        if (stream->playbackTrack)
+        {
+            StopMixerTrack(stream->playbackTrack);
+            DestroyMixerTrack(stream->playbackTrack);
+            stream->playbackTrack = nullptr;
+        }
         if (stream->native) SDL_DestroyAudioStream(stream->native);
         if (stream->audioSubsystemAcquired) SDL_QuitSubSystem(SDL_INIT_AUDIO);
         delete stream;
@@ -560,6 +640,27 @@ namespace CNA::Internal::Audio
     void ClearMixerStream(MixerStream* stream) noexcept
     {
         if (stream) (void)SDL_ClearAudioStream(Native(stream));
+    }
+
+    void SetMixerStreamGain(MixerStream* stream, const float gain) noexcept
+    {
+        if (stream && stream->playbackTrack)
+            SetMixerTrackGain(stream->playbackTrack, gain);
+    }
+
+    void PauseMixerStream(MixerStream* stream) noexcept
+    {
+        if (stream && stream->playbackTrack) PauseMixerTrack(stream->playbackTrack);
+    }
+
+    void ResumeMixerStream(MixerStream* stream) noexcept
+    {
+        if (stream && stream->playbackTrack) ResumeMixerTrack(stream->playbackTrack);
+    }
+
+    bool IsMixerStreamPaused(const MixerStream* stream) noexcept
+    {
+        return stream && stream->playbackTrack && IsMixerTrackPaused(stream->playbackTrack);
     }
 
     int GetMixerStreamQueuedBytes(const MixerStream* stream) noexcept

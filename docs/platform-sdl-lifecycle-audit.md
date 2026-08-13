@@ -46,7 +46,7 @@ Only five, all acquired lazily on first need:
 |---|---:|---|---|
 | `SDL_INIT_SENSOR` | 22 | `Sdl3Platform::AcquireSubsystem(Sensor)` | `Sdl3Platform::ReleaseSubsystem(Sensor)` after the last platform session/reference |
 | `SDL_INIT_VIDEO` | 14 | `GraphicsDevice` constructor | `GraphicsDevice::Dispose()` |
-| `SDL_INIT_AUDIO` | 12 | `AudioMixer` (permanent pin), `Microphone`, `VideoPlayer` | `VideoPlayer` only — see below |
+| `SDL_INIT_AUDIO` | 12 | SDL3 audio playback/recording backends and audio-facade queued streams | The same owners, after their callback/stream barriers — see below |
 | `SDL_INIT_HAPTIC` | 11 | `Sdl3Platform::AcquireSubsystem(Haptic)` | `Sdl3Platform::ReleaseSubsystem(Haptic)` after the last platform client |
 | `SDL_INIT_GAMEPAD` | 9 | `SdlInputBridge` (guarded by `SDL_WasInit`) | `SdlInputBridge` |
 
@@ -78,21 +78,22 @@ central promise ("`SDL_INIT_VIDEO` never called") depends on this branch. This h
 asymmetry was removed by PLAT-62's recorded conditional release, while the platform contract still
 keeps unpaired release tolerant for cleanup after partial initialization.
 
-### `SDL_INIT_AUDIO` — three different ownership models in one subsystem
+### `SDL_INIT_AUDIO` — owned by the audio implementation
 
-This is the least uniform subsystem and needs the most care:
+> **PLAT-96/112 update:** the ownership models recorded by the original audit no longer exist in
+> framework/media code. Playback opens a selected `IAudioDevice`, recording opens a selected
+> `IAudioRecordingDevice`, and queued PCM streams are opaque `MixerStream` objects behind
+> `CNA::Internal::Audio::MixerEngine`. The SDL3 implementations acquire the native audio
+> subsystem on a successful open/create and release the same reference only after the device or
+> stream and its callback barrier have been torn down. Failed opens balance their provisional
+> acquisition too.
 
-1. **`AudioMixer` pins it permanently.** `modules/audio/src/Internal/AudioMixer.cpp:75` sets a
-   process-wide `g_audioSubsystemPinned` flag and **never releases**. The pin is retried on every
-   `GetMixer()` call until it succeeds, so a first attempt on a machine with no audio hardware
-   does not poison later attempts. Deliberate (`AUD-04-008/009`).
-2. **`Microphone` acquires without releasing** (`Microphone.cpp:41`, `:183`).
-3. **`VideoPlayer` acquires and releases in pairs** (`VideoPlayer.cpp:103`, `:113`, `:134`,
-   `:243` — the last carries an explicit "paired with the `SDL_InitSubSystem()` call that opened
-   it" comment).
-
-So the audio subsystem's refcount is intentionally never driven to zero once the mixer has
-started. A platform contract that assumes symmetric acquire/release per caller would change this.
+`AudioMixer`, `Microphone`, `MediaPlayer`, and `VideoPlayer` therefore contain no direct native
+subsystem lifecycle calls. In particular, `VideoPlayer` no longer has a special acquire/release
+path: PLAT-112 connects its decoded float PCM to an initially-paused mixer playback stream and
+destroys that opaque stream through the audio facade. The remaining `SDL_INIT_AUDIO` tokens are
+implementation details under `modules/audio`, where the platform ratchet explicitly permits the
+selected audio backend.
 
 ### `SDL_INIT_SENSOR` — platform sessions plus a process-wide mutex
 

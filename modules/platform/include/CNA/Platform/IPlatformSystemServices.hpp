@@ -355,6 +355,13 @@ namespace CNA::Platform {
 
     // --- Filesystem ----------------------------------------------------------------------------
 
+    /** @brief Well-known user folders exposed by the platform filesystem service. */
+    enum class UserFolder
+    {
+        Music,
+        Pictures
+    };
+
     /** @brief Resolves platform paths and loads whole files. */
     class IPlatformFileSystem
     {
@@ -381,6 +388,13 @@ namespace CNA::Platform {
          */
         [[nodiscard]] virtual std::string GetPreferencesPath(const std::string& organization,
                                                              const std::string& application) const = 0;
+
+        /**
+         * @brief Gets a well-known per-user folder.
+         * @param folder Which folder to resolve.
+         * @return The native path with a trailing separator, or empty when unavailable.
+         */
+        [[nodiscard]] virtual std::string GetUserFolder(UserFolder folder) const = 0;
 
         /**
          * @brief Loads a whole file into memory.

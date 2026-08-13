@@ -200,6 +200,18 @@ namespace CNA::Platform::Sdl3 {
         return path;
     }
 
+    std::string Sdl3FileSystem::GetUserFolder(const UserFolder folder) const
+    {
+        SDL_Folder nativeFolder = SDL_FOLDER_MUSIC;
+        switch (folder)
+        {
+            case UserFolder::Music: nativeFolder = SDL_FOLDER_MUSIC; break;
+            case UserFolder::Pictures: nativeFolder = SDL_FOLDER_PICTURES; break;
+        }
+        const char* path = SDL_GetUserFolder(nativeFolder);
+        return path ? path : std::string();
+    }
+
     bool Sdl3FileSystem::TryLoadFile(const std::string& path, std::vector<std::uint8_t>& data) const
     {
         std::size_t size = 0;

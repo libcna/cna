@@ -45,6 +45,9 @@ namespace CNA::Platform::Common {
         [[nodiscard]] std::string GetPreferencesPath(const std::string& organization,
                                                      const std::string& application) const override;
 
+        /** @brief Gets a configured Music/Pictures path, or empty when unavailable. */
+        [[nodiscard]] std::string GetUserFolder(UserFolder folder) const override;
+
         /**
          * @brief Reads a whole file into memory.
          *

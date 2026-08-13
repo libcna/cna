@@ -10,9 +10,7 @@
 #include "CNA/Internal/Media/VisualizationFFT.hpp"
 
 #ifdef SOUND_ENABLED
-#include <SDL3/SDL.h>
-#include <SDL3_mixer/SDL_mixer.h>
-#include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "CNA/Internal/Audio/MixerEngine.hpp"
 #endif
 
 namespace Microsoft::Xna::Framework::Media
@@ -56,12 +54,13 @@ namespace Microsoft::Xna::Framework::Media
 #ifdef SOUND_ENABLED
     namespace
     {
-        MIX_Track*  g_musicTrack  = nullptr;
-        MIX_Audio*  g_musicAudio  = nullptr;
+        CNA::Internal::Audio::MixerTrack* g_musicTrack = nullptr;
+        CNA::Internal::Audio::MixerAudioPtr g_musicAudio;
 
         std::atomic<bool> g_songEnded{false};
 
-        void SDLCALL OnMusicTrackStopped(void* /*userdata*/, MIX_Track* /*track*/)
+        void OnMusicTrackStopped(void* /*userdata*/,
+                                 CNA::Internal::Audio::MixerTrack* /*track*/)
         {
             // Called from the audio thread — only set a flag.
             g_songEnded.store(true, std::memory_order_relaxed);
@@ -69,29 +68,24 @@ namespace Microsoft::Xna::Framework::Media
 
         // Runs on the AUDIO THREAD for every mixed buffer: must stay real-time safe (no
         // allocation, no locking, no exceptions). VisualizationCapture::Push is written to that
-        // contract. SDL3_mixer hands us float32 PCM directly, so no format conversion is needed --
-        // only a downmix to mono (plan_media.md MEDIA-186).
-        void SDLCALL OnPostMix(void* /*userdata*/, MIX_Mixer* /*mixer*/,
-                                const SDL_AudioSpec* spec, float* pcm, int samples)
+        // contract. The audio facade supplies float32 PCM directly, so no format conversion is
+        // needed -- only a downmix to mono (plan_media.md MEDIA-186).
+        void OnPostMix(void* /*userdata*/, int channels, float* pcm, int samples)
         {
-            g_visualizationCapture.Push(pcm, samples, spec != nullptr ? spec->channels : 1);
+            g_visualizationCapture.Push(pcm, samples, channels > 0 ? channels : 1);
         }
 
         void DestroyMusicAudio()
         {
-            if (g_musicAudio)
-            {
-                MIX_DestroyAudio(g_musicAudio);
-                g_musicAudio = nullptr;
-            }
+            g_musicAudio.reset();
         }
 
         void DestroyMusicTrack()
         {
             if (g_musicTrack)
             {
-                MIX_StopTrack(g_musicTrack, 0);
-                MIX_DestroyTrack(g_musicTrack);
+                CNA::Internal::Audio::StopMixerTrack(g_musicTrack);
+                CNA::Internal::Audio::DestroyMixerTrack(g_musicTrack);
                 g_musicTrack = nullptr;
             }
         }
@@ -100,7 +94,7 @@ namespace Microsoft::Xna::Framework::Media
         {
             if (g_musicTrack)
             {
-                MIX_SetTrackGain(g_musicTrack, muted ? 0.0f : vol);
+                CNA::Internal::Audio::SetMixerTrackGain(g_musicTrack, muted ? 0.0f : vol);
             }
         }
     }
@@ -200,28 +194,19 @@ namespace Microsoft::Xna::Framework::Media
         }
 
         // The flag is assigned only from what ACTUALLY happened, never up front. An earlier version
-        // set it before even obtaining the mixer, so a GetMixer() failure left
+        // set it before even obtaining the mixer, so a mixer-creation failure left
         // IsVisualizationEnabled reporting true with no mixer and no callback (plan_media.md
         // MEDIA-222).
 #ifdef SOUND_ENABLED
         try
         {
-            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
-
             if (!value)
             {
                 // Disabling always ends with the user-visible flag false: the caller asked for off
                 // and no data will be served either way.
                 g_visualizationEnabled = false;
 
-                if (mixer == nullptr)
-                {
-                    // No mixer exists, so no callback can be running.
-                    g_visualizationTapInstalled = false;
-                    g_visualizationCapture.Reset();
-                    return;
-                }
-                if (MIX_SetPostMixCallback(mixer, nullptr, nullptr))
+                if (CNA::Internal::Audio::SetMixerPostMixCallback(nullptr, nullptr))
                 {
                     // Uninstall confirmed -- nothing can be writing, so clearing is safe.
                     g_visualizationTapInstalled = false;
@@ -234,13 +219,9 @@ namespace Microsoft::Xna::Framework::Media
             }
 
             // Enabling: only report enabled once a tap is genuinely installed.
-            if (mixer == nullptr)
-            {
-                return; // flag stays false
-            }
             // Clear BEFORE installing: once the callback is live the audio thread owns the buffer.
             g_visualizationCapture.Reset();
-            if (MIX_SetPostMixCallback(mixer, OnPostMix, nullptr))
+            if (CNA::Internal::Audio::SetMixerPostMixCallback(OnPostMix, nullptr))
             {
                 g_visualizationTapInstalled = true;
                 g_visualizationEnabled = true;
@@ -249,9 +230,9 @@ namespace Microsoft::Xna::Framework::Media
         }
         catch (const std::exception&)
         {
-            // GetMixer() throws when no audio device can be created at all (e.g. a headless
-            // machine). No callback was ever installed, so clearing is safe -- but enabling must
-            // NOT be reported as successful.
+            // Mixer creation throws when no audio device can be created at all (e.g. a headless
+            // machine). No callback was installed, so clearing is safe -- but enabling must not
+            // be reported as successful.
             g_visualizationCapture.Reset();
             g_visualizationTapInstalled = false;
             g_visualizationEnabled = false;
@@ -287,7 +268,7 @@ namespace Microsoft::Xna::Framework::Media
 #ifdef SOUND_ENABLED
         if (g_musicTrack)
         {
-            MIX_PauseTrack(g_musicTrack);
+            CNA::Internal::Audio::PauseMixerTrack(g_musicTrack);
         }
 #endif
         TimerStop();
@@ -340,7 +321,7 @@ namespace Microsoft::Xna::Framework::Media
 #ifdef SOUND_ENABLED
         if (g_musicTrack)
         {
-            MIX_ResumeTrack(g_musicTrack);
+            CNA::Internal::Audio::ResumeMixerTrack(g_musicTrack);
         }
 #endif
         TimerStart();
@@ -543,23 +524,22 @@ namespace Microsoft::Xna::Framework::Media
         DestroyMusicAudio();
         g_songEnded.store(false, std::memory_order_relaxed);
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
-
         // Load the song file (streaming, no full predecode for long music tracks).
-        g_musicAudio = MIX_LoadAudio(mixer, song->getHandle().c_str(), false);
+        g_musicAudio = CNA::Internal::Audio::LoadMixerAudioFile(
+            song->getHandle(), /*predecode=*/false);
         if (!g_musicAudio)
         {
             return;
         }
 
-        g_musicTrack = MIX_CreateTrack(mixer);
+        g_musicTrack = CNA::Internal::Audio::CreateMixerTrack();
         if (!g_musicTrack)
         {
             DestroyMusicAudio();
             return;
         }
 
-        if (!MIX_SetTrackAudio(g_musicTrack, g_musicAudio))
+        if (!CNA::Internal::Audio::SetMixerTrackAudio(g_musicTrack, g_musicAudio.get()))
         {
             DestroyMusicTrack();
             DestroyMusicAudio();
@@ -567,24 +547,26 @@ namespace Microsoft::Xna::Framework::Media
         }
 
         ApplyMusicVolume(volume_, isMuted_);
-        MIX_SetTrackStoppedCallback(g_musicTrack, OnMusicTrackStopped, nullptr);
+        CNA::Internal::Audio::SetMixerTrackStoppedCallback(
+            g_musicTrack, OnMusicTrackStopped, nullptr);
 
         // Report duration from the audio asset.
-        SDL_AudioSpec spec{};
-        if (MIX_GetAudioFormat(g_musicAudio, &spec) && spec.freq > 0)
+        const auto format = CNA::Internal::Audio::GetMixerAudioFormat(g_musicAudio.get());
+        if (format.sampleRate > 0)
         {
-            Sint64 frames = MIX_GetAudioDuration(g_musicAudio);
+            const std::int64_t frames =
+                CNA::Internal::Audio::GetMixerAudioDuration(g_musicAudio.get());
             if (frames > 0)
             {
                 song->setDurationProperty(
                     System::TimeSpan::FromSeconds(
-                        static_cast<double>(frames) / spec.freq
+                        static_cast<double>(frames) / format.sampleRate
                     )
                 );
             }
         }
 
-        if (!MIX_PlayTrack(g_musicTrack, 0))
+        if (!CNA::Internal::Audio::PlayMixerTrack(g_musicTrack))
         {
             DestroyMusicTrack();
             DestroyMusicAudio();

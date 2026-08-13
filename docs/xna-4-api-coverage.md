@@ -631,11 +631,12 @@ both but never throws either from its own Audio source either), not a gap.
 
 ### `Microsoft::Xna::Framework::Media`
 
-- `Song`, `SongCollection`, `MediaPlayer`, `MediaQueue`: implemented with SDL_mixer.
-- `Album`, `Artist`, `Genre`, `Picture`, `Playlist` and their collections: stub.
-- `MediaLibrary`: stub.
-- `Video`, `VideoPlayer`: implemented (FFmpeg renderer).
-- **Status:** Partial
+- `Song`, `SongCollection`, `MediaPlayer`, `MediaQueue`: implemented through CNA's audio facade.
+- `Album`, `Artist`, `Genre`, `Picture`, `Playlist` and their collections: implemented by the
+  local-library index, including tags, playlists, thumbnails, and platform-provided user folders.
+- `MediaLibrary`: implemented as a synchronous local-library snapshot.
+- `Video`, `VideoPlayer`: implemented with FFmpeg decoding and an opaque CNA mixer playback stream.
+- **Status:** Implemented, with the documented compatibility deviations in `CHECKLIST.md`.
 
 ### `Microsoft::Xna::Framework::Storage`
 
@@ -843,7 +844,7 @@ maturity levels.
 | `PackedVector` (all 17 types) | ~100 % | Full Pack/Unpack with correct rounding; golden-value + edge-case tests |
 | `SpriteFont` / `Model` | ~80 % | Functional for typical use; some edge-case APIs stubs |
 | `SoundEffect / SoundEffectInstance` | ~95 % | SDL3_mixer backend; real filters, instance-tracking cascade; 3D is pan+attenuation+Doppler (no HRTF/elevation, documented) |
-| `MediaPlayer / VideoPlayer` | ~85 % | FFmpeg video; SDL_mixer audio; Album/Artist/Genre stub |
+| `MediaPlayer / VideoPlayer` | ~95 % | FFmpeg video; CNA audio facade; local Album/Artist/Genre/Picture/Playlist library implemented |
 | `ContentManager` | ~65 % | File-extension readers; no XNB; no ServiceProvider property |
 | `StorageDevice / StorageContainer` | ~90 % | Native filesystem; full XNA API shape |
 | `GamePad / Keyboard / Mouse` (XNA 4.0 core) | ~100 % behavior | SDL3 renderer; FNA-faithful `GetHashCode`/`ToString`/ordering, keycode/scancode maps, dead-zone math, button/axis mapping — all wired and tested (`feature/input` Phases I3–I5, I9–I10). `Mouse::SetPosition` now converts logical→window for scaled/letterboxed windows (a-0001, task 846) — no remaining input-layer gap; residual items are platform/hardware-gated only. |

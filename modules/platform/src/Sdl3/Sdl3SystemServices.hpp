@@ -69,6 +69,8 @@ namespace CNA::Platform::Sdl3 {
          */
         [[nodiscard]] std::string GetPreferencesPath(const std::string& organization,
                                                      const std::string& application) const override;
+        /** @brief Gets a well-known user folder. @param folder Which folder. @return Its path or empty. */
+        [[nodiscard]] std::string GetUserFolder(UserFolder folder) const override;
         /**
          * @brief Loads a whole file.
          * @param path The file to read.
