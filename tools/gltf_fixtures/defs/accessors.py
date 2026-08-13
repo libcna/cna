@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from ..builder import (FLOAT, TRIANGLES, UNSIGNED_BYTE, UNSIGNED_SHORT, GltfBuilder, flatten,
                        pack)
+from ..l5 import unsupported as l5_unsupported
 from ..manifest import Defect, Fixture, l3_primitive, world_positions
+from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
 
 _INTERLEAVED_POSITIONS = [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 3.0, 0.0)]
 _INTERLEAVED_NORMALS = [(0.0, 0.0, 1.0), (0.0, 0.0, 1.0), (0.0, 0.0, 1.0)]
@@ -368,5 +370,290 @@ def mat3_padded() -> Fixture:
     )
 
 
-FIXTURES = [interleaved_position_normal, sparse_position, sparse_indices, sparse_interleaved_base,
-            mat3_padded]
+# --- §24.2's remaining accessor rungs (`GLTF-399`) -----------------------------------------------
+
+_UV = [(0.0, 0.0), (0.75, 0.125), (0.25, 0.875)]
+
+
+def accessor_offset() -> Fixture:
+    """A non-zero ``accessor.byteOffset`` into a view whose own offset is zero."""
+    b = GltfBuilder("accessor-offset")
+    # Two vertex sets in one tightly packed view; the accessor reads the SECOND, so its own
+    # byteOffset is the only term that selects it. A decoder ignoring it reads the decoy.
+    decoy = [(-9.0, -9.0, -9.0)] * 3
+    packed = pack(flatten(decoy) + flatten(TRIANGLE_POSITIONS), FLOAT)
+    offset = b.append_bytes(packed, alignment=4)
+    view = b.add_buffer_view(offset, len(packed))
+    position = b.add_accessor(usage="POSITION", component_type=FLOAT, accessor_type="VEC3",
+                              count=3, expected=flatten(TRIANGLE_POSITIONS), buffer_view=view,
+                              byte_offset=36, min_=[0.0, 0.0, 0.0], max_=[1.0, 1.0, 0.0])
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{"attributes": {"POSITION": position, "NORMAL": normal},
+                        "indices": indices, "mode": TRIANGLES}], name="OffsetTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="accessor-offset", audit_fixture=None, owning_group="accessors",
+        description="POSITION read at accessor.byteOffset 36 into a view that starts at 0, with a "
+                    "decoy vertex set occupying the first 36 bytes. The decoy is what makes the "
+                    "fixture discriminate: a decoder ignoring accessor.byteOffset reads three "
+                    "(-9,-9,-9) vertices rather than something merely shifted.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["accessor.byteOffset", "decoy data before the accessor"],
+        spec_anchors=["accessors", "data-alignment"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="OffsetTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+def bufferview_offset() -> Fixture:
+    """The other address term: a non-zero ``bufferView.byteOffset``, accessor offset zero."""
+    b = GltfBuilder("bufferview-offset")
+    b.pad(64)
+    packed = pack(flatten(TRIANGLE_POSITIONS), FLOAT)
+    offset = b.append_bytes(packed, alignment=4)
+    view = b.add_buffer_view(offset, len(packed))
+    position = b.add_accessor(usage="POSITION", component_type=FLOAT, accessor_type="VEC3",
+                              count=3, expected=flatten(TRIANGLE_POSITIONS), buffer_view=view,
+                              min_=[0.0, 0.0, 0.0], max_=[1.0, 1.0, 0.0])
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{"attributes": {"POSITION": position, "NORMAL": normal},
+                        "indices": indices, "mode": TRIANGLES}], name="ViewOffsetTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="bufferview-offset", audit_fixture=None, owning_group="accessors",
+        description="POSITION in a bufferView that starts 64 bytes into the buffer, with the "
+                    "accessor's own offset zero. The pair with accessor-offset: §8.1 adds both "
+                    "terms, and a decoder that implements only one passes exactly one of these "
+                    "two fixtures.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["bufferView.byteOffset", "leading buffer padding"],
+        spec_anchors=["accessors", "buffers-and-buffer-views"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="ViewOffsetTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+def bufferview_stride_tight() -> Fixture:
+    """A view declaring a ``byteStride`` exactly equal to the element size."""
+    b = GltfBuilder("bufferview-stride-tight")
+    packed = pack(flatten(TRIANGLE_POSITIONS), FLOAT)
+    offset = b.append_bytes(packed, alignment=4)
+    # byteStride 12 == the element size. Legal, redundant, and emitted by real exporters -- and a
+    # reader that treats "has a byteStride" as "is interleaved" has an extra code path to get
+    # wrong here, on data that is not interleaved at all.
+    view = b.add_buffer_view(offset, len(packed), byte_stride=12)
+    position = b.add_accessor(usage="POSITION", component_type=FLOAT, accessor_type="VEC3",
+                              count=3, expected=flatten(TRIANGLE_POSITIONS), buffer_view=view,
+                              min_=[0.0, 0.0, 0.0], max_=[1.0, 1.0, 0.0])
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{"attributes": {"POSITION": position, "NORMAL": normal},
+                        "indices": indices, "mode": TRIANGLES}], name="TightStrideTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="bufferview-stride-tight", audit_fixture=None, owning_group="accessors",
+        description="A bufferView declaring byteStride 12 for VEC3<float> data -- exactly the "
+                    "element size. Legal and redundant, which is why exporters emit it and why a "
+                    "reader that branches on 'has a byteStride' rather than on the value takes its "
+                    "interleaved path over data that is not interleaved.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["byteStride equal to element size", "redundant stride"],
+        spec_anchors=["buffers-and-buffer-views", "accessors"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="TightStrideTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+def interleaved_pos_nrm_uv() -> Fixture:
+    """Three attributes in one strided view, each at its own accessor offset."""
+    b = GltfBuilder("interleaved-pos-nrm-uv")
+    interleaved = b"".join(
+        pack(list(p) + list(n) + list(uv), FLOAT)
+        for p, n, uv in zip(TRIANGLE_POSITIONS, TRIANGLE_NORMALS, _UV))
+    offset = b.append_bytes(interleaved, alignment=4)
+    view = b.add_buffer_view(offset, len(interleaved), byte_stride=32)
+    position = b.add_accessor(usage="POSITION", component_type=FLOAT, accessor_type="VEC3",
+                              count=3, expected=flatten(TRIANGLE_POSITIONS), buffer_view=view,
+                              byte_offset=0, min_=[0.0, 0.0, 0.0], max_=[1.0, 1.0, 0.0])
+    normal = b.add_accessor(usage="NORMAL", component_type=FLOAT, accessor_type="VEC3", count=3,
+                            expected=flatten(TRIANGLE_NORMALS), buffer_view=view, byte_offset=12)
+    uv = b.add_accessor(usage="TEXCOORD_0", component_type=FLOAT, accessor_type="VEC2", count=3,
+                        expected=flatten(_UV), buffer_view=view, byte_offset=24)
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{"attributes": {"POSITION": position, "NORMAL": normal, "TEXCOORD_0": uv},
+                        "indices": indices, "mode": TRIANGLES}], name="InterleavedThreeTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="interleaved-pos-nrm-uv", audit_fixture=None, owning_group="accessors",
+        description="POSITION, NORMAL and TEXCOORD_0 interleaved at stride 32 with offsets 0, 12 "
+                    "and 24. Three accessors over one view -- the layout every real exporter "
+                    "produces, and the one where an off-by-one in the offset table gives each "
+                    "attribute its neighbour's data rather than nothing.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["three interleaved attributes", "per-accessor byteOffset", "byteStride 32"],
+        spec_anchors=["accessors", "buffers-and-buffer-views"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="InterleavedThreeTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, texcoords=_UV,
+            indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+        # No L5 golden, deliberately and with the reason recorded: this primitive authors UVs and
+        # no TANGENT, so CNA generates a tangent basis with GLTF-180's angle-weighted algorithm.
+        # Reproducing that algorithm in the generator is GLTF-149's work, and emitting a golden
+        # nobody has checked would be worse than having none. The fixture's subject is the
+        # interleaved address arithmetic, which L2 and L3 assert in full.
+        l5=l5_unsupported("the primitive authors UVs and no TANGENT, so its packed bytes contain a "
+                          "generated tangent basis this generator does not reimplement",
+                          ["GLTF-149", "GLTF-180"]),
+    )
+
+
+def stride_padded() -> Fixture:
+    """A stride larger than the attributes it carries -- padding a reader must skip."""
+    b = GltfBuilder("stride-padded")
+    # 24 bytes of data (POSITION + NORMAL) in a 40-byte stride: 16 bytes of padding per vertex,
+    # filled with a sentinel a reader would decode as garbage if it walked tightly.
+    interleaved = b"".join(
+        pack(list(p) + list(n), FLOAT) + pack([-9.0, -9.0, -9.0, -9.0], FLOAT)
+        for p, n in zip(TRIANGLE_POSITIONS, TRIANGLE_NORMALS))
+    offset = b.append_bytes(interleaved, alignment=4)
+    view = b.add_buffer_view(offset, len(interleaved), byte_stride=40)
+    position = b.add_accessor(usage="POSITION", component_type=FLOAT, accessor_type="VEC3",
+                              count=3, expected=flatten(TRIANGLE_POSITIONS), buffer_view=view,
+                              min_=[0.0, 0.0, 0.0], max_=[1.0, 1.0, 0.0])
+    normal = b.add_accessor(usage="NORMAL", component_type=FLOAT, accessor_type="VEC3", count=3,
+                            expected=flatten(TRIANGLE_NORMALS), buffer_view=view, byte_offset=12)
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{"attributes": {"POSITION": position, "NORMAL": normal},
+                        "indices": indices, "mode": TRIANGLES}], name="PaddedStrideTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="stride-padded", audit_fixture=None, owning_group="accessors",
+        description="24 bytes of attributes in a 40-byte stride, with the 16 bytes of padding "
+                    "filled with a -9 sentinel. A reader that walks tightly rather than by stride "
+                    "decodes the padding as its second vertex, which is a visibly broken triangle "
+                    "rather than a subtly wrong one.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["stride larger than the data", "inter-vertex padding", "sentinel padding"],
+        spec_anchors=["buffers-and-buffer-views"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="PaddedStrideTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+def two_primitives_one_buffer() -> Fixture:
+    """Two primitives whose accessors read different windows of one bufferView."""
+    b = GltfBuilder("two-primitives-one-buffer")
+    second = [(2.0, 0.0, 0.0), (3.0, 0.0, 0.0), (2.0, 1.0, 0.0)]
+    packed = pack(flatten(TRIANGLE_POSITIONS) + flatten(second), FLOAT)
+    offset = b.append_bytes(packed, alignment=4)
+    view = b.add_buffer_view(offset, len(packed))
+    first_pos = b.add_accessor(usage="POSITION (primitive 0)", component_type=FLOAT,
+                               accessor_type="VEC3", count=3,
+                               expected=flatten(TRIANGLE_POSITIONS), buffer_view=view,
+                               min_=[0.0, 0.0, 0.0], max_=[1.0, 1.0, 0.0])
+    second_pos = b.add_accessor(usage="POSITION (primitive 1)", component_type=FLOAT,
+                                accessor_type="VEC3", count=3, expected=flatten(second),
+                                buffer_view=view, byte_offset=36,
+                                min_=[2.0, 0.0, 0.0], max_=[3.0, 1.0, 0.0])
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    # Two MESHES on two nodes rather than two primitives in one mesh, and the reason is a gap
+    # worth naming: the L4 oracle enumerates one instance per node-with-a-mesh, while CNA
+    # enumerates one per primitive, so a multi-primitive mesh makes the two sides disagree about
+    # the instance COUNT before any geometry is compared. That is an oracle limitation, not a CNA
+    # defect, and closing it (`GLTF-399`'s residue) means teaching both the oracle and the
+    # generator to enumerate per primitive. The subject here -- two accessors reading different
+    # windows of one bufferView, with a shared NORMAL and index accessor -- is unaffected.
+    first_mesh = b.add_mesh([{"attributes": {"POSITION": first_pos, "NORMAL": normal},
+                              "indices": indices, "mode": TRIANGLES}], name="FirstWindowTri")
+    second_mesh = b.add_mesh([{"attributes": {"POSITION": second_pos, "NORMAL": normal},
+                               "indices": indices, "mode": TRIANGLES}], name="SecondWindowTri")
+    first_node = b.add_node(name="FirstWindow", mesh=first_mesh)
+    second_node = b.add_node(name="SecondWindow", mesh=second_mesh)
+    b.add_scene([first_node, second_node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="two-primitives-one-buffer", audit_fixture=None, owning_group="accessors",
+        description="Two meshes whose POSITION accessors are different 36-byte windows of ONE "
+                    "bufferView, sharing a single NORMAL accessor and a single index accessor "
+                    "between them. Sharing is the point: a reader that caches decoded data by "
+                    "bufferView rather than by accessor gives both meshes the same vertices, and "
+                    "one that re-decodes the shared accessors per primitive is merely slow.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["shared bufferView", "shared normal and index accessors",
+                  "two windows of one view"],
+        spec_anchors=["meshes-overview", "buffers-and-buffer-views"],
+        l3={"primitives": [
+            l3_primitive(mesh=first_mesh, mesh_name="FirstWindowTri", primitive=0, mode=TRIANGLES,
+                         positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+                         indices=TRIANGLE_INDICES),
+            l3_primitive(mesh=second_mesh, mesh_name="SecondWindowTri", primitive=0, mode=TRIANGLES,
+                         positions=second, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES),
+        ]},
+        l4=world_positions(b, {first_mesh: list(TRIANGLE_POSITIONS), second_mesh: list(second)}),
+    )
+
+
+def accessor_minmax() -> Fixture:
+    """An accessor whose declared ``min``/``max`` are the tight bounds of its data."""
+    b = GltfBuilder("accessor-minmax")
+    spread = [(-2.0, 0.5, -3.0), (4.0, -1.5, 0.0), (1.0, 6.0, 2.0)]
+    position = b.add_packed_accessor(usage="POSITION", values=spread, accessor_type="VEC3",
+                                     with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{"attributes": {"POSITION": position, "NORMAL": normal},
+                        "indices": indices, "mode": TRIANGLES}], name="BoundedTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="accessor-minmax", audit_fixture=None, owning_group="accessors",
+        description="A POSITION accessor whose min/max are the tight per-component bounds of data "
+                    "spread over both signs on every axis. §3.6.1 requires the bounds on a "
+                    "POSITION accessor, and they are the one piece of redundancy glTF gives a "
+                    "reader -- GLTF-061 cross-checks every decoded value against them, and a "
+                    "decoder that is wrong in a way the bounds can see is caught before any "
+                    "geometry is compared.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["declared min/max", "tight bounds", "values on both signs"],
+        spec_anchors=["accessors"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="BoundedTri", primitive=0, mode=TRIANGLES,
+            positions=spread, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=world_positions(b, {mesh: list(spread)}),
+    )
+
+
+FIXTURES = [accessor_offset, bufferview_offset, bufferview_stride_tight,
+            interleaved_position_normal, interleaved_pos_nrm_uv, stride_padded,
+            two_primitives_one_buffer, sparse_position, sparse_indices,
+            sparse_interleaved_base, accessor_minmax, mat3_padded]

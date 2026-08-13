@@ -594,7 +594,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**95 of the 102** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**101 of the 109** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. The seven without one are the fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`); their manifests record
@@ -759,10 +759,17 @@ written for this document: two descriptions of the same fixture are two things t
 | Fixture | Group | Layers | What it proves |
 |---|---|---|---|
 | `gltf-required-extension-unsupported` | container | L1, L3 | extensionsRequired; unsupported extension; import rejection |
+| `accessor-offset` | accessors | L1, L2, L3 | accessor.byteOffset; decoy data before the accessor |
+| `bufferview-offset` | accessors | L1, L2, L3 | bufferView.byteOffset; leading buffer padding |
+| `bufferview-stride-tight` | accessors | L1, L2, L3 | byteStride equal to element size; redundant stride |
 | `interleaved-position-normal` | accessors | L1, L2, L3 | bufferView.byteStride; bufferView.byteOffset; accessor.byteOffset; interleaved attributes |
+| `interleaved-pos-nrm-uv` | accessors | L1, L2, L3 | three interleaved attributes; per-accessor byteOffset; byteStride 32 |
+| `stride-padded` | accessors | L1, L2, L3 | stride larger than the data; inter-vertex padding; sentinel padding |
+| `two-primitives-one-buffer` | accessors | L1, L2, L3 | shared bufferView; shared normal and index accessors; two windows of one view |
 | `sparse-position` | accessors | L1, L2, L3 | accessor.sparse; absent base bufferView; zero-initialised base array |
 | `sparse-indices` | accessors | L1, L2, L3 | accessor.sparse on indices; UNSIGNED_SHORT indices |
 | `sparse-interleaved-base` | accessors | L1, L2, L3, L4 | accessor.sparse; bufferView.byteStride; interleaved base array; tightly packed sparse values |
+| `accessor-minmax` | accessors | L1, L2, L3 | declared min/max; tight bounds; values on both signs |
 | `mat3-padded` | accessors | L1, L2, L3 | MAT3 accessor; §3.6.2.4 column padding; unreferenced accessor |
 | `u8-idx` | component-types | L1, L2, L3 | UNSIGNED_BYTE indices |
 | `u16-idx` | component-types | L1, L2, L3 | UNSIGNED_SHORT indices |
@@ -860,6 +867,6 @@ written for this document: two descriptions of the same fixture are two things t
 | `skin-joint-index-out-of-range` | robustness | L1, L2 | out-of-range JOINTS_0 index; weighted stray influence; import rejection |
 | `skin-joint-index-padding` | robustness | L1, L2, L3 | out-of-range JOINTS_0 index; zero-weight padding slot |
 | `bad-animation-input-order` | robustness | L1, L2 | non-monotonic sampler input; animation input ordering; import rejection |
-Seven fixtures declare no L5 golden because the importer must **refuse** them, and a refusal has no
+8 fixtures declare no L5 golden -- most because the importer must **refuse** them, and one (`interleaved-pos-nrm-uv`) because its packed bytes contain a generated tangent basis the generator does not reimplement (`GLTF-149`), and a refusal has no
 buffers; their manifests say so explicitly (`l5.supported = false`) with the reason and the owning
 task, which is what keeps "no golden" distinguishable from "golden forgotten".

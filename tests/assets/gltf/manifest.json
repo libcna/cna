@@ -12,10 +12,10 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 102,
+  "distinctAssetCount": 109,
   "owningGroupCounts": {
     "container": 1,
-    "accessors": 5,
+    "accessors": 12,
     "component-types": 8,
     "topology": 8,
     "normals": 2,
@@ -274,6 +274,51 @@
       "auditFixture": null
     },
     {
+      "id": "accessor-offset",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "accessor.byteOffset",
+        "decoy data before the accessor"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "bufferview-offset",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "bufferView.byteOffset",
+        "leading buffer padding"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "bufferview-stride-tight",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "byteStride equal to element size",
+        "redundant stride"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "interleaved-position-normal",
       "owningGroup": "accessors",
       "referencingGroups": [],
@@ -289,6 +334,54 @@
         "interleaved attributes"
       ],
       "auditFixture": "f5"
+    },
+    {
+      "id": "interleaved-pos-nrm-uv",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "three interleaved attributes",
+        "per-accessor byteOffset",
+        "byteStride 32"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "stride-padded",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "stride larger than the data",
+        "inter-vertex padding",
+        "sentinel padding"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "two-primitives-one-buffer",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "shared bufferView",
+        "shared normal and index accessors",
+        "two windows of one view"
+      ],
+      "auditFixture": null
     },
     {
       "id": "sparse-position",
@@ -338,6 +431,22 @@
         "bufferView.byteStride",
         "interleaved base array",
         "tightly packed sparse values"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "accessor-minmax",
+      "owningGroup": "accessors",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "declared min/max",
+        "tight bounds",
+        "values on both signs"
       ],
       "auditFixture": null
     },
@@ -2009,6 +2118,56 @@
       "sha256": "962b43bad2d86c96bbaf424f2f563b0b96ace7e736ee51e0494022f0d769115d"
     },
     {
+      "path": "accessor-minmax.expected.json",
+      "bytes": 6631,
+      "sha256": "a2538059c6d9fad4877f5f50d3d4d0ab411763c1e03bcd726b7ee88a62191346"
+    },
+    {
+      "path": "accessor-minmax.glb",
+      "bytes": 792,
+      "sha256": "014d59d748125f7ad7d155d36c222a0d9114692b15e1cd2bee990a4b2b93afe0"
+    },
+    {
+      "path": "accessor-minmax.gltf",
+      "bytes": 1431,
+      "sha256": "cc0283cecca2bf72798ab786e18cd493c419e9ca0886ac548d90df4fa861f688"
+    },
+    {
+      "path": "accessor-minmax.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "accessor-minmax.vb.bin",
+      "bytes": 144,
+      "sha256": "d4487505b0eae80a4d969ffaed95fec3c41a6b65ccb22110e52502cf7efbedab"
+    },
+    {
+      "path": "accessor-offset.expected.json",
+      "bytes": 6527,
+      "sha256": "963f8c2ce66a4a6ab9cd9e56b1f0443feaef0089da9cce3c8f4d96783dc4edb1"
+    },
+    {
+      "path": "accessor-offset.glb",
+      "bytes": 840,
+      "sha256": "830b11c7515e4df2adff034edc15e68aaecd0c53e59ff741a7a2d18ed58f3578"
+    },
+    {
+      "path": "accessor-offset.gltf",
+      "bytes": 1501,
+      "sha256": "c422d73c373562e4ac4be639370011cb7a75779f7120c0a21ab892d858da0d4d"
+    },
+    {
+      "path": "accessor-offset.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "accessor-offset.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "anim-cubicspline.expected.json",
       "bytes": 9915,
       "sha256": "e4cfbb7ceb9757212ee01dccc1f60813951e0b5c62ad5183934ebd5a3f875897"
@@ -2329,6 +2488,56 @@
       "sha256": "0c256889e138a0e28ef3be7ae76bb875fd9c71c12eb96c77d2071a93ef2ece05"
     },
     {
+      "path": "bufferview-offset.expected.json",
+      "bytes": 6500,
+      "sha256": "19c296485912a846ca312c31aa69b9e48690661c6c87732addaec6633de6881d"
+    },
+    {
+      "path": "bufferview-offset.glb",
+      "bytes": 860,
+      "sha256": "9aef0c6836c2696fec456c86f4e552173bc0c12e3ed4c82efa0e915f38441077"
+    },
+    {
+      "path": "bufferview-offset.gltf",
+      "bytes": 1523,
+      "sha256": "07a01618f3eb4c5332e957c901c84f19270220e3adb282765d4621ff0bde1e1b"
+    },
+    {
+      "path": "bufferview-offset.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "bufferview-offset.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "bufferview-stride-tight.expected.json",
+      "bytes": 6564,
+      "sha256": "875d4ac83ca18855cfdba88c8b6be1cd6833faed9adba1a7854fa7fb34c71e67"
+    },
+    {
+      "path": "bufferview-stride-tight.glb",
+      "bytes": 808,
+      "sha256": "c9245f7dfb147e5ad5ae0aa4eb2ce6e57881e4234e156cbfedb597ad91a53b2d"
+    },
+    {
+      "path": "bufferview-stride-tight.gltf",
+      "bytes": 1456,
+      "sha256": "48302bd6a67be6ec0cd991e9a703acb2687781b79b8e748c3ceaaa1d5ad91367"
+    },
+    {
+      "path": "bufferview-stride-tight.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "bufferview-stride-tight.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "camera-animated-node.expected.json",
       "bytes": 10385,
       "sha256": "9bf2dc9f9f84601eff8c66296e0b77278c5c53df4d7c1bbd019aee559ffea25b"
@@ -2492,6 +2701,21 @@
       "path": "gltf-required-extension-unsupported.gltf",
       "bytes": 1551,
       "sha256": "0333a3dc1788d6d4f7902ce8dabe748804130b0421ed4c6dffaa7c7e2d710813"
+    },
+    {
+      "path": "interleaved-pos-nrm-uv.expected.json",
+      "bytes": 6393,
+      "sha256": "b61c26443ca0b58bda8677f6eaa3198c269f1756a93e4f6a22e6f0e532845196"
+    },
+    {
+      "path": "interleaved-pos-nrm-uv.glb",
+      "bytes": 904,
+      "sha256": "fca46a4374587484bfca9cb43b3e1ac66021c1441deece2b3266fac514a4bf2c"
+    },
+    {
+      "path": "interleaved-pos-nrm-uv.gltf",
+      "bytes": 1596,
+      "sha256": "a3819c4b3383885878ba2cdafb01e217bec18c8fae70bb4d95d7cde972794ad7"
     },
     {
       "path": "interleaved-position-normal.expected.json",
@@ -3909,6 +4133,31 @@
       "sha256": "f31bfd60f9003ff800cc162a6f1702d02a0461fad2513ed714943d5fc6ba05cd"
     },
     {
+      "path": "stride-padded.expected.json",
+      "bytes": 6513,
+      "sha256": "056ccf132f97e7d177c98b9607407aa868ed17841f34f26c11d23294165f20e2"
+    },
+    {
+      "path": "stride-padded.glb",
+      "bytes": 832,
+      "sha256": "e09a39ca0654bc14b29ff0e2aefc433edd78c946f8e72313d68de17f8dded132"
+    },
+    {
+      "path": "stride-padded.gltf",
+      "bytes": 1469,
+      "sha256": "8424ea1a30891fe87357936fd34780e555f48524ad08ff8459ff591803902c30"
+    },
+    {
+      "path": "stride-padded.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "stride-padded.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "tex-dual-texture-stride.expected.json",
       "bytes": 9771,
       "sha256": "1ed3a74b32e849222439d34e6f62c76119a922d0bba20d5c874d8cd975702067"
@@ -3982,6 +4231,41 @@
       "path": "tex-texture-transform.vb.bin",
       "bytes": 192,
       "sha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5"
+    },
+    {
+      "path": "two-primitives-one-buffer.expected.json",
+      "bytes": 10377,
+      "sha256": "774efd3a5c383e51042a5dc0730720b8a872dfbc3992fca39daa29383e5fab0f"
+    },
+    {
+      "path": "two-primitives-one-buffer.glb",
+      "bytes": 1092,
+      "sha256": "0ae44a2b74824780a6c44d1ffb1724186f8dfe527b4293709de96ab53c235cbd"
+    },
+    {
+      "path": "two-primitives-one-buffer.gltf",
+      "bytes": 2037,
+      "sha256": "49724b08102df560a00caf338ee9bec85e50be99c5831b1467370950479af7f7"
+    },
+    {
+      "path": "two-primitives-one-buffer.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "two-primitives-one-buffer.p1.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "two-primitives-one-buffer.p1.vb.bin",
+      "bytes": 144,
+      "sha256": "042cca7b21fb26eb4bf94a6407007126f3b9607d31910c9e7795677e4244e6ab"
+    },
+    {
+      "path": "two-primitives-one-buffer.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "u16-idx.expected.json",
