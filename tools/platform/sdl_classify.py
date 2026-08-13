@@ -210,6 +210,7 @@ RULES: list[tuple[str, str, str]] = [
     (r"^SDL_TEXTINPUT", "input", "text input constant"),
     (r"^SDL_(Mouse|GetMouse|SetMouse|WarpMouse|CaptureMouse|GetRelativeMouse|SetRelativeMouse|GetGlobalMouse|HasMouse|GetMice|GetDefaultCursor|CreateCursor|CreateColorCursor|CreateSystemCursor|SetCursor|GetCursor|DestroyCursor|ShowCursor|HideCursor|CursorVisible|Cursor$|SystemCursor)", "input", "mouse/cursor"),
     (r"^SDL_BUTTON", "input", "mouse button"),
+    (r"^SDL_MOUSEWHEEL_", "input", "mouse wheel direction"),
     (r"^SDL_(Gamepad|GAMEPAD_|GetGamepad|OpenGamepad|CloseGamepad|IsGamepad|AddGamepadMapping|ReloadGamepadMappings|GetNumGamepad|RumbleGamepad|SendGamepadEffect|SetGamepadLED|SetGamepadSensor|SetGamepadPlayerIndex)", "input", "gamepad"),
     (r"^SDL_(Joystick|JOYSTICK_|GetJoystick|OpenJoystick|CloseJoystick|LockJoysticks|UnlockJoysticks|RumbleJoystick|SendJoystickEffect|SetJoystickLED|SetJoystickPlayerIndex|AttachVirtualJoystick|DetachVirtualJoystick|IsJoystickVirtual|SetJoystickVirtual|UpdateJoysticks|HasJoystick|GetJoysticks|VirtualJoystick)", "input", "joystick"),
     (r"^SDL_HAT_", "input", "joystick hat"),
