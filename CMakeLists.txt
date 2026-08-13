@@ -137,6 +137,7 @@ endif()
 # Playback/capture implementation selection (plan_platform.md PLAT-93). This is intentionally
 # independent from CNA_PLATFORM: window/input and audio backends are orthogonal choices.
 include(cmake/AudioPlatformSelection.cmake)
+include(cmake/Sdl2OnlyConfiguration.cmake)
 
 # Platform ratchet (plan_platform.md PLAT-8): reports how much of CNA still calls SDL
 # directly outside the PLAT-3 allowlist, and warns when that count has gone up. Warning

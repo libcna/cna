@@ -13,6 +13,10 @@
       "category": "audio-native-integration",
       "max_references": 19
     },
+    "modules/audio/tests/CNA/Audio/Platform/Sdl2AudioDeviceTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 1
+    },
     "modules/audio/tests/CNA/Audio/Platform/Sdl3AudioRecordingDeviceTests.cpp": {
       "category": "audio-native-integration",
       "max_references": 1

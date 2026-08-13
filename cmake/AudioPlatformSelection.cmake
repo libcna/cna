@@ -10,9 +10,9 @@
 # IN_LIST semantics in the lightweight selection tests and in a normal project include.
 cmake_policy(SET CMP0057 NEW)
 
-set(CNA_AUDIO_PLATFORM "SDL3" CACHE STRING "Audio platform implementation (SDL3 | NULL)")
+set(CNA_AUDIO_PLATFORM "SDL3" CACHE STRING "Audio platform implementation (SDL3 | SDL2 | NULL)")
 
-set(_cna_audio_platforms_available SDL3 NULL)
+set(_cna_audio_platforms_available SDL3 SDL2 NULL)
 
 # Recognized future directions, deliberately not aliases for SDL3. A misspelled or premature
 # selection must fail at configure time instead of producing a binary with an unintended backend.

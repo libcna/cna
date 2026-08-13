@@ -63,7 +63,8 @@ ALLOWLIST_PREFIXES: tuple[str, ...] = (
     "modules/renderers/sdl-gpu/",
     "modules/renderers/fna3d/",
     "modules/renderers/freedirect/",
-    "modules/audio/src/Platform/Sdl3/",  # playback and recording implementations
+    "modules/audio/src/Platform/Sdl3/",  # SDL3 playback and recording implementations
+    "modules/audio/src/Platform/Sdl2/",  # SDL2 playback implementation
     "modules/audio/src/Backend/Sdl3Mixer/",  # memory mixer implementation
 )
 

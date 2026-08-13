@@ -60,7 +60,6 @@ set(CNA_DRACO_AVAILABLE ${CNA_DRACO_AVAILABLE} PARENT_SCOPE)
 add_library(cna_build_flags INTERFACE)
 add_library(CNA::BuildFlags ALIAS cna_build_flags)
 target_compile_definitions(cna_build_flags INTERFACE
-        SOUND_ENABLED
         XNA5
         ${CNA_RENDERER_DEFINE}
         $<$<BOOL:${CNA_CNAEXT}>:CNA_CNAEXT>
@@ -68,6 +67,13 @@ target_compile_definitions(cna_build_flags INTERFACE
         $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>
         $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_FFMPEG_AVAILABLE>
 )
+
+# The current high-level mixer is SDL3_mixer based.  Do not advertise sound support in a
+# configuration which deliberately selected a non-SDL3 audio transport: that would compile
+# the XNA facade against an implementation which cannot exist in the resulting binary.
+if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
+    target_compile_definitions(cna_build_flags INTERFACE SOUND_ENABLED)
+endif()
 
 # Defines one CNA module: a STATIC library named cna_<name> with alias CNA::<Alias>, the
 # shared public build surface, and the calling module's own public include/ root. No module

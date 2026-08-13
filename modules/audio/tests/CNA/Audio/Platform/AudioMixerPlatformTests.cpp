@@ -32,7 +32,7 @@ TEST(AudioMixerPlatformContractTests, SelectedDeviceOwnsPlaybackAndDrivesMemoryM
 
 #if defined(CNA_AUDIO_PLATFORM_SDL3)
     SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SDL_AUDIODRIVER", "dummy", true);
-#elif defined(CNA_AUDIO_PLATFORM_NULL)
+#elif defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
     const SDL_InitFlags audioBefore = SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO;
 #else
 #error "CNA audio platform selection did not define an implementation"
@@ -59,7 +59,7 @@ TEST(AudioMixerPlatformContractTests, SelectedDeviceOwnsPlaybackAndDrivesMemoryM
     }
     EXPECT_GT(CNA::Internal::Audio::GetMixerGeneratedByteCount(), 0u);
     EXPECT_FALSE(CNA::Internal::Audio::HasMixerOutputError());
-#if defined(CNA_AUDIO_PLATFORM_NULL)
+#if defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
     EXPECT_EQ(SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO, audioBefore)
         << "NULL selection must not initialize or fall back to SDL3 audio";
 #endif

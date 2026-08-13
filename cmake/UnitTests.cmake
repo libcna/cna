@@ -72,6 +72,31 @@ if(CNA_BUILD_TESTS)
             ".*/modules/audio/tests/.*/Sdl3AudioDeviceTests\\.cpp$")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
             ".*/modules/audio/tests/.*/Sdl3AudioRecordingDeviceTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/audio/tests/.*/AudioMixerPlatformTests\\.cpp$")
+        # These suites exercise the SDL3_mixer implementation itself, not the portable XNA
+        # facade.  The implementation is purposefully absent from SDL2/NULL link graphs.
+        foreach(_cna_sdl3_mixer_test IN ITEMS
+                AudioMixerTests
+                CueTests
+                DynamicSoundEffectInstanceTests
+                OfflineAudioRendererTests
+                SoundBankTests
+                SoundEffectInstanceTests
+                SoundEffectTests)
+            list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+                ".*/modules/audio/tests/.*/${_cna_sdl3_mixer_test}\\.cpp$")
+        endforeach()
+    endif()
+    if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL2")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/audio/tests/.*/Sdl2AudioDeviceTests\\.cpp$")
+    else()
+        # SDL2 and SDL3 deliberately publish incompatible interface requirements.  The general
+        # CnaTests binary retains SDL3-native renderer fixtures, so keep the native SDL2 audio
+        # fixture in its own executable just like the SDL2 platform-event fixture above.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/audio/tests/.*/Sdl2AudioDeviceTests\\.cpp$")
     endif()
 
     # plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
@@ -245,6 +270,20 @@ if(CNA_BUILD_TESTS)
         add_test(NAME CnaSdl2PlatformTests COMMAND cna_platform_sdl2_tests)
         set_tests_properties(CnaSdl2PlatformTests PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy")
+    endif()
+
+    if(CNA_AUDIO_PLATFORM STREQUAL "SDL2")
+        add_executable(cna_audio_sdl2_tests
+            modules/audio/tests/CNA/Audio/Platform/Sdl2AudioDeviceTests.cpp)
+        target_include_directories(cna_audio_sdl2_tests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src)
+        target_link_libraries(cna_audio_sdl2_tests PRIVATE
+            cna_audio
+            SDL2::SDL2
+            gtest_main)
+        add_test(NAME CnaSdl2AudioDeviceTests COMMAND cna_audio_sdl2_tests)
+        set_tests_properties(CnaSdl2AudioDeviceTests PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy")
     endif()
 
     # The metal and glide policy suites deliberately compile on every renderer (see their own
@@ -500,16 +539,18 @@ if(CNA_BUILD_TESTS)
     # contract visible as a dedicated CTest; the shared conformance suite runs every implementation
     # compiled into the selected build (SDL3 + NULL by default, NULL in the SDL-free build).
     cna_register_renderer_test(NAME CnaAudioPlatformTests
-        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
+        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl2AudioDeviceTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
         LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
-    # plan_platform.md PLAT-93: test the cache default, both implemented values, every reserved
+    # plan_platform.md PLAT-93: test the cache default, every implemented value, every reserved
     # future identifier, and an unknown value without spawning six full nested project configs.
     # The selection file is intentionally script-mode-safe for exactly this validation path.
-    foreach(_cna_audio_selection_case IN ITEMS DEFAULT SDL3 NULL OPENAL WASAPI ALSA BOGUS)
+    foreach(_cna_audio_selection_case IN ITEMS DEFAULT SDL3 SDL2 NULL OPENAL WASAPI ALSA BOGUS)
         if(_cna_audio_selection_case STREQUAL "DEFAULT" OR
            _cna_audio_selection_case STREQUAL "SDL3")
             set(_cna_audio_selection_expected "Using SDL3 audio platform implementation")
+        elseif(_cna_audio_selection_case STREQUAL "SDL2")
+            set(_cna_audio_selection_expected "Using SDL2 audio platform implementation")
         elseif(_cna_audio_selection_case STREQUAL "NULL")
             set(_cna_audio_selection_expected "Using NULL audio platform implementation")
         elseif(_cna_audio_selection_case STREQUAL "BOGUS")
@@ -528,6 +569,12 @@ if(CNA_BUILD_TESTS)
         set_tests_properties(CnaAudioPlatformSelection_${_cna_audio_selection_case}
             PROPERTIES LABELS "audio;platform")
     endforeach()
+
+    add_test(NAME CnaSdl2OnlyRendererGate
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SDL2_ONLY_GUARD_FILE=${CMAKE_SOURCE_DIR}/cmake/Sdl2OnlyConfiguration.cmake
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Sdl2OnlyRendererGate.cmake)
+    set_tests_properties(CnaSdl2OnlyRendererGate PROPERTIES LABELS "platform;configuration")
 
     # plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
     # get one from SDL's dummy driver rather than a display server. That only works in a process
