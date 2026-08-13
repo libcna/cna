@@ -47,7 +47,7 @@ on:
       - 'modules/content/src/Xna/ContentManager.cpp'
       - 'modules/storage/src/StorageDevice.cpp'
       - 'scripts/check-apple-platform-cmake.sh'
-      - 'tests/apple/ios_smoke.cpp'
+      - 'tests/apple/apple_smoke.cpp'
   pull_request:
   workflow_dispatch:
 
@@ -128,6 +128,61 @@ jobs:
           ./cmake-build-macos/CnaTests
           --gtest_filter='PlatformTest.*:GameWindowTest.*:GameTest.MobileLifecycleEventsSuspendResumeAndTerminateTheLoop:Storage*:*DesktopOS*'
 
+      # Exercise the opt-in shipping layout in a separate build tree so the CnaTests binary above
+      # remains a directly invokable executable. The persistent SDL install and ccache are shared,
+      # so this mostly reuses work while validating the otherwise-uncovered bundle fixup path.
+      - name: Configure self-contained application bundle
+        working-directory: cna
+        run: >
+          cmake -S . -B cmake-build-macos-bundle
+          -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+          -DCNA_BUILD_TESTS=OFF
+          -DCNA_BUILD_EXAMPLES=OFF
+          -DCNA_ENABLE_NET=OFF
+          -DCNA_BUILD_APPLE_SMOKE_APP=ON
+          -DCNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build self-contained application bundle
+        working-directory: cna
+        run: cmake --build cmake-build-macos-bundle --target cna_macos_smoke --parallel 3
+
+      - name: Verify and launch the macOS application bundle
+        working-directory: cna
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          app="$(find cmake-build-macos-bundle -type d -name 'cna_macos_smoke.app' -print -quit)"
+          if [ -z "$app" ]; then
+            echo "cna_macos_smoke.app not found" >&2
+            exit 1
+          fi
+          executable="$app/Contents/MacOS/cna_macos_smoke"
+          test -x "$executable"
+          plutil -lint "$app/Contents/Info.plist"
+          test -d "$app/Contents/Frameworks"
+
+          dependencies="$(otool -L "$executable")"
+          echo "$dependencies"
+          if grep -Eq '(\.sdl-prebuilt|/opt/homebrew|/usr/local)' <<< "$dependencies"; then
+            echo "macOS bundle executable retains a build-machine dependency" >&2
+            exit 1
+          fi
+          framework_dependencies="$(find "$app/Contents/Frameworks" -maxdepth 1 -type f -exec otool -L {} +)"
+          echo "$framework_dependencies"
+          if grep -Eq '(\.sdl-prebuilt|/opt/homebrew|/usr/local)' <<< "$framework_dependencies"; then
+            echo "embedded macOS libraries retain a build-machine dependency" >&2
+            exit 1
+          fi
+
+          output="$("$executable" 2>&1)"
+          echo "$output"
+          grep -q 'CNA_APPLE_SMOKE_OK' <<< "$output"
+
   ios-build:
     name: iOS ${{ matrix.name }}
     runs-on: macos-14
@@ -207,7 +262,7 @@ jobs:
             ON)  expected='platform 7' ;;   # PLATFORM_IOSSIMULATOR
             OFF) expected='platform 2' ;;   # PLATFORM_IOS
           esac
-          echo "$platform" | grep -q "$expected" || {
+          grep -q "$expected" <<< "$platform" || {
             echo "expected $expected in the Mach-O build-version load command" >&2
             exit 1
           }
@@ -230,15 +285,15 @@ jobs:
             ON)  expected='platform 7' ;;   # PLATFORM_IOSSIMULATOR
             OFF) expected='platform 2' ;;   # PLATFORM_IOS
           esac
-          echo "$platform" | grep -q "$expected"
+          grep -q "$expected" <<< "$platform"
 
           symbols="$(nm "$executable")"
-          echo "$symbols" | grep -Eq ' [Tt] _main$'
-          echo "$symbols" | grep -Eq ' [Tt] _SDL_main$'
+          grep -Eq ' [Tt] _main$' <<< "$symbols"
+          grep -Eq ' [Tt] _SDL_main$' <<< "$symbols"
 
           dependencies="$(otool -L "$executable")"
           echo "$dependencies"
-          if echo "$dependencies" | grep -Eq '(\.sdl-prebuilt|/opt/homebrew|/usr/local|libSDL3(_image|_mixer)?[^/]*)'; then
+          if grep -Eq '(\.sdl-prebuilt|/opt/homebrew|/usr/local|libSDL3(_image|_mixer)?[^/]*)' <<< "$dependencies"; then
             echo "iOS smoke app contains a non-system dynamic SDL/build-machine dependency" >&2
             exit 1
           fi
@@ -258,4 +313,4 @@ jobs:
           xcrun simctl spawn "$udid" launchctl setenv SDL_AUDIODRIVER dummy
           output="$(xcrun simctl launch --console "$udid" com.openeggbert.cna.cna-ios-smoke 2>&1)"
           echo "$output"
-          echo "$output" | grep -q 'CNA_IOS_SMOKE_OK'
+          grep -q 'CNA_APPLE_SMOKE_OK' <<< "$output"

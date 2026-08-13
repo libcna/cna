@@ -9,10 +9,10 @@
 # the vendored SDL sub-builds are separate cmake invocations that must inherit the same
 # sysroot/architecture/deployment target this file settles (see cmake/ThirdPartySDL.cmake).
 #
-# Support boundary (docs/apple-platforms.md): macOS is a first-class desktop target with a
-# GitHub Actions gate. iOS is a *build-configuration* target — the toolchain, bundle layout,
-# vendored SDL sub-builds and renderer gating are wired and CI-compiled, but no CNA runtime,
-# pixel or device evidence exists for it. Nothing here claims iOS runtime support.
+# Support boundary (docs/apple-platforms.md): macOS has a native build/test gate. iOS is an
+# experimental target: CI final-links device and simulator application bundles and launches one
+# CNA frame in the simulator, but no physical-device, pixel, input, audio, storage or performance
+# evidence exists. Nothing here claims complete iPhone support.
 
 include_guard(GLOBAL)
 
@@ -237,9 +237,9 @@ endfunction()
 # wgpu-native, LLGL, sokol, Magnum, FNA3D). Configuring them would fail deep inside a dependency
 # build with an unreadable error; this fails immediately with a readable one.
 #
-# Being on the list means CNA wires the renderer up for iOS and CI compiles it. It does not mean
-# the renderer has been observed producing correct pixels on a device or simulator — see
-# docs/apple-platforms.md for the per-renderer evidence boundary.
+# Being on the list means CNA wires the renderer up for iOS, CI final-links it into a device app,
+# and the simulator smoke app exercises one frame. It does not mean correct pixels or any input,
+# audio, storage or physical-device behavior have been observed — see docs/apple-platforms.md.
 set(CNA_APPLE_IOS_RENDERERS
     "SDL_RENDERER"  # SDL3's own 2D renderer; Metal-backed on iOS
     CACHE INTERNAL "Renderers CNA wires up for an iOS build" FORCE)
@@ -259,8 +259,9 @@ function(cna_apple_validate_renderer renderer)
     list(FIND CNA_APPLE_IOS_RENDERERS "${renderer}" _renderer_index)
     if(NOT _renderer_index EQUAL -1)
         message(STATUS
-            "CNA: iOS build using ${renderer} — build-configuration support only, no device or "
-            "simulator runtime evidence (docs/apple-platforms.md).")
+            "CNA: iOS build using ${renderer} — experimental; CI final-links a device app and "
+            "launches a simulator smoke app, with no physical-device or pixel evidence "
+            "(docs/apple-platforms.md).")
         return()
     endif()
 

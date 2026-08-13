@@ -28,14 +28,10 @@ namespace CNA::Internal
             // SDL's UIKit view controller reads SDL_HINT_ORIENTATIONS each time UIKit asks for
             // supportedInterfaceOrientations. The XNA property is set after Game has constructed
             // its initial window, so explicitly invalidate UIKit's cached answer here.
-            if (@available(iOS 16.0, *))
-            {
-                [controller setNeedsUpdateOfSupportedInterfaceOrientations];
-            }
-            else
-            {
-                [UIViewController attemptRotationToDeviceOrientation];
-            }
+            // CNA's iOS floor is 16.3 (floating-point std::to_chars availability), so the modern
+            // instance API is always present. Keeping the pre-iOS-16 class-method fallback would
+            // only compile a dead, deprecated branch.
+            [controller setNeedsUpdateOfSupportedInterfaceOrientations];
         }
     }
 }
