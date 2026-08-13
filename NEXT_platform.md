@@ -15,15 +15,19 @@
 
 ## 1. READ THIS FIRST — the build-configuration trap
 
-There are **four** build directories and they are not interchangeable. A change can compile and
-pass in two of them while not being compiled *at all* in the third.
+There are **three current** build directories and they are not interchangeable. A change can
+compile and pass in two of them while not being compiled *at all* in the third.
 
 | Directory | Configure | Covers |
 |---|---|---|
 | `cmake-build-debug` | default (`CNA_PLATFORM=SDL3`, `CNA_GRAPHICS_RENDERER=HEADLESS`) | the SDL3 platform implementation |
 | `cmake-build-headless` | `-DCNA_PLATFORM=HEADLESS` | the second platform implementation; the conformance suite's other arm |
-| `cmake-build-devices` | `-DCNA_DEVICES=ON -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_PLATFORM=SDL3` | **all of `modules/devices-ext` and `modules/devices`** |
 | `cmake-build-terminal` | `-DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_AUDIO_PLATFORM=NULL` | terminal selection plus SDL-free silent playback |
+
+There is currently **no `cmake-build-devices` directory**. To avoid another multi-gigabyte build
+tree, devices changes are checked by temporarily configuring the existing `cmake-build-debug`
+with `-DCNA_DEVICES=ON`, building/testing it, and then configuring it back to
+`-DCNA_DEVICES=OFF` and rebuilding. Do not leave that cache in the temporary state.
 
 `TerminalPlatform` itself is compiled in **every** POSIX configuration, not only that last one —
 same arrangement as `HeadlessPlatform`, so the conformance suite always has three implementations
@@ -48,7 +52,10 @@ caching*. Cap parallelism at `-j4`.
 ```bash
 cmake --build cmake-build-debug    --target CnaTests -j4 && ./cmake-build-debug/CnaTests
 cmake --build cmake-build-headless --target CnaTests -j4 && ./cmake-build-headless/CnaTests
-cmake --build cmake-build-devices  --target CnaTests -j4 && ./cmake-build-devices/CnaTests
+cmake -S . -B cmake-build-debug -DCNA_DEVICES=ON
+cmake --build cmake-build-debug --target CnaTests -j4 && ./cmake-build-debug/CnaTests
+cmake -S . -B cmake-build-debug -DCNA_DEVICES=OFF
+cmake --build cmake-build-debug --target CnaTests -j4
 
 cd cmake-build-debug && ctest -R CnaPlatform --output-on-failure   # SDL_VIDEODRIVER=dummy suites
 
@@ -70,7 +77,7 @@ real video or their registered, deliberately scoped dummy-driver suites.
 |---|---|
 | `cmake-build-debug` | **5812 passed, 0 failed** |
 | `cmake-build-headless` | **5655 passed, 0 failed** |
-| `cmake-build-devices` | **6471 passed, 0 failed** |
+| historical dedicated devices run | **6471 passed, 0 failed**; the current workflow uses the temporary debug-cache toggle above |
 | `cmake-build-terminal` | **6315 passed, 0 failed** |
 
 PLAT-141's final conformance run mechanically lists **25 cases per implementation** (18 general +
@@ -99,7 +106,7 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **173 files / 2557 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+Ratchet: **171 files / 2544 references** of direct SDL coupling outside the PLAT-3 allowlist, down
 from the 253 / 3641 baseline. Contract: 27 headers, 520 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
@@ -124,7 +131,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**119 ✅ · 3 🟨 · 31 ⬜ · 1 ⛔ · 1 ❌** across `plan_platform.md` — about **77 %** of the 155
+**120 ✅ · 3 🟨 · 31 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — about **77 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -132,8 +139,8 @@ task rows complete.
 - **Phase 2** (SDL3 implementation) — largely done.
 - **Phase 3** (runtime) — `Game` owns the platform; timing, cursor and the event loop are migrated;
   `GraphicsDeviceManager` is SDL-free, and PLAT-55's registered golden oracle passes through the
-  new path. PLAT-50 now delegates `GameWindow` behavior to the platform window; PLAT-51 follows
-  PLAT-102's removal of its last SDL-native consumer, see §5.
+  new path. PLAT-50 now delegates `GameWindow` behavior to the platform window; PLAT-102 removed
+  the last SDL-native consumer of its escape hatch, so PLAT-51 is the immediate next task.
 - **Phase 4** (renderers) — PLAT-57's boundary decision, PLAT-59/60/61's common-interface cleanup,
   and PLAT-62's platform-owned `GraphicsDevice` window are complete; implementation continues at
   PLAT-58. 46 identities remain in scope.
@@ -230,7 +237,7 @@ each, zero difference). The round trip is now checked before it is trusted.
 
 | Task | Blocked on | Why |
 |---|---|---|
-| PLAT-51 | PLAT-102 | `DisplayInfo` is the only remaining caller of `GetNativeSdlWindowEXT()` and needs a platform safe-area query before the public accessor can change coherently. |
+| *(none)* | — | No implementation task is currently blocked; PLAT-102 unblocked PLAT-51. |
 
 ---
 
@@ -253,11 +260,10 @@ each, zero difference). The round trip is now checked before it is trusted.
 ## 7. Immediate next steps
 
 1. **Close the public window escape hatch.** PLAT-50 is complete: `GameWindow` behavior is fully
-   delegated to the `IPlatformWindow` owned by `GraphicsDevice`, with direct SDL retained only in
-   the compatibility constructor/accessor that PLAT-51 explicitly removes. First complete PLAT-102:
-   move `DisplayInfo`'s content-scale and safe-area queries behind the platform boundary. It is the
-   only `GetNativeSdlWindowEXT()` caller. Then PLAT-51 can replace that accessor with
-   `NativeWindowHandle` without an alias. PLAT-58 separately replaces the renderer creation
+   delegated to the `IPlatformWindow` owned by `GraphicsDevice`. PLAT-102 moved `DisplayInfo`'s
+   content-scale and safe-area queries behind the platform boundary, so PLAT-51 can now remove the
+   compatibility SDL constructor and replace `GetNativeSdlWindowEXT()` with
+   `GetNativeWindowHandleEXT()` returning `NativeWindowHandle`, without an alias. PLAT-58 separately replaces the renderer creation
    `SDL_Window*` with `WindowId` + native handle + physical size/scale. Do not introduce a temporary
    `void*` or pass `IPlatformWindow*` into renderers; both would violate PLAT-57's accepted boundary.
 

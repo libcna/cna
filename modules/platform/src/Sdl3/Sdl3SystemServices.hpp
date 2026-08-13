@@ -32,6 +32,14 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] bool TryGetDisplayForWindow(const IPlatformWindow& window,
                                                   DisplayInfo& display) const override;
         /**
+         * @brief Gets a window's unobscured interactive region.
+         * @param window The window to query.
+         * @param safeArea Receives the client-coordinate safe area; untouched on false.
+         * @return True when SDL reports the region.
+         */
+        [[nodiscard]] bool TryGetSafeAreaForWindow(
+            const IPlatformWindow& window, WindowBounds& safeArea) const override;
+        /**
          * @brief Gets the modes a display supports.
          * @param displayId Which display.
          * @return The supported modes; empty when unknown.

@@ -120,6 +120,25 @@ namespace CNA::Platform::Sdl3 {
         return true;
     }
 
+    bool Sdl3Displays::TryGetSafeAreaForWindow(
+        const IPlatformWindow& window, WindowBounds& safeArea) const
+    {
+        const auto* sdlWindow = dynamic_cast<const Sdl3Window*>(&window);
+        if (sdlWindow == nullptr)
+        {
+            return false;
+        }
+
+        SDL_Rect area{};
+        if (!SDL_GetWindowSafeArea(sdlWindow->GetSdlWindow(), &area))
+        {
+            return false;
+        }
+
+        safeArea = WindowBounds{area.x, area.y, area.w, area.h};
+        return true;
+    }
+
     std::vector<DisplayMode> Sdl3Displays::GetDisplayModes(const std::uint32_t displayId) const
     {
         int count = 0;

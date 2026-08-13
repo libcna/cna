@@ -235,6 +235,37 @@ TEST_F(Sdl3DisplayTest, DisplayForAWindowMatchesAnEnumeratedDisplay)
         << "a window's display must be one of the enumerated displays";
 }
 
+TEST_F(Sdl3DisplayTest, SafeAreaForAWindowIsReportedInClientCoordinates)
+{
+    WindowDescription description;
+    description.title = "safe-area probe";
+    description.width = 160;
+    description.height = 90;
+    description.visible = false;
+    std::unique_ptr<IPlatformWindow> window;
+    try
+    {
+        window = platform_->CreateWindow(description);
+    }
+    catch (const PlatformException& error)
+    {
+        GTEST_SKIP() << "window creation unavailable here: " << error.what();
+    }
+
+    WindowBounds safeArea;
+    if (!platform_->GetDisplays()->TryGetSafeAreaForWindow(*window, safeArea))
+    {
+        GTEST_SKIP() << "this video driver reports no safe area for a window";
+    }
+
+    EXPECT_GE(safeArea.x, 0);
+    EXPECT_GE(safeArea.y, 0);
+    EXPECT_GT(safeArea.width, 0);
+    EXPECT_GT(safeArea.height, 0);
+    EXPECT_LE(safeArea.x + safeArea.width, description.width);
+    EXPECT_LE(safeArea.y + safeArea.height, description.height);
+}
+
 TEST_F(Sdl3DisplayTest, UnknownDisplayIdYieldsNoModesRatherThanThrowing)
 {
     EXPECT_TRUE(platform_->GetDisplays()->GetDisplayModes(0xDEADBEEF).empty());

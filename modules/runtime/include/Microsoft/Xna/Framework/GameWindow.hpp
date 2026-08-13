@@ -21,6 +21,11 @@ namespace CNA::Platform
     class IPlatformWindow;
 }
 
+namespace CNA::Devices
+{
+    class DisplayInfo;
+}
+
 namespace Microsoft::Xna::Framework
 {
     class Game;
@@ -36,6 +41,7 @@ namespace Microsoft::Xna::Framework
     {
         friend class Game;
         friend class GraphicsDeviceManager;
+        friend class CNA::Devices::DisplayInfo;
 
     public:
         /** @brief String type alias for C++ compatibility. */
@@ -228,6 +234,7 @@ namespace Microsoft::Xna::Framework
 
         void setWindowInternal(CNA::Platform::IPlatformWindow* window,
                                SharpRuntime::IntPtr legacyHandle);
+        [[nodiscard]] CNA::Platform::IPlatformWindow* getPlatformWindowInternal() const;
         void setCurrentOrientationProperty(DisplayOrientation value);
         void updateFromPlatform();
         void refreshCachedPlatformState(bool raiseEvents);

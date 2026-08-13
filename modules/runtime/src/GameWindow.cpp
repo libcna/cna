@@ -288,6 +288,11 @@ namespace Microsoft::Xna::Framework
         refreshCachedPlatformState(false);
     }
 
+    CNA::Platform::IPlatformWindow* GameWindow::getPlatformWindowInternal() const
+    {
+        return window_;
+    }
+
     void GameWindow::setCurrentOrientationProperty(DisplayOrientation value)
     {
         if (currentOrientation_ != value)

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Platform/IPlatformWindow.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
 
 namespace CNA::Platform {
-
-    class IPlatformWindow;
 
     // --- Clipboard -----------------------------------------------------------------------------
 
@@ -94,6 +94,16 @@ namespace CNA::Platform {
          */
         [[nodiscard]] virtual bool TryGetDisplayForWindow(const IPlatformWindow& window,
                                                           DisplayInfo& display) const = 0;
+
+        /**
+         * @brief Gets the unobscured interactive region of a window.
+         *
+         * @param window The window whose client area is being described.
+         * @param safeArea Receives the region in client coordinates; untouched on false.
+         * @return True when the platform can report a safe area for this window.
+         */
+        [[nodiscard]] virtual bool TryGetSafeAreaForWindow(
+            const IPlatformWindow& window, WindowBounds& safeArea) const = 0;
 
         /**
          * @brief Gets the modes a display supports.
