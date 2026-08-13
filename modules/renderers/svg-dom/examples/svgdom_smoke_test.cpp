@@ -44,7 +44,7 @@ using namespace CNA::Internal::Renderers::SvgDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 15;
+    constexpr int kExpectedChecks = 16;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(int, JsSurfaceExists, (), {
@@ -58,6 +58,18 @@ namespace
         return canvas && root && canvas.style.opacity === '0' &&
                canvas.style.visibility !== 'hidden' && root.style.pointerEvents === 'none' &&
                root.getAttribute('pointer-events') === 'none' ? 1 : 0;
+    });
+
+    EM_JS(int, JsSurfaceAnchoredToInputCanvas, (), {
+        const canvas = Module['canvas'] || document.querySelector('canvas');
+        const root = Module['cnaSvgDomRoot'];
+        if (!canvas || !root) return 0;
+        const canvasRect = canvas.getBoundingClientRect();
+        const rootRect = root.getBoundingClientRect();
+        const close = (a, b) => Math.abs(a - b) < 0.51;
+        return close(rootRect.left, canvasRect.left) && close(rootRect.top, canvasRect.top) &&
+               close(rootRect.width, canvasRect.width) && close(rootRect.height, canvasRect.height)
+                   ? 1 : 0;
     });
 
     // SVGDOM-A: sprites now live inside per-FLUSH ordered slots (Module['cnaSvgDomFlushSlots']),
@@ -123,6 +135,7 @@ namespace
 #else
     int JsSurfaceExists() { return 0; }
     int JsInputSurfacePreserved() { return 0; }
+    int JsSurfaceAnchoredToInputCanvas() { return 0; }
     int JsFlushSlot0ChildCount() { return -1; }
     int JsSpriteHasImageWithPngHref(int) { return 0; }
     int JsSpriteHasFilter(int) { return 0; }
@@ -177,6 +190,8 @@ protected:
             check(JsSurfaceExists() == 1, "a real <svg id=\"cna-svg-dom-root\"> surface was created");
             check(JsInputSurfacePreserved() == 1,
                   "the transparent SDL canvas remains the input target while SVG ignores pointer events");
+            check(JsSurfaceAnchoredToInputCanvas() == 1,
+                  "the visible SVG surface is positioned exactly over SDL's input canvas");
             check(JsSupportsPlusLighter() == 1,
                   "this test browser genuinely supports mix-blend-mode: plus-lighter -- the "
                   "Additive check below is exercising the real CSS blend");

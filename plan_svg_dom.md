@@ -238,6 +238,7 @@ fixed.
 | Task | Status | Description |
 |---|---|---|
 | SVGDOM-5 | ✅ | **Mobile Eggbert integration fix.** `visibility:hidden` removed SDL's exact canvas from browser hit testing while the SVG overlay intercepted pointer events, so the loaded game ignored input. The canvas now stays active at `opacity:0` and the SVG root is pointer-transparent. The same real-game run exposed two Firefox hot paths: alpha animation created/cached a distinct `feColorMatrix` filter for every premultiplied alpha step, and `Present()` reassigned unchanged root geometry every frame. `AlphaBlend` draw RGB is now converted back to straight colour, alpha-only fades use dirty-diffed `<g>` opacity with no SVG filter, filter keys contain RGB only, and unchanged clear colour/surface geometry causes no DOM writes. Host tests cover tint recovery/cache-key stability/mode isolation; browser smoke and pixel suites cover input-surface structure, filter-free opacity fades and the no-double-darkening pixel result. |
+| SVGDOM-6 | ✅ | **Canvas-aligned pointer input.** The visible absolute-positioned SVG root used only the renderer-local presentation offset, so on a normal Emscripten shell it appeared near the page origin while SDL's transparent input canvas remained below the logo/status controls. Root geometry is now anchored to the canvas's `offsetLeft`/`offsetTop` before applying the presentation offset, with the combined position dirty-diffed each frame so host-page layout movement is tracked. The browser smoke suite verifies the SVG and SDL canvas rectangles coincide. |
 
 ---
 

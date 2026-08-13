@@ -257,10 +257,17 @@ EM_JS(void, CNA_SvgDom_PresentFrame, (), {
     }
 });
 
-// Records the backbuffer's own logical geometry and physical placement (offset + scale). SVGDOM-5:
-// Present still checks the geometry every frame so host-page resize/layout changes are observed,
-// but unchanged fields do not get written back. Reassigning width/height/viewBox/styles on a large
-// live SVG tree can invalidate layout and painting in Firefox even when the string value is equal.
+// Records the backbuffer's own logical geometry and physical placement (canvas anchor + viewport
+// offset + scale). SVGDOM-5: Present still checks the geometry every frame so host-page
+// resize/layout changes are observed, but unchanged fields do not get written back. Reassigning
+// width/height/viewBox/styles on a large live SVG tree can invalidate layout and painting in Firefox
+// even when the string value is equal.
+//
+// SVGDOM-6: root and canvas are siblings, but root is position:absolute while the stock Emscripten
+// canvas is a normally-positioned block below the page's logo/status/progress controls. A bare
+// viewport offset therefore placed the visible game near page origin while SDL's pointer handlers
+// remained on the transparent canvas farther down the page. Anchor the root to the canvas's layout
+// position first; the renderer-local presentation offset is only the displacement *inside* it.
 EM_JS(void, CNA_SvgDom_ApplySurfaceGeometry, (int logicalW, int logicalH,
                                               double offsetX, double offsetY,
                                               double scaleX, double scaleY), {
@@ -281,13 +288,17 @@ EM_JS(void, CNA_SvgDom_ApplySurfaceGeometry, (int logicalW, int logicalH,
         root.setAttribute('viewBox', viewBox);
         geometry.viewBox = viewBox;
     }
-    if (geometry.offsetX !== offsetX) {
-        root.style.left = offsetX + 'px';
-        geometry.offsetX = offsetX;
+    const canvas = Module['canvas'] ||
+                   (typeof document === 'undefined' ? null : document.querySelector('canvas'));
+    const left = (canvas ? canvas.offsetLeft : 0) + offsetX;
+    const top = (canvas ? canvas.offsetTop : 0) + offsetY;
+    if (geometry.left !== left) {
+        root.style.left = left + 'px';
+        geometry.left = left;
     }
-    if (geometry.offsetY !== offsetY) {
-        root.style.top = offsetY + 'px';
-        geometry.offsetY = offsetY;
+    if (geometry.top !== top) {
+        root.style.top = top + 'px';
+        geometry.top = top;
     }
     const physicalW = logicalW * scaleX;
     const physicalH = logicalH * scaleY;
