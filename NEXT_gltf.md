@@ -174,31 +174,40 @@ The remaining **~39 are doable in this environment.**
 Ordered by value, not by number. Each is a coherent unit with its own tests and one commit.
 Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is superseded.
 
-1. **Phase 21 viewer rows are the largest *blocked* group and the only path to `GLTF-458`.**
+1. **`GLTF-399` — finish the corpus (109 of 136).** This is now the highest-value *mechanical*
+   work, and four groups are already complete (transforms 17/17, component types 8/8, accessors
+   12/13, morph 12). What is left, in the order it is worth doing:
+   - **skinning 10/16** and **materials 10/12** and **scenes 1/3** and **robustness 7/8** — ordinary
+     work with existing machinery. Start here.
+   - **textures 3/10** — needs real images; `tools/gltf_fixtures/png.py` already emits PNGs, so
+     this is closer than it looks.
+   - **container 1/8** — needs the generator to emit external `.bin`/image sidecars, which it does
+     not do yet. That is the one piece of new machinery.
+   - **Draco 0/4** — `libdraco`-blocked.
+   One residue is an **oracle limitation, not a missing fixture**: the L4 oracle enumerates one
+   instance per node-with-a-mesh while CNA enumerates one per primitive, so a multi-primitive mesh
+   makes the two disagree about the instance count. `two-primitives-one-buffer` is reshaped around
+   it; closing it means teaching both the oracle and `world_positions` to enumerate per primitive.
+2. **Phase 21 viewer rows are the largest *blocked* group and the only path to `GLTF-458`.**
    `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
    without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —
    that is the single most useful thing to tell whoever asks why the milestone is still open.
-2. **`GLTF-236` + `GLTF-237` — the material data model.** The largest structural row left here.
-   `MeshOut` carries loose material fields; `CNAEXT.md` §5.5 sketches a `PbrMaterial` carrier.
+3. **`GLTF-236` + `GLTF-237` — the material data model.** The largest structural row left here.
    Note the distinction the review gate turns on: a **`CNA::Graphics::PbrMaterial`** is new public
    API and needs a `docs/gltf-api-change-review.md` §1 entry first; a purely **internal** grouping
    inside `CNA::Internal::GltfImport` does not, and would be churn without a behavioural change.
    Decide which one the row actually wants before writing any of it.
-3. **`GLTF-343` + `GLTF-344` — `KHR_materials_ior` / `_specular`.** Both are `F0` plumbing sharing
+4. **`GLTF-343` + `GLTF-344` — `KHR_materials_ior` / `_specular`.** Both are `F0` plumbing sharing
    one shader change. **Read this first:** the shader half cannot be verified here — EasyGL needs
    sibling `../easy-gl` and `../meta-gl` checkouts, and `GLTF-157`'s lesson is that an unverified
    renderer change is not a fix. A defensible split is import + effect + `GpuDrawParams` with an
    analytic L6 check, leaving the shader to a session that can run it, but say so in the row.
-4. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
+5. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
    `apt-get install libdraco-dev` — the *cheapest* unblock on the list if the owner allows it, and
    it turns eight blocked rows into ordinary work.
-5. **Second-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
+6. **Second-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
    `398`). `scripts/gltf-renderer-parity.sh` already does the comparison; what is missing is a
-   third and fourth renderer to point it at. `OPENGLES3`/`VULKAN` need checkouts and a GPU.
-6. **`GLTF-399` — the 135-asset corpus.** 75 exist. Everything around it is now mechanical: the
-   generator, `--fixture-table` for the inventory row, the size budget, the determinism check and
-   the per-asset exemption rule. Adding fixtures is the one task that scales without new
-   machinery, and `docs/gltf-conformance.md` §3.7 is the guide.
+   third and fourth renderer to point it at.
 
 **Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to
 add a fixture and when a document belongs inline instead — both were learned the expensive way.
