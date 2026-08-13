@@ -4,6 +4,12 @@
 
 namespace CNA::Internal::Renderers::Canvas
 {
+    /// CANVAS-84: Canvas2D applies tint RGB to straight-alpha pixels and tint A separately via
+    /// globalAlpha. AlphaBlend's XNA draw colour is premultiplied, so recover its straight RGB
+    /// before entering that split path. Pure C++ so the conversion and zero-alpha canonicalization
+    /// are covered by host tests without a browser CanvasRenderingContext2D.
+    Color NormalizeCanvasSpriteTint(const Color& color, bool alphaBlend);
+
     /// plan_canvas.md CANVAS-44: throws std::runtime_error for the narrow, honestly-documented gaps
     /// around Wrap/Mirror addressing combined with an out-of-bounds sourceRectangle (mixed U/V
     /// modes; a tinted draw; an AlphaBlend draw needing per-pixel un-premultiply of the tiled

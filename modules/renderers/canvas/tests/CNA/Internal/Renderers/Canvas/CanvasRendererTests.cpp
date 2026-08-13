@@ -17,6 +17,7 @@
 
 using namespace CNA::Internal::Renderers;
 using namespace CNA::Internal::Renderers::Canvas;
+using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 
@@ -69,6 +70,46 @@ TEST(CanvasBlendStateMapping, NonAddBlendFunctionThrows)
 TEST(CanvasBlendStateMapping, ArbitraryCustomBlendFactorsThrow)
 {
     EXPECT_THROW(BlendStateToCompositeOp(2, 2, 3, 3, 0, 0), std::runtime_error);
+}
+
+TEST(CanvasTintNormalization, AlphaBlendRecoversStraightRgb)
+{
+    const Color normalized = NormalizeCanvasSpriteTint(
+        Color::FromNonPremultiplied(255, 128, 64, 128), true);
+    EXPECT_EQ(normalized.getRProperty(), 255);
+    EXPECT_EQ(normalized.getGProperty(), 128);
+    EXPECT_EQ(normalized.getBProperty(), 64);
+    EXPECT_EQ(normalized.getAProperty(), 128);
+}
+
+TEST(CanvasTintNormalization, AlphaOnlyFadeStaysWhiteAndZeroAlphaIsCanonical)
+{
+    for (const int alpha : {255, 192, 128, 64, 1})
+    {
+        const Color normalized = NormalizeCanvasSpriteTint(
+            Color::FromNonPremultiplied(255, 255, 255, alpha), true);
+        EXPECT_EQ(normalized.getRProperty(), 255);
+        EXPECT_EQ(normalized.getGProperty(), 255);
+        EXPECT_EQ(normalized.getBProperty(), 255);
+        EXPECT_EQ(normalized.getAProperty(), alpha);
+    }
+
+    const Color transparent = NormalizeCanvasSpriteTint(
+        Color::FromNonPremultiplied(12, 34, 56, 0), true);
+    EXPECT_EQ(transparent.getRProperty(), 255);
+    EXPECT_EQ(transparent.getGProperty(), 255);
+    EXPECT_EQ(transparent.getBProperty(), 255);
+    EXPECT_EQ(transparent.getAProperty(), 0);
+}
+
+TEST(CanvasTintNormalization, OtherBlendModesKeepRawChannels)
+{
+    const Color raw(17, 34, 51, 68);
+    const Color unchanged = NormalizeCanvasSpriteTint(raw, false);
+    EXPECT_EQ(unchanged.getRProperty(), 17);
+    EXPECT_EQ(unchanged.getGProperty(), 34);
+    EXPECT_EQ(unchanged.getBProperty(), 51);
+    EXPECT_EQ(unchanged.getAProperty(), 68);
 }
 
 TEST(CanvasRendererThrowNo3D, ClearVariantsThrow)

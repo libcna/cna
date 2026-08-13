@@ -4,6 +4,8 @@
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
+#include <algorithm>
+#include <cstdint>
 #include <stdexcept>
 
 #if defined(__EMSCRIPTEN__)
@@ -221,6 +223,20 @@ namespace CNA::Internal::Renderers::Canvas
         }
     }
 
+    Color NormalizeCanvasSpriteTint(const Color& color, bool alphaBlend)
+    {
+        if (!alphaBlend) return color;
+
+        const std::uint8_t alpha = color.getAProperty();
+        if (alpha == 0) return Color(255, 255, 255, 0);
+        const auto straight = [alpha](std::uint8_t premultiplied) {
+            const int value = (static_cast<int>(premultiplied) * 255 + alpha / 2) / alpha;
+            return static_cast<std::uint8_t>(std::min(255, value));
+        };
+        return Color(straight(color.getRProperty()), straight(color.getGProperty()),
+                     straight(color.getBProperty()), alpha);
+    }
+
     void ValidateAddressModeCombination(int addressU, int addressV, bool exceedsBounds,
                                         bool tinted, bool needsUnpremultiply)
     {
@@ -260,9 +276,11 @@ namespace CNA::Internal::Renderers::Canvas
             const bool exceedsBounds = sourceRectangle.X < 0 || sourceRectangle.Y < 0 ||
                 sourceRectangle.X + sourceRectangle.Width > texture.GetWidth() ||
                 sourceRectangle.Y + sourceRectangle.Height > texture.GetHeight();
-            const bool tinted = color.getRProperty() != 255 || color.getGProperty() != 255 ||
-                                color.getBProperty() != 255;
             const bool needsUnpremultiply = CNA_Canvas2D_GetNeedsUnpremultiply() != 0;
+            const Color normalizedTint = NormalizeCanvasSpriteTint(color, needsUnpremultiply);
+            const bool tinted = normalizedTint.getRProperty() != 255 ||
+                                normalizedTint.getGProperty() != 255 ||
+                                normalizedTint.getBProperty() != 255;
             ValidateAddressModeCombination(addressU, addressV, exceedsBounds, tinted, needsUnpremultiply);
 
             const bool flipH = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0;
@@ -273,7 +291,8 @@ namespace CNA::Internal::Renderers::Canvas
                 destinationRectangle.Width, destinationRectangle.Height,
                 static_cast<double>(rotation), static_cast<double>(origin.X), static_cast<double>(origin.Y),
                 flipH ? 1 : 0, flipV ? 1 : 0,
-                color.getRProperty(), color.getGProperty(), color.getBProperty(), color.getAProperty(),
+                normalizedTint.getRProperty(), normalizedTint.getGProperty(),
+                normalizedTint.getBProperty(), normalizedTint.getAProperty(),
                 smoothingEnabled ? 1 : 0, addressU, addressV);
 #else
             (void)destinationRectangle; (void)sourceRectangle; (void)color; (void)rotation; (void)origin; (void)effects;
