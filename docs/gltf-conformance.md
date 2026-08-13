@@ -737,11 +737,14 @@ independent, then obtains analytic byte 92 twice on OPENGLES2 and OPENGLES3.
 their common out-of-range UV resolves to the authored yellow, blue and green quadrants under
 CLAMP, REPEAT and MIRRORED_REPEAT respectively, after the application selects each part's public
 base-colour sampler on device slot zero.
+`EasyGL_Gltf_TangentHandedness` adds the generated two-primitive tangent witness: its common
+tangent-space approximately-`+Y` normal map becomes world `+Y`/`-Y` solely through the two authored
+`tangent.w` signs, producing analytic bytes 151/0 under one light on both EasyGL profiles.
 
-What those focused tests do **not** provide is the corpus rung: beyond those five fixture
+What those focused tests do **not** provide is the corpus rung: beyond those six fixture
 witnesses, generated fixtures still need fixed camera/light rigs, a documented per-renderer
 tolerance, a reproducible PNG capture path and the independent two-process determinism check.
-Registering five successful
+Registering six successful
 assets as `CnaGltfConformanceL7` would make the ladder look complete without testing the corpus.
 `STUB` still cannot be used as a shortcut:
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden

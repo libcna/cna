@@ -231,6 +231,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-175: the two corpus primitives' opposite tangent.w signs must
+        # reconstruct opposite bitangents under the same imported normal map.
+        cna_easygl_test(cna_test_easygl_gltf_tangent_handedness
+                        easygl_gltf_tangent_handedness_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Gltf_TangentHandedness
+            COMMAND cna_test_easygl_gltf_tangent_handedness
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         easygl_render_target_test.cpp)
