@@ -326,18 +326,22 @@ def scene_mesh_instances(builder: GltfBuilder) -> list[MeshInstance]:
     return instances
 
 
-def world_positions(builder: GltfBuilder, mesh_local_positions: dict[int, list[list[float]]]
-                    ) -> dict[str, Any]:
-    """Builds the L4 expectation from the node graph and each mesh's local positions.
+def world_positions(
+        builder: GltfBuilder,
+        mesh_local_positions: dict[int | tuple[int, int], list[list[float]]]) -> dict[str, Any]:
+    """Builds the L4 expectation from the node graph and each primitive's local positions.
 
-    ``mesh_local_positions`` maps a mesh index to its concatenated per-primitive positions.
+    A key ``mesh`` is the concise form for primitive zero and keeps every single-primitive fixture
+    readable. A multi-primitive mesh uses ``(mesh, primitive)`` keys. The emitted L4 unit is one
+    ``(node, mesh, primitive)`` placement, matching the importer and preventing a second primitive
+    from being hidden inside the first one's concatenated position array.
     """
     instances = scene_mesh_instances(builder)
     nodes = builder.document.get("nodes", [])
+    meshes = builder.document.get("meshes", [])
     records: list[dict[str, Any]] = []
     all_points: list[list[float]] = []
     for inst in instances:
-        local = mesh_local_positions.get(inst.mesh, [])
         # A SKINNED mesh is not placed by its own node. Specification §3.7.3: the joints place it,
         # and the joint matrix carries inverse(globalTransform(meshNode)) precisely so that node's
         # transform cancels out. Reporting the node-placed positions here would make the L4
@@ -346,16 +350,28 @@ def world_positions(builder: GltfBuilder, mesh_local_positions: dict[int, list[l
         # instead (plan_gltf.md GLTF-247).
         skinned = "skin" in nodes[inst.node] if inst.node < len(nodes) else False
         placement = mat_identity() if skinned else inst.world_matrix
-        transformed = [transform_point(placement, p) for p in local]
-        all_points.extend(transformed)
-        records.append({
-            "node": inst.node,
-            "nodeName": inst.node_name,
-            "mesh": inst.mesh,
-            "parentNodePath": inst.parent_path,
-            "worldMatrixColumnMajor": placement,
-            "worldPositions": transformed,
-        })
+        primitive_count = len(meshes[inst.mesh].get("primitives", []))
+        for primitive in range(primitive_count):
+            local = mesh_local_positions.get((inst.mesh, primitive))
+            if local is None and primitive == 0:
+                local = mesh_local_positions.get(inst.mesh, [])
+            if local is None:
+                local = []
+            transformed = [transform_point(placement, p) for p in local]
+            all_points.extend(transformed)
+            record = {
+                "node": inst.node,
+                "nodeName": inst.node_name,
+                "mesh": inst.mesh,
+                "parentNodePath": inst.parent_path,
+                "worldMatrixColumnMajor": placement,
+                "worldPositions": transformed,
+            }
+            # Preserve the compact schema for 126 existing single-primitive fixtures while making
+            # the discriminator explicit wherever it matters.
+            if primitive_count > 1:
+                record["primitive"] = primitive
+            records.append(record)
     bounds: dict[str, Any] = {}
     if all_points:
         bounds = {

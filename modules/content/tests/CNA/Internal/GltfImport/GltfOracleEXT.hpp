@@ -236,6 +236,8 @@ namespace CnaTest::GltfOracle
         std::string nodeName;
         /** @brief The instanced mesh's index. */
         int mesh = -1;
+        /** @brief The primitive within the instanced mesh. */
+        int primitive = 0;
         /** @brief The composed world transform, glTF column-major. */
         GltfMatrix worldMatrix = IdentityMatrix();
         /** @brief The instance's vertex positions in world space. */
@@ -245,7 +247,7 @@ namespace CnaTest::GltfOracle
     /** @brief Every mesh instance of a file in world space, plus the union bounds. */
     struct WorldPositions
     {
-        /** @brief One entry per instanced mesh, in scene traversal order. */
+        /** @brief One entry per instanced primitive, in scene traversal then primitive order. */
         std::vector<WorldInstance> instances;
         /** @brief Component-wise minimum over every instance's positions. */
         std::array<float, 3> min{};

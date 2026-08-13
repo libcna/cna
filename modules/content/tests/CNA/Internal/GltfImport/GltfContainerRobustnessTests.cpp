@@ -31,6 +31,7 @@
 using namespace CNA::Internal::GltfImport;
 using CnaTest::GltfOracle::CorpusDirectory;
 using CnaTest::GltfOracle::CorpusFixtureIds;
+using CnaTest::GltfOracle::LoadedFixture;
 
 namespace
 {
@@ -302,32 +303,30 @@ TEST(GltfContainerRobustness, TwoPrimitivesReadingOneBufferViewEachGetTheirOwnDa
     // is a decoder that caches by *view* rather than by accessor: the second primitive then gets
     // the first one's vertices, which is a mesh that renders, in the wrong shape.
     //
-    // The two accessors below start 36 bytes apart in one 72-byte view, and their positions have
-    // no value in common.
-    Parsed doc;
-    ASSERT_TRUE(ParseText(doc, R"GLTF({
-  "asset": { "version": "2.0" },
-  "scene": 0,
-  "scenes": [ { "nodes": [0] } ],
-  "nodes": [ { "mesh": 0 } ],
-  "meshes": [ { "primitives": [
-    { "attributes": { "POSITION": 0 } },
-    { "attributes": { "POSITION": 1 } }
-  ] } ],
-  "buffers": [ { "byteLength": 72, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACgQAAAAAAAAAAAAADAQAAAAAAAAAAAAACgQAAAgD8AAAAA" } ],
-  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 72 } ],
-  "accessors": [
-    { "bufferView": 0, "byteOffset": 0,  "componentType": 5126, "count": 3, "type": "VEC3",
-      "min": [0,0,0], "max": [1,1,0] },
-    { "bufferView": 0, "byteOffset": 36, "componentType": 5126, "count": 3, "type": "VEC3",
-      "min": [5,0,0], "max": [6,1,0] }
-  ]
-})GLTF"));
+    // The generated fixture makes the control permanent at every layer: one mesh really has two
+    // primitives, the POSITION accessors start 36 bytes apart in the same view, and NORMAL plus
+    // indices are the exact same accessor objects. Its position sets have no value in common.
+    const LoadedFixture fixture("two-primitives-one-buffer");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const cgltf_data& data = fixture.Data();
+    ASSERT_EQ(1u, data.meshes_count);
+    ASSERT_EQ(2u, data.meshes[0].primitives_count);
+    const cgltf_primitive& firstPrimitive = data.meshes[0].primitives[0];
+    const cgltf_primitive& secondPrimitive = data.meshes[0].primitives[1];
+    const cgltf_accessor* firstPosition =
+        cgltf_find_accessor(&firstPrimitive, cgltf_attribute_type_position, 0);
+    const cgltf_accessor* secondPosition =
+        cgltf_find_accessor(&secondPrimitive, cgltf_attribute_type_position, 0);
+    ASSERT_NE(nullptr, firstPosition);
+    ASSERT_NE(nullptr, secondPosition);
+    EXPECT_EQ(firstPosition->buffer_view, secondPosition->buffer_view);
+    EXPECT_EQ(36u, secondPosition->offset - firstPosition->offset);
+    EXPECT_EQ(cgltf_find_accessor(&firstPrimitive, cgltf_attribute_type_normal, 0),
+              cgltf_find_accessor(&secondPrimitive, cgltf_attribute_type_normal, 0));
+    EXPECT_EQ(firstPrimitive.indices, secondPrimitive.indices);
 
-    const MeshOut first =
-        ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "first", nullptr, 1.0f);
-    const MeshOut second =
-        ExtractMesh(doc.data, doc.data->meshes[0].primitives[1], "second", nullptr, 1.0f);
+    const MeshOut first = ExtractMesh(&data, firstPrimitive, "first", nullptr, 1.0f);
+    const MeshOut second = ExtractMesh(&data, secondPrimitive, "second", nullptr, 1.0f);
 
     float firstX = 0.0f;
     float secondX = 0.0f;
@@ -336,7 +335,7 @@ TEST(GltfContainerRobustness, TwoPrimitivesReadingOneBufferViewEachGetTheirOwnDa
     std::memcpy(&secondX, second.vertexBytes.data() + static_cast<std::size_t>(second.stride),
                 sizeof(secondX));
     EXPECT_FLOAT_EQ(1.0f, firstX);
-    EXPECT_FLOAT_EQ(6.0f, secondX)
+    EXPECT_FLOAT_EQ(3.0f, secondX)
         << "the second primitive got the first one's vertices -- something is keyed on the "
            "bufferView rather than the accessor";
 }

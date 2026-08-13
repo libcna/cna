@@ -1,6 +1,6 @@
 {
   "id": "two-primitives-one-buffer",
-  "description": "Two meshes whose POSITION accessors are different 36-byte windows of ONE bufferView, sharing a single NORMAL accessor and a single index accessor between them. Sharing is the point: a reader that caches decoded data by bufferView rather than by accessor gives both meshes the same vertices, and one that re-decodes the shared accessors per primitive is merely slow.",
+  "description": "Two primitives of one mesh whose POSITION accessors are different 36-byte windows of ONE bufferView, sharing a single NORMAL accessor and a single index accessor. Sharing is the point: a reader that caches decoded data by bufferView rather than by accessor gives both primitives the same vertices, and one that re-decodes the shared accessors per primitive is merely slow.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -24,11 +24,13 @@
     "validatedLayers": [
       "L1",
       "L2",
-      "L3"
+      "L3",
+      "L4"
     ],
     "features": [
       "shared bufferView",
       "shared normal and index accessors",
+      "two primitives in one mesh",
       "two windows of one view"
     ],
     "auditFixture": null
@@ -37,8 +39,8 @@
     "assetVersion": "2.0",
     "defaultScene": 0,
     "sceneCount": 1,
-    "nodeCount": 2,
-    "meshCount": 2,
+    "nodeCount": 1,
+    "meshCount": 1,
     "materialCount": 0,
     "textureCount": 0,
     "imageCount": 0,
@@ -159,7 +161,7 @@
     "primitives": [
       {
         "mesh": 0,
-        "meshName": "FirstWindowTri",
+        "meshName": "TwoWindowMesh",
         "primitive": 0,
         "mode": 4,
         "modeName": "TRIANGLES",
@@ -231,9 +233,9 @@
         "material": null
       },
       {
-        "mesh": 1,
-        "meshName": "SecondWindowTri",
-        "primitive": 0,
+        "mesh": 0,
+        "meshName": "TwoWindowMesh",
+        "primitive": 1,
         "mode": 4,
         "modeName": "TRIANGLES",
         "indexed": true,
@@ -309,7 +311,7 @@
     "instances": [
       {
         "node": 0,
-        "nodeName": "FirstWindow",
+        "nodeName": "TwoWindows",
         "mesh": 0,
         "parentNodePath": [],
         "worldMatrixColumnMajor": [
@@ -346,12 +348,13 @@
             1.0,
             0.0
           ]
-        ]
+        ],
+        "primitive": 0
       },
       {
-        "node": 1,
-        "nodeName": "SecondWindow",
-        "mesh": 1,
+        "node": 0,
+        "nodeName": "TwoWindows",
+        "mesh": 0,
         "parentNodePath": [],
         "worldMatrixColumnMajor": [
           1.0,
@@ -387,7 +390,8 @@
             1.0,
             0.0
           ]
-        ]
+        ],
+        "primitive": 1
       }
     ],
     "worldBounds": {
@@ -446,8 +450,8 @@
         "primitiveCount": 1
       },
       {
-        "mesh": 1,
-        "primitive": 0,
+        "mesh": 0,
+        "primitive": 1,
         "stride": 48,
         "vertexCount": 3,
         "fields": [

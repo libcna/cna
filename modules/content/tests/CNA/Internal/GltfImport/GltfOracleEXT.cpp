@@ -361,16 +361,6 @@ namespace CnaTest::GltfOracle
             return out;
         }
 
-        std::vector<std::array<float, 3>> MeshPositions(const cgltf_mesh& mesh)
-        {
-            std::vector<std::array<float, 3>> out;
-            for (cgltf_size p = 0; p < mesh.primitives_count; ++p)
-            {
-                const std::vector<std::array<float, 3>> prim = PrimitivePositions(mesh.primitives[p]);
-                out.insert(out.end(), prim.begin(), prim.end());
-            }
-            return out;
-        }
     }
 
     GltfMatrix IdentityMatrix()
@@ -810,10 +800,6 @@ namespace CnaTest::GltfOracle
 
                 if (node.mesh != nullptr)
                 {
-                    WorldInstance instance;
-                    instance.node = static_cast<int>(&node - data.nodes);
-                    instance.nodeName = node.name != nullptr ? node.name : "";
-                    instance.mesh = static_cast<int>(node.mesh - data.meshes);
                     // A skinned mesh is not placed by its own node: the specification (§3.7.3) has
                     // the joints place it, and the joint matrix carries
                     // inverse(globalTransform(meshNode)) precisely so that node's transform cancels
@@ -821,12 +807,22 @@ namespace CnaTest::GltfOracle
                     // it is simply not this mesh's placement. The skinned result is a separate
                     // expectation (l4.skin), not this one.
                     const GltfMatrix placement = node.skin != nullptr ? IdentityMatrix() : world;
-                    instance.worldMatrix = placement;
-                    for (const std::array<float, 3>& p : MeshPositions(*node.mesh))
+                    for (cgltf_size p = 0; p < node.mesh->primitives_count; ++p)
                     {
-                        instance.worldPositions.push_back(TransformPoint(placement, p[0], p[1], p[2]));
+                        WorldInstance instance;
+                        instance.node = static_cast<int>(&node - data.nodes);
+                        instance.nodeName = node.name != nullptr ? node.name : "";
+                        instance.mesh = static_cast<int>(node.mesh - data.meshes);
+                        instance.primitive = static_cast<int>(p);
+                        instance.worldMatrix = placement;
+                        for (const std::array<float, 3>& local :
+                             PrimitivePositions(node.mesh->primitives[p]))
+                        {
+                            instance.worldPositions.push_back(
+                                TransformPoint(placement, local[0], local[1], local[2]));
+                        }
+                        out.instances.push_back(std::move(instance));
                     }
-                    out.instances.push_back(std::move(instance));
                 }
 
                 for (cgltf_size i = 0; i < node.children_count; ++i)
@@ -881,6 +877,7 @@ namespace CnaTest::GltfOracle
                     instance.nodeName = (placement.node != nullptr && placement.node->name != nullptr)
                         ? placement.node->name : "";
                     instance.mesh = static_cast<int>(mesh - data.meshes);
+                    instance.primitive = static_cast<int>(p);
                     const GltfMatrix world = placement.skinned
                         ? IdentityMatrix() : ToGltfMatrixEXT(placement.worldTransform);
                     instance.worldMatrix = world;
@@ -924,6 +921,7 @@ namespace CnaTest::GltfOracle
             out += "{\"node\":" + std::to_string(instance.node);
             out += ",\"nodeName\":" + Quote(instance.nodeName);
             out += ",\"mesh\":" + std::to_string(instance.mesh);
+            out += ",\"primitive\":" + std::to_string(instance.primitive);
             out += ",\"worldMatrixColumnMajor\":[";
             for (std::size_t c = 0; c < 16; ++c)
             {

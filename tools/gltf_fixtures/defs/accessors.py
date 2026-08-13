@@ -584,40 +584,42 @@ def two_primitives_one_buffer() -> Fixture:
     normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
     indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
                                     accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
-    # Two MESHES on two nodes rather than two primitives in one mesh, and the reason is a gap
-    # worth naming: the L4 oracle enumerates one instance per node-with-a-mesh, while CNA
-    # enumerates one per primitive, so a multi-primitive mesh makes the two sides disagree about
-    # the instance COUNT before any geometry is compared. That is an oracle limitation, not a CNA
-    # defect, and closing it (`GLTF-399`'s residue) means teaching both the oracle and the
-    # generator to enumerate per primitive. The subject here -- two accessors reading different
-    # windows of one bufferView, with a shared NORMAL and index accessor -- is unaffected.
-    first_mesh = b.add_mesh([{"attributes": {"POSITION": first_pos, "NORMAL": normal},
-                              "indices": indices, "mode": TRIANGLES}], name="FirstWindowTri")
-    second_mesh = b.add_mesh([{"attributes": {"POSITION": second_pos, "NORMAL": normal},
-                               "indices": indices, "mode": TRIANGLES}], name="SecondWindowTri")
-    first_node = b.add_node(name="FirstWindow", mesh=first_mesh)
-    second_node = b.add_node(name="SecondWindow", mesh=second_mesh)
-    b.add_scene([first_node, second_node], name="Scene")
+    # One real multi-primitive mesh. This used to be reshaped as two meshes solely because the L4
+    # oracle concatenated all primitive positions into one node-level record while CNA emitted one
+    # record per primitive. The oracle now uses the same (node, mesh, primitive) unit, so the asset
+    # can finally exercise the cache boundary it names: the primitive changes while the bufferView,
+    # NORMAL accessor and index accessor stay identical.
+    mesh = b.add_mesh([
+        {"attributes": {"POSITION": first_pos, "NORMAL": normal},
+         "indices": indices, "mode": TRIANGLES},
+        {"attributes": {"POSITION": second_pos, "NORMAL": normal},
+         "indices": indices, "mode": TRIANGLES},
+    ], name="TwoWindowMesh")
+    node = b.add_node(name="TwoWindows", mesh=mesh)
+    b.add_scene([node], name="Scene")
     b.set_default_scene(0)
     return Fixture(
         id="two-primitives-one-buffer", audit_fixture=None, owning_group="accessors",
-        description="Two meshes whose POSITION accessors are different 36-byte windows of ONE "
-                    "bufferView, sharing a single NORMAL accessor and a single index accessor "
-                    "between them. Sharing is the point: a reader that caches decoded data by "
-                    "bufferView rather than by accessor gives both meshes the same vertices, and "
-                    "one that re-decodes the shared accessors per primitive is merely slow.",
-        builder=b, validated_layers=["L1", "L2", "L3"],
+        description="Two primitives of one mesh whose POSITION accessors are different 36-byte "
+                    "windows of ONE bufferView, sharing a single NORMAL accessor and a single "
+                    "index accessor. Sharing is the point: a reader that caches decoded data by "
+                    "bufferView rather than by accessor gives both primitives the same vertices, "
+                    "and one that re-decodes the shared accessors per primitive is merely slow.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
         features=["shared bufferView", "shared normal and index accessors",
-                  "two windows of one view"],
+                  "two primitives in one mesh", "two windows of one view"],
         spec_anchors=["meshes-overview", "buffers-and-buffer-views"],
         l3={"primitives": [
-            l3_primitive(mesh=first_mesh, mesh_name="FirstWindowTri", primitive=0, mode=TRIANGLES,
+            l3_primitive(mesh=mesh, mesh_name="TwoWindowMesh", primitive=0, mode=TRIANGLES,
                          positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
                          indices=TRIANGLE_INDICES),
-            l3_primitive(mesh=second_mesh, mesh_name="SecondWindowTri", primitive=0, mode=TRIANGLES,
+            l3_primitive(mesh=mesh, mesh_name="TwoWindowMesh", primitive=1, mode=TRIANGLES,
                          positions=second, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES),
         ]},
-        l4=world_positions(b, {first_mesh: list(TRIANGLE_POSITIONS), second_mesh: list(second)}),
+        l4=world_positions(b, {
+            (mesh, 0): list(TRIANGLE_POSITIONS),
+            (mesh, 1): list(second),
+        }),
     )
 
 

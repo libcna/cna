@@ -8,24 +8,19 @@
     {
       "name": "Scene",
       "nodes": [
-        0,
-        1
+        0
       ]
     }
   ],
   "nodes": [
     {
-      "name": "FirstWindow",
+      "name": "TwoWindows",
       "mesh": 0
-    },
-    {
-      "name": "SecondWindow",
-      "mesh": 1
     }
   ],
   "meshes": [
     {
-      "name": "FirstWindowTri",
+      "name": "TwoWindowMesh",
       "primitives": [
         {
           "attributes": {
@@ -34,12 +29,7 @@
           },
           "indices": 3,
           "mode": 4
-        }
-      ]
-    },
-    {
-      "name": "SecondWindowTri",
-      "primitives": [
+        },
         {
           "attributes": {
             "POSITION": 1,

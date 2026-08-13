@@ -459,11 +459,13 @@
       "validatedLayers": [
         "L1",
         "L2",
-        "L3"
+        "L3",
+        "L4"
       ],
       "features": [
         "shared bufferView",
         "shared normal and index accessors",
+        "two primitives in one mesh",
         "two windows of one view"
       ],
       "auditFixture": null
@@ -4988,18 +4990,18 @@
     },
     {
       "path": "two-primitives-one-buffer.expected.json",
-      "bytes": 10377,
-      "sha256": "774efd3a5c383e51042a5dc0730720b8a872dfbc3992fca39daa29383e5fab0f"
+      "bytes": 10474,
+      "sha256": "e67842151a50cb1b0cb9db1d62ed7b171b9484f99293e541b261ea11eb6c324a"
     },
     {
       "path": "two-primitives-one-buffer.glb",
-      "bytes": 1092,
-      "sha256": "0ae44a2b74824780a6c44d1ffb1724186f8dfe527b4293709de96ab53c235cbd"
+      "bytes": 1012,
+      "sha256": "2f41a176a21680c8ae0dec2c57597c06d6e95c1b67345145ccf9a5018b1bb35a"
     },
     {
       "path": "two-primitives-one-buffer.gltf",
-      "bytes": 2037,
-      "sha256": "49724b08102df560a00caf338ee9bec85e50be99c5831b1467370950479af7f7"
+      "bytes": 1890,
+      "sha256": "0482a5d0befb83453bb67c010bafbc91b796ab9ab0840271e7103ac36e4c03c4"
     },
     {
       "path": "two-primitives-one-buffer.ib.bin",

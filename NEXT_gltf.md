@@ -45,7 +45,7 @@ Expected as of this writing:
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite | **6 332 passed, 188 skipped, 18 failed** |
 | generator `--check` | **127 assets, 624 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **445 passed, 23 skipped** / **468 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **446 passed, 23 skipped** / **469 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -76,7 +76,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 445 passed, 23 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 446 passed, 23 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -178,17 +178,13 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
    accessors are 12/13, normals 2/6, container 1/8 and Draco 0/4. The exact 16 missing IDs are
    generated into `manifest.json`; current + missing = target is checked per group, so the former
    135/136/141 count disagreement cannot recur. What is left, in the order it is worth doing:
-   - **the accessor oracle gap** — teach L4 and `world_positions` to enumerate per primitive, then
-     restore `two-primitives-one-buffer` to one mesh with two primitives.
+   - **accessors 12/13** — add `interleaved-mixed-widths`; the former multi-primitive L4 oracle
+     gap is closed and `two-primitives-one-buffer` is again one mesh with two primitives.
    - **normals 2/6** — add the four named tangent/non-uniform-scale witnesses; all generator and
      importer machinery already exists.
    - **container 1/8** — extend the generator to emit external `.bin`/image sidecars. This is the
      main remaining piece of generator machinery.
    - **Draco 0/4** — `libdraco`-blocked.
-   One residue is an **oracle limitation, not a missing fixture**: the L4 oracle enumerates one
-   instance per node-with-a-mesh while CNA enumerates one per primitive, so a multi-primitive mesh
-   makes the two disagree about the instance count. `two-primitives-one-buffer` is reshaped around
-   it; closing it means teaching both the oracle and `world_positions` to enumerate per primitive.
 2. **Phase 21 viewer rows are the largest *blocked* group and the only path to `GLTF-458`.**
    `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
    without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —

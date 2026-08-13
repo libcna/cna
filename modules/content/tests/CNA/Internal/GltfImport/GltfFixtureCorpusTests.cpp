@@ -454,6 +454,7 @@ TEST(GltfConformanceL4, TheGlbAndGltfTwinsPlaceTheSameGeometry)
             SCOPED_TRACE("instance " + std::to_string(i));
             EXPECT_EQ(fromText.instances[i].node, fromBinary.instances[i].node);
             EXPECT_EQ(fromText.instances[i].mesh, fromBinary.instances[i].mesh);
+            EXPECT_EQ(fromText.instances[i].primitive, fromBinary.instances[i].primitive);
             EXPECT_EQ(fromText.instances[i].worldMatrix, fromBinary.instances[i].worldMatrix)
                 << "the composed world transform differs between the .gltf and its .glb twin";
             ASSERT_EQ(fromText.instances[i].worldPositions.size(),
@@ -797,6 +798,7 @@ TEST(GltfConformanceL4, ExpectedWorldPositionsMatchTheManifest)
 
             EXPECT_EQ(static_cast<int>(NumberOr(expected, "node", -1)), actual.node);
             EXPECT_EQ(static_cast<int>(NumberOr(expected, "mesh", -1)), actual.mesh);
+            EXPECT_EQ(static_cast<int>(NumberOr(expected, "primitive", 0)), actual.primitive);
             EXPECT_EQ(StringOr(expected, "nodeName", ""), actual.nodeName);
             ExpectComponents(Numbers(Member(expected, "worldMatrixColumnMajor")),
                              std::vector<float>(actual.worldMatrix.begin(), actual.worldMatrix.end()),
@@ -843,43 +845,42 @@ TEST(GltfConformanceL4, CnaWorldPositionsMatchTheExpectedGeometry)
         ASSERT_EQ(expectedWorld.instances.size(), cnaWorld.instances.size())
             << "CNA imported a different number of mesh instances than the default scene contains";
 
-        // Instances are paired by the node that places them, not by position in the list. The two
+        // Instances are paired by the node and primitive, not by position in the list. The two
         // sides enumerate in different, equally legitimate orders -- the oracle walks the scene
         // depth-first, CNA walks the glTF node array (a deliberate ordering CollectMeshGroups
         // documents) -- and those coincide for a file whose node array happens to be authored in
         // traversal order. Comparing positionally would turn any fixture where they diverge into a
         // wall of numeric failures that says nothing about the geometry, which is exactly the
         // wrong signal: instance ORDER is not a glTF-specified property. The node index is.
-        std::map<int, std::vector<const WorldInstance*>> expectedByNode;
-        std::map<int, std::vector<const WorldInstance*>> cnaByNode;
+        using PlacementKey = std::pair<int, int>;  // node, primitive
+        std::map<PlacementKey, const WorldInstance*> expectedByPlacement;
+        std::map<PlacementKey, const WorldInstance*> cnaByPlacement;
         for (const WorldInstance& instance : expectedWorld.instances)
         {
-            expectedByNode[instance.node].push_back(&instance);
+            EXPECT_TRUE(expectedByPlacement.emplace(
+                PlacementKey{instance.node, instance.primitive}, &instance).second)
+                << "oracle emitted the same node/primitive placement twice";
         }
         for (const WorldInstance& instance : cnaWorld.instances)
         {
-            cnaByNode[instance.node].push_back(&instance);
+            EXPECT_TRUE(cnaByPlacement.emplace(
+                PlacementKey{instance.node, instance.primitive}, &instance).second)
+                << "CNA emitted the same node/primitive placement twice";
         }
-        ASSERT_EQ(expectedByNode.size(), cnaByNode.size())
-            << "CNA placed meshes on a different set of nodes than the default scene does";
+        ASSERT_EQ(expectedByPlacement.size(), cnaByPlacement.size())
+            << "CNA placed a different set of node/primitive pairs than the default scene does";
 
-        for (const auto& [node, expectedInstances] : expectedByNode)
+        for (const auto& [key, expectedInstance] : expectedByPlacement)
         {
-            SCOPED_TRACE("node " + std::to_string(node));
-            const auto found = cnaByNode.find(node);
-            ASSERT_NE(cnaByNode.end(), found) << "CNA imported no mesh instance for this node";
-            ASSERT_EQ(expectedInstances.size(), found->second.size())
-                << "this node's primitive count differs";
-            for (std::size_t i = 0; i < expectedInstances.size(); ++i)
-            {
-                SCOPED_TRACE("primitive " + std::to_string(i));
-                EXPECT_EQ(expectedInstances[i]->mesh, found->second[i]->mesh);
-                const std::vector<float> expectedPositions =
-                    Flatten(expectedInstances[i]->worldPositions);
-                ExpectComponents(
-                    std::vector<double>(expectedPositions.begin(), expectedPositions.end()),
-                    Flatten(found->second[i]->worldPositions), "worldPositions");
-            }
+            SCOPED_TRACE("node " + std::to_string(key.first) + " primitive " +
+                         std::to_string(key.second));
+            const auto found = cnaByPlacement.find(key);
+            ASSERT_NE(cnaByPlacement.end(), found)
+                << "CNA imported no instance for this node/primitive pair";
+            EXPECT_EQ(expectedInstance->mesh, found->second->mesh);
+            const std::vector<float> expectedPositions = Flatten(expectedInstance->worldPositions);
+            ExpectComponents(std::vector<double>(expectedPositions.begin(), expectedPositions.end()),
+                             Flatten(found->second->worldPositions), "worldPositions");
         }
     }
 }

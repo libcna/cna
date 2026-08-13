@@ -769,7 +769,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `interleaved-position-normal` | accessors | L1, L2, L3 | bufferView.byteStride; bufferView.byteOffset; accessor.byteOffset; interleaved attributes |
 | `interleaved-pos-nrm-uv` | accessors | L1, L2, L3 | three interleaved attributes; per-accessor byteOffset; byteStride 32 |
 | `stride-padded` | accessors | L1, L2, L3 | stride larger than the data; inter-vertex padding; sentinel padding |
-| `two-primitives-one-buffer` | accessors | L1, L2, L3 | shared bufferView; shared normal and index accessors; two windows of one view |
+| `two-primitives-one-buffer` | accessors | L1, L2, L3, L4 | shared bufferView; shared normal and index accessors; two primitives in one mesh; two windows of one view |
 | `sparse-position` | accessors | L1, L2, L3 | accessor.sparse; absent base bufferView; zero-initialised base array |
 | `sparse-indices` | accessors | L1, L2, L3 | accessor.sparse on indices; UNSIGNED_SHORT indices |
 | `sparse-interleaved-base` | accessors | L1, L2, L3, L4 | accessor.sparse; bufferView.byteStride; interleaved base array; tightly packed sparse values |
