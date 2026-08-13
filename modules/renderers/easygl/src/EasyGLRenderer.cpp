@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include <cstdint>
@@ -7256,7 +7257,8 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<EasyGL::EasyGLRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight,
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight,
             args.presentationMode, args.contextRecoveryEnabled,
             args.multiSampleCount, args.swapInterval);
     }

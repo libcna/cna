@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/OpenGL2/OpenGL2Renderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "System/NotSupportedException.hpp"
@@ -3858,7 +3859,8 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<OpenGL2::OpenGL2Renderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode,
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode,
             args.contextRecoveryEnabled, args.swapInterval);
     }
 }

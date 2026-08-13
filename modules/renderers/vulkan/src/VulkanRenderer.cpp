@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -11818,7 +11819,9 @@ namespace CNA::Internal::Renderers
 #ifdef CNA_RENDERER_VULKAN
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Vulkan::VulkanRenderer>(args.window, args.multiSampleCount, args.swapInterval);
+        return std::make_unique<Vulkan::VulkanRenderer>(
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.multiSampleCount, args.swapInterval);
     }
 #endif
 }

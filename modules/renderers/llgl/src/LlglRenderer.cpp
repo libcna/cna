@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Llgl/LlglRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Internal/Renderers/Common/NotYetImplemented.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
@@ -1731,7 +1732,7 @@ namespace CNA::Internal::Renderers::Llgl
 
     LlglRenderer::LlglRenderer(const GraphicsRendererCreateArgs& args)
     {
-        window_ = args.window;
+        window_ = CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId);
         if (window_ == nullptr)
             throw std::runtime_error(std::string(kRendererName) + " renderer: no SDL window was supplied");
 

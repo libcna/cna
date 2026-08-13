@@ -106,7 +106,7 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **169 files / 2534 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+Ratchet: **169 files / 2532 references** of direct SDL coupling outside the PLAT-3 allowlist, down
 from the 253 / 3641 baseline. Contract: 27 headers, 520 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
@@ -131,7 +131,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**121 ✅ · 3 🟨 · 30 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — about **78 %** of the 155
+**122 ✅ · 3 🟨 · 29 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — about **79 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -142,9 +142,10 @@ task rows complete.
   new path. PLAT-50 delegates `GameWindow` behavior to the platform window, PLAT-102 removed its
   last SDL-native consumer, and PLAT-51 replaced the public SDL escape hatch with
   `NativeWindowHandle` without an alias.
-- **Phase 4** (renderers) — PLAT-57's boundary decision, PLAT-59/60/61's common-interface cleanup,
-  and PLAT-62's platform-owned `GraphicsDevice` window are complete; implementation continues at
-  PLAT-58. 46 identities remain in scope.
+- **Phase 4** (renderers) — PLAT-57's boundary decision, PLAT-58/59/60/61's common-interface
+  cleanup, and PLAT-62's platform-owned `GraphicsDevice` window are complete. Renderer creation
+  now receives a complete platform-value snapshot rather than `SDL_Window*`; implementation
+  continues at PLAT-63. 46 identities remain in scope.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — five redundant backends are deleted; `Keyboard`, `Mouse` and `MouseCursor`
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by

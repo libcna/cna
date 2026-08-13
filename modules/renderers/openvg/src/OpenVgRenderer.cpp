@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/OpenVg/OpenVgRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/OpenVg/OpenVgTextureRenderer.hpp"
 #include "CNA/Internal/Renderers/OpenVg/OpenVgSpriteBatchRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
@@ -742,7 +743,8 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<OpenVg::OpenVgRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode,
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode,
             args.swapInterval);
     }
 }

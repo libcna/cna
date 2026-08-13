@@ -71,7 +71,7 @@ int main()
     }
 
     GraphicsRendererCreateArgs args;
-    args.window = window;
+    args.surface.windowId = SDL_GetWindowID(window);
     args.virtualWidth = 64;
     args.virtualHeight = 64;
     args.multiSampleCount = 1;

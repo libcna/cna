@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plan_dx.md Phase DX12 (DX-102/DX-103/DX-104/DX-105): smoke test for D3D12's device-lifetime
-// resources. Deliberately constructed OFF-SCREEN (GraphicsRendererCreateArgs::window = nullptr) --
+// resources. Deliberately constructed OFF-SCREEN (surface.windowId = 0) --
 // DX-100's own real spike found CreateSwapChainForHwnd(..., DXGI_SWAP_EFFECT_FLIP_DISCARD) crashes
 // inside vanilla Wine's own dxgi.dll, so this primary smoke test never constructs a window and
 // never reaches that code path, keeping this CTest genuinely green on this dev loop. The real
@@ -440,7 +440,7 @@ namespace
 int main()
 {
     GraphicsRendererCreateArgs args;
-    args.window = nullptr; // off-screen, deliberately -- see file header comment.
+    // surface stays windowless deliberately -- see file header comment.
     args.virtualWidth = 64;
     args.virtualHeight = 64;
 

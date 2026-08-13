@@ -3,6 +3,7 @@
 // fence-based synchronization. Clear()/Present()/draw calls are still honest "not yet implemented"
 // stubs -- see DirectX12Renderer.hpp's class doc comment for exactly why and what's next.
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
@@ -94,7 +95,7 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     DirectX12Renderer::DirectX12Renderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
     {
@@ -120,7 +121,7 @@ namespace CNA::Internal::Renderers::DirectX12
         CreateFenceResources();
 
         // DX-102: only attempted when a real window is supplied -- an off-screen construction
-        // (args.window == nullptr, what the primary D3D12 CTest suite always uses on this Wine dev
+        // (args.surface.windowId == 0, what the primary D3D12 CTest suite uses on this Wine dev
         // loop, see modules/renderers/directx12/examples/directx12_smoke_test.cpp) never touches CreateSwapChainForHwnd at all.
         if (window_)
         {

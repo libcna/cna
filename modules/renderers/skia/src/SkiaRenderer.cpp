@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaBlendMapping.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaEffectRenderer.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaGeneratedBlender.hpp"
@@ -987,9 +988,10 @@ namespace CNA::Internal::Renderers
 #ifdef CNA_RENDERER_SKIA
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Skia::SkiaRenderer>(args.window, args.virtualWidth, args.virtualHeight,
-                                                            args.presentationMode, args.swapInterval,
-                                                            args.deviceEventCallback);
+        return std::make_unique<Skia::SkiaRenderer>(
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval,
+            args.deviceEventCallback);
     }
 #endif
 } // namespace CNA::Internal::Renderers

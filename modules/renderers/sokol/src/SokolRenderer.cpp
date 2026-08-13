@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Internal/Renderers/Sokol/SokolRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Internal/Renderers/Common/NotYetImplemented.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -2478,7 +2479,7 @@ namespace CNA::Internal::Renderers::Sokol
     SokolRenderer::SokolRenderer(const GraphicsRendererCreateArgs& args,
                                                 bool forceMakeCurrentFailureEXT,
                                                 int* contextDestroyCountEXT)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , forceMakeCurrentFailureEXT_(forceMakeCurrentFailureEXT)
         , contextDestroyCountEXT_(contextDestroyCountEXT)
         , virtualWidth_(args.virtualWidth)

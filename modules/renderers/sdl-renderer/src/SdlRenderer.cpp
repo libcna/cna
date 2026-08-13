@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/SdlRenderer/SdlRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 #include <cmath>
 #include <cstring>
@@ -939,8 +940,9 @@ namespace CNA::Internal::Renderers
 #ifdef CNA_RENDERER_SDL_RENDERER
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<SdlRenderer::SdlRenderer>(args.window, args.virtualWidth, args.virtualHeight,
-                                                                 args.presentationMode, args.swapInterval);
+        return std::make_unique<SdlRenderer::SdlRenderer>(
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
     }
 #endif
 }

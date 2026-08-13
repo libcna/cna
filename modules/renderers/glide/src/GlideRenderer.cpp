@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/Glide/GlideRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Glide/GlideAbi.hpp"
 #include "CNA/Internal/Renderers/Glide/GlideBlendFactor.hpp"
 #include "CNA/Internal/Renderers/Glide/GlideCapability.hpp"
@@ -367,7 +368,7 @@ namespace CNA::Internal::Renderers::Glide
     struct GlideRenderer::Impl
     {
         explicit Impl(const GraphicsRendererCreateArgs& args)
-            : window(args.window)
+            : window(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
             , virtualWidth(args.virtualWidth > 0 ? args.virtualWidth : 640)
             , virtualHeight(args.virtualHeight > 0 ? args.virtualHeight : 480)
             , presentationMode(static_cast<CnaPresentationMode>(args.presentationMode))

@@ -871,9 +871,9 @@ namespace CNA::Internal::Renderers::Diligent
 
     public:
         /**
-         * @brief Creates the render device, immediate context and swap chain for @p args.window.
+         * @brief Creates the render device, immediate context and swap chain for @p args.surface.
          *
-         * @param args Renderer creation arguments; `window` must be a live SDL window.
+         * @param args Renderer creation arguments; `surface.windowId` must identify a live window.
          * @throws std::runtime_error If no Diligent device type could be created for this window.
          */
         explicit DiligentRenderer(const GraphicsRendererCreateArgs& args);

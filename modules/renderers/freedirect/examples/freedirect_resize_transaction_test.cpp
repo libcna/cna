@@ -285,7 +285,7 @@ namespace
         FreeDirectTestStateEXT state{};
         {
             GraphicsRendererCreateArgs args;
-            args.window = window;
+            args.surface.windowId = SDL_GetWindowID(window);
             args.virtualWidth = 48;
             args.virtualHeight = 32;
             args.depthStencilFormat = static_cast<int>(depthFormat);
@@ -345,7 +345,7 @@ namespace
         try
         {
             GraphicsRendererCreateArgs args;
-            args.window = window;
+            args.surface.windowId = SDL_GetWindowID(window);
             args.virtualWidth = 4097;
             args.virtualHeight = 32;
             FreeDirectRenderer renderer(args, Hooks(tracker));

@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/Canvas/CanvasRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Canvas/CanvasTextureRenderer.hpp"
 #include "CNA/Internal/Renderers/Canvas/CanvasRenderTargetRenderer.hpp"
 #include "CNA/Internal/Renderers/Canvas/CanvasSpriteBatchRenderer.hpp"
@@ -381,6 +382,7 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Canvas::CanvasRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode);
     }
 }

@@ -23,6 +23,12 @@ function(cna_renderer_common_setup)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
         target_include_directories(${RENDERER_TARGET} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     endif()
+    # PLAT-58 transition: families that have not yet completed PLAT-67...75 resolve the
+    # snapshot's WindowId at one SDL3 implementation edge. This is PRIVATE so the platform's
+    # implementation tree never becomes part of the renderer or framework include contract;
+    # the edge disappears together with the final family migration.
+    target_include_directories(${RENDERER_TARGET} PRIVATE
+        "${CMAKE_SOURCE_DIR}/modules/platform/src")
     # D3D11's/D3D12's SpriteBatch renderer (plan_dx.md DX-70/DX-71) calls back into
     # Microsoft::Xna::Framework::Graphics::Effect::Apply() for SpriteBatch::Begin(effect)'s
     # custom-Effect path -- a genuine, honest circular dependency between the renderer static

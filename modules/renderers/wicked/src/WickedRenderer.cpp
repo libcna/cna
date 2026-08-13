@@ -2,6 +2,7 @@
 // plan_wicked.md: CNA's WICKED graphics renderer on Wicked Engine's wi::graphics::GraphicsDevice.
 
 #include "CNA/Internal/Renderers/Wicked/WickedRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "WickedShaderSources.hpp"
 
 #include "wiGraphicsDevice_Vulkan.h"
@@ -1370,7 +1371,7 @@ namespace CNA::Internal::Renderers::Wicked
     // ------------------------------------------------------------------------------------------
 
     WickedRenderer::WickedRenderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , preferredWidth_(args.virtualWidth)
         , preferredHeight_(args.virtualHeight)
         , presentationMode_(args.presentationMode)

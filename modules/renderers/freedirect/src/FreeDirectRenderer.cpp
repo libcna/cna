@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/FreeDirect/FreeDirectRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 
 // plan_freedirect.md Design decision 9: <ddraw.h> (and the <windows.h> compatibility shim it pulls in
@@ -707,8 +708,8 @@ namespace CNA::Internal::Renderers::FreeDirect
         const GraphicsRendererCreateArgs& args, const FreeDirectTestHooksEXT& testHooks)
         : impl_(std::make_unique<Impl>(testHooks))
     {
-        if (!args.window) throw std::runtime_error("FreeDirectRenderer initialized with null window.");
-        impl_->window = args.window;
+        impl_->window = CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId);
+        if (!impl_->window) throw std::runtime_error("FreeDirectRenderer initialized with null window.");
         impl_->presentationMode = args.presentationMode;
 
         HRESULT hr = DirectDrawCreate(nullptr, &impl_->dd, nullptr);

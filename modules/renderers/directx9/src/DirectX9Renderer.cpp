@@ -8,6 +8,7 @@
 // macro ERROR (wingdi.h) that collides with LogLevel::ERROR/LogCategory::ERROR's own enumerator
 // names if windows.h is parsed first.
 #include "CNA/Logger.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/Common/NotYetImplemented.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
@@ -130,7 +131,7 @@ namespace CNA::Internal::Renderers::DirectX9
     }
 
     DirectX9Renderer::DirectX9Renderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , presentationMode_(static_cast<int>(args.presentationMode))

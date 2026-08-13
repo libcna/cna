@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Magnum/MagnumRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Internal/Renderers/Magnum/MagnumEffectRenderer.hpp"
 #include "CNA/Internal/Renderers/Magnum/MagnumSpriteBatchRenderer.hpp"
@@ -1532,7 +1533,8 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Magnum::MagnumRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight,
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight,
             args.presentationMode, args.multiSampleCount, args.swapInterval);
     }
 #endif

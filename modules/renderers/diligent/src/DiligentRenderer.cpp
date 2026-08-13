@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Diligent/DiligentRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Diligent/DiligentShaderSources.hpp"
 
 #include "CNA/Logger.hpp"
@@ -1447,7 +1448,7 @@ namespace CNA::Internal::Renderers::Diligent
     // ---- DiligentRenderer ----
 
     DiligentRenderer::DiligentRenderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , swapInterval_(args.swapInterval)

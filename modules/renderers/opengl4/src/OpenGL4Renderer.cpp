@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "System/InvalidOperationException.hpp"
 
@@ -4014,7 +4015,8 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<OpenGL4::OpenGL4Renderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode,
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode,
             args.multiSampleCount, args.swapInterval);
     }
 #endif

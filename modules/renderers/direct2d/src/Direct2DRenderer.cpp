@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Direct2D/Direct2DRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 
 #include <d2d1effects.h>
@@ -3258,7 +3259,8 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Direct2D::Direct2DRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval,
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval,
             args.contextRecoveryEnabled, args.deviceEventCallback, args.backBufferFormat,
             args.depthStencilFormat, args.multiSampleCount);
     }

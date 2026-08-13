@@ -13,7 +13,41 @@
 namespace {
 
 using CNA::Internal::Renderers::IGraphicsRenderer;
+using CNA::Internal::Renderers::RendererSurfaceInfo;
+using CNA::Platform::NativeWindowSystem;
 using CNA::Platform::WindowId;
+
+TEST(RendererSurfaceInfoTests, DefaultsDescribeAWindowlessUnscaledSurface)
+{
+    const RendererSurfaceInfo surface;
+
+    EXPECT_EQ(surface.windowId, 0u);
+    EXPECT_EQ(surface.nativeHandle.system, NativeWindowSystem::Unknown);
+    EXPECT_EQ(surface.nativeHandle.display, nullptr);
+    EXPECT_EQ(surface.nativeHandle.window, nullptr);
+    EXPECT_EQ(surface.nativeHandle.surface, nullptr);
+    EXPECT_EQ(surface.nativeHandle.windowId, 0u);
+    EXPECT_EQ(surface.drawableSize.width, 0);
+    EXPECT_EQ(surface.drawableSize.height, 0);
+    EXPECT_FLOAT_EQ(surface.displayScale, 1.0f);
+}
+
+TEST(RendererSurfaceInfoTests, CarriesACompletePlatformSnapshotByValue)
+{
+    RendererSurfaceInfo surface;
+    surface.windowId = 0x5800u;
+    surface.nativeHandle.system = NativeWindowSystem::Headless;
+    surface.drawableSize = {1600, 960};
+    surface.displayScale = 2.0f;
+
+    const RendererSurfaceInfo copy = surface;
+
+    EXPECT_EQ(copy.windowId, 0x5800u);
+    EXPECT_EQ(copy.nativeHandle.system, NativeWindowSystem::Headless);
+    EXPECT_EQ(copy.drawableSize.width, 1600);
+    EXPECT_EQ(copy.drawableSize.height, 960);
+    EXPECT_FLOAT_EQ(copy.displayScale, 2.0f);
+}
 
 class RendererWindowRegistryTest : public ::testing::Test
 {

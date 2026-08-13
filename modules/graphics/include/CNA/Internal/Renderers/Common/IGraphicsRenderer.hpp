@@ -13,6 +13,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/LogCategory.hpp"
 #include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Platform/IPlatformWindow.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include <array>
@@ -28,10 +29,6 @@
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/GraphicsCapability.hpp"
-
-// PLAT-58 removes this last renderer-creation dependency. PLAT-61 only re-keys the registry below;
-// keeping the declaration here preserves the independent sequencing of those two changes.
-struct SDL_Window;
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
 
@@ -2005,13 +2002,29 @@ namespace CNA::Internal::Renderers
     };
 
     /**
-     * @brief Arguments for creating a graphics renderer.
-     * Currently minimal, but allows for easier extension.
+     * @brief Immutable platform-window snapshot supplied when a renderer is created.
+     *
+     * The value owns nothing. Its native handle remains valid only while the platform window
+     * identified by @ref windowId is alive. Renderers use the physical @ref drawableSize for
+     * swap-chain sizing; @ref displayScale relates that size to logical window coordinates.
      */
+    struct RendererSurfaceInfo
+    {
+        /** @brief Stable identity used by platform events and renderer lookup. */
+        CNA::Platform::WindowId windowId = 0;
+        /** @brief Typed native handle for renderers that talk directly to a window system. */
+        CNA::Platform::NativeWindowHandle nativeHandle;
+        /** @brief Initial drawable size in physical pixels. */
+        CNA::Platform::WindowSize drawableSize;
+        /** @brief Initial logical-to-physical display scale; 1.0 on unscaled/windowless hosts. */
+        float displayScale = 1.0f;
+    };
+
+    /** @brief Arguments for creating a graphics renderer. */
     struct GraphicsRendererCreateArgs
     {
-        // TODO: SDL dependency should be abstracted later
-        SDL_Window* window = nullptr;
+        /** @brief Platform-neutral description of the renderer's presentation surface. */
+        RendererSurfaceInfo surface;
         /// Virtual (game-logic) resolution the renderer should present at.
         /// SDL_SetRenderLogicalPresentation will be set to this size so that
         /// the game always draws in its own coordinate space and the renderer
@@ -2069,7 +2082,8 @@ namespace CNA::Internal::Renderers
         std::function<void(RendererDeviceEvent)> deviceEventCallback;
     };
 
-    // Factory function to be implemented by each renderer
-    // INTERNAL API - SDL dependency should be abstracted later
+    // Factory function to be implemented by each renderer. The creation contract deliberately
+    // contains only platform value types; renderer-family-specific native API work starts behind
+    // this boundary.
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
 }

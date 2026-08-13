@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/DirectX7/DirectX7Renderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
@@ -919,8 +920,8 @@ namespace CNA::Internal::Renderers::DirectX7
     DirectX7Renderer::DirectX7Renderer(const GraphicsRendererCreateArgs& args)
         : impl_(std::make_unique<Impl>())
     {
-        if (!args.window) throw std::runtime_error("DirectX7Renderer initialized with null window.");
-        impl_->window = args.window;
+        impl_->window = CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId);
+        if (!impl_->window) throw std::runtime_error("DirectX7Renderer initialized with null window.");
         impl_->presentationMode = args.presentationMode;
 
         // Design decision 3: a real Win32 HWND, obtained the same way DirectX9Renderer.cpp does

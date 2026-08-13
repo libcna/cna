@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_video.h>
@@ -10389,6 +10390,7 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<WebGPU::WebGPURenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
     }
 }

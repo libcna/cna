@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/DirectX1/DirectX1Renderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 // plan_dx1.md design decision 9: <ddraw.h> (and the real <windows.h> it pulls in) is contained to
 // this .cpp only -- see DirectX1Renderer.hpp's own comment. plan_dx1.md section 1's discipline:
@@ -642,8 +643,8 @@ namespace CNA::Internal::Renderers::DirectX1
     DirectX1Renderer::DirectX1Renderer(const GraphicsRendererCreateArgs& args)
         : impl_(std::make_unique<Impl>())
     {
-        if (!args.window) throw std::runtime_error("DirectX1Renderer initialized with null window.");
-        impl_->window = args.window;
+        impl_->window = CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId);
+        if (!impl_->window) throw std::runtime_error("DirectX1Renderer initialized with null window.");
         impl_->presentationMode = args.presentationMode;
 
         // Design decision 3: a real Win32 HWND, obtained the same way DirectX9Renderer.cpp does

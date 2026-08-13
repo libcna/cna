@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SvgDom/SvgDomRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/SvgDom/SvgDomTextureRenderer.hpp"
 #include "CNA/Internal/Renderers/SvgDom/SvgDomRenderTargetRenderer.hpp"
 #include "CNA/Internal/Renderers/SvgDom/SvgDomSpriteBatchRenderer.hpp"
@@ -702,6 +703,7 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<SvgDom::SvgDomRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode);
     }
 }

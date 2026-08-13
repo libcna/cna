@@ -102,7 +102,7 @@ namespace
                 int virtualH)
     {
         GraphicsRendererCreateArgs args;
-        args.window = window;
+        args.surface.windowId = SDL_GetWindowID(window);
         args.virtualWidth = virtualW;
         args.virtualHeight = virtualH;
         args.presentationMode = mode;

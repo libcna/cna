@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
@@ -65,7 +66,7 @@ namespace CNA::Internal::Renderers::Fna3d
     // ---------------------------------------------------------------------------------------
 
     Fna3dRenderer::Fna3dRenderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , presentationMode_(args.presentationMode)
     {
         FNA3D_HookLogFunctions(ForwardInfo, ForwardWarn, ForwardError);

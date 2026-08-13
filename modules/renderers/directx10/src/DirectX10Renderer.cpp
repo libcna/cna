@@ -1,6 +1,7 @@
 // plan_d3d10.md: real Direct3D 10 graphics renderer implementation. See the header's own class-level
 // doc comment for the architecture summary; design decisions are recorded in plan_d3d10.md itself.
 #include "CNA/Internal/Renderers/DirectX10/DirectX10Renderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
@@ -938,8 +939,8 @@ namespace CNA::Internal::Renderers::DirectX10
     DirectX10Renderer::DirectX10Renderer(const GraphicsRendererCreateArgs& args)
         : impl_(std::make_unique<Impl>())
     {
-        if (!args.window) throw std::runtime_error("DirectX10Renderer initialized with null window.");
-        impl_->window = args.window;
+        impl_->window = CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId);
+        if (!impl_->window) throw std::runtime_error("DirectX10Renderer initialized with null window.");
         impl_->presentationMode = args.presentationMode;
         impl_->virtualWidth = args.virtualWidth;
         impl_->virtualHeight = args.virtualHeight;

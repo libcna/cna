@@ -1,5 +1,6 @@
 // plan_dx.md Phase DIRECTX2/DIRECTX4: D3D11 renderer skeleton + device/swap-chain/back-buffer.
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
@@ -85,7 +86,7 @@ namespace CNA::Internal::Renderers::DirectX11
     }
 
     DirectX11Renderer::DirectX11Renderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
     {

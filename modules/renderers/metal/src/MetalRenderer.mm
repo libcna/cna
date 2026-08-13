@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Metal/MetalRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPipelineKey.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalCommandFailure.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalNormalMatrix.hpp"
@@ -3118,7 +3119,7 @@ static std::function<void()> makeMetalResourceOwnerHealthCheck(
 
 MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::make_shared<Impl>())
 {
-    auto& p=*impl_; p.window=args.window; p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
+    auto& p=*impl_; p.window=CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId); p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
     // plan_metal.md Phase 15: real, previously-invisible bug -- args.presentationMode was never
     // read at all (Impl::presentationMode's own field default, Letterbox=0, silently won this
     // instead), even though GraphicsRendererCreateArgs::presentationMode's own doc comment states

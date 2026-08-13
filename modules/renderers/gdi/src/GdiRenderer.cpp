@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Gdi/GdiConfiguration.hpp"
 #include "CNA/Internal/Renderers/Gdi/GdiPresentation.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
@@ -1014,7 +1015,8 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         auto renderer = std::make_unique<Gdi::GdiRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode);
         renderer->ApplyMultiSampleCount(args.multiSampleCount);
         return renderer;
     }

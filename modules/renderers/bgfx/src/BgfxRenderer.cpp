@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -5013,7 +5014,9 @@ namespace CNA::Internal::Renderers
 #ifdef CNA_RENDERER_BGFX
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Bgfx::BgfxRenderer>(args.window, args.swapInterval);
+        return std::make_unique<Bgfx::BgfxRenderer>(
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.swapInterval);
     }
 #endif
 }

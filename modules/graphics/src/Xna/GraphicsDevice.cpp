@@ -2275,7 +2275,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // do not need. A HEADLESS or TERMINAL platform, however, creates an in-memory/terminal
         // IPlatformWindow in the ordinary branch below, making the ownership seam testable
         // without introducing a native display dependency.
-        // GraphicsRendererCreateArgs::window stays nullptr; UpdateViewportFromWindow() already
+        // GraphicsRendererCreateArgs::surface stays windowless; UpdateViewportFromWindow() already
         // falls back to the renderer's own GetViewportSize() first and only touches window_ if
         // that yields nothing, and applyPresentationParametersToWindow() already early-returns
         // when window_ is null, so neither needs its own guard.
@@ -2434,7 +2434,13 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::createRenderer()
     {
         GraphicsRendererCreateArgs args;
-        args.window = window_;
+        if (platformWindow_ != nullptr)
+        {
+            args.surface.windowId = platformWindow_->GetId();
+            args.surface.nativeHandle = platformWindow_->GetNativeHandle();
+            args.surface.drawableSize = platformWindow_->GetPixelSize();
+            args.surface.displayScale = platformWindow_->GetDisplayScale();
+        }
         args.virtualWidth = virtualWidth_;
         args.virtualHeight = virtualHeight_;
         args.contextRecoveryEnabled = contextRecoveryEnabled_;
