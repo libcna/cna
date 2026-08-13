@@ -31,6 +31,11 @@
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
 
+namespace CNA::Internal
+{
+    class GameTestPeer;
+}
+
 namespace Microsoft::Xna::Framework
 {
     /** @brief Base class that provides the XNA-style game loop, services, window, content and components. */
@@ -325,6 +330,8 @@ namespace Microsoft::Xna::Framework
         virtual void Dispose(bool disposing);
 
     private:
+        friend class CNA::Internal::GameTestPeer;
+
         GameComponentCollection Components_;
         Graphics::GraphicsDevice GraphicsDevice_;
         Content::ContentManager Content_;

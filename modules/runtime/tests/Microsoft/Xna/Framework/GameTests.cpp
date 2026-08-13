@@ -18,6 +18,16 @@
 
 using namespace Microsoft::Xna::Framework;
 
+namespace CNA::Internal
+{
+    class GameTestPeer
+    {
+    public:
+        static bool IsSuspended(const Microsoft::Xna::Framework::Game& game) { return game.isSuspended_; }
+        static void PollEvents(Microsoft::Xna::Framework::Game& game) { game.PollEvents(); }
+    };
+}
+
 namespace
 {
     // Matches GameWindowTests.cpp's own probe-then-skip idiom.
@@ -115,6 +125,39 @@ TEST(GameTest, RunExecutesLifecycleInDocumentedOrder)
     EXPECT_EQ(game.loadContentCalls, 1);
     EXPECT_GE(game.updateCalls, 1);
     EXPECT_GE(game.drawCalls, 1);
+}
+
+TEST(GameTest, MobileLifecycleEventsSuspendResumeAndTerminateTheLoop)
+{
+    if (!VideoSubsystemAvailable())
+    {
+        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+    }
+
+    LifecycleTestGame game;
+    ASSERT_FALSE(CNA::Internal::GameTestPeer::IsSuspended(game));
+
+    SDL_Event event{};
+    event.type = SDL_EVENT_DID_ENTER_BACKGROUND;
+    ASSERT_TRUE(SDL_PushEvent(&event));
+    CNA::Internal::GameTestPeer::PollEvents(game);
+    EXPECT_TRUE(CNA::Internal::GameTestPeer::IsSuspended(game));
+
+    event = {};
+    event.type = SDL_EVENT_WILL_ENTER_FOREGROUND;
+    ASSERT_TRUE(SDL_PushEvent(&event));
+    CNA::Internal::GameTestPeer::PollEvents(game);
+    EXPECT_FALSE(CNA::Internal::GameTestPeer::IsSuspended(game));
+
+    event = {};
+    event.type = SDL_EVENT_DID_ENTER_BACKGROUND;
+    ASSERT_TRUE(SDL_PushEvent(&event));
+    event = {};
+    event.type = SDL_EVENT_TERMINATING;
+    ASSERT_TRUE(SDL_PushEvent(&event));
+    CNA::Internal::GameTestPeer::PollEvents(game);
+    EXPECT_TRUE(CNA::Internal::GameTestPeer::IsSuspended(game));
+    EXPECT_FALSE(game.RunApplication);
 }
 
 // REMED-CORE-006 (fixed): Game::Initialize() now subscribes graphicsDeviceService.DeviceDisposing

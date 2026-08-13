@@ -8,6 +8,9 @@
 #include <string>
 
 #include "CNA/Platform.hpp"
+#if defined(CNA_PLATFORM_IOS)
+#include "CNA/Internal/AppleOrientation.hpp"
+#endif
 
 namespace Microsoft::Xna::Framework
 {
@@ -33,7 +36,7 @@ namespace Microsoft::Xna::Framework
         // iOS intersects this with the UISupportedInterfaceOrientations array in the bundle's
         // Info.plist (cmake/AppleInfo.iOS.plist.in), which is the outer bound; the hint can
         // narrow that set at run time but never widen it.
-        void applySupportedOrientationsHint(DisplayOrientation orientations)
+        void applySupportedOrientationsHint(DisplayOrientation orientations, SDL_Window* window)
         {
             if (!CNA::isMobilePlatform())
             {
@@ -54,10 +57,23 @@ namespace Microsoft::Xna::Framework
                 hint += "Portrait ";
             }
 
-            // DisplayOrientation::Default (no flag set) means "the game does not care"; clearing
-            // the hint hands the decision back to the platform rather than pinning it to nothing,
-            // which SDL would read as "no orientation is acceptable".
-            SDL_SetHint(SDL_HINT_ORIENTATIONS, hint.c_str());
+            // DisplayOrientation::Default means "the game does not care". Remove CNA's previous
+            // value completely so SDL falls back to the bundle/platform set instead of retaining
+            // an explicitly empty hint value.
+            if (orientations == DisplayOrientation::Default)
+            {
+                SDL_ResetHint(SDL_HINT_ORIENTATIONS);
+            }
+            else
+            {
+                SDL_SetHint(SDL_HINT_ORIENTATIONS, hint.c_str());
+            }
+
+#if defined(CNA_PLATFORM_IOS)
+            CNA::Internal::RequestAppleOrientationUpdate(window);
+#else
+            (void) window;
+#endif
         }
     }
 
@@ -287,7 +303,7 @@ namespace Microsoft::Xna::Framework
     void GameWindow::SetSupportedOrientations(DisplayOrientation orientations)
     {
         supportedOrientations_ = orientations;
-        applySupportedOrientationsHint(orientations);
+        applySupportedOrientationsHint(orientations, window_);
 
         if (!orientationIsSupported(currentOrientation_))
         {

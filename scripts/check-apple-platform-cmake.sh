@@ -146,4 +146,26 @@ done
     exit 1
 }
 
-echo "OK: Apple CMake layer parses; renderer gate, plist templates, static iOS SDL and macOS bundle fixup are present."
+# ---------------------------------------------------------------------------
+# 7. iOS orientation changes happen at two distinct times: SDL's documented initial hint must
+#    exist before SDL_INIT_VIDEO, while later XNA GraphicsDeviceManager changes need a UIKit
+#    invalidation after the window exists. Keep both halves connected to the build.
+# ---------------------------------------------------------------------------
+graphics_device="${repo_root}/modules/graphics/src/Xna/GraphicsDevice.cpp"
+orientation_adapter="${repo_root}/modules/runtime/src/AppleOrientation.mm"
+runtime_cmake="${repo_root}/modules/runtime/CMakeLists.txt"
+
+grep -q 'SDL_GetHint(SDL_HINT_ORIENTATIONS)' "${graphics_device}" || {
+    echo "FAIL: the pre-SDL-init mobile orientation default is missing" >&2
+    exit 1
+}
+grep -q 'setNeedsUpdateOfSupportedInterfaceOrientations' "${orientation_adapter}" || {
+    echo "FAIL: the iOS runtime orientation adapter does not invalidate UIKit orientation state" >&2
+    exit 1
+}
+grep -q 'src/AppleOrientation.mm' "${runtime_cmake}" || {
+    echo "FAIL: the iOS runtime orientation adapter is not part of cna_runtime" >&2
+    exit 1
+}
+
+echo "OK: Apple CMake layer parses; renderer gate, plist templates, static iOS SDL, bundle fixup and orientation bridge are present."

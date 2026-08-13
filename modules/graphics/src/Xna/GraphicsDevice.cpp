@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
+#include "CNA/Platform.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
@@ -307,6 +308,16 @@ namespace Microsoft::Xna::Framework::Graphics
 #ifdef __ANDROID__
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
+
+        // SDL documents SDL_HINT_ORIENTATIONS as a pre-initialization hint. Game owns its
+        // GraphicsDevice by value, so the user-selected GraphicsDeviceManager orientation is not
+        // available until after this constructor has created the first window. Seed the complete
+        // XNA default set before SDL_INIT_VIDEO; GameWindow narrows it later and, on iOS, asks
+        // UIKit to re-query the changed hint immediately.
+        if (CNA::isMobilePlatform() && SDL_GetHint(SDL_HINT_ORIENTATIONS) == nullptr)
+        {
+            SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait");
+        }
 
         // plan_headless.md design decision 2 / plan_software.md design decision 4 / plan_stub.md
         // design decision 1: the Headless, Software, and Stub renderers never create a real window

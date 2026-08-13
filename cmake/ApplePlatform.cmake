@@ -37,6 +37,9 @@ if(APPLE)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         set(CNA_APPLE_IOS ON)
         set(CNA_APPLE_TARGET "IOS")
+        # CNA's runtime contains one tiny Objective-C++ adapter that asks UIKit to re-evaluate
+        # supported orientations after XNA's GraphicsDeviceManager changes them at runtime.
+        enable_language(OBJCXX)
     else()
         # tvOS/watchOS/visionOS share the Darwin toolchain but nothing in this project has ever
         # been configured, built or reasoned about for them. Fail loudly instead of letting a

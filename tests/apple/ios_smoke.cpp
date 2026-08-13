@@ -3,9 +3,13 @@
 #include <cstdio>
 #include <exception>
 
+#include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
 using Microsoft::Xna::Framework::Game;
+using Microsoft::Xna::Framework::GraphicsDeviceManager;
+using Microsoft::Xna::Framework::DisplayOrientation;
 
 int main(int /*argc*/, char* /*argv*/[])
 {
@@ -15,6 +19,8 @@ int main(int /*argc*/, char* /*argv*/[])
         // its native window. One frame then exercises CNA's initialization, event, update, draw
         // and presentation path without leaving a build-only CI launch running indefinitely.
         Game game;
+        GraphicsDeviceManager graphics(&game);
+        graphics.setSupportedOrientationsProperty(DisplayOrientation::LandscapeLeft);
         game.RunOneFrame();
         std::puts("CNA_IOS_SMOKE_OK");
         return 0;
