@@ -260,7 +260,7 @@ renderers/{sdl-renderer,sdl-gpu,fna3d} ──▶ SDL3   (allowlisted, by design)
 | 8 | PLAT-113 … PLAT-119 | `HeadlessPlatform` + conformance suite | 7 |
 | 9 | PLAT-120 … PLAT-126 | Gates, performance, documentation, CI | 7 |
 | 10 | PLAT-129 … PLAT-141 | `TerminalPlatform` (optional, after Phase 8) | 13 |
-| — | §12 | Possible future implementations (**not in scope**) | 0 |
+| 11 | PLAT-SDL2-1 … PLAT-SDL2-7 | SDL2 platform implementation | 7 |
 
 **Total: 141 numeric task IDs — 140 active, 1 cut (PLAT-45); 155 ledger decisions when the 14
 lettered follow-ups are counted.** IDs are never renumbered and are never reused: a cut task keeps
@@ -629,6 +629,24 @@ unrestricted CI; they were excluded here, not reclassified as passing or removed
 
 ---
 
+## 11. SDL2 platform implementation
+
+SDL2 is the first independent native-window backend added after the original platform campaign.
+It is selected only by `CNA_PLATFORM=SDL2`; it never aliases SDL3 or uses `sdl2-compat`, because
+the point is to exercise the contract against SDL2's real API and deployment surface.
+
+| Task | Status | Deliverable / acceptance rule |
+|---|---|---|
+| PLAT-SDL2-1 | ⏳ | Add `SDL2` to platform selection, fetch/link SDL2 privately in `cna_platform`, and register it in `PlatformFactory`; no SDL2 header may escape the platform module. |
+| PLAT-SDL2-2 | ⏳ | Implement SDL2 subsystem reference counting, timing and one-window lifecycle over the existing `IPlatform` contract. |
+| PLAT-SDL2-3 | ⏳ | Translate SDL2 quit/window/key/mouse events into `PlatformEvent`; preserve the platform-neutral game-event oracle. |
+| PLAT-SDL2-4 | ⏳ | Implement the SDL2 OpenGL context service and verify an `SDL2 + OPENGLES3` 2D smoke run. |
+| PLAT-SDL2-5 | ⏳ | State an honest capability profile. SDL2 services without a compatible implementation return null and their capability bits stay false; no silent stubs. |
+| PLAT-SDL2-6 | ⏳ | Instantiate conformance/event tests for SDL2 and add an SDL2 OpenGLES3 CI matrix cell under Xvfb. |
+| PLAT-SDL2-7 | ⏳ | Document SDL2-specific limits and a supported build command; update this table with actual test evidence. |
+
+---
+
 ## 12. Possible future implementations (NOT in scope)
 
 **None of the following is implemented by this plan.** They are recorded because they are the
@@ -638,7 +656,6 @@ need its own plan file.
 
 | Candidate | Rationale | Expected capability profile | Status |
 |---|---|---|---|
-| `Sdl2Platform` | Older Windows (back to XP per SDL2's docs), older Linux distributions, targets where SDL3 is impractical, and a long-term fallback path. The most realistic second implementation. | Close to full, minus the SDL3 GPU API; gamepad and HiDPI contracts differ. | Future — not started |
 | `Sdl12Platform` | Genuinely historical systems. SDL 1.2 is deprecated upstream (last release 1.2.15) and would be CNA-owned indefinitely. | Limited profile: basic window, keyboard/mouse, old joystick API, timing, basic audio, GL or software surface, basic fullscreen. Clipboard, text input, gamepad, HiDPI largely unsupported — declared unsupported, never emulated with unsafe hacks. | Future — not started |
 | `Win32Platform` | A native platform with no SDL at all, pairing naturally with the `GDI` and `DIRECTX*` renderers. | Windows-only; no cross-platform pretence. | Future — not started |
 | `EmscriptenPlatform` | A direct browser platform for the web renderers. | Web-shaped: no multiple windows, no native dialogs. | Future — not started |
