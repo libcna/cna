@@ -66,15 +66,14 @@ endif()
 # ---------------------------------------------------------------------------
 # Deployment targets
 # ---------------------------------------------------------------------------
-# CNA is a C++23 codebase, so the floor is set by what Apple's libc++ actually ships. The hard
-# boundary is macOS 10.15 / iOS 13, where the system libc++ gained the C++17 filesystem symbols
-# this project uses unconditionally -- below it, links fail on missing symbols rather than
-# producing a working older binary. macOS 11 is chosen over 10.15 because it is also the first
-# release covering both Intel and Apple silicon. Override with -DCNA_MACOS_DEPLOYMENT_TARGET=… /
-# -DCNA_IOS_DEPLOYMENT_TARGET=…, or bypass both with -DCMAKE_OSX_DEPLOYMENT_TARGET=… .
-set(CNA_MACOS_DEPLOYMENT_TARGET "11.0" CACHE STRING
+# CNA and sharp-runtime use floating-point std::to_chars unconditionally. Apple's libc++ marks
+# those overloads unavailable before macOS 13.3 / iOS 16.3; suppressing the availability check
+# would only defer the failure to the dynamic loader on an older device. These are therefore hard
+# floors as well as defaults. Callers may raise them with CNA_*_DEPLOYMENT_TARGET or an explicit
+# CMAKE_OSX_DEPLOYMENT_TARGET, but may not lower them.
+set(CNA_MACOS_DEPLOYMENT_TARGET "13.3" CACHE STRING
     "Minimum macOS version CNA products are built for (CMAKE_OSX_DEPLOYMENT_TARGET default)")
-set(CNA_IOS_DEPLOYMENT_TARGET "13.0" CACHE STRING
+set(CNA_IOS_DEPLOYMENT_TARGET "16.3" CACHE STRING
     "Minimum iOS version CNA products are built for (CMAKE_OSX_DEPLOYMENT_TARGET default)")
 
 if(CNA_APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
@@ -84,6 +83,23 @@ if(CNA_APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     else()
         set(CMAKE_OSX_DEPLOYMENT_TARGET "${CNA_MACOS_DEPLOYMENT_TARGET}" CACHE STRING
             "Minimum Apple OS version" FORCE)
+    endif()
+endif()
+
+if(CNA_APPLE)
+    if(CNA_APPLE_IOS)
+        set(_cna_apple_minimum_deployment_target "16.3")
+        set(_cna_apple_minimum_platform_name "iOS")
+    else()
+        set(_cna_apple_minimum_deployment_target "13.3")
+        set(_cna_apple_minimum_platform_name "macOS")
+    endif()
+    if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS _cna_apple_minimum_deployment_target)
+        message(FATAL_ERROR
+            "CNA: ${_cna_apple_minimum_platform_name} deployment target "
+            "${CMAKE_OSX_DEPLOYMENT_TARGET} is below the supported minimum "
+            "${_cna_apple_minimum_deployment_target}. CNA/sharp-runtime use floating-point "
+            "std::to_chars, which Apple libc++ does not provide on older releases.")
     endif()
 endif()
 

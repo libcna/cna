@@ -168,4 +168,18 @@ grep -q 'src/AppleOrientation.mm' "${runtime_cmake}" || {
     exit 1
 }
 
-echo "OK: Apple CMake layer parses; renderer gate, plist templates, static iOS SDL, bundle fixup and orientation bridge are present."
+# ---------------------------------------------------------------------------
+# 8. sharp-runtime uses Apple's floating-point std::to_chars overloads. Xcode marks those APIs
+#    unavailable below macOS 13.3 / iOS 16.3, so advertising lower deployment floors produces a
+#    deterministic compile failure (or a loader failure if availability checking is suppressed).
+# ---------------------------------------------------------------------------
+grep -Fq 'set(CNA_MACOS_DEPLOYMENT_TARGET "13.3"' "${repo_root}/cmake/ApplePlatform.cmake" || {
+    echo "FAIL: macOS deployment target is below the std::to_chars availability floor" >&2
+    exit 1
+}
+grep -Fq 'set(CNA_IOS_DEPLOYMENT_TARGET "16.3"' "${repo_root}/cmake/ApplePlatform.cmake" || {
+    echo "FAIL: iOS deployment target is below the std::to_chars availability floor" >&2
+    exit 1
+}
+
+echo "OK: Apple CMake layer parses; renderer gate, deployment floors, plist templates, static iOS SDL, bundle fixup and orientation bridge are present."

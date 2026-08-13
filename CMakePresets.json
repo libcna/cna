@@ -62,7 +62,7 @@
     {
       "name": "macos",
       "displayName": "macOS (SDL_RENDERER, Release)",
-      "description": "plan_apple.md APPLE-1: native macOS desktop build. Requires the sibling sharp-runtime checkout and initialized submodules; the first configure builds SDL3/SDL3_image/SDL3_mixer into .sdl-prebuilt-Darwin-<arch>/ (several minutes) and every later configure reuses it. The deployment target defaults to CNA_MACOS_DEPLOYMENT_TARGET (11.0); executables stay plain binaries unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON. For the native Metal renderer use -DCNA_GRAPHICS_RENDERER=METAL instead, and read docs/metal-renderer.md first.",
+      "description": "plan_apple.md APPLE-1: native macOS desktop build. Requires the sibling sharp-runtime checkout and initialized submodules; the first configure builds SDL3/SDL3_image/SDL3_mixer into .sdl-prebuilt-Darwin-<arch>/ (several minutes) and every later configure reuses it. The deployment target defaults to CNA_MACOS_DEPLOYMENT_TARGET (13.3); executables stay plain binaries unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON. For the native Metal renderer use -DCNA_GRAPHICS_RENDERER=METAL instead, and read docs/metal-renderer.md first.",
       "binaryDir": "${sourceDir}/cmake-build-macos",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE":      "Release",
