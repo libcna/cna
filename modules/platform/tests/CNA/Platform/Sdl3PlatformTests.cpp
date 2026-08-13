@@ -11,9 +11,12 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
+#include <functional>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -254,6 +257,50 @@ TEST_F(Sdl3PlatformTest, DestructorReleasesOnlyWhatThisInstanceAcquired)
         EXPECT_TRUE(outer->IsSubsystemInitialized(subsystem_))
             << "the inner platform's destructor must not release the outer one's hold";
     }
+    EXPECT_EQ(Up(), initiallyUp);
+}
+
+TEST_F(Sdl3PlatformTest, ConcurrentInstancesShareOneBalancedSubsystemLifecycle)
+{
+    SelectAWorkingSubsystem();
+    const bool initiallyUp = Up();
+
+    // Keep one reference alive while two independent platform instances repeatedly adjust SDL's
+    // process-global count. The sentinel must remain valid throughout and the complete operation
+    // must restore the host's prior state. This is the shape that a per-instance mutex failed to
+    // serialize even though each individual instance's map remained internally consistent.
+    platform_->AcquireSubsystem(subsystem_);
+    auto first = PlatformFactory::Create("SDL3");
+    auto second = PlatformFactory::Create("SDL3");
+    std::atomic<bool> failed = false;
+
+    const auto exercise = [this, &failed](IPlatform& instance)
+    {
+        try
+        {
+            for (int iteration = 0; iteration < 100; ++iteration)
+            {
+                instance.AcquireSubsystem(subsystem_);
+                instance.ReleaseSubsystem(subsystem_);
+            }
+        }
+        catch (...)
+        {
+            failed.store(true, std::memory_order_release);
+        }
+    };
+
+    std::thread firstThread(exercise, std::ref(*first));
+    std::thread secondThread(exercise, std::ref(*second));
+    firstThread.join();
+    secondThread.join();
+
+    EXPECT_FALSE(failed.load(std::memory_order_acquire));
+    EXPECT_TRUE(Up()) << "one platform's live reference must survive other instances' churn";
+    first.reset();
+    second.reset();
+    EXPECT_TRUE(Up());
+    platform_->ReleaseSubsystem(subsystem_);
     EXPECT_EQ(Up(), initiallyUp);
 }
 

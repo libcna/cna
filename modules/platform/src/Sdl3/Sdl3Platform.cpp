@@ -10,6 +10,8 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <mutex>
+
 namespace CNA::Platform::Sdl3 {
 
     namespace {
@@ -45,6 +47,19 @@ namespace CNA::Platform::Sdl3 {
             return error != nullptr ? std::string(error) : std::string();
         }
 
+        /// Serializes native subsystem refcount and handle-cache transitions process-wide.
+        ///
+        /// SDL's subsystem counts are process-global, so a mutex stored on each Sdl3Platform
+        /// instance would protect only that instance's bookkeeping while two platforms still
+        /// enter SDL_InitSubSystem/SDL_QuitSubSystem concurrently. Keep this synchronization
+        /// primitive alive through static teardown: embedding hosts may retain a platform in a
+        /// function-local static whose destructor runs very late.
+        std::mutex& SubsystemLifecycleMutex()
+        {
+            static auto* mutex = new std::mutex();
+            return *mutex;
+        }
+
     } // namespace
 
     Sdl3Platform::Sdl3Platform()
@@ -62,7 +77,7 @@ namespace CNA::Platform::Sdl3 {
         // SDL_Quit(): PLAT-4 established that global SDL lifetime belongs to the host
         // application, and calling it here would tear down subsystems the host still holds.
         // Cached native handles must close before the subsystems that own them.
-        std::lock_guard<std::mutex> lock(subsystemMutex_);
+        std::lock_guard<std::mutex> lock(SubsystemLifecycleMutex());
         sensors_.Deactivate();
         haptics_.Deactivate();
         for (const auto& [subsystem, count] : ownedRefCounts_)
@@ -134,7 +149,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::AcquireSubsystem(const PlatformSubsystem subsystem)
     {
-        std::lock_guard<std::mutex> lock(subsystemMutex_);
+        std::lock_guard<std::mutex> lock(SubsystemLifecycleMutex());
         if (!SDL_InitSubSystem(ToSdlFlag(subsystem)))
         {
             throw PlatformException("AcquireSubsystem(" + ToString(subsystem) + ")", LastSdlError());
@@ -144,7 +159,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::ReleaseSubsystem(const PlatformSubsystem subsystem)
     {
-        std::lock_guard<std::mutex> lock(subsystemMutex_);
+        std::lock_guard<std::mutex> lock(SubsystemLifecycleMutex());
         // An unpaired release is a documented no-op, not an error: cleanup may follow partial
         // initialization even though successful owners balance every acquisition.
         const auto it = ownedRefCounts_.find(subsystem);
@@ -170,7 +185,7 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3Platform::IsSubsystemInitialized(const PlatformSubsystem subsystem) const
     {
-        std::lock_guard<std::mutex> lock(subsystemMutex_);
+        std::lock_guard<std::mutex> lock(SubsystemLifecycleMutex());
         const SDL_InitFlags flag = ToSdlFlag(subsystem);
         return (SDL_WasInit(flag) & flag) != 0;
     }

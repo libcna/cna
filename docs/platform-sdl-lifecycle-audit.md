@@ -109,8 +109,9 @@ its `IPlatformSensors` handle before releasing that reference. SDL's own refcoun
 aggregates it with the independent `Microsoft::Devices` holds instead of either surface using
 `SDL_WasInit()` as an ownership shortcut.
 
-`Sdl3Platform::subsystemMutex_` preserves the former process-wide serialization. It remains a
-mutex rather than main-thread dispatch because
+`Sdl3Platform`'s process-wide `SubsystemLifecycleMutex()` preserves the former serialization
+across **all platform instances**, not merely within one instance. It remains a mutex rather than
+main-thread dispatch because
 `SDL_RunOnMainThread(..., wait_complete=true)` is drained only by `SDL_RunMainThreadCallbacks()`,
 which runs only from `SDL_PumpEventsInternal()` — so routing subsystem calls through it would
 hang whenever nothing is pumping events, which is exactly what CNA's own concurrent
@@ -122,8 +123,8 @@ no `Game`/`GraphicsDeviceManager` at all, so there may be no event pump running.
 
 > **PLAT-108 update:** `VibrateController` now uses a private `PlatformVibrateBackend` adapter.
 > Device selection, non-gamepad correlation, simple rumble, two-motor effects and native handle
-> ownership all live in `IPlatformHaptics`/`Sdl3Haptics`. `Sdl3Platform::subsystemMutex_`
-> serializes its native subsystem acquire/release with the sensor path.
+> ownership all live in `IPlatformHaptics`/`Sdl3Haptics`. `Sdl3Platform`'s process-wide subsystem
+> lifecycle mutex serializes its native subsystem acquire/release with the sensor path.
 
 ### `SDL_INIT_GAMEPAD` — `SdlInputBridge`
 
