@@ -80,7 +80,7 @@ protected:
         std::vector<Color> source(16, Color(0, 255, 0, 255));
         source[0] = Color(255, 255, 255, 0);      // transparent
         source[1] = Color(255, 0, 255, 255);      // opaque, and identical to TGL_NO_DRAW_COLOR
-        texture.SetData(source.data(), 0, static_cast<int>(source.size()));
+        texture.SetData(source.data(), static_cast<int>(source.size()));
 
         // Check A: the reported size is the requested size, not TinyGL's internal 256x256.
         check(texture.getWidthProperty() == 4 && texture.getHeightProperty() == 4,

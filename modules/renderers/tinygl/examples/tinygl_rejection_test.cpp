@@ -33,7 +33,7 @@ using namespace CNA::Internal::Renderers::TinyGL;
 
 namespace
 {
-    constexpr int kChecks = 13;
+    constexpr int kChecks = 11;
 }
 
 class TinyGLRejectionTest : public Game
@@ -65,12 +65,23 @@ protected:
         auto& renderer = static_cast<TinyGLRenderer&>(dev.GetRenderer());
 
         // --- Stencil: TinyGL's ZBuffer has no stencil plane at all -------------------------------
-        expectRefusal([&] { renderer.ClearStencil(0); },
-                      "ClearStencil() is refused -- TinyGL has no stencil plane");
-        expectRefusal([&] { renderer.ClearDepthAndStencil(1.0f, 0); },
-                      "ClearDepthAndStencil() is refused");
-        expectRefusal([&] { renderer.ClearColorDepthAndStencil(0, 0, 0, 1, 1.0f, 0); },
-                      "ClearColorDepthAndStencil() is refused");
+        //
+        // The line this renderer draws is deliberate. Clearing an absent stencil plane is a no-op
+        // in real OpenGL too, so the stencil CLEARS are accepted and clear nothing -- refusing them
+        // would break GraphicsDevice.Clear(Color), which asks for all three planes. What is refused
+        // is every request that would be a false promise about stencil BEHAVIOUR.
+        {
+            bool threw = false;
+            try
+            {
+                renderer.ClearStencil(0);
+                renderer.ClearDepthAndStencil(1.0f, 0);
+                renderer.ClearColorAndStencil(0, 0, 0, 1, 0);
+                renderer.ClearColorDepthAndStencil(0, 0, 0, 1, 1.0f, 0);
+            }
+            catch (...) { threw = true; }
+            check(!threw, "stencil clears are accepted and clear nothing, exactly as in real GL");
+        }
         expectRefusal([&] { renderer.SetReferenceStencil(3); },
                       "a non-zero ReferenceStencil is refused");
         expectRefusal([&] {
@@ -87,7 +98,7 @@ protected:
                           state.setDepthBufferFunctionProperty(CompareFunction::GreaterEqual);
                           dev.setDepthStencilStateProperty(state);
                       },
-                      "a depth CompareFunction other than Less is refused");
+                      "a depth CompareFunction other than LessEqual is refused");
 
         // --- Blending: only the factors TinyGL's rasterizer switch really has cases for ----------
         expectRefusal([&] { dev.setBlendStateProperty(BlendState::Additive); },
