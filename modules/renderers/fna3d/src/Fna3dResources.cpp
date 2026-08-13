@@ -110,16 +110,38 @@ namespace CNA::Internal::Renderers::Fna3d
             byteCount = voxelCount * static_cast<std::size_t>(unitBytes);
             return true;
         }
+
+        FNA3D_Device* LiveDevice(const std::shared_ptr<Fna3dDeviceState>& deviceState) noexcept
+        {
+            return deviceState != nullptr ? deviceState->device : nullptr;
+        }
+
+        int CheckedBufferByteCount(int elementCount, std::size_t elementBytes, const char* what)
+        {
+            if (elementCount <= 0 || elementBytes == 0)
+            {
+                return 0;
+            }
+            if (elementBytes > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+                static_cast<std::size_t>(elementCount) >
+                    static_cast<std::size_t>(std::numeric_limits<int>::max()) / elementBytes)
+            {
+                throw std::runtime_error(
+                    std::string("FNA3D renderer: ") + what +
+                    " byte size exceeds FNA3D's signed 32-bit buffer limit.");
+            }
+            return elementCount * static_cast<int>(elementBytes);
+        }
     }
 
     // ---------------------------------------------------------------------------------------
     // Fna3dTextureRenderer
     // ---------------------------------------------------------------------------------------
 
-    Fna3dTextureRenderer::Fna3dTextureRenderer(FNA3D_Device* device, FNA3D_Texture* texture,
-                                               int width, int height, int levelCount,
-                                               int surfaceFormat, bool compressedReadback)
-        : device_(device)
+    Fna3dTextureRenderer::Fna3dTextureRenderer(
+        std::shared_ptr<Fna3dDeviceState> deviceState, FNA3D_Texture* texture, int width,
+        int height, int levelCount, int surfaceFormat, bool compressedReadback)
+        : deviceState_(deviceState)
         , texture_(texture)
         , width_(width)
         , height_(height)
@@ -131,9 +153,9 @@ namespace CNA::Internal::Renderers::Fna3d
 
     Fna3dTextureRenderer::~Fna3dTextureRenderer()
     {
-        if (device_ != nullptr && texture_ != nullptr)
+        if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device_, texture_);
+            FNA3D_AddDisposeTexture(device, texture_);
         }
         texture_ = nullptr;
     }
@@ -161,6 +183,7 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return;
         }
+        FNA3D_Device* device = deviceState_->RequireDevice("Texture2D upload");
 
         // `ImageData::surfaceFormat` is part of the renderer contract and may name a
         // block-compressed ordinal, whose raw blocks travel through this RGBA-named method
@@ -185,7 +208,7 @@ namespace CNA::Internal::Renderers::Fna3d
 
         if (stride == tightStride || stride <= 0)
         {
-            FNA3D_SetTextureData2D(device_, texture_, 0, 0, width_, height_, 0,
+            FNA3D_SetTextureData2D(device, texture_, 0, 0, width_, height_, 0,
                                    const_cast<std::uint8_t*>(pixels), levelBytes);
         }
         else
@@ -197,7 +220,7 @@ namespace CNA::Internal::Renderers::Fna3d
                             pixels + static_cast<std::size_t>(row) * stride,
                             static_cast<std::size_t>(tightStride));
             }
-            FNA3D_SetTextureData2D(device_, texture_, 0, 0, width_, height_, 0, packed.data(),
+            FNA3D_SetTextureData2D(device, texture_, 0, 0, width_, height_, 0, packed.data(),
                                    static_cast<int32_t>(packed.size()));
         }
         MarkLevelDefinedEXT(0);
@@ -211,12 +234,13 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return;
         }
+        FNA3D_Device* device = deviceState_->RequireDevice("Texture2D mip upload");
         const int levelBytes = FormatRegionByteCount(surfaceFormat_, levelW, levelH);
         if (levelBytes <= 0)
         {
             return;
         }
-        FNA3D_SetTextureData2D(device_, texture_, 0, 0, levelW, levelH, level,
+        FNA3D_SetTextureData2D(device, texture_, 0, 0, levelW, levelH, level,
                                const_cast<std::uint8_t*>(pixels), levelBytes);
         MarkLevelDefinedEXT(level);
     }
@@ -225,10 +249,11 @@ namespace CNA::Internal::Renderers::Fna3d
                                        int dataLength) const
     {
         const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
-        if (texture_ == nullptr || data == nullptr || w <= 0 || h <= 0 || level < 0 ||
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr || texture_ == nullptr || data == nullptr || w <= 0 || h <= 0 || level < 0 ||
             level >= levelCount_ ||
-            !IsValidTextureRegion2D(LevelExtent(width_, level), LevelExtent(height_, level), x,
-                                    y, w, h) ||
+            !IsValidTextureRegion2DForFormat(surfaceFormat_, LevelExtent(width_, level),
+                                             LevelExtent(height_, level), x, y, w, h) ||
             regionBytes <= 0 || dataLength < regionBytes)
         {
             return false;
@@ -241,7 +266,7 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return false;
         }
-        FNA3D_GetTextureData2D(device_, texture_, x, y, w, h, level, data, regionBytes);
+        FNA3D_GetTextureData2D(device, texture_, x, y, w, h, level, data, regionBytes);
         return true;
     }
 
@@ -249,66 +274,87 @@ namespace CNA::Internal::Renderers::Fna3d
     // Fna3dRenderTargetRenderer
     // ---------------------------------------------------------------------------------------
 
-    Fna3dRenderTargetRenderer::Fna3dRenderTargetRenderer(Fna3dRenderer* renderer,
-                                                         FNA3D_Device* device, int width,
-                                                         int height, int depthFormat,
-                                                         bool preserveContents, bool mipMap,
-                                                         int multiSampleCount, int surfaceFormat)
-        : renderer_(renderer)
-        , device_(device)
+    Fna3dRenderTargetRenderer::Fna3dRenderTargetRenderer(
+        std::shared_ptr<Fna3dDeviceState> deviceState, int width, int height, int depthFormat,
+        bool preserveContents, bool mipMap, int multiSampleCount, int surfaceFormat)
+        : deviceState_(deviceState)
         , width_(width > 0 ? width : 1)
         , height_(height > 0 ? height : 1)
         , depthFormat_(depthFormat)
         , surfaceFormat_(surfaceFormat)
         , preserveContents_(preserveContents)
     {
+        FNA3D_Device* device = deviceState_->RequireDevice("RenderTarget2D creation");
         const FNA3D_SurfaceFormat format = ToFna3dSurfaceFormat(surfaceFormat_);
         levelCount_ = LevelCountFor(std::max(width_, height_), mipMap);
 
-        texture_ = FNA3D_CreateTexture2D(device_, format, width_, height_, levelCount_, 1);
+        texture_ = FNA3D_CreateTexture2D(device, format, width_, height_, levelCount_, 1);
         if (texture_ == nullptr)
         {
             throw std::runtime_error(
                 "FNA3D renderer: FNA3D_CreateTexture2D failed for a render target.");
         }
-        FNA3D_SetTextureName(device_, texture_, "CNA RenderTarget2D");
+        FNA3D_SetTextureName(device, texture_, "CNA RenderTarget2D");
 
         if (multiSampleCount > 1)
         {
             const int applied =
-                FNA3D_GetMaxMultiSampleCount(device_, format, multiSampleCount);
+                FNA3D_GetMaxMultiSampleCount(device, format, multiSampleCount);
             if (applied > 1)
             {
                 multiSampleCount_ = applied;
-                colorBuffer_ = FNA3D_GenColorRenderbuffer(device_, width_, height_, format,
+                colorBuffer_ = FNA3D_GenColorRenderbuffer(device, width_, height_, format,
                                                           multiSampleCount_, texture_);
+                if (colorBuffer_ == nullptr)
+                {
+                    FNA3D_AddDisposeTexture(device, texture_);
+                    texture_ = nullptr;
+                    multiSampleCount_ = 0;
+                    throw std::runtime_error(
+                        "FNA3D renderer: MSAA color-renderbuffer creation failed for a "
+                        "RenderTarget2D.");
+                }
             }
         }
 
         if (depthFormat_ != 0)
         {
             depthBuffer_ = FNA3D_GenDepthStencilRenderbuffer(
-                device_, width_, height_, ToFna3dDepthFormat(depthFormat_), multiSampleCount_);
+                device, width_, height_, ToFna3dDepthFormat(depthFormat_), multiSampleCount_);
+            if (depthBuffer_ == nullptr)
+            {
+                if (colorBuffer_ != nullptr)
+                {
+                    FNA3D_AddDisposeRenderbuffer(device, colorBuffer_);
+                    colorBuffer_ = nullptr;
+                }
+                FNA3D_AddDisposeTexture(device, texture_);
+                texture_ = nullptr;
+                throw std::runtime_error(
+                    "FNA3D renderer: depth/stencil renderbuffer creation failed for a "
+                    "RenderTarget2D.");
+            }
         }
     }
 
     Fna3dRenderTargetRenderer::~Fna3dRenderTargetRenderer()
     {
-        if (device_ == nullptr)
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr)
         {
             return;
         }
         if (depthBuffer_ != nullptr)
         {
-            FNA3D_AddDisposeRenderbuffer(device_, depthBuffer_);
+            FNA3D_AddDisposeRenderbuffer(device, depthBuffer_);
         }
         if (colorBuffer_ != nullptr)
         {
-            FNA3D_AddDisposeRenderbuffer(device_, colorBuffer_);
+            FNA3D_AddDisposeRenderbuffer(device, colorBuffer_);
         }
         if (texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device_, texture_);
+            FNA3D_AddDisposeTexture(device, texture_);
         }
         depthBuffer_ = nullptr;
         colorBuffer_ = nullptr;
@@ -317,6 +363,7 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dRenderTargetRenderer::FillBindingEXT(FNA3D_RenderTargetBinding& binding) const
     {
+        (void) deviceState_->RequireDevice("RenderTarget2D binding");
         std::memset(&binding, 0, sizeof(binding));
         binding.type = FNA3D_RENDERTARGET_TYPE_2D;
         binding.twod.width = width_;
@@ -329,18 +376,12 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dRenderTargetRenderer::BindAsRenderTarget()
     {
-        if (renderer_ != nullptr)
-        {
-            renderer_->SetRenderTarget2D(this);
-        }
+        deviceState_->RequireRenderer("RenderTarget2D binding").SetRenderTarget2D(this);
     }
 
     void Fna3dRenderTargetRenderer::UnbindAsRenderTarget()
     {
-        if (renderer_ != nullptr)
-        {
-            renderer_->UnbindTargetsEXT();
-        }
+        deviceState_->RequireRenderer("RenderTarget2D unbinding").UnbindTargetsEXT();
     }
 
     int Fna3dRenderTargetRenderer::GetAppliedDepthStencilFormatEXT(
@@ -369,7 +410,8 @@ namespace CNA::Internal::Renderers::Fna3d
         // A render target created through CreateRenderTarget2DEXT may carry any surface format,
         // so its readback is sized by that format rather than assumed to be RGBA8.
         const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
-        if (texture_ == nullptr || data == nullptr || w <= 0 || h <= 0 || level < 0 ||
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr || texture_ == nullptr || data == nullptr || w <= 0 || h <= 0 || level < 0 ||
             level >= levelCount_ ||
             !IsValidTextureRegion2D(LevelExtent(width_, level), LevelExtent(height_, level), x,
                                     y, w, h) ||
@@ -381,7 +423,7 @@ namespace CNA::Internal::Renderers::Fna3d
         // once FNA3D has resolved it; the renderer resolves on unbind, so reading a target that is
         // still bound would see stale content. Resolve-on-unbind plus this ordering is exactly
         // FNA's own contract for RenderTarget2D.GetData.
-        FNA3D_GetTextureData2D(device_, texture_, x, y, w, h, level, data, regionBytes);
+        FNA3D_GetTextureData2D(device, texture_, x, y, w, h, level, data, regionBytes);
         return true;
     }
 
@@ -389,9 +431,10 @@ namespace CNA::Internal::Renderers::Fna3d
     // Fna3dTextureCubeRenderer
     // ---------------------------------------------------------------------------------------
 
-    Fna3dTextureCubeRenderer::Fna3dTextureCubeRenderer(FNA3D_Device* device, FNA3D_Texture* texture,
-                                                       int size, int levelCount, int surfaceFormat)
-        : device_(device)
+    Fna3dTextureCubeRenderer::Fna3dTextureCubeRenderer(
+        std::shared_ptr<Fna3dDeviceState> deviceState, FNA3D_Texture* texture, int size,
+        int levelCount, int surfaceFormat)
+        : deviceState_(deviceState)
         , texture_(texture)
         , size_(size)
         , levelCount_(levelCount > 0 ? levelCount : 1)
@@ -401,9 +444,9 @@ namespace CNA::Internal::Renderers::Fna3d
 
     Fna3dTextureCubeRenderer::~Fna3dTextureCubeRenderer()
     {
-        if (device_ != nullptr && texture_ != nullptr)
+        if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device_, texture_);
+            FNA3D_AddDisposeTexture(device, texture_);
         }
         texture_ = nullptr;
     }
@@ -412,7 +455,8 @@ namespace CNA::Internal::Renderers::Fna3d
                                            const void* data, int dataLength)
     {
         const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
-        if (texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr || texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
             level >= levelCount_ ||
             !IsValidTextureRegion2D(LevelExtent(size_, level), LevelExtent(size_, level), x, y,
                                     w, h) ||
@@ -420,7 +464,7 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return false;
         }
-        FNA3D_SetTextureDataCube(device_, texture_, x, y, w, h,
+        FNA3D_SetTextureDataCube(device, texture_, x, y, w, h,
                                  static_cast<FNA3D_CubeMapFace>(face), level,
                                  const_cast<void*>(data), regionBytes);
         return true;
@@ -430,7 +474,8 @@ namespace CNA::Internal::Renderers::Fna3d
                                            void* data, int dataLength) const
     {
         const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
-        if (texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr || texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
             level >= levelCount_ ||
             !IsValidTextureRegion2D(LevelExtent(size_, level), LevelExtent(size_, level), x, y,
                                     w, h) ||
@@ -438,7 +483,7 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return false;
         }
-        FNA3D_GetTextureDataCube(device_, texture_, x, y, w, h,
+        FNA3D_GetTextureDataCube(device, texture_, x, y, w, h,
                                  static_cast<FNA3D_CubeMapFace>(face), level, data, regionBytes);
         return true;
     }
@@ -447,64 +492,84 @@ namespace CNA::Internal::Renderers::Fna3d
     // Fna3dRenderTargetCubeRenderer
     // ---------------------------------------------------------------------------------------
 
-    Fna3dRenderTargetCubeRenderer::Fna3dRenderTargetCubeRenderer(Fna3dRenderer* renderer,
-                                                                 FNA3D_Device* device, int size,
-                                                                 int depthFormat,
-                                                                 bool preserveContents,
-                                                                 bool mipMap,
-                                                                 int multiSampleCount)
-        : renderer_(renderer)
-        , device_(device)
+    Fna3dRenderTargetCubeRenderer::Fna3dRenderTargetCubeRenderer(
+        std::shared_ptr<Fna3dDeviceState> deviceState, int size, int depthFormat,
+        bool preserveContents, bool mipMap, int multiSampleCount)
+        : deviceState_(deviceState)
         , size_(size > 0 ? size : 1)
         , depthFormat_(depthFormat)
         , preserveContents_(preserveContents)
     {
+        FNA3D_Device* device = deviceState_->RequireDevice("RenderTargetCube creation");
         levelCount_ = LevelCountFor(size_, mipMap);
-        texture_ = FNA3D_CreateTextureCube(device_, FNA3D_SURFACEFORMAT_COLOR, size_, levelCount_,
+        texture_ = FNA3D_CreateTextureCube(device, FNA3D_SURFACEFORMAT_COLOR, size_, levelCount_,
                                            1);
         if (texture_ == nullptr)
         {
             throw std::runtime_error(
                 "FNA3D renderer: FNA3D_CreateTextureCube failed for a render target.");
         }
-        FNA3D_SetTextureName(device_, texture_, "CNA RenderTargetCube");
+        FNA3D_SetTextureName(device, texture_, "CNA RenderTargetCube");
 
         if (multiSampleCount > 1)
         {
-            const int applied = FNA3D_GetMaxMultiSampleCount(device_, FNA3D_SURFACEFORMAT_COLOR,
+            const int applied = FNA3D_GetMaxMultiSampleCount(device, FNA3D_SURFACEFORMAT_COLOR,
                                                              multiSampleCount);
             if (applied > 1)
             {
                 multiSampleCount_ = applied;
                 colorBuffer_ = FNA3D_GenColorRenderbuffer(
-                    device_, size_, size_, FNA3D_SURFACEFORMAT_COLOR, multiSampleCount_, texture_);
+                    device, size_, size_, FNA3D_SURFACEFORMAT_COLOR, multiSampleCount_, texture_);
+                if (colorBuffer_ == nullptr)
+                {
+                    FNA3D_AddDisposeTexture(device, texture_);
+                    texture_ = nullptr;
+                    multiSampleCount_ = 0;
+                    throw std::runtime_error(
+                        "FNA3D renderer: MSAA color-renderbuffer creation failed for a "
+                        "RenderTargetCube.");
+                }
             }
         }
 
         if (depthFormat_ != 0)
         {
             depthBuffer_ = FNA3D_GenDepthStencilRenderbuffer(
-                device_, size_, size_, ToFna3dDepthFormat(depthFormat_), multiSampleCount_);
+                device, size_, size_, ToFna3dDepthFormat(depthFormat_), multiSampleCount_);
+            if (depthBuffer_ == nullptr)
+            {
+                if (colorBuffer_ != nullptr)
+                {
+                    FNA3D_AddDisposeRenderbuffer(device, colorBuffer_);
+                    colorBuffer_ = nullptr;
+                }
+                FNA3D_AddDisposeTexture(device, texture_);
+                texture_ = nullptr;
+                throw std::runtime_error(
+                    "FNA3D renderer: depth/stencil renderbuffer creation failed for a "
+                    "RenderTargetCube.");
+            }
         }
     }
 
     Fna3dRenderTargetCubeRenderer::~Fna3dRenderTargetCubeRenderer()
     {
-        if (device_ == nullptr)
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr)
         {
             return;
         }
         if (depthBuffer_ != nullptr)
         {
-            FNA3D_AddDisposeRenderbuffer(device_, depthBuffer_);
+            FNA3D_AddDisposeRenderbuffer(device, depthBuffer_);
         }
         if (colorBuffer_ != nullptr)
         {
-            FNA3D_AddDisposeRenderbuffer(device_, colorBuffer_);
+            FNA3D_AddDisposeRenderbuffer(device, colorBuffer_);
         }
         if (texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device_, texture_);
+            FNA3D_AddDisposeTexture(device, texture_);
         }
         depthBuffer_ = nullptr;
         colorBuffer_ = nullptr;
@@ -514,6 +579,7 @@ namespace CNA::Internal::Renderers::Fna3d
     void Fna3dRenderTargetCubeRenderer::FillBindingEXT(FNA3D_RenderTargetBinding& binding,
                                                        int face) const
     {
+        (void) deviceState_->RequireDevice("RenderTargetCube binding");
         std::memset(&binding, 0, sizeof(binding));
         binding.type = FNA3D_RENDERTARGET_TYPE_CUBE;
         binding.cube.size = size_;
@@ -532,21 +598,17 @@ namespace CNA::Internal::Renderers::Fna3d
     void Fna3dRenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
     {
         boundFace_ = face;
-        if (renderer_ != nullptr)
-        {
-            const RenderTargetBindingDescriptor descriptor =
-                RenderTargetBindingDescriptor::ForRenderTargetCubeFace(this, face, size_,
-                                                                       multiSampleCount_);
-            renderer_->SetRenderTargets(&descriptor, 1);
-        }
+        Fna3dRenderer& renderer =
+            deviceState_->RequireRenderer("RenderTargetCube face binding");
+        const RenderTargetBindingDescriptor descriptor =
+            RenderTargetBindingDescriptor::ForRenderTargetCubeFace(this, face, size_,
+                                                                   multiSampleCount_);
+        renderer.SetRenderTargets(&descriptor, 1);
     }
 
     void Fna3dRenderTargetCubeRenderer::UnbindAsRenderTarget()
     {
-        if (renderer_ != nullptr)
-        {
-            renderer_->UnbindTargetsEXT();
-        }
+        deviceState_->RequireRenderer("RenderTargetCube unbinding").UnbindTargetsEXT();
     }
 
     bool Fna3dRenderTargetCubeRenderer::HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const
@@ -559,7 +621,8 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         constexpr int kColorFormat = static_cast<int>(FNA3D_SURFACEFORMAT_COLOR);
         const int regionBytes = FormatRegionByteCount(kColorFormat, w, h);
-        if (texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr || texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
             level >= levelCount_ ||
             !IsValidTextureRegion2D(LevelExtent(size_, level), LevelExtent(size_, level), x, y,
                                     w, h) ||
@@ -567,7 +630,7 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return false;
         }
-        FNA3D_GetTextureDataCube(device_, texture_, x, y, w, h,
+        FNA3D_GetTextureDataCube(device, texture_, x, y, w, h,
                                  static_cast<FNA3D_CubeMapFace>(face), level, data, regionBytes);
         return true;
     }
@@ -576,11 +639,10 @@ namespace CNA::Internal::Renderers::Fna3d
     // Fna3dTexture3DRenderer
     // ---------------------------------------------------------------------------------------
 
-    Fna3dTexture3DRenderer::Fna3dTexture3DRenderer(FNA3D_Device* device, FNA3D_Texture* texture,
-                                                   int width, int height, int depth,
-                                                   int levelCount, int surfaceFormat,
-                                                   bool keepUploadMirror)
-        : device_(device)
+    Fna3dTexture3DRenderer::Fna3dTexture3DRenderer(
+        std::shared_ptr<Fna3dDeviceState> deviceState, FNA3D_Texture* texture, int width,
+        int height, int depth, int levelCount, int surfaceFormat, bool keepUploadMirror)
+        : deviceState_(deviceState)
         , texture_(texture)
         , width_(width)
         , height_(height)
@@ -598,9 +660,9 @@ namespace CNA::Internal::Renderers::Fna3d
 
     Fna3dTexture3DRenderer::~Fna3dTexture3DRenderer()
     {
-        if (device_ != nullptr && texture_ != nullptr)
+        if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device_, texture_);
+            FNA3D_AddDisposeTexture(device, texture_);
         }
         texture_ = nullptr;
     }
@@ -613,7 +675,8 @@ namespace CNA::Internal::Renderers::Fna3d
         const int levelHeight = validLevel ? LevelExtent(height_, level) : 0;
         const int levelDepth = validLevel ? LevelExtent(depth_, level) : 0;
         const int transferBytes = VolumeByteCount(surfaceFormat_, w, h, depth);
-        if (texture_ == nullptr || data == nullptr || !validLevel ||
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr || texture_ == nullptr || data == nullptr || !validLevel ||
             !IsValidTextureRegion3D(levelWidth, levelHeight, levelDepth, x, y, z, w, h, depth) ||
             transferBytes <= 0 || dataLength < transferBytes)
         {
@@ -629,9 +692,6 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return false;
         }
-        FNA3D_SetTextureData3D(device_, texture_, x, y, z, w, h, depth, level,
-                               const_cast<void*>(data), transferBytes);
-
         if (keepUploadMirror_)
         {
             std::vector<std::uint8_t>& mirror = uploadMirror_[static_cast<std::size_t>(level)];
@@ -664,6 +724,10 @@ namespace CNA::Internal::Renderers::Fna3d
                 }
             }
         }
+        // Allocate and update the exact fallback mirror first. If allocation fails, no native
+        // upload has happened and the CPU/GPU copies cannot silently diverge.
+        FNA3D_SetTextureData3D(device, texture_, x, y, z, w, h, depth, level,
+                               const_cast<void*>(data), transferBytes);
         return true;
     }
 
@@ -675,7 +739,8 @@ namespace CNA::Internal::Renderers::Fna3d
         const int levelHeight = validLevel ? LevelExtent(height_, level) : 0;
         const int levelDepth = validLevel ? LevelExtent(depth_, level) : 0;
         const int transferBytes = VolumeByteCount(surfaceFormat_, w, h, depth);
-        if (texture_ == nullptr || data == nullptr || !validLevel ||
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr || texture_ == nullptr || data == nullptr || !validLevel ||
             !IsValidTextureRegion3D(levelWidth, levelHeight, levelDepth, x, y, z, w, h, depth) ||
             transferBytes <= 0 || dataLength < transferBytes)
         {
@@ -683,7 +748,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         if (!keepUploadMirror_)
         {
-            FNA3D_GetTextureData3D(device_, texture_, x, y, z, w, h, depth, level, data,
+            FNA3D_GetTextureData3D(device, texture_, x, y, z, w, h, depth, level, data,
                                    transferBytes);
             return true;
         }
@@ -737,37 +802,39 @@ namespace CNA::Internal::Renderers::Fna3d
     // Fna3dVertexBufferRenderer
     // ---------------------------------------------------------------------------------------
 
-    Fna3dVertexBufferRenderer::Fna3dVertexBufferRenderer(FNA3D_Device* device, int vertexCapacity,
-                                                         int maxStride)
-        : device_(device)
+    Fna3dVertexBufferRenderer::Fna3dVertexBufferRenderer(
+        std::shared_ptr<Fna3dDeviceState> deviceState, int vertexCapacity, int maxStride)
+        : deviceState_(deviceState)
     {
-        const int capacity = (vertexCapacity > 0 ? vertexCapacity : 1) *
-                             (maxStride > 0 ? maxStride : 4);
+        const int capacity = CheckedBufferByteCount(vertexCapacity > 0 ? vertexCapacity : 1,
+                                                    maxStride > 0 ? maxStride : 4,
+                                                    "vertex-buffer allocation");
         EnsureCapacity(capacity);
     }
 
     Fna3dVertexBufferRenderer::~Fna3dVertexBufferRenderer()
     {
-        if (device_ != nullptr && buffer_ != nullptr)
+        if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && buffer_ != nullptr)
         {
-            FNA3D_AddDisposeVertexBuffer(device_, buffer_);
+            FNA3D_AddDisposeVertexBuffer(device, buffer_);
         }
         buffer_ = nullptr;
     }
 
     void Fna3dVertexBufferRenderer::EnsureCapacity(int byteCount)
     {
+        FNA3D_Device* device = deviceState_->RequireDevice("vertex-buffer allocation");
         if (byteCount <= capacityBytes_ && buffer_ != nullptr)
         {
             return;
         }
         if (buffer_ != nullptr)
         {
-            FNA3D_AddDisposeVertexBuffer(device_, buffer_);
+            FNA3D_AddDisposeVertexBuffer(device, buffer_);
             buffer_ = nullptr;
         }
         capacityBytes_ = byteCount > 0 ? byteCount : 4;
-        buffer_ = FNA3D_GenVertexBuffer(device_, 1, FNA3D_BUFFERUSAGE_WRITEONLY, capacityBytes_);
+        buffer_ = FNA3D_GenVertexBuffer(device, 1, FNA3D_BUFFERUSAGE_WRITEONLY, capacityBytes_);
         if (buffer_ == nullptr)
         {
             capacityBytes_ = 0;
@@ -791,16 +858,20 @@ namespace CNA::Internal::Renderers::Fna3d
             return;
         }
 
-        const int byteCount = vertex_count * static_cast<int>(stride_in_bytes);
+        const int byteCount =
+            CheckedBufferByteCount(vertex_count, stride_in_bytes, "vertex-buffer upload");
         const bool reallocated = byteCount > capacityBytes_ || buffer_ == nullptr;
         EnsureCapacity(byteCount);
 
         // A freshly allocated buffer has no previous content to preserve or alias, so NoOverwrite
         // would be a lie about GPU state; Discard is the only honest hint for a first write.
         const FNA3D_SetDataOptions resolved =
-            reallocated ? FNA3D_SETDATAOPTIONS_DISCARD : ResolveSetDataOptions(device_, options);
+            reallocated ? FNA3D_SETDATAOPTIONS_DISCARD
+                        : ResolveSetDataOptions(
+                              deviceState_->RequireDevice("vertex-buffer upload"), options);
 
-        FNA3D_SetVertexBufferData(device_, buffer_, 0, const_cast<void*>(data), vertex_count,
+        FNA3D_SetVertexBufferData(deviceState_->RequireDevice("vertex-buffer upload"), buffer_, 0,
+                                  const_cast<void*>(data), vertex_count,
                                   static_cast<int32_t>(stride_in_bytes),
                                   static_cast<int32_t>(stride_in_bytes), resolved);
         vertexCount_ = vertex_count;
@@ -809,6 +880,7 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dVertexBufferRenderer::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
+        (void) deviceState_->RequireDevice("vertex-declaration update");
         // FNA3D binds a genuine per-stream declaration rather than deriving a layout from a byte
         // stride, so the caller's own elements are kept verbatim and used at draw time. This is
         // the whole reason this renderer can accept custom vertex layouts that a stride-keyed
@@ -835,36 +907,39 @@ namespace CNA::Internal::Renderers::Fna3d
     // Fna3dIndexBufferRenderer
     // ---------------------------------------------------------------------------------------
 
-    Fna3dIndexBufferRenderer::Fna3dIndexBufferRenderer(FNA3D_Device* device, int indexCapacity,
-                                                       bool thirtyTwoBit)
-        : device_(device)
+    Fna3dIndexBufferRenderer::Fna3dIndexBufferRenderer(
+        std::shared_ptr<Fna3dDeviceState> deviceState, int indexCapacity, bool thirtyTwoBit)
+        : deviceState_(deviceState)
         , thirtyTwoBit_(thirtyTwoBit)
     {
-        EnsureCapacity((indexCapacity > 0 ? indexCapacity : 1) * (thirtyTwoBit ? 4 : 2));
+        EnsureCapacity(CheckedBufferByteCount(indexCapacity > 0 ? indexCapacity : 1,
+                                              thirtyTwoBit ? 4 : 2,
+                                              "index-buffer allocation"));
     }
 
     Fna3dIndexBufferRenderer::~Fna3dIndexBufferRenderer()
     {
-        if (device_ != nullptr && buffer_ != nullptr)
+        if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && buffer_ != nullptr)
         {
-            FNA3D_AddDisposeIndexBuffer(device_, buffer_);
+            FNA3D_AddDisposeIndexBuffer(device, buffer_);
         }
         buffer_ = nullptr;
     }
 
     void Fna3dIndexBufferRenderer::EnsureCapacity(int byteCount)
     {
+        FNA3D_Device* device = deviceState_->RequireDevice("index-buffer allocation");
         if (byteCount <= capacityBytes_ && buffer_ != nullptr)
         {
             return;
         }
         if (buffer_ != nullptr)
         {
-            FNA3D_AddDisposeIndexBuffer(device_, buffer_);
+            FNA3D_AddDisposeIndexBuffer(device, buffer_);
             buffer_ = nullptr;
         }
         capacityBytes_ = byteCount > 0 ? byteCount : 4;
-        buffer_ = FNA3D_GenIndexBuffer(device_, 1, FNA3D_BUFFERUSAGE_WRITEONLY, capacityBytes_);
+        buffer_ = FNA3D_GenIndexBuffer(device, 1, FNA3D_BUFFERUSAGE_WRITEONLY, capacityBytes_);
         if (buffer_ == nullptr)
         {
             capacityBytes_ = 0;
@@ -880,12 +955,15 @@ namespace CNA::Internal::Renderers::Fna3d
             indexCount_ = indexCount > 0 ? indexCount : 0;
             return;
         }
-        const int byteCount = indexCount * elementBytes;
+        const int byteCount =
+            CheckedBufferByteCount(indexCount, static_cast<std::size_t>(elementBytes),
+                                   "index-buffer upload");
         const bool reallocated = byteCount > capacityBytes_ || buffer_ == nullptr ||
                                  thirtyTwoBit != thirtyTwoBit_;
         thirtyTwoBit_ = thirtyTwoBit;
         EnsureCapacity(byteCount);
-        FNA3D_SetIndexBufferData(device_, buffer_, 0, const_cast<void*>(data), byteCount,
+        FNA3D_SetIndexBufferData(deviceState_->RequireDevice("index-buffer upload"), buffer_, 0,
+                                 const_cast<void*>(data), byteCount,
                                  reallocated ? FNA3D_SETDATAOPTIONS_DISCARD : options);
         indexCount_ = indexCount;
     }
@@ -903,23 +981,26 @@ namespace CNA::Internal::Renderers::Fna3d
     void Fna3dIndexBufferRenderer::SetData16WithOptions(const void* data, int index_count,
                                                         SetDataOptions options)
     {
-        Upload(data, index_count, 2, false, ResolveSetDataOptions(device_, options));
+        Upload(data, index_count, 2, false,
+               ResolveSetDataOptions(deviceState_->RequireDevice("index-buffer upload"), options));
     }
 
     void Fna3dIndexBufferRenderer::SetData32WithOptions(const void* data, int index_count,
                                                         SetDataOptions options)
     {
-        Upload(data, index_count, 4, true, ResolveSetDataOptions(device_, options));
+        Upload(data, index_count, 4, true,
+               ResolveSetDataOptions(deviceState_->RequireDevice("index-buffer upload"), options));
     }
 
     // ---------------------------------------------------------------------------------------
     // Fna3dOcclusionQueryRenderer
     // ---------------------------------------------------------------------------------------
 
-    Fna3dOcclusionQueryRenderer::Fna3dOcclusionQueryRenderer(FNA3D_Device* device)
-        : device_(device)
+    Fna3dOcclusionQueryRenderer::Fna3dOcclusionQueryRenderer(
+        std::shared_ptr<Fna3dDeviceState> deviceState)
+        : deviceState_(deviceState)
     {
-        query_ = FNA3D_CreateQuery(device_);
+        query_ = FNA3D_CreateQuery(deviceState_->RequireDevice("occlusion-query creation"));
         if (query_ == nullptr)
         {
             throw std::runtime_error("FNA3D renderer: FNA3D_CreateQuery failed.");
@@ -928,31 +1009,32 @@ namespace CNA::Internal::Renderers::Fna3d
 
     Fna3dOcclusionQueryRenderer::~Fna3dOcclusionQueryRenderer()
     {
-        if (device_ != nullptr && query_ != nullptr)
+        if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && query_ != nullptr)
         {
-            FNA3D_AddDisposeQuery(device_, query_);
+            FNA3D_AddDisposeQuery(device, query_);
         }
         query_ = nullptr;
     }
 
     void Fna3dOcclusionQueryRenderer::Begin()
     {
-        FNA3D_QueryBegin(device_, query_);
+        FNA3D_QueryBegin(deviceState_->RequireDevice("occlusion-query Begin"), query_);
     }
 
     void Fna3dOcclusionQueryRenderer::End()
     {
-        FNA3D_QueryEnd(device_, query_);
+        FNA3D_QueryEnd(deviceState_->RequireDevice("occlusion-query End"), query_);
     }
 
     bool Fna3dOcclusionQueryRenderer::IsComplete() const
     {
-        return FNA3D_QueryComplete(device_, query_) != 0;
+        return FNA3D_QueryComplete(deviceState_->RequireDevice("occlusion-query completion check"),
+                                   query_) != 0;
     }
 
     int Fna3dOcclusionQueryRenderer::PixelCount() const
     {
-        return FNA3D_QueryPixelCount(device_, query_);
+        return FNA3D_QueryPixelCount(deviceState_->RequireDevice("occlusion-query result"), query_);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -989,9 +1071,18 @@ namespace CNA::Internal::Renderers::Fna3d
         // capture of a CNA frame shows recognisable resources instead of anonymous handles.
         FNA3D_SetTextureName(device_, texture, "CNA Texture2D");
 
-        auto handle = std::make_unique<Fna3dTextureRenderer>(device_, texture, width, height,
-                                                             levelCount, data.surfaceFormat,
-                                                             compressedReadbackSupported_);
+        std::unique_ptr<Fna3dTextureRenderer> handle;
+        try
+        {
+            handle = std::make_unique<Fna3dTextureRenderer>(
+                deviceState_, texture, width, height, levelCount, data.surfaceFormat,
+                compressedReadbackSupported_);
+        }
+        catch (...)
+        {
+            FNA3D_AddDisposeTexture(device_, texture);
+            throw;
+        }
         if (!data.pixels.empty())
         {
             // `ImageData::pixels` is always tightly packed, and for a block-compressed ordinal a
@@ -1005,7 +1096,7 @@ namespace CNA::Internal::Renderers::Fna3d
 
     std::unique_ptr<IOcclusionQueryRenderer> Fna3dRenderer::CreateOcclusionQuery()
     {
-        return std::make_unique<Fna3dOcclusionQueryRenderer>(device_);
+        return std::make_unique<Fna3dOcclusionQueryRenderer>(deviceState_);
     }
 
     std::unique_ptr<ITexture3DRenderer> Fna3dRenderer::CreateTexture3D(int w, int h, int depth,
@@ -1026,9 +1117,17 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return nullptr;
         }
-        return std::make_unique<Fna3dTexture3DRenderer>(device_, texture, width, height, slices,
-                                                        levelCount, surfaceFormat,
-                                                        !texture3DReadbackSupported_);
+        try
+        {
+            return std::make_unique<Fna3dTexture3DRenderer>(
+                deviceState_, texture, width, height, slices, levelCount, surfaceFormat,
+                !texture3DReadbackSupported_);
+        }
+        catch (...)
+        {
+            FNA3D_AddDisposeTexture(device_, texture);
+            throw;
+        }
     }
 
     std::unique_ptr<ITextureCubeRenderer> Fna3dRenderer::CreateTextureCube(int size, bool mipMap,
@@ -1043,8 +1142,16 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return nullptr;
         }
-        return std::make_unique<Fna3dTextureCubeRenderer>(device_, texture, edge, levelCount,
-                                                          surfaceFormat);
+        try
+        {
+            return std::make_unique<Fna3dTextureCubeRenderer>(deviceState_, texture, edge,
+                                                              levelCount, surfaceFormat);
+        }
+        catch (...)
+        {
+            FNA3D_AddDisposeTexture(device_, texture);
+            throw;
+        }
     }
 
     std::unique_ptr<IRenderTargetRenderer> Fna3dRenderer::CreateRenderTarget2D(
@@ -1059,33 +1166,33 @@ namespace CNA::Internal::Renderers::Fna3d
         int surfaceFormat)
     {
         RequireRenderTargetFormatSupportedEXT(surfaceFormat);
-        return std::make_unique<Fna3dRenderTargetRenderer>(this, device_, w, h, depthFormat,
-                                                           preserveContents, mipMap,
-                                                           multiSampleCount, surfaceFormat);
+        return std::make_unique<Fna3dRenderTargetRenderer>(
+            deviceState_, w, h, depthFormat, preserveContents, mipMap, multiSampleCount,
+            surfaceFormat);
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> Fna3dRenderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         return std::make_unique<Fna3dRenderTargetCubeRenderer>(
-            this, device_, size, depthFormat, preserveContents, mipMap, multiSampleCount);
+            deviceState_, size, depthFormat, preserveContents, mipMap, multiSampleCount);
     }
 
     std::unique_ptr<IVertexBufferRenderer> Fna3dRenderer::CreateVertexBuffer(int vertex_capacity)
     {
         // 68 bytes is the widest vertex any CNA stock layout uses (position/normal/tangent/
         // texcoord/blend weights/blend indices); the buffer grows on demand for anything wider.
-        return std::make_unique<Fna3dVertexBufferRenderer>(device_, vertex_capacity, 68);
+        return std::make_unique<Fna3dVertexBufferRenderer>(deviceState_, vertex_capacity, 68);
     }
 
     std::unique_ptr<IIndexBufferRenderer> Fna3dRenderer::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<Fna3dIndexBufferRenderer>(device_, index_capacity, false);
+        return std::make_unique<Fna3dIndexBufferRenderer>(deviceState_, index_capacity, false);
     }
 
     std::unique_ptr<IIndexBufferRenderer> Fna3dRenderer::CreateIndexBuffer32(int index_capacity)
     {
-        return std::make_unique<Fna3dIndexBufferRenderer>(device_, index_capacity, true);
+        return std::make_unique<Fna3dIndexBufferRenderer>(deviceState_, index_capacity, true);
     }
 
     void Fna3dRenderer::RebindCurrentTargetsEXT()
@@ -1140,7 +1247,12 @@ namespace CNA::Internal::Renderers::Fna3d
             UnbindTargetsEXT();
             return;
         }
-        auto* target = static_cast<Fna3dRenderTargetRenderer*>(rt);
+        auto* target = dynamic_cast<Fna3dRenderTargetRenderer*>(rt);
+        if (target == nullptr || target->GetFna3dDeviceStateEXT() != deviceState_)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: RenderTarget2D was not created by this graphics device.");
+        }
         const RenderTargetBindingDescriptor descriptor =
             RenderTargetBindingDescriptor::ForRenderTarget2D(rt, 0, target->GetWidth(),
                                                              target->GetHeight(),
@@ -1155,6 +1267,61 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             UnbindTargetsEXT();
             return;
+        }
+
+        constexpr int kMaxRenderTargets = 4;
+        if (count > kMaxRenderTargets)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: SetRenderTargets received " + std::to_string(count) +
+                " targets, but XNA and FNA3D expose at most four simultaneous color targets.");
+        }
+
+        // Validate the whole set before disturbing the currently bound targets. Apart from
+        // avoiding type-confused static_casts, the shared token check distinguishes resources
+        // created by another live FNA3D device.
+        for (int i = 0; i < count; ++i)
+        {
+            const RenderTargetBindingDescriptor& descriptor = renderTargets[i];
+            if (descriptor.IsRenderTarget2D())
+            {
+                const auto* target =
+                    dynamic_cast<const Fna3dRenderTargetRenderer*>(descriptor.GetRenderTarget2D());
+                if (target == nullptr || target->GetFna3dDeviceStateEXT() != deviceState_)
+                {
+                    throw std::runtime_error(
+                        "FNA3D renderer: a RenderTarget2D in SetRenderTargets was not created by "
+                        "this graphics device.");
+                }
+                if (descriptor.GetArraySlice() != 0)
+                {
+                    throw std::runtime_error(
+                        "FNA3D renderer: render-target array slices are not supported; CNA render "
+                        "targets expose no texture arrays.");
+                }
+            }
+            else if (descriptor.IsRenderTargetCubeFace())
+            {
+                const auto* target = dynamic_cast<const Fna3dRenderTargetCubeRenderer*>(
+                    descriptor.GetRenderTargetCube());
+                if (target == nullptr || target->GetFna3dDeviceStateEXT() != deviceState_)
+                {
+                    throw std::runtime_error(
+                        "FNA3D renderer: a RenderTargetCube in SetRenderTargets was not created by "
+                        "this graphics device.");
+                }
+                if (descriptor.GetCubeFace() < 0 || descriptor.GetCubeFace() > 5)
+                {
+                    throw std::runtime_error(
+                        "FNA3D renderer: render-target cube face must be in the range [0, 5].");
+                }
+            }
+            else
+            {
+                throw std::runtime_error(
+                    "FNA3D renderer: SetRenderTargets received an unknown render-target "
+                    "descriptor type; a cube face is never flattened to a RenderTarget2D.");
+            }
         }
 
         UnbindTargetsEXT();
@@ -1176,19 +1343,7 @@ namespace CNA::Internal::Renderers::Fna3d
             if (descriptor.IsRenderTarget2D())
             {
                 auto* target =
-                    static_cast<Fna3dRenderTargetRenderer*>(descriptor.GetRenderTarget2D());
-                if (target == nullptr)
-                {
-                    throw std::runtime_error(
-                        "FNA3D renderer: SetRenderTargets received a null RenderTarget2D "
-                        "descriptor.");
-                }
-                if (descriptor.GetArraySlice() != 0)
-                {
-                    throw std::runtime_error(
-                        "FNA3D renderer: render-target array slices are not supported; CNA render "
-                        "targets expose no texture arrays.");
-                }
+                    dynamic_cast<Fna3dRenderTargetRenderer*>(descriptor.GetRenderTarget2D());
                 target->FillBindingEXT(bound.binding);
                 if (i == 0)
                 {
@@ -1199,14 +1354,8 @@ namespace CNA::Internal::Renderers::Fna3d
             }
             else if (descriptor.IsRenderTargetCubeFace())
             {
-                auto* target =
-                    static_cast<Fna3dRenderTargetCubeRenderer*>(descriptor.GetRenderTargetCube());
-                if (target == nullptr)
-                {
-                    throw std::runtime_error(
-                        "FNA3D renderer: SetRenderTargets received a null RenderTargetCube "
-                        "descriptor.");
-                }
+                auto* target = dynamic_cast<Fna3dRenderTargetCubeRenderer*>(
+                    descriptor.GetRenderTargetCube());
                 target->FillBindingEXT(bound.binding, descriptor.GetCubeFace());
                 if (i == 0)
                 {
@@ -1215,12 +1364,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     preserveContents = target->GetPreserveContentsEXT();
                 }
             }
-            else
-            {
-                throw std::runtime_error(
-                    "FNA3D renderer: SetRenderTargets received an unknown render-target "
-                    "descriptor type; a cube face is never flattened to a RenderTarget2D.");
-            }
+            else { /* preflight above made this branch unreachable */ }
 
             bound.needsResolve =
                 bound.binding.levelCount > 1 || bound.binding.multiSampleCount > 1;

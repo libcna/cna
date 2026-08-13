@@ -14,8 +14,8 @@
 //   real boundary, not a clamp).
 // Check E -- the renderer's own documented refusals still fire and still name their reason:
 //   instanced drawing, custom effects, an unknown vertex stride, an out-of-contract state ordinal.
-// Check F -- teardown with resources still alive does not crash: resources created and left to
-//   their destructors are released in the right order relative to the device.
+// Check F -- resources created and destroyed before the device leave it usable. The converse
+//   destruction order is covered by the separate Fna3d_Device_Lifetime test.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = skipped (no display).
 
@@ -127,15 +127,13 @@ private:
     {
         std::string message;
         {
-            // The contract this codebase actually establishes for a disposed texture is enforced
-            // at DRAW time (see skia_presentation_edge_test.cpp), not at transfer time: the shared
-            // Texture2D::SetData carries no isDisposed_ guard. That is a shared-layer gap, not an
-            // FNA3D one -- it is recorded in plan_fna3d.md rather than patched from this lane --
-            // so what is measured here is the boundary that IS contractual.
             Texture2D texture(device, 4, 4);
             texture.Dispose();
             Check(texture.getIsDisposedProperty(),
                   "a disposed texture reports itself disposed");
+            std::vector<Color> pixels(16, Color::White);
+            Check(Threw([&] { texture.SetData(pixels.data(), 16); }, message),
+                  "uploading to a disposed texture is refused");
             // Disposal must also have withdrawn it from the device's sampler collections, so a
             // later frame cannot bind freed storage.
             Check(device.getTexturesProperty()[0] != &texture,

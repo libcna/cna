@@ -52,6 +52,30 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
+    FNA3D_Device* Fna3dDeviceState::RequireDevice(const char* operation) const
+    {
+        if (device == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("FNA3D renderer: ") +
+                (operation != nullptr ? operation : "resource operation") +
+                " was requested after the owning graphics device was destroyed.");
+        }
+        return device;
+    }
+
+    Fna3dRenderer& Fna3dDeviceState::RequireRenderer(const char* operation) const
+    {
+        if (renderer == nullptr || device == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("FNA3D renderer: ") +
+                (operation != nullptr ? operation : "renderer operation") +
+                " was requested after the owning graphics device was destroyed.");
+        }
+        return *renderer;
+    }
+
     namespace Detail
     {
         std::uint64_t PrepareWindowFlags()
@@ -136,6 +160,11 @@ namespace CNA::Internal::Renderers::Fna3d
                 "hint to pin a specific driver.");
         }
 
+        deviceState_->device = device_;
+        deviceState_->renderer = this;
+
+        try
+        {
         RecomputeLayout();
 
         // XNA's device defaults: BlendState.Opaque, DepthStencilState.Default,
@@ -223,6 +252,19 @@ namespace CNA::Internal::Renderers::Fna3d
         ProbeCompressedReadbackSupport();
 
         IGraphicsRenderer::RegisterForWindow(window_, this);
+        }
+        catch (...)
+        {
+            deviceState_->renderer = nullptr;
+            for (Fna3dStockEffect& effect : effects_)
+            {
+                effect.Destroy(device_);
+            }
+            FNA3D_DestroyDevice(device_);
+            device_ = nullptr;
+            deviceState_->device = nullptr;
+            throw;
+        }
     }
 
     void Fna3dRenderer::QueryDriverLimits()
@@ -399,12 +441,17 @@ namespace CNA::Internal::Renderers::Fna3d
 
     Fna3dRenderer::~Fna3dRenderer()
     {
+        // From this point resource and SpriteBatch wrappers must no longer route back into this
+        // object, even though the native device remains alive briefly for orderly internal
+        // teardown below.
+        deviceState_->renderer = nullptr;
         if (window_ != nullptr)
         {
             IGraphicsRenderer::UnregisterForWindow(window_);
         }
         if (device_ == nullptr)
         {
+            deviceState_->device = nullptr;
             return;
         }
 
@@ -416,6 +463,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         FNA3D_DestroyDevice(device_);
         device_ = nullptr;
+        deviceState_->device = nullptr;
     }
 
     // ---------------------------------------------------------------------------------------

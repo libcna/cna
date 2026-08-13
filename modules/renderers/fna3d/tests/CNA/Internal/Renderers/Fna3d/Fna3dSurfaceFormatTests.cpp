@@ -140,4 +140,20 @@ TEST(Fna3dSurfaceFormatTests, TransferRegionsMustFitTheirMipExtent)
     EXPECT_FALSE(IsValidTextureRegion3D(8, 4, 2, 0, 0, 1, 1, 1, 2));
 }
 
+TEST(Fna3dSurfaceFormatTests, CompressedTransferRegionsRespectBlockBoundaries)
+{
+    const int color = Ordinal(SurfaceFormat::Color);
+    const int dxt5 = Ordinal(SurfaceFormat::Dxt5);
+
+    EXPECT_TRUE(IsValidTextureRegion2DForFormat(color, 10, 10, 1, 1, 3, 3));
+    EXPECT_TRUE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 0, 0, 4, 4));
+    EXPECT_TRUE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 4, 4, 6, 6));
+    EXPECT_TRUE(IsValidTextureRegion2DForFormat(dxt5, 6, 6, 0, 0, 6, 6));
+
+    EXPECT_FALSE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 1, 0, 4, 4));
+    EXPECT_FALSE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 0, 2, 4, 4));
+    EXPECT_FALSE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 0, 0, 6, 4));
+    EXPECT_FALSE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 0, 0, 4, 6));
+}
+
 #endif // CNA_RENDERER_FNA3D

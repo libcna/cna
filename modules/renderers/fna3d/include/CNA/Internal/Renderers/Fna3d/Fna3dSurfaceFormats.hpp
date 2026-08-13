@@ -77,6 +77,16 @@ namespace CNA::Internal::Renderers::Fna3d
                                               int width, int height) noexcept;
 
     /**
+     * @brief Format-aware 2D region check, including 4x4 block alignment.
+     *
+     * A compressed region must begin on a block boundary. Its right/bottom edge may end in a
+     * partial block only when it is also the mip level's right/bottom edge.
+     */
+    [[nodiscard]] bool IsValidTextureRegion2DForFormat(int surfaceFormat, int levelWidth,
+                                                       int levelHeight, int x, int y, int width,
+                                                       int height) noexcept;
+
+    /**
      * @brief 3D counterpart of IsValidTextureRegion2D.
      */
     [[nodiscard]] bool IsValidTextureRegion3D(int levelWidth, int levelHeight, int levelDepth,

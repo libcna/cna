@@ -11,6 +11,8 @@
 // Check D -- SpriteEffects::FlipHorizontally really mirrors the sampled quadrant.
 // Check E -- a rotated sprite about its centre lands where the rotation says it should.
 // Check F -- Point sampling of a 2x2 atlas magnified 32x keeps hard texel edges (no filtering).
+// Check G -- a deferred batch larger than the 16-bit index range is split without wrapping the
+//   final sprite back onto vertex zero.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = skipped (no display).
 
@@ -130,6 +132,20 @@ public:
                     Rectangle(30, 16, 1, 1), Color(255, 0, 0, 255));
         ExpectPixel("point sampling keeps the texel edge hard on the green side",
                     Rectangle(34, 16, 1, 1), Color(0, 255, 0, 255));
+
+        // Check G -- one 16-bit indexed draw can address 16,384 quads exactly. The first 16,384
+        // are deliberately off-screen and the next one is visible. Without chunking, its generated
+        // base index wraps to zero and it redraws the first off-screen quad instead.
+        device.Clear(Color(0, 0, 0, 255));
+        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+        for (int i = 0; i < 16384; ++i)
+        {
+            batch.Draw(atlas, Rectangle(-100, -100, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        }
+        batch.Draw(atlas, Rectangle(10, 10, 8, 8), Rectangle(1, 0, 1, 1), Color::White);
+        batch.End();
+        ExpectPixel("a SpriteBatch past 16-bit index capacity keeps its final sprite",
+                    Rectangle(14, 14, 1, 1), Color(0, 255, 0, 255), 2);
     }
 };
 

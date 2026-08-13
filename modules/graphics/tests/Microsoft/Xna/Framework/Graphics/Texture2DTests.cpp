@@ -25,6 +25,7 @@
 #include "System/IO/MemoryStream.hpp"
 #include "System/Environment.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -743,6 +744,22 @@ TEST(Texture2DTest, SetDataSimpleWithZeroCountDoesNotThrow)
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     EXPECT_NO_THROW(tex.SetData(buf, 0));
+}
+
+TEST(Texture2DTest, TransfersAfterDisposeThrowObjectDisposedException)
+{
+    Texture2D tex;
+    tex.Dispose();
+    Color color(1, 2, 3, 4);
+    std::uint8_t rgba[4] = {1, 2, 3, 4};
+
+    EXPECT_THROW(tex.SetData(&color, 1), System::ObjectDisposedException);
+    EXPECT_THROW(tex.SetData(0, nullptr, &color, 0, 1),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(tex.SetDataRGBA(rgba, 1), System::ObjectDisposedException);
+    EXPECT_THROW(tex.GetData(&color, 1), System::ObjectDisposedException);
+    EXPECT_THROW(tex.GetData(0, nullptr, &color, 0, 1),
+                 System::ObjectDisposedException);
 }
 
 // -----------------------------------------------------------------------

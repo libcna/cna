@@ -87,6 +87,30 @@ namespace CNA::Internal::Renderers::Fna3d
                x <= levelWidth - width && y <= levelHeight - height;
     }
 
+    bool IsValidTextureRegion2DForFormat(int surfaceFormat, int levelWidth, int levelHeight, int x,
+                                         int y, int width, int height) noexcept
+    {
+        if (!IsValidTextureRegion2D(levelWidth, levelHeight, x, y, width, height))
+        {
+            return false;
+        }
+        try
+        {
+            if (!IsBlockCompressedFormat(surfaceFormat))
+            {
+                return true;
+            }
+        }
+        catch (...)
+        {
+            return false;
+        }
+
+        const bool rightEdgeAligned = width % 4 == 0 || x == levelWidth - width;
+        const bool bottomEdgeAligned = height % 4 == 0 || y == levelHeight - height;
+        return x % 4 == 0 && y % 4 == 0 && rightEdgeAligned && bottomEdgeAligned;
+    }
+
     bool IsValidTextureRegion3D(int levelWidth, int levelHeight, int levelDepth, int x, int y,
                                 int z, int width, int height, int depth) noexcept
     {

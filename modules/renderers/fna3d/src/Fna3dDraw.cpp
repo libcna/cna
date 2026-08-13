@@ -86,12 +86,17 @@ namespace CNA::Internal::Renderers::Fna3d
                                                 const Matrix& projection, PrimitiveType primitive,
                                                 int primitiveCount, const GpuDrawParams& params)
     {
-        const auto& indexBuffer = static_cast<const Fna3dIndexBufferRenderer&>(ib);
+        const auto* indexBuffer = dynamic_cast<const Fna3dIndexBufferRenderer*>(&ib);
+        if (indexBuffer == nullptr || indexBuffer->GetFna3dDeviceStateEXT() != deviceState_)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: the index buffer was not created by this graphics device.");
+        }
         PrepareDrawEXT(vb, world, view, projection, params, params.baseVertex);
         FNA3D_DrawIndexedPrimitives(
             device_, ToFna3dPrimitiveType(primitive), params.baseVertex, params.minVertexIndex,
             params.numVertices > 0 ? params.numVertices : vb.GetVertexCount(), params.startIndex,
-            primitiveCount, indexBuffer.GetFna3dBufferEXT(), indexBuffer.GetElementSizeEXT());
+            primitiveCount, indexBuffer->GetFna3dBufferEXT(), indexBuffer->GetElementSizeEXT());
     }
 
     void Fna3dRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb,
@@ -144,10 +149,11 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         const auto* primaryBuffer = dynamic_cast<const Fna3dVertexBufferRenderer*>(&vb);
-        if (primaryBuffer == nullptr)
+        if (primaryBuffer == nullptr || primaryBuffer->GetFna3dDeviceStateEXT() != deviceState_)
         {
             throw std::runtime_error(
-                "FNA3D renderer: the primary vertex buffer was not created by this renderer.");
+                "FNA3D renderer: the primary vertex buffer was not created by this graphics "
+                "device.");
         }
 
         // FNA3D requires the elements to live through ApplyVertexBufferBindings. CNA's public
@@ -198,11 +204,12 @@ namespace CNA::Internal::Renderers::Fna3d
                 const GpuVertexStreamBinding& stream = params.vertexStreams[i];
                 const auto* streamBuffer =
                     dynamic_cast<const Fna3dVertexBufferRenderer*>(stream.buffer);
-                if (streamBuffer == nullptr)
+                if (streamBuffer == nullptr ||
+                    streamBuffer->GetFna3dDeviceStateEXT() != deviceState_)
                 {
                     throw std::runtime_error(
                         "FNA3D renderer: a declared vertex stream was not created by this "
-                        "renderer; the binding list is never silently truncated.");
+                        "graphics device; the binding list is never silently truncated.");
                 }
                 FNA3D_VertexBufferBinding& binding = bindings[static_cast<std::size_t>(i)];
                 binding.vertexBuffer = streamBuffer->GetFna3dBufferEXT();
@@ -247,11 +254,18 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         // A render target bound as an effect texture is an IRenderTargetRenderer, not an
-        // Fna3dTextureRenderer, so the sampled-texture mix-in is what both have in common.
+        // Fna3dTextureRenderer, so the sampled-texture mix-in is what both have in common. A
+        // type match alone is insufficient: two live FNA3D renderers own different devices.
         const auto* sampled = dynamic_cast<const Fna3dSampledTexture*>(texture);
-        FNA3D_VerifySampler(device_, slot,
-                            sampled != nullptr ? sampled->GetFna3dTextureEXT() : nullptr,
-                            &samplerStates_[static_cast<std::size_t>(slot)]);
+        if (texture != nullptr &&
+            (sampled == nullptr || sampled->GetFna3dDeviceStateEXT() != deviceState_))
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: an effect texture was not created by this graphics device.");
+        }
+        FNA3D_VerifySampler(
+            device_, slot, sampled != nullptr ? sampled->GetFna3dTextureEXT() : nullptr,
+            &samplerStates_[static_cast<std::size_t>(slot)]);
     }
 
     void Fna3dRenderer::ApplyStockEffectEXT(const Matrix& world, const Matrix& view,
@@ -330,12 +344,17 @@ namespace CNA::Internal::Renderers::Fna3d
                                                                params.specularEnabled, oneLight));
                 effect.Apply(device_);
                 BindEffectTextureEXT(0, params.texture0);
-                if (const auto* cube =
-                        dynamic_cast<const Fna3dSampledTexture*>(params.envMap))
+                const auto* cube = dynamic_cast<const Fna3dSampledTexture*>(params.envMap);
+                if (params.envMap != nullptr &&
+                    (cube == nullptr || cube->GetFna3dDeviceStateEXT() != deviceState_))
                 {
-                    FNA3D_VerifySampler(device_, 1, cube->GetFna3dTextureEXT(),
-                                        &samplerStates_[1]);
+                    throw std::runtime_error(
+                        "FNA3D renderer: the environment map was not created by this graphics "
+                        "device.");
                 }
+                FNA3D_VerifySampler(device_, 1,
+                                    cube != nullptr ? cube->GetFna3dTextureEXT() : nullptr,
+                                    &samplerStates_[1]);
                 break;
             }
 
