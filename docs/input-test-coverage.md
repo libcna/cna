@@ -49,7 +49,6 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | Type | Header | Dedicated suite | Test files | Note |
 |------|--------|-----------------|-----------|------|
 | `GestureDetector` | `modules/input/include/CNA/Internal/Input/GestureDetector.hpp` | yes | 4 |  |
-| `ISdlHapticBackend` | `modules/input/include/CNA/Internal/Input/SdlHapticBackend.hpp` | no | 0 | covered via SdlHapticBackendTests.cpp (FakeHapticTest) via the purpose-specific RecordingHapticBackend |
 | `InputManager` | `modules/input/include/CNA/Internal/Input/InputManager.hpp` | no | 10 | covered via InputResetTests / PlatformInputBridge* (no same-named suite by design) |
 | `MouseButton` | `modules/input/include/CNA/Internal/Input/InputManager.hpp` | no | 2 | covered via PlatformInputBridgeMouse* / InputManager (internal enum) |
 | `PlatformInputBridge` | `modules/input/include/CNA/Internal/Input/PlatformInputBridge.hpp` | yes | 10 |  |

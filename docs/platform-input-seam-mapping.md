@@ -119,18 +119,14 @@ and they were written as fallbacks, not as the answer.
 
 ---
 
-## 5. Haptics: two contracts, one device
+## 5. Haptics: one platform contract, one device
 
-`IPlatformHaptics` (PLAT-84) enumerates stable `DeviceId`s and owns the complete standalone simple
-rumble subset: capability, initialization, play and stop. `SdlHapticBackend` still does the full
-SDL effect model — create/update/run/stop/destroy arbitrary effect structures, effect status,
-gain, autocenter, pause/resume, plus feature and capacity queries — and `CnaExt/HapticDevice.cpp`
-uses essentially all of it. Its former enumeration/name methods were removed.
-
-Collapsing the two now would mean either lifting the whole SDL effect struct into the platform
-contract (which puts an SDL data layout in a header whose entire purpose is not having one) or
-deleting a feature CNA already ships. Neither is acceptable as a side effect of a refactor, so
-The narrowed `SdlHapticBackend` survives this phase and the effect model gets its own design task.
+`IPlatformHaptics` (PLAT-84) enumerates stable `DeviceId`s and owns both simple rumble and rich
+force feedback. An opened `IPlatformHapticDevice` is an independently owned session whose effect
+descriptor uses CNA enums, fixed-width magnitudes, millisecond durations and owned custom samples.
+That preserves create/update/run/stop/destroy, effect status, gain, autocenter, pause/resume and
+feature/capacity queries without putting an SDL union in the contract. `Sdl3Haptics` performs the
+only native conversion and owns handle teardown; the former `SdlHapticBackend` is deleted.
 
 ---
 

@@ -5,6 +5,8 @@
 #include "CNA/Platform/Input/IPlatformHaptics.hpp"
 
 #include <map>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -105,6 +107,37 @@ namespace CNA::Platform::Testing {
             return IsConnected(id) && stopResult;
         }
 
+        /** @brief Opens a configured rich-effect device. */
+        [[nodiscard]] std::unique_ptr<IPlatformHapticDevice> Open(const DeviceId id) override
+        {
+            return openDevice ? openDevice(id) : nullptr;
+        }
+
+        /** @brief Opens the configured joystick haptic device. */
+        [[nodiscard]] std::unique_ptr<IPlatformHapticDevice> OpenFromJoystick(
+            const DeviceId id) override
+        {
+            return openJoystickDevice ? openJoystickDevice(id) : nullptr;
+        }
+
+        /** @brief Opens the configured mouse haptic device. */
+        [[nodiscard]] std::unique_ptr<IPlatformHapticDevice> OpenFromMouse() override
+        {
+            return openMouseDevice ? openMouseDevice() : nullptr;
+        }
+
+        /** @brief Gets the configured joystick force-feedback answer. */
+        [[nodiscard]] bool IsJoystickHaptic(const DeviceId id) const override
+        {
+            return isJoystickHaptic ? isJoystickHaptic(id) : false;
+        }
+
+        /** @brief Gets the configured mouse force-feedback answer. */
+        [[nodiscard]] bool IsMouseHaptic() const override
+        {
+            return isMouseHaptic ? isMouseHaptic() : false;
+        }
+
         /** @brief Answer returned after connection/capability validation. */
         bool playResult = true;
         /** @brief Initialization result after connection/capability validation. */
@@ -137,6 +170,16 @@ namespace CNA::Platform::Testing {
         float lastSmallMotor = 0.0f;
         /** @brief Last requested duration. */
         std::uint32_t lastDurationMilliseconds = 0;
+        /** @brief Factory used by advanced standalone-device tests. */
+        std::function<std::unique_ptr<IPlatformHapticDevice>(DeviceId)> openDevice;
+        /** @brief Factory used by joystick-device tests. */
+        std::function<std::unique_ptr<IPlatformHapticDevice>(DeviceId)> openJoystickDevice;
+        /** @brief Factory used by mouse-device tests. */
+        std::function<std::unique_ptr<IPlatformHapticDevice>()> openMouseDevice;
+        /** @brief Predicate used by joystick correlation tests. */
+        std::function<bool(DeviceId)> isJoystickHaptic;
+        /** @brief Predicate used by mouse correlation tests. */
+        std::function<bool()> isMouseHaptic;
 
     private:
         std::map<DeviceId, HapticInfo> devices_;

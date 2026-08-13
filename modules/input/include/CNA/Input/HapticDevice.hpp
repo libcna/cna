@@ -7,12 +7,14 @@
 #include "System/IDisposable.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 
 namespace CNA::Platform
 {
     class IPlatform;
+    class IPlatformHapticDevice;
 }
 
 namespace CNA::Input
@@ -135,10 +137,11 @@ namespace CNA::Input
     private:
         friend class Haptics;
 
-        HapticDevice(void* effectHandle, CNA::Platform::IPlatform* platform,
+        HapticDevice(std::unique_ptr<CNA::Platform::IPlatformHapticDevice> effectDevice,
+                     CNA::Platform::IPlatform* platform,
                      std::optional<std::uint64_t> standaloneId, std::string standaloneName);
 
-        void* effectHandle_ = nullptr;
+        std::unique_ptr<CNA::Platform::IPlatformHapticDevice> effectDevice_;
         CNA::Platform::IPlatform* platform_ = nullptr;
         std::optional<std::uint64_t> standaloneId_;
         std::string standaloneName_;

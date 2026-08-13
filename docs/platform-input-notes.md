@@ -224,10 +224,10 @@ each cell.
   initialization, play and stop cross `IPlatformHaptics`. `HapticDevice` keeps the selected
   platform's haptic-subsystem reference until `Dispose`, and the SDL3 platform closes its cached
   handles before releasing the final subsystem reference.
-- **The rich effect model is preserved deliberately.** SDL3 can still create/update/run arbitrary
-  constant, periodic, condition, ramp, left-right and custom effects through the internal
-  `SdlHapticBackend`. That seam no longer enumerates devices or handles standalone rumble, and the
-  public `HapticDevice` header no longer declares `SDL_Haptic`.
+- **The rich effect model is platform-owned.** `IPlatformHapticDevice` creates/updates/runs
+  arbitrary constant, periodic, condition, ramp, left-right and custom effects from CNA-owned
+  descriptors. SDL3 converts them at its edge; the duplicate internal backend is gone and the
+  public `HapticDevice` contains no native handle.
 
 ### Host motion sensors (PLAT-85)
 

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Input/Haptics.hpp"
 
-#include "CNA/Internal/Input/SdlHapticBackend.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/Input/IPlatformHaptics.hpp"
 #include "CNA/Platform/Input/IPlatformJoystick.hpp"
@@ -103,10 +102,9 @@ namespace CNA::Input
         {
             return {};
         }
-        SDL_Haptic* handle =
-            CNA::Internal::Input::sdl_haptic_backend().OpenHaptic(static_cast<SDL_HapticID>(id));
+        std::unique_ptr<CNA::Platform::IPlatformHapticDevice> device = service->Open(id);
         subsystem.TransferOwnership();
-        return HapticDevice(handle, &platform, id, std::move(name));
+        return HapticDevice(std::move(device), &platform, id, std::move(name));
     }
 
     HapticDevice Haptics::OpenFromJoystickEXT(const std::uint32_t joystickId)
@@ -119,12 +117,12 @@ namespace CNA::Input
         ScopedHapticSubsystem subsystem(platform);
         if (!subsystem.IsAcquired())
             return {};
-        SDL_Haptic* handle =
-            CNA::Internal::Input::sdl_haptic_backend().OpenHapticFromJoystick(joystickId);
-        if (handle == nullptr)
+        std::unique_ptr<CNA::Platform::IPlatformHapticDevice> device =
+            platform.GetHaptics()->OpenFromJoystick(joystickId);
+        if (device == nullptr)
             return {};
         subsystem.TransferOwnership();
-        return HapticDevice(handle, &platform, std::nullopt, {});
+        return HapticDevice(std::move(device), &platform, std::nullopt, {});
     }
 
     HapticDevice Haptics::OpenFromMouseEXT()
@@ -135,11 +133,12 @@ namespace CNA::Input
         ScopedHapticSubsystem subsystem(platform);
         if (!subsystem.IsAcquired())
             return {};
-        SDL_Haptic* handle = CNA::Internal::Input::sdl_haptic_backend().OpenHapticFromMouse();
-        if (handle == nullptr)
+        std::unique_ptr<CNA::Platform::IPlatformHapticDevice> device =
+            platform.GetHaptics()->OpenFromMouse();
+        if (device == nullptr)
             return {};
         subsystem.TransferOwnership();
-        return HapticDevice(handle, &platform, std::nullopt, {});
+        return HapticDevice(std::move(device), &platform, std::nullopt, {});
     }
 
     bool Haptics::IsJoystickHapticEXT(const std::uint32_t joystickId)
@@ -151,7 +150,7 @@ namespace CNA::Input
             return false;
         ScopedHapticSubsystem subsystem(platform);
         return subsystem.IsAcquired()
-            && CNA::Internal::Input::sdl_haptic_backend().IsJoystickHaptic(joystickId);
+            && platform.GetHaptics()->IsJoystickHaptic(joystickId);
     }
 
     bool Haptics::IsMouseHapticEXT()
@@ -160,7 +159,6 @@ namespace CNA::Input
         if (platform.GetHaptics() == nullptr)
             return false;
         ScopedHapticSubsystem subsystem(platform);
-        return subsystem.IsAcquired()
-            && CNA::Internal::Input::sdl_haptic_backend().IsMouseHaptic();
+        return subsystem.IsAcquired() && platform.GetHaptics()->IsMouseHaptic();
     }
 }

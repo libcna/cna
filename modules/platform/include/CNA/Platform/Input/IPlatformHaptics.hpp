@@ -3,12 +3,122 @@
 
 #include "CNA/Platform/PlatformEvent.hpp"
 
+#include <array>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace CNA::Platform {
+
+    /** @brief Platform-neutral force-feedback effect family. */
+    enum class HapticEffectType
+    {
+        Constant,
+        Sine,
+        Square,
+        Triangle,
+        SawtoothUp,
+        SawtoothDown,
+        Ramp,
+        Spring,
+        Damper,
+        Inertia,
+        Friction,
+        LeftRight,
+        Custom
+    };
+
+    /** @brief Coordinate system used by a force-feedback direction. */
+    enum class HapticDirectionType
+    {
+        Polar,
+        Cartesian,
+        Spherical,
+        SteeringAxis
+    };
+
+    /** @brief Direction of a force-feedback effect. */
+    struct HapticDirection
+    {
+        HapticDirectionType type = HapticDirectionType::Polar;
+        std::array<std::int32_t, 3> values{};
+    };
+
+    /**
+     * @brief Platform-neutral force-feedback descriptor.
+     *
+     * Only the fields belonging to `type` are consumed. Magnitudes use the portable signed or
+     * unsigned 16-bit ranges; durations are milliseconds. A platform implementation translates
+     * this value into its native representation at the final boundary.
+     */
+    struct HapticEffect
+    {
+        HapticEffectType type = HapticEffectType::Constant;
+        HapticDirection direction;
+        std::uint32_t length = 0;
+        std::uint16_t delay = 0;
+        std::uint16_t button = 0;
+        std::uint16_t interval = 0;
+        std::int16_t level = 0;
+        std::uint16_t period = 0;
+        std::int16_t magnitude = 0;
+        std::int16_t offset = 0;
+        std::uint16_t phase = 0;
+        std::int16_t rampStart = 0;
+        std::int16_t rampEnd = 0;
+        std::array<std::uint16_t, 3> rightSaturation{};
+        std::array<std::uint16_t, 3> leftSaturation{};
+        std::array<std::int16_t, 3> rightCoefficient{};
+        std::array<std::int16_t, 3> leftCoefficient{};
+        std::array<std::uint16_t, 3> deadband{};
+        std::array<std::int16_t, 3> center{};
+        std::uint16_t largeMagnitude = 0;
+        std::uint16_t smallMagnitude = 0;
+        std::uint8_t customChannels = 0;
+        std::uint16_t customPeriod = 0;
+        std::vector<std::uint16_t> customData;
+        std::uint16_t attackLength = 0;
+        std::uint16_t attackLevel = 0;
+        std::uint16_t fadeLength = 0;
+        std::uint16_t fadeLevel = 0;
+    };
+
+    /** @brief Static capabilities of one opened force-feedback device. */
+    struct HapticDeviceCapabilities
+    {
+        std::string name;
+        /** @brief Portable feature bits; values match CNA::Input::HapticFeatureEXT. */
+        std::uint32_t features = 0;
+        int axisCount = 0;
+        int maxEffects = -1;
+        int maxEffectsPlaying = -1;
+        bool rumbleSupported = false;
+    };
+
+    /** @brief One independently owned opened force-feedback device. */
+    class IPlatformHapticDevice
+    {
+    public:
+        virtual ~IPlatformHapticDevice() = default;
+        [[nodiscard]] virtual HapticDeviceCapabilities GetCapabilities() const = 0;
+        [[nodiscard]] virtual bool IsEffectSupported(const HapticEffect& effect) const = 0;
+        virtual bool InitializeRumble() = 0;
+        virtual bool PlayRumble(float strength, std::uint32_t durationMilliseconds) = 0;
+        virtual bool StopRumble() = 0;
+        [[nodiscard]] virtual int CreateEffect(const HapticEffect& effect) = 0;
+        virtual bool UpdateEffect(int effectId, const HapticEffect& effect) = 0;
+        virtual bool RunEffect(int effectId, std::uint32_t iterations) = 0;
+        virtual bool StopEffect(int effectId) = 0;
+        virtual void DestroyEffect(int effectId) = 0;
+        [[nodiscard]] virtual bool GetEffectStatus(int effectId) const = 0;
+        virtual bool StopAllEffects() = 0;
+        virtual bool SetGain(int gain) = 0;
+        virtual bool SetAutocenter(int autocenter) = 0;
+        virtual bool Pause() = 0;
+        virtual bool Resume() = 0;
+    };
 
     /** @brief Stable identity and simple-rumble capability of one haptic device. */
     struct HapticInfo
@@ -122,6 +232,36 @@ namespace CNA::Platform {
          * @return True if the device accepted the request.
          */
         virtual bool StopAll(DeviceId id) = 0;
+
+        /** @brief Opens a standalone device for advanced effects. */
+        [[nodiscard]] virtual std::unique_ptr<IPlatformHapticDevice> Open(DeviceId id)
+        {
+            (void)id;
+            return nullptr;
+        }
+
+        /** @brief Opens the haptic device associated with a joystick. */
+        [[nodiscard]] virtual std::unique_ptr<IPlatformHapticDevice> OpenFromJoystick(DeviceId id)
+        {
+            (void)id;
+            return nullptr;
+        }
+
+        /** @brief Opens the host mouse haptic device. */
+        [[nodiscard]] virtual std::unique_ptr<IPlatformHapticDevice> OpenFromMouse()
+        {
+            return nullptr;
+        }
+
+        /** @brief Gets whether a joystick exposes force feedback. */
+        [[nodiscard]] virtual bool IsJoystickHaptic(DeviceId id) const
+        {
+            (void)id;
+            return false;
+        }
+
+        /** @brief Gets whether the host mouse exposes force feedback. */
+        [[nodiscard]] virtual bool IsMouseHaptic() const { return false; }
     };
 
 } // namespace CNA::Platform

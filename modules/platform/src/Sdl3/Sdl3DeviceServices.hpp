@@ -103,6 +103,16 @@ namespace CNA::Platform::Sdl3 {
         bool StopRumble(DeviceId id) override;
         /** @brief Stops every active effect owned by this service. */
         bool StopAll(DeviceId id) override;
+        /** @brief Opens a standalone device for advanced effects. */
+        [[nodiscard]] std::unique_ptr<IPlatformHapticDevice> Open(DeviceId id) override;
+        /** @brief Opens the force-feedback device associated with a joystick. */
+        [[nodiscard]] std::unique_ptr<IPlatformHapticDevice> OpenFromJoystick(DeviceId id) override;
+        /** @brief Opens the host mouse force-feedback device. */
+        [[nodiscard]] std::unique_ptr<IPlatformHapticDevice> OpenFromMouse() override;
+        /** @brief Gets whether a joystick exposes force feedback. */
+        [[nodiscard]] bool IsJoystickHaptic(DeviceId id) const override;
+        /** @brief Gets whether the host mouse exposes force feedback. */
+        [[nodiscard]] bool IsMouseHaptic() const override;
 
         /** @brief Closes cached handles before the haptic subsystem's final release. */
         void Deactivate();

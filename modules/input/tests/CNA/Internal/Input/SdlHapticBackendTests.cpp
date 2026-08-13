@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// input_noxna.md N-013: haptic (force-feedback) tests using the injectable fake backend (no real
+// input_noxna.md N-013: haptic (force-feedback) tests using a platform fake (no real
 // FFB hardware). Covers enumeration, open/close (standalone, from-joystick, from-mouse), capabilities,
-// the HapticEffectEXT -> SDL_HapticEffect conversion for every effect family, the effect lifecycle
+// the HapticEffectEXT -> platform descriptor conversion for every effect family, the effect lifecycle
 // (create/update/run/stop/destroy/status), rumble, and gain/autocenter/pause/resume.
 
 #include <gtest/gtest.h>
-
-#include <SDL3/SDL.h>
 
 #include <limits>
 #include <utility>
@@ -17,8 +15,6 @@
 #include "CNA/Input/HapticEffect.hpp"
 #include "CNA/Input/HapticInfo.hpp"
 #include "CNA/Input/Haptics.hpp"
-#include "CNA/Internal/Input/InputManager.hpp"
-#include "CNA/Internal/Input/SdlHapticBackend.hpp"
 #include "CNA/Platform/CannedHaptics.hpp"
 
 #include "RecordingHapticBackend.hpp"
@@ -32,12 +28,13 @@ using CNA::Input::HapticEffectTypeEXT;
 using CNA::Input::HapticFeatureEXT;
 using CNA::Input::HapticInfoEXT;
 using CNA::Input::Haptics;
-using CNA::Internal::Input::InputManager;
-using CNA::Internal::Input::SetSdlHapticBackendForTests;
 using CNA::Internal::Input::test_support::FakeHapticConfig;
 using CNA::Internal::Input::test_support::RecordingHapticBackend;
 using CNA::Platform::JoystickInfo;
 using CNA::Platform::JoystickKind;
+using CNA::Platform::HapticDirectionType;
+using CNA::Platform::HapticEffect;
+using CNA::Platform::HapticEffectType;
 using CNA::Platform::Testing::CannedHapticsPlatform;
 using CNA::Platform::Testing::PlatformTestDecorator;
 using CNA::Platform::Testing::ScopedCurrentPlatform;
@@ -52,19 +49,25 @@ namespace
 
         void SetUp() override
         {
-            InputManager::ResetAllForTests();
-            SetSdlHapticBackendForTests(&fake);
-            fake.onRegister = [this](const SDL_HapticID id, const FakeHapticConfig& config)
+            fake.onRegister = [this](const CNA::Platform::DeviceId id,
+                                     const FakeHapticConfig& config)
             {
-                platform.haptics.Connect(
-                    {static_cast<CNA::Platform::DeviceId>(id), config.name,
-                     config.rumbleSupported});
+                platform.haptics.Connect({id, config.name, config.rumbleSupported});
             };
-        }
-        void TearDown() override
-        {
-            SetSdlHapticBackendForTests(nullptr);
-            InputManager::ResetAllForTests();
+            platform.haptics.openDevice = [this](const CNA::Platform::DeviceId id)
+            {
+                return fake.Open(id);
+            };
+            platform.haptics.openJoystickDevice = [this](const CNA::Platform::DeviceId id)
+            {
+                return fake.OpenFromJoystick(id);
+            };
+            platform.haptics.openMouseDevice = [this] { return fake.OpenFromMouse(); };
+            platform.haptics.isJoystickHaptic = [this](const CNA::Platform::DeviceId id)
+            {
+                return fake.IsJoystickHaptic(id);
+            };
+            platform.haptics.isMouseHaptic = [this] { return fake.IsMouseHaptic(); };
         }
     };
 
@@ -86,7 +89,8 @@ namespace
     {
         FakeHapticConfig cfg;
         cfg.name = "Test Wheel";
-        cfg.features = SDL_HAPTIC_CONSTANT | SDL_HAPTIC_SINE | SDL_HAPTIC_SPRING | SDL_HAPTIC_GAIN;
+        cfg.features = static_cast<std::uint32_t>(HapticFeatureEXT::Constant
+            | HapticFeatureEXT::Sine | HapticFeatureEXT::Spring | HapticFeatureEXT::Gain);
         cfg.axisCount = 2;
         cfg.maxEffects = 16;
         cfg.maxEffectsPlaying = 4;
@@ -345,7 +349,7 @@ TEST_F(FakeHapticTest, EffectMethodsAreSafeWhenClosed)
     EXPECT_FALSE(device.IsEffectSupportedEXT(effect));
 }
 
-// --- effect-family -> SDL_HapticEffect conversion (the most bug-prone part) ---
+// --- public effect -> platform descriptor conversion ---
 
 TEST_F(FakeHapticTest, ConstantEffectMapsDirectionLevelAndEnvelope)
 {
@@ -367,18 +371,18 @@ TEST_F(FakeHapticTest, ConstantEffectMapsDirectionLevelAndEnvelope)
     effect.fadeLevel = 0;
 
     (void)device.CreateEffectEXT(effect);
-    const SDL_HapticEffect& sdl = fake.lastCreatedEffect;
+    const HapticEffect& platformEffect = fake.lastCreatedEffect;
 
-    EXPECT_EQ(sdl.constant.type, static_cast<Uint16>(SDL_HAPTIC_CONSTANT));
-    EXPECT_EQ(sdl.constant.direction.type, SDL_HAPTIC_CARTESIAN);
-    EXPECT_EQ(sdl.constant.direction.dir[0], 1);
-    EXPECT_EQ(sdl.constant.length, 1000u);
-    EXPECT_EQ(sdl.constant.delay, 5);
-    EXPECT_EQ(sdl.constant.button, 1);
-    EXPECT_EQ(sdl.constant.interval, 10);
-    EXPECT_EQ(sdl.constant.level, 20000);
-    EXPECT_EQ(sdl.constant.attack_length, 100);
-    EXPECT_EQ(sdl.constant.fade_length, 200);
+    EXPECT_EQ(platformEffect.type, HapticEffectType::Constant);
+    EXPECT_EQ(platformEffect.direction.type, HapticDirectionType::Cartesian);
+    EXPECT_EQ(platformEffect.direction.values[0], 1);
+    EXPECT_EQ(platformEffect.length, 1000u);
+    EXPECT_EQ(platformEffect.delay, 5);
+    EXPECT_EQ(platformEffect.button, 1);
+    EXPECT_EQ(platformEffect.interval, 10);
+    EXPECT_EQ(platformEffect.level, 20000);
+    EXPECT_EQ(platformEffect.attackLength, 100);
+    EXPECT_EQ(platformEffect.fadeLength, 200);
 }
 
 TEST_F(FakeHapticTest, PeriodicEffectMapsWaveParameters)
@@ -394,33 +398,34 @@ TEST_F(FakeHapticTest, PeriodicEffectMapsWaveParameters)
     effect.phase = 9000;
 
     (void)device.CreateEffectEXT(effect);
-    const SDL_HapticEffect& sdl = fake.lastCreatedEffect;
+    const HapticEffect& platformEffect = fake.lastCreatedEffect;
 
-    EXPECT_EQ(sdl.periodic.type, static_cast<Uint16>(SDL_HAPTIC_SINE));
-    EXPECT_EQ(sdl.periodic.period, 100);
-    EXPECT_EQ(sdl.periodic.magnitude, 15000);
-    EXPECT_EQ(sdl.periodic.phase, 9000);
+    EXPECT_EQ(platformEffect.type, HapticEffectType::Sine);
+    EXPECT_EQ(platformEffect.period, 100);
+    EXPECT_EQ(platformEffect.magnitude, 15000);
+    EXPECT_EQ(platformEffect.phase, 9000);
 }
 
-TEST_F(FakeHapticTest, AllFivePeriodicWaveformsMapToDistinctSdlTypes)
+TEST_F(FakeHapticTest, AllFivePeriodicWaveformsMapToDistinctPlatformTypes)
 {
     fake.Register(5, WheelConfig());
     HapticDevice device = Haptics::OpenEXT(5);
 
-    struct Case { HapticEffectTypeEXT ext; Uint16 sdl; };
+    struct Case { HapticEffectTypeEXT ext; HapticEffectType platform; };
     const Case cases[] = {
-        {HapticEffectTypeEXT::Sine, SDL_HAPTIC_SINE},
-        {HapticEffectTypeEXT::Square, SDL_HAPTIC_SQUARE},
-        {HapticEffectTypeEXT::Triangle, SDL_HAPTIC_TRIANGLE},
-        {HapticEffectTypeEXT::SawtoothUp, SDL_HAPTIC_SAWTOOTHUP},
-        {HapticEffectTypeEXT::SawtoothDown, SDL_HAPTIC_SAWTOOTHDOWN},
+        {HapticEffectTypeEXT::Sine, HapticEffectType::Sine},
+        {HapticEffectTypeEXT::Square, HapticEffectType::Square},
+        {HapticEffectTypeEXT::Triangle, HapticEffectType::Triangle},
+        {HapticEffectTypeEXT::SawtoothUp, HapticEffectType::SawtoothUp},
+        {HapticEffectTypeEXT::SawtoothDown, HapticEffectType::SawtoothDown},
     };
     for (const auto& c : cases)
     {
         HapticEffectEXT effect;
         effect.type = c.ext;
         (void)device.CreateEffectEXT(effect);
-        EXPECT_EQ(fake.lastCreatedEffect.periodic.type, c.sdl) << "ext type " << static_cast<int>(c.ext);
+        EXPECT_EQ(fake.lastCreatedEffect.type, c.platform)
+            << "ext type " << static_cast<int>(c.ext);
     }
 }
 
@@ -435,11 +440,11 @@ TEST_F(FakeHapticTest, RampEffectMapsStartAndEnd)
     effect.rampEnd = 32767;
 
     (void)device.CreateEffectEXT(effect);
-    const SDL_HapticEffect& sdl = fake.lastCreatedEffect;
+    const HapticEffect& platformEffect = fake.lastCreatedEffect;
 
-    EXPECT_EQ(sdl.ramp.type, static_cast<Uint16>(SDL_HAPTIC_RAMP));
-    EXPECT_EQ(sdl.ramp.start, -32768);
-    EXPECT_EQ(sdl.ramp.end, 32767);
+    EXPECT_EQ(platformEffect.type, HapticEffectType::Ramp);
+    EXPECT_EQ(platformEffect.rampStart, -32768);
+    EXPECT_EQ(platformEffect.rampEnd, 32767);
 }
 
 TEST_F(FakeHapticTest, ConditionEffectMapsPerAxisArrays)
@@ -457,36 +462,37 @@ TEST_F(FakeHapticTest, ConditionEffectMapsPerAxisArrays)
     effect.center = {16, 17, 18};
 
     (void)device.CreateEffectEXT(effect);
-    const SDL_HapticEffect& sdl = fake.lastCreatedEffect;
+    const HapticEffect& platformEffect = fake.lastCreatedEffect;
 
-    EXPECT_EQ(sdl.condition.type, static_cast<Uint16>(SDL_HAPTIC_SPRING));
-    EXPECT_EQ(sdl.condition.right_sat[0], 1);
-    EXPECT_EQ(sdl.condition.right_sat[2], 3);
-    EXPECT_EQ(sdl.condition.left_sat[1], 5);
-    EXPECT_EQ(sdl.condition.right_coeff[2], 9);
-    EXPECT_EQ(sdl.condition.left_coeff[0], 10);
-    EXPECT_EQ(sdl.condition.deadband[1], 14);
-    EXPECT_EQ(sdl.condition.center[2], 18);
+    EXPECT_EQ(platformEffect.type, HapticEffectType::Spring);
+    EXPECT_EQ(platformEffect.rightSaturation[0], 1);
+    EXPECT_EQ(platformEffect.rightSaturation[2], 3);
+    EXPECT_EQ(platformEffect.leftSaturation[1], 5);
+    EXPECT_EQ(platformEffect.rightCoefficient[2], 9);
+    EXPECT_EQ(platformEffect.leftCoefficient[0], 10);
+    EXPECT_EQ(platformEffect.deadband[1], 14);
+    EXPECT_EQ(platformEffect.center[2], 18);
 }
 
-TEST_F(FakeHapticTest, AllFourConditionTypesMapToDistinctSdlTypes)
+TEST_F(FakeHapticTest, AllFourConditionTypesMapToDistinctPlatformTypes)
 {
     fake.Register(5, WheelConfig());
     HapticDevice device = Haptics::OpenEXT(5);
 
-    struct Case { HapticEffectTypeEXT ext; Uint16 sdl; };
+    struct Case { HapticEffectTypeEXT ext; HapticEffectType platform; };
     const Case cases[] = {
-        {HapticEffectTypeEXT::Spring, SDL_HAPTIC_SPRING},
-        {HapticEffectTypeEXT::Damper, SDL_HAPTIC_DAMPER},
-        {HapticEffectTypeEXT::Inertia, SDL_HAPTIC_INERTIA},
-        {HapticEffectTypeEXT::Friction, SDL_HAPTIC_FRICTION},
+        {HapticEffectTypeEXT::Spring, HapticEffectType::Spring},
+        {HapticEffectTypeEXT::Damper, HapticEffectType::Damper},
+        {HapticEffectTypeEXT::Inertia, HapticEffectType::Inertia},
+        {HapticEffectTypeEXT::Friction, HapticEffectType::Friction},
     };
     for (const auto& c : cases)
     {
         HapticEffectEXT effect;
         effect.type = c.ext;
         (void)device.CreateEffectEXT(effect);
-        EXPECT_EQ(fake.lastCreatedEffect.condition.type, c.sdl) << "ext type " << static_cast<int>(c.ext);
+        EXPECT_EQ(fake.lastCreatedEffect.type, c.platform)
+            << "ext type " << static_cast<int>(c.ext);
     }
 }
 
@@ -502,12 +508,12 @@ TEST_F(FakeHapticTest, LeftRightEffectMapsMotorMagnitudesOnly)
     effect.smallMagnitude = 20000;
 
     (void)device.CreateEffectEXT(effect);
-    const SDL_HapticEffect& sdl = fake.lastCreatedEffect;
+    const HapticEffect& platformEffect = fake.lastCreatedEffect;
 
-    EXPECT_EQ(sdl.leftright.type, static_cast<Uint16>(SDL_HAPTIC_LEFTRIGHT));
-    EXPECT_EQ(sdl.leftright.length, 300u);
-    EXPECT_EQ(sdl.leftright.large_magnitude, 40000);
-    EXPECT_EQ(sdl.leftright.small_magnitude, 20000);
+    EXPECT_EQ(platformEffect.type, HapticEffectType::LeftRight);
+    EXPECT_EQ(platformEffect.length, 300u);
+    EXPECT_EQ(platformEffect.largeMagnitude, 40000);
+    EXPECT_EQ(platformEffect.smallMagnitude, 20000);
 }
 
 TEST_F(FakeHapticTest, CustomEffectMapsChannelsPeriodAndSampleData)
@@ -522,18 +528,17 @@ TEST_F(FakeHapticTest, CustomEffectMapsChannelsPeriodAndSampleData)
     effect.customData = {1, 2, 3, 4, 5, 6}; // 2 channels * 3 samples
 
     (void)device.CreateEffectEXT(effect);
-    const SDL_HapticEffect& sdl = fake.lastCreatedEffect;
+    const HapticEffect& platformEffect = fake.lastCreatedEffect;
 
-    EXPECT_EQ(sdl.custom.type, static_cast<Uint16>(SDL_HAPTIC_CUSTOM));
-    EXPECT_EQ(sdl.custom.channels, 2);
-    EXPECT_EQ(sdl.custom.period, 10);
-    EXPECT_EQ(sdl.custom.samples, 3);
-    ASSERT_NE(sdl.custom.data, nullptr);
-    EXPECT_EQ(sdl.custom.data[0], 1);
-    EXPECT_EQ(sdl.custom.data[5], 6);
+    EXPECT_EQ(platformEffect.type, HapticEffectType::Custom);
+    EXPECT_EQ(platformEffect.customChannels, 2);
+    EXPECT_EQ(platformEffect.customPeriod, 10);
+    ASSERT_EQ(platformEffect.customData.size(), 6u);
+    EXPECT_EQ(platformEffect.customData[0], 1);
+    EXPECT_EQ(platformEffect.customData[5], 6);
 }
 
-TEST_F(FakeHapticTest, CustomEffectWithEmptyDataHasNullDataPointer)
+TEST_F(FakeHapticTest, CustomEffectWithEmptyDataStaysEmpty)
 {
     fake.Register(5, WheelConfig());
     HapticDevice device = Haptics::OpenEXT(5);
@@ -543,8 +548,7 @@ TEST_F(FakeHapticTest, CustomEffectWithEmptyDataHasNullDataPointer)
     effect.customChannels = 1;
 
     (void)device.CreateEffectEXT(effect);
-    EXPECT_EQ(fake.lastCreatedEffect.custom.data, nullptr);
-    EXPECT_EQ(fake.lastCreatedEffect.custom.samples, 0);
+    EXPECT_TRUE(fake.lastCreatedEffect.customData.empty());
 }
 
 TEST_F(FakeHapticTest, UpdateEffectEXTForwardsNewParameters)
@@ -560,7 +564,7 @@ TEST_F(FakeHapticTest, UpdateEffectEXTForwardsNewParameters)
     HapticEffectEXT updated = effect;
     updated.level = 5000;
     EXPECT_TRUE(device.UpdateEffectEXT(effectId, updated));
-    EXPECT_EQ(fake.lastUpdatedEffect.constant.level, 5000);
+    EXPECT_EQ(fake.lastUpdatedEffect.level, 5000);
 }
 
 // --- gain / autocenter / pause / resume ---

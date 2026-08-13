@@ -122,6 +122,304 @@ namespace CNA::Platform::Sdl3 {
             return static_cast<Uint16>(SanitizeHapticStrength(strength) * 65535.0f);
         }
 
+        Uint8 ToSdlDirectionType(const HapticDirectionType type)
+        {
+            switch (type)
+            {
+                case HapticDirectionType::Polar:        return SDL_HAPTIC_POLAR;
+                case HapticDirectionType::Cartesian:    return SDL_HAPTIC_CARTESIAN;
+                case HapticDirectionType::Spherical:    return SDL_HAPTIC_SPHERICAL;
+                case HapticDirectionType::SteeringAxis: return SDL_HAPTIC_STEERING_AXIS;
+            }
+            return SDL_HAPTIC_POLAR;
+        }
+
+        SDL_HapticDirection ToSdlDirection(const HapticDirection& direction)
+        {
+            SDL_HapticDirection result{};
+            result.type = ToSdlDirectionType(direction.type);
+            result.dir[0] = direction.values[0];
+            result.dir[1] = direction.values[1];
+            result.dir[2] = direction.values[2];
+            return result;
+        }
+
+        Uint16 ToSdlEffectType(const HapticEffectType type)
+        {
+            switch (type)
+            {
+                case HapticEffectType::Constant:     return SDL_HAPTIC_CONSTANT;
+                case HapticEffectType::Sine:         return SDL_HAPTIC_SINE;
+                case HapticEffectType::Square:       return SDL_HAPTIC_SQUARE;
+                case HapticEffectType::Triangle:     return SDL_HAPTIC_TRIANGLE;
+                case HapticEffectType::SawtoothUp:   return SDL_HAPTIC_SAWTOOTHUP;
+                case HapticEffectType::SawtoothDown: return SDL_HAPTIC_SAWTOOTHDOWN;
+                case HapticEffectType::Ramp:         return SDL_HAPTIC_RAMP;
+                case HapticEffectType::Spring:       return SDL_HAPTIC_SPRING;
+                case HapticEffectType::Damper:       return SDL_HAPTIC_DAMPER;
+                case HapticEffectType::Inertia:      return SDL_HAPTIC_INERTIA;
+                case HapticEffectType::Friction:     return SDL_HAPTIC_FRICTION;
+                case HapticEffectType::LeftRight:    return SDL_HAPTIC_LEFTRIGHT;
+                case HapticEffectType::Custom:       return SDL_HAPTIC_CUSTOM;
+            }
+            return SDL_HAPTIC_CONSTANT;
+        }
+
+        bool IsPeriodic(const HapticEffectType type)
+        {
+            return type == HapticEffectType::Sine || type == HapticEffectType::Square
+                || type == HapticEffectType::Triangle || type == HapticEffectType::SawtoothUp
+                || type == HapticEffectType::SawtoothDown;
+        }
+
+        bool IsCondition(const HapticEffectType type)
+        {
+            return type == HapticEffectType::Spring || type == HapticEffectType::Damper
+                || type == HapticEffectType::Inertia || type == HapticEffectType::Friction;
+        }
+
+        SDL_HapticEffect ToSdlEffect(const HapticEffect& effect,
+                                     std::vector<Uint16>& customDataStorage)
+        {
+            SDL_HapticEffect result{};
+            const Uint16 type = ToSdlEffectType(effect.type);
+            if (effect.type == HapticEffectType::LeftRight)
+            {
+                result.leftright.type = type;
+                result.leftright.length = effect.length;
+                result.leftright.large_magnitude = effect.largeMagnitude;
+                result.leftright.small_magnitude = effect.smallMagnitude;
+                return result;
+            }
+            if (IsCondition(effect.type))
+            {
+                SDL_HapticCondition& value = result.condition;
+                value.type = type;
+                value.direction = ToSdlDirection(effect.direction);
+                value.length = effect.length;
+                value.delay = effect.delay;
+                value.button = effect.button;
+                value.interval = effect.interval;
+                for (std::size_t index = 0; index < 3; ++index)
+                {
+                    value.right_sat[index] = effect.rightSaturation[index];
+                    value.left_sat[index] = effect.leftSaturation[index];
+                    value.right_coeff[index] = effect.rightCoefficient[index];
+                    value.left_coeff[index] = effect.leftCoefficient[index];
+                    value.deadband[index] = effect.deadband[index];
+                    value.center[index] = effect.center[index];
+                }
+                return result;
+            }
+            if (effect.type == HapticEffectType::Custom)
+            {
+                SDL_HapticCustom& value = result.custom;
+                value.type = type;
+                value.direction = ToSdlDirection(effect.direction);
+                value.length = effect.length;
+                value.delay = effect.delay;
+                value.button = effect.button;
+                value.interval = effect.interval;
+                value.channels = effect.customChannels;
+                value.period = effect.customPeriod;
+                customDataStorage = effect.customData;
+                value.samples = effect.customChannels > 0
+                    ? static_cast<Uint16>(customDataStorage.size() / effect.customChannels)
+                    : 0;
+                value.data = customDataStorage.empty() ? nullptr : customDataStorage.data();
+                value.attack_length = effect.attackLength;
+                value.attack_level = effect.attackLevel;
+                value.fade_length = effect.fadeLength;
+                value.fade_level = effect.fadeLevel;
+                return result;
+            }
+            if (effect.type == HapticEffectType::Ramp)
+            {
+                SDL_HapticRamp& value = result.ramp;
+                value.type = type;
+                value.direction = ToSdlDirection(effect.direction);
+                value.length = effect.length;
+                value.delay = effect.delay;
+                value.button = effect.button;
+                value.interval = effect.interval;
+                value.start = effect.rampStart;
+                value.end = effect.rampEnd;
+                value.attack_length = effect.attackLength;
+                value.attack_level = effect.attackLevel;
+                value.fade_length = effect.fadeLength;
+                value.fade_level = effect.fadeLevel;
+                return result;
+            }
+            if (IsPeriodic(effect.type))
+            {
+                SDL_HapticPeriodic& value = result.periodic;
+                value.type = type;
+                value.direction = ToSdlDirection(effect.direction);
+                value.length = effect.length;
+                value.delay = effect.delay;
+                value.button = effect.button;
+                value.interval = effect.interval;
+                value.period = effect.period;
+                value.magnitude = effect.magnitude;
+                value.offset = effect.offset;
+                value.phase = effect.phase;
+                value.attack_length = effect.attackLength;
+                value.attack_level = effect.attackLevel;
+                value.fade_length = effect.fadeLength;
+                value.fade_level = effect.fadeLevel;
+                return result;
+            }
+
+            SDL_HapticConstant& value = result.constant;
+            value.type = type;
+            value.direction = ToSdlDirection(effect.direction);
+            value.length = effect.length;
+            value.delay = effect.delay;
+            value.button = effect.button;
+            value.interval = effect.interval;
+            value.level = effect.level;
+            value.attack_length = effect.attackLength;
+            value.attack_level = effect.attackLevel;
+            value.fade_length = effect.fadeLength;
+            value.fade_level = effect.fadeLevel;
+            return result;
+        }
+
+        class Sdl3HapticDevice final : public IPlatformHapticDevice
+        {
+        public:
+            Sdl3HapticDevice(SDL_Haptic* haptic, SDL_Joystick* joystickOwner = nullptr)
+                : haptic_(haptic), joystickOwner_(joystickOwner) {}
+
+            ~Sdl3HapticDevice() override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                if (haptic_ != nullptr)
+                {
+                    SDL_CloseHaptic(haptic_);
+                }
+                if (joystickOwner_ != nullptr)
+                {
+                    SDL_CloseJoystick(joystickOwner_);
+                }
+            }
+
+            HapticDeviceCapabilities GetCapabilities() const override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                HapticDeviceCapabilities result;
+                const char* name = SDL_GetHapticName(haptic_);
+                result.name = name != nullptr ? name : "";
+                result.features = static_cast<std::uint32_t>(SDL_GetHapticFeatures(haptic_));
+                result.axisCount = SDL_GetNumHapticAxes(haptic_);
+                result.maxEffects = SDL_GetMaxHapticEffects(haptic_);
+                result.maxEffectsPlaying = SDL_GetMaxHapticEffectsPlaying(haptic_);
+                result.rumbleSupported = SDL_HapticRumbleSupported(haptic_);
+                return result;
+            }
+
+            bool IsEffectSupported(const HapticEffect& effect) const override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                std::vector<Uint16> customData;
+                const SDL_HapticEffect native = ToSdlEffect(effect, customData);
+                return SDL_HapticEffectSupported(haptic_, &native);
+            }
+
+            bool InitializeRumble() override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_InitHapticRumble(haptic_);
+            }
+
+            bool PlayRumble(const float strength, const std::uint32_t duration) override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_PlayHapticRumble(haptic_, SanitizeHapticStrength(strength), duration);
+            }
+
+            bool StopRumble() override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_StopHapticRumble(haptic_);
+            }
+
+            int CreateEffect(const HapticEffect& effect) override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                std::vector<Uint16> customData;
+                const SDL_HapticEffect native = ToSdlEffect(effect, customData);
+                return SDL_CreateHapticEffect(haptic_, &native);
+            }
+
+            bool UpdateEffect(const int id, const HapticEffect& effect) override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                std::vector<Uint16> customData;
+                const SDL_HapticEffect native = ToSdlEffect(effect, customData);
+                return SDL_UpdateHapticEffect(haptic_, id, &native);
+            }
+
+            bool RunEffect(const int id, const std::uint32_t iterations) override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_RunHapticEffect(haptic_, id, iterations);
+            }
+
+            bool StopEffect(const int id) override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_StopHapticEffect(haptic_, id);
+            }
+
+            void DestroyEffect(const int id) override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                SDL_DestroyHapticEffect(haptic_, id);
+            }
+
+            bool GetEffectStatus(const int id) const override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_GetHapticEffectStatus(haptic_, id);
+            }
+
+            bool StopAllEffects() override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_StopHapticEffects(haptic_);
+            }
+
+            bool SetGain(const int gain) override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_SetHapticGain(haptic_, gain);
+            }
+
+            bool SetAutocenter(const int autocenter) override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_SetHapticAutocenter(haptic_, autocenter);
+            }
+
+            bool Pause() override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_PauseHaptic(haptic_);
+            }
+
+            bool Resume() override
+            {
+                std::lock_guard<std::recursive_mutex> lock(mutex_);
+                return SDL_ResumeHaptic(haptic_);
+            }
+
+        private:
+            SDL_Haptic* haptic_ = nullptr;
+            SDL_Joystick* joystickOwner_ = nullptr;
+            mutable std::recursive_mutex mutex_;
+        };
+
         class Sdl3SensorSession final : public IPlatformSensorSession
         {
             struct State final : std::enable_shared_from_this<State>
@@ -719,6 +1017,70 @@ namespace CNA::Platform::Sdl3 {
         const bool stopped = SDL_StopHapticEffects(static_cast<SDL_Haptic*>(it->second));
         DestroyLeftRight(id);
         return stopped;
+    }
+
+    std::unique_ptr<IPlatformHapticDevice> Sdl3Haptics::Open(const DeviceId id)
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        const std::vector<DeviceId> ids = EnumerateIds();
+        if (id == 0 || id > std::numeric_limits<SDL_HapticID>::max()
+            || !std::binary_search(ids.begin(), ids.end(), id))
+        {
+            return nullptr;
+        }
+        SDL_Haptic* haptic = SDL_OpenHaptic(static_cast<SDL_HapticID>(id));
+        return haptic != nullptr ? std::make_unique<Sdl3HapticDevice>(haptic) : nullptr;
+    }
+
+    std::unique_ptr<IPlatformHapticDevice> Sdl3Haptics::OpenFromJoystick(const DeviceId id)
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        if (id == 0 || id > std::numeric_limits<SDL_JoystickID>::max())
+        {
+            return nullptr;
+        }
+        SDL_Joystick* joystick = SDL_OpenJoystick(static_cast<SDL_JoystickID>(id));
+        if (joystick == nullptr)
+        {
+            return nullptr;
+        }
+        SDL_Haptic* haptic = SDL_OpenHapticFromJoystick(joystick);
+        if (haptic == nullptr)
+        {
+            SDL_CloseJoystick(joystick);
+            return nullptr;
+        }
+        return std::make_unique<Sdl3HapticDevice>(haptic, joystick);
+    }
+
+    std::unique_ptr<IPlatformHapticDevice> Sdl3Haptics::OpenFromMouse()
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        SDL_Haptic* haptic = SDL_OpenHapticFromMouse();
+        return haptic != nullptr ? std::make_unique<Sdl3HapticDevice>(haptic) : nullptr;
+    }
+
+    bool Sdl3Haptics::IsJoystickHaptic(const DeviceId id) const
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        if (id == 0 || id > std::numeric_limits<SDL_JoystickID>::max())
+        {
+            return false;
+        }
+        SDL_Joystick* joystick = SDL_OpenJoystick(static_cast<SDL_JoystickID>(id));
+        if (joystick == nullptr)
+        {
+            return false;
+        }
+        const bool result = SDL_IsJoystickHaptic(joystick);
+        SDL_CloseJoystick(joystick);
+        return result;
+    }
+
+    bool Sdl3Haptics::IsMouseHaptic() const
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        return SDL_IsMouseHaptic();
     }
 
 } // namespace CNA::Platform::Sdl3
