@@ -10,9 +10,9 @@ Oracle repository: `openeggbert/cna-gltf-viewer` @ `aaa008dc62bcb1127901ca23b75b
 > working record.** The banner it opened with ("nothing in it was implemented") described the
 > planning session of 2026-08-11 only, and is preserved below for provenance.
 >
-> Of 460 rows: **377 are closed (`✔` 252, `✅` 125)** and **64 remain `⬜`**. The other 19 carry a
+> Of 460 rows: **378 are closed (`✔` 252, `✅` 126)** and **64 remain `⬜`**. The other 18 carry a
 > deliberate partial marker — 8 `🔬` (investigation, no implementation owed), 7 `✅/⬜`, no
-> `✅/🐛` residue, 2 `🐛` (open defect), and 2 `⛔` (`GLTF-009` and
+> `✅/🐛` residue, 1 `🐛` (open defect), and 2 `⛔` (`GLTF-009` and
 > `GLTF-439`, each blocked by this environment for a stated reason). Every closed row carries its
 > own evidence in its Scope cell: what was decided, what
 > it cost, and which fixture or test proves it. All eight audited defects (D1–D8) are `fixed` in
@@ -928,10 +928,13 @@ center-collapse fixes land (§28).
 ### 12.1 The magic-stride ABI
 
 `MeshOut::stride` is an integer that must be interpreted identically by `ExtractMesh`,
-`BuildVertexBufferFromRawBytes`, the `.cnj` reader, and a `switch (stride)` in **every GPU
-renderer's** `ApplyLayout`. There is no shared declaration. A renderer that lacks a case falls
-through to a **position-only fallback** which leaves normals, UVs, weights and joint indices
-unbound — reading whatever the previous draw left in those attribute slots.
+`BuildVertexBufferFromRawBytes`, the `.cnj` reader, and the native layout selected by **every GPU
+renderer**. The shared source of truth is now
+`CNA/Internal/Graphics/VertexDeclarationFidelity.hpp`; renderer translations still require
+conformance checks. EasyGL used to let an unlisted stride fall through to a **position-only
+fallback**, leaving normals, UVs, weights and joint indices unbound and reading whatever a prior
+draw left in those attribute slots. `GLTF-157` replaced that path with a named refusal; a custom
+stride remains supported when its real `VertexDeclaration` reaches the generic path.
 
 `GLTF-155`…`GLTF-162` address this: a single canonical stride→`VertexDeclaration` table in
 `modules/graphics`, a static assertion per stride, a renderer conformance test that every enabled
@@ -1511,7 +1514,7 @@ shared-importer defects and must be fixed **once**, in `GltfImportCore` / `Conte
 
 Genuinely renderer-owned surfaces, which must be fixed at the renderer boundary:
 
-* `ApplyLayout`'s magic-stride table and its silent position-only fallback (§12.1);
+* native vertex-layout translation and the loud rejection policy for unknown strides (§12.1);
 * the PBR fragment shader's channel reads and its colour-space handling (§13.3);
 * the flat-normal fallback for an unbound `NormalMap` (EasyGL has one — `GLTF-384` checks whether
   every PBR-capable renderer does);
@@ -2275,7 +2278,7 @@ numerically at L4.*
 | GLTF-154 | Colour byte quantisation rule | ✔ | GLTF-089 | `round(clamp(f,0,1)*255)`. **Accept:** endpoints asserted. **Locked on a FLOAT `COLOR_0`, which is the only shape that can test it** — a normalized-integer colour is already a byte and round-trips under any rule, which is why the existing `normalized-u8-color` coverage proved nothing about the rounding. Truncation and rounding agree at 0 and 1 and differ everywhere between, so mid values carry the test: 0.5 → 128 (not 127), 0.002 → 1 (not 0), 0.998 → 254. The **clamp** gets its own test: unclamped, 1.5 narrows to 126, so a bright colour would arrive as mid grey and read as a material bug rather than an out-of-range input. |
 | GLTF-155 | **One canonical stride → `VertexDeclaration` table** | ✔ | GLTF-151 | Today the table lives in `ExtractMesh` and is re-implemented as a `switch (stride)` in every renderer, with no shared source of truth. **Accept:** a single declaration in `modules/graphics`, consumed by the importer and available to renderers. **The table is `CNA/Internal/Graphics/VertexDeclarationFidelity.hpp`'s `InferredLayoutForStride` — header-only, in `modules/graphics`, already consumed by renderers.** What this task added is the importer side: its unlisted-stride refusal is now a *query against the table* rather than a literal list, and a test asserts the two sets are one — every stride the importer can emit is in the table, and an unlisted stride comes back `known == false` rather than with a guessed layout. That coupling is what `GLTF-278` proved is needed: a restated ABI goes stale silently. The per-stride **upload** branches necessarily stay explicit — each selects a distinct C++ vertex struct, which a data table cannot do — and complete per-renderer declaration *translation* remains `plan_postaudit.md`'s, as that header's own documentation states. |
 | GLTF-156 | Static assertions tying the table to the vertex structs | ✅ | GLTF-155 | **Accept:** `modules/graphics/src/Internal/VertexDeclarationFidelityStaticChecks.cpp` — every element of every stride paired with `offsetof` on the struct that produces those bytes, so a field reordering fails the **build**, with the field named. **Corrected while writing it:** the structs to tie the table to are the packed GPU streams in `BuiltInVertexStreams.hpp`, not the public `VertexPosition*` types. Those are not the buffer layout at all — `Color` alone is 24 bytes of packed-vector machinery, so `sizeof(VertexPositionColor)` is 40, not 16 — and every built-in `VertexDeclaration` already takes its own offsets from the streams. Stride 56 has no stream struct (the importer writes those bytes itself); it is listed with that reason and its trailing Color pinned, so "not asserted" is a visible decision. |
-| GLTF-157 | Replace the silent position-only `ApplyLayout` fallback | 🐛 | GLTF-155 | An unknown stride leaves normals/UVs/weights **unbound** — reading stale attribute state. **Accept:** a loud error or a mandatory declaration path; `CNA_RENDER_LOG` is not sufficient. **The importer's half is done; the renderer's half is not.** A silent fallback of exactly this shape was found on the *import* side: `BuildVertexBufferFromRawBytes` had no `else`, so an unlisted stride fell out of the `if` chain and the freshly constructed, **empty** `VertexBuffer` was returned as though it had been filled — the mesh then drew from whatever that buffer object happened to contain. It now throws, naming the stride and whether the canonical table knows it. **Still open:** `EasyGLRenderer::ApplyLayout`'s own position-only fallback. That file cannot be compiled in this environment (it needs the sibling `../easy-gl` and `../meta-gl` checkouts), so a change there could be written but not verified, and an unverified renderer change is not what this row is asking for. |
+| GLTF-157 | Replace the silent position-only `ApplyLayout` fallback | ✅ | GLTF-155 | An unknown stride left normals/UVs/weights **unbound**, reading stale VAO state. **Closed on both boundaries.** `BuildVertexBufferFromRawBytes` already rejects an unlisted importer stride by name instead of returning an empty buffer. The formerly unavailable `../easy-gl` and `../meta-gl` sibling checkouts are now present, so the renderer half is compiled and exercised too: `EasyGLRenderer::ApplyLayout` unbinds its VAO and throws `NotSupportedException`, naming the stride and missing `VertexDeclaration`; custom layouts still use the generic declaration path above it. `EasyGL_UnknownStride_Rejected` creates a real OPENGLES3 context under Xvfb, uploads one raw stride-28 record and asserts the exact refusal. It passes on Mesa OpenGL ES 3.2; no debug-only `CNA_RENDER_LOG` is involved. |
 | GLTF-158 | Renderer stride-conformance test | ⬜ | GLTF-157 | **Accept:** every enabled renderer accepts all seven strides and binds every element; run in CI for `STUB`, `HEADLESS`, `OPENGLES3`, `VULKAN`. |
 | GLTF-159 | Pass a real `VertexDeclaration` to the renderer boundary | 🔬 | GLTF-155 | `ApplyLayout` already has a generic declaration path; the glTF loader never populates one. **Accept:** decision recorded; if adopted, magic strides become an internal detail. |
 | GLTF-160 | Audit every renderer's stride table against §2.3 | ⬜ | GLTF-158 | **Accept:** a per-renderer conformance matrix in `docs/`. |

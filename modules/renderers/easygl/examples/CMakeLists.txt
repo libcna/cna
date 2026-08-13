@@ -1330,6 +1330,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_VertexFormats_AllStrides COMMAND cna_test_easygl_vertex_formats
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-157: a raw upload whose stride has no fixed layout and no explicit
+        # VertexDeclaration must fail by name instead of inheriting stale VAO attributes.
+        cna_easygl_test(cna_test_easygl_unknown_stride_rejection
+                        easygl_unknown_stride_rejection_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_UnknownStride_Rejected COMMAND cna_test_easygl_unknown_stride_rejection
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 255: DrawUserPrimitives<VertexPositionColor> pixel-readback
         cna_easygl_test(cna_test_easygl_draw_user_primitives_vpc
                         easygl_draw_user_primitives_vpc_test.cpp)

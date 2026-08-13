@@ -9,10 +9,10 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **377 closed (`✔` 252, `✅` 125),
-  64 `⬜` remaining.** The other 19 carry a deliberate partial marker: 8 `🔬` (investigation, no
-  implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 2 `🐛` (open:
-  `GLTF-157`, `421`), and 2 `⛔` (`GLTF-009` and
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **378 closed (`✔` 252, `✅` 126),
+  64 `⬜` remaining.** The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
+  implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
+  `GLTF-421`), and 2 `⛔` (`GLTF-009` and
   `GLTF-439`, each blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
   (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
@@ -189,12 +189,13 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
    `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
    without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —
    that is the single most useful thing to tell whoever asks why the milestone is still open.
-3. **`GLTF-343` + `GLTF-344` are now that defensible split, not a next task.** Raw IOR/specular
+3. **`GLTF-343` + `GLTF-344` are now renderer-verifiable next tasks.** Raw IOR/specular
    factors survive direct and offline import, both PBR effects and `.cnj`; `GpuDrawParams` carries
    the Khronos-derived dielectric F0/F90; a discriminating analytic/L3/L6 witness pins clamp order,
-   defaults and direct/offline parity. Both rows are `✅/⬜`. Do **not** finish them here by editing
-   shaders: no renderer in this environment rasterises, and `GLTF-157` already established that an
-   unverified renderer change is not a fix. The two optional specular textures remain absent too.
+   defaults and direct/offline parity. Both rows are `✅/⬜`. `GLTF-157` established a working
+   OPENGLES3 build and real Xvfb/Mesa execution now that the sibling `easy-gl`/`meta-gl` checkouts
+   are present, so their EasyGL shader consumption can finally be changed and measured. The two
+   optional specular textures remain absent and still need a separate transport decision.
 4. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
    `apt-get install libdraco-dev` — the *cheapest* unblock on the list if the owner allows it, and
    it turns eight blocked rows into ordinary work.

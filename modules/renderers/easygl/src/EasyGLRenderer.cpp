@@ -4567,11 +4567,16 @@ void main()
             SetBoneIndicesAttributePointer(vao, 5, s, (void*)64);
             break;
         default:
-            // Unknown layout: bind position-only as a safe fallback
-            vao.enable_attribute(0);
-            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
-            CNA_RENDER_LOG("ApplyLayout: unknown stride=" << stride << ", using position-only fallback");
-            break;
+            // plan_gltf.md GLTF-157: a byte stride does not describe which attributes exist.
+            // Treating every unknown record as position-only left the other locations in stale
+            // VAO state and rendered normals, UVs or skin weights from unrelated buffers. Refuse
+            // it loudly; a genuinely custom layout reaches the generic declaration path above.
+            vao.unbind();
+            throw System::NotSupportedException(
+                "EasyGLRenderer::ApplyLayout: unsupported vertex stride " +
+                std::to_string(stride) +
+                " without a VertexDeclaration; the upload is refused rather than bound as "
+                "position-only.");
         }
         vao.unbind();
     }
