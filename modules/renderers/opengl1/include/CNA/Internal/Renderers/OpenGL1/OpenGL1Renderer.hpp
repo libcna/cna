@@ -1,11 +1,11 @@
 #pragma once
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 #include "CNA/Internal/Renderers/OpenGL1/OpenGL1Capabilities.hpp"
 #include "CNA/Internal/Renderers/OpenGL1/OpenGL1ContextRecovery.hpp"
 #include "CNA/Internal/Renderers/OpenGL1/OpenGL1OcclusionQueryRenderer.hpp"
 #include "CNA/Internal/Renderers/OpenGL1/OpenGL1RenderTargetRenderer.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
-#include <SDL3/SDL.h>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -103,7 +103,7 @@ private:OpenGL1Renderer& owner_;bool begun_=false;Matrix transform_=Matrix::getI
 };
 class OpenGL1Renderer final : public IGraphicsRenderer {
 public: explicit OpenGL1Renderer(const GraphicsRendererCreateArgs&);~OpenGL1Renderer()override;
- void Clear(float,float,float,float)override;void Present()override;void GetViewportSize(int&,int&)override;void SetVirtualResolution(int,int)override;
+ void Clear(float,float,float,float)override;void Present()override;void GetViewportSize(int&,int&)override;void OnSurfaceChanged(const RendererSurfaceInfo&)override;void SetVirtualResolution(int,int)override;
  // plan_opengl1.md item 13 (EasyGL parity): was a no-op -- now stores the mode, consulted by
  // EffectiveWidth()/EffectiveHeight() (FixedHeightDynamicWidth only; see their own doc comment).
  void SetPresentationMode(int)override;
@@ -114,12 +114,12 @@ public: explicit OpenGL1Renderer(const GraphicsRendererCreateArgs&);~OpenGL1Rend
  // constructor (IGraphicsRenderer::RegisterForWindow) -- Mouse::logical_to_window's own consumer.
  bool TransformWindowToLogical(float windowX,float windowY,float&logX,float&logY)const override;
  bool TransformLogicalToWindow(float logX,float logY,float&windowX,float&windowY)const override;
- // plan_opengl1.md item 20 (EasyGL parity): only the constructor's swapInterval ever reached SDL
+ // plan_opengl1.md item 20 (EasyGL parity): only the constructor's swapInterval reached the host
  // before this -- a runtime GraphicsDevice.PresentationParameters/vsync change silently did
  // nothing.
  void SetSwapInterval(int)override;
- // plan_opengl1.md item 22 (EasyGL parity): backbuffer MSAA. SDL_GL_MULTISAMPLEBUFFERS/SAMPLES
- // are requested before SDL_CreateWindow() (GraphicsDevice.cpp, same GLX-visual-fixed-at-window-
+ // plan_opengl1.md item 22 (EasyGL parity): backbuffer MSAA. The platform framebuffer sample
+ // attributes are requested before window creation (same GLX-visual-fixed-at-window-
  // creation-time constraint as depth/stencil) -- the constructor here only reads back whatever
  // the driver actually granted, since GLX can silently clamp/refuse the request. Cannot be
  // reconfigured post-construction (same reason), so ApplyMultiSampleCount() is intentionally not
@@ -187,7 +187,7 @@ public: explicit OpenGL1Renderer(const GraphicsRendererCreateArgs&);~OpenGL1Rend
  void DebugRestoreContext()override;
  OpenGL1ResourceRegistry* RegistryIfEnabled(){return contextRecoveryEnabled_?&registry_:nullptr;}
 private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawInternal(const OpenGL1VertexBufferRenderer&,const OpenGL1IndexBufferRenderer*,PrimitiveType,int,const GpuDrawParams*);
- // plan_opengl1.md item 22: reads back the ACTUAL SDL_GL_MULTISAMPLEBUFFERS/SAMPLES the driver
+ // plan_opengl1.md item 22: reads back the actual multisample attributes the driver
  // granted for the current GL context (not just echoing back what was requested -- GLX can
  // silently clamp/refuse), enables GL_MULTISAMPLE when genuinely present. Shared by the
  // constructor and DebugSimulateContextLoss() (same window, same fixed visual, but re-detected
@@ -216,7 +216,10 @@ private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawI
  // BindGL() call, on the correct active unit, with the SPECIFIC texture's own HasMips().
  struct GL1SamplerParams{int filter=0,addrU=0,addrV=0,maxAniso=4;};
  void ApplySamplerFilterAndWrap(int slot,bool hasMips);
- SDL_Window* window_=nullptr;SDL_GLContext glContext_=nullptr;int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;OpenGL1Capabilities caps_;IRenderTargetRenderer* currentRt_=nullptr;
+ // Declared before every GL resource-owning member so it outlives those resources.
+ std::unique_ptr<PlatformGlContextOwner> platformContext_;
+ PlatformGlSurfaceState surface_;
+ int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;OpenGL1Capabilities caps_;IRenderTargetRenderer* currentRt_=nullptr;
  // plan_opengl1.md item 24: currentCubeFace_ is only meaningful while currentCubeRt_ is
  // non-null -- used to re-bind the correct face after a context loss, the same "rebind whatever
  // was ACTIVE at loss time" fix phase 8 already established for currentRt_.

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <GLES/gl.h>
@@ -10,8 +11,6 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
-
-struct SDL_Window;
 
 namespace CNA::Internal::Renderers::OpenGLES1
 {
@@ -23,8 +22,8 @@ namespace CNA::Internal::Renderers::OpenGLES1
     /**
      * @brief CNAEXT. Real OpenGL ES 1.1 (fixed-function, no shaders) texture handle.
      *
-     * Always stores a level-0 RGBA8 image. There is no SDL_Renderer involved and no programmable
-     * shader involvement -- texture combining is done entirely via glTexEnv*.
+     * Always stores a level-0 RGBA8 image. There is no host-toolkit renderer involved and no
+     * programmable shader involvement -- texture combining is done entirely via glTexEnv*.
      */
     class OpenGLES1TextureRenderer : public ITextureRenderer
     {
@@ -517,6 +516,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
@@ -824,7 +824,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         void UnregisterIndexBufferEXT(OpenGLES1IndexBufferRenderer* buffer);
 
         // GL_OES_framebuffer_object entry points -- resolved once at startup via
-        // SDL_GL_GetProcAddress (see LoadExtensionEntryPoints()), used by
+        // the platform GL resolver (see LoadExtensionEntryPoints()), used by
         // OpenGLES1RenderTargetRenderer. Public so that class can call them without this class
         // needing to expose every FBO operation as its own wrapper method.
         PFNGLGENFRAMEBUFFERSOESPROC glGenFramebuffersOES_ = nullptr;
@@ -848,8 +848,10 @@ namespace CNA::Internal::Renderers::OpenGLES1
         void DestroyGLContext();
         void LoadExtensionEntryPoints();
 
-        SDL_Window* window_ = nullptr;
-        void* glContext_ = nullptr;
+        // Declared before every GL resource-owning member so it outlives those resources.
+        std::unique_ptr<PlatformGlContextOwner> platformContext_;
+        PlatformGlSurfaceState surface_;
+        CNA::Platform::IPlatformGlContext* platformGlService_ = nullptr;
 
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
@@ -859,7 +861,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         // GL_OES_blend_subtract / GL_OES_blend_func_separate -- both widely-supported ES1.1
         // extensions, resolved once at startup instead of assumed to exist as directly-linkable
         // symbols (portable across ES1 CM implementations that only expose them via
-        // eglGetProcAddress/SDL_GL_GetProcAddress). Null if unavailable; callers fall back to
+        // the platform GL resolver). Null if unavailable; callers fall back to
         // glBlendFunc/default-Add accordingly (documented deviation, see docs/opengles1-renderer.md).
         PFNGLBLENDFUNCSEPARATEOESPROC glBlendFuncSeparateOES_ = nullptr;
         PFNGLBLENDEQUATIONOESPROC glBlendEquationOES_ = nullptr;

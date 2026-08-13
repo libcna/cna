@@ -3,14 +3,13 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 #include "CNA/Internal/Renderers/OpenGL4/GL4Loader.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <cstdint>
 #include <string>
 #include <vector>
-
-struct SDL_Window;
 
 namespace CNA::Internal::Renderers::OpenGL4
 {
@@ -20,9 +19,9 @@ namespace CNA::Internal::Renderers::OpenGL4
      * @brief plan_opengl4.md GL4-1: real desktop OpenGL 4.x core-profile graphics renderer.
      *
      * Deliberately independent of the EasyGL renderer/`easy-gl` sibling repository -- EasyGL
-     * requests an OpenGL ES 3.0 context (`SDL_GL_CONTEXT_PROFILE_ES`, see
+     * requests an OpenGL ES 3.0 context (see
      * `EasyGLRenderer`'s constructor), which is a different, narrower feature set than a
-     * genuine desktop `SDL_GL_CONTEXT_PROFILE_CORE` context (no geometry/tessellation shaders, no
+     * genuine desktop core-profile context (no geometry/tessellation shaders, no
      * `GL_ARB_*` desktop-only extensions, no compatibility with `glGetString(GL_VERSION)` ever
      * reporting "4.x"). This renderer requests a real core profile and never touches `easy-gl`.
      *
@@ -480,14 +479,11 @@ namespace CNA::Internal::Renderers::OpenGL4
         std::vector<uint16_t> pendingIndices_;
     };
 
-    struct GraphicsRendererCreateArgs;
-
     /** @brief Real desktop OpenGL 4.x core-profile `IGraphicsRenderer` implementation. */
     class OpenGL4Renderer final : public IGraphicsRenderer
     {
     public:
-        OpenGL4Renderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                               CnaPresentationMode mode, int multiSampleCount, int swapInterval);
+        explicit OpenGL4Renderer(const GraphicsRendererCreateArgs& args);
         ~OpenGL4Renderer() override;
 
         OpenGL4Renderer(const OpenGL4Renderer&) = delete;
@@ -496,6 +492,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
@@ -511,7 +508,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         /// plan_opengl4.md GL4-17: real window/backbuffer MSAA -- a manually-managed multisample
         /// FBO (mirroring EasyGLRenderer's own msaaFbo_/CreateMsaaBuffers/ResolveMsaa
-        /// approach) rather than an SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, ...) window
+        /// approach) rather than a multisampled window pixel format
         /// pixel format, since the latter can't be resolved through our own controlled
         /// glBlitFramebuffer call and would fight this renderer's existing Y-flip/ReadBackbuffer
         /// conventions. Fixed at construction time; ApplyMultiSampleCount is not overridden
@@ -717,8 +714,9 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         static constexpr int kMaxSamplerSlots = 16;
 
-        SDL_Window* window_ = nullptr;
-        void* glContext_ = nullptr;
+        // Declared before every GL resource-owning member so it outlives those resources.
+        std::unique_ptr<PlatformGlContextOwner> platformContext_;
+        PlatformGlSurfaceState surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;

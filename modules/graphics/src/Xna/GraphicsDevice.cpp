@@ -2305,15 +2305,18 @@ namespace Microsoft::Xna::Framework::Graphics
         description.highDpi = requirements.highDpi;
         description.renderIntent = requirements.renderIntent;
 
-#if defined(CNA_RENDERER_OPENGL1)
-        // The legacy GLX visual fixes these attributes when the window is created. The renderer
-        // repeats them before creating its context for self-containment, but that later call is
-        // too late to select a stencil- or multisample-capable visual.
+#if defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGL2) || \
+    defined(CNA_RENDERER_OPENGL4) || defined(CNA_RENDERER_OPENGLES1)
+        // A desktop GLX visual fixes these attributes when the window is created, before the
+        // renderer asks IPlatformGlContext for a context. Supplying them at this boundary also
+        // keeps the equivalent EGL selection deterministic on ES hosts.
         description.openGlFramebuffer.depthBits = 24;
         description.openGlFramebuffer.stencilBits = 8;
         description.openGlFramebuffer.doubleBuffered = true;
+#if defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGLES1)
         description.openGlFramebuffer.samples =
             presentationParameters_.getMultiSampleCountProperty();
+#endif
 #endif
 
         platformWindow_ = platform_->CreateWindow(description);
@@ -2366,9 +2369,11 @@ namespace Microsoft::Xna::Framework::Graphics
             args.surface.drawableSize = platformWindow_->GetPixelSize();
             args.surface.displayScale = platformWindow_->GetDisplayScale();
         }
-#ifdef CNA_RENDERER_EASYGL
-        // PLAT-67: EasyGL receives only the narrow context service plus the surface value
-        // snapshot. The renderer never resolves a native window or reaches through IPlatform.
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL1) || \
+    defined(CNA_RENDERER_OPENGL2) || defined(CNA_RENDERER_OPENGL4) || \
+    defined(CNA_RENDERER_OPENGLES1)
+        // Context-backed renderers receive only the narrow GL service plus the surface value
+        // snapshot. They never resolve a native window or reach through IPlatform.
         args.glContext = platform_->GetGlContext();
 #endif
         args.virtualWidth = virtualWidth_;

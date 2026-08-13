@@ -1,9 +1,14 @@
 #include "CNA/Internal/Renderers/OpenGL1/OpenGL1Capabilities.hpp"
-#include <SDL3/SDL.h>
 #if defined(_WIN32)
 #include <windows.h>
 #endif
-#include <SDL3/SDL_opengl.h>
+#if defined(__APPLE__)
+#include <OpenGL/gl.h>
+#include <OpenGL/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
 #include <cstdio>
 #include <string>
 

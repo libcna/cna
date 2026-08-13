@@ -1,9 +1,15 @@
 #include "CNA/Internal/Renderers/OpenGL1/OpenGL1RenderTargetRenderer.hpp"
-#include <SDL3/SDL.h>
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 #if defined(_WIN32)
 #include <windows.h>
 #endif
-#include <SDL3/SDL_opengl.h>
+#if defined(__APPLE__)
+#include <OpenGL/gl.h>
+#include <OpenGL/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>
@@ -60,7 +66,7 @@ namespace
 
 bool TryLoadOpenGL1FramebufferObjectFunctions()
 {
-    auto load = [](const char* name) { return SDL_GL_GetProcAddress(name); };
+    auto load = [](const char* name) { return LoadPlatformGlProcAddress(name); };
     glGenFramebuffers_ = reinterpret_cast<PFNGLGENFRAMEBUFFERSPROC>(load("glGenFramebuffers"));
     glBindFramebuffer_ = reinterpret_cast<PFNGLBINDFRAMEBUFFERPROC>(load("glBindFramebuffer"));
     glDeleteFramebuffers_ = reinterpret_cast<PFNGLDELETEFRAMEBUFFERSPROC>(load("glDeleteFramebuffers"));

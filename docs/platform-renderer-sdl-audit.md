@@ -10,8 +10,8 @@
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 2 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
 | `cpu-presentation` | 2 | CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service. |
-| `migratable` | 31 | Uses platform services only (native handle, GL/Vulkan, window, events). |
-| `sdl-free` | 5 | No SDL references at all. |
+| `migratable` | 27 | Uses platform services only (native handle, GL/Vulkan, window, events). |
+| `sdl-free` | 9 | No SDL references at all. |
 
 ## Per-family detail
 
@@ -23,11 +23,7 @@
 | `fna3d` | FNA3D | `sdl-upstream` | 10 / 8 | `window` | — |
 | `skia` | SKIA | `cpu-presentation` | 96 / 82 | `gl-vulkan-interop`, `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderTexture`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderVSync`, `SDL_UpdateTexture` |
 | `blend2d` | BLEND2D | `cpu-presentation` | 50 / 41 | `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderTexture`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderVSync`, `SDL_UpdateTexture` |
-| `opengl1` | OPENGL1 | `migratable` | 58 / 46 | `gl-vulkan-interop`, `window` | — |
 | `sokol` | SOKOL | `migratable` | 58 / 43 | `gl-vulkan-interop`, `window` | — |
-| `opengles1` | OPENGLES1 | `migratable` | 57 / 52 | `gl-vulkan-interop`, `window` | — |
-| `opengl2` | OPENGL2 | `migratable` | 46 / 35 | `gl-vulkan-interop`, `window` | — |
-| `opengl4` | OPENGL4 | `migratable` | 46 / 35 | `gl-vulkan-interop`, `window` | — |
 | `diligent` | DILIGENT | `migratable` | 43 / 33 | `native-handle`, `gl-vulkan-interop`, `window`, `display` | — |
 | `openvg` | OPENVG | `migratable` | 43 / 35 | `gl-vulkan-interop`, `window` | — |
 | `gdi` | GDI | `migratable` | 39 / 36 | `native-handle`, `event`, `window` | — |
@@ -56,6 +52,10 @@
 | `glide` | GLIDE | `migratable` | 4 / 4 | `native-handle` | — |
 | `easygl` | OPENGL33 OPENGLES2 OPENGLES3 WEBGL1 WEBGL2 | `sdl-free` | 0 / 0 | — | — |
 | `headless` | HEADLESS | `sdl-free` | 0 / 0 | — | — |
+| `opengl1` | OPENGL1 | `sdl-free` | 0 / 0 | — | — |
+| `opengl2` | OPENGL2 | `sdl-free` | 0 / 0 | — | — |
+| `opengl4` | OPENGL4 | `sdl-free` | 0 / 0 | — | — |
+| `opengles1` | OPENGLES1 | `sdl-free` | 0 / 0 | — | — |
 | `portablegl` | PORTABLEGL | `sdl-free` | 0 / 0 | — | — |
 | `software` | SOFTWARE | `sdl-free` | 0 / 0 | — | — |
 | `stub` | STUB | `sdl-free` | 0 / 0 | — | — |
