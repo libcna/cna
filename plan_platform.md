@@ -10,12 +10,10 @@
 > **SDL3 becomes the first implementation of that contract, not the substrate CNA is written
 > against.**
 >
-> **Explicit scope boundary:** this plan implements one full native desktop backend
-> (`Sdl3Platform`) plus the deliberately limited `HeadlessPlatform` and `TerminalPlatform` used
-> to prove the contract. **SDL2, SDL 1.2, a native Win32 platform and any other backend are NOT
-> implemented here.** They appear only in [§12 Possible future implementations](#12-possible-future-implementations-not-in-scope)
-> as the reason the seam is shaped the way it is. No task in Phases 0–11 may be closed by adding
-> a second SDL generation.
+> **Explicit scope boundary:** the completed original campaign delivered `Sdl3Platform` plus the
+> deliberately limited `HeadlessPlatform` and `TerminalPlatform` used to prove the contract.
+> Phase 11 now adds an independent `Sdl2Platform`; SDL 1.2, native Win32 and other backends remain
+> future work in [§12 Possible future implementations](#12-possible-future-implementations-not-in-scope).
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented;
@@ -123,8 +121,8 @@ Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatfor
    XNA type (e.g. `GameWindow`), the XNA-side accessor is `CNAEXT`-tagged as usual.
 
 3. **Compile-time selection, runtime polymorphism.** `CNA_PLATFORM` is a CMake cache variable
-   with values `SDL3` (default) and `HEADLESS`; `SDL2` / `SDL12` / `WIN32` are *reserved
-   identifiers only* and configuring with them is a hard CMake error naming this plan. Only the
+   with values `SDL3` (default), `SDL2`, `HEADLESS` and `TERMINAL`; `SDL12` / `WIN32` are reserved
+   identifiers and configuring with them is a hard CMake error naming this plan. Only the
    selected implementation is compiled. `IPlatform` stays virtual anyway, because `HEADLESS` and
    the conformance suite need two implementations in one binary; the `using ActivePlatform = …`
    devirtualization sketched in `cnaplatform.md` is explicitly **not** adopted — it buys a
@@ -297,7 +295,7 @@ against a translation unit that has never seen an SDL header — that is the pha
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
 | PLAT-10 | Create `modules/platform` module | ✅ | `modules/platform/{CMakeLists.txt,include/CNA/Platform/,src/,tests/}`, added to `_cna_framework_modules` and composed after `math` so read order matches dependency direction. Links `cna_core_headers` (CNAEXT marker) + sharp-runtime `Core.Base`, and **no SDL**. Tests are picked up automatically by `cmake/UnitTests.cmake`'s `modules/*/tests/*.cpp` glob. |
-| PLAT-11 | `CNA_PLATFORM` CMake cache variable | ✅ | `cmake/PlatformSelection.cmake`, included from the root `CMakeLists.txt`. `SDL3` (default) and `HEADLESS` available; `SDL2`/`SDL12`/`WIN32`/`EMSCRIPTEN`/`TERMINAL` reserved and rejected with a `FATAL_ERROR` naming this plan and saying why the hard failure is deliberate — falling back to SDL3 would build something other than what was asked for. Unknown values fail too, listing both sets. Defines `CNA_PLATFORM_<NAME>`, matching the `CNA_RENDERER_<NAME>` convention. All four paths verified against a harness project: default, `HEADLESS`, a reserved value, and a nonsense value. |
+| PLAT-11 | `CNA_PLATFORM` CMake cache variable | ✅ | `cmake/PlatformSelection.cmake`, included from the root `CMakeLists.txt`. `SDL3` (default), `SDL2`, `HEADLESS` and POSIX `TERMINAL` are available; `SDL12`/`WIN32`/`EMSCRIPTEN` remain reserved and rejected with a `FATAL_ERROR` rather than silently falling back to SDL3. Defines `CNA_PLATFORM_<NAME>`, matching the `CNA_RENDERER_<NAME>` convention. |
 | PLAT-12 | `NativeWindowSystem` enum | ✅ | `Unknown, Win32, X11, Wayland, Cocoa, Android, Web, Headless` + `ToString()` for handle-mismatch diagnostics. `ToString()` uses an exhaustive `switch` with **no `default` arm**, so adding a system without naming it is a compiler diagnostic rather than a silent `"Unknown"`. 6 tests, all passing: per-value names, distinctness (two systems sharing a name would blur exactly the diagnostic that matters most), non-emptiness, reference stability across calls, member count, and `Unknown == 0` so a zero-initialised handle never reads as a real Win32 one. |
 | PLAT-13 | `NativeWindowHandle` struct | ✅ | `{ system, display, window, surface, windowId }` with a per-system field table in the header. **Deviates from `cnaplatform.md`'s four-field sketch by adding `windowId`**: an X11 `Window` is a 32-bit XID, not an address, so carrying it in the `void* window` field is the classic interop bug — it happens to work on LP64 and truncates or traps elsewhere, and it makes null-checking meaningless because XID `0` (`None`) looks exactly like a null pointer. X11 therefore leaves `window` null and uses `windowId`. Trivially copyable (asserted in test), owns nothing. Plus `HasNativeWindow()` and a `Describe()` that deliberately never prints pointer values. |
 | PLAT-14 | Typed native-handle accessors | ✅ | `TryGetWin32`/`TryGetX11`/`TryGetWayland`/`TryGetCocoa`/`TryGetAndroid`, each returning a validated per-system struct and each validating `system` **and** the fields that system requires. Output parameter is left untouched on failure, so a caller that ignores the return value cannot find a half-populated struct that looks usable. 18 tests, all passing, including an exhaustive cross-product asserting every accessor rejects every other system, and that an X11 handle with XID `0` is rejected even when its display is set — the case a pointer-style null check would have missed. |
@@ -637,11 +635,11 @@ the point is to exercise the contract against SDL2's real API and deployment sur
 
 | Task | Status | Deliverable / acceptance rule |
 |---|---|---|
-| PLAT-SDL2-1 | ⏳ | Add `SDL2` to platform selection, fetch/link SDL2 privately in `cna_platform`, and register it in `PlatformFactory`; no SDL2 header may escape the platform module. |
-| PLAT-SDL2-2 | ⏳ | Implement SDL2 subsystem reference counting, timing and one-window lifecycle over the existing `IPlatform` contract. |
+| PLAT-SDL2-1 | ✅ | `CNA_PLATFORM=SDL2` selects the independent `Sdl2Platform`. `cmake/ThirdPartySDL2.cmake` uses either `CNA_SDL2_ROOT` or a pinned SDL 2.30.11 FetchContent checkout, and `SDL2::SDL2` is linked **PRIVATE** only by `cna_platform`; public headers remain SDL-free. |
+| PLAT-SDL2-2 | ✅ | SDL2 subsystem ownership is refcounted per platform instance without `SDL_Quit()`. The backend creates/adopts real SDL2 windows, handles normal window lifecycle and uses SDL2 timing APIs. |
 | PLAT-SDL2-3 | ⏳ | Translate SDL2 quit/window/key/mouse events into `PlatformEvent`; preserve the platform-neutral game-event oracle. |
-| PLAT-SDL2-4 | ⏳ | Implement the SDL2 OpenGL context service and verify an `SDL2 + OPENGLES3` 2D smoke run. |
-| PLAT-SDL2-5 | ⏳ | State an honest capability profile. SDL2 services without a compatible implementation return null and their capability bits stay false; no silent stubs. |
+| PLAT-SDL2-4 | 🟨 | `Sdl2Platform::GlContext` creates, binds, swaps and queries real SDL2 GL/ES contexts. `SDL2 + OPENGLES3` configures successfully; the local full-demo build was interrupted by an external sharp-runtime archive `Bus error` before CNA's demo target, so the Xvfb smoke evidence remains pending. The CI matrix cell is prepared. |
+| PLAT-SDL2-5 | ✅ | The initial profile advertises only multiple windows, high DPI, multiple displays, borderless fullscreen and OpenGL. Every unimplemented service returns null and its capability bit remains false; no SDL2 compatibility claim is fabricated. |
 | PLAT-SDL2-6 | ⏳ | Instantiate conformance/event tests for SDL2 and add an SDL2 OpenGLES3 CI matrix cell under Xvfb. |
 | PLAT-SDL2-7 | ⏳ | Document SDL2-specific limits and a supported build command; update this table with actual test evidence. |
 

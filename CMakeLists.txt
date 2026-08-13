@@ -127,6 +127,13 @@ include(cmake/RendererSelection.cmake)
 # where the window, events and input come from.
 include(cmake/PlatformSelection.cmake)
 
+# SDL2 is an independent platform edge, not an SDL3 compatibility layer. Configure it only after
+# selection, so a default build never downloads or compiles a second native toolkit.
+if(CNA_PLATFORM STREQUAL "SDL2")
+    include(cmake/ThirdPartySDL2.cmake)
+    cna_configure_sdl2()
+endif()
+
 # Playback/capture implementation selection (plan_platform.md PLAT-93). This is intentionally
 # independent from CNA_PLATFORM: window/input and audio backends are orthogonal choices.
 include(cmake/AudioPlatformSelection.cmake)

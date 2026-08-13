@@ -15,6 +15,10 @@ if(CNA_PLATFORM STREQUAL "SDL3")
     file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Sdl3/*.cpp")
     list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
 endif()
+if(CNA_PLATFORM STREQUAL "SDL2")
+    file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Sdl2/*.cpp")
+    list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
+endif()
 
 # Implementation pieces shared between implementations that have no platform library to ask --
 # std::filesystem path resolution, standard-library host facts. Not in the public include tree:
@@ -49,4 +53,7 @@ target_link_libraries(cna_platform PUBLIC cna_core_headers)
 # probe (PLAT-27) is what proves it does not.
 if(CNA_PLATFORM STREQUAL "SDL3")
     target_link_libraries(cna_platform PRIVATE SDL3::SDL3)
+endif()
+if(CNA_PLATFORM STREQUAL "SDL2")
+    target_link_libraries(cna_platform PRIVATE SDL2::SDL2)
 endif()

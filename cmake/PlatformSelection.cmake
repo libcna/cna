@@ -12,12 +12,12 @@
 # capability is known -- not silently tolerated until something dereferences null.
 # =====================================================================================
 
-set(CNA_PLATFORM "SDL3" CACHE STRING "Platform implementation (SDL3 | HEADLESS | TERMINAL)")
+set(CNA_PLATFORM "SDL3" CACHE STRING "Platform implementation (SDL3 | SDL2 | HEADLESS | TERMINAL)")
 
 # Implemented today. TERMINAL is POSIX-only: it is built on termios, and there is no Windows
 # console path for it (plan_platform.md Phase 10). Offering it on Windows would produce a
 # configure that succeeds and a build that does not.
-set(_cna_platforms_available SDL3 HEADLESS)
+set(_cna_platforms_available SDL3 SDL2 HEADLESS)
 if(NOT WIN32)
     list(APPEND _cna_platforms_available TERMINAL)
 endif()
@@ -27,7 +27,7 @@ endif()
 # binary that is not what the user asked for. plan_platform.md §12 records why each is
 # out of scope; PLAT-11 is explicit that a reserved identifier must never degrade
 # quietly.
-set(_cna_platforms_reserved SDL2 SDL12 WIN32 EMSCRIPTEN)
+set(_cna_platforms_reserved SDL12 WIN32 EMSCRIPTEN)
 if(WIN32)
     list(APPEND _cna_platforms_reserved TERMINAL)
 endif()
@@ -38,7 +38,7 @@ if(CNA_PLATFORM IN_LIST _cna_platforms_reserved)
     message(FATAL_ERROR
         "CNA: CNA_PLATFORM=${CNA_PLATFORM} is a reserved identifier that is NOT implemented.\n"
         "Only ${_cna_platforms_available} are available today.\n"
-        "See plan_platform.md -- SDL2, SDL 1.2, native Win32 and Emscripten are recorded in "
+        "See plan_platform.md -- SDL 1.2, native Win32 and Emscripten are recorded in "
         "\"Possible future implementations (NOT in scope)\". TERMINAL exists (Phase 10) but is "
         "POSIX-only: it is built on termios and has no Windows console path.\n"
         "This is a hard error on purpose: falling back to SDL3 would build something other "

@@ -36,6 +36,12 @@ jobs:
             renderer: OPENGLES3
             audio: SDL3
             display: true
+          # Exercises the SDL2 implementation's real GL/ES context path, not sdl2-compat.
+          - name: SDL2 + OpenGLES3
+            platform: SDL2
+            renderer: OPENGLES3
+            audio: "NULL"
+            display: true
           - name: SDL3 + Vulkan
             platform: SDL3
             renderer: VULKAN
@@ -143,7 +149,7 @@ jobs:
       - name: Build the contract, consumer tests and 2D integration demo
         run: cmake --build build --target CnaTests cna_demo_2d --parallel 3
 
-      - name: Run platform CTest entries (SDL3 tuples)
+      - name: Run platform CTest entries (graphical tuples)
         if: matrix.display
         env:
           SDL_AUDIODRIVER: dummy
@@ -155,7 +161,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
         run: env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build -R '^CnaPlatform(Tests|WindowTests)$' --output-on-failure
 
-      - name: Run cross-implementation event oracle (SDL3 tuples)
+      - name: Run cross-implementation event oracle (graphical tuples)
         if: matrix.display
         env:
           SDL_AUDIODRIVER: dummy
