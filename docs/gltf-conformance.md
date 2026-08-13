@@ -596,7 +596,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**120 of the 128** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**124 of the 132** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
@@ -614,20 +614,19 @@ property that justifies converting at all: `mode-triangle-strip` and `mode-trian
 same quad by different routes and must produce byte-identical index buffers, while
 `mode-triangle-fan` — the same four indices under the other rule — must not.
 
-The PBR strides (48/68) arrived with `GLTF-215`, and their tangent stream is byte-exact for a
-reason worth stating: no corpus fixture authors UVs, and `ComputeTangentsEXT` reads a missing UV as
-`(0,0)`, so every triangle's UV determinant is zero, the `|denom| < 1e-12` guard skips it, and every
-accumulator stays exactly zero. The orthogonalised tangent therefore falls to its own `(1,0,0)`
-fallback, with handedness `+1`. That is arithmetic rather than an approximation, so the golden needs
-no reimplementation of the angle-weighted algorithm.
+The PBR strides (48/68) arrived with `GLTF-215`, and authored tangents are byte-exact at L5,
+including their handedness sign. Generated tangents are stated separately under
+`importPolicy.generatedTangents`: they are CNA policy, not values authored by glTF, and the L5
+packer consumes them only when a fixture declares an independently solvable answer.
+`tangent-absent-generated` does exactly that: its geometry and UV axes make the generated basis
+`(+X,+1)` without approximation, while a direct production-path test independently proves that CNA
+generated those bytes from an asset with no `TANGENT` accessor. `interleaved-pos-nrm-uv` remains the
+one positive asset without a golden because it declares no such policy answer; the packer refuses
+to turn its own implementation into an oracle by duplicating the algorithm.
 
-Deliberately still not covered: a primitive that **does** author UVs without a `TANGENT`, where real
-angle-weighted generation runs — the packer refuses rather than guessing, and `GLTF-149`+ extends it
-together with the fixture that needs it. The dual-texture stride (20) is likewise uncovered, since
-no corpus fixture carries a texture at all. The `primitiveCount` assertion covers only `TRIANGLES`,
-since that is the only topology that reaches L5 — a strip or fan is already converted to one by then
-(`GLTF-072`); `GLTF-078` replaces the loaders' hardcoded `numIndices / 3` with a topology-aware
-helper and this is where that replacement is held to the same answer.
+The `primitiveCount` assertion covers every topology after import. A strip or fan is already
+converted to an explicit list by L5 (`GLTF-072`), while point and line goldens keep their own
+topology and §12.3 count rule (`GLTF-078`).
 
 ---
 
@@ -794,6 +793,10 @@ written for this document: two descriptions of the same fixture are two things t
 | `mode-triangle-fan` | topology | L1, L2, L3, L4, L5 | primitive.mode = TRIANGLE_FAN; fan -> list conversion |
 | `normal-absent` | normals | L1, L2, L3, L4 | absent NORMAL; computed flat normals; non-planar triangle |
 | `normal-quantized` | normals | L1, L2, L3, L4, L5 | NORMAL as normalized SHORT; §3.6.2.2 normalized decode; authored normal passed through byte-exact |
+| `tangent-handedness` | normals | L1, L2, L3, L4, L5 | opposite TANGENT.w signs; bitangent reconstruction; two primitives in one mesh; byte-exact tangent stream; normal map with non-zero tangent-space Y |
+| `tangent-absent-generated` | normals | L1, L2, L3, L4, L5 | absent TANGENT; angle-weighted tangent generation; Gram-Schmidt; unit generated tangent; generated handedness +1 |
+| `normal-nonuniform-scale` | normals | L1, L2, L3, L4, L5 | rotated non-uniform scale; inverse-transpose normal matrix; slanted authored normal; normal renormalisation after transform |
+| `tangent-mirrored` | normals | L1, L2, L3, L4, L5 | negative-determinant placement; shared tangent vertex buffer; per-draw handedness sign; mirrored tangent direction; normal map with non-zero tangent-space Y |
 | `xf-identity` | transforms | L1, L2, L3, L4 | node without transform; single scene root |
 | `xf-translation` | transforms | L1, L2, L3, L4 | node translation |
 | `xf-scale-uniform` | transforms | L1, L2, L3, L4 | uniform node scale; normal matrix agrees with the world 3x3 |

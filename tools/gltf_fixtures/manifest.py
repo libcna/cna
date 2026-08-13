@@ -397,6 +397,7 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
                  positions: Sequence[Sequence[float]],
                  normals: Sequence[Sequence[float]] | None = None,
                  tangents: Sequence[Sequence[float]] | None = None,
+                 generated_tangents: Sequence[Sequence[float]] | None = None,
                  texcoords: Sequence[Sequence[float]] | None = None,
                  colors: Sequence[Sequence[float]] | None = None,
                  joints: Sequence[Sequence[float]] | None = None,
@@ -455,6 +456,12 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
     if dropped_attributes:
         import_policy["droppedAttributes"] = list(dropped_attributes)
         import_policy["droppedReason"] = dropped_reason or ""
+    if generated_tangents:
+        # Unlike `tangents` below, this is not something the glTF asset authors. It is CNA's
+        # documented fallback policy for a primitive with UVs but no TANGENT, so keep it under
+        # importPolicy. The L5 packer may consume an exactly-solvable basis without pretending it
+        # came from §3.7.2.1, and a production-path test still has to prove CNA generated it.
+        import_policy["generatedTangents"] = [list(t) for t in generated_tangents]
     return {
         "mesh": mesh,
         "meshName": mesh_name,

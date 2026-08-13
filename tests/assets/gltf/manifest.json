@@ -12,13 +12,13 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 128,
+  "distinctAssetCount": 132,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 13,
     "component-types": 8,
     "topology": 8,
-    "normals": 2,
+    "normals": 6,
     "transforms": 17,
     "materials": 12,
     "textures": 10,
@@ -76,22 +76,6 @@
     {
       "id": "gltf-uri-percent-encoded",
       "owningGroup": "container"
-    },
-    {
-      "id": "tangent-handedness",
-      "owningGroup": "normals"
-    },
-    {
-      "id": "tangent-absent-generated",
-      "owningGroup": "normals"
-    },
-    {
-      "id": "normal-nonuniform-scale",
-      "owningGroup": "normals"
-    },
-    {
-      "id": "tangent-mirrored",
-      "owningGroup": "normals"
     },
     {
       "id": "draco-triangle",
@@ -878,6 +862,90 @@
         "NORMAL as normalized SHORT",
         "\u00a73.6.2.2 normalized decode",
         "authored normal passed through byte-exact"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "tangent-handedness",
+      "owningGroup": "normals",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "opposite TANGENT.w signs",
+        "bitangent reconstruction",
+        "two primitives in one mesh",
+        "byte-exact tangent stream",
+        "normal map with non-zero tangent-space Y"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "tangent-absent-generated",
+      "owningGroup": "normals",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "absent TANGENT",
+        "angle-weighted tangent generation",
+        "Gram-Schmidt",
+        "unit generated tangent",
+        "generated handedness +1"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "normal-nonuniform-scale",
+      "owningGroup": "normals",
+      "referencingGroups": [
+        "transforms"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "rotated non-uniform scale",
+        "inverse-transpose normal matrix",
+        "slanted authored normal",
+        "normal renormalisation after transform"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "tangent-mirrored",
+      "owningGroup": "normals",
+      "referencingGroups": [
+        "transforms",
+        "scenes"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "negative-determinant placement",
+        "shared tangent vertex buffer",
+        "per-draw handedness sign",
+        "mirrored tangent direction",
+        "normal map with non-zero tangent-space Y"
       ],
       "auditFixture": null
     },
@@ -4162,6 +4230,31 @@
       "sha256": "202793412e9c1e5d70a3f54878468a1e3fa66b079e12a05b82847b4ae3ccc9ef"
     },
     {
+      "path": "normal-nonuniform-scale.expected.json",
+      "bytes": 7226,
+      "sha256": "de1211369e5f2e3e838f883b71faabe5d901daf348979ac6be72315d3ce41ea0"
+    },
+    {
+      "path": "normal-nonuniform-scale.glb",
+      "bytes": 884,
+      "sha256": "04083b1979cd118dc0ff8b6bf4940eed34b059ad83bbc0a4b2159e027280610d"
+    },
+    {
+      "path": "normal-nonuniform-scale.gltf",
+      "bytes": 1681,
+      "sha256": "d7e379b488c0e544446e686e371786c5fff20b018dfbcd2d027080ba1a5b77ed"
+    },
+    {
+      "path": "normal-nonuniform-scale.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "normal-nonuniform-scale.vb.bin",
+      "bytes": 144,
+      "sha256": "188749347a148d3d53d4e2b7d26661d101d1623dc25e1d2e6855a1c6d7a1bbff"
+    },
+    {
       "path": "normal-quantized.expected.json",
       "bytes": 7961,
       "sha256": "1791dce8c3b950600daa416fbdc571e179d9522c9ff2fe5cb4ae5034040103ac"
@@ -4900,6 +4993,91 @@
       "path": "stride-padded.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "tangent-absent-generated.expected.json",
+      "bytes": 8112,
+      "sha256": "d4a5a29f8462e540ea187f3343b4cf9b4fd569fabbb38e485030577b5abe1650"
+    },
+    {
+      "path": "tangent-absent-generated.glb",
+      "bytes": 944,
+      "sha256": "f6d1aeb167cb034719cb7b6c3f0cc9a6199acc8515dbff515de7229439081a58"
+    },
+    {
+      "path": "tangent-absent-generated.gltf",
+      "bytes": 1682,
+      "sha256": "6effffc0e9d989d7c9f084c74efefb21c4a768838100b31b4b4b270b4ce4d87d"
+    },
+    {
+      "path": "tangent-absent-generated.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "tangent-absent-generated.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
+    },
+    {
+      "path": "tangent-handedness.expected.json",
+      "bytes": 15094,
+      "sha256": "5a273e628fff5a0fe1065969469dbe10ea52111875b9fb6b070e0602e1bf0836"
+    },
+    {
+      "path": "tangent-handedness.glb",
+      "bytes": 1908,
+      "sha256": "e8d1956cccd2033c0edee982864990b7be1cb74ddcf292c574d0e187dba4f5bf"
+    },
+    {
+      "path": "tangent-handedness.gltf",
+      "bytes": 3285,
+      "sha256": "3c2ce1eeb0ea1e6517e8eba85353afbc8ed5ceb567e0d3258b1d760504ef549d"
+    },
+    {
+      "path": "tangent-handedness.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "tangent-handedness.p1.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "tangent-handedness.p1.vb.bin",
+      "bytes": 144,
+      "sha256": "857fd3ee9c49127dcbcc02c3aa1624631d59851bf2e1ef39178697538956d6a4"
+    },
+    {
+      "path": "tangent-handedness.vb.bin",
+      "bytes": 144,
+      "sha256": "09c13524dcc58d0293e33639a843c8356ce0e812a818c646a079f72bbbf1f412"
+    },
+    {
+      "path": "tangent-mirrored.expected.json",
+      "bytes": 10395,
+      "sha256": "69aa3e598c1c9d75b2bc89e47ea7b95ae3699817475c071e58082e23f65e4212"
+    },
+    {
+      "path": "tangent-mirrored.glb",
+      "bytes": 1540,
+      "sha256": "c56967ac8d488cb3325d02144857e690a073a4d6296625cdbce8520b52121a76"
+    },
+    {
+      "path": "tangent-mirrored.gltf",
+      "bytes": 2640,
+      "sha256": "2128cf2e40948467047c1fe8706ca795454e0819149ab5251ee082f1afb5422f"
+    },
+    {
+      "path": "tangent-mirrored.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "tangent-mirrored.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
     },
     {
       "path": "tex-dual-texture-stride.expected.json",

@@ -131,6 +131,13 @@ def _tangents_for(primitive: dict[str, Any], count: int) -> list[tuple[float, fl
     authored = primitive.get("tangents") or []
     if authored:
         return [tuple(t) for t in authored]
+    generated = (primitive.get("importPolicy") or {}).get("generatedTangents") or []
+    if generated:
+        if len(generated) != count:
+            raise ValueError(
+                f"{primitive.get('meshName')!r} states {len(generated)} generated tangents for "
+                f"{count} vertices")
+        return [tuple(t) for t in generated]
     if primitive.get("texcoords"):
         raise NotImplementedError(
             f"{primitive.get('meshName')!r} authors UVs but no TANGENT, so CNA generates one with "

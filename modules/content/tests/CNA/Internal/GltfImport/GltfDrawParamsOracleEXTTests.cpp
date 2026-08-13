@@ -11,6 +11,7 @@
 // (L3) or node world matrix (L4) -- so a passing run means the value survived the whole trip and
 // not merely that two copies of the same mistake agree.
 
+#include <array>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -436,6 +437,66 @@ TEST(GltfConformanceL6, NonUniformScaleSeparatesTheNormalMatrixFromTheWorldMatri
     const float naiveRatio   = naiveY / naiveX;
     EXPECT_GT(std::fabs(correctRatio - naiveRatio), 1.0f)
         << "the fixture no longer separates the two derivations";
+}
+
+TEST(GltfConformanceL6, RotatedNonUniformScaleTransformsTheCorpusNormalByInverseTranspose)
+{
+    // GLTF-176 / GLTF-399: unlike xf-scale-nonuniform's diagonal scale, this fixture carries an
+    // exact Rz90*S(2,3,4) matrix. It therefore catches both using World instead of inverse-
+    // transpose and transposing the right matrix in the wrong direction.
+    const LoadedFixture fixture("normal-nonuniform-scale");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("normal-nonuniform-scale");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& draw = captured.front();
+
+    const std::vector<double> expectedMatrix =
+        Numbers(Path(fixture.Expected(), "l4.normalTransform.normalMatrixColumnMajor"));
+    ASSERT_EQ(9u, expectedMatrix.size());
+    for (std::size_t i = 0; i < expectedMatrix.size(); ++i)
+    {
+        EXPECT_NEAR(expectedMatrix[i], static_cast<double>(draw.normalMatrix[i]), kTolerance)
+            << "normal matrix " << i;
+    }
+
+    const std::vector<double> source =
+        Numbers(Path(fixture.Expected(), "l4.normalTransform.sourceNormal"));
+    const std::vector<double> expectedWorld =
+        Numbers(Path(fixture.Expected(), "l4.normalTransform.worldNormal"));
+    const std::vector<double> naive =
+        Numbers(Path(fixture.Expected(), "l4.normalTransform.naiveWorld3x3Normal"));
+    ASSERT_EQ(3u, source.size());
+    ASSERT_EQ(3u, expectedWorld.size());
+    ASSERT_EQ(3u, naive.size());
+
+    std::array<double, 3> transformed = {
+        draw.normalMatrix[0] * source[0] + draw.normalMatrix[3] * source[1] +
+            draw.normalMatrix[6] * source[2],
+        draw.normalMatrix[1] * source[0] + draw.normalMatrix[4] * source[1] +
+            draw.normalMatrix[7] * source[2],
+        draw.normalMatrix[2] * source[0] + draw.normalMatrix[5] * source[1] +
+            draw.normalMatrix[8] * source[2],
+    };
+    const double length = std::sqrt(transformed[0] * transformed[0] +
+                                    transformed[1] * transformed[1] +
+                                    transformed[2] * transformed[2]);
+    ASSERT_GT(length, 0.0);
+    double distanceFromNaive = 0.0;
+    for (std::size_t i = 0; i < 3; ++i)
+    {
+        transformed[i] /= length;
+        EXPECT_NEAR(expectedWorld[i], transformed[i], kTolerance) << "world normal " << i;
+        const double delta = transformed[i] - naive[i];
+        distanceFromNaive += delta * delta;
+    }
+    EXPECT_GT(std::sqrt(distanceFromNaive), 0.3)
+        << "the fixture no longer discriminates inverse-transpose from World3x3";
 }
 
 // --- GLTF-218 / GLTF-220 / GLTF-223: material factors reach the shader ----------------------------

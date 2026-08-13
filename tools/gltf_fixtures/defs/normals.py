@@ -11,6 +11,8 @@ import math
 
 from ..builder import SHORT, TRIANGLES, UNSIGNED_SHORT, GltfBuilder
 from ..manifest import Fixture, l3_primitive, world_positions
+from ..png import encode_png
+from .common import TRIANGLE_INDICES, TRIANGLE_NORMALS, TRIANGLE_POSITIONS
 
 #: A triangle deliberately NOT in the XY plane. Every other normal-less fixture in the corpus is
 #: planar and CCW, so its computed face normal is exactly the fabricated ``(0,0,1)`` CNA used to
@@ -156,4 +158,288 @@ def normal_quantized() -> Fixture:
     )
 
 
-FIXTURES = [normal_absent, normal_quantized]
+# A canonical UV frame: increasing U follows +X and increasing V follows +Y. On the +Z carrier
+# triangle it makes the generated tangent exactly (+X,+1) and the reconstructed bitangent +Y, so
+# none of the expectations below depend on decimal approximations.
+_FRAME_UVS = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+_TANGENT_POSITIVE = [(1.0, 0.0, 0.0, 1.0)] * 3
+_TANGENT_NEGATIVE = [(1.0, 0.0, 0.0, -1.0)] * 3
+
+
+def _handedness_normal_map() -> bytes:
+    """A constant tangent-space +Y normal whose result changes when ``TANGENT.w`` changes."""
+    pixel = (128, 255, 128, 255)
+    return encode_png(2, 2, [[pixel, pixel], [pixel, pixel]])
+
+
+def _add_handedness_material(builder: GltfBuilder, name: str) -> tuple[int, dict]:
+    """Adds the discriminating normal map and returns its material plus the L3 expectation."""
+    image = builder.add_image(_handedness_normal_map(), name=f"{name}Normal")
+    texture = builder.add_texture(source=image, name=f"{name}NormalTexture")
+    material = builder.add_material({
+        "name": name,
+        "normalTexture": {"index": texture},
+    })
+    expected = {
+        "index": material,
+        "name": name,
+        "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
+        "metallicFactor": 1.0,
+        "roughnessFactor": 1.0,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": True,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return material, expected
+
+
+def tangent_handedness() -> Fixture:
+    """Two adjacent primitives whose only tangent-basis difference is ``TANGENT.w``."""
+    b = GltfBuilder("tangent-handedness")
+    material, expected_material = _add_handedness_material(b, "OppositeHandedness")
+    left_positions = [(-1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (-1.0, 1.0, 0.0)]
+    right_positions = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)]
+    left_position = b.add_packed_accessor(
+        usage="POSITION (positive handedness)", values=left_positions,
+        accessor_type="VEC3", with_bounds=True)
+    right_position = b.add_packed_accessor(
+        usage="POSITION (negative handedness)", values=right_positions,
+        accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(
+        usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    positive = b.add_packed_accessor(
+        usage="TANGENT (positive handedness)", values=_TANGENT_POSITIVE,
+        accessor_type="VEC4")
+    negative = b.add_packed_accessor(
+        usage="TANGENT (negative handedness)", values=_TANGENT_NEGATIVE,
+        accessor_type="VEC4")
+    texcoord = b.add_packed_accessor(
+        usage="TEXCOORD_0", values=_FRAME_UVS, accessor_type="VEC2")
+    indices = b.add_packed_accessor(
+        usage="indices", values=TRIANGLE_INDICES, accessor_type="SCALAR",
+        component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([
+        {"attributes": {"POSITION": left_position, "NORMAL": normal,
+                        "TANGENT": positive, "TEXCOORD_0": texcoord},
+         "indices": indices, "material": material, "mode": TRIANGLES},
+        {"attributes": {"POSITION": right_position, "NORMAL": normal,
+                        "TANGENT": negative, "TEXCOORD_0": texcoord},
+         "indices": indices, "material": material, "mode": TRIANGLES},
+    ], name="OppositeHandednessQuad")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    l4 = world_positions(b, {(mesh, 0): left_positions, (mesh, 1): right_positions})
+    l4["tangentFrames"] = [
+        {"mesh": mesh, "primitive": 0, "normal": [0.0, 0.0, 1.0],
+         "tangent": [1.0, 0.0, 0.0, 1.0], "reconstructedBitangent": [0.0, 1.0, 0.0]},
+        {"mesh": mesh, "primitive": 1, "normal": [0.0, 0.0, 1.0],
+         "tangent": [1.0, 0.0, 0.0, -1.0], "reconstructedBitangent": [0.0, -1.0, 0.0]},
+    ]
+    return Fixture(
+        id="tangent-handedness", audit_fixture=None, owning_group="normals",
+        description="Two adjacent primitives author the same +Z normal and +X tangent direction, "
+                    "but opposite TANGENT.w signs. Reconstructing B=cross(N,T)*w therefore gives "
+                    "+Y on one half and -Y on the other. A non-flat tangent-space +Y normal map "
+                    "makes dropping or defaulting the sign visibly wrong rather than merely "
+                    "different in an unused vertex field.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["opposite TANGENT.w signs", "bitangent reconstruction",
+                  "two primitives in one mesh", "byte-exact tangent stream",
+                  "normal map with non-zero tangent-space Y"],
+        spec_anchors=["meshes-overview"],
+        l3={"primitives": [
+            l3_primitive(
+                mesh=mesh, mesh_name="OppositeHandednessQuad", primitive=0, mode=TRIANGLES,
+                positions=left_positions, normals=TRIANGLE_NORMALS,
+                tangents=_TANGENT_POSITIVE, texcoords=_FRAME_UVS, indices=TRIANGLE_INDICES,
+                material=expected_material),
+            l3_primitive(
+                mesh=mesh, mesh_name="OppositeHandednessQuad", primitive=1, mode=TRIANGLES,
+                positions=right_positions, normals=TRIANGLE_NORMALS,
+                tangents=_TANGENT_NEGATIVE, texcoords=_FRAME_UVS, indices=TRIANGLE_INDICES,
+                material=expected_material),
+        ]},
+        l4=l4,
+    )
+
+
+def tangent_absent_generated() -> Fixture:
+    """A UV-mapped PBR triangle with no authored tangent and an exactly solvable fallback basis."""
+    b = GltfBuilder("tangent-absent-generated")
+    position = b.add_packed_accessor(
+        usage="POSITION", values=TRIANGLE_POSITIONS, accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(
+        usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    texcoord = b.add_packed_accessor(
+        usage="TEXCOORD_0", values=_FRAME_UVS, accessor_type="VEC2")
+    indices = b.add_packed_accessor(
+        usage="indices", values=TRIANGLE_INDICES, accessor_type="SCALAR",
+        component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal, "TEXCOORD_0": texcoord},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="GeneratedTangentTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["generatedTangentBasis"] = {
+        "algorithm": "angle-weighted UV gradients followed by Gram-Schmidt",
+        "tangents": [list(t) for t in _TANGENT_POSITIVE],
+        "unitLength": True,
+        "perpendicularToNormal": True,
+    }
+    return Fixture(
+        id="tangent-absent-generated", audit_fixture=None, owning_group="normals",
+        description="A +Z triangle whose UV axes exactly match its +X/+Y geometry, with no "
+                    "TANGENT accessor. CNA's documented fallback has the closed-form result "
+                    "(+X,+1) at every vertex; direction, unit length and handedness are all "
+                    "independently observable.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["absent TANGENT", "angle-weighted tangent generation", "Gram-Schmidt",
+                  "unit generated tangent", "generated handedness +1"],
+        spec_anchors=["meshes-overview"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="GeneratedTangentTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+            generated_tangents=_TANGENT_POSITIVE, texcoords=_FRAME_UVS,
+            indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+_NONUNIFORM_NORMAL = (0.6, 0.8, 0.0)
+_NONUNIFORM_NORMALS = [_NONUNIFORM_NORMAL] * 3
+# Exact Rz(90deg)*S(2,3,4), column-major. Using a matrix rather than a quaternion keeps the
+# independent normal-matrix expectation free of tiny sin/cos round-off values.
+_NONUNIFORM_WORLD = [
+    0.0, 2.0, 0.0, 0.0,
+    -3.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 4.0, 0.0,
+    0.0, 0.0, 0.0, 1.0,
+]
+_NONUNIFORM_NORMAL_MATRIX = [
+    0.0, 0.5, 0.0,
+    -1.0 / 3.0, 0.0, 0.0,
+    0.0, 0.0, 0.25,
+]
+_NONUNIFORM_WORLD_NORMAL_RAW = (-0.8 / 3.0, 0.6 / 2.0, 0.0)
+_NONUNIFORM_WORLD_NORMAL_LENGTH = math.sqrt(sum(v * v for v in _NONUNIFORM_WORLD_NORMAL_RAW))
+_NONUNIFORM_WORLD_NORMAL = tuple(
+    v / _NONUNIFORM_WORLD_NORMAL_LENGTH for v in _NONUNIFORM_WORLD_NORMAL_RAW)
+
+
+def normal_nonuniform_scale() -> Fixture:
+    """A slanted authored normal under an asymmetric rotated non-uniform scale."""
+    b = GltfBuilder("normal-nonuniform-scale")
+    position = b.add_packed_accessor(
+        usage="POSITION", values=TRIANGLE_POSITIONS, accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(
+        usage="NORMAL", values=_NONUNIFORM_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(
+        usage="indices", values=TRIANGLE_INDICES, accessor_type="SCALAR",
+        component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="NonUniformNormalTri")
+    node = b.add_node(name="RotatedScaledNode", mesh=mesh, matrix=_NONUNIFORM_WORLD)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["normalTransform"] = {
+        "node": node,
+        "mesh": mesh,
+        "sourceNormal": list(_NONUNIFORM_NORMAL),
+        "normalMatrixColumnMajor": list(_NONUNIFORM_NORMAL_MATRIX),
+        "worldNormal": list(_NONUNIFORM_WORLD_NORMAL),
+        "naiveWorld3x3Normal": [-2.4 / math.sqrt(7.2), 1.2 / math.sqrt(7.2), 0.0],
+    }
+    return Fixture(
+        id="normal-nonuniform-scale", audit_fixture=None, owning_group="normals",
+        description="A (0.6,0.8,0) authored normal under exact Rz90*S(2,3,4). The correct "
+                    "inverse-transpose sends it toward (-0.2667,0.3,0), while the naive world "
+                    "3x3 sends it toward (-2.4,1.2,0); rotation makes matrix transposition errors "
+                    "visible as well as the non-uniform scale error.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        referencing_groups=["transforms"],
+        features=["rotated non-uniform scale", "inverse-transpose normal matrix",
+                  "slanted authored normal", "normal renormalisation after transform"],
+        spec_anchors=["meshes-overview", "transformations"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="NonUniformNormalTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=_NONUNIFORM_NORMALS,
+            indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def tangent_mirrored() -> Fixture:
+    """One tangent-bearing mesh placed once normally and once by a negative determinant."""
+    b = GltfBuilder("tangent-mirrored")
+    material, expected_material = _add_handedness_material(b, "MirroredHandedness")
+    position = b.add_packed_accessor(
+        usage="POSITION", values=TRIANGLE_POSITIONS, accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(
+        usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    tangent = b.add_packed_accessor(
+        usage="TANGENT", values=_TANGENT_POSITIVE, accessor_type="VEC4")
+    texcoord = b.add_packed_accessor(
+        usage="TEXCOORD_0", values=_FRAME_UVS, accessor_type="VEC2")
+    indices = b.add_packed_accessor(
+        usage="indices", values=TRIANGLE_INDICES, accessor_type="SCALAR",
+        component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal, "TANGENT": tangent,
+                       "TEXCOORD_0": texcoord},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="SharedTangentTri")
+    ordinary = b.add_node(name="Ordinary", mesh=mesh)
+    mirrored = b.add_node(name="Mirrored", mesh=mesh, translation=[3.0, 0.0, 0.0],
+                          scale=[-1.0, 1.0, 1.0])
+    b.add_scene([ordinary, mirrored], name="Scene")
+    b.set_default_scene(0)
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["tangentPlacements"] = [
+        {"node": ordinary, "mirrored": False, "worldNormal": [0.0, 0.0, 1.0],
+         "worldTangent": [1.0, 0.0, 0.0], "worldHandedness": 1.0,
+         "worldBitangent": [0.0, 1.0, 0.0]},
+        {"node": mirrored, "mirrored": True, "worldNormal": [0.0, 0.0, 1.0],
+         "worldTangent": [-1.0, 0.0, 0.0], "worldHandedness": -1.0,
+         "worldBitangent": [0.0, 1.0, 0.0]},
+    ]
+    return Fixture(
+        id="tangent-mirrored", audit_fixture=None, owning_group="normals",
+        description="One mesh with authored (+X,+1) tangents is instanced normally and through "
+                    "T(3,0,0)*S(-1,1,1). The shared vertex buffer must stay local, while the "
+                    "mirrored draw transforms T to -X and multiplies w by sign(det(world))=-1 so "
+                    "the reconstructed world bitangent remains +Y. A tangent-space +Y normal map "
+                    "makes that per-draw determinant correction visible.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        referencing_groups=["transforms", "scenes"],
+        features=["negative-determinant placement", "shared tangent vertex buffer",
+                  "per-draw handedness sign", "mirrored tangent direction",
+                  "normal map with non-zero tangent-space Y"],
+        spec_anchors=["meshes-overview", "transformations"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SharedTangentTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+            tangents=_TANGENT_POSITIVE, texcoords=_FRAME_UVS,
+            indices=TRIANGLE_INDICES, material=expected_material)]},
+        l4=l4,
+    )
+
+
+FIXTURES = [normal_absent, normal_quantized, tangent_handedness,
+            tangent_absent_generated, normal_nonuniform_scale, tangent_mirrored]

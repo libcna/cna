@@ -436,7 +436,7 @@ if(CNA_BUILD_TESTS)
         "L2|GltfConformanceL2.*:GltfAccessorDecodeLock.*:GltfBufferAndWeightForm.*:GltfIndexDecode.*:GltfIndexForm.*"
         "L3|GltfConformanceL3.*:GltfAttributeCoverage.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfDrawTopology.*:GltfSamplerMapping.*:GltfImageSource.*:GltfUvChannel.*:GltfOcclusionRemap.*:GltfUnsupportedTexture.*:GltfUnlitMaterial.*"
         "L4|GltfConformanceL4.*:GltfConventions.*:GltfNodeTransformOrder.*:GltfNodeHierarchy.*:GltfMirroring.*:GltfModelShape.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfSkinComposition.*:GltfSkinLadder.*:GltfRigidAnimation.*:GltfAnimationSampling.*:GltfAnimationRobustness.*:GltfClipAndLight.*:GltfCameras.*:GltfMorphWeights.*:GltfMorphBlending.*:GltfSceneSelection.*"
-        "L5|GltfConformanceL5.*:GltfStrideAndBuffer.*:GltfBufferOracle.*:GltfVertexBufferInvariants.*:GltfVertexLayoutTable.*"
+        "L5|GltfConformanceL5.*:GltfStrideAndBuffer.*:GltfBufferOracle.*:GltfVertexBufferInvariants.*:GltfVertexLayoutTable.*:GltfNormalTangentCorpus.*"
         "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*:GltfLightBudget.*"
         "Perf|GltfPerformance.*"
         "Ledger|GltfKnownDefect.*"
