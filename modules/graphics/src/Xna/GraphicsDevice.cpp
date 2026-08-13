@@ -161,7 +161,7 @@ namespace Microsoft::Xna::Framework::Graphics
 #ifdef CNA_RENDERER_DILIGENT
             // Diligent picks its concrete device type (D3D12/Vulkan/D3D11/OpenGL) at RUNTIME, after
             // this window already exists -- but unlike CNA_RENDERER_BGFX's identical problem below,
-            // SDL3 rejects a window created with BOTH SDL_WINDOW_VULKAN and SDL_WINDOW_OPENGL set
+            // The native window backend rejects combining Vulkan and OpenGL creation flags
             // ("Conflicting window graphics flags specified"), so only one can be requested.
             //
             // DILIGENT-57: this used to re-parse CNA_DILIGENT_DEVICE with its own narrow
@@ -238,8 +238,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
             // plan_fna3d.md: FNA3D selects its driver (SDL_GPU / Direct3D 11 / OpenGL) inside
             // FNA3D_PrepareWindowAttributes and returns the SDL window flags that driver needs --
-            // SDL_WINDOW_OPENGL for the GL driver, none for the others. That call must happen
-            // before SDL_CreateWindow below, because it also primes the GL attributes the window's
+            // an OpenGL window flag for the GL driver, none for the others. That call must happen
+            // before platform window creation because it also primes the GL attributes the window's
             // visual is chosen from; same runtime-decides-the-flag shape as LLGL/Diligent/bgfx
             // above, except that FNA3D makes the decision itself rather than CNA re-deriving it.
 #ifdef CNA_RENDERER_FNA3D
@@ -2343,7 +2343,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Publish the same window to Mouse (mirrors FNA setting Mouse.WindowHandle at window
         // creation, SDL3_FNAPlatform.cs). Lets SetPosition / relative-mouse-mode target the
-        // real window instead of relying on the SDL_GetMouseFocus() fallback.
+        // real window instead of relying on a native mouse-focus fallback.
         Microsoft::Xna::Framework::Input::Mouse::INTERNAL_setWindow(
             windowHandle, platformWindow_->GetId());
 #endif
@@ -2628,9 +2628,9 @@ namespace Microsoft::Xna::Framework::Graphics
             platformWindow_->SetSize(width, height);
             platformWindow_->Sync();
 
-            // SDL_SetWindowSize() is documented as asynchronous on some windowing systems (e.g.
+            // Window resizing is asynchronous on some windowing systems (e.g.
             // X11 without a window manager to negotiate geometry immediately, as under a bare
-            // Xvfb) -- SDL_GetWindowSize()/SDL_GetWindowSizeInPixels() can keep reporting the OLD
+            // Xvfb) — logical/physical size queries can keep reporting the OLD
             // size for a short window afterward. UpdateViewportFromWindow() (called right after
             // this by every Reset()/ApplyChanges() path) needs the NEW size immediately: it feeds
             // renderer_->SetViewport(), and nothing re-issues that call later purely because the

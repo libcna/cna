@@ -20,8 +20,6 @@
 
 #include "System/Text/StringBuilder.hpp"
 
-struct SDL_Renderer;
-
 namespace Microsoft::Xna::Framework::Graphics
 {
     class Effect;

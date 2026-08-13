@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "CNA/Internal/Audio/MixerEngine.hpp"
 
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_properties.h>
 #include <SDL3/SDL_stdinc.h>
+#include <SDL3_mixer/SDL_mixer.h>
 
 #include <gtest/gtest.h>
 
@@ -71,19 +73,17 @@ TEST(AudioMixerPlatformContractTests, Float32ApplicationFormatUsesTheSameWholeBu
     CNA::Internal::Audio::DestroyMixer();
     MixerCleanup cleanup;
 
-    SDL_AudioSpec requested{};
-    requested.format = SDL_AUDIO_F32;
-    requested.channels = 2;
-    requested.freq = 48000;
+    const CNA::Internal::Audio::MixerFormat requested{
+        48000, 2, CNA::Internal::Audio::MixerSampleFormat::Float32};
     CNA::Internal::Audio::SetMixerSpecOverrideForTests(requested);
 
     MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
     ASSERT_NE(mixer, nullptr);
     SDL_AudioSpec actual{};
     ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << SDL_GetError();
-    EXPECT_EQ(actual.format, requested.format);
+    EXPECT_EQ(actual.format, SDL_AUDIO_F32);
     EXPECT_EQ(actual.channels, requested.channels);
-    EXPECT_EQ(actual.freq, requested.freq);
+    EXPECT_EQ(actual.freq, requested.sampleRate);
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
     while (CNA::Internal::Audio::GetMixerGeneratedByteCount() == 0

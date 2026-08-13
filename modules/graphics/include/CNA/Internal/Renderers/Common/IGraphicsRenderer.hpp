@@ -464,7 +464,7 @@ namespace CNA::Internal::Renderers
         /// buffer backing it, as opposed to merely being requested via DepthFormat at
         /// construction time. Most renderers honor whatever DepthFormat was requested, so the
         /// default mirrors that (via @p depthFormatWasRequested, computed by the caller from
-        /// RenderTarget2D::getDepthStencilFormatProperty() != DepthFormat::None). SDL_Renderer's
+        /// RenderTarget2D::getDepthStencilFormatProperty() != DepthFormat::None). The native 2D renderer's
         /// 2D-only render targets never allocate real depth-buffer storage regardless of what
         /// format was requested, and overrides this to always return false (Task 708).
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const { return depthFormatWasRequested; }
@@ -542,7 +542,7 @@ namespace CNA::Internal::Renderers
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
         // Headless keeps the inherited refusal because it rasterizes nothing, and the renderers
-        // that create no cube render target at all (Software, SDL_Renderer, ASCII, Canvas, DIRECTX3, GDI)
+        // that create no cube render target at all (Software, native 2D, ASCII, Canvas, DIRECTX3, GDI)
         // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
         // `TextureCube::GetData` refuses a null renderer one step earlier. Every remaining boundary
         // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
@@ -1587,7 +1587,7 @@ namespace CNA::Internal::Renderers
          *
          * Most renderers are 3D-capable and honor whatever depth/stencil format the presentation
          * parameters request, so the default is `true`. A renderer that is entirely 2D-only
-         * (SDL_Renderer) never has a depth/stencil buffer regardless of what was requested and
+         * (the native 2D renderer) never has a depth/stencil buffer regardless of what was requested and
          * overrides this to `false` — used by GraphicsDevice::Clear(ClearOptions, ...) to mask
          * DepthBuffer/Stencil out of a clear request instead of forwarding it to a
          * ClearColorDepthAndStencil()-style method this renderer cannot honor.

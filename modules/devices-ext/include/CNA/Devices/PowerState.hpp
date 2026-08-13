@@ -8,8 +8,8 @@ namespace CNA::Devices
     /**
      * @brief Describes the current state of the device's power supply.
      *
-     * Mirrors SDL3's `SDL_PowerState` (`third_party/SDL/include/SDL3/SDL_power.h`).
-     * CNA extension — no XNA/WP7 equivalent exists.
+     * Uses CNA's platform-neutral power-state vocabulary. CNA extension — no XNA/WP7
+     * equivalent exists.
      */
     enum class PowerState
     {

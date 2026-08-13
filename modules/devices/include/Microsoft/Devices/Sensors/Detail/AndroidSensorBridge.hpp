@@ -139,7 +139,7 @@ namespace Microsoft::Devices::Sensors::Detail
      * looper internally on a private worker thread, rather than requiring
      * CNA's game loop to pump anything — this keeps the eventual
      * Compass/Motion Android backends' threading model consistent with
-     * Accelerometer/Gyroscope's existing SDL-callback-thread model (a game
+     * Accelerometer/Gyroscope's existing platform-callback-thread model (a game
      * subscribing to CurrentValueChanged must already treat the handler as
      * running on an unknown thread; see AUDIT.md's "Event-thread model"
      * note).
@@ -153,7 +153,7 @@ namespace Microsoft::Devices::Sensors::Detail
      * (IsAvailable() always false, Start() always returns false) — this
      * header has no Android-only #include, so it compiles cleanly on every
      * platform, matching the discipline Accelerometer.hpp/Gyroscope.hpp
-     * already established for keeping SDL/platform headers out of public
+     * already established for keeping native platform headers out of public
      * headers.
      */
     class AndroidSensorBridge final
@@ -164,9 +164,8 @@ namespace Microsoft::Devices::Sensors::Detail
         /**
          * @param androidSensorType One of the NDK's ASENSOR_TYPE_* constants
          * (e.g. ASENSOR_TYPE_MAGNETIC_FIELD), passed as a plain int so this
-         * header never needs to include <android/sensor.h> — mirrors
-         * Accelerometer::GetSdlSensorType()'s identical discipline for
-         * SDL_SensorType.
+         * header never needs to include <android/sensor.h> — matching the platform sensor
+         * adapter's identical header-isolation discipline.
          */
         explicit AndroidSensorBridge(int androidSensorType);
 

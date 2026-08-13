@@ -17,7 +17,7 @@
 # =====================================================================================
 
 option(CNA_PLATFORM_RATCHET "Report remaining direct SDL coupling at configure time (PLAT-8)" ON)
-option(CNA_PLATFORM_RATCHET_STRICT "Make the platform ratchet a hard error instead of a warning (PLAT-121)" OFF)
+option(CNA_PLATFORM_RATCHET_STRICT "Make the platform ratchet a hard error instead of a warning (PLAT-121)" ON)
 
 if(NOT CNA_PLATFORM_RATCHET)
     return()

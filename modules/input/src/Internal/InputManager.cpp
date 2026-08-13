@@ -117,7 +117,7 @@ namespace CNA::Internal::Input
         auto& mouseState = getInternalInputState().Mouse;
         mouseState.RelativeMode = enabled;
         // Flush stale accumulated motion on toggle, matching SDL3_FNAPlatform's
-        // throwaway SDL_GetRelativeMouseState() call on enable.
+        // platform backend's throwaway relative-motion read on enable.
         mouseState.RelativeDeltaX = 0.0f;
         mouseState.RelativeDeltaY = 0.0f;
     }

@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 #include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "CNA/Internal/Audio/MixerEngine.hpp"
 #include "System/Environment.hpp"
 
 #include <SDL3_mixer/SDL_mixer.h>
@@ -148,10 +149,8 @@ TEST_P(AudioMixerSpecOverrideTest, OverriddenSpecIsActuallyNegotiated) {
     CNA::Internal::Audio::DestroyMixer();
     MixerSpecOverrideGuard guard;
 
-    SDL_AudioSpec requested{};
-    requested.format = SDL_AUDIO_S16;
-    requested.channels = channels;
-    requested.freq = freq;
+    const CNA::Internal::Audio::MixerFormat requested{
+        freq, channels, CNA::Internal::Audio::MixerSampleFormat::Signed16};
     CNA::Internal::Audio::SetMixerSpecOverrideForTests(requested);
 
     try {
@@ -192,10 +191,8 @@ TEST_P(AudioMixerInvalidSpecThrowsTest, RejectedOutrightRatherThanSilentlySubsti
     CNA::Internal::Audio::DestroyMixer();
     MixerSpecOverrideGuard guard;
 
-    SDL_AudioSpec requested{};
-    requested.format = SDL_AUDIO_S16;
-    requested.channels = channels;
-    requested.freq = freq;
+    const CNA::Internal::Audio::MixerFormat requested{
+        freq, channels, CNA::Internal::Audio::MixerSampleFormat::Signed16};
     CNA::Internal::Audio::SetMixerSpecOverrideForTests(requested);
 
     EXPECT_THROW({ CNA::Internal::Audio::GetMixer(); }, std::runtime_error);
@@ -225,10 +222,8 @@ TEST(AudioMixerTest, RepeatedDeviceOpenFailuresLeaveBalancedLifecycleAndSubseque
     CNA::Internal::Audio::DestroyMixer();
     MixerSpecOverrideGuard guard;
 
-    SDL_AudioSpec invalid{};
-    invalid.format = SDL_AUDIO_S16;
-    invalid.channels = 0; // rejected outright, see AUD-04-006
-    invalid.freq = 44100;
+    CNA::Internal::Audio::MixerFormat invalid{
+        44100, 0, CNA::Internal::Audio::MixerSampleFormat::Signed16};
 
     for (int attempt = 0; attempt < 5; ++attempt) {
         CNA::Internal::Audio::SetMixerSpecOverrideForTests(invalid);

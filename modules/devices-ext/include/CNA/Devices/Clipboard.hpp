@@ -11,8 +11,7 @@ namespace CNA::Devices
      * @brief Reads and writes the system clipboard's UTF-8 text content.
      *
      * CNA extension — no XNA/WP7 equivalent exists. Backed by SDL3's
-     * `SDL_SetClipboardText()`/`SDL_GetClipboardText()`/`SDL_HasClipboardText()`
-     * (`third_party/SDL/include/SDL3/SDL_clipboard.h`).
+     * `IPlatformClipboard` text operations.
      *
      * All members are static: this class has no instance state of its own.
      *

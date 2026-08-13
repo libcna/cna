@@ -2,21 +2,22 @@
 #pragma once
 
 #ifdef SOUND_ENABLED
-#include <SDL3/SDL.h>
-#include <SDL3_mixer/SDL_mixer.h>
-
 #include <cstdint>
+
+struct MIX_Mixer;
 
 namespace CNA::Internal::Audio
 {
-    /// Returns the shared SDL3_mixer engine, creating it on first call.
+    struct MixerFormat;
+
+    /// Returns the shared native mixer engine, creating it on first call.
     ///
     /// AUD-04-005: the requested spec is always the fixed reference S16 stereo 44100 Hz --
     /// deliberately never native-device or platform-specific. See NEXTaudio.md's "Mixer
     /// output-format policy" for the full rationale.
     ///
     /// PLAT-95: the mixer is memory-backed (`MIX_CreateMixer`); the selected `IAudioDevice` owns
-    /// native acquisition and requests whole buffers, which `MIX_Generate` fills. SDL_mixer keeps
+    /// native acquisition and requests whole buffers, which `MIX_Generate` fills. The mixer keeps
     /// its track/decode/mixing loops, but no longer owns or submits to the playback device.
     ///
     /// AUDIO-002: first-use creation and `DestroyMixer` share one mutex. On any mixer/device-open
@@ -31,7 +32,7 @@ namespace CNA::Internal::Audio
     /// scratch" semantics. Exists so device-negotiation-adjacent tests can force 22.05/44.1/
     /// 48/96 kHz and mono/stereo mixers without touching production code paths, which always
     /// request the fixed S16 stereo 44100 Hz default.
-    void SetMixerSpecOverrideForTests(const SDL_AudioSpec& spec);
+    void SetMixerSpecOverrideForTests(const MixerFormat& format);
 
     /// AUD-04-004: clears a previous `SetMixerSpecOverrideForTests()` call, restoring the
     /// production default (S16 stereo 44100 Hz) for the next mixer-creating `GetMixer()` call.

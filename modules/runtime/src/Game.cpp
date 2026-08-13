@@ -759,8 +759,8 @@ namespace Microsoft::Xna::Framework
             graphicsDeviceManager_->CreateDevice();
         }
 
-        // The game owns this subsystem reference, but not its implementation. SDL3 maps it to
-        // SDL_INIT_GAMEPAD; a future platform can make it a no-op or provide a different lifetime.
+        // The game owns this subsystem reference, but not its implementation. A platform may map
+        // it to native subsystem lifetime, make it a no-op, or provide a different lifetime.
         // Acquiring before the first event pump makes already-connected pads visible in frame one.
         if (platform_->GetGamepad() != nullptr || platform_->GetJoystick() != nullptr)
         {

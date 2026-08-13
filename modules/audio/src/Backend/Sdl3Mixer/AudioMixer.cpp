@@ -5,6 +5,9 @@
 #include "Platform/AudioDeviceFactory.hpp"
 
 #ifdef SOUND_ENABLED
+#include <SDL3/SDL.h>
+#include <SDL3_mixer/SDL_mixer.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
@@ -36,7 +39,7 @@ namespace CNA::Internal::Audio
         // AUD-04-004: test-only override for the spec requested below. Guarded by the same
         // mutex as g_mixer since it is read/written from the same lazy-init sequence.
         bool g_hasSpecOverride = false;
-        SDL_AudioSpec g_specOverride{};
+        MixerFormat g_specOverride{};
 
         // AUD-04-008/009: bumped by DestroyMixer() below, read (lock-free) by
         // SoundEffectInstance::GetLiveTrackHandle() from any thread that touches a track --
@@ -87,18 +90,17 @@ namespace CNA::Internal::Audio
 
         std::shared_ptr<MixerBufferCallback> g_mixerCallback;
 
-        [[nodiscard]] CNA::Audio::Platform::AudioSampleFormat FromSdlFormat(
-            const SDL_AudioFormat format)
+        [[nodiscard]] CNA::Audio::Platform::AudioSampleFormat ToAudioSampleFormat(
+            const MixerSampleFormat format)
         {
             switch (format)
             {
-                case SDL_AUDIO_S16:
+                case MixerSampleFormat::Signed16:
                     return CNA::Audio::Platform::AudioSampleFormat::Signed16;
-                case SDL_AUDIO_F32:
+                case MixerSampleFormat::Float32:
                     return CNA::Audio::Platform::AudioSampleFormat::Float32;
-                default:
-                    throw std::runtime_error("unsupported mixer sample format");
             }
+            throw std::runtime_error("unsupported mixer sample format");
         }
 
         [[nodiscard]] SDL_AudioFormat ToSdlFormat(
@@ -117,17 +119,17 @@ namespace CNA::Internal::Audio
         }
 
         [[nodiscard]] CNA::Audio::Platform::AudioFormat ToAudioFormat(
-            const SDL_AudioSpec& spec)
+            const MixerFormat& format)
         {
-            if (spec.freq <= 0 || spec.channels <= 0
-                || spec.channels > std::numeric_limits<std::uint8_t>::max())
+            if (format.sampleRate <= 0 || format.channels <= 0
+                || format.channels > std::numeric_limits<std::uint8_t>::max())
             {
                 throw std::runtime_error("invalid mixer format");
             }
             return CNA::Audio::Platform::AudioFormat{
-                static_cast<std::uint32_t>(spec.freq),
-                static_cast<std::uint8_t>(spec.channels),
-                FromSdlFormat(spec.format)};
+                static_cast<std::uint32_t>(format.sampleRate),
+                static_cast<std::uint8_t>(format.channels),
+                ToAudioSampleFormat(format.sampleFormat)};
         }
 
         [[nodiscard]] SDL_AudioSpec ToSdlSpec(
@@ -146,11 +148,11 @@ namespace CNA::Internal::Audio
         }
     }
 
-    void SetMixerSpecOverrideForTests(const SDL_AudioSpec& spec)
+    void SetMixerSpecOverrideForTests(const MixerFormat& format)
     {
         std::lock_guard<std::mutex> lock(g_mixerMutex);
         g_hasSpecOverride = true;
-        g_specOverride = spec;
+        g_specOverride = format;
     }
 
     void ClearMixerSpecOverrideForTests()
@@ -170,24 +172,16 @@ namespace CNA::Internal::Audio
                 throw std::runtime_error(std::string("MIX_Init failed: ") + SDL_GetError());
             }
 
-            SDL_AudioSpec requestedSpec{};
-            if (g_hasSpecOverride)
-            {
-                requestedSpec = g_specOverride;
-            }
-            else
-            {
-                requestedSpec.format = SDL_AUDIO_S16;
-                requestedSpec.channels = 2;
-                requestedSpec.freq = 44100;
-            }
+            const MixerFormat requestedFormat = g_hasSpecOverride
+                ? g_specOverride
+                : MixerFormat{44100, 2, MixerSampleFormat::Signed16};
 
             std::unique_ptr<CNA::Audio::Platform::IAudioDevice> audioDevice;
             std::shared_ptr<MixerBufferCallback> callback;
             MIX_Mixer* mixer = nullptr;
             try
             {
-                const auto requested = ToAudioFormat(requestedSpec);
+                const auto requested = ToAudioFormat(requestedFormat);
                 audioDevice = CNA::Audio::Platform::CreateSelectedAudioDevice();
                 callback = std::make_shared<MixerBufferCallback>();
                 const auto negotiated = audioDevice->Open(requested, callback);
@@ -201,9 +195,9 @@ namespace CNA::Internal::Audio
                 }
 
                 std::cerr << "[AudioMixer] Requested format=0x" << std::hex
-                          << requestedSpec.format << std::dec
-                          << " channels=" << requestedSpec.channels
-                          << " freq=" << requestedSpec.freq
+                          << static_cast<int>(requestedFormat.sampleFormat) << std::dec
+                          << " channels=" << requestedFormat.channels
+                          << " freq=" << requestedFormat.sampleRate
                           << "; application format=0x" << std::hex << mixerSpec.format
                           << std::dec << " channels=" << mixerSpec.channels
                           << " freq=" << mixerSpec.freq << "\n";

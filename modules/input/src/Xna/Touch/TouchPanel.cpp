@@ -176,7 +176,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         // Intentional deviation from FNA: FNA populates touches_ exclusively via SetFinger,
         // driven by a per-frame platform poll (FNAPlatform.UpdateTouchPanelState() ->
-        // SDL_GetTouchFingers()) that Update() runs every tick. CNA's PlatformInputBridge is
+        // a native touch-finger enumeration) that Update() runs every tick. CNA's PlatformInputBridge is
         // event-driven (dispatches discrete PlatformEvent values) rather than poll-driven, so
         // SetFinger/touches_ are not fed by the real input path and stay empty in production.
         // Fall back to the panel-owned event snapshot so GetState() still reports real touches.

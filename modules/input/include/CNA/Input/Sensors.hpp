@@ -11,7 +11,7 @@
 namespace CNA::Input
 {
     /**
-     * @brief CNAEXT — the kind of a host-device motion sensor. Mirrors SDL3's `SDL_SensorType`.
+     * @brief CNAEXT — the kind of a host-device motion sensor, using CNA-owned vocabulary.
      */
     CNAEXT enum class SensorTypeEXT
     {

@@ -33,13 +33,13 @@ namespace Microsoft::Devices::Sensors::Detail
         /** @brief Which backend produced this record, e.g. "SDL" or "Android". */
         std::string Backend;
 
-        /** @brief The native API call or internal operation that failed, e.g. "SDL_PlayHapticRumble" or "AndroidSensorBridge::Run callback". */
+        /** @brief The native API call or internal operation that failed, e.g. "PlayHapticRumble" or "AndroidSensorBridge::Run callback". */
         std::string Operation;
 
         /** @brief The native return code, if the underlying API has one; 0 if not applicable (e.g. a swallowed C++ exception has no native code of its own). */
         int NativeCode = 0;
 
-        /** @brief Human-readable detail -- SDL_GetError() text, an exception's what(), or a short fixed description. */
+        /** @brief Human-readable detail — native error text, an exception's what(), or a short fixed description. */
         std::string NativeMessage;
 
         /** @brief Best-effort identifier of the sensor/haptic device this record is about; empty if none is available at this call site. */

@@ -15,7 +15,7 @@ namespace CNA::Devices
         {
             // Null exactly when the platform reports no clipboard capability. This API answers
             // with a bool, so a caller learns it failed without an exception -- the same shape
-            // the SDL-backed version had when SDL_SetClipboardText failed.
+            // the previous native-backed version had when setting clipboard text failed.
             return false;
         }
 

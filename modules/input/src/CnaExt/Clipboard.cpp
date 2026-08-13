@@ -27,7 +27,7 @@ namespace CNA::Input
         }
 
         // This accessor returns void, so a failed write has nowhere to be reported. Swallowing is
-        // what the SDL version did -- SDL_SetClipboardText's status was discarded -- and a throw
+        // what the previous native version did — its set status was discarded — and a throw
         // from a void copy-to-clipboard would be a behaviour change, not a fix. The bool-returning
         // CNA::Devices::Clipboard is the surface that reports failure.
         try

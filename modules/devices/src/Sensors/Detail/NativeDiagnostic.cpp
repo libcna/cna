@@ -62,7 +62,7 @@ namespace Microsoft::Devices::Sensors::Detail
         catch (...)
         {
             // Record() must never let an exception escape -- callers include
-            // C callback boundaries (SDL_EventFilter, Android NDK sensor
+            // C callback boundaries (native event filters, Android NDK sensor
             // callbacks) and std::thread entry points, exactly the hazard
             // this whole mechanism exists to make observable instead of
             // fatal. Nothing further can be done if logging, the copy, or
