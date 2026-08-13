@@ -12,9 +12,9 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 132,
+  "distinctAssetCount": 139,
   "owningGroupCounts": {
-    "container": 1,
+    "container": 8,
     "accessors": 13,
     "component-types": 8,
     "topology": 8,
@@ -49,34 +49,6 @@
     "robustness": 8
   },
   "missingAssets": [
-    {
-      "id": "glb-basic",
-      "owningGroup": "container"
-    },
-    {
-      "id": "glb-bin-chunk-padding",
-      "owningGroup": "container"
-    },
-    {
-      "id": "gltf-external-bin",
-      "owningGroup": "container"
-    },
-    {
-      "id": "gltf-data-uri-bin",
-      "owningGroup": "container"
-    },
-    {
-      "id": "gltf-external-image",
-      "owningGroup": "container"
-    },
-    {
-      "id": "gltf-data-uri-image",
-      "owningGroup": "container"
-    },
-    {
-      "id": "gltf-uri-percent-encoded",
-      "owningGroup": "container"
-    },
     {
       "id": "draco-triangle",
       "owningGroup": "draco"
@@ -323,6 +295,138 @@
     }
   ],
   "assets": [
+    {
+      "id": "glb-basic",
+      "owningGroup": "container",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "GLB JSON chunk",
+        "GLB BIN chunk",
+        "zero BIN padding",
+        "data URI twin"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "glb-bin-chunk-padding",
+      "owningGroup": "container",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "GLB BIN padding",
+        "two zero pad bytes",
+        "buffer.byteLength excludes padding"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "gltf-external-bin",
+      "owningGroup": "container",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "external .bin",
+        "relative buffer URI",
+        "generated sidecar",
+        "GLB BIN twin"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "gltf-data-uri-bin",
+      "owningGroup": "container",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "buffer data URI",
+        "base64 double padding",
+        "inline geometry",
+        "GLB BIN twin"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "gltf-external-image",
+      "owningGroup": "container",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "external image",
+        "relative image URI",
+        "generated PNG sidecar",
+        "base-colour texture",
+        "GLB self-contained image twin"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "gltf-data-uri-image",
+      "owningGroup": "container",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "image data URI",
+        "inline PNG",
+        "base-colour texture",
+        "GLB self-contained image twin"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "gltf-uri-percent-encoded",
+      "owningGroup": "container",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "percent-encoded buffer URI",
+        "decoded sidecar filename",
+        "URI %20"
+      ],
+      "auditFixture": null
+    },
     {
       "id": "gltf-required-extension-unsupported",
       "owningGroup": "container",
@@ -3200,6 +3304,166 @@
       "sha256": "082d494e118e9ca9a84573506c2b39cf26b9a314f8040c07a0397f9546e52ec6"
     },
     {
+      "path": "glb-basic.expected.json",
+      "bytes": 6797,
+      "sha256": "bbde3df4424dd0940d6a81929860b550d711b08f4c0422fa113ecaa19714528d"
+    },
+    {
+      "path": "glb-basic.glb",
+      "bytes": 796,
+      "sha256": "2ac46e66b3c851e2158b663358414ee591088601d6f3d08d330542ceacc9d785"
+    },
+    {
+      "path": "glb-basic.gltf",
+      "bytes": 1439,
+      "sha256": "791105ca1ebda4518b8f85f8d2a23187ef6c9dca4f8a00b5886ca116dc5cec01"
+    },
+    {
+      "path": "glb-basic.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "glb-basic.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "glb-bin-chunk-padding.expected.json",
+      "bytes": 6847,
+      "sha256": "ad25f05e3ea78b4c11ef5209415cfe8471d06f1f8d0bad7f80b9a0986e24f3cd"
+    },
+    {
+      "path": "glb-bin-chunk-padding.glb",
+      "bytes": 796,
+      "sha256": "f33af4700f770e6101ee42cb37e4c2e6b697edd204f104a48a8a61bd01db5941"
+    },
+    {
+      "path": "glb-bin-chunk-padding.gltf",
+      "bytes": 1435,
+      "sha256": "46c9e66f6ee86e1d409b130cf726458ee0fe700b50c462561ecb214b6bc34d7f"
+    },
+    {
+      "path": "glb-bin-chunk-padding.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "glb-bin-chunk-padding.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "gltf-data-uri-bin.expected.json",
+      "bytes": 6902,
+      "sha256": "44b6d83113deca91c0d6182c3c8627b33641c6adafc53eb236b1b414a91bc07a"
+    },
+    {
+      "path": "gltf-data-uri-bin.glb",
+      "bytes": 796,
+      "sha256": "72c7f401f2ad64e2c68b885c542e3567780e236c6bc7132537ddfee8da22d550"
+    },
+    {
+      "path": "gltf-data-uri-bin.gltf",
+      "bytes": 1439,
+      "sha256": "814437c9e3c1157f58100aabe5669cd1928e4dfd73c3ba56f236906d03564a96"
+    },
+    {
+      "path": "gltf-data-uri-bin.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "gltf-data-uri-bin.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "gltf-data-uri-image.expected.json",
+      "bytes": 9446,
+      "sha256": "2a3df600c46c5c6b8c4548a87ac2a75d388ef0fc06a13562cff2e29886ba0d10"
+    },
+    {
+      "path": "gltf-data-uri-image.glb",
+      "bytes": 1584,
+      "sha256": "150c806bada3c9550dfceacb0d29545a56f3550e4a0b0bee016df4308d519bfd"
+    },
+    {
+      "path": "gltf-data-uri-image.gltf",
+      "bytes": 2583,
+      "sha256": "2f390485b97a1ced5d0d0589e3cba8e7504deb0dbca542578fae770e736227d8"
+    },
+    {
+      "path": "gltf-data-uri-image.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "gltf-data-uri-image.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
+    },
+    {
+      "path": "gltf-external-bin.expected.json",
+      "bytes": 6947,
+      "sha256": "62f753a8d116cb81a622fe605ea728f77d78e8fcdd985a81e05597bdb06bc88c"
+    },
+    {
+      "path": "gltf-external-bin.geometry.bin",
+      "bytes": 79,
+      "sha256": "c04aff6fb71a287d9d69e9a472452710d3a0ade69a84c5013ff293635ce2fb9a"
+    },
+    {
+      "path": "gltf-external-bin.glb",
+      "bytes": 796,
+      "sha256": "72c7f401f2ad64e2c68b885c542e3567780e236c6bc7132537ddfee8da22d550"
+    },
+    {
+      "path": "gltf-external-bin.gltf",
+      "bytes": 1324,
+      "sha256": "7c13862f6319d5a7c727ecee96dfaca4ea6ae3b44b79c4f3258337055b367126"
+    },
+    {
+      "path": "gltf-external-bin.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "gltf-external-bin.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "gltf-external-image.expected.json",
+      "bytes": 9574,
+      "sha256": "10b82dfe12faed2411ad13feea0d89157bf11afb4eadfc289ab02e1efd09e45f"
+    },
+    {
+      "path": "gltf-external-image.glb",
+      "bytes": 1584,
+      "sha256": "150c806bada3c9550dfceacb0d29545a56f3550e4a0b0bee016df4308d519bfd"
+    },
+    {
+      "path": "gltf-external-image.gltf",
+      "bytes": 2388,
+      "sha256": "6571f27a81980a4dc94f525d248fe941ac9ddc67fca1fd6a23af9d62658ceaea"
+    },
+    {
+      "path": "gltf-external-image.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "gltf-external-image.texture.png",
+      "bytes": 152,
+      "sha256": "84836d1c4e4d45b34b4e7a8c77f482b1581afd22de27482b6b68eaad2b2eaca9"
+    },
+    {
+      "path": "gltf-external-image.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
+    },
+    {
       "path": "gltf-required-extension-unsupported.expected.json",
       "bytes": 5227,
       "sha256": "a9c01f831c78483cae3c93c7ab91e38b3670ec6bf073451f5e44f92e00a8174a"
@@ -3213,6 +3477,36 @@
       "path": "gltf-required-extension-unsupported.gltf",
       "bytes": 1551,
       "sha256": "0333a3dc1788d6d4f7902ce8dabe748804130b0421ed4c6dffaa7c7e2d710813"
+    },
+    {
+      "path": "gltf-uri-percent-encoded geometry.bin",
+      "bytes": 79,
+      "sha256": "c04aff6fb71a287d9d69e9a472452710d3a0ade69a84c5013ff293635ce2fb9a"
+    },
+    {
+      "path": "gltf-uri-percent-encoded.expected.json",
+      "bytes": 7007,
+      "sha256": "10376b337e5d85cc623c573923a2e2217ee34624c7caa95200ec0e33665a08f4"
+    },
+    {
+      "path": "gltf-uri-percent-encoded.glb",
+      "bytes": 796,
+      "sha256": "72c7f401f2ad64e2c68b885c542e3567780e236c6bc7132537ddfee8da22d550"
+    },
+    {
+      "path": "gltf-uri-percent-encoded.gltf",
+      "bytes": 1333,
+      "sha256": "201dce60a37ec6634990e265399c5dbb7b0ae662196b2ac51e741cdddbd333f0"
+    },
+    {
+      "path": "gltf-uri-percent-encoded.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "gltf-uri-percent-encoded.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "interleaved-mixed-widths.expected.json",

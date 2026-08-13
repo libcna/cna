@@ -250,13 +250,31 @@ def emit(fixtures: list[Fixture]) -> dict[str, bytes]:
     Writing and checking both go through this, so ``--check`` cannot drift from ``--out``.
     """
     files: dict[str, bytes] = {}
+
+    def add(path: str, data: bytes, owner: str) -> None:
+        if not path or path in (".", "..") or "/" in path or "\\" in path:
+            raise ValueError(
+                f"{owner}: emitted path {path!r} is not a flat corpus filename")
+        if path in files:
+            raise ValueError(
+                f"{owner}: emitted path {path!r} collides with another fixture output")
+        files[path] = data
+
     for fixture in fixtures:
-        files[f"{fixture.id}.gltf"] = fixture.builder.to_gltf_text().encode("utf-8")
-        files[f"{fixture.id}.glb"] = fixture.builder.to_glb_bytes()
-        files[f"{fixture.id}.expected.json"] = dumps(fixture.expectation()).encode("utf-8")
+        emission = fixture.gltf_emission
+        add(f"{fixture.id}.gltf", fixture.builder.to_gltf_text(
+            buffer_uri=emission.buffer_uri if emission is not None else None,
+            image_uri_overrides=(emission.image_uri_overrides
+                                 if emission is not None else None)).encode("utf-8"), fixture.id)
+        add(f"{fixture.id}.glb", fixture.builder.to_glb_bytes(), fixture.id)
+        add(f"{fixture.id}.expected.json", dumps(fixture.expectation()).encode("utf-8"), fixture.id)
+        if emission is not None:
+            for path, data in sorted(emission.sidecars.items()):
+                add(path, data, fixture.id)
         # The L5 goldens (GLTF-007): the vertex/index bytes CNA must hand to the GPU layer, as
         # files rather than as JSON, because a byte comparison is the whole point of the layer.
-        files.update(fixture.l5_expectation()[1])
+        for path, data in fixture.l5_expectation()[1].items():
+            add(path, data, fixture.id)
     files["manifest.json"] = dumps(corpus_manifest(fixtures, files)).encode("utf-8")
     return files
 

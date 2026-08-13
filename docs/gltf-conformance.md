@@ -222,15 +222,16 @@ and none may be added.
 `manifest.json` records for every emitted file, so the byte-identity guarantee holds at test time
 without a Python interpreter. `--check` is the developer-side equivalent.
 
-Per fixture the generator emits three files into `tests/assets/gltf/`, plus the L5 goldens for a
-fixture CNA can import:
+Per fixture the generator emits three core files into `tests/assets/gltf/`, plus the L5 goldens for
+a fixture CNA can import and, for the named external-source fixtures, generated sidecars:
 
 | File | Contents |
 |---|---|
-| `<id>.gltf` | the asset, JSON with base64 `data:` URI buffers — text-first and diffable |
+| `<id>.gltf` | the asset, JSON with a base64 `data:` URI buffer by default; the named external-source fixtures instead reference generated sidecars |
 | `<id>.glb` | the same asset in the binary container, from the same source of truth |
 | `<id>.expected.json` | the inventory record and the **spec-derived** expectations for every layer the asset validates |
 | `<id>.vb.bin` / `<id>.ib.bin` | the L5 golden vertex and index buffers (§3.7). Part 0 of a fixture uses these names; a second part would use `<id>.p1.vb.bin`, so adding one never renames the first |
+| `<id>.*.bin` / `<id>.*.png` | an external buffer or image sidecar, emitted from the fixture's own builder/image bytes and hashed in `manifest.json` |
 
 `tests/assets/gltf/manifest.json` is the corpus-level inventory: the current and target distinct-
 asset counts, per-group current and target counts, every still-missing target ID, and each generated
@@ -596,7 +597,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**124 of the 132** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**131 of the 139** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
@@ -761,6 +762,13 @@ written for this document: two descriptions of the same fixture are two things t
 
 | Fixture | Group | Layers | What it proves |
 |---|---|---|---|
+| `glb-basic` | container | L1, L2, L3, L4, L5 | GLB JSON chunk; GLB BIN chunk; zero BIN padding; data URI twin |
+| `glb-bin-chunk-padding` | container | L1, L2, L3, L4, L5 | GLB BIN padding; two zero pad bytes; buffer.byteLength excludes padding |
+| `gltf-external-bin` | container | L1, L2, L3, L4, L5 | external .bin; relative buffer URI; generated sidecar; GLB BIN twin |
+| `gltf-data-uri-bin` | container | L1, L2, L3, L4, L5 | buffer data URI; base64 double padding; inline geometry; GLB BIN twin |
+| `gltf-external-image` | container | L1, L2, L3, L4, L5 | external image; relative image URI; generated PNG sidecar; base-colour texture; GLB self-contained image twin |
+| `gltf-data-uri-image` | container | L1, L2, L3, L4, L5 | image data URI; inline PNG; base-colour texture; GLB self-contained image twin |
+| `gltf-uri-percent-encoded` | container | L1, L2, L3, L4, L5 | percent-encoded buffer URI; decoded sidecar filename; URI %20 |
 | `gltf-required-extension-unsupported` | container | L1, L3 | extensionsRequired; unsupported extension; import rejection |
 | `accessor-offset` | accessors | L1, L2, L3 | accessor.byteOffset; decoy data before the accessor |
 | `bufferview-offset` | accessors | L1, L2, L3 | bufferView.byteOffset; leading buffer padding |

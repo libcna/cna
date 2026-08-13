@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MS-PL
 """``GltfBuilder``: asset construction, GLB packing, and the L2 expectation records (`GLTF-003`).
 
-One builder produces one corpus asset in both containers -- a text ``.gltf`` with a base64
-``data:`` URI buffer and a binary ``.glb`` twin -- from a single authored description, so the two
-cannot drift apart. Alongside the asset it accumulates ``accessor_records``: the **decoded** value
-of every accessor, derived from the same authored values that were packed into the buffer. That is
-the L2 expectation, and deriving it here rather than restating it in a fixture is what makes a
-fixture and its expectation a single source of truth.
+One builder produces one corpus asset in both containers -- a text ``.gltf`` (base64 ``data:`` URI
+by default, with explicit URI overrides for the container group) and a binary ``.glb`` twin -- from
+a single authored description, so the two cannot drift apart. Alongside the asset it accumulates
+``accessor_records``: the **decoded** value of every accessor, derived from the same authored values
+that were packed into the buffer. That is the L2 expectation, and deriving it here rather than
+restating it in a fixture is what makes a fixture and its expectation a single source of truth.
 
 Determinism is a hard requirement (`GLTF-020`): the JSON key order is fixed by this module rather
 than by insertion accident, floats are emitted by Python's own shortest-round-trip repr, and no
@@ -630,10 +630,9 @@ class GltfBuilder:
         """Adds an image, carried as a base64 ``data:`` URI (plan_gltf.md ``GLTF-190``).
 
         A `data:` URI rather than a bufferView so the *same* image object works unchanged in both
-        containers, and so a reader of the committed `.gltf` can see that the fixture has a texture
-        without opening a second file. `GLTF-196`'s other two source shapes -- a bufferView and an
-        external file -- are covered by their own scratch-document tests, which can vary one thing
-        at a time; a corpus asset cannot.
+        containers, and so a reader of an ordinary committed `.gltf` can see that the fixture has a
+        texture without opening a second file. A container fixture may replace this URI in the
+        text form only; the builder-authored URI remains the GLB twin's self-contained source.
 
         :param png_bytes: the encoded PNG.
         :param name: optional image name.
@@ -759,18 +758,39 @@ class GltfBuilder:
             "punctualLightCount": len(self._lights),
         }
 
-    def to_gltf_text(self) -> str:
-        """Renders the text container, with the buffer as a base64 ``data:`` URI.
+    def to_gltf_text(self, *, buffer_uri: str | None = None,
+                     image_uri_overrides: dict[int, str] | None = None) -> str:
+        """Renders the text container, normally with inline buffer and image data.
 
         Indented and newline-terminated so a committed fixture stays diffable (`GLTF-003`).
+        The optional URI overrides belong to container-specific fixtures: the underlying builder
+        remains the one source for geometry, images and the GLB twin, while the text container can
+        exercise a real external sidecar.  An absent ``buffer_uri`` keeps the long-standing
+        base64 ``data:`` form.
 
+        :param buffer_uri: an explicit URI for buffer zero, or ``None`` for its base64 data URI.
+        :param image_uri_overrides: image index -> URI substitutions for the text form only.
         :return: the complete ``.gltf`` document text.
         """
         doc = self.document
+        resolved_buffer_uri = (buffer_uri if buffer_uri is not None else
+                               _BUFFER_URI_PREFIX +
+                               base64.b64encode(bytes(self._buffer)).decode("ascii"))
         doc["buffers"] = [{
             "byteLength": len(self._buffer),
-            "uri": _BUFFER_URI_PREFIX + base64.b64encode(bytes(self._buffer)).decode("ascii"),
+            "uri": resolved_buffer_uri,
         }]
+        if image_uri_overrides:
+            # `document` deliberately exposes the authored objects without a deep copy. Clone the
+            # image records before overriding them so emitting `.gltf` cannot alter the `.glb`
+            # which is rendered from the same builder immediately afterwards.
+            images = [dict(image) for image in doc.get("images", [])]
+            for index, uri in sorted(image_uri_overrides.items()):
+                if not 0 <= index < len(images):
+                    raise ValueError(
+                        f"{self.name}: text-container image override {index} does not exist")
+                images[index]["uri"] = uri
+            doc["images"] = images
         return json.dumps(doc, indent=2, ensure_ascii=True, allow_nan=False) + "\n"
 
     def to_glb_bytes(self) -> bytes:

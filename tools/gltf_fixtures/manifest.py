@@ -16,6 +16,7 @@ import json
 import math
 from dataclasses import dataclass, field
 from typing import Any, Sequence
+from urllib.parse import unquote
 
 from . import GENERATOR_VERSION, SPEC_PIN, l5
 from .builder import GltfBuilder
@@ -208,6 +209,24 @@ class Defect:
 
 
 @dataclass
+class GltfEmission:
+    """How a fixture's text container differs from the self-contained default.
+
+    ``None`` as ``buffer_uri`` means the builder's ordinary base64 data URI. Image overrides are
+    applied only to the `.gltf`; the `.glb` twin retains the builder-authored image source. Every
+    external URI is accompanied by a flat sidecar entry, emitted and hashed with the corpus.
+
+    A fixture sets this record even when it wants the defaults if the source shape itself is what
+    the fixture proves. That makes :meth:`Fixture.container_expectation` appear only for the seven
+    named container fixtures instead of churning every existing expectation manifest.
+    """
+
+    buffer_uri: str | None = None
+    image_uri_overrides: dict[int, str] = field(default_factory=dict)
+    sidecars: dict[str, bytes] = field(default_factory=dict)
+
+
+@dataclass
 class Fixture:
     """One corpus asset: the builder that produced it plus every layer's expectation."""
 
@@ -220,6 +239,9 @@ class Fixture:
     referencing_groups: list[str] = field(default_factory=list)
     spec_anchors: list[str] = field(default_factory=list)
     audit_fixture: str | None = None
+    #: Explicit text-container source form and any files it references. ``None`` retains the
+    #: historical self-contained emission without adding a container contract to the manifest.
+    gltf_emission: GltfEmission | None = None
     #: Why this asset is allowed past the per-asset size budget (`GLTF-419`), or ``None``.
     #: A corpus fixture is meant to be small enough to read; one that cannot be needs a stated
     #: reason rather than an exemption list in a test, which is how a budget quietly stops binding.
@@ -235,6 +257,64 @@ class Fixture:
     #: geometry -- "it failed to load" is worthless unless the message says why.
     rejection: dict[str, Any] | None = None
     defects: list[Defect] = field(default_factory=list)
+
+    @staticmethod
+    def _uri_source(uri: str) -> dict[str, Any]:
+        """A compact manifest record for a URI without copying a large base64 payload into it."""
+        if uri.startswith("data:"):
+            prefix = uri.split(",", 1)[0] + ("," if "," in uri else "")
+            return {"source": "data-uri", "uriPrefix": prefix}
+        return {"source": "external", "uri": uri}
+
+    def container_expectation(self) -> dict[str, Any] | None:
+        """Derives the container/source contract from the exact objects the emitter consumes."""
+        emission = self.gltf_emission
+        if emission is None:
+            return None
+
+        buffer_uri = emission.buffer_uri
+        if buffer_uri is None:
+            buffer_uri = "data:application/octet-stream;base64,"
+        gltf_images: list[dict[str, Any]] = []
+        glb_images: list[dict[str, Any]] = []
+        referenced_sidecars: set[str] = set()
+        if not buffer_uri.startswith("data:"):
+            referenced_sidecars.add(unquote(buffer_uri))
+        for index, image in enumerate(self.builder.document.get("images", [])):
+            authored_uri = str(image.get("uri", ""))
+            text_uri = emission.image_uri_overrides.get(index, authored_uri)
+            if text_uri and not text_uri.startswith("data:"):
+                referenced_sidecars.add(unquote(text_uri))
+            gltf_images.append({"index": index, **self._uri_source(text_uri)})
+            glb_images.append({"index": index, **self._uri_source(authored_uri)})
+
+        emitted_sidecars = set(emission.sidecars)
+        if referenced_sidecars != emitted_sidecars:
+            missing = sorted(referenced_sidecars - emitted_sidecars)
+            unreferenced = sorted(emitted_sidecars - referenced_sidecars)
+            raise ValueError(
+                f"{self.id}: text-container sidecars disagree with external URIs "
+                f"(missing={missing}, unreferenced={unreferenced})")
+
+        payload_bytes = len(self.builder.buffer_bytes)
+        return {
+            "gltf": {
+                "buffer": self._uri_source(buffer_uri),
+                "images": gltf_images,
+            },
+            "glb": {
+                "buffer": {
+                    "source": "BIN",
+                    "payloadBytes": payload_bytes,
+                    "paddingBytes": (-payload_bytes) % 4,
+                },
+                "images": glb_images,
+            },
+            "sidecars": [
+                {"path": path, "bytes": len(data)}
+                for path, data in sorted(emission.sidecars.items())
+            ],
+        }
 
     def l5_expectation(self) -> tuple[dict[str, Any], dict[str, bytes]]:
         """The ``l5`` block and the golden buffer files it references."""
@@ -282,6 +362,11 @@ class Fixture:
             "rejection": self.rejection,
             "defects": [d.record() for d in self.defects],
         }
+        container = self.container_expectation()
+        if container is not None:
+            # Conditional by design: only a fixture whose subject is its source/container form
+            # carries this block, keeping all unrelated generated files byte-identical.
+            doc["container"] = container
         return _clean(doc)
 
 

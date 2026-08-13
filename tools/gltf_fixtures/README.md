@@ -23,13 +23,15 @@ must be regenerable in any environment that can run the build.
 
 ## Output
 
-Into `tests/assets/gltf/`, three files per fixture plus one corpus manifest:
+Into `tests/assets/gltf/`, three core files per fixture, any generated external-resource/L5
+sidecars, plus one corpus manifest:
 
 | File | Contents |
 |---|---|
-| `<id>.gltf` | the asset, JSON with a base64 `data:` URI buffer — text-first and diffable |
+| `<id>.gltf` | the text-first asset; buffers/images are base64 `data:` URIs by default, with generated external sidecars only for the named source-form fixtures |
 | `<id>.glb` | the same asset in the binary container, from the same source of truth |
 | `<id>.expected.json` | the inventory record and the spec-derived expectations for every layer |
+| `<id>.*.bin` / `<id>.*.png` | an external buffer/image or an L5 golden, generated from the fixture's authored bytes |
 | `manifest.json` | the corpus inventory: distinct-asset count, per-group counts, defect ledger, and a SHA-256 for every emitted file |
 
 The corpus is **committed**, not generated at test time. Fixtures are review artefacts, and
@@ -82,6 +84,10 @@ tools/gltf_fixtures/
 3. Give it a canonical id from `plan_gltf.md` §24.2. Do not invent a name for an asset the plan
    already names.
 4. Regenerate and commit the generator change together with its output.
+
+For a named external-source fixture, attach a `GltfEmission` to the `Fixture`. External URI
+spellings are percent-decoded and checked one-for-one against its flat `sidecars` map; generation
+fails on a missing, unreferenced, nested or colliding sidecar instead of committing a broken asset.
 
 ## Regenerating the L5 goldens
 

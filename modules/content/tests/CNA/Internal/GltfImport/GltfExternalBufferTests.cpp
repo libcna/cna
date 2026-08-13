@@ -3,17 +3,16 @@
 // plan_gltf.md GLTF-028 / GLTF-030: a glTF file whose buffer lives in a separate `.bin`.
 //
 // This is the shape most exported glTF actually has -- a `.gltf` next to a `.bin`, sometimes next
-// to a `textures/` directory -- and the whole corpus is self-contained by construction: every
-// fixture carries its buffer as a base64 `data:` URI so the two containers can be generated from
-// one description and compared byte for byte. That is the right trade for the corpus and it leaves
-// exactly this case with no asset behind it.
+// to a `textures/` directory. `gltf-external-bin`, `gltf-data-uri-bin`, and
+// `gltf-uri-percent-encoded` are the committed positive witnesses, all generated from the same
+// geometry shape with their sidecars hashed into the corpus manifest.
 //
 // `GltfUriContainment` tests the resolver directly, which is where the containment *decision* is
 // made. What it cannot show is that the decision is reached at all on the ordinary path: a loader
 // that resolved the URI correctly and then read the file from the wrong directory, or never read
-// it, would satisfy every one of those tests. So these load end to end, through
-// `ContentManager::Load<Model>`, from a real directory on disk -- which is also why they are
-// scratch trees rather than corpus assets, for the same reason the containment tests are.
+// it, would satisfy every one of those tests. The scratch trees remain for negative and
+// deliberately nested cases; the committed fixtures make the positive source forms participate in
+// every L1-L5 corpus sweep and in the `.gltf`/`.glb` twin checks.
 
 #include <cstdint>
 #include <cstring>
@@ -30,10 +29,15 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "GltfFixtureCorpus.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Model;
+using CnaTest::GltfOracle::CorpusDirectory;
+using CnaTest::GltfOracle::LoadedFixture;
+using CnaTest::GltfOracle::Path;
+using CnaTest::GltfOracle::StringOr;
 
 namespace
 {
@@ -157,6 +161,71 @@ TEST(GltfExternalBuffer, ARelativeBufferUriResolvesAgainstTheGltfDirectoryAndIts
     // did not say so leaves a zeroed buffer whose vertex count is still three.
     EXPECT_EQ(3, parts[0]->getNumVerticesProperty());
     EXPECT_EQ(1, parts[0]->getPrimitiveCountProperty());
+}
+
+TEST(GltfExternalBuffer, CommittedExternalInlineAndEncodedBuffersCarryIdenticalBytes)
+{
+    const LoadedFixture external("gltf-external-bin");
+    const LoadedFixture inlineData("gltf-data-uri-bin");
+    const LoadedFixture encoded("gltf-uri-percent-encoded");
+    ASSERT_TRUE(external.Ok()) << external.Error();
+    ASSERT_TRUE(inlineData.Ok()) << inlineData.Error();
+    ASSERT_TRUE(encoded.Ok()) << encoded.Error();
+    ASSERT_EQ(1u, static_cast<std::size_t>(external.Data().buffers_count));
+    ASSERT_EQ(1u, static_cast<std::size_t>(inlineData.Data().buffers_count));
+    ASSERT_EQ(1u, static_cast<std::size_t>(encoded.Data().buffers_count));
+
+    const cgltf_buffer& fromFile = external.Data().buffers[0];
+    const cgltf_buffer& fromData = inlineData.Data().buffers[0];
+    const cgltf_buffer& fromEncoded = encoded.Data().buffers[0];
+    ASSERT_NE(nullptr, fromFile.uri);
+    ASSERT_NE(nullptr, fromData.uri);
+    ASSERT_NE(nullptr, fromEncoded.uri);
+    EXPECT_STREQ("gltf-external-bin.geometry.bin", fromFile.uri);
+    EXPECT_EQ(0u, std::string(fromData.uri).find("data:application/octet-stream;base64,"));
+    EXPECT_STREQ("gltf-uri-percent-encoded%20geometry.bin", fromEncoded.uri);
+    ASSERT_EQ(79u, static_cast<std::size_t>(fromFile.size));
+    ASSERT_EQ(fromFile.size, fromData.size);
+    ASSERT_EQ(fromFile.size, fromEncoded.size);
+    ASSERT_NE(nullptr, fromFile.data);
+    ASSERT_NE(nullptr, fromData.data);
+    ASSERT_NE(nullptr, fromEncoded.data);
+    EXPECT_EQ(0, std::memcmp(fromFile.data, fromData.data, fromFile.size));
+    EXPECT_EQ(0, std::memcmp(fromFile.data, fromEncoded.data, fromFile.size));
+
+    const auto& externalContract = Path(external.Expected(), "container.gltf.buffer");
+    const auto& dataContract = Path(inlineData.Expected(), "container.gltf.buffer");
+    const auto& encodedContract = Path(encoded.Expected(), "container.gltf.buffer");
+    EXPECT_EQ("external", StringOr(externalContract, "source", ""));
+    EXPECT_EQ("data-uri", StringOr(dataContract, "source", ""));
+    EXPECT_EQ("external", StringOr(encodedContract, "source", ""));
+    EXPECT_TRUE(std::filesystem::is_regular_file(
+        CorpusDirectory() / "gltf-external-bin.geometry.bin"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(
+        CorpusDirectory() / "gltf-uri-percent-encoded geometry.bin"));
+    EXPECT_FALSE(std::filesystem::exists(
+        CorpusDirectory() / "gltf-uri-percent-encoded%20geometry.bin"))
+        << "the encoded spelling must not exist, or a loader that skips URI decoding can pass";
+
+    // And exercise the ordinary CNA ContentManager path, not just cgltf's test helper. Exact
+    // vertex/index bytes for these same fixtures are asserted independently by the L5 sweep.
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model externalModel = cm.Load<Model>("gltf-external-bin");
+    Model dataModel = cm.Load<Model>("gltf-data-uri-bin");
+    Model encodedModel = cm.Load<Model>("gltf-uri-percent-encoded");
+    ASSERT_EQ(1, externalModel.getMeshesProperty().getCountProperty());
+    ASSERT_EQ(1, dataModel.getMeshesProperty().getCountProperty());
+    ASSERT_EQ(1, encodedModel.getMeshesProperty().getCountProperty());
+    EXPECT_EQ(externalModel.getMeshesProperty()[0]->getMeshPartsProperty()[0]->
+                  getNumVerticesProperty(),
+              dataModel.getMeshesProperty()[0]->getMeshPartsProperty()[0]->
+                  getNumVerticesProperty());
+    EXPECT_EQ(externalModel.getMeshesProperty()[0]->getMeshPartsProperty()[0]->
+                  getPrimitiveCountProperty(),
+              encodedModel.getMeshesProperty()[0]->getMeshPartsProperty()[0]->
+                  getPrimitiveCountProperty());
 }
 
 TEST(GltfExternalBuffer, AMissingBufferFileFailsWithAMessageNamingIt)

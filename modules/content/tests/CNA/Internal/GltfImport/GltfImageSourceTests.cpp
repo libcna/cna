@@ -21,8 +21,13 @@
 #include <vector>
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "GltfFixtureCorpus.hpp"
 
 using namespace CNA::Internal::GltfImport;
+using CnaTest::GltfOracle::CorpusDirectory;
+using CnaTest::GltfOracle::LoadedFixture;
+using CnaTest::GltfOracle::Path;
+using CnaTest::GltfOracle::StringOr;
 
 namespace
 {
@@ -73,6 +78,17 @@ namespace
         return cgltf_load_buffers(&options, out.data, ".") == cgltf_result_success;
     }
 
+    bool ParseFile(Parsed& out, const std::filesystem::path& path)
+    {
+        cgltf_options options{};
+        const std::string pathString = path.string();
+        if (cgltf_parse_file(&options, pathString.c_str(), &out.data) != cgltf_result_success)
+        {
+            return false;
+        }
+        return cgltf_load_buffers(&options, out.data, pathString.c_str()) == cgltf_result_success;
+    }
+
     /// A document with one image, described by `imageJson`, and optionally a buffer holding the PNG
     /// so a `bufferView`-backed image has something to point at.
     std::string ImageDocument(const std::string& imageJson, bool withPngBuffer)
@@ -98,9 +114,9 @@ namespace
     /// The PNG's own eight-byte signature. Asserting it is what distinguishes "some bytes arrived"
     /// from "the image arrived": a length check alone passes for any wrongly-offset slice of the
     /// same buffer.
-    void ExpectIsThePng(const std::vector<std::uint8_t>& bytes)
+    void ExpectCompletePng(const std::vector<std::uint8_t>& bytes)
     {
-        ASSERT_EQ(kRedGreenPngBytes, bytes.size());
+        ASSERT_GE(bytes.size(), 12u);
         const std::uint8_t signature[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
         for (std::size_t i = 0; i < 8; ++i)
         {
@@ -109,7 +125,13 @@ namespace
         }
         // IEND is the last four bytes of the last chunk, so its presence proves the tail arrived
         // too rather than only the header.
-        EXPECT_EQ('D', static_cast<char>(bytes[kRedGreenPngBytes - 5]));
+        EXPECT_EQ('D', static_cast<char>(bytes[bytes.size() - 5]));
+    }
+
+    void ExpectIsThePng(const std::vector<std::uint8_t>& bytes)
+    {
+        ASSERT_EQ(kRedGreenPngBytes, bytes.size());
+        ExpectCompletePng(bytes);
     }
 }
 
@@ -150,6 +172,58 @@ TEST(GltfImageSource, ADataUriImageDecodesToTheSameBytesAsTheBufferViewForm)
     ExpectIsThePng(fromUri->bytes);
     EXPECT_EQ(fromView->bytes, fromUri->bytes)
         << "the two source forms of one image produced different bytes";
+}
+
+TEST(GltfImageSource, CommittedExternalDataUriAndGlbImagesYieldTheSamePngBytes)
+{
+    const LoadedFixture external("gltf-external-image");
+    const LoadedFixture inlineData("gltf-data-uri-image");
+    ASSERT_TRUE(external.Ok()) << external.Error();
+    ASSERT_TRUE(inlineData.Ok()) << inlineData.Error();
+    ASSERT_EQ(1u, static_cast<std::size_t>(external.Data().images_count));
+    ASSERT_EQ(1u, static_cast<std::size_t>(inlineData.Data().images_count));
+    ASSERT_NE(nullptr, external.Data().images[0].uri);
+    ASSERT_NE(nullptr, inlineData.Data().images[0].uri);
+    EXPECT_STREQ("gltf-external-image.texture.png", external.Data().images[0].uri);
+    EXPECT_EQ(0u, std::string(inlineData.Data().images[0].uri).find("data:image/png;base64,"));
+    const auto& externalImages = Path(external.Expected(), "container.gltf.images");
+    const auto& inlineImages = Path(inlineData.Expected(), "container.gltf.images");
+    ASSERT_EQ(CNA::Internal::JsonType::Array, externalImages.type);
+    ASSERT_EQ(CNA::Internal::JsonType::Array, inlineImages.type);
+    ASSERT_EQ(1u, externalImages.arrayValue.size());
+    ASSERT_EQ(1u, inlineImages.arrayValue.size());
+    EXPECT_EQ("external", StringOr(externalImages.arrayValue[0], "source", ""));
+    EXPECT_EQ("data-uri", StringOr(inlineImages.arrayValue[0], "source", ""));
+    EXPECT_TRUE(std::filesystem::is_regular_file(
+        CorpusDirectory() / "gltf-external-image.texture.png"));
+
+    const std::optional<ExtractedImage> fromExternal =
+        ExtractImage(&external.Data().images[0], external.AssetPath().parent_path());
+    const std::optional<ExtractedImage> fromData =
+        ExtractImage(&inlineData.Data().images[0], inlineData.AssetPath().parent_path());
+    ASSERT_TRUE(fromExternal.has_value());
+    ASSERT_TRUE(fromData.has_value());
+    ExpectCompletePng(fromExternal->bytes);
+    EXPECT_EQ(fromExternal->bytes, fromData->bytes);
+
+    Parsed externalGlb;
+    Parsed dataGlb;
+    ASSERT_TRUE(ParseFile(externalGlb, CorpusDirectory() / "gltf-external-image.glb"));
+    ASSERT_TRUE(ParseFile(dataGlb, CorpusDirectory() / "gltf-data-uri-image.glb"));
+    ASSERT_EQ(1u, static_cast<std::size_t>(externalGlb.data->images_count));
+    ASSERT_EQ(1u, static_cast<std::size_t>(dataGlb.data->images_count));
+    ASSERT_NE(nullptr, externalGlb.data->images[0].uri);
+    ASSERT_NE(nullptr, dataGlb.data->images[0].uri);
+    EXPECT_EQ(0u, std::string(externalGlb.data->images[0].uri).find("data:image/png;base64,"));
+    EXPECT_EQ(0u, std::string(dataGlb.data->images[0].uri).find("data:image/png;base64,"));
+    const std::optional<ExtractedImage> fromExternalGlb = ExtractImage(
+        &externalGlb.data->images[0], CorpusDirectory());
+    const std::optional<ExtractedImage> fromDataGlb = ExtractImage(
+        &dataGlb.data->images[0], CorpusDirectory());
+    ASSERT_TRUE(fromExternalGlb.has_value());
+    ASSERT_TRUE(fromDataGlb.has_value());
+    EXPECT_EQ(fromExternal->bytes, fromExternalGlb->bytes);
+    EXPECT_EQ(fromExternal->bytes, fromDataGlb->bytes);
 }
 
 TEST(GltfImageSource, ADataUriWithNoCommaIsRefusedRatherThanDecodedAsGarbage)

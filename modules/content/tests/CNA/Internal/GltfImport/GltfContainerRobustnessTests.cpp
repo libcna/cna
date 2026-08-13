@@ -32,6 +32,8 @@ using namespace CNA::Internal::GltfImport;
 using CnaTest::GltfOracle::CorpusDirectory;
 using CnaTest::GltfOracle::CorpusFixtureIds;
 using CnaTest::GltfOracle::LoadedFixture;
+using CnaTest::GltfOracle::NumberOr;
+using CnaTest::GltfOracle::Path;
 
 namespace
 {
@@ -154,6 +156,49 @@ TEST(GltfContainerRobustness, EveryCommittedGlbFollowsTheChunkLayoutSection44Req
         // Every corpus asset has a buffer, so every one has a BIN chunk -- if that ever stops
         // being true this assertion is the place to relax it deliberately.
         EXPECT_TRUE(sawBin) << "no BIN chunk, yet the asset declares a buffer";
+    }
+}
+
+TEST(GltfContainerRobustness, NamedFixturesPinZeroAndTwoByteBinPaddingExactly)
+{
+    // The corpus-wide sweep above proves every emitter result is aligned, but without named
+    // residues it could pass while the builder silently lengthened buffer.byteLength to include
+    // its pad bytes. These two inputs differ only in the payload residue: the first is already
+    // aligned, the second requires two bytes that belong to the chunk and NOT to the buffer.
+    struct Case { const char* id; std::size_t payloadBytes; std::size_t paddingBytes; };
+    const Case cases[] = {
+        {"glb-basic", 80u, 0u},
+        {"glb-bin-chunk-padding", 78u, 2u},
+    };
+    for (const Case& testCase : cases)
+    {
+        SCOPED_TRACE(testCase.id);
+        const LoadedFixture fixture(testCase.id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        ASSERT_EQ(1u, static_cast<std::size_t>(fixture.Data().buffers_count));
+        EXPECT_EQ(testCase.payloadBytes,
+                  static_cast<std::size_t>(fixture.Data().buffers[0].size));
+        const auto& contract = Path(fixture.Expected(), "container.glb.buffer");
+        EXPECT_EQ(static_cast<double>(testCase.payloadBytes),
+                  NumberOr(contract, "payloadBytes", -1.0));
+        EXPECT_EQ(static_cast<double>(testCase.paddingBytes),
+                  NumberOr(contract, "paddingBytes", -1.0));
+
+        const std::vector<std::uint8_t> bytes =
+            ReadBytes(CorpusDirectory() / (std::string(testCase.id) + ".glb"));
+        ASSERT_GE(bytes.size(), 28u);
+        const std::size_t jsonLength = ReadU32(bytes, 12);
+        const std::size_t binHeader = 20u + jsonLength;
+        ASSERT_LE(binHeader + 8u, bytes.size());
+        EXPECT_EQ(0x004E4942u, ReadU32(bytes, binHeader + 4u));
+        const std::size_t binLength = ReadU32(bytes, binHeader);
+        ASSERT_EQ(testCase.payloadBytes + testCase.paddingBytes, binLength);
+        ASSERT_EQ(binHeader + 8u + binLength, bytes.size());
+        for (std::size_t i = testCase.payloadBytes; i < binLength; ++i)
+        {
+            EXPECT_EQ(0u, bytes[binHeader + 8u + i])
+                << "BIN padding byte " << (i - testCase.payloadBytes) << " is not zero";
+        }
     }
 }
 
