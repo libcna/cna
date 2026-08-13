@@ -453,6 +453,132 @@ def mat_normal_occlusion_scale() -> Fixture:
     )
 
 
+def mat_default() -> Fixture:
+    """A primitive with **no** `material` at all -- glTF's own default material.
+
+    §3.7.2 is explicit: a primitive without a material uses the default, and the default *is*
+    metallic-roughness with `baseColorFactor` white, `metallic` 1 and `roughness` 1. It is not "no
+    material" and it is not `BasicEffect`. Getting that wrong is half of defect **D7**: the effect
+    selection asked which texture maps were present, and a primitive with no material has none, so
+    it could never reach the PBR path.
+    """
+    b = GltfBuilder("mat-default")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="DefaultMaterialTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    expected_material = {
+        # No `index`: there is no material in the file. Every value below is §3.7.2's default,
+        # which a conforming reader must supply rather than invent its own.
+        "name": "",
+        "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
+        "metallicFactor": 1.0,
+        "roughnessFactor": 1.0,
+        "emissiveFactor": [0.0, 0.0, 0.0],
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+        "defaultMaterialRule": "A primitive with no material uses glTF's default, which IS "
+                               "metallic-roughness -- so it selects PbrEffect, not BasicEffect. "
+                               "GLTF-217. The wrong reading (no material means no PBR) is half of "
+                               "defect D7.",
+    }
+    return Fixture(
+        id="mat-default", audit_fixture=None, owning_group="materials",
+        description="A primitive that declares no material at all. glTF's default material is "
+                    "metallic-roughness with a white base colour and metallic/roughness of 1, so "
+                    "this is the fixture that separates 'no material' from 'not PBR' -- a "
+                    "distinction defect D7 collapsed.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["no material", "glTF default material", "metallic-roughness by default"],
+        spec_anchors=["meshes-overview", "metallic-roughness-material"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="DefaultMaterialTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
+#: An emissive factor with three different non-zero channels, none of them 1: a channel dropped,
+#: swapped or clamped is a different colour rather than a dimmer one.
+_EMISSIVE_ONLY = [0.35, 0.7, 0.05]
+
+
+def mat_emissive_factor() -> Fixture:
+    """`emissiveFactor` without the strength extension -- the plain §3.9.3 case."""
+    b = GltfBuilder("mat-emissive-factor")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    material = b.add_material({
+        "name": "Glow",
+        "pbrMetallicRoughness": {
+            "baseColorFactor": [0.05, 0.05, 0.05, 1.0],
+            "metallicFactor": 0.0,
+            "roughnessFactor": 0.9,
+        },
+        "emissiveFactor": _EMISSIVE_ONLY,
+    })
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "material": material,
+        "mode": TRIANGLES,
+    }], name="GlowTri")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    expected_material = {
+        "index": material,
+        "name": "Glow",
+        "baseColorFactor": [0.05, 0.05, 0.05, 1.0],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.9,
+        "emissiveFactor": _EMISSIVE_ONLY,
+        "alphaMode": "OPAQUE",
+        "alphaCutoff": 0.5,
+        "doubleSided": False,
+        "hasBaseColorTexture": False,
+        "hasNormalTexture": False,
+        "hasMetallicRoughnessTexture": False,
+        "hasOcclusionTexture": False,
+        "hasEmissiveTexture": False,
+    }
+    return Fixture(
+        id="mat-emissive-factor", audit_fixture=None, owning_group="materials",
+        description="A near-black material whose emissiveFactor is [0.35,0.7,0.05] -- three "
+                    "different non-zero channels, none of them 1. The pair with "
+                    "mat-emissive-strength: this is the plain §3.9.3 term with no multiplier, so "
+                    "an implementation that applied a strength of 1 twice, or read the factor "
+                    "through the extension's code path only, diverges on exactly one of the two.",
+        builder=b, validated_layers=["L1", "L2", "L3"],
+        features=["emissiveFactor without the strength extension", "dark base colour"],
+        spec_anchors=["metallic-roughness-material", "additional-textures"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="GlowTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,
+            material=expected_material)]},
+        l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
+    )
+
+
 #: The mask cutoff of `mat-alpha-mask-cutoff`. Deliberately NOT 0.5: that is glTF's own default
 #: for `alphaCutoff` AND what `PbrEffect` falls back to, so a cutoff that never arrived would
 #: coincide with the expected value and the fixture would prove nothing.
@@ -1046,6 +1172,7 @@ def mat_specular_glossiness() -> Fixture:
     )
 
 
-FIXTURES = [mat_factor_only_gold, mat_emissive_strength, mat_vertex_color_pbr,
+FIXTURES = [mat_default, mat_factor_only_gold, mat_emissive_factor, mat_emissive_strength,
+            mat_vertex_color_pbr,
             mat_normal_occlusion_scale, mat_alpha_mask_cutoff, mat_unimplemented_extensions,
             mat_unlit, mat_unlit_vertex_color_alpha, mat_specular_glossiness, mat_authored_tangent]

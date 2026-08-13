@@ -261,6 +261,10 @@ class GltfBuilder:
         self.name = name
         self._buffer = bytearray()
         self._scenes: list[dict[str, Any]] = []
+        #: The `asset.version` every fixture declares. There is deliberately no escape for
+        #: writing another one: the vendored cgltf refuses a non-2.0 file at *parse*, and a corpus
+        #: fixture must parse (see `GltfContainerRobustness`, which asserts that refusal instead).
+        self._asset_version = "2.0"
         self._nodes: list[dict[str, Any]] = []
         self._meshes: list[dict[str, Any]] = []
         self._materials: list[dict[str, Any]] = []
@@ -486,7 +490,8 @@ class GltfBuilder:
                  translation: Sequence[float] | None = None,
                  rotation: Sequence[float] | None = None,
                  scale: Sequence[float] | None = None,
-                 matrix: Sequence[float] | None = None) -> int:
+                 matrix: Sequence[float] | None = None,
+                 deliberately_malformed: bool = False) -> int:
         """Adds a node.
 
         ``matrix`` and the TRS properties are mutually exclusive (§3.5.3); authoring both is
@@ -502,9 +507,14 @@ class GltfBuilder:
         :param rotation: the node's rotation as an ``(x, y, z, w)`` quaternion.
         :param scale: the node's scale.
         :param matrix: the node's local transform as 16 column-major floats.
+        :param deliberately_malformed: authorises a node that breaks §3.5.3's matrix-or-TRS rule.
+            Only a `bad-*` fixture wants this -- the guard exists because authoring both by
+            accident produces a file whose reading is implementation-defined, and the whole point
+            of a malformed fixture is that breaking the rule is the thing under test.
         :return: the new node's index.
         """
-        if matrix is not None and any(v is not None for v in (translation, rotation, scale)):
+        if (matrix is not None and any(v is not None for v in (translation, rotation, scale))
+                and not deliberately_malformed):
             raise ValueError(
                 f"{self.name}: node {name!r} authors both 'matrix' and TRS -- §3.5.3 allows one")
         node: dict[str, Any] = {"name": name}
@@ -682,7 +692,7 @@ class GltfBuilder:
         :return: the asset as a plain dict, in the module's fixed key order.
         """
         doc: dict[str, Any] = {
-            "asset": {"version": "2.0", "generator": GENERATOR_NAME},
+            "asset": {"version": self._asset_version, "generator": GENERATOR_NAME},
         }
         if self._extensions_used:
             doc["extensionsUsed"] = list(self._extensions_used)
