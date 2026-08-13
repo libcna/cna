@@ -5,6 +5,7 @@
 
 #include "../Common/StandardFileSystem.hpp"
 #include "../Common/StandardSystemInfo.hpp"
+#include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 
 #include <map>
 #include <memory>
@@ -58,6 +59,22 @@ namespace CNA::Platform::Sdl2 {
             IPlatformWindow& window) override;
 
     private:
+        class Keyboard final : public IPlatformKeyboard
+        {
+        public:
+            void Update() override;
+            [[nodiscard]] const KeyboardSnapshot& GetSnapshot() const override;
+            [[nodiscard]] bool HasKeyboard() const override;
+            [[nodiscard]] KeyCode GetKeyFromScancode(Scancode scancode) const override;
+            [[nodiscard]] std::string GetScancodeName(Scancode scancode) const override;
+            [[nodiscard]] Scancode GetScancodeFromName(const std::string& name) const override;
+            [[nodiscard]] std::string GetKeyName(Scancode scancode) const override;
+            [[nodiscard]] KeyCode GetKeyFromName(const std::string& name) const override;
+
+        private:
+            KeyboardSnapshot snapshot_;
+        };
+
         class GlContext final : public IPlatformGlContext
         {
         public:
@@ -76,6 +93,7 @@ namespace CNA::Platform::Sdl2 {
         std::map<PlatformSubsystem, int> ownedRefCounts_;
         Common::StandardFileSystem fileSystem_{"cna-sdl2"};
         Common::StandardSystemInfo systemInfo_;
+        Keyboard keyboard_;
         GlContext glContext_;
     };
 

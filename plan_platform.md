@@ -637,10 +637,10 @@ the point is to exercise the contract against SDL2's real API and deployment sur
 |---|---|---|
 | PLAT-SDL2-1 | ✅ | `CNA_PLATFORM=SDL2` selects the independent `Sdl2Platform`. `cmake/ThirdPartySDL2.cmake` uses either `CNA_SDL2_ROOT` or a pinned SDL 2.30.11 FetchContent checkout, and `SDL2::SDL2` is linked **PRIVATE** only by `cna_platform`; public headers remain SDL-free. |
 | PLAT-SDL2-2 | ✅ | SDL2 subsystem ownership is refcounted per platform instance without `SDL_Quit()`. The backend creates/adopts real SDL2 windows, handles normal window lifecycle and uses SDL2 timing APIs. |
-| PLAT-SDL2-3 | ⏳ | Translate SDL2 quit/window/key/mouse events into `PlatformEvent`; preserve the platform-neutral game-event oracle. |
+| PLAT-SDL2-3 | ✅ | SDL2 quit, window, keyboard, text and mouse events are translated into `PlatformEvent`; the keyboard service provides an exact SDL2 snapshot. `cna_platform_sdl2_tests` injects native SDL2 key/mouse/window events and proves their platform-neutral values. |
 | PLAT-SDL2-4 | 🟨 | `Sdl2Platform::GlContext` creates, binds, swaps and queries real SDL2 GL/ES contexts. `SDL2 + OPENGLES3` configures successfully; the local full-demo build was interrupted by an external sharp-runtime archive `Bus error` before CNA's demo target, so the Xvfb smoke evidence remains pending. The CI matrix cell is prepared. |
 | PLAT-SDL2-5 | ✅ | The initial profile advertises only multiple windows, high DPI, multiple displays, borderless fullscreen and OpenGL. Every unimplemented service returns null and its capability bit remains false; no SDL2 compatibility claim is fabricated. |
-| PLAT-SDL2-6 | ⏳ | Instantiate conformance/event tests for SDL2 and add an SDL2 OpenGLES3 CI matrix cell under Xvfb. |
+| PLAT-SDL2-6 | 🟨 | `CnaSdl2PlatformTests` is a separate native-queue executable because SDL2 and SDL3 CMake targets deliberately cannot coexist on one test target. The platform CI matrix builds/runs it under the SDL2 OpenGLES3 Xvfb cell; CI evidence is pending. |
 | PLAT-SDL2-7 | ⏳ | Document SDL2-specific limits and a supported build command; update this table with actual test evidence. |
 
 ---

@@ -32,6 +32,10 @@ CATEGORY_RATIONALES = {
         "Exercises the selected SDL3 platform implementation at its native edge; these tests "
         "live in modules/platform/tests and are excluded from non-SDL platform builds."
     ),
+    "platform-sdl2-integration": (
+        "Exercises the selected SDL2 platform implementation at its native edge; these tests "
+        "live in modules/platform/tests and are excluded from non-SDL2 platform builds."
+    ),
     "audio-native-integration": (
         "Exercises the separately selected SDL3/SDL_mixer audio implementation or mixer ABI; "
         "the audio boundary is independent of CNA's window/input platform."
@@ -56,6 +60,8 @@ def classify(record: FileRecord) -> str | None:
 
     if path.startswith("modules/platform/tests/CNA/Platform/Sdl3"):
         return "platform-sdl3-integration"
+    if path.startswith("modules/platform/tests/CNA/Platform/Sdl2"):
+        return "platform-sdl2-integration"
 
     if path.startswith("modules/audio/tests/"):
         return "audio-native-integration"

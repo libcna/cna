@@ -51,6 +51,18 @@ if(CNA_BUILD_TESTS)
     if(NOT CNA_PLATFORM STREQUAL "SDL3")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl3.*\\.cpp$")
     endif()
+    # SDL2 implementation tests include SDL2's real event structure and are meaningful only when
+    # the SDL2 backend was selected. Contract tests above remain parameterised over all builds.
+    if(NOT CNA_PLATFORM STREQUAL "SDL2")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl2.*\\.cpp$")
+    endif()
+    # The SDL2 native-queue mapper test must not share CnaTests with SDL3-native fixture tests:
+    # SDL deliberately makes both imported targets declare mutually exclusive SDL_VERSION
+    # interface requirements. It receives its own small executable below.
+    if(CNA_PLATFORM STREQUAL "SDL2")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/platform/tests/.*/Sdl2PlatformTests\\.cpp$")
+    endif()
 
     # plan_platform.md PLAT-94: like the general platform implementation above, the native
     # SDL3 audio test directly exercises a private implementation compiled only for its selected
@@ -222,6 +234,18 @@ if(CNA_BUILD_TESTS)
             gtest_main
             SDL3::SDL3
     )
+
+    if(CNA_PLATFORM STREQUAL "SDL2")
+        add_executable(cna_platform_sdl2_tests
+            modules/platform/tests/CNA/Platform/Sdl2PlatformTests.cpp)
+        target_link_libraries(cna_platform_sdl2_tests PRIVATE
+            cna_platform
+            SDL2::SDL2
+            gtest_main)
+        add_test(NAME CnaSdl2PlatformTests COMMAND cna_platform_sdl2_tests)
+        set_tests_properties(CnaSdl2PlatformTests PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy")
+    endif()
 
     # The metal and glide policy suites deliberately compile on every renderer (see their own
     # header comments); their policy headers ride the unconditional header-interface targets

@@ -7,6 +7,7 @@
 
 #include <SDL.h>
 
+#include <algorithm>
 #include <mutex>
 
 namespace CNA::Platform::Sdl2 {
@@ -66,6 +67,92 @@ namespace CNA::Platform::Sdl2 {
             return SDL_GL_GetProcAddress(name);
         }
 
+        Scancode ToScancode(const SDL_Scancode scancode)
+        {
+            const auto value = static_cast<std::uint16_t>(scancode);
+            return IsKnownScancode(value) ? static_cast<Scancode>(value) : Scancode::Unknown;
+        }
+
+        std::uint16_t ToModifiers(const SDL_Keymod modifiers)
+        {
+            std::uint16_t result = 0;
+            const auto add = [&result](const KeyModifier modifier) {
+                result |= static_cast<std::uint16_t>(modifier);
+            };
+            if ((modifiers & KMOD_SHIFT) != 0) { add(KeyModifier::Shift); }
+            if ((modifiers & KMOD_CTRL) != 0) { add(KeyModifier::Control); }
+            if ((modifiers & KMOD_ALT) != 0) { add(KeyModifier::Alt); }
+            if ((modifiers & KMOD_GUI) != 0) { add(KeyModifier::Gui); }
+            if ((modifiers & KMOD_CAPS) != 0) { add(KeyModifier::CapsLock); }
+            if ((modifiers & KMOD_NUM) != 0) { add(KeyModifier::NumLock); }
+            if ((modifiers & KMOD_SCROLL) != 0) { add(KeyModifier::ScrollLock); }
+            if ((modifiers & KMOD_MODE) != 0) { add(KeyModifier::Mode); }
+            return result;
+        }
+
+        KeyCode ToKeyCode(const SDL_Keycode key)
+        {
+            // SDL's printable keycodes are Unicode while CNA uses Windows virtual-key values.
+            if (key >= SDLK_a && key <= SDLK_z)
+            {
+                return static_cast<KeyCode>(static_cast<std::uint16_t>('A' + (key - SDLK_a)));
+            }
+            if (key >= SDLK_0 && key <= SDLK_9)
+            {
+                return static_cast<KeyCode>(static_cast<std::uint16_t>('0' + (key - SDLK_0)));
+            }
+            if (key >= SDLK_F1 && key <= SDLK_F24)
+            {
+                return static_cast<KeyCode>(static_cast<std::uint16_t>(112 + (key - SDLK_F1)));
+            }
+            switch (key)
+            {
+                case SDLK_SPACE: return KeyCode::Space;
+                case SDLK_RETURN: return KeyCode::Enter;
+                case SDLK_ESCAPE: return KeyCode::Escape;
+                case SDLK_BACKSPACE: return KeyCode::Back;
+                case SDLK_TAB: return KeyCode::Tab;
+                case SDLK_LEFT: return KeyCode::Left;
+                case SDLK_RIGHT: return KeyCode::Right;
+                case SDLK_UP: return KeyCode::Up;
+                case SDLK_DOWN: return KeyCode::Down;
+                case SDLK_HOME: return KeyCode::Home;
+                case SDLK_END: return KeyCode::End;
+                case SDLK_PAGEUP: return KeyCode::PageUp;
+                case SDLK_PAGEDOWN: return KeyCode::PageDown;
+                case SDLK_INSERT: return KeyCode::Insert;
+                case SDLK_DELETE: return KeyCode::Delete;
+                case SDLK_LSHIFT: return KeyCode::LeftShift;
+                case SDLK_RSHIFT: return KeyCode::RightShift;
+                case SDLK_LCTRL: return KeyCode::LeftControl;
+                case SDLK_RCTRL: return KeyCode::RightControl;
+                case SDLK_LALT: return KeyCode::LeftAlt;
+                case SDLK_RALT: return KeyCode::RightAlt;
+                case SDLK_LGUI: return KeyCode::LeftWindows;
+                case SDLK_RGUI: return KeyCode::RightWindows;
+                case SDLK_CAPSLOCK: return KeyCode::CapsLock;
+                case SDLK_NUMLOCKCLEAR: return KeyCode::NumLock;
+                case SDLK_SCROLLLOCK: return KeyCode::Scroll;
+                case SDLK_KP_0: return KeyCode::NumPad0;
+                case SDLK_KP_1: return KeyCode::NumPad1;
+                case SDLK_KP_2: return KeyCode::NumPad2;
+                case SDLK_KP_3: return KeyCode::NumPad3;
+                case SDLK_KP_4: return KeyCode::NumPad4;
+                case SDLK_KP_5: return KeyCode::NumPad5;
+                case SDLK_KP_6: return KeyCode::NumPad6;
+                case SDLK_KP_7: return KeyCode::NumPad7;
+                case SDLK_KP_8: return KeyCode::NumPad8;
+                case SDLK_KP_9: return KeyCode::NumPad9;
+                case SDLK_KP_ENTER: return KeyCode::Enter;
+                case SDLK_KP_PLUS: return KeyCode::Add;
+                case SDLK_KP_MINUS: return KeyCode::Subtract;
+                case SDLK_KP_MULTIPLY: return KeyCode::Multiply;
+                case SDLK_KP_DIVIDE: return KeyCode::Divide;
+                case SDLK_KP_DECIMAL: return KeyCode::Decimal;
+                default: return KeyCode::None;
+            }
+        }
+
         bool MapWindowEvent(const SDL_WindowEvent& source, PlatformEvent& destination)
         {
             WindowEvent event;
@@ -121,6 +208,7 @@ namespace CNA::Platform::Sdl2 {
         capabilities.multipleDisplays = true;
         capabilities.borderlessFullscreen = true;
         capabilities.openGlContext = true;
+        capabilities.exactKeyboardState = true;
         // The remaining SDL2 services arrive only when their contract implementation does.
         // Reporting them false protects existing games through the capability fallback path.
         return capabilities;
@@ -245,6 +333,58 @@ namespace CNA::Platform::Sdl2 {
             {
                 destination.push_back(translated);
             }
+            else if (source.type == SDL_KEYDOWN || source.type == SDL_KEYUP)
+            {
+                KeyEvent key;
+                key.window = static_cast<WindowId>(source.key.windowID);
+                key.scancode = ToScancode(source.key.keysym.scancode);
+                key.keycode = ToKeyCode(source.key.keysym.sym);
+                key.modifiers = ToModifiers(static_cast<SDL_Keymod>(source.key.keysym.mod));
+                key.pressed = source.type == SDL_KEYDOWN;
+                key.repeat = source.key.repeat != 0;
+                destination.emplace_back(key);
+            }
+            else if (source.type == SDL_TEXTINPUT)
+            {
+                TextInputEvent text;
+                text.window = static_cast<WindowId>(source.text.windowID);
+                text.text = source.text.text;
+                destination.emplace_back(std::move(text));
+            }
+            else if (source.type == SDL_MOUSEMOTION)
+            {
+                MouseMotionEvent motion;
+                motion.window = static_cast<WindowId>(source.motion.windowID);
+                motion.x = static_cast<float>(source.motion.x);
+                motion.y = static_cast<float>(source.motion.y);
+                motion.deltaX = static_cast<float>(source.motion.xrel);
+                motion.deltaY = static_cast<float>(source.motion.yrel);
+                destination.emplace_back(motion);
+            }
+            else if (source.type == SDL_MOUSEBUTTONDOWN || source.type == SDL_MOUSEBUTTONUP)
+            {
+                MouseButtonEvent button;
+                button.window = static_cast<WindowId>(source.button.windowID);
+                button.button = source.button.button;
+                button.pressed = source.type == SDL_MOUSEBUTTONDOWN;
+                button.clicks = source.button.clicks;
+                button.x = static_cast<float>(source.button.x);
+                button.y = static_cast<float>(source.button.y);
+                destination.emplace_back(button);
+            }
+            else if (source.type == SDL_MOUSEWHEEL)
+            {
+                MouseWheelEvent wheel;
+                wheel.window = static_cast<WindowId>(source.wheel.windowID);
+                wheel.x = static_cast<float>(source.wheel.x);
+                wheel.y = static_cast<float>(source.wheel.y);
+                if (source.wheel.direction == SDL_MOUSEWHEEL_FLIPPED)
+                {
+                    wheel.x = -wheel.x;
+                    wheel.y = -wheel.y;
+                }
+                destination.emplace_back(wheel);
+            }
         }
     }
 
@@ -253,7 +393,7 @@ namespace CNA::Platform::Sdl2 {
     std::uint64_t Sdl2Platform::GetTicksMilliseconds() const { return SDL_GetTicks64(); }
     void Sdl2Platform::Delay(const std::uint32_t milliseconds) { SDL_Delay(milliseconds); }
 
-    IPlatformKeyboard* Sdl2Platform::GetKeyboard() { return nullptr; }
+    IPlatformKeyboard* Sdl2Platform::GetKeyboard() { return &keyboard_; }
     IPlatformMouse* Sdl2Platform::GetMouse() { return nullptr; }
     IPlatformGamepad* Sdl2Platform::GetGamepad() { return nullptr; }
     IPlatformJoystick* Sdl2Platform::GetJoystick() { return nullptr; }
@@ -273,6 +413,44 @@ namespace CNA::Platform::Sdl2 {
     std::unique_ptr<IPlatformSurfacePresenter> Sdl2Platform::CreateSurfacePresenter(IPlatformWindow&)
     {
         throw PlatformNotSupportedException(PlatformCapability::SurfacePresentation, GetName());
+    }
+
+    void Sdl2Platform::Keyboard::Update()
+    {
+        snapshot_.pressedKeys.clear();
+        int count = 0;
+        const Uint8* state = SDL_GetKeyboardState(&count);
+        for (int index = 0; state != nullptr && index < count; ++index)
+        {
+            if (state[index] == 0) { continue; }
+            const KeyCode key = ToKeyCode(SDL_GetKeyFromScancode(static_cast<SDL_Scancode>(index)));
+            if (key != KeyCode::None) { snapshot_.pressedKeys.push_back(key); }
+        }
+        snapshot_.modifiers = ToModifiers(SDL_GetModState());
+    }
+    const KeyboardSnapshot& Sdl2Platform::Keyboard::GetSnapshot() const { return snapshot_; }
+    bool Sdl2Platform::Keyboard::HasKeyboard() const { return true; }
+    KeyCode Sdl2Platform::Keyboard::GetKeyFromScancode(const Scancode scancode) const
+    {
+        return ToKeyCode(SDL_GetKeyFromScancode(static_cast<SDL_Scancode>(scancode)));
+    }
+    std::string Sdl2Platform::Keyboard::GetScancodeName(const Scancode scancode) const
+    {
+        const char* name = SDL_GetScancodeName(static_cast<SDL_Scancode>(scancode));
+        return name != nullptr ? std::string(name) : std::string();
+    }
+    Scancode Sdl2Platform::Keyboard::GetScancodeFromName(const std::string& name) const
+    {
+        return ToScancode(SDL_GetScancodeFromName(name.c_str()));
+    }
+    std::string Sdl2Platform::Keyboard::GetKeyName(const Scancode scancode) const
+    {
+        const char* name = SDL_GetKeyName(SDL_GetKeyFromScancode(static_cast<SDL_Scancode>(scancode)));
+        return name != nullptr ? std::string(name) : std::string();
+    }
+    KeyCode Sdl2Platform::Keyboard::GetKeyFromName(const std::string& name) const
+    {
+        return ToKeyCode(SDL_GetKeyFromName(name.c_str()));
     }
 
     GlContextHandle Sdl2Platform::GlContext::CreateContext(

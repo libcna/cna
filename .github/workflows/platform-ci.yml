@@ -149,11 +149,15 @@ jobs:
       - name: Build the contract, consumer tests and 2D integration demo
         run: cmake --build build --target CnaTests cna_demo_2d --parallel 3
 
+      - name: Build SDL2 native-queue platform test
+        if: matrix.platform == 'SDL2'
+        run: cmake --build build --target cna_platform_sdl2_tests --parallel 3
+
       - name: Run platform CTest entries (graphical tuples)
         if: matrix.display
         env:
           SDL_AUDIODRIVER: dummy
-        run: ctest --test-dir build -R '^CnaPlatform(Tests|WindowTests)$' --output-on-failure
+        run: ctest --test-dir build -R '^Cna(Platform(Tests|WindowTests)|Sdl2PlatformTests)$' --output-on-failure
 
       - name: Run platform CTest entries with no display (Headless tuple)
         if: matrix.display == false
