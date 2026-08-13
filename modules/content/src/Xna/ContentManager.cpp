@@ -4,6 +4,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
+#include "CNA/Internal/CnjMorphSidecarEXT.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
 #include "CNA/Internal/Graphics/ModelMaterialVariantsEXT.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
@@ -3776,9 +3777,23 @@ namespace Microsoft::Xna::Framework::Content
                                 morph->Stride = stride;
                                 morph->PositionDeltas.reserve(static_cast<std::size_t>(targetCount));
                                 morph->NormalDeltas.reserve(static_cast<std::size_t>(targetCount));
+                                std::vector<int> serializedVertexCounts;
+                                serializedVertexCounts.reserve(
+                                    static_cast<std::size_t>(targetCount));
                                 for (int t = 0; t < targetCount; ++t)
                                 {
                                     const int vertexCount = morphReader.Read<std::int32_t>();
+                                    if (vertexCount < 0 ||
+                                        (vertexCount != 0 && vertexCount != numVertices))
+                                    {
+                                        throw ContentLoadException(
+                                            "Model mesh '" + meshName + "' morph target " +
+                                            std::to_string(t) + " declares " +
+                                            std::to_string(vertexCount) +
+                                            " vertices; expected 0 or " +
+                                            std::to_string(numVertices) + ": " + path);
+                                    }
+                                    serializedVertexCounts.push_back(vertexCount);
                                     std::vector<Vector3> positions;
                                     positions.reserve(static_cast<std::size_t>(vertexCount));
                                     for (int v = 0; v < vertexCount; ++v)
@@ -3791,7 +3806,15 @@ namespace Microsoft::Xna::Framework::Content
                                     morph->PositionDeltas.push_back(std::move(positions));
 
                                     std::vector<Vector3> normals;
-                                    if (morphReader.Read<std::int32_t>() != 0)
+                                    const int hasNormals = morphReader.Read<std::int32_t>();
+                                    if (hasNormals != 0 && hasNormals != 1)
+                                    {
+                                        throw ContentLoadException(
+                                            "Model mesh '" + meshName + "' morph target " +
+                                            std::to_string(t) +
+                                            " has an invalid normal-delta flag: " + path);
+                                    }
+                                    if (hasNormals != 0)
                                     {
                                         normals.reserve(static_cast<std::size_t>(vertexCount));
                                         for (int v = 0; v < vertexCount; ++v)
@@ -3803,6 +3826,82 @@ namespace Microsoft::Xna::Framework::Content
                                         }
                                     }
                                     morph->NormalDeltas.push_back(std::move(normals));
+                                }
+
+                                // GLTF-289. CNB-82's original sidecar ends above; tangent xyz
+                                // deltas live in an optional, magic/versioned trailer so old
+                                // sidecars remain readable and old readers harmlessly ignore new
+                                // data. Handedness is not serialized here because it remains in
+                                // BaseVertexBytes and morph blending never changes it.
+                                morph->TangentDeltas.resize(
+                                    static_cast<std::size_t>(targetCount));
+                                if (morphReader.Remaining() > 0u)
+                                {
+                                    const std::int32_t magic = morphReader.Read<std::int32_t>();
+                                    if (magic != CNA::Internal::CnjMorphTangentTrailerMagicEXT)
+                                    {
+                                        throw ContentLoadException(
+                                            "Model mesh '" + meshName +
+                                            "' morph sidecar has an unknown trailing block: " +
+                                            path);
+                                    }
+                                    const std::int32_t version = morphReader.Read<std::int32_t>();
+                                    if (version != CNA::Internal::CnjMorphTangentTrailerVersionEXT)
+                                    {
+                                        throw ContentLoadException(
+                                            "Model mesh '" + meshName +
+                                            "' morph tangent trailer has unsupported version " +
+                                            std::to_string(version) + ": " + path);
+                                    }
+                                    const int trailerTargetCount =
+                                        morphReader.Read<std::int32_t>();
+                                    if (trailerTargetCount != targetCount)
+                                    {
+                                        throw ContentLoadException(
+                                            "Model mesh '" + meshName +
+                                            "' morph tangent trailer declares " +
+                                            std::to_string(trailerTargetCount) +
+                                            " targets; expected " +
+                                            std::to_string(targetCount) + ": " + path);
+                                    }
+                                    for (int t = 0; t < targetCount; ++t)
+                                    {
+                                        const int hasTangents = morphReader.Read<std::int32_t>();
+                                        if (hasTangents != 0 && hasTangents != 1)
+                                        {
+                                            throw ContentLoadException(
+                                                "Model mesh '" + meshName + "' morph target " +
+                                                std::to_string(t) +
+                                                " has an invalid tangent-delta flag: " + path);
+                                        }
+                                        if (hasTangents == 0) { continue; }
+                                        const int vertexCount = serializedVertexCounts[
+                                            static_cast<std::size_t>(t)];
+                                        if (vertexCount == 0)
+                                        {
+                                            throw ContentLoadException(
+                                                "Model mesh '" + meshName + "' morph target " +
+                                                std::to_string(t) +
+                                                " has tangent deltas but no vertices: " + path);
+                                        }
+                                        auto& tangents = morph->TangentDeltas[
+                                            static_cast<std::size_t>(t)];
+                                        tangents.reserve(static_cast<std::size_t>(vertexCount));
+                                        for (int v = 0; v < vertexCount; ++v)
+                                        {
+                                            const float x = morphReader.Read<float>();
+                                            const float y = morphReader.Read<float>();
+                                            const float z = morphReader.Read<float>();
+                                            tangents.emplace_back(x, y, z);
+                                        }
+                                    }
+                                    if (morphReader.Remaining() != 0u)
+                                    {
+                                        throw ContentLoadException(
+                                            "Model mesh '" + meshName + "' morph sidecar has " +
+                                            std::to_string(morphReader.Remaining()) +
+                                            " unexpected trailing byte(s): " + path);
+                                    }
                                 }
 
                                 morph->Weights = !morphWeightsField.empty()

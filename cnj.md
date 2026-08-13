@@ -509,12 +509,19 @@ pre-campaign behaviour for that asset; the *file* is still version 2 whenever it
 | `"lights"` | no imported lights | `KHR_lights_punctual`, at most three directional. |
 | `"animations"` | none | each entry names a standalone `AnimationClip` `.cnj`. |
 
-### One thing the `.cnj` path still loses
+### Morph-sidecar compatibility
 
-**Morph tangent deltas.** They are imported and correct in memory on the runtime path, and
-`BuildMorphBytes` writes only position and normal deltas — so a model converted offline morphs its
-positions and normals and keeps its rest-pose tangents. That is `GLTF-289`'s open residue, and it is
-recorded here rather than left for a consumer to discover from a subtly wrong normal map.
+The `_morph.bin` prefix remains the CNB-82 layout: target count, then each target's position deltas
+and optional normal deltas. `GLTF-289` adds tangent xyz deltas in an optional trailer beginning with
+the little-endian magic `MTAN`, a version (`1`) and the repeated target count. An older reader stops
+after the prefix and therefore retains its former behaviour; a current reader accepts both the old
+no-trailer file and the new one. Tangent handedness is not duplicated in the trailer: `TANGENT.w`
+already lives in the base vertex bytes and morph blending deliberately never changes it.
+
+A target that omits `POSITION` is legal glTF. The legacy prefix nevertheless uses its position
+count to size every following semantic, so the writer emits a zero-filled position stream for that
+target before its authored normal/tangent deltas. This keeps the old prefix structurally readable
+without changing the target's blended result.
 
 ## Custom loaders (game-registered, selected by `.cnj` `"type"`)
 

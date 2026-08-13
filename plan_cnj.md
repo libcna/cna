@@ -17,6 +17,7 @@
 > | Phase 13A `✅ CLOSED` — "PBR material support" | The effect-selection rule asked which texture **maps** were present, so a material with every PBR factor and no map could never select `PbrEffect`: a gold, half-transparent, double-sided material imported as opaque white `BasicEffect`, with not one property surviving (D7). | `GLTF-215`–`GLTF-217`, `GLTF-219`, `GLTF-221`, `GLTF-228`–`GLTF-231` |
 > | `CNB-55` (6) — "`COLOR_0` on a skinned primitive is silently dropped" | Still true, and no longer silent: the loss is reported by name, along with the `NORMAL` the same layout also cannot carry. | `GLTF-241`, `GLTF-091` |
 > | Rigid (non-joint) animation, unmentioned by any phase | Dropped entirely: an unskinned model's clips had nowhere to live (D6). | `GLTF-293`, `GLTF-294` |
+> | `CNB-82`/`CNB-83` — morph sidecar round-trip | Position and normal deltas round-tripped only when `POSITION` existed. Tangent deltas were never written, a legal NORMAL-only target wrote its vectors after a declared zero vertex count so the reader consumed none of them, and the writer ignored per-instance `node.weights` in favour of `mesh.weights`. | `GLTF-289` — zero-filled compatibility prefix, a versioned `MTAN` tangent trailer, and node-aware default weights, swept over all 13 `morph-*` fixtures |
 >
 > **No `✅` below should be read as "this is complete today."** For the current state of glTF import
 > use `plan_gltf.md` (the campaign record), `docs/gltf-limitations.md` (what is still lost and where

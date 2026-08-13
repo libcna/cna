@@ -2081,7 +2081,7 @@
       "features": [
         "POSITION, NORMAL and TANGENT deltas",
         "tangent handedness preserved",
-        "GLTF-289 residue"
+        "direct/offline morph sidecar parity"
       ],
       "auditFixture": null
     },
@@ -4398,8 +4398,8 @@
     },
     {
       "path": "morph-position-normal-tangent.expected.json",
-      "bytes": 10281,
-      "sha256": "3e338cbea5c1e686b2c84a96b44a57abf1b65d6edaaf420dd1d7458674962c74"
+      "bytes": 10130,
+      "sha256": "c09b34e4f32c223fb4ba05c3e7e3e8cc8f5ad7b31eeadd79ee96ecdecdee62dd"
     },
     {
       "path": "morph-position-normal-tangent.glb",

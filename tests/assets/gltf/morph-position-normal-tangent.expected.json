@@ -1,6 +1,6 @@
 {
   "id": "morph-position-normal-tangent",
-  "description": "A target carrying POSITION, NORMAL and TANGENT deltas. This is the fixture GLTF-289's open residue is measured on: tangent deltas import correctly on the runtime path and are NOT written to the .cnj sidecar, so the offline path morphs positions and normals and keeps its rest-pose tangents. The base tangent's handedness is -1, which blending must never touch.",
+  "description": "A target carrying POSITION, NORMAL and TANGENT deltas. The runtime path and the offline .cnj sidecar preserve all three; the base tangent's handedness is -1, which blending must never touch.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -29,7 +29,7 @@
     "features": [
       "POSITION, NORMAL and TANGENT deltas",
       "tangent handedness preserved",
-      "GLTF-289 residue"
+      "direct/offline morph sidecar parity"
     ],
     "auditFixture": null
   },

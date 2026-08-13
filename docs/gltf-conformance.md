@@ -889,7 +889,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `skin-ushort-joint-indices` | skinning | L1, L2, L3, L4, L5 | UNSIGNED_SHORT JOINTS_0; joint index component conversion |
 | `morph-position-only` | animation | L1, L2, L3 | one morph target; POSITION deltas only |
 | `morph-position-normal` | animation | L1, L2, L3 | POSITION and NORMAL deltas; normal renormalisation |
-| `morph-position-normal-tangent` | animation | L1, L2, L3 | POSITION, NORMAL and TANGENT deltas; tangent handedness preserved; GLTF-289 residue |
+| `morph-position-normal-tangent` | animation | L1, L2, L3 | POSITION, NORMAL and TANGENT deltas; tangent handedness preserved; direct/offline sidecar parity |
 | `morph-two-targets` | animation | L1, L2, L3 | two morph targets; weighted accumulation |
 | `morph-eight-targets` | animation | L1, L2, L3 | eight morph targets; interleaved zero weights |
 | `morph-zero-weights` | animation | L1, L2, L3 | zero weight; rest pose is exact |

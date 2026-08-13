@@ -1088,7 +1088,7 @@ def morph_position_normal() -> Fixture:
 
 
 def morph_position_normal_tangent() -> Fixture:
-    """All three delta semantics, including the one the `.cnj` sidecar drops (`GLTF-289`)."""
+    """All three delta semantics, including `.cnj` tangent parity (`GLTF-289`)."""
     return _morph_fixture(
         name="morph-position-normal-tangent",
         targets=[{"POSITION": [(0.0, 0.0, 1.0)] * 3,
@@ -1096,13 +1096,11 @@ def morph_position_normal_tangent() -> Fixture:
                   "TANGENT": [(0.0, 1.0, 0.0)] * 3}],
         mesh_weights=[1.0],
         with_tangents=True,
-        description="A target carrying POSITION, NORMAL and TANGENT deltas. This is the fixture "
-                    "GLTF-289's open residue is measured on: tangent deltas import correctly on "
-                    "the runtime path and are NOT written to the .cnj sidecar, so the offline path "
-                    "morphs positions and normals and keeps its rest-pose tangents. The base "
-                    "tangent's handedness is -1, which blending must never touch.",
+        description="A target carrying POSITION, NORMAL and TANGENT deltas. The runtime path and "
+                    "the offline .cnj sidecar preserve all three; the base tangent's handedness "
+                    "is -1, which blending must never touch.",
         features=["POSITION, NORMAL and TANGENT deltas", "tangent handedness preserved",
-                  "GLTF-289 residue"],
+                  "direct/offline morph sidecar parity"],
         docstring="")
 
 

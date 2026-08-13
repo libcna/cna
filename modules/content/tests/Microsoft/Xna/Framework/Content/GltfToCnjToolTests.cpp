@@ -48,7 +48,9 @@
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
 
+#include "CNA/Internal/CnjMorphSidecarEXT.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -2303,6 +2305,198 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
     const auto midWeights = EvaluateMorphWeightsEXT(morph->WeightTrack, 0.5);
     ASSERT_EQ(midWeights.size(), 1u);
     EXPECT_NEAR(midWeights[0], 0.5f, 1e-5f);
+}
+
+// GLTF-289: the original CNB-82 sidecar carried only position and normal deltas. Tangent xyz now
+// lives in an optional trailer after that byte-compatible prefix, and a target with no POSITION
+// is encoded with a zero-filled prefix stream so its NORMAL bytes remain structurally readable.
+TEST(GltfToCnjToolTest, TangentAndNormalOnlyMorphTargetsRoundTripThroughTheOfflinePath)
+{
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    const std::filesystem::path tangentInput =
+        corpus / "morph-position-normal-tangent.gltf";
+    const std::filesystem::path normalOnlyInput = corpus / "morph-normal-only-target.gltf";
+    if (!std::filesystem::exists(tangentInput) || !std::filesystem::exists(normalOnlyInput))
+        GTEST_SKIP() << "the morph fixture corpus is not present";
+
+    ScratchDir contentRoot;
+    std::vector<std::string> fixtureIds;
+    for (const auto& entry : std::filesystem::directory_iterator(corpus))
+    {
+        const std::filesystem::path& path = entry.path();
+        const std::string id = path.stem().string();
+        if (path.extension() == ".gltf" && id.rfind("morph-", 0) == 0)
+        {
+            fixtureIds.push_back(id);
+        }
+    }
+    std::sort(fixtureIds.begin(), fixtureIds.end());
+    ASSERT_GE(fixtureIds.size(), 13u) << "the morph fixture family has shrunk";
+    for (const std::string& id : fixtureIds)
+    {
+        ASSERT_EQ(0, RunGltfToCnjTool(
+                         (corpus / (id + ".gltf")).string(),
+                         contentRoot.path().string(), id)) << id;
+    }
+
+    const auto readBytes = [](const std::filesystem::path& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        return std::vector<std::uint8_t>(
+            std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    };
+    const std::filesystem::path tangentSidecar =
+        contentRoot.path() / "morph-position-normal-tangent_mesh0_morph.bin";
+    std::vector<std::uint8_t> tangentBytes = readBytes(tangentSidecar);
+
+    // One target × three vertices: the old prefix is 84 bytes. Pin the magic immediately after
+    // it, rather than merely proving that the new reader and writer share the same private guess.
+    constexpr std::size_t legacyPrefixSize =
+        sizeof(std::int32_t) * 3u + sizeof(float) * 3u * 3u * 2u;
+    ASSERT_GE(tangentBytes.size(), legacyPrefixSize + sizeof(std::int32_t) * 3u);
+    std::int32_t trailerMagic = 0;
+    std::memcpy(&trailerMagic, tangentBytes.data() + legacyPrefixSize, sizeof(trailerMagic));
+    EXPECT_EQ(CNA::Internal::CnjMorphTangentTrailerMagicEXT, trailerMagic);
+
+    const std::vector<std::uint8_t> normalOnlyBytes = readBytes(
+        contentRoot.path() / "morph-normal-only-target_mesh0_morph.bin");
+    EXPECT_EQ(legacyPrefixSize, normalOnlyBytes.size())
+        << "a NORMAL-only target was not represented by the backwards-compatible prefix";
+
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ContentManager directContent(nullptr, corpus.string());
+    directContent.setGraphicsDevice(gd);
+    ContentManager offlineContent(nullptr, contentRoot.path().string());
+    offlineContent.setGraphicsDevice(gd);
+
+    Model directTangent = directContent.Load<Model>("morph-position-normal-tangent");
+    Model offlineTangent = offlineContent.Load<Model>("morph-position-normal-tangent");
+    auto* directTangentData = dynamic_cast<MorphTargetDataEXT*>(
+        directTangent.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    auto* offlineTangentData = dynamic_cast<MorphTargetDataEXT*>(
+        offlineTangent.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    ASSERT_NE(nullptr, directTangentData);
+    ASSERT_NE(nullptr, offlineTangentData);
+    ASSERT_EQ(1u, offlineTangentData->TangentDeltas.size());
+    ASSERT_EQ(3u, offlineTangentData->TangentDeltas[0].size());
+    for (std::size_t vertex = 0; vertex < 3u; ++vertex)
+    {
+        EXPECT_EQ(directTangentData->TangentDeltas[0][vertex],
+                  offlineTangentData->TangentDeltas[0][vertex]);
+    }
+    EXPECT_EQ(BlendMorphTargetsEXT(*directTangentData, directTangentData->Weights),
+              BlendMorphTargetsEXT(*offlineTangentData, offlineTangentData->Weights));
+
+    Model directNormalOnly = directContent.Load<Model>("morph-normal-only-target");
+    Model offlineNormalOnly = offlineContent.Load<Model>("morph-normal-only-target");
+    auto* directNormalData = dynamic_cast<MorphTargetDataEXT*>(
+        directNormalOnly.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    auto* offlineNormalData = dynamic_cast<MorphTargetDataEXT*>(
+        offlineNormalOnly.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    ASSERT_NE(nullptr, directNormalData);
+    ASSERT_NE(nullptr, offlineNormalData);
+    ASSERT_EQ(1u, offlineNormalData->NormalDeltas.size());
+    ASSERT_EQ(3u, offlineNormalData->NormalDeltas[0].size());
+    EXPECT_EQ(BlendMorphTargetsEXT(*directNormalData, directNormalData->Weights),
+              BlendMorphTargetsEXT(*offlineNormalData, offlineNormalData->Weights));
+
+    // A sidecar written before GLTF-289 ends exactly at the old prefix. Reuse the generated
+    // descriptor with that truncated copy to prove the compatibility branch, not merely the
+    // absence of a trailer on some unrelated POSITION-only fixture.
+    std::ifstream currentCnjFile(
+        contentRoot.path() / "morph-position-normal-tangent.cnj");
+    std::string legacyCnj((std::istreambuf_iterator<char>(currentCnjFile)),
+                          std::istreambuf_iterator<char>());
+    const std::string currentSidecarName =
+        "morph-position-normal-tangent_mesh0_morph.bin";
+    const std::string legacySidecarName = "legacy_morph.bin";
+    ASSERT_NE(std::string::npos, legacyCnj.find(currentSidecarName));
+    legacyCnj.replace(legacyCnj.find(currentSidecarName), currentSidecarName.size(),
+                      legacySidecarName);
+    WriteFile(contentRoot.path() / "legacy.cnj", legacyCnj);
+    WriteFile(contentRoot.path() / legacySidecarName, std::string(
+        reinterpret_cast<const char*>(tangentBytes.data()), legacyPrefixSize));
+    ContentManager legacyContent(nullptr, contentRoot.path().string());
+    legacyContent.setGraphicsDevice(gd);
+    Model legacy = legacyContent.Load<Model>("legacy");
+    auto* legacyMorph = dynamic_cast<MorphTargetDataEXT*>(
+        legacy.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getTagProperty());
+    ASSERT_NE(nullptr, legacyMorph);
+    ASSERT_EQ(1u, legacyMorph->TangentDeltas.size());
+    EXPECT_TRUE(legacyMorph->TangentDeltas[0].empty());
+
+    // Sweep every morph fixture, in both directions: every direct part must have one offline
+    // counterpart and every counterpart must reproduce the exact default blended vertex bytes.
+    // This catches per-shape sidecar bugs (several targets, absent semantics, explicit-zero node
+    // weights) that a single happy-path target cannot exercise.
+    std::size_t comparedParts = 0;
+    for (const std::string& id : fixtureIds)
+    {
+        SCOPED_TRACE(id);
+        Model direct = directContent.Load<Model>(id);
+        Model offline = offlineContent.Load<Model>(id);
+        std::vector<MorphTargetDataEXT*> directMorphs;
+        std::vector<MorphTargetDataEXT*> offlineMorphs;
+        const auto collectMorphs = [](Model& model, std::vector<MorphTargetDataEXT*>& result)
+        {
+            for (int meshIndex = 0;
+                 meshIndex < model.getMeshesProperty().getCountProperty(); ++meshIndex)
+            {
+                const auto& parts =
+                    model.getMeshesProperty()[meshIndex]->getMeshPartsProperty();
+                for (int partIndex = 0; partIndex < parts.getCountProperty(); ++partIndex)
+                {
+                    if (auto* morph = dynamic_cast<MorphTargetDataEXT*>(
+                            parts[partIndex]->getTagProperty()))
+                    {
+                        result.push_back(morph);
+                    }
+                }
+            }
+        };
+        collectMorphs(direct, directMorphs);
+        collectMorphs(offline, offlineMorphs);
+        ASSERT_EQ(directMorphs.size(), offlineMorphs.size());
+        ASSERT_FALSE(directMorphs.empty());
+        for (std::size_t part = 0; part < directMorphs.size(); ++part)
+        {
+            SCOPED_TRACE("part " + std::to_string(part));
+            const MorphTargetDataEXT& expected = *directMorphs[part];
+            const MorphTargetDataEXT& actual = *offlineMorphs[part];
+            EXPECT_EQ(expected.Stride, actual.Stride);
+            EXPECT_EQ(expected.BaseVertexBytes, actual.BaseVertexBytes);
+            EXPECT_EQ(expected.Weights, actual.Weights);
+            EXPECT_EQ(expected.NormalDeltas, actual.NormalDeltas);
+            EXPECT_EQ(expected.TangentDeltas, actual.TangentDeltas);
+            EXPECT_EQ(BlendMorphTargetsEXT(expected, expected.Weights),
+                      BlendMorphTargetsEXT(actual, actual.Weights));
+            ++comparedParts;
+        }
+    }
+    EXPECT_GE(comparedParts, fixtureIds.size());
+
+    // A present trailer is versioned state, not ignorable garbage. Corrupt only the version and
+    // require the reader to name it instead of consuming the following target count as another
+    // interpretation of the same bytes.
+    const std::int32_t unsupportedVersion = 99;
+    std::memcpy(tangentBytes.data() + legacyPrefixSize + sizeof(std::int32_t),
+                &unsupportedVersion, sizeof(unsupportedVersion));
+    WriteFile(tangentSidecar, std::string(
+        reinterpret_cast<const char*>(tangentBytes.data()), tangentBytes.size()));
+    ContentManager malformedContent(nullptr, contentRoot.path().string());
+    malformedContent.setGraphicsDevice(gd);
+    try
+    {
+        (void)malformedContent.Load<Model>("morph-position-normal-tangent");
+        FAIL() << "a morph tangent trailer with an unknown version loaded successfully";
+    }
+    catch (const ContentLoadException& ex)
+    {
+        EXPECT_NE(std::string::npos, std::string(ex.what()).find("unsupported version 99"));
+    }
 }
 
 // CUBICSPLINE interpolation for morph-weight animation tracks: the offline CLI/.cnj round-trip

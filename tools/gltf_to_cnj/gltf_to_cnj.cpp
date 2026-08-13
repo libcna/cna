@@ -23,7 +23,7 @@
 // the .cnj path, locked by plan_gltf.md GLTF-236/GLTF-237. Current representation limits are
 // reported by GltfImportCore rather than copied into this CLI-specific file.
 //
-// plan_cnj.md CNB-82/83 (Phase 14C): morph target position/normal deltas (GltfImportCore::
+// plan_cnj.md CNB-82/83 (Phase 14C): morph target position/normal/tangent deltas (GltfImportCore::
 // ExtractMesh always extracts them), the default blend weights, and an optional weight animation
 // track are serialized to a per-primitive binary sidecar (BuildMorphBytes) plus "morphTargets"/
 // "morphWeights"/"morphWeightTrack" mesh-entry JSON fields, read back by ModelTypeReader::Read()'s
@@ -32,6 +32,7 @@
 // Phase 13B); now fully serialized through both the offline CLI/.cnj path and the runtime glTF path.
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "CNA/Internal/CnjMorphSidecarEXT.hpp"
 
 #include <cctype>
 #include <cstdint>
@@ -90,30 +91,86 @@ namespace
     //     vertexCount * float32[3]   (position deltas)
     //     int32 hasNormalDeltas (0 or 1)
     //     if hasNormalDeltas: vertexCount * float32[3]   (normal deltas)
+    //   optional GLTF-289 trailer, present only when at least one target has tangent deltas:
+    //     int32 magic = 'MTAN', int32 version = 1, int32 targetCount
+    //     repeat targetCount times:
+    //       int32 hasTangentDeltas (0 or 1)
+    //       if hasTangentDeltas: that target's vertexCount * float32[3] (tangent xyz deltas)
+    //
+    // Keeping the original position/normal prefix unchanged means an older reader loads a new
+    // sidecar exactly as it did before and ignores the trailer. Targets without POSITION use a
+    // zero-filled position stream in that prefix: the old format tied every following semantic's
+    // length to `vertexCount`, so writing zero there made a normal-only target structurally
+    // unreadable even though glTF permits it.
     // Mirrors BinReaderEXT's own byte order (sequential little-endian floats/int32s, native
     // memcpy) already used by the .skeleton.bin/.clip.bin formats in ContentManager.cpp.
     std::vector<std::uint8_t> BuildMorphBytes(const MeshOut& meshOut)
     {
         std::vector<std::uint8_t> out;
         const auto targetCount = meshOut.morphPositionDeltas.size();
+        const std::size_t meshVertexCount = meshOut.stride > 0
+            ? meshOut.vertexBytes.size() / static_cast<std::size_t>(meshOut.stride) : 0u;
+        bool hasAnyTangents = false;
         AppendInt32(out, static_cast<std::int32_t>(targetCount));
         for (std::size_t t = 0; t < targetCount; ++t)
         {
             const auto& positions = meshOut.morphPositionDeltas[t];
-            AppendInt32(out, static_cast<std::int32_t>(positions.size()));
-            for (const Vector3& p : positions)
+            const bool hasNormals = t < meshOut.morphNormalDeltas.size()
+                                     && !meshOut.morphNormalDeltas[t].empty();
+            const bool hasTangents = t < meshOut.morphTangentDeltas.size()
+                                      && !meshOut.morphTangentDeltas[t].empty();
+            const auto validSemanticSize = [meshVertexCount](std::size_t size)
             {
+                return size == 0u || size == meshVertexCount;
+            };
+            if (!validSemanticSize(positions.size()) ||
+                (hasNormals && !validSemanticSize(meshOut.morphNormalDeltas[t].size())) ||
+                (hasTangents && !validSemanticSize(meshOut.morphTangentDeltas[t].size())))
+            {
+                throw std::runtime_error(
+                    "Morph target " + std::to_string(t) +
+                    " has a delta count that differs from the mesh vertex count " +
+                    std::to_string(meshVertexCount) + ".");
+            }
+
+            const std::size_t vertexCount =
+                (!positions.empty() || hasNormals || hasTangents) ? meshVertexCount : 0u;
+            AppendInt32(out, static_cast<std::int32_t>(vertexCount));
+            for (std::size_t v = 0; v < vertexCount; ++v)
+            {
+                const Vector3 p = positions.empty() ? Vector3::Zero : positions[v];
                 AppendFloat(out, p.X); AppendFloat(out, p.Y); AppendFloat(out, p.Z);
             }
 
-            const bool hasNormals = t < meshOut.morphNormalDeltas.size()
-                                     && !meshOut.morphNormalDeltas[t].empty();
             AppendInt32(out, hasNormals ? 1 : 0);
             if (hasNormals)
             {
                 for (const Vector3& n : meshOut.morphNormalDeltas[t])
                 {
                     AppendFloat(out, n.X); AppendFloat(out, n.Y); AppendFloat(out, n.Z);
+                }
+            }
+            hasAnyTangents = hasAnyTangents || hasTangents;
+        }
+
+        if (hasAnyTangents)
+        {
+            AppendInt32(out, CNA::Internal::CnjMorphTangentTrailerMagicEXT);
+            AppendInt32(out, CNA::Internal::CnjMorphTangentTrailerVersionEXT);
+            AppendInt32(out, static_cast<std::int32_t>(targetCount));
+            for (std::size_t t = 0; t < targetCount; ++t)
+            {
+                const bool hasTangents = t < meshOut.morphTangentDeltas.size()
+                                          && !meshOut.morphTangentDeltas[t].empty();
+                AppendInt32(out, hasTangents ? 1 : 0);
+                if (hasTangents)
+                {
+                    for (const Vector3& tangent : meshOut.morphTangentDeltas[t])
+                    {
+                        AppendFloat(out, tangent.X);
+                        AppendFloat(out, tangent.Y);
+                        AppendFloat(out, tangent.Z);
+                    }
                 }
             }
         }
@@ -279,7 +336,10 @@ namespace
                     WriteBinaryFile(outputDir / morphFile, BuildMorphBytes(meshOut));
 
                     const std::size_t targetCount = meshOut.morphPositionDeltas.size();
-                    morphWeights = GetMeshDefaultWeights(mesh, targetCount);
+                    // glTF gives an instancing node's `weights` precedence over `mesh.weights`.
+                    // This converter emits one entry per placement, so using the mesh alone made
+                    // two instances with distinct default poses round-trip as the same pose.
+                    morphWeights = GetMeshDefaultWeights(mesh, targetCount, instance.node);
                     morphWeightTrack = ExtractMorphWeightTrack(data, mesh, targetCount);
                 }
 
@@ -589,7 +649,7 @@ namespace
                         const std::size_t targetCount =
                             variantMesh.morphPositionDeltas.size();
                         variantEntry.morphWeights =
-                            GetMeshDefaultWeights(mesh, targetCount);
+                            GetMeshDefaultWeights(mesh, targetCount, instance.node);
                         variantEntry.morphWeightTrack =
                             ExtractMorphWeightTrack(data, mesh, targetCount);
                     }
