@@ -182,7 +182,7 @@ RULES: list[tuple[str, str, str]] = [
 
     # GL / Vulkan / Metal interop, before window flags (SDL_WINDOW_OPENGL is creation intent).
     (r"^SDL_GL_", "gl-vulkan-interop", "GL context"),
-    (r"^SDL_(GLContext|GLattr|GLprofile)", "gl-vulkan-interop", "GL context type"),
+    (r"^SDL_(GLContext|GL[Aa]ttr|GLprofile)", "gl-vulkan-interop", "GL context type"),
     (r"^SDL_Vulkan_", "gl-vulkan-interop", "Vulkan surface/extensions"),
     (r"^SDL_Metal_", "gl-vulkan-interop", "Metal view"),
     (r"^SDL_MetalView$", "gl-vulkan-interop", "Metal view handle"),

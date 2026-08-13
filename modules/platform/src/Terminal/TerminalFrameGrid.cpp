@@ -2,9 +2,11 @@
 
 #include "TerminalFrameGrid.hpp"
 
-#include "CNA/Platform/PlatformException.hpp"
+#include "../Common/SurfaceFrameValidation.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <limits>
 
 namespace CNA::Platform::Terminal {
 
@@ -17,19 +19,6 @@ namespace CNA::Platform::Terminal {
             return (red * 299 + green * 587 + blue * 114) / 1000;
         }
 
-        void Validate(const SurfaceFrame& frame)
-        {
-            if (frame.pixels == nullptr)
-            {
-                throw PlatformException("TerminalPresenter::Present", "the frame has no pixels");
-            }
-            if (frame.width <= 0 || frame.height <= 0)
-            {
-                throw PlatformException("TerminalPresenter::Present",
-                                        "the frame has a non-positive size");
-            }
-        }
-
     } // namespace
 
     const std::string& GlyphRamp()
@@ -40,11 +29,19 @@ namespace CNA::Platform::Terminal {
 
     void TerminalGrid::Reset(const int newColumns, const int newRows)
     {
+        const std::size_t safeColumns = static_cast<std::size_t>(std::max(0, newColumns));
+        const std::size_t safeRows = static_cast<std::size_t>(std::max(0, newRows));
+        if (safeColumns != 0 &&
+            safeRows > static_cast<std::size_t>(std::numeric_limits<int>::max()) / safeColumns)
+        {
+            throw PlatformException("TerminalGrid::Reset", "the cell count exceeds INT_MAX");
+        }
+
+        // Allocate first so a failed resize preserves the old, internally consistent grid.
+        std::vector<TerminalCell> replacement(safeColumns * safeRows, TerminalCell{});
+        cells.swap(replacement);
         columns = newColumns;
         rows = newRows;
-        cells.assign(static_cast<std::size_t>(std::max(0, newColumns)) *
-                         static_cast<std::size_t>(std::max(0, newRows)),
-                     TerminalCell{});
     }
 
     void QuantizeInto(const SurfaceFrame& frame, const int sourceX, const int sourceY,
@@ -52,14 +49,19 @@ namespace CNA::Platform::Terminal {
                       const int destinationColumn, const int destinationRow,
                       const int destinationColumns, const int destinationRows)
     {
-        Validate(frame);
+        const int stride = Common::ValidateSurfaceFrame(frame, "TerminalPresenter::Present");
         if (sourceWidth <= 0 || sourceHeight <= 0 || destinationColumns <= 0 || destinationRows <= 0)
         {
             throw PlatformException("TerminalPresenter::Present",
                                     "a degenerate source or destination rectangle");
         }
+        if (sourceX < 0 || sourceY < 0 || sourceX > frame.width - sourceWidth ||
+            sourceY > frame.height - sourceHeight)
+        {
+            throw PlatformException("TerminalPresenter::Present",
+                                    "the source rectangle lies outside the frame");
+        }
 
-        const int stride = frame.strideBytes > 0 ? frame.strideBytes : frame.width * 4;
         const std::string& ramp = GlyphRamp();
         const int lastGlyph = static_cast<int>(ramp.size()) - 1;
 
@@ -68,16 +70,20 @@ namespace CNA::Platform::Terminal {
             // Half-open source spans computed from the cell's edges rather than from a rounded
             // step, so every source pixel lands in exactly one cell and none is dropped when the
             // sizes do not divide evenly.
-            const int top = sourceY + (row * sourceHeight) / destinationRows;
-            const int bottom = sourceY + ((row + 1) * sourceHeight) / destinationRows;
+            const int top = sourceY + static_cast<int>(
+                (static_cast<std::int64_t>(row) * sourceHeight) / destinationRows);
+            const int bottom = sourceY + static_cast<int>(
+                (static_cast<std::int64_t>(row + 1) * sourceHeight) / destinationRows);
 
             for (int column = 0; column < destinationColumns; ++column)
             {
-                const int left = sourceX + (column * sourceWidth) / destinationColumns;
-                const int right = sourceX + ((column + 1) * sourceWidth) / destinationColumns;
+                const int left = sourceX + static_cast<int>(
+                    (static_cast<std::int64_t>(column) * sourceWidth) / destinationColumns);
+                const int right = sourceX + static_cast<int>(
+                    (static_cast<std::int64_t>(column + 1) * sourceWidth) / destinationColumns);
 
-                long long sumRed = 0, sumGreen = 0, sumBlue = 0;
-                long long counted = 0;
+                std::uint64_t sumRed = 0, sumGreen = 0, sumBlue = 0;
+                std::uint64_t counted = 0;
 
                 for (int y = top; y < std::max(bottom, top + 1) && y < frame.height; ++y)
                 {
@@ -126,7 +132,7 @@ namespace CNA::Platform::Terminal {
 
     TerminalGrid QuantizeToGrid(const SurfaceFrame& frame, const int columns, const int rows)
     {
-        Validate(frame);
+        (void)Common::ValidateSurfaceFrame(frame, "TerminalPresenter::Present");
         if (columns <= 0 || rows <= 0)
         {
             throw PlatformException("TerminalPresenter::Present", "a non-positive grid size");

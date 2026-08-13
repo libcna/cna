@@ -15,20 +15,16 @@
 
 ## 0. Current checkpoint (supersedes stale counts below)
 
-Phase 8 is complete through PLAT-119. PLAT-118 runs the same 26-scenario event transcript through
-every compiled implementation (**43/43** focused tests across the three build profiles). PLAT-119
-ran the HEADLESS-selected binary with both display environment variables absent: all non-network
-tests passed; the only 63 full-run failures were the five ENet/UDP suites blocked from creating
-sockets by the execution sandbox. The display-free rerun excluding those suites was **6356 passed /
-53 skipped / 0 failed**, and platform conformance was **52/52**.
+All 155 ledger decisions have a terminal status: **154 implemented and PLAT-45 deliberately cut**.
+A post-completion source and behavioural audit on 2026-08-13 corrected capability refusals,
+fullscreen semantics, surface-frame validation, SDL graphics global-state handling and several
+exception-safety gaps. The strict production ratchet is now **0 files / 0 references** outside the
+four renderer allowlist entries.
 
-PLAT-29 is also closed: SDL subsystem lifecycle serialization is process-wide across platform
-instances, its two-instance regression passes, and the pre-`SDL_Quit()` devices shutdown harness
-has been reverified. Phase 9 documentation now starts at `docs/platform-abstraction.md`.
-
-The measured ratchet is **48 files / 657 references** outside the allowlist. Any larger counts or
-"continue at" directions later in this historical continuity file predate this checkpoint; use
-`plan_platform.md` statuses and `git log --oneline` for current task state.
+The final serial non-network runs are SDL3 **6,553 passed / 55 skipped**, HEADLESS **6,367 / 49**
+and TERMINAL **6,349 / 56**, all with zero failures. Both registered platform CTest entries pass in
+all three profiles. The five ENet/UDP suites remain excluded because this execution sandbox denies
+their socket operations; see the completion record in `plan_platform.md`.
 
 ---
 
@@ -69,8 +65,9 @@ caching*. Cap parallelism at `-j4`.
 ### Commands
 
 ```bash
-cmake --build cmake-build-debug    --target CnaTests -j4 && ./cmake-build-debug/CnaTests
+cmake --build cmake-build-debug    --target CnaTests -j4 && ./cmake-build-debug/Debug/bin/CnaTests
 cmake --build cmake-build-headless --target CnaTests -j4 && ./cmake-build-headless/CnaTests
+cmake --build cmake-build-terminal --target CnaTests -j4 && ./cmake-build-terminal/CnaTests
 cmake -S . -B cmake-build-debug -DCNA_DEVICES=ON
 cmake --build cmake-build-debug --target CnaTests -j4 && ./cmake-build-debug/CnaTests
 cmake -S . -B cmake-build-debug -DCNA_DEVICES=OFF
@@ -94,15 +91,14 @@ real video or their registered, deliberately scoped dummy-driver suites.
 
 | Variant | Result |
 |---|---|
-| `cmake-build-debug` | **5812 passed, 0 failed** |
-| `cmake-build-headless` | **5655 passed, 0 failed** |
+| `cmake-build-debug` | **6,553 passed / 55 skipped / 0 failed** (five network suites excluded) |
+| `cmake-build-headless` | **6,367 passed / 49 skipped / 0 failed** (five network suites excluded) |
 | historical dedicated devices run | **6471 passed, 0 failed**; the current workflow uses the temporary debug-cache toggle above |
-| `cmake-build-terminal` | **6315 passed, 0 failed** |
+| `cmake-build-terminal` | **6,349 passed / 56 skipped / 0 failed** (five network suites excluded) |
 
-PLAT-141's final conformance run mechanically lists **25 cases per implementation** (18 general +
-7 window). The default build runs all three implementations: **74 of 75 passed**, with the only
-skip being the intentionally inapplicable unsupported-capability case for SDL3. The HEADLESS- and
-TERMINAL-selected builds each run Headless + Terminal and pass **50 of 50**. The registered
+PLAT-141's final conformance run mechanically lists **29 cases per implementation** (19 general +
+10 window). The default build runs all three implementations (87 instances), while the HEADLESS-
+and TERMINAL-selected builds each run Headless + Terminal (58 instances). The registered
 `CnaPlatformWindowTests` + `CnaPlatformTests` also pass; in a restricted sandbox set
 `XDG_DATA_HOME` to a writable `/tmp` path so the preferences-path write test measures the service
 rather than the sandbox's read-only home directory.
@@ -125,8 +121,8 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **161 files / 2206 references** of direct SDL coupling outside the PLAT-3 allowlist, down
-from the 253 / 3641 baseline. Contract: 27 headers, 531 documented declarations, all SDL-free.
+Ratchet: **0 files / 0 references** of direct SDL coupling outside the PLAT-3 allowlist, down from
+the 253 / 3641 baseline. Contract: **28 headers, 623 documented declarations**, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
 `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` failure was fixed —

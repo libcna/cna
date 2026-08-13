@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -186,6 +187,29 @@ TEST(TerminalFrameGridTest, AMalformedFrameIsRefusedRatherThanRead)
     const Frame frame(4, 4, 0, 0, 0);
     EXPECT_THROW((void)QuantizeToGrid(frame.View(), 0, 4), PlatformException);
     EXPECT_THROW((void)QuantizeToGrid(frame.View(), 4, -1), PlatformException);
+
+    SurfaceFrame negativeStride = frame.View();
+    negativeStride.strideBytes = -4;
+    EXPECT_THROW((void)QuantizeToGrid(negativeStride, 4, 4), PlatformException);
+
+    SurfaceFrame shortStride = frame.View();
+    shortStride.strideBytes = shortStride.width * 4 - 1;
+    EXPECT_THROW((void)QuantizeToGrid(shortStride, 4, 4), PlatformException);
+
+    SurfaceFrame overflowingRow = frame.View();
+    overflowingRow.width = std::numeric_limits<int>::max();
+    EXPECT_THROW((void)QuantizeToGrid(overflowingRow, 4, 4), PlatformException);
+}
+
+TEST(TerminalFrameGridTest, AnUnrepresentableTerminalGridIsRefusedBeforeAllocation)
+{
+    TerminalGrid grid;
+    grid.Reset(2, 2);
+
+    EXPECT_THROW(grid.Reset(std::numeric_limits<int>::max(), 2), PlatformException);
+    EXPECT_EQ(grid.columns, 2);
+    EXPECT_EQ(grid.rows, 2);
+    EXPECT_EQ(grid.cells.size(), 4u);
 }
 
 // --- the colour ladder -----------------------------------------------------------------------------

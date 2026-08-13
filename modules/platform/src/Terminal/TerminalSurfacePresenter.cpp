@@ -2,7 +2,7 @@
 
 #include "TerminalSurfacePresenter.hpp"
 
-#include "CNA/Platform/PlatformException.hpp"
+#include "../Common/SurfaceFrameValidation.hpp"
 
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -103,15 +103,7 @@ namespace CNA::Platform::Terminal {
 
     void TerminalSurfacePresenter::Present(const SurfaceFrame& frame)
     {
-        if (frame.pixels == nullptr)
-        {
-            throw PlatformException("TerminalPresenter::Present", "the frame has no pixels");
-        }
-        if (frame.width <= 0 || frame.height <= 0)
-        {
-            throw PlatformException("TerminalPresenter::Present",
-                                    "the frame has a non-positive size");
-        }
+        (void)Common::ValidateSurfaceFrame(frame, "TerminalPresenter::Present");
 
         if (sessionGeneration_ != sessions_->GetGeneration())
         {

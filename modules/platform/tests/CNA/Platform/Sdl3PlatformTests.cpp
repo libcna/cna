@@ -177,6 +177,14 @@ TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)
     EXPECT_EQ(platform_->GetVulkanSurface() != nullptr, capabilities.vulkanSurface);
 }
 
+TEST_F(Sdl3PlatformTest, VulkanCapabilityProbePreservesTheHostsVideoSubsystemState)
+{
+    const bool initiallyUp = platform_->IsSubsystemInitialized(PlatformSubsystem::Video);
+    (void)platform_->GetCapabilities();
+    EXPECT_EQ(platform_->IsSubsystemInitialized(PlatformSubsystem::Video), initiallyUp)
+        << "the loader probe must balance its temporary Video and Vulkan references";
+}
+
 // --- subsystem lifecycle (PLAT-29) --------------------------------------------------------------
 
 TEST_F(Sdl3PlatformTest, AcquiringBringsASubsystemUpAndReleasingRestoresThePriorState)

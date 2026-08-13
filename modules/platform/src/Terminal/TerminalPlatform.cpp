@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <thread>
 #include <utility>
 
@@ -100,7 +101,15 @@ namespace CNA::Platform::Terminal {
         void SetResizable(const bool resizable) override { resizable_ = resizable; }
         [[nodiscard]] bool IsBorderless() const override { return borderless_; }
         void SetBorderless(const bool borderless) override { borderless_ = borderless; }
-        void SetFullscreenMode(const WindowFullscreenMode mode) override { mode_ = mode; }
+        void SetFullscreenMode(const WindowFullscreenMode mode) override
+        {
+            if (mode == WindowFullscreenMode::BorderlessFullscreen)
+            {
+                throw PlatformNotSupportedException(
+                    PlatformCapability::BorderlessFullscreen, "Terminal");
+            }
+            mode_ = mode;
+        }
         [[nodiscard]] WindowFullscreenMode GetFullscreenMode() const override { return mode_; }
         void Show() override { visible_ = true; }
         void Hide() override { visible_ = false; }
@@ -247,13 +256,12 @@ namespace CNA::Platform::Terminal {
             // first and leave two callers each believing they owned the screen.
             throw PlatformNotSupportedException(PlatformCapability::MultipleWindows, GetName());
         }
-        windowSlot_->taken = true;
-
         // The requested size stands, exactly as it does on any other implementation: a game draws
         // at the resolution it asked for and the presenter quantises. The terminal becomes
         // authoritative only when it *changes* -- which is the same way a real windowing system
         // behaves when a window manager resizes a window after it was created.
         auto window = std::make_unique<TerminalWindow>(windowSlot_, nextWindowId_++, description);
+        windowSlot_->taken = true;
         windowSlot_->window = window.get();
 
         if (attachedToTerminal_ && !TerminalResizeWatcher::IsWatching())
@@ -271,8 +279,12 @@ namespace CNA::Platform::Terminal {
         // letterboxing assumes, which is the part that has to be right.
         constexpr int kNominalCellWidth = 8;
         constexpr int kNominalCellHeight = 16;
-        width = std::max(1, columns) * kNominalCellWidth;
-        height = std::max(1, rows) * kNominalCellHeight;
+        const long long requestedWidth =
+            static_cast<long long>(std::max(1, columns)) * kNominalCellWidth;
+        const long long requestedHeight =
+            static_cast<long long>(std::max(1, rows)) * kNominalCellHeight;
+        width = static_cast<int>(std::min<long long>(requestedWidth, std::numeric_limits<int>::max()));
+        height = static_cast<int>(std::min<long long>(requestedHeight, std::numeric_limits<int>::max()));
     }
 
     void TerminalPlatform::PollEvents(std::vector<PlatformEvent>& destination)
@@ -363,6 +375,12 @@ namespace CNA::Platform::Terminal {
     std::unique_ptr<IPlatformSurfacePresenter> TerminalPlatform::CreateSurfacePresenter(
         IPlatformWindow& window)
     {
+        if (windowSlot_->window != &window)
+        {
+            throw PlatformException("CreateSurfacePresenter",
+                                    "window was not created by this Terminal platform");
+        }
+
         if (!attachedToTerminal_)
         {
             // Piped into a log, redirected to a file, captured by CI. Refusing here is what stops

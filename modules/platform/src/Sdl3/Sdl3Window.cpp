@@ -12,6 +12,40 @@ namespace CNA::Platform::Sdl3 {
 
     namespace {
 
+        std::string LastSdlError()
+        {
+            const char* error = SDL_GetError();
+            return error != nullptr ? std::string(error) : std::string();
+        }
+
+        void RequireSdlSuccess(const bool succeeded, const char* operation)
+        {
+            if (!succeeded)
+            {
+                throw PlatformException(operation, LastSdlError());
+            }
+        }
+
+        void SetExclusiveMode(SDL_Window* window, const int requestedWidth,
+                              const int requestedHeight, const char* operation)
+        {
+            const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+            if (display == 0)
+            {
+                throw PlatformException(operation, LastSdlError());
+            }
+
+            SDL_DisplayMode closest{};
+            const bool highDensity =
+                (SDL_GetWindowFlags(window) & SDL_WINDOW_HIGH_PIXEL_DENSITY) != 0;
+            if (!SDL_GetClosestFullscreenDisplayMode(display, requestedWidth, requestedHeight,
+                                                     0.0f, highDensity, &closest))
+            {
+                throw PlatformException(operation, LastSdlError());
+            }
+            RequireSdlSuccess(SDL_SetWindowFullscreenMode(window, &closest), operation);
+        }
+
         /// Determines which windowing system SDL is actually driving.
         ///
         /// Keyed off the driver name rather than off which properties happen to be present:
@@ -122,7 +156,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Window::SetTitle(const std::string& title)
     {
-        SDL_SetWindowTitle(window_, title.c_str());
+        RequireSdlSuccess(SDL_SetWindowTitle(window_, title.c_str()), "Window::SetTitle");
     }
 
     WindowBounds Sdl3Window::GetClientBounds() const
@@ -150,13 +184,23 @@ namespace CNA::Platform::Sdl3 {
         WindowSize size;
         // Deliberately the pixel size, not the logical size: under high DPI they differ, and a
         // renderer must size its swapchain from this one.
-        SDL_GetWindowSizeInPixels(window_, &size.width, &size.height);
+        RequireSdlSuccess(SDL_GetWindowSizeInPixels(window_, &size.width, &size.height),
+                          "Window::GetPixelSize");
         return size;
     }
 
     void Sdl3Window::SetSize(const int width, const int height)
     {
-        SDL_SetWindowSize(window_, width, height);
+        // SDL_SetWindowSize has no effect in fullscreen. For exclusive fullscreen, a size change
+        // means selecting the closest real display mode instead; otherwise a GraphicsDevice reset
+        // would report the new backbuffer size while the monitor stayed on the old one.
+        if ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0 &&
+            SDL_GetWindowFullscreenMode(window_) != nullptr)
+        {
+            SetExclusiveMode(window_, width, height, "Window::SetSize(ExclusiveFullscreen)");
+            return;
+        }
+        RequireSdlSuccess(SDL_SetWindowSize(window_, width, height), "Window::SetSize");
     }
 
     float Sdl3Window::GetDisplayScale() const
@@ -178,7 +222,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Window::SetResizable(const bool resizable)
     {
-        SDL_SetWindowResizable(window_, resizable);
+        RequireSdlSuccess(SDL_SetWindowResizable(window_, resizable), "Window::SetResizable");
     }
 
     bool Sdl3Window::IsBorderless() const
@@ -188,7 +232,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Window::SetBorderless(const bool borderless)
     {
-        SDL_SetWindowBordered(window_, !borderless);
+        RequireSdlSuccess(SDL_SetWindowBordered(window_, !borderless), "Window::SetBorderless");
     }
 
     void Sdl3Window::SetFullscreenMode(const WindowFullscreenMode mode)
@@ -196,16 +240,25 @@ namespace CNA::Platform::Sdl3 {
         switch (mode)
         {
             case WindowFullscreenMode::Windowed:
-                SDL_SetWindowFullscreen(window_, false);
+                RequireSdlSuccess(SDL_SetWindowFullscreen(window_, false),
+                                  "Window::SetFullscreenMode(Windowed)");
                 break;
             case WindowFullscreenMode::BorderlessFullscreen:
                 // Null exclusive mode means "use the desktop mode", i.e. borderless fullscreen.
-                SDL_SetWindowFullscreenMode(window_, nullptr);
-                SDL_SetWindowFullscreen(window_, true);
+                RequireSdlSuccess(SDL_SetWindowFullscreenMode(window_, nullptr),
+                                  "Window::SetFullscreenMode(BorderlessFullscreen)");
+                RequireSdlSuccess(SDL_SetWindowFullscreen(window_, true),
+                                  "Window::SetFullscreenMode(BorderlessFullscreen)");
                 break;
             case WindowFullscreenMode::ExclusiveFullscreen:
-                SDL_SetWindowFullscreen(window_, true);
+            {
+                const WindowBounds bounds = GetClientBounds();
+                SetExclusiveMode(window_, bounds.width, bounds.height,
+                                 "Window::SetFullscreenMode(ExclusiveFullscreen)");
+                RequireSdlSuccess(SDL_SetWindowFullscreen(window_, true),
+                                  "Window::SetFullscreenMode(ExclusiveFullscreen)");
                 break;
+            }
         }
     }
 
@@ -222,12 +275,35 @@ namespace CNA::Platform::Sdl3 {
                    : WindowFullscreenMode::ExclusiveFullscreen;
     }
 
-    void Sdl3Window::Show() { SDL_ShowWindow(window_); }
-    void Sdl3Window::Hide() { SDL_HideWindow(window_); }
-    void Sdl3Window::Minimize() { SDL_MinimizeWindow(window_); }
-    void Sdl3Window::Maximize() { SDL_MaximizeWindow(window_); }
-    void Sdl3Window::Restore() { SDL_RestoreWindow(window_); }
-    void Sdl3Window::Sync() { SDL_SyncWindow(window_); }
+    void Sdl3Window::Show()
+    {
+        RequireSdlSuccess(SDL_ShowWindow(window_), "Window::Show");
+    }
+
+    void Sdl3Window::Hide()
+    {
+        RequireSdlSuccess(SDL_HideWindow(window_), "Window::Hide");
+    }
+
+    void Sdl3Window::Minimize()
+    {
+        RequireSdlSuccess(SDL_MinimizeWindow(window_), "Window::Minimize");
+    }
+
+    void Sdl3Window::Maximize()
+    {
+        RequireSdlSuccess(SDL_MaximizeWindow(window_), "Window::Maximize");
+    }
+
+    void Sdl3Window::Restore()
+    {
+        RequireSdlSuccess(SDL_RestoreWindow(window_), "Window::Restore");
+    }
+
+    void Sdl3Window::Sync()
+    {
+        RequireSdlSuccess(SDL_SyncWindow(window_), "Window::Sync");
+    }
 
     bool Sdl3Window::HasFocus() const
     {

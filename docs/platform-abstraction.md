@@ -54,6 +54,10 @@ missing capability. It must not silently succeed. Ordinary absence uses a status
 null service as documented; operational failure throws `PlatformException` with the CNA operation
 name and backend detail text.
 
+This applies to behavior carried by an otherwise available object too. In particular, a platform
+with `multipleWindows == false` must refuse a second *live* window and release that capacity when
+the first is destroyed; a window with no `borderlessFullscreen` capability must refuse that mode.
+
 ### Subsystems are acquired, not globally initialized
 
 There is intentionally no platform-wide `Initialize()` or `Shutdown()` method. CNA production
@@ -70,8 +74,9 @@ Implementations must:
 - serialize process-global native subsystem state across platform instances when the backend
   library itself exposes process-global lifetime.
 
-For SDL3, `SubsystemLifecycleMutex()` is process-wide, while `ownedRefCounts_` is per instance.
-The application remains responsible for its own `SDL_Init()`/`SDL_Quit()` calls.
+For SDL3, `SdlGlobalStateMutex()` is process-wide, while `ownedRefCounts_` is per instance. The
+same lock covers the process-global OpenGL attribute set and Vulkan loader counter. The application
+remains responsible for its own `SDL_Init()`/`SDL_Quit()` calls.
 
 ### Events are batches
 
@@ -133,6 +138,11 @@ directly. A zero or invalid native scale is normalized to 1.0.
 `SetSize()` may be asynchronous; `Sync()` makes requested state observable. The Headless backend
 models this deliberately so code cannot accidentally depend on immediate application.
 
+Borderless and exclusive fullscreen are distinct. SDL3 assigns a null display mode only for
+borderless desktop fullscreen; exclusive mode selects a concrete closest display mode. A backend
+that cannot provide the requested distinction fails the operation instead of reporting the other
+mode as success.
+
 Renderers receive surface changes through their platform-neutral state and keep these concerns
 separate:
 
@@ -140,6 +150,12 @@ separate:
 - physical drawable dimensions for backbuffers and swapchains;
 - renderer-owned viewport/letterbox/overscan transforms;
 - stable window identity for the renderer registry.
+
+A `SurfaceFrame` always describes forward, row-major RGBA8 storage. `strideBytes == 0` means
+`width * 4`; a non-zero stride must be positive and at least that large. Implementations validate
+row-size and address-span overflow before reading the buffer. The contract cannot discover the
+allocation size behind a raw pointer, so ownership still requires the caller to keep the complete
+described storage alive through `Present()`.
 
 ## Performance contract
 
@@ -192,6 +208,8 @@ regression beyond it is investigated rather than waived.
     python3 tools/platform/renderer_sdl_audit.py --check
     python3 tools/platform/sdl_ratchet.py --check --strict
     python3 tools/platform/hot_path_lint.py
+    python3 tools/platform/nonproduction_sdl_audit.py --check
+    python3 tools/platform/check_contract.py
     ```
 
 12. Add the selection to the CI matrix with one compatible renderer. Do not multiply every

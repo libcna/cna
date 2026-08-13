@@ -123,6 +123,17 @@ TEST(GuideTest, NotificationPositionDefaultAndSet) {
 
 TEST(GuideTest, IsScreenSaverEnabledGetSet) {
     CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+    if (platform.GetDisplays() == nullptr)
+    {
+        // Headless and Terminal deliberately advertise no display service. Guide's safe fallback
+        // is "enabled", and setting an unavailable host feature is a no-op rather than fabricated
+        // mutable state.
+        EXPECT_TRUE(Guide::getIsScreenSaverEnabledProperty());
+        Guide::setIsScreenSaverEnabledProperty(false);
+        EXPECT_TRUE(Guide::getIsScreenSaverEnabledProperty());
+        GTEST_SKIP() << "the selected platform has no display/screen-saver service";
+    }
+
     try
     {
         platform.AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);

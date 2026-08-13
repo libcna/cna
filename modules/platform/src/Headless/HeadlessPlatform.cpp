@@ -25,8 +25,10 @@ namespace CNA::Platform::Headless {
         class HeadlessWindow final : public IPlatformWindow
         {
         public:
-            HeadlessWindow(const WindowId id, const WindowDescription& description)
-                : id_(id)
+            HeadlessWindow(std::shared_ptr<bool> windowTaken, const WindowId id,
+                           const WindowDescription& description)
+                : windowTaken_(std::move(windowTaken))
+                , id_(id)
                 , title_(description.title)
                 , width_(description.width)
                 , height_(description.height)
@@ -38,6 +40,8 @@ namespace CNA::Platform::Headless {
                 , mode_(description.fullscreenMode)
             {
             }
+
+            ~HeadlessWindow() override { *windowTaken_ = false; }
 
             [[nodiscard]] WindowId GetId() const override { return id_; }
 
@@ -74,7 +78,15 @@ namespace CNA::Platform::Headless {
             void SetResizable(const bool resizable) override { resizable_ = resizable; }
             [[nodiscard]] bool IsBorderless() const override { return borderless_; }
             void SetBorderless(const bool borderless) override { borderless_ = borderless; }
-            void SetFullscreenMode(const WindowFullscreenMode mode) override { mode_ = mode; }
+            void SetFullscreenMode(const WindowFullscreenMode mode) override
+            {
+                if (mode == WindowFullscreenMode::BorderlessFullscreen)
+                {
+                    throw PlatformNotSupportedException(
+                        PlatformCapability::BorderlessFullscreen, "Headless");
+                }
+                mode_ = mode;
+            }
             [[nodiscard]] WindowFullscreenMode GetFullscreenMode() const override { return mode_; }
             void Show() override { visible_ = true; }
             void Hide() override { visible_ = false; }
@@ -96,6 +108,7 @@ namespace CNA::Platform::Headless {
             [[nodiscard]] std::string GetDisplayName() const override { return {}; }
 
         private:
+            std::shared_ptr<bool> windowTaken_;
             WindowId id_;
             std::string title_;
             int width_ = 0, height_ = 0;
@@ -158,7 +171,16 @@ namespace CNA::Platform::Headless {
 
     std::unique_ptr<IPlatformWindow> HeadlessPlatform::CreateWindow(const WindowDescription& description)
     {
-        return std::make_unique<HeadlessWindow>(nextWindowId_++, description);
+        if (*windowTaken_)
+        {
+            throw PlatformNotSupportedException(PlatformCapability::MultipleWindows, GetName());
+        }
+
+        // Publish the occupied slot only after construction succeeds. A failed allocation or
+        // title copy must leave the platform able to retry.
+        auto window = std::make_unique<HeadlessWindow>(windowTaken_, nextWindowId_++, description);
+        *windowTaken_ = true;
+        return window;
     }
 
     void HeadlessPlatform::PollEvents(std::vector<PlatformEvent>& destination)

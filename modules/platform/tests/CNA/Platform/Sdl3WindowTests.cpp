@@ -174,20 +174,57 @@ TEST_F(Sdl3WindowTest, FullscreenModeStartsWindowed)
     EXPECT_EQ(window_->GetFullscreenMode(), WindowFullscreenMode::Windowed);
 }
 
+TEST_F(Sdl3WindowTest, ExclusiveFullscreenNeverSilentlyCollapsesToBorderless)
+{
+    try
+    {
+        window_->SetFullscreenMode(WindowFullscreenMode::ExclusiveFullscreen);
+    }
+    catch (const PlatformException&)
+    {
+        SUCCEED() << "the dummy driver has no exclusive display mode and refused cleanly";
+        return;
+    }
+
+    EXPECT_EQ(window_->GetFullscreenMode(), WindowFullscreenMode::ExclusiveFullscreen);
+    EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::Windowed));
+}
+
 TEST_F(Sdl3WindowTest, VisibilityAndStateCallsAreAccepted)
 {
-    // A hidden window under the dummy driver will not report focus or minimisation changes, so
-    // the assertion is that these calls are safe and do not throw -- their visible effect is a
-    // display-server behaviour this environment cannot observe.
+    // These calls are supported by the dummy driver and therefore must succeed rather than
+    // silently discard a false SDL result.
     EXPECT_NO_THROW(window_->Show());
     EXPECT_NO_THROW(window_->Hide());
-    EXPECT_NO_THROW(window_->Minimize());
-    EXPECT_NO_THROW(window_->Restore());
-    EXPECT_NO_THROW(window_->Maximize());
-    EXPECT_NO_THROW(window_->Restore());
     EXPECT_NO_THROW(window_->SetResizable(false));
     EXPECT_NO_THROW(window_->SetBorderless(true));
     EXPECT_NO_THROW(window_->Sync());
+}
+
+TEST_F(Sdl3WindowTest, WindowManagerStateCallsSucceedOrReportOperationalFailure)
+{
+    // Dummy/offscreen drivers have no window manager and return false for these operations. A
+    // desktop driver applies them. Both outcomes obey PLAT-21; the forbidden outcome is the old
+    // one where the SDL failure was discarded and the caller was told the operation succeeded.
+    const auto succeedsOrThrowsPlatformException = [](const auto& operation) {
+        try
+        {
+            operation();
+        }
+        catch (const PlatformException&)
+        {
+            return;
+        }
+        catch (...)
+        {
+            FAIL() << "window operation threw outside the platform error contract";
+        }
+    };
+
+    succeedsOrThrowsPlatformException([this] { window_->Minimize(); });
+    succeedsOrThrowsPlatformException([this] { window_->Restore(); });
+    succeedsOrThrowsPlatformException([this] { window_->Maximize(); });
+    succeedsOrThrowsPlatformException([this] { window_->Restore(); });
 }
 
 // --- native handle (PLAT-32) -----------------------------------------------------------------------

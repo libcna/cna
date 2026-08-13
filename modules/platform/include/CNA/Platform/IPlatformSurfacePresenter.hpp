@@ -43,8 +43,9 @@ namespace CNA::Platform {
         /**
          * @brief Bytes per row.
          *
-         * Zero means tightly packed (`width * 4`). A non-zero value lets a rasteriser present a
-         * sub-rectangle of a larger buffer without copying it first.
+         * Zero means tightly packed (`width * 4`). A positive non-zero value lets a rasteriser
+         * present a sub-rectangle of a larger buffer without copying it first, and must be at
+         * least `width * 4`. Negative or shorter strides are malformed.
          */
         int strideBytes = 0;
     };
@@ -99,8 +100,8 @@ namespace CNA::Platform {
          * @brief Presents one finished frame.
          *
          * @param frame The pixels to present.
-         * @throws PlatformException If the frame is malformed (null pixels, non-positive size)
-         * or presentation failed.
+         * @throws PlatformException If the frame is malformed (null pixels, non-positive size,
+         * invalid or overflowing stride) or presentation failed.
          */
         virtual void Present(const SurfaceFrame& frame) = 0;
 

@@ -5,6 +5,7 @@
 #include "CNA/Platform/PlatformException.hpp"
 
 #include "Sdl3EventMapper.hpp"
+#include "Sdl3Synchronization.hpp"
 #include "Sdl3Window.hpp"
 
 #include <SDL3/SDL.h>
@@ -32,32 +33,23 @@ namespace CNA::Platform::Sdl3 {
             return SDL_INIT_VIDEO;
         }
 
-        /// Whether this host has a Vulkan loader at all. Probed once: a capability that claims
-        /// Vulkan works on a machine with no loader would break the model's central promise --
-        /// true means the calls succeed, false means they refuse.
-        bool HostHasVulkan()
-        {
-            static const bool available = SDL_Vulkan_LoadLibrary(nullptr);
-            return available;
-        }
-
         std::string LastSdlError()
         {
             const char* error = SDL_GetError();
             return error != nullptr ? std::string(error) : std::string();
         }
 
-        /// Serializes native subsystem refcount and handle-cache transitions process-wide.
-        ///
-        /// SDL's subsystem counts are process-global, so a mutex stored on each Sdl3Platform
-        /// instance would protect only that instance's bookkeeping while two platforms still
-        /// enter SDL_InitSubSystem/SDL_QuitSubSystem concurrently. Keep this synchronization
-        /// primitive alive through static teardown: embedding hosts may retain a platform in a
-        /// function-local static whose destructor runs very late.
-        std::mutex& SubsystemLifecycleMutex()
+        void RequireSdlSuccess(const bool succeeded, const std::string& operation)
         {
-            static auto* mutex = new std::mutex();
-            return *mutex;
+            if (!succeeded)
+            {
+                throw PlatformException(operation, LastSdlError());
+            }
+        }
+
+        void SetGlAttributeOrThrow(const SDL_GLAttr attribute, const int value)
+        {
+            RequireSdlSuccess(SDL_GL_SetAttribute(attribute, value), "CreateWindow(OpenGl)");
         }
 
     } // namespace
@@ -77,7 +69,7 @@ namespace CNA::Platform::Sdl3 {
         // SDL_Quit(): PLAT-4 established that global SDL lifetime belongs to the host
         // application, and calling it here would tear down subsystems the host still holds.
         // Cached native handles must close before the subsystems that own them.
-        std::lock_guard<std::mutex> lock(SubsystemLifecycleMutex());
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
         sensors_.Deactivate();
         haptics_.Deactivate();
         for (const auto& [subsystem, count] : ownedRefCounts_)
@@ -93,6 +85,33 @@ namespace CNA::Platform::Sdl3 {
     {
         static const std::string name = "SDL3";
         return name;
+    }
+
+    bool Sdl3Platform::HasVulkanSupport() const
+    {
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        if (vulkanAvailable_.has_value())
+        {
+            return *vulkanAvailable_;
+        }
+
+        // SDL requires the video driver to exist before probing the Vulkan loader. Take a
+        // temporary, balanced subsystem reference so an early GetCapabilities() neither caches
+        // the misleading "video not initialized" failure nor changes the host's final state.
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+        {
+            vulkanAvailable_ = false;
+            return false;
+        }
+
+        const bool available = SDL_Vulkan_LoadLibrary(nullptr);
+        if (available)
+        {
+            SDL_Vulkan_UnloadLibrary();
+        }
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        vulkanAvailable_ = available;
+        return available;
     }
 
     PlatformCapabilities Sdl3Platform::GetCapabilities() const
@@ -113,7 +132,7 @@ namespace CNA::Platform::Sdl3 {
         capabilities.nativeWindowHandle = true;
         capabilities.surfacePresentation = true;
         capabilities.openGlContext = true;
-        capabilities.vulkanSurface = HostHasVulkan();
+        capabilities.vulkanSurface = HasVulkanSupport();
 
         // System services: implemented.
         capabilities.clipboard = true;
@@ -149,7 +168,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::AcquireSubsystem(const PlatformSubsystem subsystem)
     {
-        std::lock_guard<std::mutex> lock(SubsystemLifecycleMutex());
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
         if (!SDL_InitSubSystem(ToSdlFlag(subsystem)))
         {
             throw PlatformException("AcquireSubsystem(" + ToString(subsystem) + ")", LastSdlError());
@@ -159,7 +178,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::ReleaseSubsystem(const PlatformSubsystem subsystem)
     {
-        std::lock_guard<std::mutex> lock(SubsystemLifecycleMutex());
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
         // An unpaired release is a documented no-op, not an error: cleanup may follow partial
         // initialization even though successful owners balance every acquisition.
         const auto it = ownedRefCounts_.find(subsystem);
@@ -185,20 +204,26 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3Platform::IsSubsystemInitialized(const PlatformSubsystem subsystem) const
     {
-        std::lock_guard<std::mutex> lock(SubsystemLifecycleMutex());
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
         const SDL_InitFlags flag = ToSdlFlag(subsystem);
         return (SDL_WasInit(flag) & flag) != 0;
     }
 
     std::unique_ptr<IPlatformWindow> Sdl3Platform::CreateWindow(const WindowDescription& description)
     {
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+
         // Creation-time flags only. Render intent and high-DPI in particular CANNOT be applied
         // afterwards -- the native surface attributes are chosen when the window is made -- which
         // is why WindowDescription carries them rather than exposing setters.
         SDL_WindowFlags flags = 0;
         if (description.resizable)  { flags |= SDL_WINDOW_RESIZABLE; }
         if (description.borderless) { flags |= SDL_WINDOW_BORDERLESS; }
-        if (!description.visible)   { flags |= SDL_WINDOW_HIDDEN; }
+        // Fullscreen setup needs a real window/display id, so it is completed after creation.
+        // Stage a requested fullscreen window hidden to avoid a visible windowed-frame flash.
+        const bool stageHidden = !description.visible ||
+                                 description.fullscreenMode != WindowFullscreenMode::Windowed;
+        if (stageHidden)            { flags |= SDL_WINDOW_HIDDEN; }
         if (description.highDpi)    { flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY; }
 
         switch (description.renderIntent)
@@ -211,23 +236,27 @@ namespace CNA::Platform::Sdl3 {
 
         if (description.renderIntent == WindowRenderIntent::OpenGl)
         {
+            // GL attributes are process-global and survive window creation. Reset first so an
+            // MSAA window cannot silently force multisampling onto the next window that asked for
+            // zero or one sample.
+            SDL_GL_ResetAttributes();
             const OpenGlFramebufferDescription& framebuffer = description.openGlFramebuffer;
             if (framebuffer.depthBits > 0)
-                SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, framebuffer.depthBits);
+                SetGlAttributeOrThrow(SDL_GL_DEPTH_SIZE, framebuffer.depthBits);
             if (framebuffer.stencilBits > 0)
-                SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, framebuffer.stencilBits);
+                SetGlAttributeOrThrow(SDL_GL_STENCIL_SIZE, framebuffer.stencilBits);
             if (framebuffer.doubleBuffered)
-                SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+                SetGlAttributeOrThrow(SDL_GL_DOUBLEBUFFER, 1);
             if (framebuffer.samples > 1)
             {
-                SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-                SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, framebuffer.samples);
+                SetGlAttributeOrThrow(SDL_GL_MULTISAMPLEBUFFERS, 1);
+                SetGlAttributeOrThrow(SDL_GL_MULTISAMPLESAMPLES, framebuffer.samples);
             }
-        }
-
-        if (description.fullscreenMode != WindowFullscreenMode::Windowed)
-        {
-            flags |= SDL_WINDOW_FULLSCREEN;
+            else
+            {
+                SetGlAttributeOrThrow(SDL_GL_MULTISAMPLEBUFFERS, 0);
+                SetGlAttributeOrThrow(SDL_GL_MULTISAMPLESAMPLES, 0);
+            }
         }
 
         SDL_Window* raw = SDL_CreateWindow(description.title.c_str(), description.width,
@@ -237,25 +266,36 @@ namespace CNA::Platform::Sdl3 {
             throw PlatformException("CreateWindow(" + description.title + ")", LastSdlError());
         }
 
-        auto window = std::make_unique<Sdl3Window>(raw);
+        std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> pending(raw, &SDL_DestroyWindow);
+        auto window = std::make_unique<Sdl3Window>(pending.get());
+        pending.release();
 
         // Post-creation state that genuinely can be applied afterwards. Position is applied only
         // when the caller asked for an explicit one; SDL centres by default.
         if (!description.centered)
         {
-            SDL_SetWindowPosition(raw, description.x, description.y);
+            RequireSdlSuccess(SDL_SetWindowPosition(raw, description.x, description.y),
+                              "CreateWindow(SetPosition)");
         }
         if (description.minimumWidth > 0 || description.minimumHeight > 0)
         {
-            SDL_SetWindowMinimumSize(raw, description.minimumWidth, description.minimumHeight);
+            RequireSdlSuccess(
+                SDL_SetWindowMinimumSize(raw, description.minimumWidth, description.minimumHeight),
+                "CreateWindow(SetMinimumSize)");
         }
         if (description.maximumWidth > 0 || description.maximumHeight > 0)
         {
-            SDL_SetWindowMaximumSize(raw, description.maximumWidth, description.maximumHeight);
+            RequireSdlSuccess(
+                SDL_SetWindowMaximumSize(raw, description.maximumWidth, description.maximumHeight),
+                "CreateWindow(SetMaximumSize)");
         }
-        if (description.fullscreenMode == WindowFullscreenMode::BorderlessFullscreen)
+        if (description.fullscreenMode != WindowFullscreenMode::Windowed)
         {
-            SDL_SetWindowFullscreenMode(raw, nullptr);
+            window->SetFullscreenMode(description.fullscreenMode);
+            if (description.visible)
+            {
+                RequireSdlSuccess(SDL_ShowWindow(raw), "CreateWindow(ShowFullscreen)");
+            }
         }
 
         return window;
@@ -361,7 +401,7 @@ namespace CNA::Platform::Sdl3 {
     {
         // Null exactly when the capability is false. Handing back a service that would refuse
         // every call would break the rule a caller relies on to decide whether to ask at all.
-        return HostHasVulkan() ? &vulkanSurface_ : nullptr;
+        return HasVulkanSupport() ? &vulkanSurface_ : nullptr;
     }
 
     std::unique_ptr<IPlatformSurfacePresenter> Sdl3Platform::CreateSurfacePresenter(IPlatformWindow& window)

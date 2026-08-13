@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -56,7 +57,7 @@ namespace CNA::Platform::Headless {
         [[nodiscard]] bool IsSubsystemInitialized(PlatformSubsystem subsystem) const override;
 
         /**
-         * @brief Creates an in-memory window.
+         * @brief Creates the one in-memory window this capability-minimal platform exposes.
          *
          * Real enough to be resized, retitled and queried, so `GameWindow` and
          * `GraphicsDeviceManager` behave as they would anywhere. Its native handle reports
@@ -64,6 +65,8 @@ namespace CNA::Platform::Headless {
          *
          * @param description The window's creation parameters.
          * @return The created window.
+         * @throws PlatformNotSupportedException If a window is already alive, matching the
+         *         platform's false `MultipleWindows` capability.
          */
         [[nodiscard]] std::unique_ptr<IPlatformWindow> CreateWindow(
             const WindowDescription& description) override;
@@ -144,6 +147,9 @@ namespace CNA::Platform::Headless {
         std::vector<PlatformEvent> queued_;
         std::uint64_t createdAtNanoseconds_ = 0;
         WindowId nextWindowId_ = 1;
+
+        /// Shared with the window so destroying the platform before its window remains safe.
+        std::shared_ptr<bool> windowTaken_ = std::make_shared<bool>(false);
 
         std::unique_ptr<Common::StandardFileSystem> fileSystem_;
         std::unique_ptr<Common::StandardSystemInfo> systemInfo_;

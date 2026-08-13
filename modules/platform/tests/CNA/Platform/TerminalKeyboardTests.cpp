@@ -8,6 +8,8 @@
 #include "../../../src/Terminal/TerminalSurfacePresenter.hpp"
 #include "PseudoTerminalHarness.hpp"
 
+#include "CNA/Platform/PlatformException.hpp"
+
 #include <gtest/gtest.h>
 
 #include <poll.h>
@@ -17,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <thread>
@@ -495,6 +498,34 @@ TEST(TerminalKeyboardTest, PlatformProvidesFallbackWhileReportingStateAsInexact)
 
     platform.GetKeyboard()->Update();
     EXPECT_FALSE(pty.EchoIsOn());
+}
+
+TEST(TerminalPlatformTest, PresenterRejectsAWindowFromAnotherPlatformInstance)
+{
+    PseudoTerminal pty;
+    ASSERT_TRUE(pty.IsOpen());
+
+    TerminalPlatform platform(pty.Device(), pty.Device());
+    TerminalPlatform other(pty.Device(), pty.Device());
+    std::unique_ptr<IPlatformWindow> foreign = other.CreateWindow(WindowDescription{});
+
+    EXPECT_THROW((void)platform.CreateSurfacePresenter(*foreign), PlatformException);
+    EXPECT_FALSE(TerminalSession::IsActive())
+        << "provenance must be checked before a terminal session is acquired";
+}
+
+TEST(TerminalPlatformTest, CellGridConversionCannotOverflowSignedPixelSizes)
+{
+    int width = 0;
+    int height = 0;
+    TerminalPlatform::CellGridToPixelSize(std::numeric_limits<int>::max(),
+                                          std::numeric_limits<int>::max(), width, height);
+    EXPECT_EQ(width, std::numeric_limits<int>::max());
+    EXPECT_EQ(height, std::numeric_limits<int>::max());
+
+    TerminalPlatform::CellGridToPixelSize(-1, 0, width, height);
+    EXPECT_EQ(width, 8);
+    EXPECT_EQ(height, 16);
 }
 
 } // namespace

@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
 
 namespace CNA::Platform::Sdl3 {
@@ -118,7 +119,7 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override;
         /** @brief Gets the OpenGL context service. @return The SDL3 GL service; never null. */
         [[nodiscard]] IPlatformGlContext* GetGlContext() override;
-        /** @brief Gets the Vulkan surface service. @return The SDL3 Vulkan service; never null. */
+        /** @brief Gets the Vulkan surface service. @return The service when the host probe succeeds. */
         [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override;
 
         /**
@@ -130,10 +131,15 @@ namespace CNA::Platform::Sdl3 {
             IPlatformWindow& window) override;
 
     private:
+        [[nodiscard]] bool HasVulkanSupport() const;
+
         /// Per-subsystem acquisition count owned by THIS instance. SDL keeps its own global
         /// refcount; this one exists so the destructor can release exactly what it acquired and
         /// no more, which matters when the host application holds subsystems of its own.
         std::map<PlatformSubsystem, int> ownedRefCounts_;
+
+        /// One stable host probe. Empty until capabilities or the accessor are first queried.
+        mutable std::optional<bool> vulkanAvailable_;
 
         /// Services are owned by the platform and outlive every caller's use of them, which is
         /// what makes returning a raw pointer safe: a caller never owns what it is handed.

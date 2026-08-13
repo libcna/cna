@@ -1,334 +1,229 @@
 symbol,area,owning_interface,task,occurrences,files,note
-SDL_AUDIODRIVER,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,90,14,audio driver selection env var; becomes audio configuration
-SDL_AudioSpec,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,43,14,audio device/stream
-SDL_mixer,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,27,19,SDL header include
-SDL_AUDIO_S16LE,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,25,5,audio device/stream
-SDL_AudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,23,9,audio device/stream
-SDL_DestroyAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,9,7,audio device/stream
-SDL_OpenAudioDeviceStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,7,4,audio device/stream
-SDL_AUDIO_S16,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,6,3,audio device/stream
-SDL_CreateAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,6,2,audio device/stream
-SDL_PutAudioStreamData,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,6,3,audio device/stream
-SDL_GetAudioStreamQueued,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,5,5,audio device/stream
-SDL_AUDIO_F32,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,4,3,audio device/stream
-SDL_GetAudioStreamData,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,4,4,audio device/stream
+SDL_AUDIODRIVER,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,99,18,audio driver selection env var; becomes audio configuration
+SDL_AudioSpec,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,39,11,audio device/stream
+SDL_mixer,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,23,14,SDL header include
+SDL_AUDIO_S16LE,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,22,2,audio device/stream
+SDL_AudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,18,6,audio device/stream
+SDL_AUDIO_F32,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,11,7,audio device/stream
+SDL_AudioFormat,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,8,5,audio device/stream
+SDL_AUDIO_S16,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,7,5,audio device/stream
+SDL_DestroyAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,7,4,audio device/stream
+SDL_GetAudioStreamFormat,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,7,3,audio device/stream
+SDL_AudioDeviceID,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,6,1,audio device/stream
+SDL_OpenAudioDeviceStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,5,2,audio device/stream
+SDL_CreateAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,4,2,audio device/stream
+SDL_PutAudioStreamData,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,4,3,audio device/stream
 SDL_ResumeAudioStreamDevice,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,4,2,audio device/stream
-SDL_wave,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,4,3,SDL header include
-SDL_GetAudioStreamFormat,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,3,1,audio device/stream
-SDL_SetAudioStreamGain,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,3,2,audio device/stream
-SDL_audio,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,3,3,SDL header include
-SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,2,audio device/stream
-SDL_AudioFormat,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,2,audio device/stream
-SDL_GetAudioStreamAvailable,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,1,audio device/stream
+SDL_GetAudioStreamData,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,3,3,audio device/stream
+SDL_GetAudioDeviceName,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,1,audio device/stream
+SDL_GetAudioStreamQueued,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,2,audio device/stream
 SDL_IsSupportedChannelCount,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,2,audio format query
-SDL_LoadWAV_IO,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,2,audio device/stream
-SDL_LockAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,1,audio device/stream
-SDL_PauseAudioStreamDevice,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,1,audio device/stream
+SDL_audio,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,2,2,SDL header include
+SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
 SDL_AUDIO_DEVICE_DEFAULT_RECORDING,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
-SDL_AUDIO_F32LE,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
-SDL_AudioDeviceID,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
-SDL_AudioStreamDevicePaused,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
+SDL_AUDIO_UNKNOWN,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
 SDL_ClearAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
-SDL_GetAudioDeviceName,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
 SDL_GetAudioRecordingDevices,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
-SDL_LoadWAV,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
-SDL_UnbindAudioStream_REAL,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
+SDL_GetAudioStreamAvailable,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
+SDL_LockAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
+SDL_PauseAudioStreamDevice,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
+SDL_SetAudioStreamGain,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
+SDL_UnlockAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
 SDL_audiocvt,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,SDL header include
-SDL_sysaudio,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,SDL header include
-SDL_DisplayID,display,IPlatformDisplays,PLAT-43,9,3,display/video
-SDL_ORIENTATION_LANDSCAPE_FLIPPED,display,IPlatformDisplays,PLAT-43,8,5,display/video
-SDL_GetCurrentVideoDriver,display,IPlatformDisplays,PLAT-43,7,5,display/video
-SDL_GetCurrentDisplayOrientation,display,IPlatformDisplays,PLAT-43,6,5,display/video
-SDL_GetDisplays,display,IPlatformDisplays,PLAT-43,4,2,display/video
-SDL_ORIENTATION_LANDSCAPE,display,IPlatformDisplays,PLAT-43,4,3,display/video
-SDL_DisplayOrientation,display,IPlatformDisplays,PLAT-43,3,3,display/video
-SDL_GetPrimaryDisplay,display,IPlatformDisplays,PLAT-43,3,3,display/video
-SDL_DisplayMode,display,IPlatformDisplays,PLAT-43,2,1,display/video
+SDL_DisplayID,display,IPlatformDisplays,PLAT-43,8,3,display/video
+SDL_DisplayMode,display,IPlatformDisplays,PLAT-43,4,2,display/video
+SDL_GetDisplayForWindow,display,IPlatformDisplays,PLAT-43,3,2,display/video
+SDL_GetCurrentVideoDriver,display,IPlatformDisplays,PLAT-43,2,2,display/video
 SDL_GetDisplayName,display,IPlatformDisplays,PLAT-43,2,2,display/video
-SDL_ScreenSaverEnabled,display,IPlatformDisplays,PLAT-43,2,2,display/video
 SDL_DisableScreenSaver,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_DisplayOrientation,display,IPlatformDisplays,PLAT-43,1,1,display/video
 SDL_EnableScreenSaver,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_GetClosestFullscreenDisplayMode,display,IPlatformDisplays,PLAT-43,1,1,display/video
 SDL_GetCurrentDisplayMode,display,IPlatformDisplays,PLAT-43,1,1,display/video
-SDL_GetDisplayForWindow,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_GetCurrentDisplayOrientation,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_GetDesktopDisplayMode,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_GetDisplayBounds,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_GetDisplayContentScale,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_GetDisplays,display,IPlatformDisplays,PLAT-43,1,1,display/video
 SDL_GetFullscreenDisplayModes,display,IPlatformDisplays,PLAT-43,1,1,display/video
-SDL_GetError,error,PlatformException,PLAT-21,324,86,error reporting
-SDL_ClearError,error,PlatformException,PLAT-21,5,3,error reporting
-SDL_Event,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,89,21,event payload type
-SDL_PumpEvents,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,24,11,event pump
-SDL_EVENT_FINGER_DOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,19,5,event type constant
-SDL_EVENT_KEY_DOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,17,6,event type constant
-SDL_AddEventWatch,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,13,5,event pump
-SDL_EVENT_MOUSE_BUTTON_DOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,13,4,event type constant
-SDL_EVENT_FINGER_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,10,4,event type constant
-SDL_EventFilter,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,10,2,event payload type
-SDL_EVENT_FINGER_MOTION,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,8,4,event type constant
-SDL_EVENT_KEY_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,8,5,event type constant
-SDL_EVENT_FINGER_CANCELED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,7,3,event type constant
-SDL_EVENT_GAMEPAD_ADDED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,7,5,event type constant
-SDL_EVENT_SENSOR_UPDATE,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,7,3,event type constant
-SDL_EVENT_MOUSE_BUTTON_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,6,4,event type constant
-SDL_EVENT_MOUSE_MOTION,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,6,4,event type constant
-SDL_EVENT_MOUSE_WHEEL,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,6,4,event type constant
-SDL_RemoveEventWatch,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,6,2,event pump
-SDL_EVENT_JOYSTICK_ADDED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,5,4,event type constant
-SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,5,4,event type constant
-SDL_EVENT_TEXT_EDITING_CANDIDATES,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,3,event type constant
-SDL_EVENT_TEXT_INPUT,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,3,event type constant
-SDL_EVENT_WINDOW_EXPOSED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,2,event type constant
-SDL_EVENT_WINDOW_FOCUS_LOST,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,3,event type constant
-SDL_EVENT_WINDOW_RESIZED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,4,event type constant
-SDL_EVENT_WINDOW_RESTORED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,4,event type constant
-SDL_PollEvent,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,4,event pump
-SDL_PushEvent,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,3,event pump
-SDL_events,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,3,SDL header include
+SDL_GetPrimaryDisplay,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_ORIENTATION_LANDSCAPE,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_ORIENTATION_LANDSCAPE_FLIPPED,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_ORIENTATION_PORTRAIT,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_ORIENTATION_PORTRAIT_FLIPPED,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_ScreenSaverEnabled,display,IPlatformDisplays,PLAT-43,1,1,display/video
+SDL_GetError,error,PlatformException,PLAT-21,233,58,error reporting
+SDL_ClearError,error,PlatformException,PLAT-21,1,1,error reporting
+SDL_Event,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,44,7,event payload type
+SDL_PumpEvents,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,21,9,event pump
+SDL_EVENT_WINDOW_RESIZED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,6,4,event type constant
+SDL_EVENT_GAMEPAD_BUTTON_DOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,5,2,event type constant
+SDL_EVENT_KEY_DOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,5,2,event type constant
+SDL_EVENT_WINDOW_EXPOSED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,5,3,event type constant
+SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,5,3,event type constant
+SDL_EventType,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,5,1,event payload type
+SDL_EVENT_GAMEPAD_AXIS_MOTION,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,2,event type constant
+SDL_EVENT_MOUSE_BUTTON_DOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,2,event type constant
+SDL_EVENT_WINDOW_DISPLAY_CHANGED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,3,event type constant
+SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,3,event type constant
+SDL_EVENT_WINDOW_RESTORED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,4,3,event type constant
 SDL_EVENT_DID_ENTER_FOREGROUND,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,3,event type constant
-SDL_EVENT_GAMEPAD_AXIS_MOTION,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,3,event type constant
-SDL_EVENT_GAMEPAD_BUTTON_DOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
-SDL_EVENT_JOYSTICK_REMOVED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,3,event type constant
+SDL_EVENT_FINGER_DOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_FINGER_MOTION,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_FINGER_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_GAMEPAD_ADDED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_JOYSTICK_ADDED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
 SDL_EVENT_KEYBOARD_ADDED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
 SDL_EVENT_MOUSE_ADDED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
-SDL_EVENT_TEXT_EDITING,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,3,event type constant
-SDL_EVENT_WINDOW_FOCUS_GAINED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,3,event type constant
-SDL_EVENT_WINDOW_MINIMIZED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,3,event type constant
-SDL_EVENT_GAMEPAD_BUTTON_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
+SDL_EVENT_MOUSE_WHEEL,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_SENSOR_UPDATE,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,3,event type constant
+SDL_EVENT_TEXT_EDITING_CANDIDATES,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_TEXT_INPUT,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_WINDOW_CLOSE_REQUESTED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_WINDOW_FOCUS_GAINED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_WINDOW_FOCUS_LOST,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_WINDOW_MAXIMIZED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_WINDOW_MINIMIZED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_WINDOW_MOVED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_EVENT_WINDOW_SHOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event type constant
+SDL_PushEvent,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,3,2,event pump
+SDL_EVENT_CLIPBOARD_UPDATE,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,1,event type constant
+SDL_EVENT_FINGER_CANCELED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
 SDL_EVENT_GAMEPAD_REMOVED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
+SDL_EVENT_JOYSTICK_REMOVED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
 SDL_EVENT_KEYBOARD_REMOVED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
+SDL_EVENT_KEY_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
+SDL_EVENT_LOW_MEMORY,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
+SDL_EVENT_MOUSE_MOTION,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
 SDL_EVENT_MOUSE_REMOVED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
 SDL_EVENT_QUIT,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
-SDL_EVENT_WINDOW_CLOSE_REQUESTED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
-SDL_EVENT_WINDOW_DISPLAY_CHANGED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
-SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
-SDL_EVENT_WINDOW_MAXIMIZED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
-SDL_EVENT_DISPLAY_ORIENTATION,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
-SDL_EVENT_WILL_ENTER_BACKGROUND,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
-SDL_EVENT_WINDOW_,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
-SDL_EVENT_WINDOW_ENTER_FULLSCREEN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
-SDL_EVENT_WINDOW_LEAVE_FULLSCREEN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
-SDL_EVENT_WINDOW_SAFE_AREA_CHANGED,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
-SDL_EVENT_WINDOW_SHOWN,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
-SDL_PumpEventsInternal,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event pump
-SDL_TouchFingerEvent,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event payload type
-SDL_WaitEvent,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event pump
-SDL_WaitEventTimeout,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event pump
-SDL_IOStream,filesystem,IPlatformFileSystem,PLAT-44,10,8,IO stream
-SDL_IOFromConstMem,filesystem,IPlatformFileSystem,PLAT-44,8,5,IO stream
-SDL_CloseIO,filesystem,IPlatformFileSystem,PLAT-44,7,3,IO stream API
-SDL_IOFromDynamicMem,filesystem,IPlatformFileSystem,PLAT-44,7,3,IO stream
-SDL_GetPrefPath,filesystem,IPlatformFileSystem,PLAT-44,4,3,filesystem
-SDL_LoadFile,filesystem,IPlatformFileSystem,PLAT-44,4,1,filesystem
-SDL_GetUserFolder,filesystem,IPlatformFileSystem,PLAT-44,3,3,filesystem
-SDL_TellIO,filesystem,IPlatformFileSystem,PLAT-44,3,2,IO stream API
-SDL_FOLDER_MUSIC,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
+SDL_EVENT_TEXT_EDITING,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
+SDL_EVENT_WILL_ENTER_BACKGROUND,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event type constant
+SDL_PollEvent,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,2,2,event pump
+SDL_AddEventWatch,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event pump
+SDL_EVENT_GAMEPAD_BUTTON_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
+SDL_EVENT_MOUSE_BUTTON_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
+SDL_RemoveEventWatch,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event pump
+SDL_IOFromConstMem,filesystem,IPlatformFileSystem,PLAT-44,3,2,IO stream
+SDL_IOStream,filesystem,IPlatformFileSystem,PLAT-44,3,2,IO stream
+SDL_FOLDER_MUSIC,filesystem,IPlatformFileSystem,PLAT-44,2,1,filesystem
+SDL_CreateDirectory,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
 SDL_FOLDER_PICTURES,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
 SDL_Folder,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
 SDL_GetBasePath,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
-SDL_GetIOSize,filesystem,IPlatformFileSystem,PLAT-44,1,1,IO stream API
-SDL_IO_SEEK_SET,filesystem,IPlatformFileSystem,PLAT-44,1,1,IO stream
-SDL_LOG_CATEGORY_AUDIO,filesystem,IPlatformFileSystem,PLAT-44,1,1,IO stream API
+SDL_GetPrefPath,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
+SDL_GetUserFolder,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
+SDL_LoadFile,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
 SDL_LoadFile_IO,filesystem,IPlatformFileSystem,PLAT-44,1,1,IO stream API
-SDL_ReadIO,filesystem,IPlatformFileSystem,PLAT-44,1,1,IO stream API
-SDL_SeekIO,filesystem,IPlatformFileSystem,PLAT-44,1,1,IO stream API
-SDL_GL_SetAttribute,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,75,14,GL context
-SDL_GL_GetProcAddress,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,53,14,GL context
-SDL_GL_CreateContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,43,15,GL context
-SDL_GL_MakeCurrent,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,34,12,GL context
-SDL_GL_SetSwapInterval,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,27,13,GL context
-SDL_GL_DestroyContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,22,12,GL context
-SDL_GL_GetSwapInterval,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,18,4,GL context
-SDL_GLContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,17,12,GL context type
-SDL_GL_CONTEXT_MAJOR_VERSION,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,15,12,GL context
-SDL_GL_CONTEXT_MINOR_VERSION,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,15,12,GL context
-SDL_GL_CONTEXT_PROFILE_MASK,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,15,12,GL context
-SDL_GL_SwapWindow,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,14,12,GL context
-SDL_GL_MULTISAMPLEBUFFERS,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,12,7,GL context
-SDL_GL_STENCIL_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,11,9,GL context
-SDL_GL_MULTISAMPLESAMPLES,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,10,6,GL context
-SDL_opengl,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,10,8,SDL header include
-SDL_GL_DEPTH_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,9,7,GL context
-SDL_GL_CONTEXT_PROFILE_ES,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,7,6,GL context
-SDL_GL_CONTEXT_PROFILE_COMPATIBILITY,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,6,GL context
-SDL_GL_CONTEXT_PROFILE_CORE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,6,GL context
-SDL_GL_GetAttribute,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,4,GL context
-SDL_metal,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,2,SDL header include
-SDL_GLContextState,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context type
-SDL_GL_DOUBLEBUFFER,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,4,GL context
-SDL_Metal_CreateView,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,Metal view
-SDL_Metal_DestroyView,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,3,2,Metal view
-SDL_Metal_GetLayer,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,3,2,Metal view
-SDL_Vulkan_CreateSurface,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,Vulkan surface/extensions
-SDL_Vulkan_DestroySurface,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,Vulkan surface/extensions
-SDL_FunctionPointer,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,SDL_GL_GetProcAddress return type
-SDL_MetalView,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,Metal view handle
+SDL_GL_SetAttribute,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,19,6,GL context
+SDL_GL_GetSwapInterval,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,17,3,GL context
+SDL_GL_GetAttribute,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,16,2,GL context
+SDL_GL_GetProcAddress,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,10,4,GL context
+SDL_GL_SetSwapInterval,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,10,5,GL context
+SDL_GLContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,7,3,GL context type
+SDL_GL_CONTEXT_MAJOR_VERSION,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,7,5,GL context
+SDL_GL_CONTEXT_MINOR_VERSION,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,7,5,GL context
+SDL_GL_CONTEXT_PROFILE_MASK,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,7,5,GL context
+SDL_GL_MULTISAMPLEBUFFERS,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,7,4,GL context
+SDL_GL_CONTEXT_PROFILE_COMPATIBILITY,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,5,GL context
+SDL_GL_MULTISAMPLESAMPLES,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,3,GL context
+SDL_GL_CONTEXT_PROFILE_CORE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
+SDL_GL_CONTEXT_PROFILE_ES,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
+SDL_GL_DEPTH_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
+SDL_GL_DOUBLEBUFFER,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
+SDL_GL_STENCIL_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
+SDL_GL_SwapWindow,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,3,GL context
+SDL_GL_CreateContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,3,3,GL context
+SDL_opengl,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,3,3,SDL header include
+SDL_GLAttr,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context type
+SDL_GL_DestroyContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_GL_MakeCurrent,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_GL_ResetAttributes,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_Vulkan_LoadLibrary,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,Vulkan surface/extensions
+SDL_Vulkan_UnloadLibrary,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,Vulkan surface/extensions
+SDL_vulkan,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,SDL header include
+SDL_GL_,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,GL context
+SDL_Vulkan_CreateSurface,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,Vulkan surface/extensions
+SDL_Vulkan_DestroySurface,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,Vulkan surface/extensions
 SDL_Vulkan_GetInstanceExtensions,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,Vulkan surface/extensions
-SDL_opengl_glext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,SDL header include
-SDL_vulkan,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,SDL header include
-SDL_Gamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,109,5,gamepad
-SDL_Haptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,99,9,haptics
-SDL_Joystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,81,13,joystick
-SDL_JoystickID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,37,11,joystick
-SDL_Keycode,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,35,5,keyboard mapping
-SDL_Cursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,30,7,mouse/cursor
-SDL_SensorType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,28,12,sensors
-SDL_HapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,27,7,haptics
-SDL_HapticID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,21,6,haptics
-SDL_GetSensors,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,19,9,sensors
-SDL_HapticEffectID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,19,4,haptics
-SDL_CreateSystemCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,18,2,mouse/cursor
-SDL_CloseHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,16,5,haptics
-SDL_PlayHapticRumble,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,16,7,haptics
-SDL_GamepadButton,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,15,5,gamepad
-SDL_JoystickType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,15,10,joystick
-SDL_haptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,15,9,SDL header include
-SDL_CloseSensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,14,6,sensors
-SDL_GAMEPAD_BUTTON_SOUTH,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,13,2,gamepad
-SDL_SENSOR_GYRO,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,13,8,sensors
-SDL_SENSOR_ACCEL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,11,7,sensors
-SDL_Scancode,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,11,4,keyboard mapping
-SDL_sensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,10,6,SDL header include
-SDL_BUTTON_LEFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,9,3,mouse button
-SDL_OpenSensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,9,5,sensors
-SDL_SCANCODE_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,9,3,scancode
-SDL_FingerID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,4,touch
-SDL_GAMEPAD_AXIS_LEFTX,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,2,gamepad
-SDL_GamepadAxis,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,5,gamepad
-SDL_GetHaptics,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,4,haptics
-SDL_HAPTIC_LEFTRIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,6,haptics
-SDL_Keymod,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,5,keyboard mapping
-SDL_SYSTEM_CURSOR_DEFAULT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,2,cursor/sensor constant
-SDL_Sensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,4,sensors
-SDL_CreateColorCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,7,2,mouse/cursor
-SDL_GamepadButtonLabel,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,7,6,gamepad
-SDL_GetHapticID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,7,2,haptics
-SDL_HAPTIC_SINE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,7,5,haptics
-SDL_JoystickConnectionState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,7,6,joystick
-SDL_SensorID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,7,2,sensors
-SDL_StopHapticRumble,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,7,4,haptics
-SDL_CreateHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,3,haptics
-SDL_DestroyHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,4,haptics
-SDL_GAMEPAD_BUTTON_EAST,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,2,gamepad
-SDL_GAMEPAD_BUTTON_NORTH,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,2,gamepad
-SDL_GAMEPAD_BUTTON_WEST,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,2,gamepad
-SDL_GetSensorType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,3,sensors
-SDL_HAPTIC_CONSTANT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,4,haptics
-SDL_HAPTIC_SPRING,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,4,haptics
-SDL_JOYSTICK_TYPE_GAMEPAD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,4,joystick
-SDL_RunHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,4,haptics
-SDL_SetCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,2,mouse/cursor
-SDL_StopHapticEffects,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,5,haptics
-SDL_BUTTON_RIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,3,mouse button
-SDL_GamepadType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,4,gamepad
-SDL_GetMouseFocus,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,3,mouse/cursor
-SDL_HAPTIC_CUSTOM,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,5,haptics
-SDL_HapticRumbleSupported,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,3,haptics
-SDL_JOYSTICK_TYPE_FLIGHT_STICK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,3,joystick
-SDL_JOYSTICK_TYPE_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,4,joystick
-SDL_OpenHapticFromJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,4,haptics
-SDL_RumbleGamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,5,gamepad
-SDL_BUTTON_X2,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,mouse button
-SDL_DestroyCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,mouse/cursor
-SDL_GAMEPAD_AXIS_LEFTY,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_AXIS_RIGHTX,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_BACK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_DPAD_DOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_DPAD_LEFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_DPAD_RIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_DPAD_UP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_GUIDE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_LEFT_PADDLE1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_LEFT_PADDLE2,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_LEFT_STICK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_MISC1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_RIGHT_STICK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GAMEPAD_BUTTON_START,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
-SDL_GetJoystickType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick
-SDL_GetModState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,keyboard/text input
-SDL_HAPTIC_DAMPER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,haptics
-SDL_HAPTIC_FRICTION,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,haptics
-SDL_HAPTIC_INERTIA,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,haptics
-SDL_HAPTIC_RAMP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,haptics
-SDL_HAPTIC_SAWTOOTHDOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,haptics
-SDL_HAPTIC_SAWTOOTHUP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,haptics
-SDL_HAPTIC_SQUARE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,haptics
-SDL_HAPTIC_TRIANGLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,haptics
-SDL_HAT_,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick hat
-SDL_JOYSTICK_TYPE_ARCADE_PAD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,joystick
-SDL_JOYSTICK_TYPE_ARCADE_STICK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,joystick
-SDL_JOYSTICK_TYPE_DANCE_PAD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,joystick
-SDL_JOYSTICK_TYPE_DRUM_KIT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,joystick
-SDL_JOYSTICK_TYPE_GUITAR,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,joystick
-SDL_JOYSTICK_TYPE_WHEEL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,joystick
+SDL_Keycode,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,24,4,keyboard mapping
+SDL_Haptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,22,1,haptics
+SDL_JoystickID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,19,3,joystick
+SDL_Gamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,14,1,gamepad
+SDL_HapticID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,14,2,haptics
+SDL_Joystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,11,3,joystick
+SDL_SensorID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,11,2,sensors
+SDL_GamepadButton,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,4,gamepad
+SDL_Sensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,8,1,sensors
+SDL_GamepadAxis,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,7,4,gamepad
+SDL_CloseHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,1,haptics
+SDL_CloseJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,2,joystick
+SDL_HapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,1,haptics
+SDL_Scancode,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,6,4,keyboard mapping
+SDL_Cursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,1,mouse/cursor
+SDL_HapticRumbleSupported,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,1,haptics
+SDL_JOYSTICK_TYPE_FLIGHT_STICK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,4,joystick
+SDL_OpenHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,2,haptics
+SDL_GAMEPAD_BUTTON_SOUTH,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,gamepad
+SDL_GetJoysticks,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,joystick
+SDL_GetKeyFromScancode,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,keyboard/text input
+SDL_GetNumGamepadTouchpads,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,1,gamepad
+SDL_GetSensors,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,sensors
+SDL_JOYSTICK_TYPE_ARCADE_PAD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick
+SDL_JOYSTICK_TYPE_ARCADE_STICK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick
+SDL_JOYSTICK_TYPE_DANCE_PAD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick
+SDL_JOYSTICK_TYPE_DRUM_KIT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick
+SDL_JOYSTICK_TYPE_GAMEPAD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick
+SDL_JOYSTICK_TYPE_GUITAR,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick
+SDL_JOYSTICK_TYPE_WHEEL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick
 SDL_KMOD_NONE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,keyboard mapping
-SDL_OpenHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,haptics
-SDL_OpenJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,4,joystick
-SDL_SCANCODE_A,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,scancode
-SDL_StartTextInputWithProperties,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,keyboard/text input
-SDL_WarpMouseInWindow,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,mouse/cursor
-SDL_BUTTON_MIDDLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,mouse button
-SDL_BUTTON_X1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,mouse button
-SDL_CloseJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,joystick
-SDL_GAMEPAD_AXIS_LEFT_TRIGGER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
-SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_OpenJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,joystick
+SDL_SENSOR_ACCEL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,sensors
+SDL_SENSOR_GYRO,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,sensors
+SDL_SensorType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,sensors
+SDL_TEXTINPUT_TYPE_TEXT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,text input constant
+SDL_CloseSensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,sensors
+SDL_DestroyCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,mouse/cursor
+SDL_GAMEPAD_AXIS_COUNT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_AXIS_LEFTY,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_BACK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_COUNT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_DPAD_DOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_DPAD_LEFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_DPAD_RIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_DPAD_UP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_EAST,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_GUIDE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_LEFT_PADDLE1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_LEFT_PADDLE2,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_LEFT_STICK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_MISC1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_NORTH,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_RIGHT_STICK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GAMEPAD_BUTTON_START,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
 SDL_GAMEPAD_BUTTON_TOUCHPAD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
-SDL_GAMEPAD_TYPE_XBOXONE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,gamepad
-SDL_GetGamepadFirmwareVersion,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,gamepad
-SDL_GetGamepadName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,gamepad
-SDL_GetGamepadPath,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,gamepad
-SDL_GetGamepadSerial,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,gamepad
-SDL_GetGamepadSteamHandle,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,gamepad
-SDL_GetGamepadTouchpadFinger,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,gamepad
-SDL_GetHapticFeatures,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,haptics
-SDL_GetHapticName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,haptics
-SDL_GetJoystickAxis,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,joystick
-SDL_GetJoystickGUID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,joystick
-SDL_GetJoystickName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,joystick
-SDL_GetKeyFromScancode,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,keyboard/text input
-SDL_GetRelativeMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,mouse/cursor
-SDL_GetTouchDevices,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,touch
-SDL_HAPTIC_,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,haptics
-SDL_HAT_CENTERED,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,joystick hat
-SDL_HAT_LEFTUP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,joystick hat
-SDL_HapticDirection,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,haptics
-SDL_JOYSTICK_CONNECTION_INVALID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,joystick
-SDL_JOYSTICK_CONNECTION_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,joystick
-SDL_JOYSTICK_TYPE_THROTTLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,joystick
-SDL_KMOD_CAPS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,keyboard mapping
-SDL_KeyboardID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,keyboard/text input
-SDL_MouseID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,mouse/cursor
-SDL_OpenGamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,gamepad
-SDL_SCANCODE_1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_COMMA,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_ESCAPE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_F1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_F13,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_GRAVE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_KP_1,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_KP_PLUS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_LALT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_LCTRL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_LSHIFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_PERIOD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_RETURN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_SEMICOLON,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_SLASH,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_SPACE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_UP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_SCANCODE_VOLUMEUP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
-SDL_STANDARD_GRAVITY,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,cursor/sensor constant
-SDL_SYSTEM_CURSOR_CROSSHAIR,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,cursor/sensor constant
-SDL_SetGamepadLED,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,gamepad
-SDL_StopHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,haptics
-SDL_TextInputActive,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,keyboard/text input
-SDL_UpdateHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,haptics
-SDL_androidsensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,SDL header include
-SDL_windowssensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,SDL header include
-SDL_CaptureMouse,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,mouse/cursor
-SDL_CloseGamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GAMEPAD_AXIS_RIGHTY,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,gamepad
-SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,gamepad
+SDL_GAMEPAD_BUTTON_WEST,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
+SDL_GamepadHasSensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,gamepad
+SDL_GetGamepads,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,gamepad
+SDL_GetHaptics,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,haptics
+SDL_HAPTIC_LEFTRIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,haptics
+SDL_HAT_RIGHTDOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,joystick hat
+SDL_JOYSTICK_TYPE_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,3,joystick
+SDL_SCANCODE_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,scancode
+SDL_StopHapticRumble,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,haptics
+SDL_BUTTON_RIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,mouse button
+SDL_CreateHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
+SDL_DestroyHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
+SDL_DetachVirtualJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,joystick
+SDL_GAMEPAD_AXIS_LEFTX,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
+SDL_GAMEPAD_AXIS_LEFT_TRIGGER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
+SDL_GAMEPAD_AXIS_RIGHTX,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
+SDL_GAMEPAD_AXIS_RIGHTY,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
+SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
 SDL_GAMEPAD_BUTTON_LABEL_A,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
 SDL_GAMEPAD_BUTTON_LABEL_B,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
 SDL_GAMEPAD_BUTTON_LABEL_CIRCLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
@@ -337,233 +232,195 @@ SDL_GAMEPAD_BUTTON_LABEL_SQUARE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2
 SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
 SDL_GAMEPAD_BUTTON_LABEL_X,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
 SDL_GAMEPAD_BUTTON_LABEL_Y,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
+SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
 SDL_GAMEPAD_TYPE_PS4,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GamepadHasAxis,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GamepadHasButton,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GamepadHasSensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GamepadSensorEnabled,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetGamepadButtonLabel,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetGamepadConnectionState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetGamepadJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetGamepadPowerInfo,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetGamepadSensorData,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetGamepadType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetGlobalMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,mouse/cursor
-SDL_GetHapticEffectStatus,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
+SDL_GAMEPAD_TYPE_PS5,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
+SDL_GAMEPAD_TYPE_XBOX360,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
+SDL_GAMEPAD_TYPE_XBOXONE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
+SDL_GetHapticFeatures,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
+SDL_GetHapticName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
 SDL_GetHapticNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_GetJoystickBall,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
-SDL_GetJoystickButton,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
-SDL_GetJoystickHat,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
-SDL_GetJoystickPowerInfo,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
-SDL_GetJoystickProduct,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
-SDL_GetJoystickVendor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
-SDL_GetKeyName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,keyboard/text input
-SDL_GetKeyboardNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard/text input
-SDL_GetKeyboards,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard/text input
-SDL_GetMaxHapticEffects,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,input device API
-SDL_GetMaxHapticEffectsPlaying,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,input device API
-SDL_GetMice,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,mouse/cursor
-SDL_GetMouseNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,mouse/cursor
-SDL_GetNumGamepadTouchpadFingers,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetNumGamepadTouchpads,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetNumHapticAxes,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_GetNumJoystickAxes,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,input device API
-SDL_GetNumJoystickBalls,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,input device API
-SDL_GetNumJoystickButtons,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,input device API
-SDL_GetNumJoystickHats,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,input device API
+SDL_GetJoystickType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,joystick
+SDL_GetKeyFromName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard/text input
+SDL_GetKeyName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard/text input
+SDL_GetKeyboards,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,keyboard/text input
+SDL_GetMice,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,mouse/cursor
+SDL_GetNumGamepadTouchpadFingers,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,gamepad
+SDL_GetRelativeMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,mouse/cursor
+SDL_GetSensorData,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,sensors
+SDL_GetSensorNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,sensors
 SDL_GetSensorTypeForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,sensors
-SDL_GetTouchDeviceName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,touch
-SDL_HAPTIC_CARTESIAN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_HAPTIC_GAIN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
+SDL_GetTouchDevices,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,touch
+SDL_HAPTIC_CONSTANT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
 SDL_HAPTIC_POLAR,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
+SDL_HAT_CENTERED,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick hat
 SDL_HAT_DOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick hat
 SDL_HAT_LEFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick hat
 SDL_HAT_LEFTDOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick hat
+SDL_HAT_LEFTUP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick hat
 SDL_HAT_RIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick hat
-SDL_HAT_RIGHTDOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick hat
 SDL_HAT_RIGHTUP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick hat
 SDL_HAT_UP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick hat
-SDL_HapticCondition,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_HapticConstant,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_HapticCustom,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_HapticEffectSupported,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_HapticLeftRight,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_HapticPeriodic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_HapticRamp,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_IsGamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_IsJoystickHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,input device API
-SDL_IsMouseHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,input device API
+SDL_HapticDirection,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
 SDL_JOYSTICK_CONNECTION_WIRED,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
 SDL_JOYSTICK_CONNECTION_WIRELESS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
-SDL_KMOD_LCTRL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,keyboard mapping
+SDL_JOYSTICK_TYPE_THROTTLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
+SDL_JoystickType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,joystick
+SDL_KMOD_CAPS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard mapping
+SDL_KMOD_LSHIFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,keyboard mapping
 SDL_KMOD_MODE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard mapping
 SDL_KMOD_NUM,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard mapping
-SDL_KMOD_RSHIFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,keyboard mapping
 SDL_KMOD_SCROLL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard mapping
-SDL_OpenHapticFromMouse,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_PauseHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_ResumeHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_RumbleGamepadTriggers,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_SCANCODE_0,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_2,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_3,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_4,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_5,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_6,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_7,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_8,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_9,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_APOSTROPHE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_APPLICATION,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_B,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_BACKSLASH,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_BACKSPACE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_C,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_CAPSLOCK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_D,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_DELETE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_DOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_E,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_END,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_EQUALS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F10,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F11,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F12,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F14,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F15,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F16,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F17,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F18,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F19,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F2,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F20,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F21,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F22,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F23,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F24,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F3,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F4,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F5,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F6,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F7,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F8,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_F9,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_G,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_H,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_HOME,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_I,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_INSERT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_J,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_K,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_0,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_2,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_3,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_4,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_5,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_6,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_7,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_8,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_9,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_CLEAR,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_DECIMAL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_DIVIDE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_MINUS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_KP_MULTIPLY,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_L,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_LEFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_LEFTBRACKET,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_LGUI,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_M,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_MINUS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_N,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_NONUSBACKSLASH,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,scancode
-SDL_SCANCODE_NONUSHASH,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,scancode
-SDL_SCANCODE_NUMLOCKCLEAR,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_O,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_P,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_PAGEDOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_PAGEUP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_PAUSE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_PRINTSCREEN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_Q,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_R,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_RALT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_RCTRL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_RGUI,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_RIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_RIGHTBRACKET,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_RSHIFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_S,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_SCROLLLOCK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_SLEEP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_T,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_TAB,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_U,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_V,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_VOLUMEDOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_W,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_X,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_Y,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
-SDL_SCANCODE_Z,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
+SDL_KMOD_SHIFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,keyboard mapping
+SDL_KeyboardID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,keyboard/text input
+SDL_Keymod,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard mapping
+SDL_MouseID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,mouse/cursor
+SDL_OpenHapticFromJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
+SDL_OpenSensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,sensors
+SDL_PlayHapticRumble,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
+SDL_RunHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
+SDL_SCANCODE_A,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,scancode
+SDL_SCANCODE_COUNT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,scancode
 SDL_SENSOR_ACCEL_L,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,sensors
 SDL_SENSOR_ACCEL_R,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,sensors
 SDL_SENSOR_GYRO_L,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,sensors
 SDL_SENSOR_GYRO_R,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,sensors
 SDL_SENSOR_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,sensors
-SDL_SYSTEM_CURSOR_,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,cursor/sensor constant
-SDL_SYSTEM_CURSOR_PROGRESS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,cursor/sensor constant
-SDL_SetGamepadSensorEnabled,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_SetHapticAutocenter,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_SetHapticGain,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
-SDL_SetTextInputArea,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,keyboard/text input
-SDL_StartTextInput,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard/text input
-SDL_SystemCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,mouse/cursor
-SDL_TEXTINPUT_TYPE_TEXT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,text input constant
+SDL_SYSTEM_CURSOR_DEFAULT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,cursor/sensor constant
+SDL_SetJoystickVirtualAxis,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,joystick
+SDL_StopHapticEffects,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
+SDL_TEXTINPUT_TYPE_NUMBER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,text input constant
+SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_HIDDEN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,text input constant
+SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_VISIBLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,text input constant
+SDL_TEXTINPUT_TYPE_TEXT_EMAIL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,text input constant
+SDL_TEXTINPUT_TYPE_TEXT_NAME,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,text input constant
+SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,text input constant
+SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_VISIBLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,text input constant
+SDL_TEXTINPUT_TYPE_TEXT_USERNAME,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,text input constant
 SDL_TextInputType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,keyboard/text input
-SDL_TouchID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,touch
-SDL_WarpMouseGlobal,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,mouse/cursor
-SDL_GAMEPAD_AXIS_COUNT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
-SDL_GAMEPAD_BUTTON_COUNT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
-SDL_GAMEPAD_TYPE_PS5,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_TouchID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,touch
+SDL_AttachVirtualJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_BUTTON_LMASK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse button
+SDL_BUTTON_MMASK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse button
+SDL_BUTTON_RMASK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse button
+SDL_BUTTON_X1MASK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse button
+SDL_BUTTON_X2MASK,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse button
+SDL_CaptureMouse,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_CloseGamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_CreateColorCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_CreateSystemCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GAMEPAD_TYPE_GAMECUBE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GAMEPAD_TYPE_PS3,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
 SDL_GAMEPAD_TYPE_STANDARD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
 SDL_GAMEPAD_TYPE_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
-SDL_GAMEPAD_TYPE_XBOX360,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
-SDL_GetCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_GamepadButtonLabel,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GamepadHasAxis,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GamepadHasButton,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GamepadSensorEnabled,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GamepadType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
 SDL_GetGamepadAxis,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
 SDL_GetGamepadButton,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadButtonLabel,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadConnectionState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadFirmwareVersion,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadJoystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadPath,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
 SDL_GetGamepadPlayerIndex,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
-SDL_GetJoysticks,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
-SDL_GetKeyFromName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
+SDL_GetGamepadPowerInfo,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadProduct,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadSensorData,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadSerial,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadSteamHandle,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadTouchpadFinger,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGamepadVendor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_GetGlobalMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_GetHapticEffectStatus,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_GetHapticID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_GetJoystickAxis,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_GetJoystickBall,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_GetJoystickButton,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_GetJoystickFromID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_GetJoystickGUID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_GetJoystickHat,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_GetJoystickName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_GetJoystickNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_GetJoystickPowerInfo,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_GetKeyboardNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
+SDL_GetKeyboardState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
+SDL_GetMaxHapticEffects,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
+SDL_GetMaxHapticEffectsPlaying,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
+SDL_GetModState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
+SDL_GetMouseFocus,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_GetMouseNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_GetMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_GetNumHapticAxes,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_GetNumJoystickAxes,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
+SDL_GetNumJoystickBalls,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
+SDL_GetNumJoystickButtons,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
+SDL_GetNumJoystickHats,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
 SDL_GetScancodeFromName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
 SDL_GetScancodeName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
-SDL_GetSensorData,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,sensors
-SDL_GetSensorNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,sensors
-SDL_GetTouchFingers,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,touch
-SDL_HAPTIC_AUTOCENTER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
-SDL_HAPTIC_DUMMY,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
-SDL_HAPTIC_INFINITY,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
-SDL_HAPTIC_PAUSE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_GetTouchDeviceName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,touch
+SDL_HAPTIC_CARTESIAN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_CUSTOM,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_DAMPER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_FRICTION,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_INERTIA,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_RAMP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_SAWTOOTHDOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_SAWTOOTHUP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_SINE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
 SDL_HAPTIC_SPHERICAL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
-SDL_HAPTIC_STATUS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_SPRING,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_SQUARE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
 SDL_HAPTIC_STEERING_AXIS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
-SDL_HapticDirectionType,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
-SDL_HapticFeatures,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HAPTIC_TRIANGLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HapticCondition,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HapticConstant,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HapticCustom,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HapticEffectSupported,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HapticPeriodic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HapticRamp,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_HasKeyboard,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
 SDL_HideCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_IsJoystickHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
+SDL_IsMouseHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
+SDL_JOYSTICK_CONNECTION_UNKNOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_JoystickConnectionState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
 SDL_KMOD_ALT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
 SDL_KMOD_CTRL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
 SDL_KMOD_GUI,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
 SDL_KMOD_LALT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
+SDL_KMOD_LCTRL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
 SDL_KMOD_LGUI,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
-SDL_KMOD_LSHIFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
 SDL_KMOD_RALT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
 SDL_KMOD_RCTRL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
 SDL_KMOD_RGUI,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
-SDL_KMOD_SHIFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
-SDL_SCANCODE_KP_ENTER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
-SDL_SCANCODE_KP_PERIOD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
-SDL_SCANCODE_MENU,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
-SDL_SENSOR_EMSCRIPTEN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,sensors
+SDL_KMOD_RSHIFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard mapping
+SDL_MOUSEWHEEL_FLIPPED,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse wheel direction
+SDL_MOUSEWHEEL_NORMAL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse wheel direction
+SDL_MouseButtonFlags,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_OpenGamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_OpenHapticFromMouse,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_PauseHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_ResumeHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_RumbleGamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_RumbleGamepadTriggers,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_SCANCODE_CUT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
+SDL_SCANCODE_KP_5,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
+SDL_SCANCODE_LSHIFT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
+SDL_SCANCODE_MEDIA_EJECT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
+SDL_SCANCODE_RGUI,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
+SDL_SCANCODE_SLEEP,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
+SDL_SCANCODE_W,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,scancode
+SDL_SYSTEM_CURSOR_CROSSHAIR,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
 SDL_SYSTEM_CURSOR_EW_RESIZE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
 SDL_SYSTEM_CURSOR_MOVE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
 SDL_SYSTEM_CURSOR_NESW_RESIZE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
@@ -571,141 +428,119 @@ SDL_SYSTEM_CURSOR_NOT_ALLOWED,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1
 SDL_SYSTEM_CURSOR_NS_RESIZE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
 SDL_SYSTEM_CURSOR_NWSE_RESIZE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
 SDL_SYSTEM_CURSOR_POINTER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
+SDL_SYSTEM_CURSOR_PROGRESS,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
 SDL_SYSTEM_CURSOR_TEXT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
 SDL_SYSTEM_CURSOR_WAIT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
-SDL_SYSTEM_CURSOR_WAITARROW,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,cursor/sensor constant
 SDL_ScreenKeyboardShown,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
-SDL_SendSensorUpdate,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,input device API
+SDL_SetCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_SetGamepadLED,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
 SDL_SetGamepadPlayerIndex,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_SetGamepadSensorEnabled,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,gamepad
+SDL_SetHapticAutocenter,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_SetHapticGain,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_SetJoystickVirtualButton,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_SetJoystickVirtualHat,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_SetTextInputArea,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
 SDL_ShowCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_StartTextInput,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
+SDL_StartTextInputWithProperties,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
+SDL_StopHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
 SDL_StopTextInput,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
-SDL_TEXTINPUT_TYPE_NUMBER,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,text input constant
-SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_HIDDEN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,text input constant
-SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_VISIBLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,text input constant
-SDL_TEXTINPUT_TYPE_TEXT_EMAIL,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,text input constant
-SDL_TEXTINPUT_TYPE_TEXT_NAME,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,text input constant
-SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,text input constant
-SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_VISIBLE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,text input constant
-SDL_TEXTINPUT_TYPE_TEXT_USERNAME,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,text input constant
-SDL_joystick,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,SDL header include
-SDL_mouse,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,SDL header include
-SDL_syshaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,SDL header include
-SDL_INIT_VIDEO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,226,65,init flag
-SDL_InitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,126,36,subsystem lifecycle
-SDL_QuitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,123,40,subsystem lifecycle
+SDL_SystemCursor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_TextInputActive,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,keyboard/text input
+SDL_UpdateHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptics
+SDL_UpdateJoysticks,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_VirtualJoystickDesc,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,joystick
+SDL_WarpMouseGlobal,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_WarpMouseInWindow,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
+SDL_gamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,SDL header include
 SDL_Init,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,98,68,subsystem lifecycle
-SDL_Quit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,80,38,subsystem lifecycle
-SDL_INIT_SENSOR,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,26,9,init flag
-SDL_INIT_GAMEPAD,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,20,4,init flag
-SDL_WasInit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,19,12,subsystem lifecycle
-SDL_main,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,18,3,entrypoint
-SDL_INIT_AUDIO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,16,6,init flag
-SDL_INIT_HAPTIC,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,11,5,init flag
-SDL_InitHapticRumble,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,11,3,subsystem lifecycle
-SDL_VIDEODRIVER,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,9,7,video driver selection env var; becomes platform configuration
-SDL_RunOnMainThread,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,7,2,main-thread affinity
-SDL_init,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,5,5,SDL header include
-SDL_IsMainThread,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,2,1,main-thread affinity
-SDL_MAIN_NEEDED,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,2,2,entrypoint
-SDL_VideoThreadID,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,2,1,main-thread affinity
-SDL_InitHaptics,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,subsystem lifecycle
-SDL_InitSensors,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,subsystem lifecycle
-SDL_MainThreadID,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,entrypoint
-SDL_QuitHaptics,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,subsystem lifecycle
-SDL_QuitLog,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,subsystem lifecycle
-SDL_RunMainThreadCallbacks,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,main-thread affinity
-SDL_Log,logging,CNA Logger,PLAT-53,56,16,logging
-SDL_LogPriority,logging,CNA Logger,PLAT-53,8,3,logging
-SDL_LOG_PRIORITY_INFO,logging,CNA Logger,PLAT-53,6,2,logging
-SDL_LOG_CATEGORY_APPLICATION,logging,CNA Logger,PLAT-53,5,2,logging
-SDL_LOG_PRIORITY_DEBUG,logging,CNA Logger,PLAT-53,5,2,logging
-SDL_LOG_PRIORITY_WARN,logging,CNA Logger,PLAT-53,5,3,logging
-SDL_GetLogPriority,logging,CNA Logger,PLAT-53,3,1,logging
-SDL_SetLogPriorities,logging,CNA Logger,PLAT-53,3,2,logging
-SDL_LOG_PRIORITY_CRITICAL,logging,CNA Logger,PLAT-53,2,2,logging
-SDL_LOG_PRIORITY_ERROR,logging,CNA Logger,PLAT-53,2,2,logging
-SDL_LogMessage,logging,CNA Logger,PLAT-53,2,2,logging
+SDL_INIT_VIDEO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,77,47,init flag
+SDL_Quit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,64,36,subsystem lifecycle
+SDL_QuitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,27,12,subsystem lifecycle
+SDL_InitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,24,12,subsystem lifecycle
+SDL_INIT_AUDIO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,23,7,init flag
+SDL_WasInit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,13,9,subsystem lifecycle
+SDL_VIDEODRIVER,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,4,3,video driver selection env var; becomes platform configuration
+SDL_init,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,4,4,SDL header include
+SDL_InitFlags,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,3,2,subsystem lifecycle
+SDL_main,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,3,1,entrypoint
+SDL_InitHapticRumble,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,2,1,subsystem lifecycle
+SDL_INIT_GAMEPAD,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,init flag
+SDL_INIT_HAPTIC,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,init flag
+SDL_INIT_INTERFACE,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,init flag
+SDL_INIT_SENSOR,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,init flag
+SDL_Log,logging,CNA Logger,PLAT-53,16,2,logging
+SDL_LogPriority,logging,CNA Logger,PLAT-53,2,1,logging
 SDL_SetLogOutputFunction,logging,CNA Logger,PLAT-53,2,1,logging
 SDL_GetLogOutputFunction,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_LOG_CATEGORY_ERROR,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_LOG_CATEGORY_INPUT,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_LOG_CATEGORY_RENDER,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_LOG_CATEGORY_SYSTEM,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_LOG_CATEGORY_TEST,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_LOG_CATEGORY_VIDEO,logging,CNA Logger,PLAT-53,1,1,logging
+SDL_LOG_PRIORITY_WARN,logging,CNA Logger,PLAT-53,1,1,logging
 SDL_LogOutputFunction,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_log,logging,CNA Logger,PLAT-53,1,1,SDL header include
-SDL_PROP_WINDOW_WIN32_HWND_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,35,34,native window property
-SDL_GetPointerProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,33,22,property access
-SDL_GetWindowProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,24,21,property access
-SDL_PropertiesID,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,16,14,property set handle
-SDL_SetNumberProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,9,5,property access
-SDL_DestroyProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,7,6,property access
-SDL_CreateProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,6,6,property access
-SDL_GetNumberProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,4,4,property access
-SDL_PROP_WINDOW_X11_DISPLAY_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,4,4,native window property
-SDL_PROP_WINDOW_X11_WINDOW_NUMBER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,4,4,native window property
-SDL_SetBooleanProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,4,2,property access
+SDL_GetPointerProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,15,5,property access
+SDL_PROP_WINDOW_WIN32_HWND_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,11,11,native window property
+SDL_PropertiesID,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,10,7,property set handle
+SDL_SetNumberProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,8,4,property access
+SDL_GetWindowProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,5,5,property access
+SDL_CreateProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,4,4,property access
+SDL_DestroyProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,4,4,property access
 SDL_GetBooleanProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,3,1,property access
-SDL_GetIOProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,3,2,property access
-SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,3,2,SDL property key
-SDL_GetGamepadProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,property access
-SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,SDL property key
-SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,SDL property key
-SDL_PROP_GAMEPAD_CAP_TRIGGER_RUMBLE_BOOLEAN,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,SDL property key
-SDL_PROP_TEXTINPUT_TYPE_NUMBER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,SDL property key
-SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,1,native window property
+SDL_GetNumberProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,3,3,property access
+SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
+SDL_PROP_WINDOW_COCOA_WINDOW_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
 SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
 SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
-SDL_PROP_WINDOW_COCOA_WINDOW_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,native window property
-SDL_free,none,-,-,34,15,allocator/string/math shim
-SDL_getenv,none,-,-,11,5,environment: C++/CNA config path is used instead
-SDL_strcmp,none,-,-,5,2,allocator/string/math shim
-SDL_MAJOR_VERSION,none,-,-,4,3,version/assert macros
-SDL_PLATFORM_ANDROID,none,-,-,3,3,SDL OS-detection macro; CNA uses its own build-system detection
+SDL_PROP_WINDOW_X11_DISPLAY_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
+SDL_PROP_WINDOW_X11_WINDOW_NUMBER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
+SDL_GetGamepadProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,property access
+SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,SDL property key
+SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,SDL property key
+SDL_PROP_GAMEPAD_CAP_TRIGGER_RUMBLE_BOOLEAN,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,SDL property key
+SDL_PROP_TEXTINPUT_TYPE_NUMBER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,SDL property key
+SDL_SetBooleanProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,property access
+SDL_SetPointerPropertyWithCleanup,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,property access
+SDL_free,none,-,-,18,6,allocator/string/math shim
+SDL_GetEnvironment,none,-,-,5,2,environment: C++/CNA config path is used instead
+SDL_MAJOR_VERSION,none,-,-,5,4,version/assert macros
+SDL_SetEnvironmentVariable,none,-,-,4,2,environment: C++/CNA config path is used instead
 SDL_h_,none,-,-,3,3,SDL header include with no CNA contract
 SDL_stdinc,none,-,-,3,3,SDL header include with no CNA contract
-SDL_GUIDToString,none,-,-,2,2,GUID/endian/CRC helper
+SDL_strcmp,none,-,-,3,1,allocator/string/math shim
 SDL_MICRO_VERSION,none,-,-,2,1,version/assert macros
 SDL_MINOR_VERSION,none,-,-,2,1,version/assert macros
+SDL_PLATFORM_ANDROID,none,-,-,2,2,SDL OS-detection macro; CNA uses its own build-system detection
 SDL_aligned_free,none,-,-,2,2,SDL-internal allocator/object bookkeeping
-SDL_max,none,-,-,2,2,allocator/string/math shim
-SDL_Enable,none,-,-,1,1,"wildcard fragment in a doc comment, not an API name"
-SDL_LockMutex,none,-,-,1,1,threading: C++ std facilities are used instead
-SDL_Open,none,-,-,1,1,"wildcard fragment in a doc comment, not an API name"
-SDL_SDL,none,-,-,1,1,SDL header include with no CNA contract
-SDL_SetObjectValid,none,-,-,1,1,SDL-internal allocator/object bookkeeping
-SDL_ShouldQuitSubsystem,none,-,-,1,1,threading: C++ std facilities are used instead
-SDL_Show,none,-,-,1,1,"wildcard fragment in a doc comment, not an API name"
-SDL_WaitSemaphore,none,-,-,1,1,threading: C++ std facilities are used instead
-SDL_assert,none,-,-,1,1,SDL header include with no CNA contract
-SDL_sysmutex,none,-,-,1,1,SDL header include with no CNA contract
-SDL_DestroySurface,pixel-format,CNA graphics types,PLAT-64/PLAT-65,41,8,surface
-SDL_PIXELFORMAT_RGBA32,pixel-format,CNA graphics types,PLAT-64/PLAT-65,31,19,pixel format
-SDL_Surface,pixel-format,CNA graphics types,PLAT-64/PLAT-65,25,9,surface
-SDL_CreateSurfaceFrom,pixel-format,CNA graphics types,PLAT-64/PLAT-65,20,6,surface
+SDL_error,none,-,-,2,2,SDL header include with no CNA contract
+SDL_FUNCTION,none,-,-,1,1,allocator/string/math shim
+SDL_GUIDToString,none,-,-,1,1,GUID/endian/CRC helper
+SDL_PLATFORM_LINUX,none,-,-,1,1,SDL OS-detection macro; CNA uses its own build-system detection
+SDL_PLATFORM_MACOS,none,-,-,1,1,SDL OS-detection macro; CNA uses its own build-system detection
+SDL_PLATFORM_WINDOWS,none,-,-,1,1,SDL OS-detection macro; CNA uses its own build-system detection
+SDL_UnsetEnvironmentVariable,none,-,-,1,1,environment: C++/CNA config path is used instead
+SDL_VERSION,none,-,-,1,1,version/assert macros
+SDL_getenv,none,-,-,1,1,environment: C++/CNA config path is used instead
+SDL_max,none,-,-,1,1,allocator/string/math shim
+SDL_properties,none,-,-,1,1,SDL header include with no CNA contract
+SDL_PIXELFORMAT_RGBA32,pixel-format,CNA graphics types,PLAT-64/PLAT-65,14,6,pixel format
 SDL_BlendFactor,pixel-format,CNA graphics types,PLAT-64/PLAT-65,11,3,blend mode
 SDL_BLENDMODE_BLEND,pixel-format,CNA graphics types,PLAT-64/PLAT-65,10,4,blend mode
 SDL_ComposeCustomBlendMode,pixel-format,CNA graphics types,PLAT-64/PLAT-65,10,5,blend mode
 SDL_FRect,pixel-format,CNA graphics types,PLAT-64/PLAT-65,10,3,geometry vocabulary
-SDL_image,pixel-format,CNA graphics types,PLAT-64/PLAT-65,10,8,SDL header include
 SDL_FColor,pixel-format,CNA graphics types,PLAT-64/PLAT-65,9,2,color
-SDL_Rect,pixel-format,CNA graphics types,PLAT-64/PLAT-65,9,5,geometry vocabulary
-SDL_SCALEMODE_LINEAR,pixel-format,CNA graphics types,PLAT-64/PLAT-65,8,4,surface
-SDL_ScaleMode,pixel-format,CNA graphics types,PLAT-64/PLAT-65,7,5,surface
-SDL_ConvertSurface,pixel-format,CNA graphics types,PLAT-64/PLAT-65,6,4,surface
+SDL_Rect,pixel-format,CNA graphics types,PLAT-64/PLAT-65,9,4,geometry vocabulary
+SDL_Surface,pixel-format,CNA graphics types,PLAT-64/PLAT-65,8,3,surface
+SDL_DestroySurface,pixel-format,CNA graphics types,PLAT-64/PLAT-65,7,2,surface
+SDL_SCALEMODE_LINEAR,pixel-format,CNA graphics types,PLAT-64/PLAT-65,7,5,surface
+SDL_SCALEMODE_NEAREST,pixel-format,CNA graphics types,PLAT-64/PLAT-65,7,5,surface
+SDL_ScaleMode,pixel-format,CNA graphics types,PLAT-64/PLAT-65,6,4,surface
 SDL_BlendMode,pixel-format,CNA graphics types,PLAT-64/PLAT-65,5,3,blend mode
 SDL_BlendOperation,pixel-format,CNA graphics types,PLAT-64/PLAT-65,4,3,blend mode
 SDL_FPoint,pixel-format,CNA graphics types,PLAT-64/PLAT-65,4,1,geometry vocabulary
-SDL_SCALEMODE_NEAREST,pixel-format,CNA graphics types,PLAT-64/PLAT-65,4,3,surface
-SDL_ScaleSurface,pixel-format,CNA graphics types,PLAT-64/PLAT-65,4,1,surface
-SDL_BLENDMODE_NONE,pixel-format,CNA graphics types,PLAT-64/PLAT-65,3,3,blend mode
-SDL_BlitSurfaceScaled,pixel-format,CNA graphics types,PLAT-64/PLAT-65,3,1,surface
+SDL_ConvertSurface,pixel-format,CNA graphics types,PLAT-64/PLAT-65,3,1,surface
 SDL_FLIP_HORIZONTAL_AND_VERTICAL,pixel-format,CNA graphics types,PLAT-64/PLAT-65,3,1,surface
 SDL_FlipMode,pixel-format,CNA graphics types,PLAT-64/PLAT-65,3,2,surface
 SDL_BLENDMODE_ADD,pixel-format,CNA graphics types,PLAT-64/PLAT-65,2,2,blend mode
+SDL_BLENDMODE_NONE,pixel-format,CNA graphics types,PLAT-64/PLAT-65,2,2,blend mode
 SDL_BLENDOPERATION_ADD,pixel-format,CNA graphics types,PLAT-64/PLAT-65,2,2,blend mode
-SDL_CreateSurface,pixel-format,CNA graphics types,PLAT-64/PLAT-65,2,1,surface
 SDL_FLIP_HORIZONTAL,pixel-format,CNA graphics types,PLAT-64/PLAT-65,2,1,surface
 SDL_FLIP_VERTICAL,pixel-format,CNA graphics types,PLAT-64/PLAT-65,2,1,surface
 SDL_BLENDFACTOR_DST_ALPHA,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,blend mode
@@ -723,10 +558,9 @@ SDL_BLENDOPERATION_MAXIMUM,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,b
 SDL_BLENDOPERATION_MINIMUM,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,blend mode
 SDL_BLENDOPERATION_REV_SUBTRACT,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,blend mode
 SDL_BLENDOPERATION_SUBTRACT,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,blend mode
+SDL_CreateSurfaceFrom,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,surface
 SDL_FLIP_NONE,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,surface
-SDL_SetSurfaceBlendMode,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,surface
-SDL_Renderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,424,174,SDL_Renderer object/API
-SDL_Texture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,115,65,SDL_Renderer texture
+SDL_Renderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,308,111,SDL_Renderer object/API
 SDL_GPUTextureFormat,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,100,2,SDL_GPU renderer API
 SDL_GPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,89,2,SDL_GPU renderer API
 SDL_gpu,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,60,12,SDL header include
@@ -735,6 +569,7 @@ SDL_GPUSampleCount,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, S
 SDL_GPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,48,2,SDL_GPU renderer API
 SDL_GPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,46,4,SDL_GPU renderer API
 SDL_ReleaseGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,44,1,SDL_GPU resource API
+SDL_GetRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,38,16,SDL_Renderer object/API
 SDL_GPUPrimitiveType,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,34,2,SDL_GPU renderer API
 SDL_GPURenderPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,32,2,SDL_GPU renderer API
 SDL_GPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,31,2,SDL_GPU renderer API
@@ -744,10 +579,10 @@ SDL_GPU_SHADERFORMAT_SPIRV,sdl-renderer-specific,"allowlisted renderers (SDL_REN
 SDL_PushGPUVertexUniformData,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,25,3,SDL_GPU command/pass API
 SDL_GPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,24,5,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_INVALID,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,23,2,SDL_GPU renderer API
+SDL_Texture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,23,9,SDL_Renderer texture
 SDL_AcquireGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,22,1,SDL_GPU command/pass API
 SDL_GPU_SAMPLECOUNT_1,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,18,3,SDL_GPU renderer API
 SDL_GPUBufferBinding,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,17,1,SDL_GPU renderer API
-SDL_LOGICAL_PRESENTATION_LETTERBOX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,17,9,SDL_Renderer constant
 SDL_MapGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,17,1,SDL_GPU command/pass API
 SDL_ReleaseGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,17,3,SDL_GPU resource API
 SDL_GPU_LOADOP_CLEAR,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,16,2,SDL_GPU renderer API
@@ -756,53 +591,50 @@ SDL_GPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_
 SDL_GPUGraphicsPipelineCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,3,SDL_GPU renderer API
 SDL_GPU_SHADERSTAGE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,1,SDL_GPU renderer API
 SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,1,SDL_GPU renderer API
-SDL_SetRenderVSync,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,4,SDL_Renderer state
 SDL_SubmitGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,2,SDL_GPU command/pass API
-SDL_CreateRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,5,SDL_Renderer object/API
-SDL_DrawGPUIndexedPrimitives,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,4,SDL_GPU command/pass API
 SDL_GPUColorTargetDescription,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,1,SDL_GPU renderer API
 SDL_GPUVertexAttribute,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,2,SDL_GPU renderer API
 SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,2,SDL_GPU renderer API
 SDL_GPU_TEXTURETYPE_2D,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,3,SDL_GPU renderer API
 SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,1,SDL_GPU renderer API
 SDL_GPU_FILTER_LINEAR,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,13,1,SDL_GPU renderer API
-SDL_SetRenderLogicalPresentation,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,13,7,SDL_Renderer state
 SDL_BeginGPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,1,SDL_GPU command/pass API
 SDL_CreateGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,2,SDL_GPU resource API
 SDL_CreateGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,1,SDL_GPU resource API
+SDL_DrawGPUIndexedPrimitives,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,2,SDL_GPU command/pass API
 SDL_GPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,1,SDL_GPU renderer API
 SDL_GPUTransferBufferCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,1,SDL_GPU renderer API
 SDL_GPUVertexBufferDescription,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,1,SDL_GPU renderer API
 SDL_GPU_LOADOP_LOAD,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,2,SDL_GPU renderer API
 SDL_GPU_VERTEXINPUTRATE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,1,SDL_GPU renderer API
-SDL_GetRenderOutputSize,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,7,SDL_Renderer state
-SDL_GetRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,6,SDL_Renderer object/API
 SDL_PushGPUFragmentUniformData,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,1,SDL_GPU command/pass API
 SDL_RenderTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,7,SDL_Renderer draw call
 SDL_SetGPUStencilReference,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,2,SDL_GPU resource API
 SDL_UnmapGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,1,SDL_GPU command/pass API
-SDL_UpdateTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,7,SDL_Renderer texture
 SDL_EndGPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,1,SDL_GPU command/pass API
 SDL_GPUTextureCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
 SDL_GPUTextureRegion,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,2,SDL_GPU renderer API
+SDL_GetRenderOutputSize,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,6,SDL_Renderer state
+SDL_SetRenderVSync,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,4,SDL_Renderer state
 SDL_BindGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,1,SDL_GPU command/pass API
-SDL_CreateTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,6,SDL_Renderer texture
-SDL_DestroyRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,5,SDL_Renderer object/API
 SDL_GPU_BUFFERUSAGE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,1,SDL_GPU renderer API
 SDL_GPU_SHADERSTAGE_FRAGMENT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,1,SDL_GPU renderer API
 SDL_ReleaseGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,2,SDL_GPU resource API
 SDL_SubmitGPUCommandBufferAndAcquireFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,1,SDL_GPU command/pass API
+SDL_UpdateTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,7,SDL_Renderer texture
 SDL_BindGPUFragmentSamplers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,2,SDL_GPU command/pass API
 SDL_BindGPUVertexBuffers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,1,SDL_GPU command/pass API
+SDL_DestroyTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,4,SDL_Renderer texture
 SDL_DownloadFromGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,2,SDL_GPU API
 SDL_DrawGPUPrimitives,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,1,SDL_GPU command/pass API
 SDL_GPU_BUFFERUSAGE_INDEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,1,SDL_GPU renderer API
 SDL_GPU_FILTER_NEAREST,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,1,SDL_GPU renderer API
 SDL_GPU_STOREOP_STORE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,1,SDL_GPU renderer API
-SDL_RenderCoordinatesToWindow,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,4,SDL_Renderer draw call
+SDL_LOGICAL_PRESENTATION_LETTERBOX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,6,SDL_Renderer constant
 SDL_SetGPUScissor,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,4,SDL_GPU resource API
+SDL_SetTextureScaleMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,5,SDL_Renderer texture
 SDL_BindGPUIndexBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,1,SDL_GPU command/pass API
-SDL_DestroyTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,4,SDL_Renderer texture
+SDL_CreateTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,6,SDL_Renderer texture
 SDL_GPUSampler,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,2,SDL_GPU renderer API
 SDL_GPUTextureSamplerBinding,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,1,SDL_GPU renderer API
 SDL_GPUTextureTransferInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,1,SDL_GPU renderer API
@@ -826,7 +658,7 @@ SDL_ClaimWindowForGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RE
 SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
 SDL_SetGPUBlendConstants,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,3,SDL_GPU resource API
-SDL_SetTextureScaleMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,3,SDL_Renderer texture
+SDL_SetRenderLogicalPresentation,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,3,SDL_Renderer state
 SDL_TEXTUREACCESS_TARGET,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,4,SDL_Renderer constant
 SDL_UploadToGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,3,SDL_GPU API
 SDL_GPUFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
@@ -836,12 +668,12 @@ SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,sdl-renderer-specific,"allowlisted renderers 
 SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
 SDL_GenerateMipmapsForGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,3,SDL_GPU API
 SDL_ReleaseGPUFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU resource API
-SDL_RendererLogicalPresentation,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,3,SDL_Renderer object/API
 SDL_WaitAndAcquireGPUSwapchainTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,3,SDL_GPU API
 SDL_WaitForGPUFences,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU API
 SDL_BlitGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU command/pass API
 SDL_CreateGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU resource API
 SDL_CreateGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU resource API
+SDL_CreateRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,3,SDL_Renderer object/API
 SDL_GPUBufferCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
 SDL_GPUBufferRegion,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
 SDL_GPURasterizerState,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
@@ -855,13 +687,14 @@ SDL_LOGICAL_PRESENTATION_DISABLED,sdl-renderer-specific,"allowlisted renderers (
 SDL_ReleaseWindowFromGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU API
 SDL_RenderClear,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,3,SDL_Renderer draw call
 SDL_RenderPresent,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,3,SDL_Renderer draw call
-SDL_SetRenderDrawColor,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,3,SDL_Renderer state
+SDL_RendererLogicalPresentation,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,3,SDL_Renderer object/API
 SDL_SetTextureAlphaMod,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_Renderer texture
 SDL_SetTextureBlendMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_Renderer texture
 SDL_SetTextureColorMod,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_Renderer texture
 SDL_BindGPUVertexStorageBuffers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_GPU command/pass API
 SDL_CreateGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU resource API
 SDL_DestroyGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU resource API
+SDL_DestroyRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_Renderer object/API
 SDL_GPUBlitInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
 SDL_GPUColorTargetBlendState,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_GPU renderer API
 SDL_GPUDepthStencilTargetInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
@@ -881,9 +714,8 @@ SDL_GetRenderLogicalPresentationRect,sdl-renderer-specific,"allowlisted renderer
 SDL_LOGICAL_PRESENTATION_OVERSCAN,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_Renderer constant
 SDL_LOGICAL_PRESENTATION_STRETCH,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_Renderer constant
 SDL_ReleaseGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU resource API
-SDL_RenderCoordinatesFromWindow,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_Renderer draw call
-SDL_SetRenderClipRect,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_Renderer state
 SDL_SetRenderDrawBlendMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_Renderer state
+SDL_SetRenderDrawColor,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_Renderer state
 SDL_EndGPURenderPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU command/pass API
 SDL_GPUBlendFactor,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPUBlendOp,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
@@ -900,7 +732,6 @@ SDL_GPU_CULLMODE_NONE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER
 SDL_GPU_FILLMODE_FILL,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_PRESENTMODE_IMMEDIATE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_PRESENTMODE_MAILBOX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_PRIMITIVETYPE_POINTLIST,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU renderer API
 SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
@@ -910,8 +741,9 @@ SDL_GenerateMipmapsForGPU,sdl-renderer-specific,"allowlisted renderers (SDL_REND
 SDL_GetGPUDeviceDriver,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU resource API
 SDL_GetRenderDrawBlendMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_Renderer state
 SDL_GetRendererName,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_Renderer object/API
-SDL_RenderCoordinates,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_Renderer draw call
+SDL_RENDERER_VSYNC_DISABLED,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
 SDL_SetGPUSwapchainParameters,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
+SDL_SetRenderClipRect,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_Renderer state
 SDL_TEXTUREACCESS_STREAMING,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
 SDL_WindowSupportsGPUPresentMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU API
 SDL_CancelGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU command/pass API
@@ -951,6 +783,7 @@ SDL_GPU_FILLMODE_LINE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER
 SDL_GPU_PRESENTMODE_VSYNC,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_PRIMITIVETYPE_LINELIST,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_PRIMITIVETYPE_LINESTRIP,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_PRIMITIVETYPE_POINTLIST,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_STENCILOP_DECREMENT_AND_CLAMP,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_STENCILOP_DECREMENT_AND_WRAP,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_STENCILOP_INCREMENT_AND_CLAMP,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
@@ -963,69 +796,31 @@ SDL_GPU_SWAPCHAINCOMPOSITION_SDR,sdl-renderer-specific,"allowlisted renderers (S
 SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GetGPURendererDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU resource API
-SDL_LOG_CATEGORY_GPU,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU API
 SDL_LockTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer texture
 SDL_ReleaseGPUSampler,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU resource API
+SDL_RenderCoordinates,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer draw call
+SDL_RenderCoordinatesFromWindow,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer draw call
+SDL_RenderCoordinatesToWindow,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer draw call
 SDL_RenderGeometry,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer draw call
 SDL_SetRenderTextureAddressMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer state
 SDL_TEXTUREACCESS_STATIC,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer constant
 SDL_render,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL header include
-SDL_PowerState,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,24,15,power state
-SDL_POWERSTATE_UNKNOWN,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,9,7,power state
-SDL_CameraSpec,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,8,1,camera
-SDL_GetPowerInfo,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,8,5,power state
-SDL_POWERSTATE_ERROR,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,7,7,power state
-SDL_POWERSTATE_ON_BATTERY,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,6,6,power state
-SDL_ShowMessageBox,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,6,4,message box
-SDL_DialogFileFilter,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,2,file dialog
-SDL_OpenCamera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,4,camera
+SDL_CameraSpec,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,1,camera
 SDL_POWERSTATE_CHARGED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
 SDL_POWERSTATE_CHARGING,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
 SDL_POWERSTATE_NO_BATTERY,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
-SDL_AcquireCameraFrame,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,3,camera
-SDL_CreateTray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,4,tray
-SDL_CreateTrayMenu,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,4,tray
-SDL_GetCameras,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,3,camera
-SDL_GetClipboardText,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,3,clipboard
-SDL_HINT_VIDEO_DRIVER,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,1,SDL hint (becomes CNA configuration)
-SDL_SetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,4,SDL hint (becomes CNA configuration)
-SDL_ShowSimpleMessageBox,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,4,message box
-SDL_TrayEntry,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,2,tray
-SDL_camera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,4,SDL header include
-SDL_CameraID,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,2,camera
-SDL_HINT_ORIENTATIONS,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,2,SDL hint (becomes CNA configuration)
-SDL_HINT_OVERRIDE,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,1,SDL hint (becomes CNA configuration)
-SDL_HasClipboardText,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,clipboard
-SDL_InsertTrayEntryAt,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,tray
-SDL_Locale,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,2,locale
-SDL_OpenURL,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,URL launcher
-SDL_SetClipboardText,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,clipboard
-SDL_ShowOpenFileDialog,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,file dialog
-SDL_ShowOpenFolderDialog,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,file dialog
-SDL_ShowSaveFileDialog,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,file dialog
-SDL_dialog,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,SDL header include
-SDL_locale,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,SDL header include
-SDL_messagebox,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,SDL header include
-SDL_power,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,SDL header include
-SDL_Camera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,camera
-SDL_CloseCamera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,camera
-SDL_GetCameraPermissionState,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,camera
-SDL_GetCameraSupportedFormats,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,camera
-SDL_GetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,SDL hint (becomes CNA configuration)
-SDL_GetNumLogicalCPUCores,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,system info
-SDL_GetPreferredLocales,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,locale
-SDL_GetSystemRAM,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,system info
-SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,SDL hint (becomes CNA configuration)
-SDL_MESSAGEBOX_ERROR,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,message box
-SDL_MessageBoxButtonData,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,message box
-SDL_SetHintWithPriority,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,SDL hint (becomes CNA configuration)
-SDL_SetTrayEntryCallback,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,tray
-SDL_Tray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,tray
-SDL_TrayMenu,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,tray
-SDL_clipboard,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,SDL header include
-SDL_cpuinfo,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,SDL header include
-SDL_misc,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,SDL header include
-SDL_tray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,SDL header include
+SDL_POWERSTATE_ON_BATTERY,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
+SDL_POWERSTATE_UNKNOWN,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
+SDL_Camera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,1,camera
+SDL_CameraID,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,1,camera
+SDL_POWERSTATE_ERROR,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,4,power state
+SDL_DialogFileFilter,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,1,file dialog
+SDL_MessageBoxButtonData,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,1,message box
+SDL_PowerState,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,3,power state
+SDL_TrayEntry,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,1,tray
+SDL_DestroyTray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,tray
+SDL_MESSAGEBOX_INFORMATION,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,message box
+SDL_AcquireCameraFrame,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_CAMERA_PERMISSION_STATE_APPROVED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_CAMERA_PERMISSION_STATE_DENIED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_CAMERA_PERMISSION_STATE_PENDING,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
@@ -1033,69 +828,99 @@ SDL_CAMERA_POSITION_BACK_FACING,system-service,IPlatformDialogs/Clipboard/Tray/C
 SDL_CAMERA_POSITION_FRONT_FACING,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_CAMERA_POSITION_UNKNOWN,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_CameraPosition,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
-SDL_CreateTraySubmenu,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
-SDL_DestroyTray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
+SDL_CloseCamera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
+SDL_CreateTray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
+SDL_CreateTrayMenu,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_GetCameraFormat,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_GetCameraName,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
+SDL_GetCameraPermissionState,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_GetCameraPosition,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
+SDL_GetCameraSupportedFormats,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
+SDL_GetCameras,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
+SDL_GetClipboardText,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,clipboard
 SDL_GetNumCameraDrivers,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
+SDL_GetNumLogicalCPUCores,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,system info
 SDL_GetPlatform,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,system info
+SDL_GetPowerInfo,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,power state
+SDL_GetPreferredLocales,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,locale
+SDL_GetSystemRAM,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,system info
 SDL_GetTrayEntryChecked,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_GetTrayEntryEnabled,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_HINT_ANDROID_TRAP_BACK_BUTTON,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,SDL hint (becomes CNA configuration)
-SDL_HasNEON,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,system info
-SDL_HasSSE,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,system info
-SDL_MESSAGEBOX_INFORMATION,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,message box
+SDL_HasClipboardText,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,clipboard
+SDL_InsertTrayEntryAt,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
+SDL_Locale,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,locale
+SDL_MESSAGEBOX_ERROR,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,message box
 SDL_MESSAGEBOX_WARNING,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,message box
 SDL_MessageBoxData,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,message box
+SDL_MessageBoxFlags,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,message box
+SDL_OpenCamera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
+SDL_OpenURL,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,URL launcher
 SDL_ReleaseCameraFrame,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
+SDL_SetClipboardText,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,clipboard
+SDL_SetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,SDL hint (becomes CNA configuration)
+SDL_SetTrayEntryCallback,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_SetTrayEntryChecked,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_SetTrayEntryEnabled,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_SetTrayEntryLabel,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_SetTrayTooltip,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
+SDL_ShowMessageBox,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,message box
+SDL_ShowOpenFileDialog,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,file dialog
+SDL_ShowOpenFolderDialog,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,file dialog
+SDL_ShowSaveFileDialog,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,file dialog
+SDL_ShowSimpleMessageBox,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,message box
 SDL_TRAYENTRY_BUTTON,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_TRAYENTRY_CHECKBOX,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_TRAYENTRY_CHECKED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_TRAYENTRY_DISABLED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
+SDL_Tray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_TrayEntryFlags,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
+SDL_TrayMenu,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_Delay,timing,IPlatform timing,PLAT-39,7,5,timing
-SDL_GetPerformanceCounter,timing,IPlatform timing,PLAT-39,4,1,timing
-SDL_GetTicksNS,timing,IPlatform timing,PLAT-39,4,4,timing
 SDL_GetTicks,timing,IPlatform timing,PLAT-39,3,2,timing
+SDL_GetTicksNS,timing,IPlatform timing,PLAT-39,2,1,timing
+SDL_GetPerformanceCounter,timing,IPlatform timing,PLAT-39,1,1,timing
 SDL_GetPerformanceFrequency,timing,IPlatform timing,PLAT-39,1,1,timing
-SDL_Window,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,403,161,window management
-SDL_CreateWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,116,51,window management
-SDL_DestroyWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,97,46,window management
-SDL_GetWindowSize,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,75,45,window management
-SDL_GetWindowSizeInPixels,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,57,27,window management
-SDL_SetWindowSize,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,57,36,window management
-SDL_WINDOW_HIDDEN,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,46,37,window flag
-SDL_SyncWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,40,18,window management
-SDL_WINDOW_OPENGL,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,26,12,window flag
-SDL_GetWindowID,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,13,9,window management
-SDL_SetWindowFullscreen,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,12,7,window management
-SDL_GetWindowFlags,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,8,5,window management
-SDL_WINDOW_RESIZABLE,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,7,6,window flag
-SDL_MinimizeWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,5,4,window management
-SDL_RestoreWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,5,4,window management
-SDL_WINDOW_VULKAN,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,5,2,window flag
-SDL_WindowFlags,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,5,1,window management
-SDL_GetWindowFromID,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,2,window management
-SDL_ShowWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,4,window management
-SDL_WINDOW_BORDERLESS,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,3,window flag
-SDL_video,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,4,SDL header include
-SDL_GetWindowDisplayScale,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,3,window management
-SDL_GetWindowSafeArea,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window management
-SDL_HideWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window management
-SDL_SetWindowBordered,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,1,window management
-SDL_SetWindowResizable,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,1,window management
-SDL_SetWindowTitle,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,1,window management
-SDL_WINDOW_FULLSCREEN,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window flag
-SDL_WINDOW_HIGH_PIXEL_DENSITY,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window flag
-SDL_WINDOW_MINIMIZED,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window flag
-SDL_GetWindowPixelDensity,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
-SDL_GetWindowRelativeMouseMode,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
+SDL_Window,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,239,98,window management
+SDL_CreateWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,79,39,window management
+SDL_DestroyWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,78,38,window management
+SDL_GetWindowID,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,62,25,window management
+SDL_SetWindowSize,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,51,34,window management
+SDL_SyncWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,36,16,window management
+SDL_WINDOW_HIDDEN,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,33,29,window flag
+SDL_GetWindowSize,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,22,19,window management
+SDL_GetWindowSizeInPixels,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,13,8,window management
+SDL_WINDOW_OPENGL,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,12,11,window flag
+SDL_GetWindowFromID,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,11,6,window management
+SDL_SetWindowFullscreen,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,11,5,window management
+SDL_GetWindowFlags,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,7,1,window management
+SDL_ShowWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,6,6,window management
+SDL_WINDOW_RESIZABLE,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,6,6,window flag
+SDL_MinimizeWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,4,window management
+SDL_RestoreWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,4,window management
+SDL_WindowID,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,3,window management
+SDL_GetWindowPixelDensity,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,3,window management
+SDL_HideWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,3,window management
+SDL_WINDOW_BORDERLESS,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,3,window flag
+SDL_WINDOW_HIGH_PIXEL_DENSITY,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,3,window flag
+SDL_WindowFlags,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,3,window management
+SDL_GetWindowDisplayScale,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window management
+SDL_GetWindowFullscreenMode,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,1,window management
+SDL_GetWindowPosition,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,1,window management
+SDL_SetWindowFullscreenMode,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,1,window management
+SDL_WINDOW_FULLSCREEN,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,1,window flag
+SDL_WINDOW_VULKAN,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window flag
+SDL_GetWindowSafeArea,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
 SDL_GetWindowTitle,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
+SDL_MaximizeWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
+SDL_SetWindowBordered,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
+SDL_SetWindowMaximumSize,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
+SDL_SetWindowMinimumSize,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
+SDL_SetWindowPosition,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
 SDL_SetWindowRelativeMouseMode,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
+SDL_SetWindowResizable,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
+SDL_SetWindowTitle,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
+SDL_WINDOW_INPUT_FOCUS,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window flag
 SDL_WINDOW_METAL,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window flag
-SDL_cocoavideo,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,SDL header include
+SDL_WINDOW_MINIMIZED,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window flag
+SDL_video,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,SDL header include

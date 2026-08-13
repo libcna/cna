@@ -312,15 +312,91 @@ TEST_P(PlatformWindowConformance, NativeHandleAgreesWithTheCapability)
     }
 }
 
-TEST_P(PlatformWindowConformance, StateTogglesDoNotThrow)
+TEST_P(PlatformWindowConformance, ASecondWindowFollowsTheMultipleWindowsCapability)
+{
+    WindowDescription description;
+    description.title = "second conformance window";
+    description.width = 160;
+    description.height = 120;
+    description.visible = false;
+
+    if (capabilities_.multipleWindows)
+    {
+        EXPECT_NE(platform_->CreateWindow(description), nullptr);
+        return;
+    }
+
+    try
+    {
+        (void)platform_->CreateWindow(description);
+        FAIL() << "a platform without MultipleWindows accepted a second live window";
+    }
+    catch (const PlatformNotSupportedException& refusal)
+    {
+        EXPECT_EQ(refusal.GetCapability(), PlatformCapability::MultipleWindows);
+    }
+}
+
+TEST_P(PlatformWindowConformance, DestroyingAWindowReleasesItsCapacity)
+{
+    window_.reset();
+
+    WindowDescription description;
+    description.title = "replacement conformance window";
+    description.width = 160;
+    description.height = 120;
+    description.visible = false;
+    EXPECT_NE(platform_->CreateWindow(description), nullptr);
+}
+
+TEST_P(PlatformWindowConformance, BorderlessFullscreenFollowsItsCapability)
+{
+    if (capabilities_.borderlessFullscreen)
+    {
+        EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::BorderlessFullscreen));
+        return;
+    }
+
+    try
+    {
+        window_->SetFullscreenMode(WindowFullscreenMode::BorderlessFullscreen);
+        FAIL() << "a platform without BorderlessFullscreen silently accepted the request";
+    }
+    catch (const PlatformNotSupportedException& refusal)
+    {
+        EXPECT_EQ(refusal.GetCapability(), PlatformCapability::BorderlessFullscreen);
+    }
+}
+
+TEST_P(PlatformWindowConformance, StateChangesFollowTheOperationalErrorContract)
 {
     EXPECT_NO_THROW(window_->Show());
     EXPECT_NO_THROW(window_->Hide());
-    EXPECT_NO_THROW(window_->Minimize());
-    EXPECT_NO_THROW(window_->Restore());
     EXPECT_NO_THROW(window_->SetResizable(false));
     EXPECT_NO_THROW(window_->SetBorderless(true));
     EXPECT_NO_THROW(window_->Sync());
+
+    // A real window manager applies these operations; an SDL dummy/offscreen driver has no
+    // window manager and rejects them. PLAT-21 allows both outcomes, but never a foreign
+    // exception or a false native result silently reported as success.
+    const auto succeedsOrReportsPlatformFailure = [](const auto& operation) {
+        try
+        {
+            operation();
+        }
+        catch (const PlatformException&)
+        {
+            return;
+        }
+        catch (...)
+        {
+            FAIL() << "window state operation escaped the platform error contract";
+        }
+    };
+    succeedsOrReportsPlatformFailure([this] { window_->Minimize(); });
+    succeedsOrReportsPlatformFailure([this] { window_->Restore(); });
+    succeedsOrReportsPlatformFailure([this] { window_->Maximize(); });
+    succeedsOrReportsPlatformFailure([this] { window_->Restore(); });
 }
 
 // --- filesystem ------------------------------------------------------------------------------------------

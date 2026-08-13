@@ -2,12 +2,15 @@
 
 #include "Sdl3GraphicsServices.hpp"
 
+#include "../Common/SurfaceFrameValidation.hpp"
 #include "CNA/Platform/PlatformException.hpp"
+#include "Sdl3Synchronization.hpp"
 #include "Sdl3Window.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <mutex>
 #include <type_traits>
 
 namespace CNA::Platform::Sdl3 {
@@ -73,17 +76,34 @@ namespace CNA::Platform::Sdl3 {
             }
         }
 
-        /// Ensures SDL has loaded a Vulkan loader, and reports whether one exists.
-        ///
-        /// SDL_Vulkan_GetInstanceExtensions must not be called before the library is loaded --
-        /// doing so crashes rather than returning an error, which is how this was found. The
-        /// result is cached because the answer cannot change within a process and the probe
-        /// dlopen()s a library.
-        bool VulkanLoaderAvailable()
+        void SetGlAttributeOrThrow(const SDL_GLAttr attribute, const int value,
+                                   const char* operation)
         {
-            static const bool available = SDL_Vulkan_LoadLibrary(nullptr);
-            return available;
+            if (!SDL_GL_SetAttribute(attribute, value))
+            {
+                throw PlatformException(operation, SDL_GetError());
+            }
         }
+
+        /// A balanced temporary reference. SDL counts every successful load call and explicitly
+        /// requires the same number of unloads; the old process-static probe leaked two such
+        /// references and could cache a pre-video failure forever.
+        class VulkanLoaderLease
+        {
+        public:
+            explicit VulkanLoaderLease(const char* operation)
+            {
+                if (!SDL_Vulkan_LoadLibrary(nullptr))
+                {
+                    throw PlatformException(operation, SDL_GetError());
+                }
+            }
+
+            ~VulkanLoaderLease() { SDL_Vulkan_UnloadLibrary(); }
+
+            VulkanLoaderLease(const VulkanLoaderLease&) = delete;
+            VulkanLoaderLease& operator=(const VulkanLoaderLease&) = delete;
+        };
 
         int ToSdlGlProfile(const GlProfile profile)
         {
@@ -103,18 +123,28 @@ namespace CNA::Platform::Sdl3 {
     GlContextHandle Sdl3GlContext::CreateContext(const WindowId window,
                                                  const GlContextDescription& description)
     {
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
         SDL_Window* nativeWindow = RequireSdl3Window(window, "GlContext::CreateContext");
 
         // Attributes must be set BEFORE context creation; setting them afterwards is silently
         // ignored, which is how a renderer ends up with a context it did not ask for.
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, description.majorVersion);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, description.minorVersion);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, ToSdlGlProfile(description.profile));
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, description.depthBits);
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, description.stencilBits);
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, description.multisampleBuffers);
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, description.multisampleSamples);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, description.doubleBuffer ? 1 : 0);
+        SDL_GL_ResetAttributes();
+        SetGlAttributeOrThrow(SDL_GL_CONTEXT_MAJOR_VERSION, description.majorVersion,
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_CONTEXT_MINOR_VERSION, description.minorVersion,
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_CONTEXT_PROFILE_MASK, ToSdlGlProfile(description.profile),
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_DEPTH_SIZE, description.depthBits,
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_STENCIL_SIZE, description.stencilBits,
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_MULTISAMPLEBUFFERS, description.multisampleBuffers,
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_MULTISAMPLESAMPLES, description.multisampleSamples,
+                              "GlContext::CreateContext");
+        SetGlAttributeOrThrow(SDL_GL_DOUBLEBUFFER, description.doubleBuffer ? 1 : 0,
+                              "GlContext::CreateContext");
 
         SDL_GLContext context = SDL_GL_CreateContext(nativeWindow);
         if (context == nullptr)
@@ -144,7 +174,10 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3GlContext::SwapBuffers(const WindowId window)
     {
-        SDL_GL_SwapWindow(RequireSdl3Window(window, "GlContext::SwapBuffers"));
+        if (!SDL_GL_SwapWindow(RequireSdl3Window(window, "GlContext::SwapBuffers")))
+        {
+            throw PlatformException("GlContext::SwapBuffers", SDL_GetError());
+        }
     }
 
     bool Sdl3GlContext::SetSwapInterval(const int interval)
@@ -193,16 +226,14 @@ namespace CNA::Platform::Sdl3 {
 
     std::vector<std::string> Sdl3VulkanSurface::GetInstanceExtensions() const
     {
-        if (!VulkanLoaderAvailable())
-        {
-            throw PlatformNotSupportedException(PlatformCapability::VulkanSurface, "SDL3");
-        }
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        const VulkanLoaderLease loader("VulkanSurface::GetInstanceExtensions");
 
         Uint32 count = 0;
         const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
         if (extensions == nullptr)
         {
-            return {};
+            throw PlatformException("VulkanSurface::GetInstanceExtensions", SDL_GetError());
         }
 
         std::vector<std::string> names;
@@ -217,11 +248,7 @@ namespace CNA::Platform::Sdl3 {
     VulkanSurfaceHandle Sdl3VulkanSurface::CreateSurface(const VulkanInstanceHandle instance,
                                                          const WindowId window)
     {
-        if (!VulkanLoaderAvailable())
-        {
-            throw PlatformNotSupportedException(PlatformCapability::VulkanSurface, "SDL3");
-        }
-
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
         SDL_Window* nativeWindow = RequireSdl3Window(window, "VulkanSurface::CreateSurface");
 
         // Value-initialised rather than VK_NULL_HANDLE: that macro needs a real Vulkan header,
@@ -242,6 +269,7 @@ namespace CNA::Platform::Sdl3 {
         {
             return;
         }
+        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
         SDL_Vulkan_DestroySurface(static_cast<VkInstance>(instance),
                                   FromSurfaceHandle<VkSurfaceKHR>(surface), nullptr);
     }
@@ -272,17 +300,20 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3SurfacePresenter::SetScaleMode(const PresentScaleMode mode, const PresentFilter filter)
     {
-        scaleMode_ = mode;
-        filter_ = filter;
-
         // The scale mode belongs to the texture, so a mode change after a texture exists has to
         // be applied to it too -- otherwise the setting silently takes effect only on the next
         // resize.
         if (texture_ != nullptr)
         {
-            SDL_SetTextureScaleMode(texture_, filter_ == PresentFilter::Linear ? SDL_SCALEMODE_LINEAR
-                                                                              : SDL_SCALEMODE_NEAREST);
+            if (!SDL_SetTextureScaleMode(texture_,
+                                         filter == PresentFilter::Linear ? SDL_SCALEMODE_LINEAR
+                                                                         : SDL_SCALEMODE_NEAREST))
+            {
+                throw PlatformException("SurfacePresenter::SetScaleMode", SDL_GetError());
+            }
         }
+        scaleMode_ = mode;
+        filter_ = filter;
     }
 
     bool Sdl3SurfacePresenter::SetVSync(const bool enabled)
@@ -296,36 +327,38 @@ namespace CNA::Platform::Sdl3 {
         {
             return;
         }
-        if (texture_ != nullptr)
-        {
-            SDL_DestroyTexture(texture_);
-            texture_ = nullptr;
-        }
-
-        texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
-                                     width, height);
-        if (texture_ == nullptr)
+        SDL_Texture* replacement =
+            SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
+                              width, height);
+        if (replacement == nullptr)
         {
             throw PlatformException("SurfacePresenter::Present", SDL_GetError());
         }
+        if (!SDL_SetTextureScaleMode(replacement,
+                                     filter_ == PresentFilter::Linear ? SDL_SCALEMODE_LINEAR
+                                                                      : SDL_SCALEMODE_NEAREST))
+        {
+            const std::string detail = SDL_GetError();
+            SDL_DestroyTexture(replacement);
+            throw PlatformException("SurfacePresenter::Present", detail);
+        }
+
+        if (texture_ != nullptr)
+        {
+            SDL_DestroyTexture(texture_);
+        }
+        texture_ = replacement;
         textureWidth_ = width;
         textureHeight_ = height;
-
-        SDL_SetTextureScaleMode(texture_, filter_ == PresentFilter::Linear ? SDL_SCALEMODE_LINEAR
-                                                                          : SDL_SCALEMODE_NEAREST);
     }
 
     void Sdl3SurfacePresenter::Present(const SurfaceFrame& frame)
     {
-        if (frame.pixels == nullptr || frame.width <= 0 || frame.height <= 0)
-        {
-            throw PlatformException("SurfacePresenter::Present",
-                                    "frame must have non-null pixels and a positive size");
-        }
+        const int stride =
+            Common::ValidateSurfaceFrame(frame, "SurfacePresenter::Present");
 
         EnsureTexture(frame.width, frame.height);
 
-        const int stride = frame.strideBytes > 0 ? frame.strideBytes : frame.width * 4;
         if (!SDL_UpdateTexture(texture_, nullptr, frame.pixels, stride))
         {
             throw PlatformException("SurfacePresenter::Present", SDL_GetError());
@@ -336,9 +369,16 @@ namespace CNA::Platform::Sdl3 {
             : scaleMode_ == PresentScaleMode::Overscan ? SDL_LOGICAL_PRESENTATION_OVERSCAN
             : scaleMode_ == PresentScaleMode::Stretch ? SDL_LOGICAL_PRESENTATION_STRETCH
                                                       : SDL_LOGICAL_PRESENTATION_DISABLED;
-        SDL_SetRenderLogicalPresentation(renderer_, frame.width, frame.height, logicalPresentation);
+        if (!SDL_SetRenderLogicalPresentation(renderer_, frame.width, frame.height,
+                                              logicalPresentation))
+        {
+            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
+        }
 
-        SDL_RenderClear(renderer_);
+        if (!SDL_RenderClear(renderer_))
+        {
+            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
+        }
         SDL_FRect unscaledDestination{};
         const SDL_FRect* destination = nullptr;
         if (scaleMode_ == PresentScaleMode::None || scaleMode_ == PresentScaleMode::Native)
@@ -354,8 +394,14 @@ namespace CNA::Platform::Sdl3 {
             unscaledDestination.h = static_cast<float>(frame.height);
             destination = &unscaledDestination;
         }
-        SDL_RenderTexture(renderer_, texture_, nullptr, destination);
-        SDL_RenderPresent(renderer_);
+        if (!SDL_RenderTexture(renderer_, texture_, nullptr, destination))
+        {
+            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
+        }
+        if (!SDL_RenderPresent(renderer_))
+        {
+            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
+        }
     }
 
     void Sdl3SurfacePresenter::GetTargetSize(int& width, int& height) const

@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -281,6 +282,22 @@ TEST_F(Sdl3PresenterTest, MalformedFramesAreRejectedRatherThanRead)
     zeroSize.width = 0;
     zeroSize.height = 8;
     EXPECT_THROW(presenter_->Present(zeroSize), PlatformException);
+
+    SurfaceFrame negativeStride;
+    negativeStride.pixels = pixels.data();
+    negativeStride.width = 4;
+    negativeStride.height = 4;
+    negativeStride.strideBytes = -4;
+    EXPECT_THROW(presenter_->Present(negativeStride), PlatformException);
+
+    SurfaceFrame shortStride = negativeStride;
+    shortStride.strideBytes = shortStride.width * 4 - 1;
+    EXPECT_THROW(presenter_->Present(shortStride), PlatformException);
+
+    SurfaceFrame overflowingRow = negativeStride;
+    overflowingRow.width = std::numeric_limits<int>::max();
+    overflowingRow.strideBytes = 0;
+    EXPECT_THROW(presenter_->Present(overflowingRow), PlatformException);
 }
 
 TEST_F(Sdl3PresenterTest, TargetSizeIsReportedAndScaleModeIsAccepted)
