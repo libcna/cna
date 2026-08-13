@@ -486,6 +486,7 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
                  texcoords: Sequence[Sequence[float]] | None = None,
                  colors: Sequence[Sequence[float]] | None = None,
                  joints: Sequence[Sequence[float]] | None = None,
+                 authored_joints: Sequence[Sequence[float]] | None = None,
                  weights: Sequence[Sequence[float]] | None = None,
                  indices: Sequence[int] | None = None,
                  material: dict[str, Any] | None = None,
@@ -504,10 +505,12 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
     EMPTY, so "dropped" cannot quietly become "present and wrong".
 
     ``importPolicy`` is the one part of this record that is **not** spec-derived: it states what
-    CNA's own documented per-mode policy (plan_gltf.md §10.1, ``GLTF-072``) must turn the primitive
-    into. A strip or fan is converted to a triangle list at import, so the mode CNA carries and the
-    index list it emits both differ from the authored ones -- and a manifest that stated only the
-    authored values could not tell a correct conversion from a missing one.
+    CNA's own documented policies must turn the primitive into. A strip or fan is converted to a
+    triangle list (plan_gltf.md §10.1, ``GLTF-072``), and a non-topological skin remaps authored
+    ``JOINTS_0`` indices onto its parent-before-child GPU palette (``GLTF-252``). `joints` states
+    the palette indices present in the imported L3 mesh; `authored_joints`, when supplied, records
+    the source accessor under `importPolicy.authoredJoints` so the remap can be checked rather than
+    inferred from its output.
     """
     from .builder import (LINE_LOOP, LINE_STRIP, MODE_NAMES, TRIANGLES, expand_to_triangles,
                           primitive_count_for_mode, produces_triangles)
@@ -547,6 +550,10 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
         # importPolicy. The L5 packer may consume an exactly-solvable basis without pretending it
         # came from §3.7.2.1, and a production-path test still has to prove CNA generated it.
         import_policy["generatedTangents"] = [list(t) for t in generated_tangents]
+    if authored_joints is not None:
+        # JOINTS_0 indexes skin.joints[] in the file and the GPU palette after import. Those are
+        # intentionally different spaces when BuildSkeleton topologically reorders a skin.
+        import_policy["authoredJoints"] = [list(j) for j in authored_joints]
     return {
         "mesh": mesh,
         "meshName": mesh_name,

@@ -31,6 +31,7 @@
     ],
     "features": [
       "joint parented to joint",
+      "non-topological skin.joints order",
       "global joint transform",
       "per-vertex joint binding"
     ],
@@ -99,16 +100,16 @@
         "bufferViewByteOffset": 36,
         "bufferViewByteStride": null,
         "values": [
+          1,
+          0,
+          0,
+          0,
           0,
           0,
           0,
           0,
           1,
           0,
-          0,
-          0,
-          0,
-          1,
           0,
           0
         ]
@@ -247,21 +248,21 @@
         "joints": [
           [
             0,
-            0,
-            0,
-            0
+            1,
+            1,
+            1
           ],
           [
             1,
-            0,
-            0,
-            0
+            1,
+            1,
+            1
           ],
           [
             0,
             1,
-            0,
-            0
+            1,
+            1
           ]
         ],
         "weights": [
@@ -306,7 +307,27 @@
             2
           ],
           "converted": false,
-          "primitiveCount": 1
+          "primitiveCount": 1,
+          "authoredJoints": [
+            [
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0,
+              0
+            ]
+          ]
         },
         "material": null
       }
@@ -391,6 +412,66 @@
       "joints": [
         {
           "joint": 0,
+          "node": 0,
+          "nodeName": "JointB",
+          "parentJoint": 1,
+          "jointGlobalColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            2.0,
+            3.0,
+            0.0,
+            1.0
+          ],
+          "inverseBindMatrixColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "jointMatrixColumnMajor": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            2.0,
+            3.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "joint": 1,
           "node": 1,
           "nodeName": "JointA",
           "parentJoint": -1,
@@ -444,66 +525,6 @@
             1.0,
             0.0,
             0.0,
-            3.0,
-            0.0,
-            1.0
-          ]
-        },
-        {
-          "joint": 1,
-          "node": 0,
-          "nodeName": "JointB",
-          "parentJoint": 0,
-          "jointGlobalColumnMajor": [
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            2.0,
-            3.0,
-            0.0,
-            1.0
-          ],
-          "inverseBindMatrixColumnMajor": [
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "jointMatrixColumnMajor": [
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            2.0,
             3.0,
             0.0,
             1.0
@@ -572,7 +593,7 @@
         ],
         "vertexBufferFile": "skin-parented-joints.vb.bin",
         "vertexBufferBytes": 204,
-        "vertexBufferSha256": "560e74fcadbc8aee771d60c28acc463fa03fda8408a65bf0ac482549ef06acf5",
+        "vertexBufferSha256": "84c8a3afb13a57fe6d94e1c0d34784a25c5ef6f2ff1703fb589427796010428a",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "skin-parented-joints.ib.bin",

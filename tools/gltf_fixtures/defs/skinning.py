@@ -1298,9 +1298,15 @@ def skin_nonuniform_joint_scale() -> Fixture:
     )
 
 
-#: One vertex per joint plus one shared between them, so the chain is observable at both ends and
-#: in a blend: vertex 0 rides the parent, vertex 1 the child, vertex 2 half of each.
-_PARENTED_JOINTS = [(0, 0, 0, 0), (1, 0, 0, 0), (0, 1, 0, 0)]
+#: The file deliberately lists the CHILD before the PARENT in ``skin.joints[]``. One vertex per
+#: joint plus one shared between them makes both the topological reorder and the chain observable:
+#: vertex 0 rides file-local joint 1 (the parent), vertex 1 joint 0 (the child), vertex 2 both.
+_PARENTED_JOINTS_AUTHORED = [(1, 0, 0, 0), (0, 0, 0, 0), (1, 0, 0, 0)]
+#: What ExtractMesh must hand to the GPU after old file-local indices [child,parent] are remapped
+#: onto the parent-before-child palette. Every valid component is remapped, including zero-weight
+#: padding: authored joint 0 is the child and therefore becomes palette slot 1. L3/L5 describe
+#: these imported values, not raw accessor values.
+_PARENTED_JOINTS_IMPORTED = [(0, 1, 1, 1), (1, 1, 1, 1), (0, 1, 1, 1)]
 _PARENTED_WEIGHTS = [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0), (0.5, 0.5, 0.0, 0.0)]
 
 
@@ -1314,25 +1320,26 @@ def skin_parented_joints() -> Fixture:
     stays correct. A single-joint fixture cannot tell the two rules apart at all.
     """
     b = GltfBuilder("skin-parented-joints")
-    mesh, ibm = _skinned_triangle(b, joint_indices=_PARENTED_JOINTS,
+    mesh, ibm = _skinned_triangle(b, joint_indices=_PARENTED_JOINTS_AUTHORED,
                                   joint_weights=_PARENTED_WEIGHTS,
                                   inverse_binds=[mat_identity()] * 2)
-    # Declared parent-before-child, which is also the order BuildSkeleton reorders into, so the
-    # golden's BlendIndices are the authored ones and a reordering regression is visible at L5.
+    # Declared child-before-parent. BuildSkeleton must reorder this to parent-before-child without
+    # touching the scene graph's stable order, and ExtractMesh must remap the authored JOINTS_0
+    # indices into that palette. GLTF-252 tests all three index spaces explicitly.
     child = b.add_node(name="JointB", translation=[2.0, 0.0, 0.0])
     parent = b.add_node(name="JointA", translation=[0.0, 3.0, 0.0], children=[child])
     mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
-    b.add_skin({"name": "Skin", "joints": [parent, child], "inverseBindMatrices": ibm})
+    b.add_skin({"name": "Skin", "joints": [child, parent], "inverseBindMatrices": ibm})
     b.add_scene([parent, mesh_node], name="Scene")
     b.set_default_scene(0)
 
     parent_global = mat_translation([0.0, 3.0, 0.0])
     child_global = mat_mul(parent_global, mat_translation([2.0, 0.0, 0.0]))
-    globals_ = [parent_global, child_global]
+    globals_ = [child_global, parent_global]
     l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
     l4["skin"] = _skin_block(
-        joint_nodes=[parent, child], joint_names=["JointA", "JointB"], joint_globals=globals_,
-        joint_indices=_PARENTED_JOINTS, joint_weights=_PARENTED_WEIGHTS, parents=[-1, 0],
+        joint_nodes=[child, parent], joint_names=["JointB", "JointA"], joint_globals=globals_,
+        joint_indices=_PARENTED_JOINTS_AUTHORED, joint_weights=_PARENTED_WEIGHTS, parents=[1, -1],
         note="JointB's global transform is T(0,3,0) * T(2,0,0) = T(2,3,0), so the vertex bound to "
              "it lands at (3,3,0). A reader using node-local transforms puts it at (3,0,0) and "
              "moves the shared vertex half as far wrong, while the parent's vertex stays right -- "
@@ -1343,11 +1350,13 @@ def skin_parented_joints() -> Fixture:
                     "one shared. The child's joint matrix must carry its parent's transform; a "
                     "node-local reading is wrong on two of the three vertices and right on one.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
-        features=["joint parented to joint", "global joint transform", "per-vertex joint binding"],
+        features=["joint parented to joint", "non-topological skin.joints order",
+                  "global joint transform", "per-vertex joint binding"],
         spec_anchors=["skins", "joint-hierarchy", "skinned-mesh-attributes"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="SkinnedTri", primitive=0, mode=TRIANGLES,
-            positions=TRIANGLE_POSITIONS, joints=_PARENTED_JOINTS, weights=_PARENTED_WEIGHTS,
+            positions=TRIANGLE_POSITIONS, joints=_PARENTED_JOINTS_IMPORTED,
+            authored_joints=_PARENTED_JOINTS_AUTHORED, weights=_PARENTED_WEIGHTS,
             indices=TRIANGLE_INDICES)]},
         l4=l4,
     )

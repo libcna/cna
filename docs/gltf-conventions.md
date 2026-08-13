@@ -299,6 +299,25 @@ Three properties of that equation are load-bearing, and each was a defect when i
 * **`skin.skeleton` is a hint, never a traversal stop.** It names a convenient common root for the
   joints; walking only as far as it drops any ancestor above it (`GLTF-249`).
 
+### Scene nodes and palette slots are different identities
+
+`plan_gltf.md` `GLTF-252`. A joint participates in three index spaces that happen to coincide in
+simple files and must therefore never be inferred from one another:
+
+| Space | Meaning | Consumer |
+|---|---|---|
+| `skin.joints[]` index | authored file-local joint reference | decoded `JOINTS_0` before import policy |
+| `sceneNodeIndex` | stable identity in `SceneGraphOut` and `Model::Bones` | hierarchy, rigid animation, cameras and lights |
+| `paletteIndex` | parent-before-child slot in this skin's GPU palette | `SkinningData`, `BlendIndices`, `uBones[]` |
+
+`SkeletonResult::oldToNew` converts the first to the third. The scene-aware overload additionally
+records `sceneNodeIndexToPaletteIndex` and `paletteIndexToSceneNodeIndex`; non-joint scene nodes and
+joints outside the imported default scene map to `-1`. These are internal carrier fields, not a new
+public API. `skin-parented-joints` deliberately authors the child before its parent and
+`GltfSkinSpaces.SceneNodeAndPaletteMappingsAreExplicitAndBidirectional` proves that the scene graph
+keeps its stable order, the palette becomes topological, both maps invert one another, and all four
+`BlendIndices` bytes address the palette.
+
 ## Morphing happens on the CPU
 
 `plan_gltf.md` `GLTF-285`. A morph target is a per-vertex delta array, and CNA applies the weighted

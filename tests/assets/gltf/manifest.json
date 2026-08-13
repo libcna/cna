@@ -2017,6 +2017,7 @@
       ],
       "features": [
         "joint parented to joint",
+        "non-topological skin.joints order",
         "global joint transform",
         "per-vertex joint binding"
       ],
@@ -5028,18 +5029,18 @@
     },
     {
       "path": "skin-parented-joints.expected.json",
-      "bytes": 11742,
-      "sha256": "56bf6f99d02a18bff4866d4534717337fc471fa57364e78315325fb746c8dee1"
+      "bytes": 12115,
+      "sha256": "77d90d785abe2040ca8d8766363e8396d86d08df79f4e78070ea6df6995f0b7d"
     },
     {
       "path": "skin-parented-joints.glb",
       "bytes": 1364,
-      "sha256": "d7256cc9d8c400640f01d748d74315379def95c9e5799c7139d26ef42079bfbc"
+      "sha256": "d971dc8811b3629eae08cf8d9bca6f7874fc40362c95d86320aadc3d0655d297"
     },
     {
       "path": "skin-parented-joints.gltf",
       "bytes": 2452,
-      "sha256": "22c564c83ba7615ea6ce501a551c33b16ef7be22341a1df7d69d5ef64fa5e6bb"
+      "sha256": "8f0dee48fa9261262a9e84fd0ec74abbcd361d38e9550c38c5b8d246ad73bcf2"
     },
     {
       "path": "skin-parented-joints.ib.bin",
@@ -5049,7 +5050,7 @@
     {
       "path": "skin-parented-joints.vb.bin",
       "bytes": 204,
-      "sha256": "560e74fcadbc8aee771d60c28acc463fa03fda8408a65bf0ac482549ef06acf5"
+      "sha256": "84c8a3afb13a57fe6d94e1c0d34784a25c5ef6f2ff1703fb589427796010428a"
     },
     {
       "path": "skin-plus-static-mesh.expected.json",

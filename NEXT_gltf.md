@@ -9,9 +9,9 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **374 closed (`✔` 252, `✅` 122),
-  64 `⬜` remaining.** The other 22 carry a deliberate partial marker: 8 `🔬` (investigation, no
-  implementation owed), 8 `✅/⬜` and 2 `✅/🐛` (landed with a named residue), 2 `🐛` (open:
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **375 closed (`✔` 252, `✅` 123),
+  64 `⬜` remaining.** The other 21 carry a deliberate partial marker: 8 `🔬` (investigation, no
+  implementation owed), 7 `✅/⬜` and 2 `✅/🐛` (landed with a named residue), 2 `🐛` (open:
   `GLTF-157`, `421`), and 2 `⛔` (`GLTF-009` and
   `GLTF-439`, each blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
@@ -43,9 +43,9 @@ Expected as of this writing:
 | Check | Expected |
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
-| full suite | **6 366 passed, 191 skipped, 18 failed** |
+| full suite | **6 367 passed, 191 skipped, 18 failed** |
 | generator `--check` | **140 assets, 694 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **473 passed, 26 skipped** / **499 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **474 passed, 26 skipped** / **500 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -76,7 +76,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 473 passed, 26 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 474 passed, 26 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the

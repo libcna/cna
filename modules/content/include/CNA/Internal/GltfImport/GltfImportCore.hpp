@@ -74,6 +74,25 @@ namespace CNA::Internal::GltfImport
         /** @brief Maps a joint's glTF node pointer directly to its reordered index. */
         std::unordered_map<const cgltf_node*, int> nodeToNewIndex;
         /**
+         * @brief Maps each stable `sceneNodeIndex` to this skin's `paletteIndex`, or -1 when that
+         * scene node is not a joint of this skin.
+         *
+         * plan_gltf.md `GLTF-252`. The vector has the same length as `SceneGraphOut::nodes` when
+         * the scene-aware `BuildSkeleton` overload is used. It is deliberately not `oldToNew`:
+         * `skin.joints[]` order is a third, file-local index space and the scene graph must never
+         * be reordered to make either one coincide with the GPU palette.
+         */
+        std::vector<int> sceneNodeIndexToPaletteIndex;
+        /**
+         * @brief Maps each `paletteIndex` back to its stable `sceneNodeIndex`, or -1 when the joint
+         * is outside the imported default scene.
+         *
+         * This is the inverse of @ref sceneNodeIndexToPaletteIndex for every joint reachable from
+         * the imported scene. Joints outside it still remain usable through @ref nodeToNewIndex;
+         * inventing a scene identity for a node the scene did not import would be misleading.
+         */
+        std::vector<int> paletteIndexToSceneNodeIndex;
+        /**
          * @brief The `sceneNodeIndex` of the node `skin.skeleton` names, or -1 when it names none.
          *
          * plan_gltf.md `GLTF-249`. This is a **hint**, recorded so an application can locate and
@@ -1095,7 +1114,8 @@ namespace CNA::Internal::GltfImport
      *
      * @param skin The glTF skin to process.
      * @param unitScale Uniform scale applied to every bone's translation (see `ScaleTranslation`).
-     * @return The reordered skeleton, plus the old-to-new joint index remap.
+     * @return The reordered skeleton, plus its file-joint/palette mappings. Scene-index mappings
+     *         are empty or `-1` because this overload has no scene graph.
      */
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale);
 
@@ -1120,7 +1140,7 @@ namespace CNA::Internal::GltfImport
      * @param meshNodeWorld World transform of the node instancing the skinned mesh, in XNA
      *        row-vector form. Pass the identity when no such node applies.
      * @param unitScale Uniform scale applied to every bone's translation (see `ScaleTranslation`).
-     * @return The reordered skeleton, plus the old-to-new joint index remap.
+     * @return The reordered skeleton, plus the file-joint, scene-node and palette mappings.
      */
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, const SceneGraphOut& scene,
                                   const Microsoft::Xna::Framework::Matrix& meshNodeWorld,

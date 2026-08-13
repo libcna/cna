@@ -28,15 +28,17 @@
 // exactly once; until it lands, D8 keeps that half open.
 
 #include <algorithm>
-#include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
-#include <cstring>
+#include <array>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
-#include <stdexcept>
 #include <fstream>
-#include <gtest/gtest.h>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
@@ -56,6 +58,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 
 using CnaTest::GltfOracle::CorpusDirectory;
 using CnaTest::GltfOracle::LoadedFixture;
@@ -293,6 +296,93 @@ TEST(GltfSceneGraphBones, SkinnedMeshAncestryIsPreservedInTheSceneModelButDoesNo
     // ...and none of it transforms the mesh, because glTF says the joints already place it.
     ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
     EXPECT_EQ(bones[0], model.getMeshesProperty()[0]->getParentBoneProperty());
+}
+
+// --- GLTF-252: scene-node identity and joint-palette ordering are separate index spaces ---------
+
+TEST(GltfSkinSpaces, SceneNodeAndPaletteMappingsAreExplicitAndBidirectional)
+{
+    using namespace CNA::Internal::GltfImport;
+
+    const LoadedFixture fixture("skin-parented-joints");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const SceneGraphOut scene = BuildSceneGraph(&fixture.Data());
+    const std::vector<MeshGroup> groups = CollectMeshGroups(&fixture.Data(), scene);
+    ASSERT_EQ(1u, groups.size());
+    ASSERT_NE(nullptr, groups[0].skin);
+    ASSERT_EQ(1u, groups[0].instances.size());
+    const MeshInstanceOut& instance = groups[0].instances[0];
+
+    // The fixture is intentionally hostile to an identity remap: its file-local joints array is
+    // [JointB(child), JointA(parent)], while a usable GPU palette must be [JointA, JointB].
+    ASSERT_EQ(2u, groups[0].skin->joints_count);
+    ASSERT_NE(nullptr, groups[0].skin->joints[0]->name);
+    ASSERT_NE(nullptr, groups[0].skin->joints[1]->name);
+    EXPECT_STREQ("JointB", groups[0].skin->joints[0]->name);
+    EXPECT_STREQ("JointA", groups[0].skin->joints[1]->name);
+
+    const SkeletonResult skeleton =
+        BuildSkeleton(groups[0].skin, scene, instance.worldTransform, 1.0f);
+    ASSERT_EQ(2u, skeleton.bones.size());
+    ASSERT_EQ(2u, skeleton.oldToNew.size());
+    EXPECT_EQ(1, skeleton.oldToNew[0]);
+    EXPECT_EQ(0, skeleton.oldToNew[1]);
+    EXPECT_EQ("JointA", skeleton.bones[0].name);
+    EXPECT_EQ("JointB", skeleton.bones[1].name);
+
+    // Model::Bones follows the scene graph and includes a synthetic root plus non-joint nodes;
+    // the palette does neither. Resolve by name to make the asserted index space unmistakable.
+    ASSERT_EQ(scene.nodes.size(), skeleton.sceneNodeIndexToPaletteIndex.size());
+    ASSERT_EQ(skeleton.bones.size(), skeleton.paletteIndexToSceneNodeIndex.size());
+    EXPECT_EQ(-1, skeleton.sceneNodeIndexToPaletteIndex[0])
+        << "the synthetic scene root is not a joint-palette entry";
+
+    for (std::size_t paletteIndex = 0; paletteIndex < skeleton.bones.size(); ++paletteIndex)
+    {
+        const int sceneNodeIndex =
+            skeleton.paletteIndexToSceneNodeIndex[paletteIndex];
+        ASSERT_GT(sceneNodeIndex, 0);
+        ASSERT_LT(static_cast<std::size_t>(sceneNodeIndex), scene.nodes.size());
+        EXPECT_EQ(static_cast<int>(paletteIndex),
+                  skeleton.sceneNodeIndexToPaletteIndex[
+                      static_cast<std::size_t>(sceneNodeIndex)]);
+        EXPECT_EQ(skeleton.bones[paletteIndex].name,
+                  scene.nodes[static_cast<std::size_t>(sceneNodeIndex)].name);
+    }
+    EXPECT_NE(skeleton.paletteIndexToSceneNodeIndex[0], 0)
+        << "paletteIndex was silently treated as sceneNodeIndex";
+
+    const int meshSceneNodeIndex = instance.sceneNodeIndex;
+    ASSERT_GT(meshSceneNodeIndex, 0);
+    ASSERT_LT(static_cast<std::size_t>(meshSceneNodeIndex),
+              skeleton.sceneNodeIndexToPaletteIndex.size());
+    EXPECT_EQ(-1, skeleton.sceneNodeIndexToPaletteIndex[
+                      static_cast<std::size_t>(meshSceneNodeIndex)])
+        << "the skinned mesh node belongs to the scene, not to its skin's joint palette";
+
+    // Finally pin the consumer of oldToNew. BlendIndices is the final four bytes of this fixture's
+    // 68-byte skinned-PBR vertex. The authored indices [1], [0], [1,0] must therefore arrive as
+    // palette slots [0], [1], [0,1] -- never as file-local or scene-node indices.
+    ASSERT_NE(nullptr, instance.mesh);
+    ASSERT_EQ(1u, instance.mesh->primitives_count);
+    const MeshOut mesh = ExtractMesh(
+        &fixture.Data(), instance.mesh->primitives[0], "skin-parented-joints", &skeleton, 1.0f);
+    ASSERT_EQ(68, mesh.stride);
+    ASSERT_EQ(static_cast<std::size_t>(mesh.stride) * 3u, mesh.vertexBytes.size());
+    constexpr std::size_t blendIndicesOffset = 64u;
+    const std::array<std::array<std::uint8_t, 4>, 3> expectedPaletteIndices = {{
+        {{0u, 1u, 1u, 1u}}, {{1u, 1u, 1u, 1u}}, {{0u, 1u, 1u, 1u}}
+    }};
+    for (std::size_t vertex = 0; vertex < expectedPaletteIndices.size(); ++vertex)
+    {
+        for (std::size_t component = 0; component < 4u; ++component)
+        {
+            EXPECT_EQ(expectedPaletteIndices[vertex][component],
+                      mesh.vertexBytes[vertex * static_cast<std::size_t>(mesh.stride) +
+                                       blendIndicesOffset + component])
+                << "vertex " << vertex << ", BlendIndices component " << component;
+        }
+    }
 }
 
 // --- GLTF-245 / GLTF-247 / GLTF-248: the skin coordinate spaces --------------------------------

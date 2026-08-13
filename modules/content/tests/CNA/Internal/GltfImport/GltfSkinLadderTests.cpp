@@ -16,10 +16,10 @@
 // the result against the manifest. Two properties make that comparison meaningful rather than
 // circular:
 //
-//   * The palette is indexed in CNA's OWN bone order, not the file's joint order, and the two
-//     differ by `SkeletonResult::oldToNew` (§15.1.2 -- the bone order is the scene graph's and is
-//     deliberately not a skin palette's). The mapping is read from the importer rather than
-//     assumed, so a reordering regression surfaces as a wrong position rather than being absorbed.
+//   * The palette is indexed in CNA's OWN parent-before-child order, not the file's joint order,
+//     and the two differ by `SkeletonResult::oldToNew` (§15.1.2). The scene-node order is a third,
+//     deliberately separate space. The mapping is read from the importer rather than assumed, so
+//     a reordering regression surfaces as a wrong position rather than being absorbed.
 //   * The expected positions are computed by the generator from the authored transforms, in
 //     Python, without reference to any C++ code. Nothing here can agree with itself by accident.
 //
@@ -65,8 +65,10 @@ namespace
     /// not a fudge factor.
     constexpr float kTolerance = 1e-4f;
 
-    /// A fixture's authored joint bindings, read from its L3 expectation: the file's own
-    /// JOINTS_0/WEIGHTS_0 in the file's own joint index space.
+    /// A fixture's authored joint bindings. Ordinary fixtures have an identity palette remap, so
+    /// their L3 `joints` are also the authored values. A deliberately non-topological skin records
+    /// the accessor separately under `importPolicy.authoredJoints` because L3 itself contains the
+    /// post-remap palette indices (GLTF-252).
     struct Bindings
     {
         std::vector<std::array<int, 4>> joints;
@@ -83,7 +85,11 @@ namespace
             return false;
         }
         const CNA::Internal::JsonValue& primitive = primitives.arrayValue.front();
-        const CNA::Internal::JsonValue& joints = Member(primitive, "joints");
+        const CNA::Internal::JsonValue& policy = Member(primitive, "importPolicy");
+        const CNA::Internal::JsonValue& authoredJoints = Member(policy, "authoredJoints");
+        const CNA::Internal::JsonValue& joints =
+            authoredJoints.type == CNA::Internal::JsonType::Array
+                ? authoredJoints : Member(primitive, "joints");
         const CNA::Internal::JsonValue& weights = Member(primitive, "weights");
         const CNA::Internal::JsonValue& positions = Member(primitive, "positions");
         if (joints.type != CNA::Internal::JsonType::Array ||

@@ -967,6 +967,11 @@ namespace CNA::Internal::GltfImport
         }
 
         const std::size_t n = skin->joints_count;
+        // GLTF-252: these are the explicit bridge between the stable scene-node identity space
+        // and this skin's private GPU-palette space. They stay populated independently of
+        // oldToNew, whose input is the file-local skin.joints[] order rather than a scene index.
+        result.sceneNodeIndexToPaletteIndex.assign(scene.nodes.size(), -1);
+        result.paletteIndexToSceneNodeIndex.assign(n, -1);
         if (n == 0) { return result; }
 
         // plan_gltf.md GLTF-261. The GPU palette is MaxBones (72) mat4s, a real XNA constant that
@@ -1096,6 +1101,30 @@ namespace CNA::Internal::GltfImport
 
             result.bones[newIdx] = bone;
             result.nodeToNewIndex[node] = static_cast<int>(newIdx);
+
+            const auto sceneNode = scene.indexOfNode.find(node);
+            if (sceneNode != scene.indexOfNode.end())
+            {
+                const int sceneNodeIndex = sceneNode->second;
+                if (sceneNodeIndex < 0 ||
+                    static_cast<std::size_t>(sceneNodeIndex) >=
+                        result.sceneNodeIndexToPaletteIndex.size())
+                {
+                    throw std::runtime_error(
+                        "The scene graph returned an out-of-range sceneNodeIndex for joint '" +
+                        bone.name + "'.");
+                }
+                int& paletteIndex = result.sceneNodeIndexToPaletteIndex[
+                    static_cast<std::size_t>(sceneNodeIndex)];
+                if (paletteIndex != -1)
+                {
+                    throw std::runtime_error(
+                        "Skin '" + std::string(skin->name != nullptr ? skin->name : "<unnamed>") +
+                        "' lists scene node '" + bone.name + "' as a joint more than once.");
+                }
+                paletteIndex = static_cast<int>(newIdx);
+                result.paletteIndexToSceneNodeIndex[newIdx] = sceneNodeIndex;
+            }
         }
 
         return result;
