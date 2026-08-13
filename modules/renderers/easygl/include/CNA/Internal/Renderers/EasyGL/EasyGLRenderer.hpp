@@ -664,6 +664,8 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_occlusionmap = -1; ///< sampler2D occlusion map (PbrEffect only, R channel)
             int loc_pbr_metallic    = -1;  ///< float metallic factor (PbrEffect only)
             int loc_pbr_roughness   = -1;  ///< float roughness factor (PbrEffect only)
+            /// plan_gltf.md GLTF-343/344: xyz = dielectric F0, w = dielectric F90.
+            int loc_pbr_dielectric_fresnel = -1;
             /// plan_gltf.md GLTF-210/GLTF-212: vec3 colour-management gate (PbrEffect only).
             /// x = decode the base-colour sample from sRGB, y = decode the emissive sample,
             /// z = encode the fragment's RGB back to sRGB. Each is 0 or 1 and multiplies a

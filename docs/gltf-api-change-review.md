@@ -209,18 +209,23 @@ validation. The only clamp is the one the extension specification requires in th
 
 **Migration.** None.
 
-**Deliberate boundary.** This review approves factor transport only. The extension's two optional
-textures need two additional texture bindings and per-map colour-space/UV handling on every PBR
-renderer, and the shader must replace its core `mix(0.04, albedo, metallic)` formulation with the
-extension's dielectric/metal BRDF mix. Neither change is accepted without a rasterising renderer
-test. Until that work lands the registry remains `PARSED_BUT_IGNORED`, with a more precise reason:
-factors reach L6 but no renderer consumes them, and texture inputs are still reported as absent.
+**Implemented boundary.** Factor consumption now exists on EasyGL's rigid and skinned PBR
+programs. A `uDielectricFresnel` vec4 carries RGB F0 plus scalar F90; the dielectric endpoint is
+mixed with albedo for metals, and Schlick uses `F90 - F0` rather than assuming the grazing endpoint
+is always one. The core defaults are algebraically identical to the former constants. Other PBR
+renderers still need the same consumption, and the extension's two optional textures still need
+additional bindings plus per-map colour-space/UV handling. The registry therefore remains
+`PARSED_BUT_IGNORED`: a required use is not claimed while either cross-renderer factor parity or
+texture inputs are absent.
 
 **Test.** Effect default/setter/clone tests cover both classes. `mat-factor-only-gold` authors IOR
 2, specular factor 0.3 and colour `(0.25,1,12)`, making the derived F0
 `(1/120,1/30,0.3)` and F90 `0.3`; the blue channel proves the clamp happens before the strength
-multiply. L3, direct L6 and `.cnj` parity compare those values against the fixture manifest. The
-remaining shader/texture work stays explicitly open on `GLTF-343`/`GLTF-344`.
+multiply. L3, direct L6 and `.cnj` parity compare those values against the fixture manifest.
+`EasyGL_Pbr_FresnelFactors` then uses a black, fully rough analytic scene where normal-incidence
+output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core and `(2,9,43)` for the
+fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
+`(33,33,33)` versus `(15,15,15)`. Texture and non-EasyGL renderer work stays explicitly open.
 
 ---
 

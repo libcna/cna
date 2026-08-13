@@ -56,8 +56,8 @@ every lit file would be far worse than the approximation.
 | `KHR_materials_unlit` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | yes | Maps to LightingEnabled = false on BasicEffect, with baseColorFactor as the diffuse colour. SkinnedEffect has no such flag -- real XNA's has none either -- so a skinned unlit material is approximated with an all-white ambient and no directional light, which is unlit apart from any specular term. | `GLTF-337` |
 | `KHR_materials_pbrSpecularGlossiness` | **APPROXIMATED_AND_REPORTED** | no | Archived by Khronos but present in older assets, so converted rather than refused: diffuse becomes the base colour, metallic 0, roughness 1 - glossiness. Not claimed, because specularFactor -- a coloured specular reflection -- has no metallic-roughness equivalent, so a file REQUIRING the extension is asking for something the conversion cannot deliver. | `GLTF-349` |
 | `KHR_materials_variants` | **IMPLEMENTED_AND_TESTED** | yes | The source-order variant table and sparse primitive mappings are preserved. Model's CNAEXT selection API swaps the complete material-dependent part state, including effect, vertex layout, textures and samplers, on both direct glTF and offline .cnj paths while leaving the default mapping unchanged. | `GLTF-341` |
-| `KHR_materials_ior` | **PARSED_BUT_IGNORED** | no | The factor reaches PBR effect state and shader-ready dielectric F0 at L6, but no renderer consumes it yet. | `GLTF-343` |
-| `KHR_materials_specular` | **PARSED_BUT_IGNORED** | no | Factor and colour reach PBR effect state and dielectric F0/F90 at L6. The two optional textures are not imported and no renderer consumes the factors yet. | `GLTF-344` |
+| `KHR_materials_ior` | **PARSED_BUT_IGNORED** | no | The factor reaches PBR effect state and shader-ready dielectric F0/F90; EasyGL consumes both endpoints, but other PBR renderers do not yet. | `GLTF-343` |
+| `KHR_materials_specular` | **PARSED_BUT_IGNORED** | no | Factor and colour reach PBR effect state and EasyGL's rigid/skinned shaders. The two optional textures are not imported and other PBR renderers do not consume the endpoints yet. | `GLTF-344` |
 | `KHR_materials_clearcoat` | **PARSED_BUT_IGNORED** | no | A second specular lobe -- a large shader change. | `GLTF-345` |
 | `KHR_materials_sheen` | **PARSED_BUT_IGNORED** | no | A third BRDF lobe, same shape of change as clearcoat. | `GLTF-346` |
 | `KHR_materials_volume` | **PARSED_BUT_IGNORED** | no | Meaningless without a real transmission pass, which CNA does not have. | `GLTF-347` |
@@ -139,8 +139,8 @@ provable, and only the last step is missing.
 |---|---|---|---|
 | `alphaMode: BLEND` | `PbrEffect::getAlphaModeEXTProperty()` | `BlendState` and back-to-front draw ordering, which in XNA are per-draw device state the application sets. CNA does not sort by default. | `GLTF-230` |
 | `doubleSided` | `PbrEffect::getDoubleSidedEXTProperty()` | `RasterizerState::CullMode`, per-draw device state for the same reason. | `GLTF-231`, `GLTF-230` |
-| `KHR_materials_ior.ior` | `PbrEffect::getIorEXTProperty()` and `GpuDrawParams::pbrDielectricF0` | Every PBR renderer still uses its hardcoded 0.04 dielectric F0. | `GLTF-343` |
-| `KHR_materials_specular` factors | `PbrEffect::getSpecularFactorEXTProperty()` / `getSpecularColorFactorEXTProperty()` and `GpuDrawParams::pbrDielectricF0` / `pbrDielectricF90` | Every PBR renderer still ignores those endpoints; the two texture inputs are separately absent above. | `GLTF-344` |
+| `KHR_materials_ior.ior` | `PbrEffect::getIorEXTProperty()` and `GpuDrawParams::pbrDielectricF0` | EasyGL consumes it; other PBR renderers still use their core dielectric F0. | `GLTF-343` |
+| `KHR_materials_specular` factors | `PbrEffect::getSpecularFactorEXTProperty()` / `getSpecularColorFactorEXTProperty()` and `GpuDrawParams::pbrDielectricF0` / `pbrDielectricF90` | EasyGL consumes both endpoints; other PBR renderers still ignore them, and the two texture inputs are separately absent above. | `GLTF-344` |
 
 `alphaMode: MASK` **used** to be in this table and is not any more: the cutoff is fragment-program
 work rather than device state, so `GLTF-372` wired it into `GpuDrawParams::alphaTest` and every PBR

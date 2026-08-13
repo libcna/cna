@@ -189,13 +189,13 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
    `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
    without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —
    that is the single most useful thing to tell whoever asks why the milestone is still open.
-3. **`GLTF-343` + `GLTF-344` are now renderer-verifiable next tasks.** Raw IOR/specular
+3. **`GLTF-343` + `GLTF-344` now render correctly on EasyGL but remain cross-renderer/texture tasks.** Raw IOR/specular
    factors survive direct and offline import, both PBR effects and `.cnj`; `GpuDrawParams` carries
    the Khronos-derived dielectric F0/F90; a discriminating analytic/L3/L6 witness pins clamp order,
-   defaults and direct/offline parity. Both rows are `✅/⬜`. `GLTF-157` established a working
-   OPENGLES3 build and real Xvfb/Mesa execution now that the sibling `easy-gl`/`meta-gl` checkouts
-   are present, so their EasyGL shader consumption can finally be changed and measured. The two
-   optional specular textures remain absent and still need a separate transport decision.
+   defaults and direct/offline parity. Both rows remain `✅/⬜`. EasyGL's rigid and skinned shaders
+   now consume RGB F0 and scalar F90, with a real OPENGLES3 analytic pixel test covering the core
+   default, the channel-separated fixture factors and an F90-only grazing change. The same factor
+   endpoints on other PBR renderers and both optional specular textures remain absent.
 4. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
    `apt-get install libdraco-dev` — the *cheapest* unblock on the list if the owner allows it, and
    it turns eight blocked rows into ordinary work.

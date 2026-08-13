@@ -5880,14 +5880,16 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
+// plan_gltf.md GLTF-343/344: factor-only KHR_materials_ior/specular state, already reduced by
+// FillGpuDrawParams to the exact shader-ready Fresnel endpoints. xyz is dielectric F0; w is F90.
+"uniform vec4 uDielectricFresnel;\n"
 // plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
 "uniform vec3 uSrgb;\n"
 // plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
-// already uses everywhere -- the EasyGL family needs sibling checkouts this tree does not have, so
-// a wider overload could not be verified here.
+// already uses everywhere.
 "uniform float uNormalScale;\n"
 "uniform float uOcclusionStrength;\n"
 "uniform vec3 uLight0Dir;\n"
@@ -5903,7 +5905,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.3/B.3.4/B.3.2).
 CNA_GL_SRGB_TRANSFER_DECL
-"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
+"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic){\n"
 "    vec3 H=normalize(V+L);\n"
 "    float NdotL=max(dot(N,L),0.0);\n"
 "    float NdotV=max(dot(N,V),1e-4);\n"
@@ -5914,7 +5916,7 @@ CNA_GL_SRGB_TRANSFER_DECL
 "    float D=a2/(3.14159265*dTerm*dTerm+1e-7);\n"
 "    float k=(roughness+1.0); k=k*k/8.0;\n"
 "    float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));\n"
-"    vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
+"    vec3 F=F0+(F90-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
 "    vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);\n"
 "    vec3 diffuseColor=albedo*(1.0-metallic);\n"
 "    vec3 kd=vec3(1.0)-F;\n"
@@ -5943,11 +5945,12 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
-"    vec3 F0=mix(vec3(0.04),albedo,metallic);\n"
+"    vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic);\n"
+"    vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic);\n"
 "    vec3 Lo=vec3(0.0);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
@@ -5993,6 +5996,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_pbr_dielectric_fresnel = p.prog.uniform_location("uDielectricFresnel");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
@@ -6073,14 +6077,15 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
+// plan_gltf.md GLTF-343/344: same shader-ready dielectric Fresnel endpoints as unskinned PBR.
+"uniform vec4 uDielectricFresnel;\n"
 // plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
 "uniform vec3 uSrgb;\n"
 // plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
-// already uses everywhere -- the EasyGL family needs sibling checkouts this tree does not have, so
-// a wider overload could not be verified here.
+// already uses everywhere.
 "uniform float uNormalScale;\n"
 "uniform float uOcclusionStrength;\n"
 "uniform vec3 uLight0Dir;\n"
@@ -6094,7 +6099,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 CNA_GL_SRGB_TRANSFER_DECL
-"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
+"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic){\n"
 "    vec3 H=normalize(V+L);\n"
 "    float NdotL=max(dot(N,L),0.0);\n"
 "    float NdotV=max(dot(N,V),1e-4);\n"
@@ -6105,7 +6110,7 @@ CNA_GL_SRGB_TRANSFER_DECL
 "    float D=a2/(3.14159265*dTerm*dTerm+1e-7);\n"
 "    float k=(roughness+1.0); k=k*k/8.0;\n"
 "    float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));\n"
-"    vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
+"    vec3 F=F0+(F90-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
 "    vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);\n"
 "    vec3 diffuseColor=albedo*(1.0-metallic);\n"
 "    vec3 kd=vec3(1.0)-F;\n"
@@ -6134,11 +6139,12 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
-"    vec3 F0=mix(vec3(0.04),albedo,metallic);\n"
+"    vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic);\n"
+"    vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic);\n"
 "    vec3 Lo=vec3(0.0);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
-"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
@@ -6186,6 +6192,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_pbr_dielectric_fresnel = p.prog.uniform_location("uDielectricFresnel");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
@@ -6649,6 +6656,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
             p.prog.set_uniform(p.loc_pbr_metallic, params.pbrMetallicFactor);
         if (p.loc_pbr_roughness >= 0)
             p.prog.set_uniform(p.loc_pbr_roughness, params.pbrRoughnessFactor);
+        if (p.loc_pbr_dielectric_fresnel >= 0)
+        {
+            p.prog.set_uniform(
+                p.loc_pbr_dielectric_fresnel,
+                params.pbrDielectricF0[0], params.pbrDielectricF0[1],
+                params.pbrDielectricF0[2], params.pbrDielectricF90);
+        }
         // plan_gltf.md GLTF-210/GLTF-212. Three independent decisions, so three independent
         // components: two about what a bound texture contains, one about where the fragment is
         // going. A renderer that ignored this field entirely would keep the pre-GLTF-209
