@@ -29,7 +29,7 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 
 ## Status
 
-**Delivered and green.** 4 CTest suites, 37 checks, 4/4 passing under
+**Delivered and green.** 5 CTest suites, 45 checks, 5/5 passing under
 `-DCNA_GRAPHICS_RENDERER=TINYGL`. Public renderer identity count is **47**
 (`scripts/check_renderer_identities.py`).
 
@@ -45,6 +45,11 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 - `SetVirtualResolution()` through `ZB_resize` — no context teardown.
 - Texture upload through `glGenTextures`/`glTexImage2D`, with an untouched CPU RGBA shadow for
   exact `GetData()`.
+- **Real 3D**, not merely a rasterized quad: perspective projection (a quad at z=-6 covers 256 px
+  against the same quad's 1521 px at z=0), depth-buffer occlusion that is independent of draw
+  order, `DepthStencilState::DepthRead`'s test-without-write, modelview rotation that really
+  foreshortens (1521 px -> 854 px at 60 degrees about Y), and perspective texture mapping. All
+  measured by `TinyGL_3D`.
 - 3D: the `VertexPositionColor` (stride 16) and `VertexPositionColorTexture` (stride 24) routes,
   non-indexed (`glDrawArrays`) and indexed (`glArrayElement` inside `glBegin`/`glEnd`), honouring
   `vertexStart`, `startIndex`, `baseVertex` and the stream's `VertexOffset`.
@@ -127,6 +132,7 @@ them are refused one step earlier.
 | `TINYGL-12` | `TinyGL_TextureSprite` (7 checks) | **DONE** |
 | `TINYGL-13` | `TinyGL_State` (9 checks) | **DONE** |
 | `TINYGL-14` | `TinyGL_Rejection` (11 checks) | **DONE** |
+| `TINYGL-14b` | `TinyGL_3D` (8 checks): earn `SupportsCapability(ThreeD)` with perspective, depth occlusion and modelview proofs | **DONE** |
 | `TINYGL-15` | `docs/tinygl-renderer.md` capability boundary | **DONE** |
 | `TINYGL-16` | Fixed-function lighting via `glLight*` | **OPEN** — needs its own owner instruction |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus | **OPEN** |

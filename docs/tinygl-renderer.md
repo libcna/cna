@@ -36,6 +36,9 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 | Backbuffer readback | ✅ | Direct `ZBuffer::pbuf` access; upstream `glReadPixels` is a stub. |
 | Resize | ✅ | `ZB_resize`, no context teardown. |
 | `Texture2D` create/update/`GetData` | ✅ | `GetData` is exact (CPU shadow), alpha included. |
+| Perspective projection | ✅ | Real w-divide: a quad at z=-6 covers 256 px where the same quad at z=0 covers 1521. |
+| Depth-buffer occlusion | ✅ | Draw-order independent; `DepthStencilState::DepthRead` tests without writing. |
+| Modelview transform | ✅ | A 60° Y rotation foreshortens 1521 px to 854 px. |
 | 3D `VertexPositionColor` (stride 16) | ✅ | `glDrawArrays`. |
 | 3D `VertexPositionColorTexture` (stride 24) | ✅ | Texel × vertex colour, which is XNA's own modulate. |
 | Indexed draws | ✅ | `glArrayElement` inside `glBegin`/`glEnd` — TinyGL has **no `glDrawElements`**. |
@@ -163,5 +166,9 @@ TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/
 existing checkout for an offline build. An OpenMP-capable toolchain is required — see
 `plan_tinygl.md` §Build for why.
 
-Four suites, 37 checks: `TinyGL_Smoke` (10), `TinyGL_TextureSprite` (7), `TinyGL_State` (9),
-`TinyGL_Rejection` (11). All pass.
+Five suites, 45 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
+`TinyGL_State` (9), `TinyGL_Rejection` (11). All pass.
+
+`TinyGL_Smoke` alone would not earn `SupportsCapability(ThreeD)` — it draws a full-viewport quad at
+z=0 with identity matrices, which a purely 2D rasterizer would also pass. `TinyGL_3D` is what
+actually measures the perspective divide, the depth occlusion and the modelview transform.

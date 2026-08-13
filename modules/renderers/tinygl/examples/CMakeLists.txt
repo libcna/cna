@@ -30,6 +30,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "TINYGL")
     cna_register_renderer_test(NAME TinyGL_TextureSprite COMMAND cna_test_tinygl_texture_sprite
         TIMEOUT 30 LABELS "TinyGL")
 
+    cna_tinygl_test(cna_test_tinygl_3d tinygl_3d_test.cpp)
+    cna_register_renderer_test(NAME TinyGL_3D COMMAND cna_test_tinygl_3d
+        TIMEOUT 30 LABELS "TinyGL")
+
     cna_tinygl_test(cna_test_tinygl_state tinygl_state_test.cpp)
     cna_register_renderer_test(NAME TinyGL_State COMMAND cna_test_tinygl_state
         TIMEOUT 30 LABELS "TinyGL")
