@@ -12,6 +12,7 @@
 #include "CNA/Platform/CannedSensors.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -49,6 +50,22 @@ TEST_F(CnaInputSensorsTest, EnumerationForwardsSensorListWithTypes)
     ASSERT_EQ(list.size(), 2u);
     EXPECT_EQ(list[0], (SensorInfoEXT{1, "Accelerometer", SensorTypeEXT::Accelerometer}));
     EXPECT_EQ(list[1].type, SensorTypeEXT::Gyroscope);
+    EXPECT_EQ(platform.sensorSubsystemAcquisitions, 1);
+    EXPECT_EQ(platform.sensorSubsystemBalance, 0);
+}
+
+TEST_F(CnaInputSensorsTest, EnumerationDropsIdsThePublicApiCannotRepresent)
+{
+    platform.Canned().SetEnumeration({
+        SensorInfo{std::numeric_limits<std::uint32_t>::max(), SensorKind::Accelerometer, "last"},
+        SensorInfo{static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) + 1,
+                   SensorKind::Gyroscope, "too-wide"},
+    });
+
+    const auto list = Sensors::GetSensorsEXT();
+    ASSERT_EQ(list.size(), 1u);
+    EXPECT_EQ(list[0].id, std::numeric_limits<std::uint32_t>::max());
+    EXPECT_EQ(platform.sensorSubsystemBalance, 0);
 }
 
 TEST_F(CnaInputSensorsTest, EveryPlatformSensorKindMapsToItsExtensionCounterpart)
@@ -88,6 +105,14 @@ TEST_F(CnaInputSensorsTest, AccelerometerAndGyroReadTheirSamplesWhenPresent)
     Vector3 gyro;
     ASSERT_TRUE(Sensors::GetGyroscopeEXT(gyro));
     EXPECT_EQ(gyro, Vector3(0.1f, -0.2f, 0.3f));
+
+    EXPECT_EQ(platform.Canned().StartCount(SensorKind::Accelerometer), 1);
+    EXPECT_EQ(platform.Canned().StopCount(SensorKind::Accelerometer), 1);
+    EXPECT_FALSE(platform.Canned().IsStarted(SensorKind::Accelerometer));
+    EXPECT_EQ(platform.Canned().StartCount(SensorKind::Gyroscope), 1);
+    EXPECT_EQ(platform.Canned().StopCount(SensorKind::Gyroscope), 1);
+    EXPECT_FALSE(platform.Canned().IsStarted(SensorKind::Gyroscope));
+    EXPECT_EQ(platform.sensorSubsystemBalance, 0);
 }
 
 TEST_F(CnaInputSensorsTest, ReadsReturnFalseWhenSensorAbsent)
@@ -96,6 +121,8 @@ TEST_F(CnaInputSensorsTest, ReadsReturnFalseWhenSensorAbsent)
     EXPECT_FALSE(Sensors::GetAccelerometerEXT(v));
     EXPECT_FALSE(Sensors::GetGyroscopeEXT(v));
     EXPECT_EQ(v, Vector3(1.0f, 2.0f, 3.0f)) << "out-param left untouched when no sensor is read";
+    EXPECT_EQ(platform.sensorSubsystemAcquisitions, 2);
+    EXPECT_EQ(platform.sensorSubsystemBalance, 0);
 }
 
 TEST_F(CnaInputSensorsTest, AnAbsentSensorIsRefusedBeforeStartingRatherThanThrowing)
@@ -110,6 +137,7 @@ TEST_F(CnaInputSensorsTest, AnAbsentSensorIsRefusedBeforeStartingRatherThanThrow
     EXPECT_NO_THROW((void)Sensors::GetAccelerometerEXT(v));
     EXPECT_FALSE(Sensors::GetAccelerometerEXT(v));
     EXPECT_EQ(platform.Canned().StartCount(SensorKind::Accelerometer), 0);
+    EXPECT_EQ(platform.sensorSubsystemBalance, 0);
 }
 
 TEST_F(CnaInputSensorsTest, RepeatedReadsKeepWorkingAndStayStateless)
@@ -128,7 +156,11 @@ TEST_F(CnaInputSensorsTest, RepeatedReadsKeepWorkingAndStayStateless)
         ASSERT_TRUE(Sensors::GetAccelerometerEXT(v)) << "read " << i;
         EXPECT_EQ(v, Vector3(1.0f, 2.0f, 3.0f)) << "read " << i;
     }
-    EXPECT_GE(platform.Canned().StartCount(SensorKind::Accelerometer), 1);
+    EXPECT_EQ(platform.Canned().StartCount(SensorKind::Accelerometer), 5);
+    EXPECT_EQ(platform.Canned().StopCount(SensorKind::Accelerometer), 5);
+    EXPECT_FALSE(platform.Canned().IsStarted(SensorKind::Accelerometer));
+    EXPECT_EQ(platform.sensorSubsystemAcquisitions, 5);
+    EXPECT_EQ(platform.sensorSubsystemBalance, 0);
 }
 
 TEST_F(CnaInputSensorsTest, EnumerationIsEmptyWhenThePlatformHasNoSensorService)

@@ -228,3 +228,16 @@ each cell.
   constant, periodic, condition, ramp, left-right and custom effects through the internal
   `SdlHapticBackend`. That seam no longer enumerates devices or handles standalone rumble, and the
   public `HapticDevice` header no longer declares `SDL_Haptic`.
+
+### Host motion sensors (PLAT-85)
+
+- **Static reads keep the old lifetime shape.** `CNA::Input::Sensors` acquires
+  `PlatformSubsystem::Sensor`, opens the selected `IPlatformSensors` kind, reads, closes it and
+  releases the subsystem on every call. It does not cache a service pointer or started flag across
+  calls; either would outlive the ambient platform that supplied it.
+- **Teardown order is explicit.** A started sensor closes before its subsystem reference is
+  released. SDL3 also deactivates any cached service handles before the platform's last sensor
+  reference reaches zero, so destruction cannot close a stale native pointer.
+- **Polling and events are separate contracts.** Public accelerometer/gyroscope helpers stay
+  on-demand. `SensorEvent` independently preserves an event stream's stable id, six values and
+  sensor-clock timestamp for general platform consumers; the input bridge intentionally ignores it.

@@ -4,6 +4,7 @@
 #include "CNA/Platform/Input/KeyCode.hpp"
 #include "CNA/Platform/Input/Scancode.hpp"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <variant>
@@ -249,6 +250,23 @@ namespace CNA::Platform {
         bool connected = false;
     };
 
+    /** @brief A host-device motion sensor published a new sample. */
+    struct SensorEvent
+    {
+        /** @brief Which sensor; correlates with `IPlatformSensors::GetSensors()`. */
+        DeviceId device = 0;
+        /**
+         * @brief Sensor-dependent values in native order.
+         *
+         * Accelerometers and gyroscopes use the first three components. Six are retained because
+         * SDL and other sensor APIs can publish composite readings, and dropping the upper half at
+         * the platform boundary would make it impossible for a later consumer to recover them.
+         */
+        std::array<float, 6> values{};
+        /** @brief Reading time in nanoseconds since the sensor's arbitrary monotonic epoch. */
+        std::uint64_t timestampNanoseconds = 0;
+    };
+
     /** @brief A gamepad axis in CNA's platform-independent ordering. */
     enum class GamepadAxis
     {
@@ -384,6 +402,7 @@ namespace CNA::Platform {
         MouseWheelEvent,
         TouchEvent,
         DeviceEvent,
+        SensorEvent,
         ControllerAxisEvent,
         ControllerButtonEvent,
         AppLifecycleEvent>;

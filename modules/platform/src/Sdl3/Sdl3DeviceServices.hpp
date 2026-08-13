@@ -45,7 +45,11 @@ namespace CNA::Platform::Sdl3 {
          */
         [[nodiscard]] bool TryGetReading(SensorKind kind, SensorReading& reading) const override;
 
+        /** @brief Closes cached handles before the sensor subsystem's final release. */
+        void Deactivate();
+
     private:
+        void CloseAll();
         std::map<SensorKind, void*> open_;
     };
 

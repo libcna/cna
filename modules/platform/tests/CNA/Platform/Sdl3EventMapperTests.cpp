@@ -385,6 +385,30 @@ TEST(Sdl3EventMapperTests, DeviceAddAndRemoveMapToTheRightKindAndConnectedFlag)
     }
 }
 
+TEST(Sdl3EventMapperTests, SensorUpdatePreservesIdentityAllValuesAndSampleTimestamp)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_SENSOR_UPDATE);
+    source.sensor.which = 81;
+    source.sensor.timestamp = 1234;
+    source.sensor.sensor_timestamp = 987654321;
+    for (std::size_t index = 0; index < 6; ++index)
+    {
+        source.sensor.data[index] = static_cast<float>(index) - 2.5f;
+    }
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    ASSERT_EQ(GetEventTypeName(mapped), "SensorEvent");
+    const auto& sensor = std::get<SensorEvent>(mapped);
+    EXPECT_EQ(sensor.device, 81u);
+    for (std::size_t index = 0; index < sensor.values.size(); ++index)
+    {
+        EXPECT_FLOAT_EQ(sensor.values[index], static_cast<float>(index) - 2.5f);
+    }
+    EXPECT_EQ(sensor.timestampNanoseconds, 987654321u)
+        << "the reading timestamp, not the queue timestamp, is the sample's time";
+}
+
 TEST(Sdl3EventMapperTests, GamepadAxesMapToCnaVocabularyAndBridgeNumerics)
 {
     const struct

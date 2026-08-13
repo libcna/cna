@@ -50,13 +50,14 @@ std::vector<PlatformEvent> OneOfEach()
             motion,
             button,             wheel,
             touch,              DeviceEvent{},
+            SensorEvent{},
             ControllerAxisEvent{}, ControllerButtonEvent{},
             AppLifecycleEvent{}};
 }
 
 TEST(PlatformEventTests, VariantCoversEveryDocumentedAlternative)
 {
-    EXPECT_EQ(std::variant_size_v<PlatformEvent>, 14u);
+    EXPECT_EQ(std::variant_size_v<PlatformEvent>, 15u);
     EXPECT_EQ(OneOfEach().size(), std::variant_size_v<PlatformEvent>);
 }
 
@@ -101,13 +102,25 @@ TEST(PlatformEventTests, WindowScopedEventsReportTheirWindow)
 
 TEST(PlatformEventTests, ProcessScopedEventsReportNoWindow)
 {
-    // Quit, device connection, controller input and application lifecycle are process-scoped.
+    // Quit, device/sensor/controller input and application lifecycle are process-scoped.
     // Inventing a window id for them would be a lie a caller could act on.
     EXPECT_EQ(GetEventWindow(PlatformEvent{QuitEvent{}}), 0u);
     EXPECT_EQ(GetEventWindow(PlatformEvent{DeviceEvent{}}), 0u);
+    EXPECT_EQ(GetEventWindow(PlatformEvent{SensorEvent{}}), 0u);
     EXPECT_EQ(GetEventWindow(PlatformEvent{ControllerAxisEvent{}}), 0u);
     EXPECT_EQ(GetEventWindow(PlatformEvent{ControllerButtonEvent{}}), 0u);
     EXPECT_EQ(GetEventWindow(PlatformEvent{AppLifecycleEvent{}}), 0u);
+}
+
+TEST(PlatformEventTests, SensorDefaultsCarryNoPhantomReading)
+{
+    const SensorEvent sensor;
+    EXPECT_EQ(sensor.device, 0u);
+    EXPECT_EQ(sensor.timestampNanoseconds, 0u);
+    for (const float value : sensor.values)
+    {
+        EXPECT_FLOAT_EQ(value, 0.0f);
+    }
 }
 
 TEST(PlatformEventTests, KeyEventDistinguishesRepeatFromFreshPress)

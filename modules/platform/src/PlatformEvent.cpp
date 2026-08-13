@@ -29,6 +29,7 @@ namespace CNA::Platform {
         static const std::string mouseWheel = "MouseWheelEvent";
         static const std::string touch = "TouchEvent";
         static const std::string device = "DeviceEvent";
+        static const std::string sensor = "SensorEvent";
         static const std::string controllerAxis = "ControllerAxisEvent";
         static const std::string controllerButton = "ControllerButtonEvent";
         static const std::string appLifecycle = "AppLifecycleEvent";
@@ -47,6 +48,7 @@ namespace CNA::Platform {
             [&](const MouseWheelEvent&) -> const std::string& { return mouseWheel; },
             [&](const TouchEvent&) -> const std::string& { return touch; },
             [&](const DeviceEvent&) -> const std::string& { return device; },
+            [&](const SensorEvent&) -> const std::string& { return sensor; },
             [&](const ControllerAxisEvent&) -> const std::string& { return controllerAxis; },
             [&](const ControllerButtonEvent&) -> const std::string& { return controllerButton; },
             [&](const AppLifecycleEvent&) -> const std::string& { return appLifecycle; },
@@ -65,10 +67,11 @@ namespace CNA::Platform {
             [](const MouseButtonEvent& e) { return e.window; },
             [](const MouseWheelEvent& e) { return e.window; },
             [](const TouchEvent& e) { return e.window; },
-            // Quit, device connection and application lifecycle are process-scoped, not
+            // Quit, device/sensor/controller and application events are process-scoped, not
             // window-scoped: there is no window to report, and inventing one would be a lie.
             [](const QuitEvent&) { return WindowId{0}; },
             [](const DeviceEvent&) { return WindowId{0}; },
+            [](const SensorEvent&) { return WindowId{0}; },
             [](const ControllerAxisEvent&) { return WindowId{0}; },
             [](const ControllerButtonEvent&) { return WindowId{0}; },
             [](const AppLifecycleEvent&) { return WindowId{0}; },

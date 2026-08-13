@@ -12,6 +12,7 @@
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 
 #include <map>
+#include <set>
 #include <vector>
 
 namespace CNA::Platform::Testing {
@@ -44,14 +45,26 @@ namespace CNA::Platform::Testing {
             readings_.clear();
             enumeration_.clear();
             started_.clear();
+            startCalls_.clear();
+            stopCalls_.clear();
         }
 
         /** @brief Gets how many times a sensor was started. @param kind Which sensor. @return The count. */
         [[nodiscard]] int StartCount(const SensorKind kind) const
         {
-            const auto found = started_.find(kind);
-            return found != started_.end() ? found->second : 0;
+            const auto found = startCalls_.find(kind);
+            return found != startCalls_.end() ? found->second : 0;
         }
+
+        /** @brief Gets how many active starts were stopped. @param kind Which sensor. @return The count. */
+        [[nodiscard]] int StopCount(const SensorKind kind) const
+        {
+            const auto found = stopCalls_.find(kind);
+            return found != stopCalls_.end() ? found->second : 0;
+        }
+
+        /** @brief Gets whether the scripted sensor is currently started. */
+        [[nodiscard]] bool IsStarted(const SensorKind kind) const { return started_.contains(kind); }
 
         /** @brief Gets the scripted enumeration. @return The scripted list. */
         [[nodiscard]] std::vector<SensorInfo> GetSensors() const override { return enumeration_; }
@@ -76,11 +89,20 @@ namespace CNA::Platform::Testing {
             {
                 throw PlatformNotSupportedException(PlatformCapability::Sensors, "Canned");
             }
-            ++started_[kind];
+            if (started_.insert(kind).second)
+            {
+                ++startCalls_[kind];
+            }
         }
 
         /** @brief Records a stop. @param kind Which sensor. */
-        void Stop(const SensorKind kind) override { started_.erase(kind); }
+        void Stop(const SensorKind kind) override
+        {
+            if (started_.erase(kind) != 0)
+            {
+                ++stopCalls_[kind];
+            }
+        }
 
         /**
          * @brief Reads a scripted sensor.
@@ -101,7 +123,9 @@ namespace CNA::Platform::Testing {
 
     private:
         std::map<SensorKind, SensorReading> readings_;
-        std::map<SensorKind, int> started_;
+        std::set<SensorKind> started_;
+        std::map<SensorKind, int> startCalls_;
+        std::map<SensorKind, int> stopCalls_;
         std::vector<SensorInfo> enumeration_;
     };
 
@@ -109,11 +133,37 @@ namespace CNA::Platform::Testing {
     class CannedSensorPlatform final : public PlatformTestDecorator
     {
     public:
+        /** @brief Tracks and forwards sensor-subsystem acquisition. */
+        void AcquireSubsystem(const PlatformSubsystem subsystem) override
+        {
+            PlatformTestDecorator::AcquireSubsystem(subsystem);
+            if (subsystem == PlatformSubsystem::Sensor)
+            {
+                ++sensorSubsystemBalance;
+                ++sensorSubsystemAcquisitions;
+            }
+        }
+
+        /** @brief Tracks and forwards sensor-subsystem release. */
+        void ReleaseSubsystem(const PlatformSubsystem subsystem) override
+        {
+            PlatformTestDecorator::ReleaseSubsystem(subsystem);
+            if (subsystem == PlatformSubsystem::Sensor)
+            {
+                --sensorSubsystemBalance;
+            }
+        }
+
         /** @brief Gets the scripted sensor service. @return The service; never null. */
         [[nodiscard]] IPlatformSensors* GetSensors() override { return &sensors_; }
 
         /** @brief Gets the scripted service for writing. @return The scripted service. */
         [[nodiscard]] CannedSensors& Canned() { return sensors_; }
+
+        /** @brief Outstanding sensor-subsystem references held by public accessors. */
+        int sensorSubsystemBalance = 0;
+        /** @brief Total sensor-subsystem acquisitions made by public accessors. */
+        int sensorSubsystemAcquisitions = 0;
 
     private:
         CannedSensors sensors_;

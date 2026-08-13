@@ -72,15 +72,21 @@ namespace CNA::Platform::Sdl3 {
 
     // --- sensors (PLAT-85) ----------------------------------------------------------------------
 
-    Sdl3Sensors::~Sdl3Sensors()
+    Sdl3Sensors::~Sdl3Sensors() { CloseAll(); }
+
+    void Sdl3Sensors::Deactivate() { CloseAll(); }
+
+    void Sdl3Sensors::CloseAll()
     {
         for (const auto& [kind, handle] : open_)
         {
+            (void)kind;
             if (handle != nullptr)
             {
                 SDL_CloseSensor(static_cast<SDL_Sensor*>(handle));
             }
         }
+        open_.clear();
     }
 
     std::vector<SensorInfo> Sdl3Sensors::GetSensors() const

@@ -244,6 +244,20 @@ namespace CNA::Platform::Sdl3 {
                 return true;
             }
 
+            case SDL_EVENT_SENSOR_UPDATE:
+            {
+                SensorEvent sensor;
+                sensor.device = static_cast<DeviceId>(source.sensor.which);
+                for (std::size_t index = 0; index < sensor.values.size(); ++index)
+                {
+                    sensor.values[index] = source.sensor.data[index];
+                }
+                // Use the sensor's sample time, not the later time at which SDL queued the event.
+                sensor.timestampNanoseconds = source.sensor.sensor_timestamp;
+                destination = sensor;
+                return true;
+            }
+
             case SDL_EVENT_GAMEPAD_AXIS_MOTION:
             {
                 const auto mappedAxis = ToGamepadAxis(

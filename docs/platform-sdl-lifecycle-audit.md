@@ -98,6 +98,12 @@ acquires in its constructor and releases in its destructor, and `Accelerometer`/
 call `SDL_QuitSubSystem(SDL_INIT_SENSOR)` explicitly at three sites each. Serialised by
 `Detail::SdlSubsystemMutex`, a **process-wide** mutex shared with the haptic backend.
 
+`CNA::Input::Sensors` now participates through PLAT-29's platform refcount: each static
+enumeration/read acquires and releases one `PlatformSubsystem::Sensor` reference, and a read closes
+its `IPlatformSensors` handle before releasing that reference. SDL's own refcount therefore
+aggregates it with the independent `Microsoft::Devices` holds instead of either surface using
+`SDL_WasInit()` as an ownership shortcut.
+
 `SdlSubsystemMutex`'s own header documents why it is a mutex rather than main-thread dispatch:
 `SDL_RunOnMainThread(..., wait_complete=true)` is drained only by `SDL_RunMainThreadCallbacks()`,
 which runs only from `SDL_PumpEventsInternal()` — so routing subsystem calls through it would

@@ -104,16 +104,17 @@ An SDL event the mapper does not recognise is intentionally omitted from the pla
 | `SDL_EVENT_GAMEPAD_BUTTON_DOWN` / `_UP` | The event is mapped but does not mutate a second store; `Sdl3Gamepad::Update()` polls the complete held-button mask once per frame | `GamePadState.Buttons`/`.DPad` read one immutable platform snapshot |
 | `SDL_EVENT_GAMEPAD_AXIS_MOTION` | The event is mapped but state is polled with the same CNA-owned axis helper; stick Y is inverted and triggers normalised at the SDL edge | `GamePadState.ThumbSticks`/`.Triggers`; the requested dead zone is applied by public `GamePad::GetState` |
 | `SDL_EVENT_JOYSTICK_ADDED` / `_REMOVED` | `Sdl3Joystick` opens/closes the raw device before the platform batch reaches the input bridge; a small SDL-free announced-id set suppresses duplicate add and unknown remove notifications | `CNA::Input::Joysticks::ConnectedEXT`/`DisconnectedEXT.Invoke(deviceId)` plus one immutable raw snapshot per frame; distinct from `GamePad`'s mapped view of the same physical device |
+| `SDL_EVENT_SENSOR_UPDATE` | Mapped losslessly to process-scoped `SensorEvent`; the input bridge has no accumulator for it because public `Sensors` remains an on-demand query | General platform consumers can correlate its stable device id with `IPlatformSensors::GetSensors()` and observe all six values plus the sensor sample timestamp |
 
-**Intentionally unhandled event types (P8-012/014, confirmed 2026-07-17):**
+**Intentionally unhandled event type (P8-012, confirmed 2026-07-17):**
 - `SDL_EVENT_GAMEPAD_REMAPPED` — FNA itself has no handler for this event either (confirmed: zero
   matches in `SDL3_FNAPlatform.cs`). XNA's `Buttons`/`GamePadState` model is read fresh on every
   frame update rather than kept in an event accumulator, so a live SDL mapping change is picked up
   by the next `IPlatformGamepad::Update()` without a special-case handler.
-- `SDL_EVENT_SENSOR_UPDATE` — `CNA::Input::Sensors` (and `Microsoft::Devices::Sensors::Accelerometer`
-  etc.) read sensor data via an on-demand `SDL_GetSensorData` poll (`SystemSensorBackend.cpp:80`), the
-  same "query, not event-stream" pattern already used for gamepad rumble/light bar/gyro/accelerometer
-  (§2 above). There is no sensor *event* to route.
+
+`CNA::Input::Sensors` and `Microsoft::Devices::Sensors` still read through their established
+on-demand APIs; mapping `SensorEvent` does not create a second public accumulator. It completes the
+general platform event contract for consumers that do want the native stream.
 
 Touch coordinates: SDL delivers finger position/delta normalized to `[0, 1]` relative to the
 window. There are two independent scaling paths from that same normalized event, feeding two
