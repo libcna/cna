@@ -685,6 +685,14 @@ grazing case keeps `H=N`, making every dot product exact and distinguishing the 
 geometry term from the IBL variant without depending on a framebuffer or a captured reference
 image.
 
+`GLTF-381` separately pins the custom-effect boundary. `mat-authored-tangent` is loaded as a real
+`Model`, its imported PBR effect is replaced with a `ShaderEffect` declaring the stride-48
+POSITION/NORMAL/TANGENT/TEXCOORD element order, and all four streams are compared against the L3
+manifest before `Model::Draw`. HEADLESS then executes that draw through the custom-program branch
+and verifies the three matrices arrived without changing the vertex bytes. This is deliberately L6:
+it proves that custom effects keep the imported geometry and reach the renderer boundary, while
+actual attribute rasterization remains an L7, renderer-specific question.
+
 Every comparison is against a value **another layer already established independently**, never
 against a second walk of the same code. That is what makes a green L6 mean "the value survived the
 whole trip" rather than "two copies of the same mistake agree".

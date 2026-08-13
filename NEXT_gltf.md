@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **369 closed (`✔` 248, `✅` 121),
-  68 `⬜` remaining.** The other 23 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **370 closed (`✔` 249, `✅` 121),
+  67 `⬜` remaining.** The other 23 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 9 `✅/⬜` and 2 `✅/🐛` (landed with a named residue), 2 `🐛` (open:
   `GLTF-157`, `421`), and 2 `⛔` (`GLTF-009` and
   `GLTF-439`, each blocked by this environment for a stated reason).
@@ -43,9 +43,9 @@ Expected as of this writing:
 | Check | Expected |
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
-| full suite | **6 353 passed, 189 skipped, 18 failed** |
+| full suite | **6 354 passed, 189 skipped, 18 failed** |
 | generator `--check` | **139 assets, 689 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **464 passed, 24 skipped** / **488 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **465 passed, 24 skipped** / **489 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -76,7 +76,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 464 passed, 24 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 465 passed, 24 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -153,7 +153,7 @@ These are not style preferences; they are what made the campaign find things.
 
 ## What is blocked in this environment, and why
 
-**46 of the 83 remaining rows cannot be finished here.** Do not mark them done, and do not work
+**46 of the 82 remaining rows cannot be finished here.** Do not mark them done, and do not work
 around them by weakening their acceptance. Recounted 2026-08-13: `HEADLESS` was added as a second
 renderer, which moved several rows out of the "second renderer" bucket, and `GLTF-404`/`GLTF-419`
 turned out not to need CI at all.
@@ -168,7 +168,7 @@ turned out not to need CI at all.
 | **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
 | **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |
 
-The remaining **~37 are doable in this environment.**
+The remaining **~36 are doable in this environment.**
 
 ## Suggested next clusters
 

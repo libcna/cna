@@ -18,7 +18,9 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "GltfDrawParamsOracleEXT.hpp"
 #include "GltfFixtureCorpus.hpp"
 
@@ -33,11 +35,13 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
 
 using CNA::Internal::JsonType;
 using CNA::Internal::JsonValue;
@@ -1478,6 +1482,130 @@ TEST(GltfDrawParamsOracleL6, EveryStockEffectIsCapturableWithItsOwnDistinguishin
 
     // Leave the model holding an effect it does not own for no longer than the test needs it.
     part->setEffectProperty(nullptr);
+}
+
+// A custom effect is the one effect the glTF importer never constructs itself, so a corpus-only
+// sweep of imported effect types cannot cover this boundary. Bind one onto a real imported part:
+// the fixture's L3 record is the independent answer for all four vertex attributes, its L5 golden
+// is the byte-level answer, and HEADLESS executes the complete Model::Draw route without inventing
+// pixels. The shader declares all four locations in the same element order as the stride-48 glTF
+// layout, making a dropped tangent/UV or a stock-effect-only vertex path visible here.
+TEST(GltfDrawParamsOracleL6, ACustomShaderKeepsTheImportedTangentVertexContract)
+{
+    using Microsoft::Xna::Framework::Graphics::Effect;
+    using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
+    using Microsoft::Xna::Framework::Graphics::ShaderEffect;
+    using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTangentTexture;
+
+    const LoadedFixture fixture("mat-authored-tangent");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& primitives = Path(fixture.Expected(), "l3.primitives");
+    ASSERT_EQ(JsonType::Array, primitives.type);
+    ASSERT_EQ(1u, primitives.arrayValue.size());
+    const JsonValue& expected = primitives.arrayValue.front();
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-authored-tangent");
+    ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+    ModelMeshPart* part = model.getMeshesProperty()[0]->getMeshPartsProperty()[0];
+    ASSERT_NE(nullptr, part);
+    auto* vertexBuffer = part->getVertexBufferProperty();
+    ASSERT_NE(nullptr, vertexBuffer);
+    ASSERT_EQ(3, vertexBuffer->getVertexCountProperty());
+
+    std::array<VertexPositionNormalTangentTexture, 3> vertices;
+    ASSERT_NO_THROW(vertexBuffer->GetData(vertices.data(), static_cast<int>(vertices.size())));
+    const JsonValue& positions = Member(expected, "positions");
+    const JsonValue& normals = Member(expected, "normals");
+    const JsonValue& tangents = Member(expected, "tangents");
+    const JsonValue& texcoords = Member(expected, "texcoords");
+    ASSERT_EQ(JsonType::Array, positions.type);
+    ASSERT_EQ(vertices.size(), positions.arrayValue.size());
+    ASSERT_EQ(vertices.size(), normals.arrayValue.size());
+    ASSERT_EQ(vertices.size(), tangents.arrayValue.size());
+    ASSERT_EQ(vertices.size(), texcoords.arrayValue.size());
+    for (std::size_t i = 0; i < vertices.size(); ++i)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(i));
+        const std::vector<double> p = Numbers(positions.arrayValue[i]);
+        const std::vector<double> n = Numbers(normals.arrayValue[i]);
+        const std::vector<double> t = Numbers(tangents.arrayValue[i]);
+        const std::vector<double> uv = Numbers(texcoords.arrayValue[i]);
+        ASSERT_EQ(3u, p.size());
+        ASSERT_EQ(3u, n.size());
+        ASSERT_EQ(4u, t.size());
+        ASSERT_EQ(2u, uv.size());
+        const float actualPosition[] = {
+            vertices[i].Position.X, vertices[i].Position.Y, vertices[i].Position.Z};
+        const float actualNormal[] = {
+            vertices[i].Normal.X, vertices[i].Normal.Y, vertices[i].Normal.Z};
+        const float actualTangent[] = {
+            vertices[i].Tangent.X, vertices[i].Tangent.Y,
+            vertices[i].Tangent.Z, vertices[i].Tangent.W};
+        const float actualUv[] = {
+            vertices[i].TextureCoordinate.X, vertices[i].TextureCoordinate.Y};
+        ExpectFlatNear(p, actualPosition, 3, "custom-shader position input");
+        ExpectFlatNear(n, actualNormal, 3, "custom-shader normal input");
+        ExpectFlatNear(t, actualTangent, 4, "custom-shader tangent input");
+        ExpectFlatNear(uv, actualUv, 2, "custom-shader texture-coordinate input");
+    }
+    EXPECT_FLOAT_EQ(-1.0f, vertices.front().Tangent.W)
+        << "the witness stopped discriminating tangent handedness from a default +1";
+
+    static const char* kVertexShader = R"GLSL(#version 300 es
+precision highp float;
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec4 aTangent;
+layout(location = 3) in vec2 aTexCoord;
+uniform mat4 World;
+uniform mat4 View;
+uniform mat4 Projection;
+out vec4 vVertexProbe;
+void main() {
+    vVertexProbe = vec4(aNormal.xy + aTangent.xy + aTexCoord, aTangent.w, 1.0);
+    gl_Position = Projection * View * World * vec4(aPosition, 1.0);
+}
+)GLSL";
+    static const char* kFragmentShader = R"GLSL(#version 300 es
+precision mediump float;
+in vec4 vVertexProbe;
+out vec4 FragColor;
+void main() { FragColor = vVertexProbe; }
+)GLSL";
+
+    ShaderEffect custom(gd, kVertexShader, kFragmentShader);
+    CNA::Internal::Renderers::GpuDrawParams customParams;
+    custom.FillGpuDrawParams(customParams);
+    EXPECT_EQ(custom.GetEffectRendererPtr(), customParams.customEffectRenderer)
+        << "ShaderEffect did not select the custom-program draw path";
+    Effect* const importedEffect = part->getEffectProperty();
+    ASSERT_NE(nullptr, importedEffect);
+    part->setEffectProperty(&custom);
+    EXPECT_EQ(&custom, part->getEffectProperty());
+    EXPECT_EQ(vertexBuffer, part->getVertexBufferProperty())
+        << "replacing the material effect replaced the imported geometry too";
+
+    const Matrix appWorld = Matrix::CreateTranslation(3.0f, 4.0f, 5.0f);
+    if (gd.GetGraphicsRendererName() == "HEADLESS")
+    {
+        ASSERT_TRUE(gd.SupportsCapability(CNA::GraphicsCapability::ThreeD));
+        ASSERT_TRUE(gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects));
+        ASSERT_TRUE(custom.IsEffectValid());
+        ASSERT_NE(nullptr, customParams.customEffectRenderer);
+        EXPECT_NO_THROW(model.Draw(appWorld, TestView(), TestProjection()));
+        EXPECT_EQ(appWorld, custom.getWorldProperty());
+        EXPECT_EQ(TestView(), custom.getViewProperty());
+        EXPECT_EQ(TestProjection(), custom.getProjectionProperty());
+    }
+
+    // Restore the model's owned effect before the stack-owned custom effect is destroyed.
+    part->setEffectProperty(importedEffect);
+    std::array<VertexPositionNormalTangentTexture, 3> after;
+    ASSERT_NO_THROW(vertexBuffer->GetData(after.data(), static_cast<int>(after.size())));
+    EXPECT_EQ(vertices, after) << "drawing through ShaderEffect changed the imported vertex data";
 }
 
 // --- plan_gltf.md GLTF-377: fog is state no glTF file can ask for -----------------------------------
