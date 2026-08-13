@@ -1038,7 +1038,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     //
     // Hence a ceiling rather than a ban. Adding one is fine; raising this number is the deliberate
     // act that says so, and the commit that raises it is where the reason goes.
-    constexpr int kCeiling = 258;
+    constexpr int kCeiling = 260;
 
     int found = 0;
     std::map<std::string, int> perFile;

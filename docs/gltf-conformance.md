@@ -496,7 +496,7 @@ an asset that declares an extension needs a registry record (`GLTF-335`). Both a
 
 ### 3.8 Inline documents vs corpus fixtures — which goes where (`GLTF-414`)
 
-The suite also contains **258 glTF documents written inline as C++ string literals**, and they are
+The suite also contains **260 glTF documents written inline as C++ string literals**, and they are
 deliberately not in the corpus. The rule, so the choice is made rather than defaulted to:
 
 **Put it in the corpus** when the document is an *asset whose correct import is a conformance
@@ -594,7 +594,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**103 of the 111** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**106 of the 114** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. The seven without one are the fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`); their manifests record
@@ -806,7 +806,9 @@ written for this document: two descriptions of the same fixture are two things t
 | `xf-shared-mesh` | transforms | L1, L2, L3, L4 | node.translation; mesh instancing; two scene roots |
 | `xf-transform-only` | transforms | L1, L2, L3, L4 | transform-only node; mesh on a child |
 | `xf-multi-root` | transforms | L1, L2, L3, L4 | three scene roots; multi-root scene |
+| `mat-default` | materials | L1, L2, L3 | no material; glTF default material; metallic-roughness by default |
 | `mat-factor-only-gold` | materials | L1, L2, L3 | pbrMetallicRoughness factors; baseColorFactor; alphaMode BLEND; doubleSided; no texture maps |
+| `mat-emissive-factor` | materials | L1, L2, L3 | emissiveFactor without the strength extension; dark base colour |
 | `mat-emissive-strength` | materials | L1, L2, L3 | KHR_materials_emissive_strength; emissiveFactor; HDR emissive above 1; no texture maps |
 | `mat-vertex-color-pbr` | materials | L1, L2, L3 | COLOR_0 with a PBR material; unsupported material model; import report |
 | `mat-normal-occlusion-scale` | materials | L1, L2, L3 | normalTexture.scale; occlusionTexture.strength; texture view without a texture |
@@ -865,6 +867,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `bad-accessor-out-of-bounds` | robustness | L1 | accessor beyond bufferView; structural validation; import rejection |
 | `bad-accessor-count-overflow` | robustness | L1 | accessor count overflow; size_t wrap; structural validation; import rejection |
 | `bad-index-out-of-range` | robustness | L1, L2 | index beyond vertex count; index range validation; import rejection |
+| `bad-matrix-and-trs` | robustness | L1, L2, L3, L4 | matrix and TRS on one node; §3.5.3 exclusivity; deterministic resolution |
 | `accessor-count-mismatch` | robustness | L1, L2 | attribute count mismatch; per-primitive attribute agreement; import rejection |
 | `skin-joint-index-out-of-range` | robustness | L1, L2 | out-of-range JOINTS_0 index; weighted stray influence; import rejection |
 | `skin-joint-index-padding` | robustness | L1, L2, L3 | out-of-range JOINTS_0 index; zero-weight padding slot |

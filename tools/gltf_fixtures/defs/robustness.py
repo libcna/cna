@@ -6,6 +6,13 @@ the file's own buffers. They exist to prove the validation pass actually runs: w
 `cgltf_validate` could be removed again and every other test would stay green.
 
 Specification: §3.6.2 ``accessors``, §3.6.2.4 ``data-alignment``.
+
+One malformed case deliberately has **no fixture here**: an ``asset.version`` of ``"1.0"``. The
+vendored cgltf refuses such a file at *parse* time (``cgltf_result_legacy_gltf``), and this corpus's
+rejection convention requires a fixture to PARSE -- a rejection fixture is one a parse-only reader
+would happily accept, and one that fails to parse proves nothing about CNA's own checks. The version
+gate is asserted where it actually happens instead:
+``GltfContainerRobustness.AGltf10DocumentIsRefusedAtParseByTheVendoredReader``.
 """
 
 from __future__ import annotations
@@ -403,6 +410,70 @@ def bad_index_out_of_range() -> Fixture:
     )
 
 
+def bad_matrix_and_trs() -> Fixture:
+    """A node authoring **both** `matrix` and TRS -- §3.5.3 allows exactly one.
+
+    The two describe different transforms here on purpose: the matrix translates by +4 on X and the
+    TRS translates by +9 on Y, so whichever a reader picks is visible in the geometry, and "picked
+    one silently" is distinguishable from "composed both".
+
+    Resolved rather than refused, which is the campaign's own recorded decision
+    (`GltfNodeTransformOrder.ANodeDeclaringBothMatrixAndTrsIsResolvedByTheSpecsOwnExclusivityRule`):
+    `cgltf_node_transform_local` honours ``has_matrix``, so the matrix wins, and the resolution is
+    the same whichever order the two appear in the document. Determinism is the property that
+    matters -- a resolution depending on JSON key order means the same file imports differently
+    depending on how it was serialised, which is the worst kind of bug to chase. This fixture is
+    what puts that decision under the corpus-wide L4 sweep instead of one hand-authored test.
+    """
+    b = GltfBuilder("bad-matrix-and-trs")
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    mesh = b.add_mesh([{
+        "attributes": {"POSITION": position, "NORMAL": normal},
+        "indices": indices,
+        "mode": TRIANGLES,
+    }], name="AmbiguousTri")
+    node = b.add_node(name="MeshNode", mesh=mesh,
+                      matrix=[1.0, 0.0, 0.0, 0.0,
+                              0.0, 1.0, 0.0, 0.0,
+                              0.0, 0.0, 1.0, 0.0,
+                              4.0, 0.0, 0.0, 1.0],
+                      translation=[0.0, 9.0, 0.0],
+                      deliberately_malformed=True)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["ambiguousTransform"] = {
+        "authoredMatrixTranslation": [4.0, 0.0, 0.0],
+        "authoredTrsTranslation": [0.0, 9.0, 0.0],
+        "resolution": "matrix",
+        "rule": "§3.5.3 makes matrix and TRS mutually exclusive; the file is malformed either way, "
+                "and CNA resolves deterministically (the matrix) rather than refusing. The two "
+                "authored transforms differ so the choice is visible in the geometry.",
+    }
+    return Fixture(
+        id="bad-matrix-and-trs", audit_fixture=None, owning_group="robustness",
+        description="A node authoring both `matrix` (translate +4 X) and `translation` (+9 Y). "
+                    "§3.5.3 makes them mutually exclusive, so this file is malformed -- and the "
+                    "campaign's recorded decision is to RESOLVE it deterministically rather than "
+                    "refuse: `cgltf_node_transform_local` honours `has_matrix`, so the matrix "
+                    "wins. The two transforms are deliberately different, which is what makes the "
+                    "resolution observable in the geometry; and the resolution must not depend on "
+                    "JSON key order, or the same file imports differently depending on how it was "
+                    "serialised.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4"],
+        features=["matrix and TRS on one node", "§3.5.3 exclusivity", "deterministic resolution"],
+        spec_anchors=["nodes-and-hierarchy"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="AmbiguousTri", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
 def bad_animation_input_order() -> Fixture:
     """An animation sampler whose input times go **backwards**. Proves **`GLTF-313`**.
 
@@ -489,5 +560,6 @@ def bad_animation_input_order() -> Fixture:
 
 
 FIXTURES = [bad_accessor_out_of_bounds, bad_accessor_count_overflow, bad_index_out_of_range,
+            bad_matrix_and_trs,
             accessor_count_mismatch, skin_joint_index_out_of_range,
             skin_joint_index_padding, bad_animation_input_order]

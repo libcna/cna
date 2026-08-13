@@ -651,3 +651,45 @@ TEST(GltfContainerRobustness, AnAccessorWithNoBufferViewAndAnAbsurdCountIsRefuse
                       << e.what();
     }
 }
+
+// --- the version gate, asserted where it actually happens ----------------------------------------
+
+TEST(GltfContainerRobustness, AGltf10DocumentIsRefusedAtParseByTheVendoredReader)
+{
+    // glTF 1.0 is not a subset of 2.0: different material model, different animation encoding, and
+    // shader-based techniques 2.0 removed entirely. A reader that ignores `asset.version` and
+    // parses what it recognises imports a real 1.0 asset as a PARTIAL model with no diagnostic --
+    // which is worse than refusing a file it cannot read.
+    //
+    // This lives here rather than in the corpus because the vendored cgltf refuses such a file at
+    // *parse*, and a corpus rejection fixture must parse: one that does not proves nothing about
+    // CNA's own checks. The body below is otherwise valid glTF 2.0 on purpose, so what is refused
+    // is unambiguously the version and not the content.
+    Parsed doc;
+    EXPECT_FALSE(ParseText(doc, R"GLTF({
+  "asset": { "version": "1.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+  "buffers": [ { "byteLength": 36, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAACAPwAAAAA=" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" } ]
+})GLTF"))
+        << "a document declaring asset.version 1.0 was parsed as glTF 2.0";
+
+    // The control: the identical document at version 2.0 parses, so the refusal above is the
+    // version rather than anything else about the file.
+    Parsed modern;
+    EXPECT_TRUE(ParseText(modern, R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0 } } ] } ],
+  "buffers": [ { "byteLength": 36, "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAACAPwAAAAA=" } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [ { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" } ]
+})GLTF"))
+        << "the 2.0 control does not parse either, so the version test above proves nothing";
+}

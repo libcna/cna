@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 111,
+  "distinctAssetCount": 114,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 12,
@@ -20,14 +20,14 @@
     "topology": 8,
     "normals": 2,
     "transforms": 17,
-    "materials": 10,
+    "materials": 12,
     "textures": 3,
     "skinning": 10,
     "animation": 23,
     "cameras": 5,
     "lights": 2,
     "scenes": 3,
-    "robustness": 7
+    "robustness": 8
   },
   "promotedAuditFixtures": {
     "f1": "xf-shared-mesh",
@@ -1064,6 +1064,22 @@
       "auditFixture": null
     },
     {
+      "id": "mat-default",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "no material",
+        "glTF default material",
+        "metallic-roughness by default"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "mat-factor-only-gold",
       "owningGroup": "materials",
       "referencingGroups": [],
@@ -1080,6 +1096,21 @@
         "no texture maps"
       ],
       "auditFixture": "f8"
+    },
+    {
+      "id": "mat-emissive-factor",
+      "owningGroup": "materials",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "emissiveFactor without the strength extension",
+        "dark base colour"
+      ],
+      "auditFixture": null
     },
     {
       "id": "mat-emissive-strength",
@@ -2075,6 +2106,23 @@
       "auditFixture": null
     },
     {
+      "id": "bad-matrix-and-trs",
+      "owningGroup": "robustness",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "features": [
+        "matrix and TRS on one node",
+        "\u00a73.5.3 exclusivity",
+        "deterministic resolution"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "accessor-count-mismatch",
       "owningGroup": "robustness",
       "referencingGroups": [],
@@ -2522,6 +2570,31 @@
       "sha256": "0c256889e138a0e28ef3be7ae76bb875fd9c71c12eb96c77d2071a93ef2ece05"
     },
     {
+      "path": "bad-matrix-and-trs.expected.json",
+      "bytes": 7317,
+      "sha256": "e5b895146d3428627b608e3cc335f34197b7cb9cecda371c4b03fc3d981623fe"
+    },
+    {
+      "path": "bad-matrix-and-trs.glb",
+      "bytes": 892,
+      "sha256": "c4a3d13bd2c5dd96584aa465e2dba4a2d3c5805314e2cd734cac678ef5c4a2fd"
+    },
+    {
+      "path": "bad-matrix-and-trs.gltf",
+      "bytes": 1734,
+      "sha256": "641213b2217d6479818304339569ad357c709eb91a4999ed30b75c5f555ba23c"
+    },
+    {
+      "path": "bad-matrix-and-trs.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "bad-matrix-and-trs.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "bufferview-offset.expected.json",
       "bytes": 6500,
       "sha256": "19c296485912a846ca312c31aa69b9e48690661c6c87732addaec6633de6881d"
@@ -2875,6 +2948,56 @@
       "path": "mat-authored-tangent.vb.bin",
       "bytes": 144,
       "sha256": "51d2fe984e9cef9a12cbbe1ed50d92593146b3d2dda4f88504e3c0f00ae19caf"
+    },
+    {
+      "path": "mat-default.expected.json",
+      "bytes": 7360,
+      "sha256": "f5c5590392e0d294dde76e11fd5b7728f5900683b64526711358256e601521e5"
+    },
+    {
+      "path": "mat-default.glb",
+      "bytes": 796,
+      "sha256": "1e95954ee0aca3b35783f319f6e9cf81c5edf2b1aef637effab5e83bea7e28ba"
+    },
+    {
+      "path": "mat-default.gltf",
+      "bytes": 1436,
+      "sha256": "0703c9010adf137c4d531394c21eb5dd065a567e41a3b53affa6673deaa43389"
+    },
+    {
+      "path": "mat-default.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-default.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "mat-emissive-factor.expected.json",
+      "bytes": 7279,
+      "sha256": "6a520e953b84db2e88dfc5e426b89b0c33ec1c587d3103e74f71b91992557120"
+    },
+    {
+      "path": "mat-emissive-factor.glb",
+      "bytes": 968,
+      "sha256": "e011057078f1b027d2791dc43e9bbac21f29e07775f0bdbd5ac73029899d5287"
+    },
+    {
+      "path": "mat-emissive-factor.gltf",
+      "bytes": 1785,
+      "sha256": "caaf4c06044f939fdd319595148ac6d45e260832b1e01df0ef68452e655aa092"
+    },
+    {
+      "path": "mat-emissive-factor.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "mat-emissive-factor.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
     },
     {
       "path": "mat-emissive-strength.expected.json",
