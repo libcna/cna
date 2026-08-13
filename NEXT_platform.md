@@ -106,8 +106,8 @@ The per-variant totals differ because the variants configure different option se
 tests are missing: `TERMINAL` drops the `Sdl3*` test files (they reference symbols only the SDL3
 selection compiles) and `cmake-build-debug` carries non-default options from earlier sessions.
 
-Ratchet: **169 files / 2532 references** of direct SDL coupling outside the PLAT-3 allowlist, down
-from the 253 / 3641 baseline. Contract: 27 headers, 520 documented declarations, all SDL-free.
+Ratchet: **168 files / 2512 references** of direct SDL coupling outside the PLAT-3 allowlist, down
+from the 253 / 3641 baseline. Contract: 27 headers, 521 documented declarations, all SDL-free.
 
 The gtest binary has **no known failing tests**. The long-standing
 `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` failure was fixed —
@@ -131,7 +131,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**122 ✅ · 3 🟨 · 29 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — about **79 %** of the 155
+**123 ✅ · 3 🟨 · 28 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — about **79 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -143,9 +143,10 @@ task rows complete.
   last SDL-native consumer, and PLAT-51 replaced the public SDL escape hatch with
   `NativeWindowHandle` without an alias.
 - **Phase 4** (renderers) — PLAT-57's boundary decision, PLAT-58/59/60/61's common-interface
-  cleanup, and PLAT-62's platform-owned `GraphicsDevice` window are complete. Renderer creation
-  now receives a complete platform-value snapshot rather than `SDL_Window*`; implementation
-  continues at PLAT-63. 46 identities remain in scope.
+  cleanup, PLAT-62's platform-owned `GraphicsDevice` window and PLAT-63's display-service-backed
+  `GraphicsAdapter` are complete. Renderer creation now receives a complete platform-value
+  snapshot rather than `SDL_Window*`; implementation continues at PLAT-64. 46 identities remain
+  in scope.
   See §6 for why most cannot be built here.
 - **Phase 5** (input) — five redundant backends are deleted; `Keyboard`, `Mouse` and `MouseCursor`
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by

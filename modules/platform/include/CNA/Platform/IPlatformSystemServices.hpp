@@ -112,6 +112,18 @@ namespace CNA::Platform {
          * @return The supported modes; empty when the display is unknown or exposes none.
          */
         [[nodiscard]] virtual std::vector<DisplayMode> GetDisplayModes(std::uint32_t displayId) const = 0;
+
+        /**
+         * @brief Gets the mode a display is currently using.
+         *
+         * This can differ from @ref DisplayInfo::desktopMode while an application owns an
+         * exclusive-fullscreen mode.
+         *
+         * @param displayId Which display.
+         * @param mode Receives the current mode; untouched when this returns false.
+         * @return True when the display is known and its current mode is available.
+         */
+        [[nodiscard]] virtual bool TryGetCurrentDisplayMode(std::uint32_t displayId, DisplayMode& mode) const = 0;
     };
 
     // --- Dialogs -------------------------------------------------------------------------------

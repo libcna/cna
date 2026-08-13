@@ -271,6 +271,30 @@ TEST_F(Sdl3DisplayTest, UnknownDisplayIdYieldsNoModesRatherThanThrowing)
     EXPECT_TRUE(platform_->GetDisplays()->GetDisplayModes(0xDEADBEEF).empty());
 }
 
+TEST_F(Sdl3DisplayTest, CurrentModeMatchesAnEnumeratedDisplay)
+{
+    const std::vector<DisplayInfo> displays = platform_->GetDisplays()->GetDisplays();
+    if (displays.empty())
+    {
+        GTEST_SKIP() << "this video driver reports no displays";
+    }
+
+    DisplayMode current;
+    ASSERT_TRUE(platform_->GetDisplays()->TryGetCurrentDisplayMode(displays.front().id, current));
+    EXPECT_GT(current.width, 0);
+    EXPECT_GT(current.height, 0);
+    EXPECT_GE(current.refreshRate, 0.0f);
+}
+
+TEST_F(Sdl3DisplayTest, UnknownDisplayLeavesCurrentModeOutputUntouched)
+{
+    DisplayMode current{123, 456, 78.0f};
+    EXPECT_FALSE(platform_->GetDisplays()->TryGetCurrentDisplayMode(0xDEADBEEF, current));
+    EXPECT_EQ(current.width, 123);
+    EXPECT_EQ(current.height, 456);
+    EXPECT_FLOAT_EQ(current.refreshRate, 78.0f);
+}
+
 // --- dialogs (PLAT-103) -----------------------------------------------------------------------
 
 TEST_F(Sdl3ServiceTest, TheDialogServiceIsPresentBecauseMessageBoxIsSupported)

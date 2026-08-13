@@ -45,6 +45,14 @@ namespace CNA::Platform::Sdl3 {
          * @return The supported modes; empty when unknown.
          */
         [[nodiscard]] std::vector<DisplayMode> GetDisplayModes(std::uint32_t displayId) const override;
+        /**
+         * @brief Gets a display's current mode.
+         * @param displayId Which display.
+         * @param mode Receives the current mode; untouched on false.
+         * @return True when SDL reports a current mode.
+         */
+        [[nodiscard]] bool TryGetCurrentDisplayMode(
+            std::uint32_t displayId, DisplayMode& mode) const override;
     };
 
     /** @brief SDL3-backed path resolution and file loading. */

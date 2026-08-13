@@ -152,6 +152,11 @@ namespace CNA::Platform::Sdl3 {
         result.reserve(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i)
         {
+            if (modes[i] == nullptr)
+            {
+                continue;
+            }
+
             DisplayMode mode;
             mode.width = modes[i]->w;
             mode.height = modes[i]->h;
@@ -160,6 +165,20 @@ namespace CNA::Platform::Sdl3 {
         }
         SDL_free(modes);
         return result;
+    }
+
+    bool Sdl3Displays::TryGetCurrentDisplayMode(
+        const std::uint32_t displayId, DisplayMode& mode) const
+    {
+        const SDL_DisplayMode* current =
+            SDL_GetCurrentDisplayMode(static_cast<SDL_DisplayID>(displayId));
+        if (current == nullptr)
+        {
+            return false;
+        }
+
+        mode = DisplayMode{current->w, current->h, current->refresh_rate};
+        return true;
     }
 
     // --- filesystem -------------------------------------------------------------------------------
