@@ -222,6 +222,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-189: CLAMP/REPEAT/MIRRORED_REPEAT from three generated assets,
+        # applied through ModelMeshPart's public per-slot sampler contract before Model::Draw.
+        cna_easygl_test(cna_test_easygl_gltf_sampler_wrap
+                        easygl_gltf_sampler_wrap_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Gltf_SamplerWrap
+            COMMAND cna_test_easygl_gltf_sampler_wrap
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         easygl_render_target_test.cpp)

@@ -733,10 +733,15 @@ one generated asset rather than only on equivalent hand-built geometry. A second
 `EasyGL_Gltf_BaseColorFactorTexture`, does the same for the generated
 `mat-basecolor-factor-times-texture.gltf`: it verifies the imported texture and factor remain
 independent, then obtains analytic byte 92 twice on OPENGLES2 and OPENGLES3.
+`EasyGL_Gltf_SamplerWrap` adds three more generated assets with byte-identical geometry and image:
+their common out-of-range UV resolves to the authored yellow, blue and green quadrants under
+CLAMP, REPEAT and MIRRORED_REPEAT respectively, after the application selects each part's public
+base-colour sampler on device slot zero.
 
-What those focused tests do **not** provide is the corpus rung: beyond those two pilots, generated
-fixtures still need fixed camera/light rigs, a documented per-renderer tolerance, a reproducible
-PNG capture path and the independent two-process determinism check. Registering two successful
+What those focused tests do **not** provide is the corpus rung: beyond those five fixture
+witnesses, generated fixtures still need fixed camera/light rigs, a documented per-renderer
+tolerance, a reproducible PNG capture path and the independent two-process determinism check.
+Registering five successful
 assets as `CnaGltfConformanceL7` would make the ladder look complete without testing the corpus.
 `STUB` still cannot be used as a shortcut:
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden

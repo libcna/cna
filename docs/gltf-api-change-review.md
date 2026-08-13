@@ -472,11 +472,16 @@ non-mipmapped minFilters, and the undefined-sampler default. The whole table is 
 because `MapGltfSamplerEXT` takes raw glTF enum values rather than a `cgltf_sampler`, which no
 realistic number of fixtures could match for coverage.
 
-**What is not proved here.** There is no end-to-end fixture, because **no corpus asset carries a
-texture at all** — the generator has no image support yet, and `GLTF-190`'s reference checkerboard
-is what several texture tasks are waiting on. So the mapping and the wiring are tested, and "an
-imported textured part ends up with the sampler its file declared" is not. `GLTF-203`'s other half,
-`uv-out-of-range-*` at L7, remains part of the open `GLTF-009` corpus-image work.
+**Application boundary and framebuffer proof.** `SamplerState` is global per-slot device state in
+XNA, not part-local state, so `Model::Draw` deliberately does not overwrite it. A caller that wants
+the source asset's policy selects `part.getSamplerStatesEXTProperty()[slot]` on the matching device
+slot immediately before drawing; automatic binding would also override every non-glTF model,
+whose compatible default carries no origin flag. `EasyGL_Gltf_SamplerWrap` exercises precisely
+that public boundary on the three generated `uv-out-of-range-*` fixtures. At one shared authored UV,
+CLAMP, REPEAT and MIRRORED_REPEAT produce the reference image's yellow, blue and green quadrants
+respectively on both OPENGLES2 and OPENGLES3. Thus the raw-enum table, real-file import, per-part
+transport and GPU addressing are all distinct assertions; only corpus-wide L7 orchestration remains
+under `GLTF-009`.
 
 ---
 
