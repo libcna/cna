@@ -41,10 +41,10 @@
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "System/IO/FileStream.hpp"
 #include "System/IO/MemoryStream.hpp"
-// Must match CMakeLists.txt's CNA_FFMPEG_AVAILABLE condition (MINGW OR EMSCRIPTEN OR ANDROID) --
-// VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp are excluded from the build on all three, so
-// Video::Video() has no definition to link against on any of them, not just Emscripten/Android.
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__MINGW32__) && !defined(__MINGW32__)
+// Keep this tied to the build-system capability rather than duplicating its platform list.
+// Video.cpp is excluded whenever FFmpeg is unavailable (currently MinGW, Emscripten, Android and
+// iOS), so even mentioning the loader on one of those targets leaves an undefined Video symbol.
+#ifdef CNA_FFMPEG_AVAILABLE
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #endif
 
@@ -3009,7 +3009,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__MINGW32__)
+#ifdef CNA_FFMPEG_AVAILABLE
         class VideoTypeReader : public LooseFileContentTypeReader<Media::Video>
         {
         public:
@@ -3043,7 +3043,7 @@ namespace Microsoft::Xna::Framework::Content
         RegisterTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>(
             std::make_unique<SkinnedModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__MINGW32__)
+#ifdef CNA_FFMPEG_AVAILABLE
         RegisterTypeReader<Media::Video>(std::make_unique<VideoTypeReader>());
 #endif
     }

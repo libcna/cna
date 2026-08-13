@@ -44,6 +44,7 @@ on:
       - 'modules/runtime/tests/Microsoft/Xna/Framework/GameTests.cpp'
       - 'modules/graphics/src/Xna/GraphicsDevice.cpp'
       - 'modules/audio/tests/CNA/Internal/Audio/AudioMixerTests.cpp'
+      - 'modules/content/src/Xna/ContentManager.cpp'
       - 'modules/storage/src/StorageDevice.cpp'
       - 'scripts/check-apple-platform-cmake.sh'
       - 'tests/apple/ios_smoke.cpp'

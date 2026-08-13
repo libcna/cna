@@ -45,7 +45,7 @@ if(CNA_BUILD_TESTS)
     # REMED-BUILD-013 (discovered while verifying it): mirrors CnaLibrary.cmake's own
     # CNA_FFMPEG_AVAILABLE exclusion for VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp/
     # VideoContentTypeReader.cpp -- these 4 test files exercise exactly those classes, which do not
-    # exist in the built CNA library on an FFmpeg-unavailable platform (MinGW/Emscripten/Android),
+    # exist in the built CNA library on an FFmpeg-unavailable platform (MinGW/Emscripten/Android/iOS),
     # and previously failed to link there (never hit before this task: no FFmpeg-unavailable CnaTests
     # build had gotten this far). VideoSoundtrackTypeTests.cpp is unaffected -- that enum has no .cpp
     # and no FFmpeg dependency.
