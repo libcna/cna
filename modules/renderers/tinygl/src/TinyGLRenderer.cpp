@@ -27,6 +27,7 @@ extern "C" {
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -47,6 +48,16 @@ namespace CNA::Internal::Renderers::TinyGL
         constexpr std::uint8_t kNoDrawR = 0xFF;
         constexpr std::uint8_t kNoDrawG = 0x00;
         constexpr std::uint8_t kNoDrawB = 0xFF;
+
+        /// TinyGL silently rounds framebuffer widths DOWN to a multiple of four. CNA instead
+        /// rounds the private allocation UP and keeps reporting/clipping to the requested logical
+        /// size, so no public column disappears.
+        int PaddedFramebufferWidth(int logicalWidth)
+        {
+            if (logicalWidth > std::numeric_limits<int>::max() - 3)
+                throw std::runtime_error("TinyGLRenderer: framebuffer width is too large to align.");
+            return (logicalWidth + 3) & ~3;
+        }
 
         [[noreturn]] void Unsupported(const std::string& message)
         {
@@ -290,6 +301,9 @@ namespace CNA::Internal::Renderers::TinyGL
     TinyGLTextureRenderer::TinyGLTextureRenderer(const ImageData& data)
         : width_(data.width), height_(data.height)
     {
+        if (data.mipLevels != 1)
+            Unsupported(
+                "Texture2D mip chains are not supported -- TinyGL stores and samples level 0 only.");
         const std::size_t expected =
             static_cast<std::size_t>(std::max(data.width, 0)) *
             static_cast<std::size_t>(std::max(data.height, 0)) * 4u;
@@ -297,32 +311,68 @@ namespace CNA::Internal::Renderers::TinyGL
         if (data.pixels.size() >= expected && expected > 0)
             std::memcpy(shadowRgba_.data(), data.pixels.data(), expected);
 
-        GLuint name = 0;
-        glGenTextures(1, &name);
-        glTexture_ = name;
+        GLuint names[2] = {};
+        glGenTextures(2, names);
+        glOpaqueTexture_ = names[0];
+        glCutoutTexture_ = names[1];
         Upload();
     }
 
     TinyGLTextureRenderer::~TinyGLTextureRenderer()
     {
-        if (glTexture_ != 0)
-        {
-            const GLuint name = glTexture_;
-            glDeleteTextures(1, &name);
-            glTexture_ = 0;
-        }
+        const GLuint names[2] = {glOpaqueTexture_, glCutoutTexture_};
+        glDeleteTextures(2, names);
+        glOpaqueTexture_ = 0;
+        glCutoutTexture_ = 0;
     }
 
     void TinyGLTextureRenderer::Upload()
     {
-        if (width_ <= 0 || height_ <= 0 || glTexture_ == 0) return;
+        if (width_ <= 0 || height_ <= 0 || glOpaqueTexture_ == 0 || glCutoutTexture_ == 0) return;
 
-        // TINYGL-0 fact B: glTexImage2D accepts GL_RGB/GL_UNSIGNED_BYTE only. Alpha is folded into
-        // TinyGL's own colour key here so its rasterizer performs the discard -- CNA supplies the
-        // data, TinyGL makes the per-fragment decision.
+        // TINYGL-0 fact B: glTexImage2D accepts GL_RGB/GL_UNSIGNED_BYTE only. Keep ordinary RGB in
+        // one object; UploadCutout() folds alpha into TinyGL's colour key in the second object.
         const std::size_t texelCount =
             static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_);
-        std::vector<std::uint8_t> rgb(texelCount * 3u);
+        std::vector<std::uint8_t> opaqueRgb(texelCount * 3u);
+        for (std::size_t i = 0; i < texelCount; ++i)
+        {
+            const std::uint8_t r = shadowRgba_[i * 4 + 0];
+            const std::uint8_t g = shadowRgba_[i * 4 + 1];
+            const std::uint8_t b = shadowRgba_[i * 4 + 2];
+            // An opaque texel that happens to BE the key colour would otherwise disappear. Nudging
+            // green by one is the smallest change that keeps it visible. TinyGL's key test is
+            // unconditional, so the ordinary texture must apply the same nudge too.
+            if (r == kNoDrawR && g == kNoDrawG && b == kNoDrawB)
+            {
+                opaqueRgb[i * 3 + 0] = kNoDrawR;
+                opaqueRgb[i * 3 + 1] = 1;
+                opaqueRgb[i * 3 + 2] = kNoDrawB;
+            }
+            else
+            {
+                opaqueRgb[i * 3 + 0] = r;
+                opaqueRgb[i * 3 + 1] = g;
+                opaqueRgb[i * 3 + 2] = b;
+            }
+        }
+
+        // Validated shape only -- see this file's header comment on gl_fatal_error().
+        glBindTexture(GL_TEXTURE_2D, static_cast<GLint>(glOpaqueTexture_));
+        glTexImage2D(GL_TEXTURE_2D, 0, 3, width_, height_, 0, GL_RGB, GL_UNSIGNED_BYTE,
+                     opaqueRgb.data());
+        cutoutAlphaMultiplier_ = -1.0f;
+        UploadCutout(1.0f);
+    }
+
+    void TinyGLTextureRenderer::UploadCutout(float alphaMultiplier) const
+    {
+        alphaMultiplier = std::clamp(alphaMultiplier, 0.0f, 1.0f);
+        if (cutoutAlphaMultiplier_ == alphaMultiplier) return;
+
+        const std::size_t texelCount =
+            static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_);
+        std::vector<std::uint8_t> cutoutRgb(texelCount * 3u);
         hasCutoutTexels_ = false;
         for (std::size_t i = 0; i < texelCount; ++i)
         {
@@ -330,32 +380,38 @@ namespace CNA::Internal::Renderers::TinyGL
             const std::uint8_t g = shadowRgba_[i * 4 + 1];
             const std::uint8_t b = shadowRgba_[i * 4 + 2];
             const std::uint8_t a = shadowRgba_[i * 4 + 3];
-            if (a < kAlphaCutoutThreshold)
+            if (static_cast<float>(a) * alphaMultiplier <
+                static_cast<float>(kAlphaCutoutThreshold))
             {
-                rgb[i * 3 + 0] = kNoDrawR;
-                rgb[i * 3 + 1] = kNoDrawG;
-                rgb[i * 3 + 2] = kNoDrawB;
+                cutoutRgb[i * 3 + 0] = kNoDrawR;
+                cutoutRgb[i * 3 + 1] = kNoDrawG;
+                cutoutRgb[i * 3 + 2] = kNoDrawB;
                 hasCutoutTexels_ = true;
-                continue;
             }
-            // An opaque texel that happens to BE the key colour would otherwise disappear. Nudging
-            // green by one is the smallest change that keeps it visible, and is preferred over
-            // silently dropping it.
-            if (r == kNoDrawR && g == kNoDrawG && b == kNoDrawB)
+            else if (r == kNoDrawR && g == kNoDrawG && b == kNoDrawB)
             {
-                rgb[i * 3 + 0] = kNoDrawR;
-                rgb[i * 3 + 1] = 1;
-                rgb[i * 3 + 2] = kNoDrawB;
-                continue;
+                cutoutRgb[i * 3 + 0] = kNoDrawR;
+                cutoutRgb[i * 3 + 1] = 1;
+                cutoutRgb[i * 3 + 2] = kNoDrawB;
             }
-            rgb[i * 3 + 0] = r;
-            rgb[i * 3 + 1] = g;
-            rgb[i * 3 + 2] = b;
+            else
+            {
+                cutoutRgb[i * 3 + 0] = r;
+                cutoutRgb[i * 3 + 1] = g;
+                cutoutRgb[i * 3 + 2] = b;
+            }
         }
 
-        glBindTexture(GL_TEXTURE_2D, static_cast<GLint>(glTexture_));
-        // Validated shape only -- see this file's header comment on gl_fatal_error().
-        glTexImage2D(GL_TEXTURE_2D, 0, 3, width_, height_, 0, GL_RGB, GL_UNSIGNED_BYTE, rgb.data());
+        glBindTexture(GL_TEXTURE_2D, static_cast<GLint>(glCutoutTexture_));
+        glTexImage2D(GL_TEXTURE_2D, 0, 3, width_, height_, 0, GL_RGB, GL_UNSIGNED_BYTE,
+                     cutoutRgb.data());
+        cutoutAlphaMultiplier_ = alphaMultiplier;
+    }
+
+    unsigned int TinyGLTextureRenderer::GLTextureHandle(bool cutout, float alphaMultiplier) const
+    {
+        if (cutout) UploadCutout(alphaMultiplier);
+        return cutout ? glCutoutTexture_ : glOpaqueTexture_;
     }
 
     void TinyGLTextureRenderer::UpdatePixels(const std::uint8_t* rgba, int stride)
@@ -409,6 +465,12 @@ namespace CNA::Internal::Renderers::TinyGL
         /// True while the installed BlendState is one of the two XNA alpha presets, which this
         /// renderer executes as TinyGL's colour-key cutout rather than as a blend equation.
         bool alphaCutoutMode = false;
+        /// Active XNA viewport, whose coordinates are top-left based just like TinyGL's rasterizer.
+        /// SpriteBatch positions are local to this rectangle.
+        int viewportX = 0;
+        int viewportY = 0;
+        int viewportW = 1;
+        int viewportH = 1;
 
         /// De-interleaved float arrays handed to TinyGL's vertex-array pointers, rebuilt per draw.
         /// They must outlive the draw because TinyGL stores the pointers, not the data.
@@ -428,13 +490,15 @@ namespace CNA::Internal::Renderers::TinyGL
                 "process-wide global (glInit/glClose) and offers no make-current entry point, so "
                 "exactly one TinyGLRenderer may exist at a time.");
 
-        impl_->zb = ZB_open(virtualWidth_, virtualHeight_, ZB_MODE_RGBA, nullptr);
+        impl_->zb = ZB_open(PaddedFramebufferWidth(virtualWidth_), virtualHeight_, ZB_MODE_RGBA, nullptr);
         if (impl_->zb == nullptr)
             throw std::runtime_error("TinyGLRenderer: ZB_open() failed to allocate the framebuffer.");
         glInit(impl_->zb);
         g_contextLive = true;
 
         glViewport(0, 0, virtualWidth_, virtualHeight_);
+        impl_->viewportW = virtualWidth_;
+        impl_->viewportH = virtualHeight_;
         // XNA's front faces are clockwise in screen space; TinyGL's default is counter-clockwise,
         // so the winding is stated explicitly rather than inherited.
         glFrontFace(GL_CW);
@@ -482,10 +546,14 @@ namespace CNA::Internal::Renderers::TinyGL
 
         // ZB_resize reallocates the colour and depth planes in place; the GL context stays valid
         // and keeps pointing at the same ZBuffer, so no glInit()/glClose() cycle is needed.
-        ZB_resize(impl_->zb, nullptr, newWidth, newHeight);
+        ZB_resize(impl_->zb, nullptr, PaddedFramebufferWidth(newWidth), newHeight);
         virtualWidth_ = newWidth;
         virtualHeight_ = newHeight;
         glViewport(0, 0, virtualWidth_, virtualHeight_);
+        impl_->viewportX = 0;
+        impl_->viewportY = 0;
+        impl_->viewportW = virtualWidth_;
+        impl_->viewportH = virtualHeight_;
     }
 
     void TinyGLRenderer::ReadBackbuffer(int x, int y, int w, int h, std::uint8_t* pixels)
@@ -501,7 +569,8 @@ namespace CNA::Internal::Renderers::TinyGL
                 std::uint8_t* dest =
                     pixels + (static_cast<std::size_t>(row) * static_cast<std::size_t>(w) +
                               static_cast<std::size_t>(col)) * 4u;
-                if (sourceX < 0 || sourceY < 0 || sourceX >= zb->xsize || sourceY >= zb->ysize)
+                if (sourceX < 0 || sourceY < 0 || sourceX >= virtualWidth_ ||
+                    sourceY >= virtualHeight_)
                 {
                     dest[0] = dest[1] = dest[2] = 0;
                     dest[3] = 0xFF;
@@ -561,8 +630,8 @@ namespace CNA::Internal::Renderers::TinyGL
 
     void TinyGLRenderer::ClearColorAndDepth(float r, float g, float b, float a, float /*depth*/)
     {
-        // TinyGL clears the whole depth plane to its own fixed far value; glClearDepth does not
-        // exist, so the requested depth cannot be honoured and is deliberately not pretended to be.
+        // TinyGL clears the whole depth plane to its own fixed far value. Upstream records
+        // glClearDepth but glopClear never reads it, so the requested depth cannot be honoured.
         impl_->clearColor[0] = r;
         impl_->clearColor[1] = g;
         impl_->clearColor[2] = b;
@@ -632,6 +701,10 @@ namespace CNA::Internal::Renderers::TinyGL
                     " selects a subset of RGBA, which TinyGL cannot express -- it has no "
                     "glColorMask and no per-channel write control.");
         }
+        if (writeState.multiSampleMask != 0xFFFFFFFFu)
+            Unsupported(
+                "BlendState.MultiSampleMask cannot be honoured -- TinyGL rasterizes exactly one "
+                "sample per pixel and has no coverage-mask state.");
 
         if (IsXnaAlphaPreset(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                              colorBlendFunc, alphaBlendFunc))
@@ -646,8 +719,6 @@ namespace CNA::Internal::Renderers::TinyGL
             return;
         }
 
-        impl_->alphaCutoutMode = false;
-
         // XNA carries separate RGB and alpha factors; TinyGL's rasterizer has one factor pair for
         // the whole pixel and no alpha channel to apply the second pair to. Accepting a state whose
         // halves disagree would silently drop one of them.
@@ -661,6 +732,7 @@ namespace CNA::Internal::Renderers::TinyGL
         const GLint source = ToTinyGLSourceFactor(colorSrcBlend);
         const GLint dest = ToTinyGLDestFactor(colorDstBlend);
         const GLenum equation = ToTinyGLBlendEquation(colorBlendFunc);
+        impl_->alphaCutoutMode = false;
 
         // BlendState::Opaque -- (One, Zero) with Add -- is the identity, so blending is switched
         // off entirely rather than executed, matching every other CNA renderer's own fast path.
@@ -734,6 +806,10 @@ namespace CNA::Internal::Renderers::TinyGL
             Unsupported(
                 "a non-zero DepthBias/SlopeScaleDepthBias cannot be honoured -- TinyGL's "
                 "glPolygonOffset stores its arguments and its rasterizer never reads them.");
+        if (cullMode < 0 || cullMode > 2)
+            Unsupported("unsupported CullMode ordinal " + std::to_string(cullMode));
+        if (fillMode < 0 || fillMode > 1)
+            Unsupported("unsupported FillMode ordinal " + std::to_string(fillMode));
 
         switch (cullMode)
         {
@@ -748,8 +824,6 @@ namespace CNA::Internal::Renderers::TinyGL
             glEnable(GL_CULL_FACE);
             glCullFace(GL_BACK);
             break;
-        default:
-            Unsupported("unsupported CullMode ordinal " + std::to_string(cullMode));
         }
 
         switch (fillMode)
@@ -760,8 +834,6 @@ namespace CNA::Internal::Renderers::TinyGL
         case 1: // WireFrame
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
             break;
-        default:
-            Unsupported("unsupported FillMode ordinal " + std::to_string(fillMode));
         }
     }
 
@@ -782,10 +854,16 @@ namespace CNA::Internal::Renderers::TinyGL
         if (w <= 0 || h <= 0)
             Unsupported("a Viewport with a non-positive width or height cannot be installed -- "
                         "TinyGL's glViewport treats that as a fatal error and terminates.");
+        if (x < 0 || y < 0 || x > virtualWidth_ - w || y > virtualHeight_ - h)
+            Unsupported("a Viewport outside the logical backbuffer cannot be installed safely.");
 
-        // XNA's viewport origin is top-left; TinyGL's, like OpenGL's, is bottom-left.
-        const int flippedY = virtualHeight_ - (y + h);
-        glViewport(x, flippedY, w, h);
+        // Unlike desktop OpenGL, TinyGL's gl_eval_viewport() applies a negative Y scale and writes
+        // directly into a top-row-first ZBuffer. Its viewport origin therefore already matches XNA.
+        glViewport(x, y, w, h);
+        impl_->viewportX = x;
+        impl_->viewportY = y;
+        impl_->viewportW = w;
+        impl_->viewportH = h;
     }
 
     void TinyGLRenderer::ApplySamplerState(int /*slot*/, int filter, int addressU, int addressV,
@@ -796,8 +874,11 @@ namespace CNA::Internal::Renderers::TinyGL
         ValidateTextureAddressMode(addressV);
     }
 
-    void TinyGLRenderer::ApplySamplerMipState(int /*slot*/, int /*maxMipLevel*/, float /*lodBias*/)
+    void TinyGLRenderer::ApplySamplerMipState(int /*slot*/, int maxMipLevel, float lodBias)
     {
+        if (maxMipLevel != 0 || lodBias != 0.0f)
+            Unsupported(
+                "mip-level selection cannot be honoured -- TinyGL textures store level 0 only.");
     }
 
     std::unique_ptr<IVertexBufferRenderer> TinyGLRenderer::CreateVertexBuffer(int vertex_capacity)
@@ -869,7 +950,7 @@ namespace CNA::Internal::Renderers::TinyGL
             if (texture == nullptr)
                 Unsupported("a textured draw was requested" + where +
                             " but no TinyGL texture is bound to unit 0.");
-            state.glTexture = texture->GLTextureHandle();
+            state.texture = texture;
         }
         return state;
     }
@@ -879,7 +960,7 @@ namespace CNA::Internal::Renderers::TinyGL
                                                  const char* route)
     {
         const std::size_t stride = vb.StrideInBytes();
-        const bool textured = state.glTexture != 0;
+        const bool textured = state.texture != nullptr;
         const std::size_t expected = textured ? kPositionColorTextureStride : kPositionColorStride;
 
         if (stride != expected)
@@ -904,6 +985,11 @@ namespace CNA::Internal::Renderers::TinyGL
         // point is still TinyGL's.
         const int vertexCount = vb.GetVertexCount();
         const std::uint8_t* base = vb.Bytes();
+        if (stride != 0 && (base == nullptr ||
+            vb.ByteSize() < static_cast<std::size_t>(vertexCount) * stride))
+            throw std::runtime_error(
+                std::string("TinyGLRenderer: the ") + route +
+                " draw reads a vertex buffer that has not received a complete SetData upload.");
         auto& positions = impl_->scratchPositions;
         auto& colors = impl_->scratchColors;
         auto& texCoords = impl_->scratchTexCoords;
@@ -923,7 +1009,7 @@ namespace CNA::Internal::Renderers::TinyGL
             // XNA packs Color as four unsigned bytes in RGBA order at offset 12 of both layouts.
             for (int c = 0; c < 4; ++c)
                 colors[static_cast<std::size_t>(i) * 4u + static_cast<std::size_t>(c)] =
-                    static_cast<float>(record[12 + c]) / 255.0f;
+                    (static_cast<float>(record[12 + c]) / 255.0f) * state.diffuse[c];
 
             if (textured)
             {
@@ -932,6 +1018,16 @@ namespace CNA::Internal::Renderers::TinyGL
                 texCoords[static_cast<std::size_t>(i) * 2u + 0] = uv[0];
                 texCoords[static_cast<std::size_t>(i) * 2u + 1] = uv[1];
             }
+        }
+
+        unsigned int selectedTexture = 0;
+        if (textured)
+        {
+            // BasicEffect.Alpha is uniform and already carried in diffuse[3]. This may lazily
+            // refresh the cutout object for that multiplier; it is deliberately after every
+            // recoverable validation above and before client GL state.
+            selectedTexture = state.texture->GLTextureHandle(
+                impl_->alphaCutoutMode, state.diffuse[3]);
         }
 
         glEnableClientState(GL_VERTEX_ARRAY);
@@ -954,7 +1050,7 @@ namespace CNA::Internal::Renderers::TinyGL
         {
             glEnableClientState(GL_TEXTURE_COORD_ARRAY);
             glTexCoordPointer(2, GL_FLOAT, 0, texCoords.data());
-            glBindTexture(GL_TEXTURE_2D, static_cast<GLint>(state.glTexture));
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLint>(selectedTexture));
             glEnable(GL_TEXTURE_2D);
         }
         else
@@ -1005,6 +1101,7 @@ namespace CNA::Internal::Renderers::TinyGL
                                      "this renderer.");
 
         const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
+        const GLenum mode = ToTinyGLMode(primitive);
         const long long firstElement =
             static_cast<long long>(state.streamVertexOffset) + static_cast<long long>(state.vertexStart);
         if (firstElement < 0 ||
@@ -1016,8 +1113,8 @@ namespace CNA::Internal::Renderers::TinyGL
 
         BindVertexArrays(*vb, state, route);
         LoadDrawMatrices(world, view, projection);
-        glDrawArrays(ToTinyGLMode(primitive), static_cast<GLint>(firstElement), vertexCount);
-        UnbindVertexArrays(state.glTexture != 0);
+        glDrawArrays(mode, static_cast<GLint>(firstElement), vertexCount);
+        UnbindVertexArrays(state.texture != nullptr);
     }
 
     void TinyGLRenderer::DrawIndexedCommon(const IVertexBufferRenderer& vbBase,
@@ -1035,6 +1132,7 @@ namespace CNA::Internal::Renderers::TinyGL
                                      "created by this renderer.");
 
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
+        const GLenum mode = ToTinyGLMode(primitive);
         if (state.startIndex < 0 || state.startIndex + indexCount > ib->GetIndexCount())
             throw std::runtime_error(
                 std::string("TinyGLRenderer: the ") + route + " draw reads indices [" +
@@ -1042,33 +1140,33 @@ namespace CNA::Internal::Renderers::TinyGL
                 std::to_string(state.startIndex + indexCount) +
                 ") but the bound index buffer holds " + std::to_string(ib->GetIndexCount()) + ".");
 
-        BindVertexArrays(*vb, state, route);
-        LoadDrawMatrices(world, view, projection);
-
         // TinyGL has no glDrawElements (TINYGL-0). glArrayElement() is its own indexed fetch: it
         // reads element i from every enabled client array and emits the vertex, so replaying the
         // index list between glBegin/glEnd is a genuine indexed draw, not a CPU-side expansion into
         // a temporary vertex array.
         const long long vertexBase =
             static_cast<long long>(state.baseVertex) + static_cast<long long>(state.streamVertexOffset);
-        glBegin(ToTinyGLMode(primitive));
+        std::vector<GLint> elements(static_cast<std::size_t>(indexCount));
         for (int i = 0; i < indexCount; ++i)
         {
             const long long element =
                 vertexBase + static_cast<long long>(ib->IndexAt(state.startIndex + i));
             if (element < 0 || element >= static_cast<long long>(vb->GetVertexCount()))
             {
-                glEnd();
-                UnbindVertexArrays(state.glTexture != 0);
                 throw std::runtime_error(
                     std::string("TinyGLRenderer: the ") + route + " draw decoded vertex index " +
                     std::to_string(element) + ", outside the bound vertex buffer's " +
                     std::to_string(vb->GetVertexCount()) + " vertices.");
             }
-            glArrayElement(static_cast<GLint>(element));
+            elements[static_cast<std::size_t>(i)] = static_cast<GLint>(element);
         }
+
+        BindVertexArrays(*vb, state, route);
+        LoadDrawMatrices(world, view, projection);
+        glBegin(mode);
+        for (const GLint element : elements) glArrayElement(element);
         glEnd();
-        UnbindVertexArrays(state.glTexture != 0);
+        UnbindVertexArrays(state.texture != nullptr);
     }
 
     void TinyGLRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb,
@@ -1124,7 +1222,8 @@ namespace CNA::Internal::Renderers::TinyGL
             return true;
         // Not implemented, and reported as such rather than silently no-opped:
         //  - DepthStencilBuffer/StencilBuffer: TinyGL's ZBuffer has a depth plane and no stencil
-        //    plane; ApplyDepthStencilState() refuses stencilEnable and every stencil clear throws.
+        //    plane; ApplyDepthStencilState() refuses stencilEnable and stencil clears are legal
+        //    absent-plane no-ops.
         //    DepthStencilBuffer is false because the pair is what the capability names -- the depth
         //    half alone is real, and ApplyDepthStencilState()/SetDepthTestEnabled() implement it.
         //  - AdditiveBlending: BlendState::Additive is (SourceAlpha, One), and TinyGL's factor
@@ -1145,7 +1244,7 @@ namespace CNA::Internal::Renderers::TinyGL
         }
     }
 
-    void TinyGLRenderer::DrawTexturedQuadEXT(unsigned int glTexture,
+    void TinyGLRenderer::DrawTexturedQuadEXT(const TinyGLTextureRenderer& texture,
                                              const float positionsPixels[4][2],
                                              const float uvs[4][2],
                                              const float colorsRgba01[4][4],
@@ -1156,7 +1255,7 @@ namespace CNA::Internal::Renderers::TinyGL
         // fixed-function transform alone performs the pixel -> NDC mapping. `spriteTransform`
         // composes on top exactly as EasyGLRenderer's own SpriteBatch does.
         const Matrix orthoM = Matrix::CreateOrthographicOffCenter(
-            0.0f, static_cast<float>(virtualWidth_), static_cast<float>(virtualHeight_), 0.0f,
+            0.0f, static_cast<float>(impl_->viewportW), static_cast<float>(impl_->viewportH), 0.0f,
             0.0f, 1.0f);
         const Matrix combined = spriteTransform * orthoM;
 
@@ -1188,7 +1287,9 @@ namespace CNA::Internal::Renderers::TinyGL
             for (int c = 0; c < 4; ++c) colors[i][c] = colorsRgba01[corner][c];
         }
 
-        glBindTexture(GL_TEXTURE_2D, static_cast<GLint>(glTexture));
+        glBindTexture(GL_TEXTURE_2D,
+                      static_cast<GLint>(texture.GLTextureHandle(
+                          impl_->alphaCutoutMode, colorsRgba01[0][3])));
         glEnable(GL_TEXTURE_2D);
         glEnableClientState(GL_VERTEX_ARRAY);
         glEnableClientState(GL_COLOR_ARRAY);
@@ -1236,6 +1337,8 @@ namespace CNA::Internal::Renderers::TinyGL
 
     void TinyGLSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
+        if (!begun_)
+            throw std::runtime_error("TinyGLSpriteBatchRenderer::Draw: Draw() called before Begin()");
         Draw(texture,
              Rectangle(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()),
              Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()), Color(255, 255, 255, 255),
@@ -1247,6 +1350,8 @@ namespace CNA::Internal::Renderers::TinyGL
                                          const Rectangle& sourceRectangle,
                                          const Color& color)
     {
+        if (!begun_)
+            throw std::runtime_error("TinyGLSpriteBatchRenderer::Draw: Draw() called before Begin()");
         Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0.0f, 0.0f),
              SpriteEffects::None, 0.0f);
     }
@@ -1260,6 +1365,8 @@ namespace CNA::Internal::Renderers::TinyGL
                                          SpriteEffects effects,
                                          float /*layerDepth*/)
     {
+        if (!begun_)
+            throw std::runtime_error("TinyGLSpriteBatchRenderer::Draw: Draw() called before Begin()");
         const auto* tinyTexture = dynamic_cast<const TinyGLTextureRenderer*>(&texture);
         if (tinyTexture == nullptr)
             throw std::runtime_error("TinyGLRenderer: the drawn texture was not created by this "
@@ -1283,11 +1390,15 @@ namespace CNA::Internal::Renderers::TinyGL
         const float top = static_cast<float>(destinationRectangle.Y);
         const float width = static_cast<float>(destinationRectangle.Width);
         const float height = static_cast<float>(destinationRectangle.Height);
+        const float sourceWidth = static_cast<float>(std::max(1, sourceRectangle.Width));
+        const float sourceHeight = static_cast<float>(std::max(1, sourceRectangle.Height));
+        const float scaleX = width / sourceWidth;
+        const float scaleY = height / sourceHeight;
 
         // Corners relative to the rotation origin, then rotated and translated back -- the same
         // TL, TR, BR, BL order DrawTexturedQuadEXT() expects.
-        const float ox = origin.X;
-        const float oy = origin.Y;
+        const float ox = origin.X * scaleX;
+        const float oy = origin.Y * scaleY;
         const float localX[4] = {-ox, width - ox, width - ox, -ox};
         const float localY[4] = {-oy, -oy, height - oy, height - oy};
         const float cosR = std::cos(rotation);
@@ -1296,8 +1407,8 @@ namespace CNA::Internal::Renderers::TinyGL
         float positions[4][2];
         for (int i = 0; i < 4; ++i)
         {
-            positions[i][0] = left + ox + localX[i] * cosR - localY[i] * sinR;
-            positions[i][1] = top + oy + localX[i] * sinR + localY[i] * cosR;
+            positions[i][0] = left + localX[i] * cosR - localY[i] * sinR;
+            positions[i][1] = top + localX[i] * sinR + localY[i] * cosR;
         }
         const float uvs[4][2] = {{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}};
 
@@ -1307,7 +1418,7 @@ namespace CNA::Internal::Renderers::TinyGL
         const float a = static_cast<float>(color.getAProperty()) / 255.0f;
         const float colors[4][4] = {{r, g, b, a}, {r, g, b, a}, {r, g, b, a}, {r, g, b, a}};
 
-        owner_.DrawTexturedQuadEXT(tinyTexture->GLTextureHandle(), positions, uvs, colors, transform_);
+        owner_.DrawTexturedQuadEXT(*tinyTexture, positions, uvs, colors, transform_);
     }
 
 }

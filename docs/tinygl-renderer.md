@@ -5,7 +5,7 @@ Task breakdown and design decisions are in [`../plan_tinygl.md`](../plan_tinygl.
 pre-implementation probe that established the constraints below is in
 [`../tinygl-spike/README.md`](../tinygl-spike/README.md).
 
-Upstream: [C-Chads/tinygl](https://github.com/C-Chads/tinygl), the maintained fork of Fabrice
+Upstream: [C-Chads/tinygl](https://github.com/C-Chads/tinygl), an archived fork of Fabrice
 Bellard's TinyGL, pinned at commit `36a7987e`. A CPU implementation of a fixed-function OpenGL 1.x
 subset — **no shaders exist anywhere in its design**.
 
@@ -32,9 +32,9 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 
 | Feature | Status | Notes |
 |---|---|---|
-| Clear (colour, depth) | ✅ | `glClearColor`/`glClear`. `ClearDepth`'s value is ignored — TinyGL has no `glClearDepth` equivalent and always clears to its own far value. |
+| Clear (colour, depth) | ✅ | `glClearColor`/`glClear`. `ClearDepth`'s value is ignored — upstream records `glClearDepth`, but `glopClear` never reads it and always uses its fixed far value. |
 | Backbuffer readback | ✅ | Direct `ZBuffer::pbuf` access; upstream `glReadPixels` is a stub. |
-| Resize | ✅ | `ZB_resize`, no context teardown. |
+| Resize | ✅ | `ZB_resize`, no context teardown; private width is padded up to a multiple of four so upstream cannot truncate logical columns. |
 | `Texture2D` create/update/`GetData` | ✅ | `GetData` is exact (CPU shadow), alpha included. |
 | Perspective projection | ✅ | Real w-divide: a quad at z=-6 covers 256 px where the same quad at z=0 covers 1521. |
 | Depth-buffer occlusion | ✅ | Draw-order independent; `DepthStencilState::DepthRead` tests without writing. |
@@ -44,7 +44,7 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 | Indexed draws | ✅ | `glArrayElement` inside `glBegin`/`glEnd` — TinyGL has **no `glDrawElements`**. |
 | Draw offsets (`vertexStart`, `startIndex`, `baseVertex`, `VertexOffset`) | ✅ | |
 | `BasicEffect`: `VertexColorEnabled`, `DiffuseColor`, `Alpha`, `TextureEnabled` | ✅ | |
-| `SpriteBatch` (source/dest rects, tint, rotation, origin, flips) | ✅ | Real textured quads. |
+| `SpriteBatch` (source/dest rects, tint, rotation, origin, flips) | ✅ | Real viewport-local textured quads; origin uses source-rectangle texels. |
 | World/View/Projection | ✅ | TinyGL's own `GL_PROJECTION`/`GL_MODELVIEW` stacks. |
 | `CullMode` | ✅ | `glFrontFace(GL_CW)` + `glCullFace`. |
 | `FillMode.WireFrame` | ✅ | `glPolygonMode(GL_LINE)`. |
@@ -66,13 +66,17 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 | `TextureCube`, `Texture3D` | ❌ | No cube or volume texture type. |
 | Custom `Effect`, `SkinnedEffect`, PBR, per-pixel lighting | ❌ | No shader stage of any kind. |
 | `BasicEffect` lighting, fog, alpha test | ❌ | Not wired to TinyGL's own `glLight*` pipeline yet — `plan_tinygl.md` `TINYGL-16`. |
-| MSAA, anisotropic filtering, mip levels | ❌ | |
+| MSAA, anisotropic filtering, mip levels | ❌ | Mip creation/selection and non-default sample masks are refused. |
 | Instancing, multi-stream vertex input | ❌ | |
 | Occlusion queries | ❌ | |
 
 `SupportsCapability()` returns true for `ThreeD` and `WireFrame` only. Everything else in
 `CNA::GraphicsCapability` reports false, including `DepthStencilBuffer` (the depth half is real; the
 pair the capability names is not) and `AdditiveBlending`.
+
+The lower-level buffer hooks intentionally distinguish the usable depth-state path from its planes:
+`SupportsDepthStencil()` and `SupportsDepthBuffer()` are true so device depth state is initialized,
+while `SupportsStencilBuffer()` is false and stencil clears are masked out.
 
 ## Blending
 
@@ -109,10 +113,11 @@ capability query.
 ### 1. Transparency is 1-bit
 
 TinyGL has no alpha, but it does have `TGL_NO_DRAW_COLOR` (`0xFF00FF`): its triangle rasterizer
-discards any textured fragment whose texel matches that key. On upload, texels with alpha below
-`TinyGLTextureRenderer::kAlphaCutoutThreshold` (**128**) are written as the key colour, so TinyGL
-performs a real per-fragment discard. Alpha is thresholded, never interpolated — a half-transparent
-sprite is either fully drawn or fully absent, with no blending in between.
+discards any textured fragment whose texel matches that key. CNA keeps two TinyGL objects per
+texture. The ordinary object preserves RGB for `BlendState::Opaque`; in the cutout object, source
+alpha multiplied by uniform `BasicEffect.Alpha` or SpriteBatch tint alpha is thresholded at
+`TinyGLTextureRenderer::kAlphaCutoutThreshold` (**128**) and low-alpha texels become the key. Alpha
+is never interpolated — a fragment is fully drawn or absent, with no compositing in between.
 
 An opaque texel that genuinely *is* `0xFF00FF` would otherwise disappear; it is uploaded as
 `0xFF01FF` (green nudged by one) so it stays visible. Both behaviours are asserted by
@@ -166,8 +171,8 @@ TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/
 existing checkout for an offline build. An OpenMP-capable toolchain is required — see
 `plan_tinygl.md` §Build for why.
 
-Five suites, 45 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
-`TinyGL_State` (9), `TinyGL_Rejection` (11). All pass.
+Six suites, 68 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
+`TinyGL_State` (9), `TinyGL_Rejection` (11), and the post-audit `TinyGL_Contract` (23). All pass.
 
 `TinyGL_Smoke` alone would not earn `SupportsCapability(ThreeD)` — it draws a full-viewport quad at
 z=0 with identity matrices, which a purely 2D rasterizer would also pass. `TinyGL_3D` is what

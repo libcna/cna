@@ -23,6 +23,17 @@ set(CNA_TINYGL_GIT_TAG "36a7987e7bebfda19615ea33341b1cc0ff9c3b13"
 function(cna_configure_tinygl)
     include(FetchContent)
 
+    # TinyGL compiles OpenMP regions into the static archive. Find the C component in this parent
+    # directory before adding upstream: imported targets are directory-scoped in CMake, so doing the
+    # lookup only after FetchContent_MakeAvailable() can emit a false negative even though the child
+    # directory already found and linked OpenMP. The renderer's documented toolchain contract makes
+    # this a configure-time requirement rather than a warning followed by a possible link failure.
+    enable_language(C)
+    find_package(OpenMP REQUIRED COMPONENTS C)
+    if(NOT TARGET OpenMP::OpenMP_C)
+        message(FATAL_ERROR "CNA: FindOpenMP succeeded but OpenMP::OpenMP_C is unavailable.")
+    endif()
+
     # Upstream builds a shared library and its demo corpus by default; CNA links the static archive
     # only. The demos pull in SDL and X11, neither of which this renderer needs -- it never opens a
     # window (see docs/tinygl-renderer.md).
@@ -53,18 +64,9 @@ function(cna_configure_tinygl)
     # glopDrawPixels are compiled with OpenMP pragmas
     # (TGL_FEATURE_MULTITHREADED_COPY_TEXIMAGE_2D / TGL_FEATURE_MULTITHREADED_DRAWPIXELS in
     # zfeatures.h), so the static archive carries unresolved GOMP_* references even though this
-    # renderer never calls either entry point. Upstream's own src/CMakeLists.txt links
-    # OpenMP::OpenMP_C only when the legacy OPENMP_C_FOUND variable is set, which modern
-    # FindOpenMP no longer defines -- so link it here rather than relying on that.
-    find_package(OpenMP COMPONENTS C)
-    if(TARGET OpenMP::OpenMP_C)
-        target_link_libraries(tinygl-static PUBLIC OpenMP::OpenMP_C)
-    else()
-        message(WARNING
-            "CNA: OpenMP was not found. TinyGL's multithreaded glDrawPixels/glCopyTexImage2D "
-            "paths may fail to link; neither is reachable from the TINYGL renderer, but a link "
-            "error here means this build needs an OpenMP-capable toolchain.")
-    endif()
+    # renderer never calls either entry point. Upstream checks the incorrectly-cased legacy-style
+    # OPENMP_C_FOUND name rather than FindOpenMP's OpenMP_C_FOUND, so link the required target here.
+    target_link_libraries(tinygl-static PUBLIC OpenMP::OpenMP_C)
 
     # Upstream compiles with -march=native when not cross-compiling, so the archive is tuned for
     # the build host. Stated rather than overridden: it is upstream's own choice, and CNA builds

@@ -41,6 +41,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "TINYGL")
     cna_tinygl_test(cna_test_tinygl_rejection tinygl_rejection_test.cpp)
     cna_register_renderer_test(NAME TinyGL_Rejection COMMAND cna_test_tinygl_rejection
         TIMEOUT 30 LABELS "TinyGL")
+
+    cna_tinygl_test(cna_test_tinygl_contract tinygl_contract_test.cpp)
+    cna_register_renderer_test(NAME TinyGL_Contract COMMAND cna_test_tinygl_contract
+        TIMEOUT 30 LABELS "TinyGL")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

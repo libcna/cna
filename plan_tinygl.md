@@ -3,7 +3,7 @@
 ## Scope
 
 `TINYGL` is CNA's fixed-function CPU OpenGL renderer, implemented on
-[C-Chads/tinygl](https://github.com/C-Chads/tinygl) — the maintained fork of Fabrice Bellard's
+[C-Chads/tinygl](https://github.com/C-Chads/tinygl) — an archived fork of Fabrice Bellard's
 TinyGL. It MUST NOT depend on EasyGL, PortableGL, SDL_Renderer, SDL_GPU, bgfx or any other CNA
 renderer, and it never opens a window, touches SDL's video subsystem, or talks to a GPU driver.
 
@@ -29,7 +29,8 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 
 ## Status
 
-**Delivered and green.** 5 CTest suites, 45 checks, 5/5 passing under
+**Delivered and green after the post-implementation contract audit.** 6 CTest suites, 68 checks,
+6/6 passing under
 `-DCNA_GRAPHICS_RENDERER=TINYGL`. Public renderer identity count is **47**
 (`scripts/check_renderer_identities.py`).
 
@@ -42,9 +43,12 @@ zlib does not have — an acknowledgment in the product **and its documentation*
   no display server. `Present()` is a no-op; `GetWindowInternal()`/`GetRendererInternal()` are null.
 - `Clear` / `ClearColorAndDepth` / `ClearDepth` through `glClearColor`/`glClear`.
 - `ReadBackbuffer()` straight off `ZBuffer::pbuf` (see TINYGL-0 fact A).
-- `SetVirtualResolution()` through `ZB_resize` — no context teardown.
+- `SetVirtualResolution()` through `ZB_resize` — no context teardown. Because upstream rounds a
+  `ZBuffer` width down to a multiple of four, CNA pads the private allocation up while preserving
+  the exact requested logical width and clipping readback to it.
 - Texture upload through `glGenTextures`/`glTexImage2D`, with an untouched CPU RGBA shadow for
-  exact `GetData()`.
+  exact `GetData()`. Opaque RGB and alpha-cutout sampling use separate TinyGL texture objects, so
+  the discard key is selected only by an alpha-preset blend state.
 - **Real 3D**, not merely a rasterized quad: perspective projection (a quad at z=-6 covers 256 px
   against the same quad's 1521 px at z=0), depth-buffer occlusion that is independent of draw
   order, `DepthStencilState::DepthRead`'s test-without-write, modelview rotation that really
@@ -53,9 +57,10 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 - 3D: the `VertexPositionColor` (stride 16) and `VertexPositionColorTexture` (stride 24) routes,
   non-indexed (`glDrawArrays`) and indexed (`glArrayElement` inside `glBegin`/`glEnd`), honouring
   `vertexStart`, `startIndex`, `baseVertex` and the stream's `VertexOffset`.
-- `BasicEffect`'s `VertexColorEnabled`, `DiffuseColor`, `Alpha` and `TextureEnabled`.
-- 2D: a real textured `SpriteBatch` quad path with source/destination rectangles, tint, rotation,
-  origin and both flip flags.
+- `BasicEffect`'s `VertexColorEnabled`, `DiffuseColor`, `Alpha` and `TextureEnabled`; packed vertex
+  colour is multiplied by the forwarded diffuse/alpha material exactly once.
+- 2D: a real textured, viewport-local `SpriteBatch` quad path with source/destination rectangles,
+  tint, rotation, source-texel origin and both flip flags.
 - World/View/Projection through TinyGL's own `GL_PROJECTION`/`GL_MODELVIEW` stacks (`glLoadMatrixf`).
 - State: blend factors/equation (`glBlendFunc`/`glBlendEquation`), depth enable/write
   (`glEnable(GL_DEPTH_TEST)`/`glDepthMask`), cull mode (`glCullFace`/`glFrontFace`), fill mode
@@ -67,7 +72,7 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 ## Intentional TinyGL limitations
 
 Each is refused deterministically with `System::NotSupportedException`, never silently no-opped,
-and each is covered by `TinyGL_Rejection`:
+and is covered by `TinyGL_Rejection` or the post-audit `TinyGL_Contract` suite:
 
 - **No stencil.** TinyGL's `ZBuffer` has a depth plane and a colour plane and nothing else.
   Enabling the stencil test and setting a non-zero `ReferenceStencil` are refused.
@@ -83,7 +88,8 @@ and each is covered by `TinyGL_Rejection`:
   and has no framebuffer-object, cube or volume texture concept.
 - **No shaders of any kind**, so no custom `Effect`, no `SkinnedEffect`, no PBR, no per-pixel
   lighting.
-- **No MSAA, no anisotropy, no mip levels.**
+- **No MSAA, no anisotropy, no mip levels.** Mip-chain texture creation, non-default mip sampler
+  controls and a non-default `MultiSampleMask` are refused.
 - **No instancing, no multi-stream vertex input.**
 - **Lighting is not wired up.** TinyGL has a real `glLight*` fixed-function pipeline, but CNA does
   not translate XNA's lighting parameters onto it yet, so `lightingEnabled` is refused rather than
@@ -98,8 +104,11 @@ defaults and leave a renderer that can only throw. Each is documented, tested, a
 1. **Transparency is 1-bit, not alpha blending.** `BlendState::AlphaBlend` and
    `BlendState::NonPremultiplied` are matched on their complete factor+function signature and
    executed as TinyGL's own `TGL_NO_DRAW_COLOR` colour-key cutout: texels below
-   `TinyGLTextureRenderer::kAlphaCutoutThreshold` (128) are uploaded as the key colour and TinyGL's
-   triangle rasterizer discards them per fragment. Alpha is thresholded, never interpolated.
+   `TinyGLTextureRenderer::kAlphaCutoutThreshold` (128) are uploaded into a separate cutout texture
+   as the key colour and TinyGL's triangle rasterizer discards them per fragment. The effective
+   threshold includes uniform `BasicEffect.Alpha` or SpriteBatch tint alpha. `BlendState::Opaque`
+   selects the ordinary RGB object and never applies this alpha discard. Alpha is thresholded,
+   never interpolated.
 2. **Sampler state is inert.** `glTexParameteri` is an upstream no-op and the texel fetch masks the
    fixed-point S/T against the texture dimension, so sampling is always nearest with wrap
    addressing whatever `SamplerState` asks for. `TextureFilter::Anisotropic` is still refused,
@@ -133,6 +142,7 @@ them are refused one step earlier.
 | `TINYGL-13` | `TinyGL_State` (9 checks) | **DONE** |
 | `TINYGL-14` | `TinyGL_Rejection` (11 checks) | **DONE** |
 | `TINYGL-14b` | `TinyGL_3D` (8 checks): earn `SupportsCapability(ThreeD)` with perspective, depth occlusion and modelview proofs | **DONE** |
+| `TINYGL-14c` | `TinyGL_Contract` (23 checks): post-implementation audit regressions for framebuffer alignment, effect modulation, offsets, SpriteBatch geometry/viewport/alpha, mip/MSAA refusals, capability hooks and validation ordering | **DONE** |
 | `TINYGL-15` | `docs/tinygl-renderer.md` capability boundary | **DONE** |
 | `TINYGL-16` | Fixed-function lighting via `glLight*` | **OPEN** — needs its own owner instruction |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus | **OPEN** |
@@ -231,9 +241,9 @@ TinyGL is fetched at configure time. For an offline build, point CMake at an exi
 
 OpenMP is required: upstream compiles `glopCopyTexImage2D` and `glopDrawPixels` with OpenMP pragmas,
 so the archive carries unresolved `GOMP_*` references even though this renderer calls neither.
-Upstream's own CMake links `OpenMP::OpenMP_C` only when the legacy `OPENMP_C_FOUND` variable is set,
-which modern `FindOpenMP` no longer defines — `cmake/ThirdPartyTinyGL.cmake` links it explicitly for
-that reason.
+Upstream's own CMake checks the incorrectly-cased `OPENMP_C_FOUND` name instead of CMake's
+`OpenMP_C_FOUND`. `cmake/ThirdPartyTinyGL.cmake` therefore enables C, requires the OpenMP C
+component before adding the upstream directory, and explicitly links `OpenMP::OpenMP_C`.
 
 Upstream compiles with `-march=native` when not cross-compiling, so the archive is tuned for the
 build host. That is upstream's own choice and CNA builds TinyGL per machine; it is stated rather

@@ -122,15 +122,16 @@ namespace CNA::Internal::Renderers::TinyGL
     };
 
     /**
-     * Renderer handle for a texture, backed by a real TinyGL texture object
+     * Renderer handle for a texture, backed by two real TinyGL texture objects
      * (`glGenTextures`/`glTexImage2D`).
      *
      * Two upstream constraints shape this handle, both established by `TINYGL-0`:
      *
      *  - `glTexImage2D` accepts `GL_RGB`/`GL_UNSIGNED_BYTE` only. CNA's RGBA8 source is therefore
-     *    converted on upload, and TinyGL never sees an alpha channel. Texels whose alpha is below
-     *    `kAlphaCutoutThreshold` are written as TinyGL's `TGL_NO_DRAW_COLOR` key (0xFF00FF), which
-     *    its triangle rasterizer discards -- that colour key is the only transparency TinyGL has.
+     *    converted on upload, and TinyGL never sees an alpha channel. The ordinary texture keeps
+     *    every texel visible for `BlendState::Opaque`; a second cutout texture writes texels below
+     *    `kAlphaCutoutThreshold` as TinyGL's `TGL_NO_DRAW_COLOR` key (0xFF00FF). The renderer selects
+     *    that second object only for the two documented alpha-preset approximations.
      *  - Every texture is resampled to 256x256 inside `glTexImage2D` (`TGL_FEATURE_TEXTURE_DIM`),
      *    with nearest-neighbour and no interpolation. `GetWidth()`/`GetHeight()` keep reporting the
      *    size the game asked for, because that is what `Texture2D.Width`/`Height` must return; the
@@ -142,7 +143,7 @@ namespace CNA::Internal::Renderers::TinyGL
     class TinyGLTextureRenderer final : public ITextureRenderer
     {
     public:
-        /** @brief Alpha values strictly below this become the discard colour key on upload. */
+        /** @brief Effective source alpha values strictly below this become the discard key. */
         static constexpr std::uint8_t kAlphaCutoutThreshold = 128;
 
         /**
@@ -180,18 +181,25 @@ namespace CNA::Internal::Renderers::TinyGL
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /** @brief CNAEXT. Real TinyGL texture object handle (`glGenTextures` name). */
-        CNAEXT [[nodiscard]] unsigned int GLTextureHandle() const { return glTexture_; }
+        /**
+         * @brief CNAEXT. Selects the real TinyGL texture object for the installed blend mode.
+         * @param cutout Whether low-alpha source texels must use TinyGL's discard key.
+         */
+        CNAEXT [[nodiscard]] unsigned int GLTextureHandle(bool cutout,
+                                                          float alphaMultiplier = 1.0f) const;
         /** @brief CNAEXT. Whether any source texel was below the cutout threshold on the last upload. */
         CNAEXT [[nodiscard]] bool HasCutoutTexelsEXT() const { return hasCutoutTexels_; }
 
     private:
         void Upload();
+        void UploadCutout(float alphaMultiplier) const;
 
-        unsigned int glTexture_ = 0;
+        unsigned int glOpaqueTexture_ = 0;
+        unsigned int glCutoutTexture_ = 0;
         int width_ = 0;
         int height_ = 0;
-        bool hasCutoutTexels_ = false;
+        mutable bool hasCutoutTexels_ = false;
+        mutable float cutoutAlphaMultiplier_ = -1.0f;
         /// Untouched RGBA8 source, kept so GetData() is exact.
         std::vector<std::uint8_t> shadowRgba_;
     };
@@ -282,7 +290,7 @@ namespace CNA::Internal::Renderers::TinyGL
          * @param sourceRectangle      Source region in texels.
          * @param color                Tint colour.
          * @param rotation             Rotation in radians around @p origin.
-         * @param origin               Rotation origin, in destination pixels relative to the top-left corner.
+         * @param origin               Rotation origin in source-rectangle texels, matching XNA.
          * @param effects              Horizontal/vertical flip flags.
          * @param layerDepth           Sort depth; this renderer draws in submission order.
          */
@@ -309,7 +317,7 @@ namespace CNA::Internal::Renderers::TinyGL
     };
 
     /**
-     * CNA graphics renderer implemented on TinyGL (C-Chads/tinygl, the maintained fork of Fabrice
+     * CNA graphics renderer implemented on TinyGL (C-Chads/tinygl, an archived fork of Fabrice
      * Bellard's TinyGL): a CPU implementation of a fixed-function OpenGL 1.x subset, with no
      * shaders anywhere in its design.
      *
@@ -412,6 +420,13 @@ namespace CNA::Internal::Renderers::TinyGL
          * @return `DepthFormat::Depth16`'s ordinal, always.
          */
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
+
+        /** @brief TinyGL has a usable depth/stencil-state path backed by its real depth plane. */
+        [[nodiscard]] bool SupportsDepthStencil() const override { return true; }
+        /** @brief TinyGL's default ZBuffer has a real 16-bit depth plane. */
+        [[nodiscard]] bool SupportsDepthBuffer() const override { return true; }
+        /** @brief TinyGL's default ZBuffer has no stencil plane. */
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return false; }
 
         /** @brief Always null: this renderer needs no window. */
         [[nodiscard]] SDL_Window* GetWindowInternal() const override { return nullptr; }
@@ -526,7 +541,8 @@ namespace CNA::Internal::Renderers::TinyGL
          *  3. Everything else -- including `BlendState::Additive`, whose `SourceAlpha` source
          *     factor TinyGL's factor switch has no case for -- is refused.
          *
-         * The colour write mask must select all four channels: TinyGL has no `glColorMask`.
+         * The colour write mask must select all four channels and `MultiSampleMask` must keep its
+         * all-samples default: TinyGL has neither `glColorMask` nor sample-mask state.
          *
          * @param colorSrcBlend  Raw `Blend` ordinal for the RGB source factor.
          * @param alphaSrcBlend  Raw `Blend` ordinal for the alpha source factor.
@@ -627,8 +643,8 @@ namespace CNA::Internal::Renderers::TinyGL
         void SetScissorRect(int x, int y, int w, int h) override;
 
         /**
-         * @brief Installs `GraphicsDevice.Viewport`, converting XNA's top-left origin to TinyGL's
-         *        bottom-left window origin.
+         * @brief Installs `GraphicsDevice.Viewport`; TinyGL's rasterizer already uses a top-left
+         *        framebuffer origin, matching XNA.
          *
          * TinyGL has no depth-range control (`glDepthRange` does not exist), so @p minDepth and
          * @p maxDepth must be the full 0..1 range.
@@ -660,7 +676,7 @@ namespace CNA::Internal::Renderers::TinyGL
                                int maxAnisotropy) override;
 
         /**
-         * @brief Accepts the mip half of a sampler slot, which TinyGL has no storage for.
+         * @brief Accepts the inert defaults and refuses a non-default mip selection.
          * @param slot        Texture unit index.
          * @param maxMipLevel Highest mip level the sampler may use.
          * @param lodBias     Level-of-detail bias.
@@ -760,14 +776,14 @@ namespace CNA::Internal::Renderers::TinyGL
          * quad through the same TinyGL draw machinery the 3D route uses -- not part of
          * `IGraphicsRenderer`.
          *
-         * @param glTexture       TinyGL texture handle to sample.
+         * @param texture         TinyGL texture whose blend-appropriate object is sampled.
          * @param positionsPixels Four corner positions (TL, TR, BR, BL), in destination pixel space.
          * @param uvs             Four corresponding normalized texture coordinates.
          * @param colorsRgba01    Four corresponding per-vertex tint colors, components in [0,1].
          * @param spriteTransform `ISpriteBatchRenderer::SetTransformMatrix()`'s current value,
          *                        composed with the internal ortho projection.
          */
-        CNAEXT void DrawTexturedQuadEXT(unsigned int glTexture,
+        CNAEXT void DrawTexturedQuadEXT(const TinyGLTextureRenderer& texture,
                                         const float positionsPixels[4][2],
                                         const float uvs[4][2],
                                         const float colorsRgba01[4][4],
@@ -784,8 +800,8 @@ namespace CNA::Internal::Renderers::TinyGL
             float diffuse[4] = {1.0f, 1.0f, 1.0f, 1.0f};
             /// `GpuDrawParams::vertexColorEnabled`.
             bool vertexColorEnabled = true;
-            /// Texture bound to unit 0, or 0 when this is the untextured colored route.
-            unsigned int glTexture = 0;
+            /// Texture bound to unit 0, or null when this is the untextured colored route.
+            const TinyGLTextureRenderer* texture = nullptr;
             /// The bound stream's own `VertexBufferBinding.VertexOffset`, in vertex elements.
             int streamVertexOffset = 0;
             /// First vertex for a non-indexed draw.
@@ -804,8 +820,8 @@ namespace CNA::Internal::Renderers::TinyGL
         /// Refuses every `GpuDrawParams` shape the fixed-function routes cannot execute, then
         /// extracts the part they can. Touches no TinyGL state, so a refused draw leaves the
         /// context exactly as the previous draw left it.
-        static FixedFunctionDrawState TranslateDrawParams(const GpuDrawParams& params,
-                                                          const char* route);
+        FixedFunctionDrawState TranslateDrawParams(const GpuDrawParams& params,
+                                                   const char* route);
 
         /// Validates the bound buffer's stride/declaration and installs TinyGL's array pointers.
         /// Returns the record stride in bytes.
