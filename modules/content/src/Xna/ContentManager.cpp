@@ -3003,6 +3003,11 @@ namespace Microsoft::Xna::Framework::Content
                                 pbrFx->setOcclusionMapProperty(occlusionTex);
                             pbrFx->setMetallicFactorProperty(meshOut.material.metallicFactor);
                             pbrFx->setRoughnessFactorProperty(meshOut.material.roughnessFactor);
+                            pbrFx->setIorEXTProperty(meshOut.material.iorEXT);
+                            pbrFx->setSpecularFactorEXTProperty(
+                                meshOut.material.specularFactorEXT);
+                            pbrFx->setSpecularColorFactorEXTProperty(
+                                meshOut.material.specularColorFactorEXT);
                             pbrFx->setEmissiveFactorProperty(meshOut.material.emissiveFactor);
                             // plan_gltf.md GLTF-224/GLTF-225: never read before, so a material that
                             // dialled its normal map down to a subtle 0.2 got the full 1.0 instead.
@@ -3037,6 +3042,11 @@ namespace Microsoft::Xna::Framework::Content
                                 skinnedPbrFx->setOcclusionMapProperty(occlusionTex);
                             skinnedPbrFx->setMetallicFactorProperty(meshOut.material.metallicFactor);
                             skinnedPbrFx->setRoughnessFactorProperty(meshOut.material.roughnessFactor);
+                            skinnedPbrFx->setIorEXTProperty(meshOut.material.iorEXT);
+                            skinnedPbrFx->setSpecularFactorEXTProperty(
+                                meshOut.material.specularFactorEXT);
+                            skinnedPbrFx->setSpecularColorFactorEXTProperty(
+                                meshOut.material.specularColorFactorEXT);
                             skinnedPbrFx->setEmissiveFactorProperty(meshOut.material.emissiveFactor);
                             // plan_gltf.md GLTF-224/GLTF-225: never read before, so a material that
                             // dialled its normal map down to a subtle 0.2 got the full 1.0 instead.
@@ -3461,6 +3471,18 @@ namespace Microsoft::Xna::Framework::Content
                             CNA::Internal::GltfImport::MaterialOut material;
                             material.metallicFactor = JsonFloat(mg, "metallicFactor", 1.0f);
                             material.roughnessFactor = JsonFloat(mg, "roughnessFactor", 1.0f);
+                            material.iorEXT = JsonFloat(mg, "ior", 1.5f);
+                            material.specularFactorEXT =
+                                JsonFloat(mg, "specularFactor", 1.0f);
+                            const std::size_t specularColorArray =
+                                FindKeyArray(mg, "specularColorFactor");
+                            if (specularColorArray != std::string::npos)
+                            {
+                                const auto specularColor =
+                                    JsonFloatArray3(mg, specularColorArray);
+                                material.specularColorFactorEXT = Vector3(
+                                    specularColor[0], specularColor[1], specularColor[2]);
+                            }
                             const auto emissiveFactorArr = JsonFloatArray3(mg, FindKeyArray(mg, "emissiveFactor"));
                             material.emissiveFactor = Vector3(emissiveFactorArr[0],
                                                                emissiveFactorArr[1],
@@ -3849,6 +3871,10 @@ namespace Microsoft::Xna::Framework::Content
                                     pbrFx->setOcclusionMapProperty(t);
                                 pbrFx->setMetallicFactorProperty(material.metallicFactor);
                                 pbrFx->setRoughnessFactorProperty(material.roughnessFactor);
+                                pbrFx->setIorEXTProperty(material.iorEXT);
+                                pbrFx->setSpecularFactorEXTProperty(material.specularFactorEXT);
+                                pbrFx->setSpecularColorFactorEXTProperty(
+                                    material.specularColorFactorEXT);
                                 pbrFx->setEmissiveFactorProperty(material.emissiveFactor);
                                 pbrFx->setNormalScaleEXTProperty(material.normalScale);
                                 pbrFx->setOcclusionStrengthEXTProperty(
@@ -3883,6 +3909,11 @@ namespace Microsoft::Xna::Framework::Content
                                     skinnedPbrFx->setOcclusionMapProperty(t);
                                 skinnedPbrFx->setMetallicFactorProperty(material.metallicFactor);
                                 skinnedPbrFx->setRoughnessFactorProperty(material.roughnessFactor);
+                                skinnedPbrFx->setIorEXTProperty(material.iorEXT);
+                                skinnedPbrFx->setSpecularFactorEXTProperty(
+                                    material.specularFactorEXT);
+                                skinnedPbrFx->setSpecularColorFactorEXTProperty(
+                                    material.specularColorFactorEXT);
                                 skinnedPbrFx->setEmissiveFactorProperty(material.emissiveFactor);
                                 skinnedPbrFx->setNormalScaleEXTProperty(material.normalScale);
                                 skinnedPbrFx->setOcclusionStrengthEXTProperty(

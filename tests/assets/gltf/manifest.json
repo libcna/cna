@@ -1365,6 +1365,9 @@
         "baseColorFactor",
         "alphaMode BLEND",
         "doubleSided",
+        "KHR_materials_ior",
+        "KHR_materials_specular",
+        "factor-only dielectric F0",
         "no texture maps"
       ],
       "auditFixture": "f8"
@@ -3750,18 +3753,18 @@
     },
     {
       "path": "mat-factor-only-gold.expected.json",
-      "bytes": 11335,
-      "sha256": "b3cbdc11344edbb75f116e90e4aa7f5d565b6fdbce26adf57c5648c98cbe7489"
+      "bytes": 11824,
+      "sha256": "e2e1735481e35a6c9a08aa7ba62cadda6ebb31016e070134408d80f7e8c955ec"
     },
     {
       "path": "mat-factor-only-gold.glb",
-      "bytes": 1008,
-      "sha256": "cfd53287b7c675b3fd84f5785072cd4bdae3ee07b6725d2a2329485c07f14f3d"
+      "bytes": 1204,
+      "sha256": "1f3f69aa7bcc72c893553de76b38da5d22da1766f76bfb5151fa5bb0361b7d83"
     },
     {
       "path": "mat-factor-only-gold.gltf",
-      "bytes": 1840,
-      "sha256": "3fe8a6902cfb077690e316c7131c9b12fb9462d53e1d257d67e80a44b17e292a"
+      "bytes": 2193,
+      "sha256": "74d0f59e7846f1096498a0e3aaa18e7c10b98bbd087b6c7525d5a92fda4a7d67"
     },
     {
       "path": "mat-factor-only-gold.ib.bin",

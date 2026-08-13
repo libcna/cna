@@ -129,6 +129,16 @@ namespace CnaTest::GltfOracle
         float metallicFactor = 0.0f;
         /** @brief `GpuDrawParams::pbrRoughnessFactor`. */
         float roughnessFactor = 0.0f;
+        /** @brief The PBR effect's carried `KHR_materials_ior` factor. */
+        float ior = 1.5f;
+        /** @brief The PBR effect's carried `KHR_materials_specular.specularFactor`. */
+        float specularFactor = 1.0f;
+        /** @brief The PBR effect's carried linear-RGB specular colour factor. */
+        std::array<float, 3> specularColorFactor{1.0f, 1.0f, 1.0f};
+        /** @brief `GpuDrawParams::pbrDielectricF0`, derived from IOR/specular factors. */
+        std::array<float, 3> dielectricF0{0.04f, 0.04f, 0.04f};
+        /** @brief `GpuDrawParams::pbrDielectricF90`. */
+        float dielectricF90 = 1.0f;
 
         // --- §21.1 colour space (plan_gltf.md GLTF-210/GLTF-212) ---------------------------------
 

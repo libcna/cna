@@ -25,11 +25,19 @@ _BASE_COLOR_FACTOR = [1.0, 0.72, 0.315, 0.5]
 _METALLIC_FACTOR = 0.9
 _ROUGHNESS_FACTOR = 0.35
 _EMISSIVE_FACTOR = [0.25, 0.1, 0.0]
+#: GLTF-343/344's factor-only extension witness. IOR 2 gives an exact 1/9 dielectric base F0;
+#: blue deliberately exceeds the specular-colour unit range, which Khronos permits, so the
+#: required clamp-before-strength order produces 0.3 instead of 0.4.
+_IOR = 2.0
+_SPECULAR_FACTOR = 0.3
+_SPECULAR_COLOR_FACTOR = [0.25, 1.0, 12.0]
+_DIELECTRIC_F0 = [1.0 / 120.0, 1.0 / 30.0, 0.3]
 
 
 def mat_factor_only_gold() -> Fixture:
     """f8 -- a factor-only metallic-roughness material. Proves **D7**."""
     b = GltfBuilder("mat-factor-only-gold")
+    b.declare_extensions(used=["KHR_materials_ior", "KHR_materials_specular"])
     position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
                                      accessor_type="VEC3", with_bounds=True)
     normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
@@ -45,6 +53,13 @@ def mat_factor_only_gold() -> Fixture:
         "emissiveFactor": _EMISSIVE_FACTOR,
         "alphaMode": "BLEND",
         "doubleSided": True,
+        "extensions": {
+            "KHR_materials_ior": {"ior": _IOR},
+            "KHR_materials_specular": {
+                "specularFactor": _SPECULAR_FACTOR,
+                "specularColorFactor": _SPECULAR_COLOR_FACTOR,
+            },
+        },
     })
     mesh = b.add_mesh([{
         "attributes": {"POSITION": position, "NORMAL": normal},
@@ -61,6 +76,11 @@ def mat_factor_only_gold() -> Fixture:
         "baseColorFactor": _BASE_COLOR_FACTOR,
         "metallicFactor": _METALLIC_FACTOR,
         "roughnessFactor": _ROUGHNESS_FACTOR,
+        "ior": _IOR,
+        "specularFactor": _SPECULAR_FACTOR,
+        "specularColorFactor": _SPECULAR_COLOR_FACTOR,
+        "dielectricF0": _DIELECTRIC_F0,
+        "dielectricF90": _SPECULAR_FACTOR,
         "emissiveFactor": _EMISSIVE_FACTOR,
         "alphaMode": "BLEND",
         "alphaCutoff": 0.5,
@@ -75,15 +95,17 @@ def mat_factor_only_gold() -> Fixture:
         id="mat-factor-only-gold", audit_fixture="f8", owning_group="materials",
         description="A metallic-roughness material with no texture maps at all: gold "
                     "baseColorFactor at 50% alpha, non-default metallic/roughness/emissive "
-                    "factors, alphaMode BLEND, doubleSided. Every one of those is a first-class "
-                    "glTF material property and none of them survives import today. The scalar "
+                    "factors, alphaMode BLEND, doubleSided, plus factor-only IOR/specular "
+                    "extensions. Every one of those is a first-class glTF material property. The scalar "
                     "factors were added when promoting the audit's f8, which authored only the "
                     "base colour, alpha mode and double-sidedness -- they widen the same defect "
                     "without changing it.",
         builder=b, validated_layers=["L1", "L2", "L3"],
         features=["pbrMetallicRoughness factors", "baseColorFactor", "alphaMode BLEND",
-                  "doubleSided", "no texture maps"],
-        spec_anchors=["metallic-roughness-material", "alpha-coverage", "double-sided"],
+                  "doubleSided", "KHR_materials_ior", "KHR_materials_specular",
+                  "factor-only dielectric F0", "no texture maps"],
+        spec_anchors=["metallic-roughness-material", "alpha-coverage", "double-sided",
+                      "extensions"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="GoldTri", primitive=0, mode=TRIANGLES,
             positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,

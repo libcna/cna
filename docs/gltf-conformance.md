@@ -659,6 +659,7 @@ byte.
 | Normal matrix | `NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3`, `NonUniformScaleSeparatesTheNormalMatrixFromTheWorldMatrix` | XNA's own `Matrix::Invert` + `Transpose` |
 | Base colour factor | `MaterialFactorsReachTheBoundEffect` | the manifest's **L3** `material.baseColorFactor` |
 | Metallic / roughness | `MaterialFactorsReachTheBoundEffect` | L3 `material.metallicFactor` / `roughnessFactor` |
+| Dielectric F0 / F90 (`KHR_materials_ior` / `_specular`) | `IorAndSpecularFactorsReachShaderReadyFresnelEndpoints` | L3 `material.ior`, `specularFactor`, `specularColorFactor`, and the manifest's spec-derived endpoints |
 | Emissive | `MaterialFactorsReachTheBoundEffect` | L3 `material.emissiveFactor` |
 | MR / occlusion / normal / emissive maps | `APbrDrawYieldsEverySection211QuantityItCanCarry` | *binding only* — which slot is filled. Channel semantics stay L3/L7 |
 | Tangent handedness | — | **L5**, in the vertex bytes; not an effect parameter |
@@ -675,11 +676,14 @@ bindings, every factor/scalar, alpha state and five sampler slots. A separate ri
 every value non-default so an omitted field cannot accidentally agree through defaults. This is
 the L6 half of `GLTF-244`; its L7/two-rasterising-renderer half remains open.
 
-`GltfPbrBrdf` is the renderer-independent analytic half of the shader contract (`GLTF-235`). It
-pins GGX distribution, direct-light Smith-Schlick geometry, Schlick Fresnel and metallic F0 at
-normal incidence and at a symmetric 80-degree grazing angle. The latter keeps `H=N`, making every
-dot product exact and distinguishing the direct-light geometry term from the IBL variant without
-depending on a framebuffer or a captured reference image.
+`GltfPbrBrdf` is the renderer-independent analytic half of the shader contract (`GLTF-235`,
+`GLTF-343`, `GLTF-344`). It pins GGX distribution, direct-light Smith-Schlick geometry, Schlick
+Fresnel and metallic F0 at normal incidence and at a symmetric 80-degree grazing angle. It also
+pins the extension interaction order: IOR 2, strength 0.3 and a blue colour factor of 12 produce
+dielectric F0 blue 0.3, not 0.4, because the colour product clamps before strength is applied. The
+grazing case keeps `H=N`, making every dot product exact and distinguishing the direct-light
+geometry term from the IBL variant without depending on a framebuffer or a captured reference
+image.
 
 Every comparison is against a value **another layer already established independently**, never
 against a second walk of the same code. That is what makes a green L6 mean "the value survived the

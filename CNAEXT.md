@@ -99,7 +99,7 @@ all closed 2026‑07‑17). The final design builds *on top of* this — do not 
 
 | Type | Notes |
 |---|---|
-| `PbrEffect` | `Effect` + `IEffectMatrices` + `IEffectFog` + `IEffectLights`. Base‑color tint + alpha via `DiffuseColor`/`Alpha`. Maps: `Texture` (base color), `NormalMap`, `MetallicRoughnessMap`, `EmissiveMap`, `OcclusionMap` (all `Texture2D*` `get*Property`/`set*Property` + `SetOwned*` owning variants). Factors: `MetallicFactor`/`RoughnessFactor` (`float`), `EmissiveFactor` (`Vector3`). BRDF = glTF 2.0 Appendix B reference (GGX distribution + Smith‑Schlick‑GGX visibility + Schlick Fresnel). Lit with the **3 directional lights + `AmbientLightColor`** convention (the same one `BasicEffect`/`SkinnedEffect` use) — **not** image‑based lighting. |
+| `PbrEffect` | `Effect` + `IEffectMatrices` + `IEffectFog` + `IEffectLights`. Base‑color tint + alpha via `DiffuseColor`/`Alpha`. Maps: `Texture` (base color), `NormalMap`, `MetallicRoughnessMap`, `EmissiveMap`, `OcclusionMap` (all `Texture2D*` `get*Property`/`set*Property` + `SetOwned*` owning variants). Factors: `MetallicFactor`/`RoughnessFactor` (`float`), `EmissiveFactor` (`Vector3`), plus factor-only `IorEXT`, `SpecularFactorEXT` and `SpecularColorFactorEXT`. The latter derive dielectric F0/F90 in `GpuDrawParams`; renderers do not consume them yet. BRDF = glTF 2.0 Appendix B reference (GGX distribution + Smith‑Schlick‑GGX visibility + Schlick Fresnel). Lit with the **3 directional lights + `AmbientLightColor`** convention (the same one `BasicEffect`/`SkinnedEffect` use) — **not** image‑based lighting. |
 | `SkinnedPbrEffect` | `PbrEffect`'s full material surface + `SkinnedEffect`'s bone API (`MaxBones = 72`, `SetBoneTransforms`/`GetBoneTransforms`, `WeightsPerVertex`). Game code feeds `AnimationPlayer::GetSkinTransforms()` each frame. |
 
 **Vertex formats (CNAEXT):** `VertexPositionNormalTangentTexture` (stride 48, tangent as `vec4` with
@@ -154,10 +154,11 @@ loss at run time — is `docs/gltf-limitations.md`.
 | `KHR_materials_unlit` | ⚠️ | `LightingEnabled = false` on `BasicEffect`. `SkinnedEffect` has no such flag — real XNA's has none either — so a skinned unlit material is approximated. |
 | `KHR_materials_transmission` | ⚠️ | Approximated as `alpha = 1 - transmissionFactor`; explicitly not physical, and **not claimed**, so a file that *requires* it is refused rather than drawn as tinted alpha. |
 | `KHR_materials_pbrSpecularGlossiness` | ⚠️ | Archived by Khronos, so converted rather than refused: diffuse → base colour, metallic 0, roughness `1 - glossiness`. The coloured specular term has no equivalent and its magnitude is reported. |
+| `KHR_materials_ior` / `KHR_materials_specular` | ⚠️ | Raw factors survive both loaders and `.cnj`, and shader-ready dielectric F0/F90 are analytically verified at L6. Every renderer still ignores those endpoints, and the specular extension's two texture inputs are absent, so neither extension is claimed. |
 | `KHR_draco_mesh_compression` | ⚠️ | Decoded when the build has `libdraco` (`CNA_DRACO_AVAILABLE`); claimed only in such a build, so a file requiring Draco is refused rather than arriving empty. |
 | `EXT_meshopt_compression`, `KHR_texture_basisu`, `EXT_texture_webp` | ❌ | No decoder. A texture's plain PNG/JPEG fallback is used when the file provides one; meshopt is refused at validation, because reading such a view without a decoder yields undefined bytes rather than an error. |
 | `EXT_mesh_gpu_instancing` | ❌ | The node's own single placement imports; the per-instance transforms do not, so the file renders one copy where it describes many. Reported per file. |
-| `KHR_materials_variants`, `_ior`, `_specular`, `_clearcoat`, `_sheen`, `_volume` | ❌ | Parsed and ignored, each for a stated reason. None is claimed, so a file requiring one is refused by name. |
+| `KHR_materials_variants`, `_clearcoat`, `_sheen`, `_volume` | ❌ | Parsed and ignored, each for a stated reason. None is claimed, so a file requiring one is refused by name. |
 | Any other extension | — | The full classification of all 20 the registry knows is `docs/gltf-limitations.md` §1, generated from `GltfExtensionRegistryEXT()` — the same registry the `extensionsRequired` gate reads. |
 
 **Malformed input** is refused by name rather than imported wrongly: structural validation

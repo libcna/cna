@@ -2153,6 +2153,21 @@ namespace CNA::Internal::GltfImport
             const cgltf_float* base = prim.material->pbr_metallic_roughness.base_color_factor;
             out.material.baseColorFactor = Vector4(base[0], base[1], base[2], base[3]);
         }
+        // plan_gltf.md GLTF-343/GLTF-344: cgltf already parses these extensions, but nothing in
+        // CNA copied their factor state before this point. Keep the raw values in MaterialOut;
+        // PbrEffect/SkinnedPbrEffect derive shader-ready dielectric F0/F90 when filling the draw
+        // block. The optional textures remain a named open residue because they require two new
+        // sampler bindings and per-map UV/colour-space handling on every PBR renderer.
+        if (prim.material && prim.material->has_ior)
+        {
+            out.material.iorEXT = prim.material->ior.ior;
+        }
+        if (prim.material && prim.material->has_specular)
+        {
+            out.material.specularFactorEXT = prim.material->specular.specular_factor;
+            const cgltf_float* color = prim.material->specular.specular_color_factor;
+            out.material.specularColorFactorEXT = Vector3(color[0], color[1], color[2]);
+        }
         // plan_gltf.md GLTF-349: KHR_materials_pbrSpecularGlossiness, converted rather than
         // refused. Khronos archived it, but it is what a decade of older assets are authored in,
         // and rejecting them would be a worse answer than an approximation with a name.
@@ -3495,10 +3510,12 @@ namespace CNA::Internal::GltfImport
                  "The default material mapping is imported; the variants are not.",
                  "GLTF-341"},
                 {"KHR_materials_ior", GltfExtensionSupportEXT::ParsedButIgnored, false,
-                 "Affects F0; a small, well-defined shader change not yet made.",
+                 "The factor reaches PBR effect state and shader-ready dielectric F0 at L6, but "
+                 "no renderer consumes it yet.",
                  "GLTF-343"},
                 {"KHR_materials_specular", GltfExtensionSupportEXT::ParsedButIgnored, false,
-                 "Depends on the same F0 plumbing as KHR_materials_ior.",
+                 "Factor and colour reach PBR effect state and dielectric F0/F90 at L6. The two "
+                 "optional textures are not imported and no renderer consumes the factors yet.",
                  "GLTF-344"},
                 {"KHR_materials_clearcoat", GltfExtensionSupportEXT::ParsedButIgnored, false,
                  "A second specular lobe -- a large shader change.",
@@ -4013,10 +4030,13 @@ namespace CNA::Internal::GltfImport
             if (name == nullptr) { continue; }
             if (!IsGltfExtensionSupportedEXT(name))
             {
+                const GltfExtensionRecordEXT* record = FindGltfExtensionEXT(name);
+                const std::string reason = record != nullptr
+                    ? record->note
+                    : "The extension is not present in CNA's support registry.";
                 warnings.push_back(
                     "'" + sourceName + "' uses extension '" + std::string(name) + "', which CNA "
-                    "does not implement -- it is ignored, so anything it contributes is absent "
-                    "from the import.");
+                    "does not fully implement. " + reason);
             }
         }
     }

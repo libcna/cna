@@ -535,6 +535,21 @@ TEST(GltfConformanceL6, MaterialFactorsReachTheBoundEffect)
                     d.metallicFactor, kTolerance);
         EXPECT_NEAR(static_cast<float>(NumberOr(material, "roughnessFactor", -1.0)),
                     d.roughnessFactor, kTolerance);
+        EXPECT_NEAR(static_cast<float>(NumberOr(material, "ior", 1.5)), d.ior, kTolerance);
+        EXPECT_NEAR(static_cast<float>(NumberOr(material, "specularFactor", 1.0)),
+                    d.specularFactor, kTolerance);
+        const JsonValue& expectedSpecularColor = Member(material, "specularColorFactor");
+        if (expectedSpecularColor.type == JsonType::Array)
+        {
+            ExpectFlatNear(Numbers(expectedSpecularColor), d.specularColorFactor.data(), 3,
+                           "specularColorFactor -> PBR effect");
+        }
+        else
+        {
+            const std::vector<double> white{1.0, 1.0, 1.0};
+            ExpectFlatNear(white, d.specularColorFactor.data(), 3,
+                           "default specularColorFactor -> PBR effect");
+        }
         // KHR_materials_emissive_strength multiplies the [0,1] emissiveFactor, and the PRODUCT is
         // what a renderer must bind. A fixture that carries the extension states all three numbers
         // (factor, strength, product) so this comparison reads the spec-derived answer rather than
@@ -548,6 +563,39 @@ TEST(GltfConformanceL6, MaterialFactorsReachTheBoundEffect)
         ++checked;
     }
     EXPECT_GT(checked, 0u) << "no fixture exercised the material contract";
+}
+
+TEST(GltfConformanceL6, IorAndSpecularFactorsReachShaderReadyFresnelEndpoints)
+{
+    const LoadedFixture fixture("mat-factor-only-gold");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const JsonValue& material = FirstMaterial(fixture);
+    ASSERT_EQ(JsonType::Object, material.type);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("mat-factor-only-gold");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    EXPECT_NEAR(static_cast<float>(NumberOr(material, "ior", -1.0)), d.ior, kTolerance);
+    EXPECT_NEAR(static_cast<float>(NumberOr(material, "specularFactor", -1.0)),
+                d.specularFactor, kTolerance);
+    ExpectFlatNear(Numbers(Member(material, "specularColorFactor")),
+                   d.specularColorFactor.data(), 3, "carried specularColorFactor");
+    ExpectFlatNear(Numbers(Member(material, "dielectricF0")), d.dielectricF0.data(), 3,
+                   "shader-ready dielectric F0");
+    EXPECT_NEAR(static_cast<float>(NumberOr(material, "dielectricF90", -1.0)),
+                d.dielectricF90, kTolerance);
+
+    // The fixture's blue colour product exceeds one. If the implementation multiplied strength
+    // before clamping, this would be 0.4 instead of the specification's 0.3.
+    EXPECT_NEAR(d.dielectricF0[2], d.specularFactor, kTolerance);
 }
 
 // --- GLTF-258 / GLTF-263: bone palette and influence count ------------------------------------------

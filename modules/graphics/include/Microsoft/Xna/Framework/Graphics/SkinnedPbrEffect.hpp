@@ -177,6 +177,19 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Sets the roughness factor [0,1]. @param value The new roughness factor. */
         CNAEXT void setRoughnessFactorProperty(float value);
 
+        /** @brief Gets `KHR_materials_ior`'s index of refraction (default 1.5). @return The IOR. */
+        CNAEXT [[nodiscard]] float getIorEXTProperty() const;
+        /** @brief Sets the dielectric index of refraction. @param value The new IOR. */
+        CNAEXT void setIorEXTProperty(float value);
+        /** @brief Gets the specular reflection strength (default 1). @return The strength. */
+        CNAEXT [[nodiscard]] float getSpecularFactorEXTProperty() const;
+        /** @brief Sets the dielectric specular strength. @param value The new strength. */
+        CNAEXT void setSpecularFactorEXTProperty(float value);
+        /** @brief Gets the linear-RGB F0 colour factor (default white). @return The colour factor. */
+        CNAEXT [[nodiscard]] Vector3 getSpecularColorFactorEXTProperty() const;
+        /** @brief Sets the dielectric F0 colour factor. @param value The new colour factor. */
+        CNAEXT void setSpecularColorFactorEXTProperty(const Vector3& value);
+
         /** @brief Gets the emissive factor, multiplied with the emissive map's RGB. @return The emissive factor. */
         CNAEXT [[nodiscard]] Vector3 getEmissiveFactorProperty() const;
 
@@ -413,6 +426,9 @@ namespace Microsoft::Xna::Framework::Graphics
         Vector3 emissiveFactor_    = Vector3::Zero;
         float   metallicFactor_    = 1.0f;
         float   roughnessFactor_   = 1.0f;
+        float   iorEXT_                 = 1.5f;
+        float   specularFactorEXT_      = 1.0f;
+        Vector3 specularColorFactorEXT_ = Vector3{1.0f, 1.0f, 1.0f};
 
         float fogStart_ = 0.0f;
         float fogEnd_   = 1.0f;

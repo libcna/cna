@@ -10,8 +10,8 @@ session needs to start work without re-deriving the state.
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
 - **Working document:** `plan_gltf.md`, 460 numbered rows. **369 closed (`✔` 248, `✅` 121),
-  70 `⬜` remaining.** The other 21 carry a deliberate partial marker: 8 `🔬` (investigation, no
-  implementation owed), 7 `✅/⬜` and 2 `✅/🐛` (landed with a named residue), 2 `🐛` (open:
+  68 `⬜` remaining.** The other 23 carry a deliberate partial marker: 8 `🔬` (investigation, no
+  implementation owed), 9 `✅/⬜` and 2 `✅/🐛` (landed with a named residue), 2 `🐛` (open:
   `GLTF-157`, `421`), and 2 `⛔` (`GLTF-009` and
   `GLTF-439`, each blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
@@ -43,9 +43,9 @@ Expected as of this writing:
 | Check | Expected |
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
-| full suite | **6 345 passed, 189 skipped, 18 failed** |
+| full suite | **6 353 passed, 189 skipped, 18 failed** |
 | generator `--check` | **139 assets, 689 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **458 passed, 24 skipped** / **482 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **464 passed, 24 skipped** / **488 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -56,7 +56,7 @@ saying they are there.
 
 There is a third tree for the **second renderer**,
 `/media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless` (`-DCNA_GRAPHICS_RENDERER=HEADLESS`).
-It matters more than it sounds: `HEADLESS` reports `GraphicsCapability::ThreeD`, so the 15
+It matters more than it sounds: `HEADLESS` reports `GraphicsCapability::ThreeD`, so the 16
 `GltfToCnjToolTest` cases that **skip on `STUB`** actually run there — and two of them were failing
 on stale pre-`GLTF-215` effect expectations that the skip had hidden. Compare the two renderers with
 
@@ -76,7 +76,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 454 passed, 24 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 464 passed, 24 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -153,14 +153,14 @@ These are not style preferences; they are what made the campaign find things.
 
 ## What is blocked in this environment, and why
 
-**44 of the 83 remaining rows cannot be finished here.** Do not mark them done, and do not work
-around them by weakening their acceptance. Recounted 2026-08-12: `HEADLESS` was added as a second
+**46 of the 83 remaining rows cannot be finished here.** Do not mark them done, and do not work
+around them by weakening their acceptance. Recounted 2026-08-13: `HEADLESS` was added as a second
 renderer, which moved several rows out of the "second renderer" bucket, and `GLTF-404`/`GLTF-419`
 turned out not to need CI at all.
 
 | Blocker | Rows | Note |
 |---|---|---|
-| **L7 / rendered image** | 16 — `GLTF-016`, `175`, `176`, `182`, `189`, `213`, `218`, `230`, `244`, `264`, `268`, `340`, `386`, `387`, `390`, `397` | Needs a renderer with a real 3D pipeline. This environment builds `STUB` and `HEADLESS`, neither of which rasterises. |
+| **L7 / rendered image** | 18 — `GLTF-016`, `175`, `176`, `182`, `189`, `213`, `218`, `230`, `244`, `264`, `268`, `340`, `343`, `344`, `386`, `387`, `390`, `397` | Needs a renderer with a real 3D pipeline. This environment builds `STUB` and `HEADLESS`, neither of which rasterises. `GLTF-343`/`344` now reach shader-ready F0/F90 at L6; consuming those values in every renderer is the blocked residue. |
 | **second/third renderer** | 10 — `GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs the comparison; `OPENGLES3`/`VULKAN` need sibling checkouts and a GPU. `GLTF-017`/`382`/`383`/`388` were closable *because* `HEADLESS` builds here. |
 | **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
 | **`cna-gltf-viewer` repo** | 11 — `GLTF-128`, `323`, `342`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
@@ -168,7 +168,7 @@ turned out not to need CI at all.
 | **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
 | **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |
 
-The remaining **~39 are doable in this environment.**
+The remaining **~37 are doable in this environment.**
 
 ## Suggested next clusters
 
@@ -189,11 +189,12 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
    `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
    without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —
    that is the single most useful thing to tell whoever asks why the milestone is still open.
-3. **`GLTF-343` + `GLTF-344` — `KHR_materials_ior` / `_specular`.** Both are `F0` plumbing sharing
-   one shader change. **Read this first:** the shader half cannot be verified here — EasyGL needs
-   sibling `../easy-gl` and `../meta-gl` checkouts, and `GLTF-157`'s lesson is that an unverified
-   renderer change is not a fix. A defensible split is import + effect + `GpuDrawParams` with an
-   analytic L6 check, leaving the shader to a session that can run it, but say so in the row.
+3. **`GLTF-343` + `GLTF-344` are now that defensible split, not a next task.** Raw IOR/specular
+   factors survive direct and offline import, both PBR effects and `.cnj`; `GpuDrawParams` carries
+   the Khronos-derived dielectric F0/F90; a discriminating analytic/L3/L6 witness pins clamp order,
+   defaults and direct/offline parity. Both rows are `✅/⬜`. Do **not** finish them here by editing
+   shaders: no renderer in this environment rasterises, and `GLTF-157` already established that an
+   unverified renderer change is not a fix. The two optional specular textures remain absent too.
 4. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
    `apt-get install libdraco-dev` — the *cheapest* unblock on the list if the owner allows it, and
    it turns eight blocked rows into ordinary work.

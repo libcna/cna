@@ -147,6 +147,12 @@ namespace CnaTest::GltfOracle
         float metallicFactor = 0.0f;
         /** @brief `MeshOut::material.roughnessFactor`. */
         float roughnessFactor = 0.0f;
+        /** @brief `MeshOut::material.iorEXT`. */
+        float ior = 1.5f;
+        /** @brief `MeshOut::material.specularFactorEXT`. */
+        float specularFactor = 1.0f;
+        /** @brief `MeshOut::material.specularColorFactorEXT`. */
+        std::array<float, 3> specularColorFactor{1.0f, 1.0f, 1.0f};
         /** @brief `MeshOut::material.emissiveFactor`. */
         std::array<float, 3> emissiveFactor{};
         /** @brief Which material images survived import, by presence only. */

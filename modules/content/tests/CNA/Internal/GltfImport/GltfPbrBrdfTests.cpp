@@ -11,6 +11,8 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/Graphics/PbrFresnelEXT.hpp"
+
 namespace
 {
     constexpr double kShaderPi = 3.14159265;
@@ -120,4 +122,24 @@ TEST(GltfPbrBrdf, F0InterpolatesFromFourPercentDielectricToMetalAlbedo)
     expectF0(dielectric, {0.04, 0.04, 0.04});
     expectF0(halfMetal, {0.52, 0.145, 0.02});
     expectF0(metal, {1.0, 0.25, 0.0});
+}
+
+TEST(GltfPbrBrdf, IorAndSpecularInteractionClampsColourBeforeStrength)
+{
+    using CNA::Internal::Graphics::ComputePbrDielectricFresnelEXT;
+
+    const auto core = ComputePbrDielectricFresnelEXT(1.5f, 1.0f, {1.0f, 1.0f, 1.0f});
+    EXPECT_NEAR(core.f0[0], 0.04f, 1e-7f);
+    EXPECT_NEAR(core.f0[1], 0.04f, 1e-7f);
+    EXPECT_NEAR(core.f0[2], 0.04f, 1e-7f);
+    EXPECT_FLOAT_EQ(core.f90, 1.0f);
+
+    // IOR 2 gives F0=1/9. Blue's product is 4/3, so the specified clamp-before-strength order
+    // yields 0.3. Multiplying strength first and clamping afterwards would incorrectly yield 0.4.
+    const auto extended =
+        ComputePbrDielectricFresnelEXT(2.0f, 0.3f, {0.25f, 1.0f, 12.0f});
+    EXPECT_NEAR(extended.f0[0], 1.0f / 120.0f, 1e-7f);
+    EXPECT_NEAR(extended.f0[1], 1.0f / 30.0f, 1e-7f);
+    EXPECT_NEAR(extended.f0[2], 0.3f, 1e-7f);
+    EXPECT_FLOAT_EQ(extended.f90, 0.3f);
 }

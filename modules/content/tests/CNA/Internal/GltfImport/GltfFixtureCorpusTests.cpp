@@ -764,6 +764,30 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
     }
 }
 
+TEST(GltfConformanceL3, IorAndSpecularFactorsMatchTheManifest)
+{
+    const LoadedFixture fixture("mat-factor-only-gold");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
+    const ExtractedPrimitive* actual = FindExtracted(extracted, 0, 0);
+    ASSERT_NE(nullptr, actual);
+    ASSERT_TRUE(actual->extracted) << actual->error;
+
+    const JsonValue& expectedPrimitive = ExpectedPrimitives(fixture).arrayValue.at(0);
+    const JsonValue& material = Member(expectedPrimitive, "material");
+    ASSERT_EQ(JsonType::Object, material.type);
+
+    const MeshOutDump& dump = actual->dump;
+    EXPECT_NEAR(NumberOr(material, "ior", -1.0), static_cast<double>(dump.ior), 1e-6);
+    EXPECT_NEAR(NumberOr(material, "specularFactor", -1.0),
+                static_cast<double>(dump.specularFactor), 1e-6);
+    ExpectComponents(Numbers(Member(material, "specularColorFactor")),
+                     std::vector<float>(dump.specularColorFactor.begin(),
+                                        dump.specularColorFactor.end()),
+                     "specularColorFactor");
+}
+
 // --- L4: world-space geometry ------------------------------------------------------------------
 
 TEST(GltfConformanceL4, ExpectedWorldPositionsMatchTheManifest)

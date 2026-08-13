@@ -367,3 +367,40 @@ TEST(GltfExtensionRegistry, EveryDeferredMaterialExtensionIsReportedByNameRather
     }
     EXPECT_GE(warnings.size(), deferred.size());
 }
+
+TEST(GltfExtensionRegistry, FactorCarriedFresnelExtensionsReportTheirRemainingResidue)
+{
+    const LoadedFixture fixture("mat-factor-only-gold");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    std::vector<std::string> warnings;
+    ASSERT_NO_THROW(ValidateGltfEXT(&fixture.Data(), "mat-factor-only-gold", warnings));
+
+    const auto warningFor = [&warnings](const std::string& extension) -> std::string {
+        for (const std::string& warning : warnings)
+        {
+            if (warning.find(extension) != std::string::npos) { return warning; }
+        }
+        return {};
+    };
+
+    for (const std::string& extension : {"KHR_materials_ior", "KHR_materials_specular"})
+    {
+        SCOPED_TRACE(extension);
+        const GltfExtensionRecordEXT* record = FindGltfExtensionEXT(extension);
+        ASSERT_NE(nullptr, record);
+        EXPECT_EQ(GltfExtensionSupportEXT::ParsedButIgnored, record->support);
+        EXPECT_FALSE(record->claimed)
+            << "a file requiring the extension must remain refused until a renderer consumes it";
+
+        const std::string warning = warningFor(extension);
+        ASSERT_FALSE(warning.empty()) << "the partially carried extension was silent";
+        EXPECT_NE(std::string::npos, warning.find("L6"))
+            << "the report hides the factor transport that did land: " << warning;
+        EXPECT_NE(std::string::npos, warning.find("no renderer"))
+            << "the report does not name the shader-side residue: " << warning;
+    }
+
+    EXPECT_NE(std::string::npos, warningFor("KHR_materials_specular").find("textures"))
+        << "KHR_materials_specular's two missing texture inputs are not named";
+}

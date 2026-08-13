@@ -129,6 +129,20 @@ TEST_F(PbrEffectDefaultsTest, RoughnessFactorDefaultsToOne)
     EXPECT_FLOAT_EQ(fx.getRoughnessFactorProperty(), 1.0f);
 }
 
+TEST_F(PbrEffectDefaultsTest, DielectricFresnelFactorsDefaultToCoreGltf)
+{
+    EXPECT_FLOAT_EQ(fx.getIorEXTProperty(), 1.5f);
+    EXPECT_FLOAT_EQ(fx.getSpecularFactorEXTProperty(), 1.0f);
+    EXPECT_EQ(fx.getSpecularColorFactorEXTProperty(), Vector3(1.0f, 1.0f, 1.0f));
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_FLOAT_EQ(params.pbrDielectricF0[0], 0.04f);
+    EXPECT_FLOAT_EQ(params.pbrDielectricF0[1], 0.04f);
+    EXPECT_FLOAT_EQ(params.pbrDielectricF0[2], 0.04f);
+    EXPECT_FLOAT_EQ(params.pbrDielectricF90, 1.0f);
+}
+
 TEST_F(PbrEffectDefaultsTest, EmissiveFactorDefaultsToZero)
 {
     EXPECT_EQ(fx.getEmissiveFactorProperty(), Vector3::Zero);
@@ -165,6 +179,25 @@ TEST_F(PbrEffectDefaultsTest, SetRoughnessFactorRoundTrips)
 {
     fx.setRoughnessFactorProperty(0.75f);
     EXPECT_FLOAT_EQ(fx.getRoughnessFactorProperty(), 0.75f);
+}
+
+TEST_F(PbrEffectDefaultsTest, IorAndSpecularFactorsRoundTripAndReachDrawParams)
+{
+    fx.setIorEXTProperty(2.0f);
+    fx.setSpecularFactorEXTProperty(0.3f);
+    fx.setSpecularColorFactorEXTProperty(Vector3(0.25f, 1.0f, 12.0f));
+
+    EXPECT_FLOAT_EQ(fx.getIorEXTProperty(), 2.0f);
+    EXPECT_FLOAT_EQ(fx.getSpecularFactorEXTProperty(), 0.3f);
+    EXPECT_EQ(fx.getSpecularColorFactorEXTProperty(), Vector3(0.25f, 1.0f, 12.0f));
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_NEAR(params.pbrDielectricF0[0], 1.0f / 120.0f, 1e-7f);
+    EXPECT_NEAR(params.pbrDielectricF0[1], 1.0f / 30.0f, 1e-7f);
+    EXPECT_NEAR(params.pbrDielectricF0[2], 0.3f, 1e-7f)
+        << "the colour product must clamp before specularFactor is applied";
+    EXPECT_FLOAT_EQ(params.pbrDielectricF90, 0.3f);
 }
 
 TEST_F(PbrEffectDefaultsTest, SetEmissiveFactorRoundTrips)
@@ -206,12 +239,18 @@ TEST_F(PbrEffectDefaultsTest, CloneCopiesMaterialState)
     fx.setMetallicFactorProperty(0.3f);
     fx.setRoughnessFactorProperty(0.6f);
     fx.setEmissiveFactorProperty(Vector3(0.5f, 0.5f, 0.5f));
+    fx.setIorEXTProperty(1.8f);
+    fx.setSpecularFactorEXTProperty(0.4f);
+    fx.setSpecularColorFactorEXTProperty(Vector3(0.2f, 0.3f, 0.4f));
 
     auto* cloned = dynamic_cast<PbrEffect*>(fx.Clone());
     ASSERT_NE(cloned, nullptr);
     EXPECT_FLOAT_EQ(cloned->getMetallicFactorProperty(), 0.3f);
     EXPECT_FLOAT_EQ(cloned->getRoughnessFactorProperty(), 0.6f);
     EXPECT_EQ(cloned->getEmissiveFactorProperty(), Vector3(0.5f, 0.5f, 0.5f));
+    EXPECT_FLOAT_EQ(cloned->getIorEXTProperty(), 1.8f);
+    EXPECT_FLOAT_EQ(cloned->getSpecularFactorEXTProperty(), 0.4f);
+    EXPECT_EQ(cloned->getSpecularColorFactorEXTProperty(), Vector3(0.2f, 0.3f, 0.4f));
     delete cloned;
 }
 

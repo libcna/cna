@@ -1,6 +1,6 @@
 {
   "id": "mat-factor-only-gold",
-  "description": "A metallic-roughness material with no texture maps at all: gold baseColorFactor at 50% alpha, non-default metallic/roughness/emissive factors, alphaMode BLEND, doubleSided. Every one of those is a first-class glTF material property and none of them survives import today. The scalar factors were added when promoting the audit's f8, which authored only the base colour, alpha mode and double-sidedness -- they widen the same defect without changing it.",
+  "description": "A metallic-roughness material with no texture maps at all: gold baseColorFactor at 50% alpha, non-default metallic/roughness/emissive factors, alphaMode BLEND, doubleSided, plus factor-only IOR/specular extensions. Every one of those is a first-class glTF material property. The scalar factors were added when promoting the audit's f8, which authored only the base colour, alpha mode and double-sidedness -- they widen the same defect without changing it.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -16,7 +16,8 @@
   "specAnchors": [
     "metallic-roughness-material",
     "alpha-coverage",
-    "double-sided"
+    "double-sided",
+    "extensions"
   ],
   "inventory": {
     "id": "mat-factor-only-gold",
@@ -32,6 +33,9 @@
       "baseColorFactor",
       "alphaMode BLEND",
       "doubleSided",
+      "KHR_materials_ior",
+      "KHR_materials_specular",
+      "factor-only dielectric F0",
       "no texture maps"
     ],
     "auditFixture": "f8"
@@ -52,7 +56,10 @@
     "bufferViewCount": 3,
     "bufferCount": 1,
     "bufferByteLength": 78,
-    "extensionsUsed": [],
+    "extensionsUsed": [
+      "KHR_materials_ior",
+      "KHR_materials_specular"
+    ],
     "extensionsRequired": [],
     "punctualLightCount": 0
   },
@@ -216,6 +223,19 @@
           ],
           "metallicFactor": 0.9,
           "roughnessFactor": 0.35,
+          "ior": 2.0,
+          "specularFactor": 0.3,
+          "specularColorFactor": [
+            0.25,
+            1.0,
+            12.0
+          ],
+          "dielectricF0": [
+            0.008333333333333333,
+            0.03333333333333333,
+            0.3
+          ],
+          "dielectricF90": 0.3,
           "emissiveFactor": [
             0.25,
             0.1,

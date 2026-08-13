@@ -28,6 +28,7 @@
 namespace CnaTest::GltfOracle
 {
     using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Vector3;
     using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
     using Microsoft::Xna::Framework::Graphics::Effect;
     using Microsoft::Xna::Framework::Graphics::IEffectMatrices;
@@ -116,10 +117,10 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
             return "?";
         }
 
-        /// The alpha state lives on the two PBR effects only; every other effect legitimately has
-        /// none, and the record says so rather than inventing an OPAQUE default that would look
-        /// like a real answer.
-        void CaptureAlphaState(const Effect* effect, DrawParamsDump& dump)
+        /// The alpha and extension Fresnel factors live on the two PBR effects only; every other
+        /// effect legitimately has none, and the record says so rather than inventing defaults
+        /// that would look like real carried state.
+        void CaptureCarriedPbrState(const Effect* effect, DrawParamsDump& dump)
         {
             if (const auto* pbr = dynamic_cast<const PbrEffect*>(effect))
             {
@@ -127,6 +128,11 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                 dump.alphaMode   = AlphaModeName(pbr->getAlphaModeEXTProperty());
                 dump.alphaCutoff = pbr->getAlphaCutoffEXTProperty();
                 dump.doubleSided = pbr->getDoubleSidedEXTProperty();
+                dump.ior = pbr->getIorEXTProperty();
+                dump.specularFactor = pbr->getSpecularFactorEXTProperty();
+                const Vector3 specularColor = pbr->getSpecularColorFactorEXTProperty();
+                dump.specularColorFactor = {
+                    specularColor.X, specularColor.Y, specularColor.Z};
                 return;
             }
             if (const auto* skinned = dynamic_cast<const SkinnedPbrEffect*>(effect))
@@ -135,6 +141,11 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                 dump.alphaMode   = AlphaModeName(skinned->getAlphaModeEXTProperty());
                 dump.alphaCutoff = skinned->getAlphaCutoffEXTProperty();
                 dump.doubleSided = skinned->getDoubleSidedEXTProperty();
+                dump.ior = skinned->getIorEXTProperty();
+                dump.specularFactor = skinned->getSpecularFactorEXTProperty();
+                const Vector3 specularColor = skinned->getSpecularColorFactorEXTProperty();
+                dump.specularColorFactor = {
+                    specularColor.X, specularColor.Y, specularColor.Z};
             }
         }
     }
@@ -269,6 +280,9 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                                      p.diffuseColor[3]};
                 dump.metallicFactor  = p.pbrMetallicFactor;
                 dump.roughnessFactor = p.pbrRoughnessFactor;
+                dump.dielectricF0 = {p.pbrDielectricF0[0], p.pbrDielectricF0[1],
+                                     p.pbrDielectricF0[2]};
+                dump.dielectricF90 = p.pbrDielectricF90;
                 dump.normalScale       = p.pbrNormalScale;
                 dump.occlusionStrength = p.pbrOcclusionStrength;
                 dump.baseColorTextureIsSrgb = p.pbrBaseColorTextureIsSrgb;
@@ -292,7 +306,7 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                 }
 
                 dump.alphaTest = {p.alphaTest[0], p.alphaTest[1], p.alphaTest[2], p.alphaTest[3]};
-                CaptureAlphaState(effect, dump);
+                CaptureCarriedPbrState(effect, dump);
 
                 dump.pbr                = p.pbr;
                 dump.skinned            = p.skinned;
@@ -354,6 +368,11 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
         out += ",\"diffuseColor\":" + Flat(dump.diffuseColor);
         out += ",\"metallicFactor\":" + Num(dump.metallicFactor);
         out += ",\"roughnessFactor\":" + Num(dump.roughnessFactor);
+        out += ",\"ior\":" + Num(dump.ior);
+        out += ",\"specularFactor\":" + Num(dump.specularFactor);
+        out += ",\"specularColorFactor\":" + Flat(dump.specularColorFactor);
+        out += ",\"dielectricF0\":" + Flat(dump.dielectricF0);
+        out += ",\"dielectricF90\":" + Num(dump.dielectricF90);
         out += ",\"normalScale\":" + Num(dump.normalScale);
         out += ",\"occlusionStrength\":" + Num(dump.occlusionStrength);
         out += ",\"baseColorTextureIsSrgb\":" + Bool(dump.baseColorTextureIsSrgb);

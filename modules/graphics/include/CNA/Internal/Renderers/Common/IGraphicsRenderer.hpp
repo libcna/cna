@@ -1035,6 +1035,15 @@ namespace CNA::Internal::Renderers
         /// PbrEffect: roughness factor [0,1], multiplied with pbrMetallicRoughnessMap's G channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrRoughnessFactor = 1.0f;
+        /// plan_gltf.md GLTF-343/GLTF-344: dielectric normal-incidence reflectance after applying
+        /// KHR_materials_ior and the factor-only part of KHR_materials_specular. Core glTF's
+        /// default is 0.04 in every channel. Kept separate from the metallic F0, which remains the
+        /// material's base colour, and from F90 below because specularFactor can reduce grazing
+        /// reflectance independently. No renderer consumes these fields yet; they are the verified
+        /// L6 boundary for the still-open shader work.
+        float pbrDielectricF0[3] = {0.04f, 0.04f, 0.04f};
+        /// Dielectric grazing reflectance after KHR_materials_specular's scalar strength (default 1).
+        float pbrDielectricF90 = 1.0f;
         /// plan_gltf.md GLTF-224: glTF `normalTexture.scale`. Scales the sampled tangent-space
         /// normal's x and y before the tangent basis is applied -- 0 flattens the map to the
         /// geometric normal, 1 is the map as authored, and glTF puts no upper bound on it. Only

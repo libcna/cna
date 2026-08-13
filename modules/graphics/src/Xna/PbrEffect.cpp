@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Graphics/AlphaCoverageEXT.hpp"
+#include "CNA/Internal/Graphics/PbrFresnelEXT.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <array>
@@ -52,11 +53,14 @@ namespace Microsoft::Xna::Framework::Graphics
         diffuseColor_      = src.diffuseColor_;
         alpha_             = src.alpha_;
         ambientLightColor_ = src.ambientLightColor_;
-        emissiveFactor_    = src.emissiveFactor_;
-        metallicFactor_    = src.metallicFactor_;
-        roughnessFactor_   = src.roughnessFactor_;
-        normalScale_       = src.normalScale_;
-        occlusionStrength_ = src.occlusionStrength_;
+        emissiveFactor_         = src.emissiveFactor_;
+        metallicFactor_         = src.metallicFactor_;
+        roughnessFactor_        = src.roughnessFactor_;
+        iorEXT_                 = src.iorEXT_;
+        specularFactorEXT_      = src.specularFactorEXT_;
+        specularColorFactorEXT_ = src.specularColorFactorEXT_;
+        normalScale_            = src.normalScale_;
+        occlusionStrength_      = src.occlusionStrength_;
         baseColorTextureIsSrgb_ = src.baseColorTextureIsSrgb_;
         emissiveTextureIsSrgb_  = src.emissiveTextureIsSrgb_;
         encodeOutputToSrgb_     = src.encodeOutputToSrgb_;
@@ -247,6 +251,19 @@ namespace Microsoft::Xna::Framework::Graphics
     float PbrEffect::getRoughnessFactorProperty() const  { return roughnessFactor_; }
     void  PbrEffect::setRoughnessFactorProperty(float v) { roughnessFactor_ = v; }
 
+    float PbrEffect::getIorEXTProperty() const { return iorEXT_; }
+    void PbrEffect::setIorEXTProperty(float v) { iorEXT_ = v; }
+    float PbrEffect::getSpecularFactorEXTProperty() const { return specularFactorEXT_; }
+    void PbrEffect::setSpecularFactorEXTProperty(float v) { specularFactorEXT_ = v; }
+    Vector3 PbrEffect::getSpecularColorFactorEXTProperty() const
+    {
+        return specularColorFactorEXT_;
+    }
+    void PbrEffect::setSpecularColorFactorEXTProperty(const Vector3& v)
+    {
+        specularColorFactorEXT_ = v;
+    }
+
     Vector3 PbrEffect::getEmissiveFactorProperty() const { return emissiveFactor_; }
     void    PbrEffect::setEmissiveFactorProperty(const Vector3& v) { emissiveFactor_ = v; }
 
@@ -363,6 +380,15 @@ namespace Microsoft::Xna::Framework::Graphics
 
         p.pbrMetallicFactor  = metallicFactor_;
         p.pbrRoughnessFactor = roughnessFactor_;
+        const CNA::Internal::Graphics::PbrDielectricFresnelEXT dielectricFresnel =
+            CNA::Internal::Graphics::ComputePbrDielectricFresnelEXT(
+                iorEXT_, specularFactorEXT_,
+                {specularColorFactorEXT_.X, specularColorFactorEXT_.Y,
+                 specularColorFactorEXT_.Z});
+        p.pbrDielectricF0[0] = dielectricFresnel.f0[0];
+        p.pbrDielectricF0[1] = dielectricFresnel.f0[1];
+        p.pbrDielectricF0[2] = dielectricFresnel.f0[2];
+        p.pbrDielectricF90   = dielectricFresnel.f90;
 
         // plan_gltf.md GLTF-372: a MASK material's cutoff is the one piece of glTF alpha coverage
         // that is fragment-program work rather than device state, and every PBR shader already

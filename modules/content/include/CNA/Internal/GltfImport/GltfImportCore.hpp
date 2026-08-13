@@ -298,6 +298,12 @@ namespace CNA::Internal::GltfImport
         float metallicFactor = 1.0f;
         /** @brief `pbrMetallicRoughness.roughnessFactor` (glTF default 1). */
         float roughnessFactor = 1.0f;
+        /** @brief `KHR_materials_ior.ior` (extension default 1.5). */
+        float iorEXT = 1.5f;
+        /** @brief `KHR_materials_specular.specularFactor` (extension default 1). */
+        float specularFactorEXT = 1.0f;
+        /** @brief `KHR_materials_specular.specularColorFactor` (linear RGB, default white). */
+        Microsoft::Xna::Framework::Vector3 specularColorFactorEXT{1.0f, 1.0f, 1.0f};
         /** @brief `emissiveFactor` after any supported emissive-strength multiplier. */
         Microsoft::Xna::Framework::Vector3 emissiveFactor;
 

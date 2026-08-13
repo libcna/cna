@@ -170,6 +170,60 @@ import and the `.cnj`. The rendering half is `GLTF-230` at L7.
 
 ---
 
+### 1.4a Dielectric Fresnel factors on the PBR effects — `GLTF-343`, `GLTF-344`
+
+**Problem.** Core glTF fixes a dielectric's normal-incidence reflectance at 4%, corresponding to
+an IOR of 1.5. `KHR_materials_ior` replaces that constant with `((ior-1)/(ior+1))²`, while
+`KHR_materials_specular` scales and colours the dielectric Fresnel term. cgltf parses all three
+factor values, but CNA currently drops them before `MeshOut`; an application cannot inspect them
+and a renderer cannot honour them later.
+
+**Why not internal.** These are runtime shading inputs. Like metallic and roughness, they must live
+on the effect so a non-glTF caller can set them and so cloning, offline content and the draw
+parameter block have one source of truth. Keeping them only in the importer would strand them at
+exactly the boundary the existing defect crosses.
+
+**Shape.** The following members are added identically to `PbrEffect` and `SkinnedPbrEffect`:
+
+```cpp
+CNAEXT [[nodiscard]] float getIorEXTProperty() const;              // default 1.5
+CNAEXT void setIorEXTProperty(float value);
+CNAEXT [[nodiscard]] float getSpecularFactorEXTProperty() const;   // default 1
+CNAEXT void setSpecularFactorEXTProperty(float value);
+CNAEXT [[nodiscard]] Vector3 getSpecularColorFactorEXTProperty() const; // default One
+CNAEXT void setSpecularColorFactorEXTProperty(const Vector3& value);
+```
+
+The raw properties retain the extension's authored factors. `FillGpuDrawParams` derives the two
+shader-ready quantities shared by both effects: RGB `pbrDielectricF0` and scalar
+`pbrDielectricF90`. The derivation follows the Khronos interaction rule exactly: multiply the IOR
+reflectance by `specularColorFactor`, clamp that product per channel to 1, then multiply by
+`specularFactor`; F90 is `specularFactor`. Keeping F90 separate is essential — a reduced specular
+factor must also reduce grazing reflectance, which cannot be reconstructed from F0 alone.
+
+**Compatibility.** Additive. The defaults derive F0 = `(0.04,0.04,0.04)` and F90 = 1, exactly the
+constants every CNA PBR shader uses today. Existing callers and old `.cnj` files therefore keep
+their current parameter block byte-for-byte. Setters follow the existing metallic/roughness effect
+properties and do not silently clamp caller input; imported glTF values have already passed glTF
+validation. The only clamp is the one the extension specification requires in the F0 equation.
+
+**Migration.** None.
+
+**Deliberate boundary.** This review approves factor transport only. The extension's two optional
+textures need two additional texture bindings and per-map colour-space/UV handling on every PBR
+renderer, and the shader must replace its core `mix(0.04, albedo, metallic)` formulation with the
+extension's dielectric/metal BRDF mix. Neither change is accepted without a rasterising renderer
+test. Until that work lands the registry remains `PARSED_BUT_IGNORED`, with a more precise reason:
+factors reach L6 but no renderer consumes them, and texture inputs are still reported as absent.
+
+**Test.** Effect default/setter/clone tests cover both classes. `mat-factor-only-gold` authors IOR
+2, specular factor 0.3 and colour `(0.25,1,12)`, making the derived F0
+`(1/120,1/30,0.3)` and F90 `0.3`; the blue channel proves the clamp happens before the strength
+multiply. L3, direct L6 and `.cnj` parity compare those values against the fixture manifest. The
+remaining shader/texture work stays explicitly open on `GLTF-343`/`GLTF-344`.
+
+---
+
 ### 1.5 A home for rigid (non-joint) animation clips — `GLTF-294`
 
 **Problem.** `GLTF-293` imports rigid node animation correctly, but the clip has nowhere to be

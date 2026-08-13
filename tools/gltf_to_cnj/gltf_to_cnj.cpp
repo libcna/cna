@@ -768,6 +768,21 @@ namespace
                      << e.material.baseColorFactor.Y << ", " << e.material.baseColorFactor.Z
                      << "]"
                      << ", \"alpha\": " << e.material.baseColorFactor.W;
+                // GLTF-343/344: factor-only IOR/specular state survives the offline path. Defaults
+                // are omitted so old/simple .cnj output remains byte-stable.
+                if (e.material.iorEXT != 1.5f)
+                    json << ", \"ior\": " << e.material.iorEXT;
+                if (e.material.specularFactorEXT != 1.0f)
+                    json << ", \"specularFactor\": " << e.material.specularFactorEXT;
+                if (e.material.specularColorFactorEXT.X != 1.0f ||
+                    e.material.specularColorFactorEXT.Y != 1.0f ||
+                    e.material.specularColorFactorEXT.Z != 1.0f)
+                {
+                    json << ", \"specularColorFactor\": ["
+                         << e.material.specularColorFactorEXT.X << ", "
+                         << e.material.specularColorFactorEXT.Y << ", "
+                         << e.material.specularColorFactorEXT.Z << "]";
+                }
                 // GLTF-224/225 were correct only on direct .gltf loads. These two schema fields
                 // close the offline loss; omitted defaults keep older/simple .cnj byte-stable.
                 if (e.material.normalScale != 1.0f)

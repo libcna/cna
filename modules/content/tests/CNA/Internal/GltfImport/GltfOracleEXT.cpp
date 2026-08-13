@@ -537,6 +537,11 @@ namespace CnaTest::GltfOracle
         dump.useDualTexture = mesh.useDualTexture;
         dump.metallicFactor = mesh.material.metallicFactor;
         dump.roughnessFactor = mesh.material.roughnessFactor;
+        dump.ior = mesh.material.iorEXT;
+        dump.specularFactor = mesh.material.specularFactorEXT;
+        dump.specularColorFactor = {mesh.material.specularColorFactorEXT.X,
+                                    mesh.material.specularColorFactorEXT.Y,
+                                    mesh.material.specularColorFactorEXT.Z};
         dump.emissiveFactor = {mesh.material.emissiveFactor.X,
                                mesh.material.emissiveFactor.Y,
                                mesh.material.emissiveFactor.Z};
@@ -673,6 +678,10 @@ namespace CnaTest::GltfOracle
         out += ",\"use32BitIndices\":" + std::string(dump.use32BitIndices ? "true" : "false");
         out += ",\"metallicFactor\":" + Num(dump.metallicFactor);
         out += ",\"roughnessFactor\":" + Num(dump.roughnessFactor);
+        out += ",\"ior\":" + Num(dump.ior);
+        out += ",\"specularFactor\":" + Num(dump.specularFactor);
+        out += ",\"specularColorFactor\":[" + Num(dump.specularColorFactor[0]) + "," +
+               Num(dump.specularColorFactor[1]) + "," + Num(dump.specularColorFactor[2]) + "]";
         out += ",\"emissiveFactor\":[" + Num(dump.emissiveFactor[0]) + "," +
                Num(dump.emissiveFactor[1]) + "," + Num(dump.emissiveFactor[2]) + "]";
         out += ",\"hasBaseColorImage\":" + std::string(dump.hasBaseColorImage ? "true" : "false");

@@ -731,11 +731,12 @@ namespace
   ]
 })GLTF";
 
-    // CNB-56/59 + plan_gltf.md GLTF-236/237: an unskinned triangle with all five material slots,
-    // an explicit TANGENT accessor, and deliberately non-default factor/scalar/alpha/sampler state
-    // -- proves the offline CLI tool's complete .cnj material serialization.
+    // CNB-56/59 + plan_gltf.md GLTF-236/237/343/344: an unskinned triangle with all five material
+    // slots, an explicit TANGENT accessor, and deliberately non-default core/Fresnel/alpha/sampler
+    // state -- proves the offline CLI tool's complete factor-only .cnj material serialization.
     const char* kPbrGltf = R"GLTF({
   "asset": { "version": "2.0" },
+  "extensionsUsed": [ "KHR_materials_ior", "KHR_materials_specular" ],
   "scene": 0,
   "scenes": [ { "nodes": [0] } ],
   "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
@@ -756,7 +757,14 @@ namespace
     "emissiveFactor": [0.1, 0.2, 0.3],
     "alphaMode": "MASK",
     "alphaCutoff": 0.73,
-    "doubleSided": true
+    "doubleSided": true,
+    "extensions": {
+      "KHR_materials_ior": { "ior": 2.0 },
+      "KHR_materials_specular": {
+        "specularFactor": 0.3,
+        "specularColorFactor": [0.25, 1.0, 12.0]
+      }
+    }
   } ],
   "textures": [
     { "source": 0, "sampler": 0 }, { "source": 1 }, { "source": 2 }, { "source": 3 }
@@ -938,6 +946,12 @@ namespace
         expectArrayNear(runtime.diffuseColor, offline.diffuseColor, "diffuseColor");
         EXPECT_NEAR(runtime.metallicFactor, offline.metallicFactor, kTolerance);
         EXPECT_NEAR(runtime.roughnessFactor, offline.roughnessFactor, kTolerance);
+        EXPECT_NEAR(runtime.ior, offline.ior, kTolerance);
+        EXPECT_NEAR(runtime.specularFactor, offline.specularFactor, kTolerance);
+        expectArrayNear(runtime.specularColorFactor, offline.specularColorFactor,
+                        "specularColorFactor");
+        expectArrayNear(runtime.dielectricF0, offline.dielectricF0, "dielectricF0");
+        EXPECT_NEAR(runtime.dielectricF90, offline.dielectricF90, kTolerance);
         EXPECT_NEAR(runtime.normalScale, offline.normalScale, kTolerance);
         EXPECT_NEAR(runtime.occlusionStrength, offline.occlusionStrength, kTolerance);
         expectArrayNear(runtime.emissiveColor, offline.emissiveColor, "emissiveColor");
@@ -1847,6 +1861,10 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_NE(std::string::npos, cnj.find("\"alphaMode\": \"MASK\""));
     EXPECT_NE(std::string::npos, cnj.find("\"alphaCutoff\": 0.73"));
     EXPECT_NE(std::string::npos, cnj.find("\"doubleSided\": true"));
+    EXPECT_NE(std::string::npos, cnj.find("\"ior\": 2"));
+    EXPECT_NE(std::string::npos, cnj.find("\"specularFactor\": 0.3"));
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"specularColorFactor\": [0.25, 1, 12]"));
     EXPECT_NE(std::string::npos, cnj.find("\"sampler0Filter\": 1"));
     EXPECT_NE(std::string::npos, cnj.find("\"sampler0AddressU\": 1"));
     EXPECT_NE(std::string::npos, cnj.find("\"sampler0AddressV\": 2"));
@@ -1888,6 +1906,9 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     ASSERT_NE(pbrFx->getOcclusionMapProperty(), nullptr);
     EXPECT_NEAR(pbrFx->getMetallicFactorProperty(), 0.5f, 1e-5f);
     EXPECT_NEAR(pbrFx->getRoughnessFactorProperty(), 0.3f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getIorEXTProperty(), 2.0f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getSpecularFactorEXTProperty(), 0.3f, 1e-5f);
+    EXPECT_EQ(pbrFx->getSpecularColorFactorEXTProperty(), Vector3(0.25f, 1.0f, 12.0f));
     const Vector3 emissiveFactor = pbrFx->getEmissiveFactorProperty();
     EXPECT_NEAR(emissiveFactor.X, 0.1f, 1e-5f);
     EXPECT_NEAR(emissiveFactor.Y, 0.2f, 1e-5f);
@@ -1917,9 +1938,9 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     ASSERT_EQ(runtimeDraws.size(), 1u);
     ExpectL6MaterialStateEqual(runtimeDraws.front(), offlineDraws.front());
 
-    // A pre-GLTF-216 or hand-written PBR .cnj may omit diffuseColor/alpha. Removing both from the
-    // rich output must retain the effect's historical white/opaque defaults rather than taking
-    // JsonFloatArray3's generic zero fallback and rendering the material black.
+    // A pre-GLTF-216/343/344 or hand-written PBR .cnj may omit diffuseColor/alpha and the Fresnel
+    // extension fields. Removing all of them from the rich output must retain the historical
+    // white/opaque/core-glTF defaults rather than manufacturing black or zero reflectance.
     std::string legacyCnj = cnj;
     const auto eraseArrayField = [&](const std::string& field) {
         const std::string prefix = ", \"" + field + "\": [";
@@ -1938,7 +1959,10 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
         legacyCnj.erase(begin, end - begin);
     };
     eraseArrayField("diffuseColor");
+    eraseArrayField("specularColorFactor");
     eraseScalarField("alpha");
+    eraseScalarField("ior");
+    eraseScalarField("specularFactor");
     WriteFile(contentRoot.path() / "legacy.cnj", legacyCnj);
 
     Model legacy = cm.Load<Model>("legacy");
@@ -1948,6 +1972,9 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     ASSERT_NE(legacyFx, nullptr);
     EXPECT_EQ(legacyFx->getDiffuseColorProperty(), Vector3(1.0f, 1.0f, 1.0f));
     EXPECT_FLOAT_EQ(legacyFx->getAlphaProperty(), 1.0f);
+    EXPECT_FLOAT_EQ(legacyFx->getIorEXTProperty(), 1.5f);
+    EXPECT_FLOAT_EQ(legacyFx->getSpecularFactorEXTProperty(), 1.0f);
+    EXPECT_EQ(legacyFx->getSpecularColorFactorEXTProperty(), Vector3(1.0f, 1.0f, 1.0f));
 }
 
 // plan_gltf.md GLTF-237 and the L6 half of GLTF-244: one rich probe can prove that every schema

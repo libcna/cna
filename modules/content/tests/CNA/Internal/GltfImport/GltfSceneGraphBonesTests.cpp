@@ -672,6 +672,19 @@ TEST(GltfMaterialState, EveryAuthoredMaterialPropertyReachesTheEffect)
     EXPECT_NEAR(NumberOr(expected, "roughnessFactor", -1),
                 static_cast<double>(pbr->getRoughnessFactorProperty()), 1e-5);
 
+    // GLTF-343 / GLTF-344: raw extension factors remain inspectable on the effect. Their
+    // shader-ready F0/F90 boundary is asserted separately by the L6 draw-parameter oracle.
+    EXPECT_NEAR(NumberOr(expected, "ior", -1),
+                static_cast<double>(pbr->getIorEXTProperty()), 1e-5);
+    EXPECT_NEAR(NumberOr(expected, "specularFactor", -1),
+                static_cast<double>(pbr->getSpecularFactorEXTProperty()), 1e-5);
+    const std::vector<double> specularColor = Numbers(Member(expected, "specularColorFactor"));
+    ASSERT_EQ(3u, specularColor.size());
+    const auto carriedSpecularColor = pbr->getSpecularColorFactorEXTProperty();
+    EXPECT_NEAR(specularColor[0], static_cast<double>(carriedSpecularColor.X), 1e-5);
+    EXPECT_NEAR(specularColor[1], static_cast<double>(carriedSpecularColor.Y), 1e-5);
+    EXPECT_NEAR(specularColor[2], static_cast<double>(carriedSpecularColor.Z), 1e-5);
+
     // GLTF-228 / GLTF-229 / GLTF-231: the alpha and sidedness state, which had no home at all.
     EXPECT_EQ("BLEND", StringOr(expected, "alphaMode", "")) << "the fixture stopped authoring BLEND";
     EXPECT_EQ(AlphaModeEXT::Blend, pbr->getAlphaModeEXTProperty());
@@ -708,6 +721,10 @@ TEST(GltfMaterialState, AMaterialThatDeclaresNothingGetsGltfsOwnDefaults)
     EXPECT_NEAR(1.0, static_cast<double>(pbr->getAlphaProperty()), 1e-6);
     EXPECT_NEAR(1.0, static_cast<double>(pbr->getMetallicFactorProperty()), 1e-6);
     EXPECT_NEAR(1.0, static_cast<double>(pbr->getRoughnessFactorProperty()), 1e-6);
+    EXPECT_NEAR(1.5, static_cast<double>(pbr->getIorEXTProperty()), 1e-6);
+    EXPECT_NEAR(1.0, static_cast<double>(pbr->getSpecularFactorEXTProperty()), 1e-6);
+    EXPECT_EQ(Microsoft::Xna::Framework::Vector3(1.0f, 1.0f, 1.0f),
+              pbr->getSpecularColorFactorEXTProperty());
 }
 
 // --- GLTF-294: a rigid clip survives to the model and poses it ---------------------------------
