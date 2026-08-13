@@ -1313,7 +1313,7 @@ TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
 //
 // Mirrors the SaveAsPngTest coverage above, adapted for JPEG: lossy colour
 // tolerance instead of exact match, and no alpha preservation (JPEG has no
-// alpha channel — FNA/SDL_image round-trips it back as fully opaque).
+// alpha channel — the reference image decoder round-trips it back as fully opaque).
 // Also verifies FNA_GRAPHICS_JPEG_SAVE_QUALITY is honoured (Task 261 audit
 // found CNA previously hardcoded quality=100, ignoring FNA's env var).
 // -----------------------------------------------------------------------

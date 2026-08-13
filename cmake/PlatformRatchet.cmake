@@ -1,9 +1,9 @@
 # =====================================================================================
 # CNA platform ratchet (plan_platform.md Task PLAT-8)
 #
-# Reports, at configure time, how much of CNA still calls SDL directly outside the
-# PLAT-3 allowlist, and warns when that number has gone UP since the recorded budget
-# (tools/platform/sdl_budget.json).
+# Reports, at configure time, how much of CNA calls SDL directly outside the PLAT-3
+# production allowlist, and audits every surviving test/example use against PLAT-123's
+# per-file categorized manifest.
 #
 # Why this runs from the very start of the migration rather than at the end: the SDL
 # separation spans nine phases and ~250 production files. A check that only fires once
@@ -11,9 +11,9 @@
 # a new SDL call site added to an already-migrated module, and a migration that stalls
 # while still looking finished. Warning continuously makes the trend visible from day one.
 #
-# WARNING, not error, on purpose: today essentially the whole tree is over budget by
-# design, so failing the build would just block all work. PLAT-121 flips this to
-# CNA_PLATFORM_RATCHET_STRICT once the count reaches the allowlist floor.
+# PLAT-121 reached the production floor and made it a hard error by default. PLAT-123's
+# non-production audit is always strict: new native test scaffolding must be classified at
+# its owning edge rather than entering through an open-ended tests/ exemption.
 # =====================================================================================
 
 option(CNA_PLATFORM_RATCHET "Report remaining direct SDL coupling at configure time (PLAT-8)" ON)
@@ -72,6 +72,31 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${_ratchet_script}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/sdl_budget.json")
 
+set(_nonproduction_audit_script
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/nonproduction_sdl_audit.py")
+if(EXISTS "${_nonproduction_audit_script}")
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}" "${_nonproduction_audit_script}"
+                --repo "${CMAKE_CURRENT_SOURCE_DIR}" --check
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE _nonproduction_audit_result
+        OUTPUT_VARIABLE _nonproduction_audit_stdout
+        ERROR_VARIABLE _nonproduction_audit_stderr
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_STRIP_TRAILING_WHITESPACE
+    )
+    if(_nonproduction_audit_stdout)
+        message(STATUS "CNA: ${_nonproduction_audit_stdout}")
+    endif()
+    if(NOT _nonproduction_audit_result EQUAL 0)
+        message(FATAL_ERROR
+            "CNA non-production SDL audit failed:\n${_nonproduction_audit_stderr}")
+    endif()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${_nonproduction_audit_script}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/nonproduction_sdl_budget.json")
+endif()
+
 # On-demand target for the full per-module breakdown, so a developer working through a
 # migration task can see what is left without re-configuring.
 add_custom_target(cna_platform_ratchet
@@ -79,3 +104,12 @@ add_custom_target(cna_platform_ratchet
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Reporting remaining direct SDL coupling (plan_platform.md PLAT-8)"
     VERBATIM)
+
+if(EXISTS "${_nonproduction_audit_script}")
+    add_custom_target(cna_platform_nonproduction_sdl_audit
+        COMMAND "${Python3_EXECUTABLE}" "${_nonproduction_audit_script}"
+                --repo "${CMAKE_CURRENT_SOURCE_DIR}" --check
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Auditing justified SDL use in tests/examples (plan_platform.md PLAT-123)"
+        VERBATIM)
+endif()

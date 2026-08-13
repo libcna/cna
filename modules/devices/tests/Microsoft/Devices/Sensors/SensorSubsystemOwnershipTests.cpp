@@ -18,8 +18,8 @@ using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorState;
 
 // Task P4-8: Accelerometer and Gyroscope both wrap the same
-// SDL_INIT_SENSOR subsystem. Before this task, each class guarded its own
-// SDL_InitSubSystem()/SDL_QuitSubSystem() calls with SDL_WasInit(), which
+// native sensor subsystem. Before this task, each class guarded its own
+// acquire/release calls with a global initialized query, which
 // bypassed SDL's own internal ref-counting — one class's last instance
 // disposing could tear the subsystem down while the other class's
 // instances still expected it alive. This can't observe SDL's internal
@@ -98,8 +98,7 @@ TEST(SensorSubsystemOwnershipTests, DisposingGyroscopeDoesNotAffectAccelerometer
 // Task P7-1: getIsSupportedProperty() previously locked each class's *own*
 // SdlSensorSubsystem<T>::mutex_ around its real SDL sensor-subsystem calls —
 // two different mutexes for Accelerometer and Gyroscope, so nothing actually
-// serialized their real SDL_InitSubSystem/SDL_GetSensors/SDL_OpenSensor/
-// SDL_GetSensorType/SDL_CloseSensor/SDL_QuitSubSystem calls against each
+// serialized their real subsystem/enumerate/open/type/close/release calls against each
 // other. Unlike plan_devices_phase6.md's P6-1 addendum test (which only
 // stressed one class at a time and still reliably reproduced heap
 // corruption), this test constructs/destroys/probes *both* classes

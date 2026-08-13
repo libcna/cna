@@ -2,8 +2,8 @@
 #include <gtest/gtest.h>
 #include <any>
 
-#include <SDL3/SDL.h>
-
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -122,9 +122,14 @@ TEST(GuideTest, NotificationPositionDefaultAndSet) {
 }
 
 TEST(GuideTest, IsScreenSaverEnabledGetSet) {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+    try
     {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+        platform.AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);
+    }
+    catch (const CNA::Platform::PlatformException& error)
+    {
+        GTEST_SKIP() << "video subsystem unavailable: " << error.what();
     }
 
     Guide::setIsScreenSaverEnabledProperty(true);
@@ -132,7 +137,7 @@ TEST(GuideTest, IsScreenSaverEnabledGetSet) {
     Guide::setIsScreenSaverEnabledProperty(false);
     EXPECT_FALSE(Guide::getIsScreenSaverEnabledProperty());
 
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    platform.ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
 }
 
 // --- Guide keyboard input capture (Task 3.2) ---

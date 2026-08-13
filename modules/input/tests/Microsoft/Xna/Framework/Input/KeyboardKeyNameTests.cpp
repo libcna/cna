@@ -3,8 +3,8 @@
 
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
-
-#include <SDL3/SDL.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 
 #include <string>
 
@@ -12,9 +12,9 @@ using Microsoft::Xna::Framework::Input::Keyboard;
 using Microsoft::Xna::Framework::Input::Keys;
 
 // GetKeyNameEXT is layout-dependent: it resolves scancode -> keycode through the active keymap, which
-// SDL only establishes once the video subsystem is up. Initialize it (Xvfb+x11 in CI) and skip if a
-// display is unavailable, mirroring the MouseCursor / Clipboard tests. CI runs a US layout, so the
-// basic Latin keys resolve to their ASCII names.
+// the window platform establishes once its video subsystem is up. Acquire it through the platform
+// contract and skip if a display is unavailable. CI runs a US layout, so basic Latin keys resolve
+// to their ASCII names.
 namespace
 {
     class KeyboardKeyNameEXTTest : public ::testing::Test
@@ -23,14 +23,22 @@ namespace
         bool videoUp_ = false;
         void SetUp() override
         {
-            videoUp_ = SDL_InitSubSystem(SDL_INIT_VIDEO);
-            if (!videoUp_)
-                GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed (no display): " << SDL_GetError();
+            try
+            {
+                CNA::Platform::GetCurrentPlatform().AcquireSubsystem(
+                    CNA::Platform::PlatformSubsystem::Video);
+                videoUp_ = true;
+            }
+            catch (const CNA::Platform::PlatformException& error)
+            {
+                GTEST_SKIP() << "video subsystem unavailable: " << error.what();
+            }
         }
         void TearDown() override
         {
             if (videoUp_)
-                SDL_QuitSubSystem(SDL_INIT_VIDEO);
+                CNA::Platform::GetCurrentPlatform().ReleaseSubsystem(
+                    CNA::Platform::PlatformSubsystem::Video);
         }
     };
 }

@@ -131,7 +131,7 @@ TEST(KeyboardInputTest, GetKeyFromScancodeEXTNoneReturnsNone)
 
 TEST(KeyboardInputTest, GetKeyFromScancodeEXTUnmappedKeyReturnsNone)
 {
-    // Keys::Kana has no SDL_Scancode equivalent (no such physical key on US layouts).
+    // Keys::Kana has no physical-scancode equivalent (no such key on US layouts).
     EXPECT_EQ(Keyboard::GetKeyFromScancodeEXT(Keys::Kana), Keys::None);
 }
 

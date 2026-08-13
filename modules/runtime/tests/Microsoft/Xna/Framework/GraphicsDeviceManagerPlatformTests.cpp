@@ -5,7 +5,7 @@
 // Deliberately without the SDL video probe the rest of GraphicsDeviceManagerTests.cpp guards
 // itself with: everything checked here is decided before any window exists, which is exactly why
 // it can be checked in an environment with no display at all. That is also the point of the
-// migration -- the orientation decision was reading SDL_GetPlatform(), a call that has nothing to
+// migration — the orientation decision was reading a native platform-name query, which has nothing to
 // do with graphics and pulled the SDL header into a header every game includes.
 
 #include <gtest/gtest.h>

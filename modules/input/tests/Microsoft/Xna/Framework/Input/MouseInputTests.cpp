@@ -15,12 +15,13 @@
 #include <utility>
 #include <vector>
 
-#include <SDL3/SDL.h>
-
 #include "CNA/Internal/Input/CoordinateTransformTestRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Platform/CannedMouse.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/PlatformException.hpp"
+#include "CNA/Platform/WindowDescription.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -383,7 +384,7 @@ TEST_F(MousePlatformInputTest, RelativeModeAccumulatesDeltaAndDrainsOnRead)
     EXPECT_EQ(first.getXProperty(), 4);
     EXPECT_EQ(first.getYProperty(), -3);
 
-    // Draining semantics (mirrors FNA's SDL_GetRelativeMouseState): a second read with no new
+    // Draining semantics (mirrors FNA's native relative-state read): a second read with no new
     // motion in between returns 0,0.
     const auto second = Mouse::GetState();
     EXPECT_EQ(second.getXProperty(), 0);
@@ -397,19 +398,33 @@ TEST(MouseTest, IsRelativeMouseModeEXTRoundTripsThroughRealWindow)
 #endif
     ResetMouseState();
 
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    CNA::Platform::IPlatform& current = CNA::Platform::GetCurrentPlatform();
+    try
     {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+        current.AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);
+    }
+    catch (const CNA::Platform::PlatformException& error)
+    {
+        GTEST_SKIP() << "video subsystem unavailable: " << error.what();
     }
 
-    SDL_Window* window = SDL_CreateWindow("MouseInputTests", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!window)
+    CNA::Platform::WindowDescription description;
+    description.title = "MouseInputTests";
+    description.width = 64;
+    description.height = 64;
+    description.visible = false;
+    std::unique_ptr<CNA::Platform::IPlatformWindow> window;
+    try
     {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+        window = current.CreateWindow(description);
+    }
+    catch (const CNA::Platform::PlatformException& error)
+    {
+        current.ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
+        GTEST_SKIP() << "window creation unavailable: " << error.what();
     }
 
-    Mouse::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
+    Mouse::setWindowHandleProperty(window->GetWindowHandle());
 
     Mouse::setIsRelativeMouseModeEXTProperty(true);
     EXPECT_TRUE(Mouse::getIsRelativeMouseModeEXTProperty());
@@ -417,8 +432,8 @@ TEST(MouseTest, IsRelativeMouseModeEXTRoundTripsThroughRealWindow)
     Mouse::setIsRelativeMouseModeEXTProperty(false);
     EXPECT_FALSE(Mouse::getIsRelativeMouseModeEXTProperty());
 
-    SDL_DestroyWindow(window);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    window.reset();
+    current.ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
     ResetMouseState();
 }
 

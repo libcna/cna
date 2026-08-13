@@ -1,20 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 //
-// PLAT-78b: the keycode table moved out of SdlInputBridge without changing its answers.
+// PLAT-78b/PLAT-123: native key names and CNA keycodes must round-trip without changing answers.
 //
-// `SdlInputBridge` still owns its original SDL-keycode table, reachable through
-// `GetKeyFromName`; `CNA::Platform::Sdl3::ToKeyCode` is the copy that moved into the platform
-// module. While both exist they must agree for every key, because a migration that silently
-// remapped one surfaces as "my game's controls moved" rather than as a test failure.
-//
-// This file is deliberately temporary. It is deleted when the bridge's own table goes, and until
-// then its whole job is to make the two copies impossible to drift apart.
+// The public compatibility helper reaches the selected platform keyboard while
+// `CNA::Platform::Sdl3::ToKeyCode` is the native-edge mapping. Agreement across every native key
+// protects the layout/name path from silently moving a game's controls.
 
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Platform/Input/KeyCode.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 
-#include "../../../../../platform/src/Sdl3/Sdl3KeyCodes.hpp"
+#include "../../../src/Sdl3/Sdl3KeyCodes.hpp"
 
 #include <SDL3/SDL.h>
 #include <gtest/gtest.h>

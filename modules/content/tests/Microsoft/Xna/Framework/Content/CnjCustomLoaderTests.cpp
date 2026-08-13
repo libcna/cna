@@ -71,7 +71,7 @@ namespace
 // plan_cnj.md CNB-38: no GraphicsDevice here -- none of this fixture's tests touch graphics, so
 // none of them need to pay for real window/SDL-video-subsystem creation (which fails outright
 // under a genuinely headless environment, e.g. CNA_GRAPHICS_RENDERER=HEADLESS's whole point, or
-// SDL_VIDEODRIVER=dummy under EasyGL). Only FactoryCanRecursivelyLoadReferencedTexture actually
+// a dummy video driver under EasyGL). Only FactoryCanRecursivelyLoadReferencedTexture actually
 // needs one, via CnjCustomLoaderGraphicsTest below.
 class CnjCustomLoaderTest : public ::testing::Test
 {

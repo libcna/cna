@@ -197,7 +197,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         bindings.emplace_back(targets.back().get());
     }
 #if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_DIRECTX1) || defined(CNA_RENDERER_DIRECTX2) || defined(CNA_RENDERER_DIRECTX3) || defined(CNA_RENDERER_DIRECTX5) || defined(CNA_RENDERER_DIRECTX6) || defined(CNA_RENDERER_DIRECTX7) || defined(CNA_RENDERER_DIRECTX8) || defined(CNA_RENDERER_GDI)
-    // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
+    // Task 709 (native 2D renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
     // exactly one active render target at a time -- unlike the other, real-MRT-capable renderers,
@@ -339,7 +339,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 {
     GraphicsDevice gd;
     // VertexBuffer/DrawPrimitives are inherently 3D concepts -- a permanently 2D-only renderer
-    // (OpenVG, and likewise Canvas/SDL_Renderer/ASCII/GDI/DirectX1/etc. if this test is ever run
+    // (OpenVG, and likewise Canvas/native-2D/ASCII/GDI/DirectX1/etc. if this test is ever run
     // against them) has no real vertex-buffer factory to construct one at all, so there is no
     // "empty vertex-buffer state DrawPrimitives should reject" to observe. Found running this file
     // for the first time against a native, CI-runnable 2D-only renderer (OPENVG) -- this test was
@@ -366,7 +366,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 // Regression test for a real reported crash (cna-template/missing.md): the single-argument
 // Clear(const Color&) overload matches FNA's own semantics by requesting
 // Target|DepthBuffer|Stencil together, which used to forward unconditionally to
-// ClearColorDepthAndStencil() -- a hard throw on SDL_Renderer, since that renderer is entirely
+// ClearColorDepthAndStencil() — a hard throw on the native 2D renderer, since it is entirely
 // 2D-only and never has a depth/stencil buffer at all. GraphicsDevice::Clear(ClearOptions, ...)
 // now masks DepthBuffer/Stencil out of the request when IGraphicsRenderer::SupportsDepthStencil()
 // reports false, degrading to a color-only clear instead of crashing (matching FNA's own

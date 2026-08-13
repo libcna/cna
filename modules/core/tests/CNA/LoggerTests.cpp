@@ -70,7 +70,7 @@ TEST_F(LoggerTest, AMessageBelowTheMinimumLevelIsDiscarded)
 
 TEST_F(LoggerTest, EverySeverityIsDeliveredWithItsOwnLevel)
 {
-    // The old version pinned each level to an SDL_LogPriority, which collapsed DEBUG, TRACE and
+    // The old version pinned each level to a native log priority, which collapsed DEBUG, TRACE and
     // EXPERIMENT onto one value and so could not tell them apart. Owning the sink means the
     // level survives to the consumer intact, and this pins that.
     Logger::SetMinimumLevel(LogLevel::EXPERIMENT);

@@ -59,7 +59,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // a renderer that had read nothing at all. The tests below therefore assert the real outcome for
 // this renderer rather than merely that the call returned.
 //
-// SDL_Renderer, Canvas, DIRECTX3 and Blend2D keep IGraphicsRenderer::CreateTextureCube's
+// Native 2D, Canvas, DIRECTX3 and Blend2D keep IGraphicsRenderer::CreateTextureCube's
 // nullptr default (no cube resource exists at all); Headless stores no pixel data by design.
 // Every other renderer reads level 0 back exactly -- Software only at level 0, since it stores no
 // cube mip levels.
@@ -84,7 +84,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // policy (OpenVgRenderer::CreateTextureCube only ever returns a real object under the opt-in
 // WarnAndStub policy, and even then a discard-everything null object, never real storage) --
 // ShivaVG/OpenVG has no cube-map concept at all. Same "no cube resource exists" shape as
-// SDL_Renderer/Canvas/HTML_DOM/FreeDirect/GDI above. || \
+// Native-2D/Canvas/HTML_DOM/FreeDirect/GDI above. || \
     defined(CNA_RENDERER_PORTABLEGL)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;

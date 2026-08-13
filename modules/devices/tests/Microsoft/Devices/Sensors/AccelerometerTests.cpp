@@ -37,7 +37,7 @@ using Microsoft::Xna::Framework::Vector3;
 using System::TimeSpan;
 
 // NOTE: Unlike Compass/Motion, the Accelerometer sensor can genuinely be
-// supported on platforms/devices that expose SDL_SENSOR_ACCEL. These tests
+// supported on platforms/devices that expose an accelerometer. These tests
 // branch on the live getIsSupportedProperty() result so they pass both on
 // typical headless CI/dev machines (no accelerometer hardware) and on real
 // hardware.
@@ -72,10 +72,10 @@ TEST(AccelerometerTests, DesktopPlatformReachesRealHardwareProbeRatherThanBeingH
 }
 
 // Task P5-1: getIsSupportedProperty() previously called
-// EnsureSensorSubsystemInitialized() (a real SDL_InitSubSystem(SDL_INIT_SENSOR)
-// call as of Task P4-8) on every call/every construction with no matching
-// SDL_QuitSubSystem() — an unbounded ref-count leak. This can't assert on
-// SDL's internal ref-count directly (no public API exposes it), so this
+// EnsureSensorSubsystemInitialized() (a real platform sensor-subsystem acquisition
+// as of Task P4-8) on every call/every construction with no matching
+// release — an unbounded ref-count leak. This can't assert on
+// the native ref-count directly (no public API exposes it), so this
 // instead proves the observable consequence of a leak-free fix: hammering
 // the probe path (many discarded constructions plus many direct
 // getIsSupportedProperty() calls) doesn't change subsequent behavior —
@@ -151,7 +151,7 @@ TEST(AccelerometerTests, StartOnUnsupportedPlatformThrows)
 }
 
 // Task P6-2: OpenDefaultSensorLocked() failing (no sensor hardware, but
-// SDL_INIT_SENSOR itself initializes fine) after subsystemHeld_ was just
+// the sensor subsystem itself initializes fine) after subsystemHeld_ was just
 // set true previously left it true until this instance's eventual
 // Dispose() — a real subsystem-hold leak. GetSubsystemHeldForTesting()
 // (Task P6-2) lets this test directly confirm the hold is released
@@ -170,10 +170,10 @@ TEST(AccelerometerTests, FailedStartReleasesSubsystemHoldItAcquired)
 }
 
 // Task SDLCORE-003 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
-// a failed SDL_AddEventWatch() registration must not leave this instance
+// a failed event-watch registration must not leave this instance
 // claiming Ready with no possible way for a real sensor event to ever
 // reach it, and must release a subsystem hold this Start() call itself
-// just acquired. The real SDL_AddEventWatch() call offers no way to force
+// just acquired. The real native registration offers no way to force
 // it to fail on demand, so SetEventWatchRegistrationFailureForTesting()
 // bypasses it entirely for this one, deterministic test. Requires reaching
 // *past* the "no default sensor" check FailedStartReleasesSubsystemHoldItAcquired
@@ -566,8 +566,8 @@ TEST(AccelerometerTests, GetCurrentValuePropertyDoesNotThrowWhenSupported)
 }
 
 // NOTE: Actually observing ReadingChanged/CurrentValueChanged fire together
-// requires a real accelerometer delivering an SDL_EVENT_SENSOR_UPDATE
-// through the SDL event pump, which this headless dev container cannot
+// requires a real accelerometer delivering a platform sensor-update event
+// through the event pump, which this headless dev container cannot
 // produce (same limitation as VibrateControllerTests' gamepad-conflict
 // scenario). This test only confirms that subscribing to the legacy
 // ReadingChanged event does not crash and that Start()/Stop() still behave
@@ -597,7 +597,7 @@ TEST(AccelerometerTests, ReadingChangedSubscriptionDoesNotThrow)
 
 // Task P4-3: exercises the real CurrentValueChanged dispatch path via the
 // Task P4-2 synthetic-injection hooks (this environment has no real
-// hardware to deliver a genuine SDL_EVENT_SENSOR_UPDATE, so every
+// hardware to deliver a genuine platform sensor-update event, so every
 // preceding "subscription" test in this file only proved subscribing
 // doesn't crash, never that the event actually carries correct data).
 // SetStartedForTesting(true) bypasses the real Start()'s hardware
@@ -902,7 +902,7 @@ TEST(AccelerometerTests, GetCurrentValuePropertyStillThrowsAfterSyntheticUpdateW
 
 // Task P4-7: Timestamp is now the real wall-clock time of the call
 // (System::DateTimeOffset::getUtcNowProperty()), not a bogus near-year-1
-// value derived from SDL_GetTicksNS(). Asserts "close to now" with a
+// value derived from a native monotonic tick count. Asserts "close to now" with a
 // generous tolerance rather than an exact value, since wall-clock time is
 // inherently non-deterministic between the call and the assertion.
 TEST(AccelerometerTests, CurrentValueChangedReceivesWallClockTimestamp)
@@ -1043,7 +1043,7 @@ TEST(AccelerometerTests, ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDo
 // Task P3-6: CurrentValueChanged is the primary, non-deprecated event
 // (unlike the legacy ReadingChanged above). Same headless limitation:
 // actually observing it fire needs a real accelerometer delivering an
-// SDL_EVENT_SENSOR_UPDATE, which this environment cannot produce. This
+// platform sensor-update event, which this environment cannot produce. This
 // test confirms subscribing doesn't crash and Start()/Stop() still behave
 // correctly with a subscriber attached.
 TEST(AccelerometerTests, CurrentValueChangedSubscriptionDoesNotThrow)
@@ -1069,10 +1069,10 @@ TEST(AccelerometerTests, CurrentValueChangedSubscriptionDoesNotThrow)
 
 // Task P5-2: exercises inFlightCallbackCount_ under real concurrent
 // contention (this environment has no real hardware to deliver genuinely
-// concurrent SDL_EVENT_SENSOR_UPDATE events, so this uses real std::thread
+// concurrent platform sensor-update events, so this uses real std::thread
 // concurrency on InjectSyntheticSensorUpdate() instead, which goes through
 // the exact same counter/lock/condition_variable machinery as the real SDL
-// event-watch path). Confirms: no crash/UB when the count legitimately
+// event-delivery path). Confirms: no crash/UB when the count legitimately
 // goes above 1 (multiple threads dispatching to the same instance at
 // once), every dispatch's event is still received, and Dispose() called
 // afterward correctly waits for the count to fully drain rather than
@@ -1432,15 +1432,15 @@ TEST(AccelerometerTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanc
 }
 
 // Task SDLCORE-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
-// this container never has a real SDL sensor open (SDL_GetSensors() always
+// this container never has a real native sensor open (platform enumeration always
 // returns an empty list here), so any id at all -- real-looking or not -- is
 // necessarily "not currently connected". This proves the plumbing/logic of
-// IsSensorConnectedForTesting() itself (it reaches the real SDL_GetSensors()
+// IsSensorConnectedForTesting() itself (it reaches the real platform enumeration
 // call and correctly reports "not found" rather than throwing, crashing, or
 // trivially returning true), not a genuine remove/re-add/default-device-change
 // scenario -- that would require either real hardware or a native
-// fault-injection layer capable of safely mocking SDL_GetSensors()/
-// SDL_OpenSensor()/SDL_CloseSensor() (Task TEST2-005's own separate scope),
+// fault-injection layer capable of safely mocking sensor enumeration/open/close
+// (Task TEST2-005's own separate scope),
 // neither of which exists in this environment. See this task's own
 // plan_devices.md resolution note and docs/devices-hardware-checklist.md for
 // the full, honest accounting of what remains unexercised.

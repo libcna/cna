@@ -164,7 +164,7 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 // EasyGL is the one renderer that overrides it with a real upload into the shared GL cube texture.
 //
 // Constructing a RenderTargetCube can legitimately fail on a renderer that has no cube-map render
-// target at all (Software, SDL_Renderer, ASCII, Canvas, DIRECTX3 keep CreateRenderTargetCube's nullptr
+// target at all (Software, native 2D, ASCII, Canvas, DIRECTX3 keep CreateRenderTargetCube's nullptr
 // default); that is not what is under test, so it is skipped rather than asserted either way.
 // -----------------------------------------------------------------------
 

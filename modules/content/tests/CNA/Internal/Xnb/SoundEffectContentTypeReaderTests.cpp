@@ -672,7 +672,7 @@ TEST_F(SoundEffectContentTypeReaderTest, SmallDurationOracleDisagreementDoesNotT
 // reinterpreting a compressed byte offset as a PCM frame index (or vice versa). This test proves
 // that empirically with a real compression ratio, not just by code inspection: a hand-built
 // IMA-ADPCM fixture (4 full 256-byte blocks, no wSamplesPerBlock extension, exactly matching
-// SDL3's own auto-derive formula in SDL_wave.c's IMA_ADPCM_Init) compresses 1024 bytes down to a
+// the reference IMA ADPCM auto-derive formula) compresses 1024 bytes down to a
 // documented 2020-frame (~4:1) decode. Authored loop values (loopStart=1500, loopLength=400) are
 // deliberately chosen so they are sane relative to the real 2020-frame decoded output but would
 // be nonsensical if misread as byte offsets against the 1024-byte compressed buffer (loopStart
@@ -702,7 +702,7 @@ TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoopPointsSurviveAsDecodedFrame
     constexpr uint16_t kBlockAlign = 256;
     constexpr int kBlockCount = 4;
     constexpr int kCompressedBytes = kBlockAlign * kBlockCount; // 1024
-    // SDL_wave.c's IMA_ADPCM_Init auto-derive formula (no wSamplesPerBlock supplied):
+    // The reference IMA ADPCM auto-derive formula (no wSamplesPerBlock supplied):
     // blockdatasamples = (blockalign - 4*channels) * 8 / (bitspersample*channels);
     // samplesperblock = blockdatasamples + 1.
     constexpr int kSamplesPerBlock = (kBlockAlign - 4) * 8 / 4 + 1; // 505

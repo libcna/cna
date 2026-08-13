@@ -141,7 +141,7 @@ TEST(GamePlatformTimingTest, MouseVisibilityRoundTripsThroughTheProperty)
 TEST(GamePlatformTimingTest, SettingMouseVisibilityIsSafeWithNoPointerService)
 {
     // The property must work regardless of whether the platform has a mouse at all: a platform
-    // that reports no pointer returns null from GetMouse(), and the previous SDL_ShowCursor call
+    // that reports no pointer returns null from GetMouse(), and the previous native cursor call
     // had no such branch to get wrong. Headless and, later, terminal both take this path.
     TimingGame game;
 
