@@ -30,8 +30,8 @@ namespace CNA::Devices::Detail
      * `Camera` calls through this interface instead of calling SDL3's
      * `SDL_OpenCamera()`/`SDL_AcquireCameraFrame()` family directly. This exists for
      * the same reason `Microsoft::Devices::Detail::IVibrateBackend`/`ICompassBackend`
-     * and this namespace's own `IFileDialogBackend`/`ITrayBackend`/`IMessageBoxBackend`
-     * do: the real backend (`SdlCameraBackend`) has a genuinely uncontainable side
+     * and the former dialog/tray test backends did: the real backend (`SdlCameraBackend`) has a
+     * genuinely uncontainable side
      * effect an automated test cannot safely trigger — opening a real camera device,
      * which on most platforms either fails loudly (no camera hardware in a CI
      * container) or, worse, actually requests OS camera permission and opens a real

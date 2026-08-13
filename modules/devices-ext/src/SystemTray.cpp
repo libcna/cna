@@ -3,54 +3,44 @@
 
 #ifdef CNA_DEVICES
 
-#include "CNA/Devices/Detail/SdlTrayBackend.hpp"
-#include "CNA/TargetPlatform.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatformSystemServices.hpp"
+#include "CNA/Platform/PlatformException.hpp"
+
+#include <utility>
 
 namespace CNA::Devices
 {
     bool SystemTray::getIsSupportedProperty()
     {
-        switch (CNA::getCurrentPlatform())
-        {
-        case CNA::TargetPlatform::Desktop:
-            return true;
-        case CNA::TargetPlatform::Android:
-        case CNA::TargetPlatform::iOS:
-        case CNA::TargetPlatform::Web:
-        default:
-            return false;
-        }
+        const CNA::Platform::PlatformCapabilities capabilities =
+            CNA::Platform::GetCurrentPlatform().GetCapabilities();
+        return capabilities.tray;
     }
 
     SystemTray::SystemTray(const std::string& tooltip)
-        : backend_(std::make_unique<Detail::SdlTrayBackend>())
     {
-        backend_->Create(tooltip);
-    }
-
-    SystemTray::SystemTray(const std::string& tooltip, std::unique_ptr<Detail::ITrayBackend> backend)
-        : backend_(std::move(backend))
-    {
-        if (backend_)
+        CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+        CNA::Platform::IPlatformTray* service = platform.GetTray();
+        if (service == nullptr)
         {
-            backend_->Create(tooltip);
+            throw CNA::Platform::PlatformNotSupportedException(
+                CNA::Platform::PlatformCapability::Tray, platform.GetName());
+        }
+
+        tray_ = service->CreateTray(tooltip);
+        if (tray_ == nullptr)
+        {
+            throw CNA::Platform::PlatformException(
+                "SystemTray", "the platform tray service returned no icon");
         }
     }
 
-    SystemTray::~SystemTray()
-    {
-        if (backend_)
-        {
-            backend_->Destroy();
-        }
-    }
+    SystemTray::~SystemTray() = default;
 
     void SystemTray::setTooltipProperty(const std::string& tooltip)
     {
-        if (backend_)
-        {
-            backend_->SetTooltip(tooltip);
-        }
+        tray_->SetTooltip(tooltip);
     }
 
     std::size_t SystemTray::AddEntry(
@@ -58,47 +48,35 @@ namespace CNA::Devices
         bool checkable,
         bool initiallyChecked,
         bool initiallyEnabled,
-        Detail::TrayEntryClickCallback onClick)
+        TrayEntryClickCallback onClick)
     {
-        if (backend_)
-        {
-            return backend_->AddEntry(label, checkable, initiallyChecked, initiallyEnabled, std::move(onClick));
-        }
-        return 0;
+        return tray_->AddEntry(
+            label, checkable, initiallyChecked, initiallyEnabled, std::move(onClick));
     }
 
     void SystemTray::SetEntryLabel(std::size_t index, const std::string& label)
     {
-        if (backend_)
-        {
-            backend_->SetEntryLabel(index, label);
-        }
+        tray_->SetEntryLabel(index, label);
     }
 
     void SystemTray::SetEntryChecked(std::size_t index, bool checked)
     {
-        if (backend_)
-        {
-            backend_->SetEntryChecked(index, checked);
-        }
+        tray_->SetEntryChecked(index, checked);
     }
 
     bool SystemTray::GetEntryChecked(std::size_t index) const
     {
-        return backend_ ? backend_->GetEntryChecked(index) : false;
+        return tray_->GetEntryChecked(index);
     }
 
     void SystemTray::SetEntryEnabled(std::size_t index, bool enabled)
     {
-        if (backend_)
-        {
-            backend_->SetEntryEnabled(index, enabled);
-        }
+        tray_->SetEntryEnabled(index, enabled);
     }
 
     bool SystemTray::GetEntryEnabled(std::size_t index) const
     {
-        return backend_ ? backend_->GetEntryEnabled(index) : false;
+        return tray_->GetEntryEnabled(index);
     }
 } // namespace CNA::Devices
 

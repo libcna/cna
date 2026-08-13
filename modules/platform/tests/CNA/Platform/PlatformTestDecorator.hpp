@@ -170,6 +170,8 @@ namespace CNA::Platform::Testing {
         [[nodiscard]] IPlatformDisplays* GetDisplays() override { return inner_->GetDisplays(); }
         /** @brief Gets the inner dialog service. @return The service, or null. */
         [[nodiscard]] IPlatformDialogs* GetDialogs() override { return inner_->GetDialogs(); }
+        /** @brief Gets the inner tray service. @return The service, or null. */
+        [[nodiscard]] IPlatformTray* GetTray() override { return inner_->GetTray(); }
         /** @brief Gets the inner filesystem service. @return The service. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override
         {

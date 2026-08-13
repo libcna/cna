@@ -39,9 +39,8 @@ mean a CNA graphics renderer implementation:
 
 Unchanged on purpose (not CNA graphics-renderer terminology):
 
-- other subsystems' backend concepts: input (`SdlGamepadBackend`,
-  `ISystemKeyboardBackend`, …), devices (`ICameraBackend`, `SdlTrayBackend`,
-  `AndroidCompassBackend`, …), net (`ENetBackend`), audio prose
+- other subsystems' backend concepts: devices (`ICameraBackend`,
+  `SdlCameraBackend`), net (`ENetBackend`), audio prose
   ("audio backend"), and their docs (`docs/input-backend.md`,
   `docs/devices-native-backend-design.md`);
 - third-party/upstream API vocabulary: Skia `GrBackendRenderTarget`/

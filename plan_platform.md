@@ -67,9 +67,9 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1102** |
-| Files referencing SDL (all) | **423** |
-| Production files (`src/` + `include/`) referencing SDL | **117** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1103** |
+| Files referencing SDL (all) | **420** |
+| Production files (`src/` + `include/`) referencing SDL | **114** |
 | …of which are renderer production files | **9** |
 | Test/example files referencing SDL | **306** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **7** |
@@ -79,10 +79,10 @@ Production SDL surface per module (`src/` + `include/` only):
 
 | Module | Files | Dominant concern |
 |---|---:|---|
-| `modules/platform` | 26 | - |
-| `modules/devices-ext` | 20 | clipboard, message box, file dialog, tray, camera, locale, power, display, URL |
+| `modules/platform` | 27 | - |
 | `modules/devices` | 17 | `Microsoft::Devices` sensors + vibrate, SDL subsystem refcounting |
 | `modules/input` | 17 | keyboard, mouse, gamepad, joystick, haptic, sensor, touch, text input |
+| `modules/devices-ext` | 16 | clipboard, message box, file dialog, tray, camera, locale, power, display, URL |
 | `modules/audio` | 7 | audio device/stream, mixer, microphone |
 | `modules/graphics` | 6 | `GraphicsDevice`, common renderer contracts |
 | `modules/media` | 6 | `MediaPlayer`, `VideoPlayer`, library paths |
@@ -472,7 +472,7 @@ Separate contract, separate selection variable, per design decision 7.
 | PLAT-102 | Migrate `DisplayInfo` | ✅ | `DisplayInfo.cpp` is SDL-free. Content scale now comes from the borrowed `IPlatformWindow`, where the value is intrinsically per-window; safe-area lookup crosses the displays service through the new implementation-neutral `TryGetSafeAreaForWindow()` query. SDL3 validates that the supplied window belongs to its implementation before resolving `SDL_GetWindowSafeArea` at the native edge, and unsupported/null services preserve the established zero/empty results. The real dummy-driver window test and all four `DisplayInfoTests` pass with `CNA_DEVICES=ON`; the option was enabled temporarily in the existing debug build and restored to OFF afterward, so no additional build tree was created. Contract, inventory and hot-path gates pass; the ratchet tightens to **171 files / 2544 references**. |
 | PLAT-103 | Migrate `SdlMessageBoxBackend` | ✅ | `Sdl3Dialogs` implemented and wired; `capabilities.messageBox` honestly true. `SdlMessageBoxBackend` → `PlatformMessageBoxBackend`, forwarding to `IPlatformDialogs`. The contract gained **`ShowMessageBoxWithButtons`**, which it had no way to express — `CNA::Devices::MessageBox::Show` returns the chosen button index and the contract offered only a void single-button form. It is a separate method rather than an optional parameter because the two answer different questions: one informs, the other asks, and a caller that only informs should not receive a return value it must decide to ignore. `MessageBox::getIsSupportedProperty()` was an **unconditional `true`** — only ever right because SDL was the sole platform — and now reports the capability, so a headless or terminal host answers honestly and a caller can fall back. A message box that cannot be shown does **not** take the process down: this is usually the last thing a game does on its way out, and the SDL version discarded the status too. |
 | PLAT-104 | Migrate `SdlFileDialogBackend` | ✅ | **The contract was wrong and was changed first.** Its file-dialog signatures were synchronous (`ShowOpenFileDialog` *returned* the paths) and SDL3's are not — `SDL_ShowOpenFileDialog` takes a callback and returns immediately. Honouring the old shape would have meant pumping the event loop from inside a call a game makes during its own frame, which reenters the game loop as readily as it works, and CNA's own `CNA::Devices::FileDialog` is already callback-shaped for that reason. The three entry points now take a `FileDialogCallback`, and the **asymmetry with the synchronous message box is deliberate and documented**: a message box genuinely blocks, a file dialog does not. `SdlFileDialogBackend` → `PlatformFileDialogBackend`. A missing callback is **rejected before the dialog is shown** — a dialog whose answer is discarded is worse than a refusal, because by then the user has been interrupted. A platform with no file dialogs **invokes the callback with an empty list** rather than dropping it: the caller has already registered a continuation, and silently dropping it is a hang rather than a refusal, while an empty result is exactly what a cancel produces. |
-| PLAT-105 | Migrate `SdlTrayBackend` | ⬜ | Tray + menus; capability-gated. |
+| PLAT-105 | Migrate `SdlTrayBackend` | ✅ | `IPlatformTray` creates independently owned `IPlatformTrayIcon` instances with stable flat-menu indices, retained repeatable click callbacks, tooltip/label updates and checked/enabled state. SDL3 owns every native tray type and callback trampoline in `Sdl3Tray`; desktop support is advertised through `capabilities.tray`, while HEADLESS and TERMINAL return null and report false. `SystemTray` now reads the ambient platform seam, refuses unsupported platforms with `PlatformNotSupportedException(Tray)`, and contains **zero SDL references**; the old public test backend, test-only constructor and three `SdlTrayBackend` files are deleted. Nine deterministic canned-platform tests cover creation/destruction, capability/refusal, callback lifetime, parameters, state and invalid indices. With `CNA_DEVICES=ON`, focused SDL3 coverage passes **15 / 15**; SDL3, HEADLESS and TERMINAL `CnaTests` builds succeed and their service-consistency selections pass. Contract coverage is **27 headers / 541 declarations**, all static gates pass, and the ratchet tightens by **4 files / 38 references** to **74 / 1186**. |
 | PLAT-106 | Migrate `SdlCameraBackend` | ⬜ | `SDL_GetCameras`/`SDL_OpenCamera`; capability-gated. |
 | PLAT-107 | Migrate `Locale` / `SystemInfo` / `UrlLauncher` | ✅ | All three on `IPlatformSystemInfo`. Required changing `GetPreferredLocales()` to return a structured **`PlatformLocale{language, country}`** instead of a BCP 47 tag: `Devices::LocaleInfo` needs the parts separately, and re-splitting a formatted tag would be a lossy round-trip through a string for no benefit. Changed now, with one consumer, rather than later with several. Original scope: | `SDL_GetPreferredLocales`, `SDL_GetSystemRAM`, `SDL_GetNumLogicalCPUCores`, `SDL_GetPlatform`, `SDL_OpenURL`. |
 | PLAT-108 | Migrate `Microsoft::Devices` sensors and vibrate | ⬜ | `Accelerometer`, `Gyroscope`, `SdlSensorSubsystem`, `SdlHapticVibrateBackend`, `SdlSubsystemMutex`. Must preserve the audited shutdown ordering (PLAT-4) — this subsystem has dedicated ordering tests for a reason. |

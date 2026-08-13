@@ -3,8 +3,10 @@
 
 #include "CNA/Platform/IPlatformWindow.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -253,6 +255,102 @@ namespace CNA::Platform {
         virtual void ShowOpenFolderDialog(FileDialogCallback onResult,
                                           const std::string& defaultLocation, bool allowMultiple,
                                           IPlatformWindow* parent) = 0;
+    };
+
+    // --- System tray ---------------------------------------------------------------------------
+
+    /** @brief Invoked whenever the user activates a tray-menu entry. */
+    using TrayEntryClickCallback = std::function<void()>;
+
+    /**
+     * @brief One owned system-tray icon and its flat menu.
+     *
+     * Destroying the interface removes the native icon and all of its entries. Entry indices are
+     * stable for that lifetime and are deliberately opaque: implementations may use pointers,
+     * integer commands or another native identity underneath them.
+     */
+    class IPlatformTrayIcon
+    {
+    public:
+        /** @brief Removes the icon and destroys the interface. */
+        virtual ~IPlatformTrayIcon() = default;
+
+        /**
+         * @brief Changes the icon's tooltip.
+         * @param tooltip The new UTF-8 tooltip, or empty to clear it.
+         */
+        virtual void SetTooltip(const std::string& tooltip) = 0;
+
+        /**
+         * @brief Appends an entry to the icon's flat menu.
+         *
+         * Nested menus are absent deliberately: CNA has no caller for them, and a second
+         * implementation should not have to invent hierarchy merely because SDL can express it.
+         *
+         * @param label The UTF-8 entry label.
+         * @param checkable Whether the entry has a checked state.
+         * @param initiallyChecked Its initial checked state when checkable.
+         * @param initiallyEnabled Whether it initially accepts activation.
+         * @param onClick Called every time the user activates the entry; may be empty.
+         * @return A stable index for the remaining entry operations.
+         * @throws PlatformException If the native entry cannot be created.
+         */
+        [[nodiscard]] virtual std::size_t AddEntry(
+            const std::string& label, bool checkable, bool initiallyChecked,
+            bool initiallyEnabled, TrayEntryClickCallback onClick) = 0;
+
+        /**
+         * @brief Changes an entry's label.
+         * @param index The stable index returned by AddEntry; an unknown index is ignored.
+         * @param label The new UTF-8 label.
+         */
+        virtual void SetEntryLabel(std::size_t index, const std::string& label) = 0;
+
+        /**
+         * @brief Changes an entry's checked state.
+         * @param index The stable index returned by AddEntry; an unknown index is ignored.
+         * @param checked The new state.
+         */
+        virtual void SetEntryChecked(std::size_t index, bool checked) = 0;
+
+        /**
+         * @brief Reads an entry's checked state.
+         * @param index The stable index returned by AddEntry.
+         * @return The state, or false for an unknown index.
+         */
+        [[nodiscard]] virtual bool GetEntryChecked(std::size_t index) const = 0;
+
+        /**
+         * @brief Changes whether an entry accepts activation.
+         * @param index The stable index returned by AddEntry; an unknown index is ignored.
+         * @param enabled The new state.
+         */
+        virtual void SetEntryEnabled(std::size_t index, bool enabled) = 0;
+
+        /**
+         * @brief Reads whether an entry accepts activation.
+         * @param index The stable index returned by AddEntry.
+         * @return The state, or false for an unknown index.
+         */
+        [[nodiscard]] virtual bool GetEntryEnabled(std::size_t index) const = 0;
+    };
+
+    /** @brief Creates independently owned system-tray icons. */
+    class IPlatformTray
+    {
+    public:
+        /** @brief Destroys the service after every icon it created has been released. */
+        virtual ~IPlatformTray() = default;
+
+        /**
+         * @brief Creates a tray icon and its empty flat menu.
+         * @param tooltip The initial UTF-8 tooltip, or empty for none.
+         * @return The owned icon; destroying it removes the native icon.
+         * @throws PlatformException If the host advertises tray support but creation fails.
+         * @throws PlatformNotSupportedException If the platform reports no `Tray` capability.
+         */
+        [[nodiscard]] virtual std::unique_ptr<IPlatformTrayIcon> CreateTray(
+            const std::string& tooltip) = 0;
     };
 
     // --- Filesystem ----------------------------------------------------------------------------

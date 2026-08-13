@@ -159,6 +159,8 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] IPlatformDisplays* GetDisplays() override;
         /** @brief Gets the dialog service. @return Null; there is no native dialog in a terminal. */
         [[nodiscard]] IPlatformDialogs* GetDialogs() override;
+        /** @brief Gets the tray service. @return Null; a terminal has no notification area. */
+        [[nodiscard]] IPlatformTray* GetTray() override;
         /** @brief Gets the filesystem service. @return A real filesystem; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
         /** @brief Gets the system information service. @return Real host information; never null. */

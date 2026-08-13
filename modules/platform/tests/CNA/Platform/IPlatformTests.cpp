@@ -123,6 +123,7 @@ public:
     [[nodiscard]] IPlatformClipboard* GetClipboard() override { return nullptr; }
     [[nodiscard]] IPlatformDisplays* GetDisplays() override { return nullptr; }
     [[nodiscard]] IPlatformDialogs* GetDialogs() override { return nullptr; }
+    [[nodiscard]] IPlatformTray* GetTray() override { return nullptr; }
     [[nodiscard]] IPlatformFileSystem* GetFileSystem() override { return nullptr; }
     [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override { return nullptr; }
     [[nodiscard]] IPlatformGlContext* GetGlContext() override { return nullptr; }

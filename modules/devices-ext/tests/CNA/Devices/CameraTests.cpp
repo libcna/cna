@@ -23,8 +23,7 @@ namespace
     // genuine camera device the instant it's constructed -- on most machines this
     // either fails loudly (no camera hardware in a CI container) or, worse, actually
     // requests OS camera permission and opens a real device if one happens to be
-    // present. Every test below uses this fake instead, injected via Camera's
-    // constructor (mirroring SystemTrayTests.cpp's own FakeTrayBackend pattern) --
+    // present. Every test below uses this fake instead, injected via Camera's constructor --
     // never the real backend.
     class FakeCameraBackend final : public ICameraBackend
     {

@@ -299,6 +299,13 @@ namespace CNA::Platform {
         [[nodiscard]] virtual IPlatformDialogs* GetDialogs() = 0;
 
         /**
+         * @brief Gets the system-tray service.
+         *
+         * @return The service, or null when this platform reports no `Tray` capability.
+         */
+        [[nodiscard]] virtual IPlatformTray* GetTray() = 0;
+
+        /**
          * @brief Gets the filesystem service.
          *
          * @return The service. Never null: every platform can resolve paths.

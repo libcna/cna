@@ -7,6 +7,7 @@
 #include "Sdl3DeviceServices.hpp"
 #include "Sdl3InputServices.hpp"
 #include "Sdl3SystemServices.hpp"
+#include "Sdl3Tray.hpp"
 
 #include <cstdint>
 #include <map>
@@ -104,8 +105,10 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformClipboard* GetClipboard() override;
         /** @brief Gets the display service. @return The SDL3 display enumerator; never null. */
         [[nodiscard]] IPlatformDisplays* GetDisplays() override;
-        /** @brief Gets the dialog service. @return Null until PLAT-103 lands. */
+        /** @brief Gets the dialog service. @return The SDL3 dialog service; never null. */
         [[nodiscard]] IPlatformDialogs* GetDialogs() override;
+        /** @brief Gets the tray service. @return The service on desktop targets, otherwise null. */
+        [[nodiscard]] IPlatformTray* GetTray() override;
         /** @brief Gets the filesystem service. @return The SDL3 filesystem; never null. */
         [[nodiscard]] IPlatformFileSystem* GetFileSystem() override;
         /** @brief Gets the system information service. @return The SDL3 system info; never null. */
@@ -146,6 +149,7 @@ namespace CNA::Platform::Sdl3 {
         Sdl3Haptics haptics_;
         Sdl3InputDevices inputDevices_;
         Sdl3Dialogs dialogs_;
+        Sdl3Tray tray_;
     };
 
 } // namespace CNA::Platform::Sdl3

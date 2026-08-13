@@ -32,6 +32,8 @@ TEST(ServiceContractTests, EveryServiceInterfaceHasAVirtualDestructor)
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformClipboard>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformDisplays>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformDialogs>);
+    EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformTray>);
+    EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformTrayIcon>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformFileSystem>);
     EXPECT_TRUE(std::has_virtual_destructor_v<IPlatformSystemInfo>);
 }
@@ -48,6 +50,8 @@ TEST(ServiceContractTests, EveryServiceInterfaceIsAbstract)
     EXPECT_TRUE(std::is_abstract_v<IPlatformClipboard>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformDisplays>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformDialogs>);
+    EXPECT_TRUE(std::is_abstract_v<IPlatformTray>);
+    EXPECT_TRUE(std::is_abstract_v<IPlatformTrayIcon>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformFileSystem>);
     EXPECT_TRUE(std::is_abstract_v<IPlatformSystemInfo>);
 }

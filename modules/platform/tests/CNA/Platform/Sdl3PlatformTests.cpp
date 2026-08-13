@@ -159,9 +159,9 @@ TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
     EXPECT_TRUE(capabilities.inputDeviceEnumeration);
     EXPECT_TRUE(capabilities.messageBox);
     EXPECT_TRUE(capabilities.nativeFileDialog);
+    EXPECT_EQ(platform_->GetTray() != nullptr, capabilities.tray);
 
     // Still unwired, so still false -- the pairing the conformance suite enforces.
-    EXPECT_FALSE(capabilities.tray) << "flips true in PLAT-105";
     EXPECT_FALSE(capabilities.camera) << "flips true in PLAT-106";
     EXPECT_TRUE(capabilities.gamepadSensors);
 }

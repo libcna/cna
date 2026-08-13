@@ -123,9 +123,9 @@ namespace CNA::Platform::Sdl3 {
         capabilities.inputDeviceEnumeration = true;
         capabilities.messageBox = true;
         capabilities.nativeFileDialog = true;
+        capabilities.tray = Sdl3Tray::IsSupported();
 
         // Still unwired. Each flips true in the task that wires its accessor, not before.
-        //   capabilities.tray                PLAT-105
         //   capabilities.camera              PLAT-106
 
         return capabilities;
@@ -330,6 +330,7 @@ namespace CNA::Platform::Sdl3 {
     IPlatformClipboard* Sdl3Platform::GetClipboard() { return &clipboard_; }
     IPlatformDisplays* Sdl3Platform::GetDisplays() { return &displays_; }
     IPlatformDialogs* Sdl3Platform::GetDialogs() { return &dialogs_; }
+    IPlatformTray* Sdl3Platform::GetTray() { return Sdl3Tray::IsSupported() ? &tray_ : nullptr; }
     IPlatformFileSystem* Sdl3Platform::GetFileSystem() { return &fileSystem_; }
     IPlatformSystemInfo* Sdl3Platform::GetSystemInfo() { return &systemInfo_; }
     IPlatformGlContext* Sdl3Platform::GetGlContext() { return &glContext_; }
