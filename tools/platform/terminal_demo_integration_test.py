@@ -63,7 +63,7 @@ def main() -> int:
         os.close(slave)
         # The demo's Content directory is staged next to the executable.
         os.chdir(os.path.dirname(demo))
-        os.execv(demo, [demo, "--smoke", "75"])
+        os.execv(demo, [demo, "--smoke", "600"])
 
     os.close(slave)
     output = bytearray()
@@ -78,10 +78,11 @@ def main() -> int:
         os.kill(pid, signal.SIGWINCH)
         time.sleep(0.15)
 
-        # Feed a real keyboard byte while the game is polling its platform. The 2D sample is not
-        # an input demo, so its bounded smoke mode remains the deterministic exit mechanism;
-        # terminal keyboard semantics themselves are covered by TerminalKeyboardTests.
+        # Feed a normal key first, then Escape. Escape is handled by Game1::Update and must end
+        # the process far before the smoke-mode safety valve, proving the live keyboard path.
         os.write(master, b"w")
+        time.sleep(0.05)
+        os.write(master, b"\x1b")
 
         exit_deadline = time.monotonic() + 8.0
         status = None
@@ -93,7 +94,7 @@ def main() -> int:
         else:
             os.kill(pid, signal.SIGTERM)
             os.waitpid(pid, 0)
-            raise AssertionError("bounded demo did not stop before the timeout")
+            raise AssertionError("Escape did not stop the demo before the timeout")
 
         if status is None or not os.WIFEXITED(status) or os.WEXITSTATUS(status) != 0:
             raise AssertionError(f"demo exited unsuccessfully: status={status}")
