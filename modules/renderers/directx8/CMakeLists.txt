@@ -11,7 +11,7 @@ if(NOT EXISTS "${CNA_DX8_DXVK_LIB}")
         "${CNA_DX8_DXVK_LIB} -- install the dxvk package (providing /usr/lib/dxvk/wine64/"
         "d3d8.dll.a) or set -DCNA_DX8_DXVK_LIB=<path> to point at it explicitly.")
 endif()
-target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 "${CNA_DX8_DXVK_LIB}")
+target_link_libraries(${RENDERER_TARGET} PRIVATE "${CNA_DX8_DXVK_LIB}")
 
 # Module-owned examples (module-examples campaign): the family's example/test
 # registration is module-local; its historical selection/platform conditions

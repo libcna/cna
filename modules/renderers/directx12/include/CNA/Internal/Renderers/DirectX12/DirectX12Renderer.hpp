@@ -10,6 +10,7 @@
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_RENDERER=D3D12).
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 #include "D3D12ResourceStateTracker.hpp"
 #include "D3D12PipelineStateCache.hpp"
@@ -75,6 +76,7 @@ namespace CNA::Internal::Renderers::DirectX12
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
         /// renderer state applied at the next Present(), not a direct D3D12 API call ahead of time.
         void SetSwapInterval(int interval) override;
@@ -183,7 +185,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /// viewport rect + depth range; every draw path re-records its own command list fresh
         /// (immediate-per-draw model), so each RSSetViewports site simply reads the stored value
         /// back through GetEffectiveViewportEXT() -- no capture/replay is needed (unlike the
-        /// deferred Vulkan/SdlGpu renderers). Before this task D3D12 never overrode the no-op base
+        /// deferred GPU renderers). Before this task D3D12 never overrode the no-op base
         /// SetViewport and hardcoded a full-target D3D12_VIEWPORT at all four RSSetViewports sites
         /// (+ the sprite path), so a custom Viewport was a total no-op on backbuffer and RT alike.
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
@@ -448,7 +450,7 @@ namespace CNA::Internal::Renderers::DirectX12
         void CreateDescriptorHeapResources();
         void CreateCommandListResources();
         void CreateFenceResources();
-        /// DX-102: real swap-chain attempt, only when window_ != nullptr. Catches HRESULT-level
+        /// DX-102: real swap-chain attempt, only when a native HWND is available. Catches HRESULT-level
         /// failure and downgrades to swapChainAvailable_ = false rather than throwing -- see the
         /// class-level doc comment for why. A genuine Wine-level crash (as opposed to a clean
         /// HRESULT failure) cannot be caught here or anywhere in-process; that risk is why the
@@ -568,7 +570,8 @@ namespace CNA::Internal::Renderers::DirectX12
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
 
-        SDL_Window* window_ = nullptr;
+        std::unique_ptr<PlatformRendererSurfaceState> surface_;
+        HWND hwnd_ = nullptr;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
 

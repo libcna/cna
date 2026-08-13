@@ -18,7 +18,6 @@
 // pointer. All real <d3d8.h> usage lives in DirectX8Renderer.cpp behind the Impl pimpl below.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
-#include <SDL3/SDL.h>
 #include <memory>
 
 namespace CNA::Internal::Renderers::DirectX8
@@ -30,8 +29,7 @@ namespace CNA::Internal::Renderers::DirectX8
      * modeled on DirectX9Renderer's own shape rather than DIRECTX1..DIRECTX7's DirectDraw-based one): a
      * single Direct3DCreate8 + IDirect3D8::CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hwnd,
      * D3DCREATE_SOFTWARE_VERTEXPROCESSING, &presentParams, &device) call creates both the device
-     * and its own swap chain against a real Win32 HWND (SDL_PROP_WINDOW_WIN32_HWND_POINTER, the
-     * same technique every Windows-only renderer in this project uses) -- no separate DirectDraw
+     * and its own swap chain against the real Win32 HWND supplied in RendererSurfaceInfo -- no separate DirectDraw
      * object, no manual "shadow backbuffer + Blt to primary" trick this whole family needed since
      * DX2-0. D3DPRESENT_PARAMETERS construction has one real, spike-confirmed (DX8-0) rule:
      * FullScreen_PresentationInterval must be D3DPRESENT_INTERVAL_DEFAULT in windowed mode, or
@@ -84,10 +82,9 @@ namespace CNA::Internal::Renderers::DirectX8
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
-        // No SDL_Renderer exists here at all -- always nullptr, same as every other
-        // non-SDL_Renderer-based renderer.
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         // A real letterbox scale+offset transform (uniform scale to fit, centered), recomputed
-        // from the real physical SDL_Window size on every call -- shares the exact math Present()
+        // from the current physical drawable size -- shares the exact math Present()
         // itself uses, so these two are always consistent with what's actually on screen.
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;

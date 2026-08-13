@@ -10,8 +10,8 @@
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 2 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
 | `cpu-presentation` | 1 | CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service. |
-| `migratable` | 20 | Uses platform services only (native handle, GL/Vulkan, window, events). |
-| `sdl-free` | 17 | No SDL references at all. |
+| `migratable` | 8 | Uses platform services only (native handle, GL/Vulkan, window, events). |
+| `sdl-free` | 29 | No SDL references at all. |
 
 ## Per-family detail
 
@@ -26,23 +26,23 @@
 | `webgpu` | WEBGPU | `migratable` | 39 / 38 | `native-handle`, `gl-vulkan-interop`, `window`, `display` | — |
 | `bgfx` | BGFX | `migratable` | 36 / 33 | `native-handle`, `window`, `display` | — |
 | `svg-dom` | SVG_DOM | `migratable` | 27 / 24 | `native-handle`, `window`, `filesystem` | — |
-| `direct2d` | DIRECT2D | `migratable` | 16 / 13 | `native-handle`, `window` | — |
 | `canvas` | CANVAS | `migratable` | 14 / 9 | `window` | — |
-| `directx1` | DIRECTX1 | `migratable` | 14 / 6 | `native-handle`, `window` | — |
-| `directx2` | DIRECTX2 | `migratable` | 14 / 6 | `native-handle`, `window` | — |
-| `directx3` | DIRECTX3 | `migratable` | 14 / 6 | `native-handle`, `window` | — |
-| `directx5` | DIRECTX5 | `migratable` | 14 / 6 | `native-handle`, `window` | — |
-| `directx6` | DIRECTX6 | `migratable` | 14 / 6 | `native-handle`, `window` | — |
-| `directx7` | DIRECTX7 | `migratable` | 14 / 6 | `native-handle`, `window` | — |
-| `directx12` | DIRECTX12 | `migratable` | 12 / 12 | `native-handle`, `window` | — |
-| `directx8` | DIRECTX8 | `migratable` | 12 / 7 | `native-handle`, `window` | — |
 | `metal` | METAL | `migratable` | 12 / 8 | `gl-vulkan-interop`, `window` | — |
-| `directx11` | DIRECTX11 | `migratable` | 11 / 11 | `native-handle`, `window` | — |
-| `directx9` | DIRECTX9 | `migratable` | 10 / 10 | `native-handle`, `window` | — |
 | `html-dom` | HTML_DOM | `migratable` | 10 / 7 | `window` | — |
-| `directx10` | DIRECTX10 | `migratable` | 7 / 6 | `native-handle`, `window` | — |
 | `glide` | GLIDE | `migratable` | 4 / 4 | `native-handle` | — |
 | `diligent` | DILIGENT | `sdl-free` | 0 / 0 | — | — |
+| `direct2d` | DIRECT2D | `sdl-free` | 0 / 0 | — | — |
+| `directx1` | DIRECTX1 | `sdl-free` | 0 / 0 | — | — |
+| `directx10` | DIRECTX10 | `sdl-free` | 0 / 0 | — | — |
+| `directx11` | DIRECTX11 | `sdl-free` | 0 / 0 | — | — |
+| `directx12` | DIRECTX12 | `sdl-free` | 0 / 0 | — | — |
+| `directx2` | DIRECTX2 | `sdl-free` | 0 / 0 | — | — |
+| `directx3` | DIRECTX3 | `sdl-free` | 0 / 0 | — | — |
+| `directx5` | DIRECTX5 | `sdl-free` | 0 / 0 | — | — |
+| `directx6` | DIRECTX6 | `sdl-free` | 0 / 0 | — | — |
+| `directx7` | DIRECTX7 | `sdl-free` | 0 / 0 | — | — |
+| `directx8` | DIRECTX8 | `sdl-free` | 0 / 0 | — | — |
+| `directx9` | DIRECTX9 | `sdl-free` | 0 / 0 | — | — |
 | `easygl` | OPENGL33 OPENGLES2 OPENGLES3 WEBGL1 WEBGL2 | `sdl-free` | 0 / 0 | — | — |
 | `headless` | HEADLESS | `sdl-free` | 0 / 0 | — | — |
 | `llgl` | LLGL | `sdl-free` | 0 / 0 | — | — |

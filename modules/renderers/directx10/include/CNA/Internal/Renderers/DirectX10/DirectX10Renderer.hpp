@@ -22,7 +22,6 @@
 // DirectX10Renderer.cpp behind the Impl pimpl below.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
-#include <SDL3/SDL.h>
 #include <memory>
 
 namespace CNA::Internal::Renderers::DirectX10
@@ -33,7 +32,7 @@ namespace CNA::Internal::Renderers::DirectX10
      * (DXVK 2.6.0 ships no d3d10.dll of its own at all).
      *
      * Device/window bring-up: a single D3D10CreateDeviceAndSwapChain call against a real Win32
-     * HWND (SDL_PROP_WINDOW_WIN32_HWND_POINTER) creates both the device and its own real DXGI swap
+     * HWND supplied in RendererSurfaceInfo creates both the device and its own real DXGI swap
      * chain -- no logical-resolution render target or letterboxing (unlike DIRECTX8's own addition,
      * forced there by D3D8 having no scaled-blit primitive at all): the swap chain always matches
      * the real window size, matching DirectX11Renderer's own simpler, already-established
@@ -75,6 +74,7 @@ namespace CNA::Internal::Renderers::DirectX10
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
 
         // ---- IGraphicsRenderer: textures and render targets (real ID3D10Texture2D) ----
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
