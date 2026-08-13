@@ -1,22 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 //
-// Task P9-HARDWARE-005: a small standalone (non-GTest) executable that forces SDL_AUDIODRIVER to
-// a driver name that does not exist, before anything in this fresh process ever touches SDL
-// audio, then calls a real XNA-facing audio entry point to prove NoAudioHardwareException is
-// genuinely thrown when SDL3_mixer's device can't be opened. The shared CnaTests binary cannot
-// exercise this path: CNA::Internal::Audio::AudioMixer.cpp's g_mixer is a process-wide,
-// once-ever-initialized cache, and SDL only reads SDL_AUDIODRIVER the first time SDL_Init
-// (SDL_INIT_AUDIO) runs in a process (see plan_audio.md P9-HARDWARE-002/005's notes). PLAT-95
-// moved that open from SDL_mixer to the selected Sdl3AudioDevice; MIX_Init itself still never
-// touches the audio subsystem.
+// Task P9-HARDWARE-005 / PLAT-99: a small standalone (non-GTest) executable that forces
+// SDL_AUDIODRIVER to a nonexistent name before anything in this fresh process touches audio,
+// then calls a real XNA-facing entry point. The selected SDL3 device must translate the failed
+// open to NoAudioHardwareException; the selected NULL device must succeed silently without
+// consulting SDL at all. The shared CnaTests binary cannot reliably exercise the SDL3 failure
+// path because AudioMixer's device and SDL's driver selection are process-wide caches.
 //
 // SoundEffect::getMasterVolumeProperty() is used as the trigger: a static property getter that
 // calls GetMixerOrThrowXna() as its very first action, needing no file/buffer/instance setup at
 // all (SoundEffect.cpp, wired by P9-HARDWARE-002).
 //
-// Exit codes: 0 = NoAudioHardwareException thrown as expected, 1 = no exception thrown (audio
-// device was unexpectedly available in this environment, or a real regression), 2 = the wrong
-// exception type was thrown.
+// Exit codes: 0 = selection-appropriate behavior, 1 = SDL3 unexpectedly succeeded or NULL
+// unexpectedly reported no hardware, 2 = another exception type was thrown.
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/Environment.hpp"
@@ -38,7 +34,12 @@ int main()
     }
     catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
     {
+#if defined(CNA_AUDIO_PLATFORM_NULL)
+        std::fprintf(stderr, "NULL audio unexpectedly reported missing physical hardware\n");
+        return 1;
+#else
         return 0;
+#endif
     }
     catch (const std::exception& ex)
     {
@@ -46,6 +47,10 @@ int main()
         return 2;
     }
 
-    std::fprintf(stderr, "no exception thrown -- an audio device was available in this environment\n");
+#if defined(CNA_AUDIO_PLATFORM_NULL)
+    return 0;
+#else
+    std::fprintf(stderr, "no exception thrown -- SDL3 unexpectedly opened an audio device\n");
     return 1;
+#endif
 }

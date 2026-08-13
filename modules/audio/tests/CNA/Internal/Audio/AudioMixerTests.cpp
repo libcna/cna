@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// Task P9-HARDWARE-005: AudioMixer::GetMixer()/DestroyMixer() require a real (or mocked) SDL3
-// audio subsystem; this environment only ever runs the SDL "dummy" audio driver (IN-12), and
-// g_mixer (AudioMixer.cpp) is a process-wide, once-ever-initialized cache -- once any earlier
+// Task P9-HARDWARE-005 / PLAT-99: SDL3 playback requires a real or mocked audio subsystem, and
+// this environment only ever runs the SDL "dummy" driver (IN-12). NULL playback deliberately
+// requires neither. For the SDL3 failure path, g_mixer (AudioMixer.cpp) is a process-wide,
+// once-ever-initialized cache -- once any earlier
 // test in this shared CnaTests binary succeeds even once, every later attempt sees the already
 // -cached mixer and can never exercise GetMixer()'s failure branch again (see plan_audio.md
 // P9-HARDWARE-002's verification caveat). A real regression test for the no-audio-hardware path
@@ -254,11 +255,10 @@ TEST(AudioMixerTest, RepeatedDeviceOpenFailuresLeaveBalancedLifecycleAndSubseque
 
 // AUD-15-017: repeated GetMixer()/DestroyMixer() cycles must never leak a device, thread, handle,
 // or MIX_Init()/SDL_INIT_AUDIO refcount -- each cycle recreates the mixer "from scratch" (matches
-// DestroyMixer()'s own documented contract), and the AUD-04-008/009 subsystem pin (GetMixer()'s
-// one-time SDL_InitSubSystem(SDL_INIT_AUDIO)) must keep the audio subsystem itself alive across
-// every one of these destroy calls, not just the first. 20 cycles is far more than any single
-// test elsewhere in this suite exercises in a row; a leak would most plausibly show up as a
-// growing resource count or a failure partway through, not necessarily on cycle 1.
+// DestroyMixer()'s own documented contract), and every selected-device/queued-stream subsystem
+// lease must be reacquired and released cleanly on each cycle. Twenty cycles is far more than any
+// single test elsewhere in this suite exercises in a row; a leak would most plausibly show up as
+// a growing resource count or a failure partway through, not necessarily on cycle 1.
 TEST(AudioMixerTest, RepeatedInitDestroyCyclesLeaveNoLeakedStateAndFinalCallSucceeds) {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     try {
@@ -285,7 +285,7 @@ TEST(AudioMixerTest, RepeatedInitDestroyCyclesLeaveNoLeakedStateAndFinalCallSucc
     }
 }
 
-TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsInvalid) {
+TEST(AudioMixerTest, MissingPhysicalHardwareFollowsTheSelectedAudioDeviceContract) {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
 
     SpawnedProcess proc = SpawnHarness(CNA_AUDIO_NO_HARDWARE_HARNESS_PATH);
@@ -300,7 +300,7 @@ TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsI
 
     ASSERT_TRUE(finished) << "harness process did not exit before the watchdog deadline and was killed; output: " << output;
     EXPECT_EQ(exitCode, 0)
-        << "expected the harness to exit 0 (NoAudioHardwareException thrown); got " << exitCode
+        << "expected selection-appropriate no-hardware behavior; got " << exitCode
         << "; output: " << output;
 }
 

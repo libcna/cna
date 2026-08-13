@@ -470,10 +470,10 @@ if(CNA_BUILD_TESTS)
 
     # plan_platform.md PLAT-91: audio has its own platform contract and selection axis rather
     # than inheriting from CNA::Platform. Keep its native-SDK-free/lifecycle/buffer-granularity
-    # contract visible as a dedicated CTest; future SDL3 and NULL conformance cases join this
-    # filter in PLAT-94/99.
+    # contract visible as a dedicated CTest; the shared conformance suite runs every implementation
+    # compiled into the selected build (SDL3 + NULL by default, NULL in the SDL-free build).
     cna_register_renderer_test(NAME CnaAudioPlatformTests
-        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:AudioPlatformSelectionCompileTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
+        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
         LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     # plan_platform.md PLAT-93: test the cache default, both implemented values, every reserved

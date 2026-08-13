@@ -36,9 +36,9 @@ public:
     std::size_t lastOutputSize = 0;
 };
 
-// PLAT-99 adds the production NullAudioDevice and the shared conformance suite. This small
-// contract double exists only to freeze PLAT-91's lifecycle, negotiation, and buffer granularity
-// before either implementation is written.
+// This small deterministic double isolates the contract's explicit negotiation and manual buffer
+// geometry cases. PLAT-99's shared conformance suite separately runs lifecycle/barrier behavior
+// against the production SDL3 and NULL implementations.
 class ContractAudioDevice final : public IAudioDevice
 {
 public:

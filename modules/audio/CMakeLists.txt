@@ -2,8 +2,9 @@
 # audio stream list, and audio/media/runtime all call INTO it (ownership follows dependency
 # direction; assigning it to runtime would create a runtime<->audio link cycle for nothing).
 file(GLOB_RECURSE CNA_AUDIO_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
-# The independent audio selection owns its native edge. NULL's implementation arrives in
-# PLAT-99; until then it must not accidentally compile or construct the SDL3 implementation.
+# The independent audio selection owns its native edge. The portable NullAudioDevice is always
+# compiled so the default build can run cross-implementation conformance tests; a non-SDL3
+# selection must not accidentally compile or construct the native SDL3 implementation.
 if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Platform/Sdl3/.*\\.cpp$")
 endif()

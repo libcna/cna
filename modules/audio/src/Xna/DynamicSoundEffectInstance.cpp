@@ -157,9 +157,9 @@ namespace Microsoft::Xna::Framework::Audio
         // Stopped — set up fresh playback.
 
 #ifdef SOUND_ENABLED
-        // Establish the selected output before allocating a mixer-specific queued source. This is
-        // load-bearing for CNA_AUDIO_PLATFORM=NULL: its refusal must not create a native object as
-        // a hidden side effect on the way to reporting NoAudioHardwareException.
+        // Establish the selected output before allocating a mixer-specific queued source. This
+        // keeps the source lifetime subordinate to a started playback device under both SDL3 and
+        // NULL, rather than manufacturing an unattached native object on a failed open.
         EnsureMixerOrThrowXna();
         EnsureStream();
 

@@ -36,8 +36,8 @@ endif()
 
 # --- Task P9-HARDWARE-005: standalone no-audio-hardware harness ---
 # A tiny standalone (non-GTest) executable that forces SDL_AUDIODRIVER to a nonexistent driver
-# name before any SDL audio call in this fresh process, then proves NoAudioHardwareException is
-# genuinely thrown. Spawned by tests/CNA/Internal/Audio/AudioMixerTests.cpp -- see that file /
+# name before any audio call in this fresh process, then proves SDL3 reports no hardware while
+# NULL succeeds without consulting it. Spawned by AudioMixerTests.cpp -- see that file and
 # tools/audio/audio_no_hardware_harness.cpp for why this needs its own process (AudioMixer.cpp's
 # g_mixer is a process-wide, once-ever-initialized cache).
 if(CNA_BUILD_TESTS)

@@ -23,7 +23,7 @@ pass in two of them while not being compiled *at all* in the third.
 | `cmake-build-debug` | default (`CNA_PLATFORM=SDL3`, `CNA_GRAPHICS_RENDERER=HEADLESS`) | the SDL3 platform implementation |
 | `cmake-build-headless` | `-DCNA_PLATFORM=HEADLESS` | the second platform implementation; the conformance suite's other arm |
 | `cmake-build-devices` | `-DCNA_DEVICES=ON -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_PLATFORM=SDL3` | **all of `modules/devices-ext` and `modules/devices`** |
-| `cmake-build-terminal` | `-DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_AUDIO_PLATFORM=NULL` | terminal selection plus the SDL-free audio refusal path |
+| `cmake-build-terminal` | `-DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_AUDIO_PLATFORM=NULL` | terminal selection plus SDL-free silent playback |
 
 `TerminalPlatform` itself is compiled in **every** POSIX configuration, not only that last one —
 same arrangement as `HeadlessPlatform`, so the conformance suite always has three implementations
@@ -124,7 +124,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**116 ✅ · 3 🟨 · 33 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **75 %** of the 155
+**117 ✅ · 3 🟨 · 32 ⬜ · 2 ⛔ · 1 ❌** across `plan_platform.md` — about **75 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).
@@ -140,10 +140,10 @@ task rows complete.
   now consume typed platform services. Cursor creation, including custom RGBA images, is owned by
   the selected platform and no SDL cursor type remains in the public input API.
   `PlatformInputBridge` consumes the complete event vocabulary in the production path.
-- **Phase 6** (audio) — PLAT-91…98 complete: independent playback/recording contracts, selection,
-  SDL3 devices, contract-driven `AudioMixer` output, SDL-free XNA sound-effect / queued-stream /
-  microphone ownership, and platform-neutral WaveBank/XACT file IO. Continue at PLAT-99
-  (`NullAudioDevice`).
+- **Phase 6** (audio) — **all nine tasks complete**: independent playback/recording contracts,
+  orthogonal selection, SDL3 devices, contract-driven `AudioMixer` output, SDL-free XNA
+  sound-effect / queued-stream / microphone ownership, platform-neutral WaveBank/XACT file IO,
+  and a paced SDL-free `NullAudioDevice` exercised by the same conformance suite as SDL3.
 - **Phase 7** (services) — clipboard, power, locale, system info, URL, dialogs done.
 - **Phase 8** (headless + conformance) — done except PLAT-118.
 - **Phase 9** (gates, perf, docs) — not started.
@@ -295,15 +295,14 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **Phase 6 audio continuation.** PLAT-91/92 established independent SDL-free playback and
-   recording contracts; PLAT-93 added orthogonal selection; PLAT-94/95 route memory-backed mixer
-   output through the selected SDL3 playback device. PLAT-96 moved sound effects, instances and
-   queued streams behind the private opaque `MixerEngine` facade. PLAT-97 now routes `Microphone`
-   through the selected recording provider, gives every native audio object its own balanced
-   subsystem lease and removes the last permanent compatibility pin. PLAT-98 verified that
-   `WaveBank` / `XactParser` already use standard C++ file IO and removed their last stale native
-   audio names. Continue with **PLAT-99**: implement the selected `NullAudioDevice` and close the
-   decode/playback-dependent NULL tests that currently refuse by design.
+2. **Completed Phase 6 reference.** PLAT-91…99 now provide independent SDL-free playback and
+   recording contracts, orthogonal `SDL3`/`NULL` selection, an SDL3 device edge, and a paced
+   `NullAudioDevice`. The memory-backed mixer, sound effects, dynamic streams and microphones all
+   consume those boundaries; WaveBank/XACT file IO was already standard C++. The parameterised
+   production-device suite runs SDL3 + NULL in the default build and NULL alone in the terminal
+   build. NULL playback drives both S16 and F32 mixer output without initializing SDL audio;
+   recording remains truthfully unsupported rather than inventing a fake microphone. No Phase 6
+   work remains—continue the Phase 4 dependency chain in item 1.
 
 ---
 

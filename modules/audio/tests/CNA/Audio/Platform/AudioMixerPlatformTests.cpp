@@ -10,7 +10,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <stdexcept>
 #include <thread>
 
 namespace {
@@ -31,6 +30,11 @@ TEST(AudioMixerPlatformContractTests, SelectedDeviceOwnsPlaybackAndDrivesMemoryM
 
 #if defined(CNA_AUDIO_PLATFORM_SDL3)
     SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SDL_AUDIODRIVER", "dummy", true);
+#elif defined(CNA_AUDIO_PLATFORM_NULL)
+    const SDL_InitFlags audioBefore = SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO;
+#else
+#error "CNA audio platform selection did not define an implementation"
+#endif
 
     MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
     ASSERT_NE(mixer, nullptr);
@@ -53,22 +57,19 @@ TEST(AudioMixerPlatformContractTests, SelectedDeviceOwnsPlaybackAndDrivesMemoryM
     }
     EXPECT_GT(CNA::Internal::Audio::GetMixerGeneratedByteCount(), 0u);
     EXPECT_FALSE(CNA::Internal::Audio::HasMixerOutputError());
-#elif defined(CNA_AUDIO_PLATFORM_NULL)
-    const SDL_InitFlags audioBefore = SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO;
-    EXPECT_THROW((void)CNA::Internal::Audio::GetMixer(), std::runtime_error);
+#if defined(CNA_AUDIO_PLATFORM_NULL)
     EXPECT_EQ(SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO, audioBefore)
         << "NULL selection must not initialize or fall back to SDL3 audio";
-#else
-#error "CNA audio platform selection did not define an implementation"
 #endif
 }
 
 TEST(AudioMixerPlatformContractTests, Float32ApplicationFormatUsesTheSameWholeBufferPath)
 {
 #if defined(CNA_AUDIO_PLATFORM_SDL3)
+    SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SDL_AUDIODRIVER", "dummy", true);
+#endif
     CNA::Internal::Audio::DestroyMixer();
     MixerCleanup cleanup;
-    SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SDL_AUDIODRIVER", "dummy", true);
 
     SDL_AudioSpec requested{};
     requested.format = SDL_AUDIO_F32;
@@ -92,9 +93,6 @@ TEST(AudioMixerPlatformContractTests, Float32ApplicationFormatUsesTheSameWholeBu
     }
     EXPECT_GT(CNA::Internal::Audio::GetMixerGeneratedByteCount(), 0u);
     EXPECT_FALSE(CNA::Internal::Audio::HasMixerOutputError());
-#else
-    GTEST_SKIP() << "requires the implemented SDL3 playback device";
-#endif
 }
 
 } // namespace
