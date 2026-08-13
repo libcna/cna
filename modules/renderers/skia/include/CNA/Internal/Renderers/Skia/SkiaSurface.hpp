@@ -19,8 +19,8 @@ namespace CNA::Internal::Renderers::Skia
      *
      * The surface owns Skia's pixels and defines CNA's canonical top-left RGBA8 readback
      * convention. Presentation is deliberately outside this class: the graphics renderer uploads
-     * these pixels to its SDL presentation texture after Flush(), which keeps Skia resource
-     * ownership independent from SDL window ownership.
+     * these pixels to its platform presenter after Flush(), which keeps Skia resource ownership
+     * independent from native window ownership.
      */
     class SkiaSurface final
     {
@@ -70,7 +70,7 @@ namespace CNA::Internal::Renderers::Skia
         /// Returns an immutable Skia snapshot suitable for sampling by a later canvas draw.
         [[nodiscard]] sk_sp<SkImage> SnapshotImage() const;
 
-        /// Produces a complete, tightly packed RGBA8 image for SDL presentation. Only valid for
+        /// Produces a complete, tightly packed RGBA8 image for platform presentation. Only valid for
         /// the default-format (Color) surface used by the backbuffer.
         [[nodiscard]] std::vector<std::uint8_t> SnapshotRgba() const;
 

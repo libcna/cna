@@ -292,7 +292,9 @@ TEST_F(Sdl3PresenterTest, TargetSizeIsReportedAndScaleModeIsAccepted)
     EXPECT_GE(height, 0);
 
     EXPECT_NO_THROW(presenter_->SetScaleMode(PresentScaleMode::Stretch, PresentFilter::Linear));
+    EXPECT_NO_THROW(presenter_->SetScaleMode(PresentScaleMode::Overscan, PresentFilter::Linear));
     EXPECT_NO_THROW(presenter_->SetScaleMode(PresentScaleMode::None, PresentFilter::Nearest));
+    EXPECT_NO_THROW(presenter_->SetScaleMode(PresentScaleMode::Native, PresentFilter::Nearest));
     // SetVSync reports whether it was honoured rather than throwing: a driver that cannot
     // synchronise should keep presenting.
     (void)presenter_->SetVSync(false);

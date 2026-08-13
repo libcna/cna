@@ -161,9 +161,13 @@ namespace CNA::Platform::Sdl3 {
 
     float Sdl3Window::GetDisplayScale() const
     {
-        const float scale = SDL_GetWindowDisplayScale(window_);
-        // SDL returns 0.0f on failure; a zero scale would divide to infinity in any layout
-        // computation, so an unknown scale reports as 1:1 instead.
+        // IPlatformWindow's value converts logical window coordinates to drawable pixels. SDL
+        // calls that ratio "pixel density". SDL_GetWindowDisplayScale is deliberately different:
+        // it also folds in the user's UI/content-scale preference and can be 1.25 even when a
+        // non-high-density 120x60 window has a 120x60 drawable. Using it for input transforms
+        // shifts every renderer coordinate despite there being no extra pixels.
+        const float scale = SDL_GetWindowPixelDensity(window_);
+        // SDL returns 0.0f on failure; a zero scale would divide to infinity in layout code.
         return scale > 0.0f ? scale : 1.0f;
     }
 

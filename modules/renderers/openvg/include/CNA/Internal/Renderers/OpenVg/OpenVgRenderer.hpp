@@ -2,8 +2,7 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
-
-#include <SDL3/SDL.h>
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 
 namespace CNA::Internal::Renderers::OpenVg
 {
@@ -52,8 +51,7 @@ namespace CNA::Internal::Renderers::OpenVg
     class OpenVgRenderer final : public IGraphicsRenderer
     {
     public:
-        OpenVgRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                       CnaPresentationMode mode, int swapInterval = 1);
+        explicit OpenVgRenderer(const GraphicsRendererCreateArgs& args);
         ~OpenVgRenderer() override;
 
         OpenVgRenderer(const OpenVgRenderer&) = delete;
@@ -62,6 +60,8 @@ namespace CNA::Internal::Renderers::OpenVg
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        /** @brief Refreshes the platform-neutral drawable snapshot after a window change. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
@@ -166,7 +166,7 @@ namespace CNA::Internal::Renderers::OpenVg
         /// CNAEXT. One logical->physical presentation mapping, shared by GetViewportSize(),
         /// GetDefaultViewportRect(), the GL_PROJECTION ortho, TransformWindowToLogical/ToWindow
         /// and the scissor-rect mapping -- see the class doc comment. `x`/`y`/`width`/`height` are
-        /// the PHYSICAL pixel sub-rectangle (`SDL_GetWindowSizeInPixels`-scaled) the current
+        /// the PHYSICAL pixel sub-rectangle the current
         /// presentation mode maps the logical canvas onto; `logicalWidth`/`logicalHeight` are the
         /// logical canvas size itself. Mirrors OpenGL2Renderer::ComputeLogicalViewport's algorithm
         /// exactly, except physical-pixel-based throughout (not window-point-based) so it is
@@ -210,8 +210,8 @@ namespace CNA::Internal::Renderers::OpenVg
         void refreshPresentationDerivedStateEXT();
         [[nodiscard]] int GetPhysicalHeightEXT() const;
 
-        SDL_Window* window_ = nullptr;
-        SDL_GLContext glContext_ = nullptr;
+        std::unique_ptr<PlatformGlContextOwner> platformContext_;
+        PlatformGlSurfaceState surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
@@ -237,5 +237,6 @@ namespace CNA::Internal::Renderers::OpenVg
         bool scissorEnabled_ = false;
 
         bool ownsGlobalContext_ = false;
+        bool shivaContextCreated_ = false;
     };
 }

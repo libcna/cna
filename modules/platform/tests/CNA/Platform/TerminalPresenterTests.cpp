@@ -456,6 +456,43 @@ TEST_F(TerminalPresenter, LetterboxLeavesRowsBlankForAWideFrame)
     EXPECT_EQ(lit, 40 * 5);
 }
 
+TEST_F(TerminalPresenter, OverscanFillsTheGridFromACentredAspectPreservingCrop)
+{
+    TerminalSurfacePresenter presenter(pty_.Device(), pty_.Device(),
+                                       TerminalColourDepth::Monochrome, 80, 40);
+    presenter.SetScaleMode(PresentScaleMode::Overscan, PresentFilter::Nearest);
+
+    // The 80x40 frame is twice as wide as the effective square 40x20 terminal grid (cells are
+    // approximately 1:2). Overscan must therefore crop the central 40 source columns. Make only
+    // that exact crop white: stretching or cropping from either edge cannot light every cell.
+    Frame frame(80, 40, 0, 0, 0);
+    for (int y = 0; y < 40; ++y)
+        for (int x = 20; x < 60; ++x)
+            frame.SetPixel(x, y, 255, 255, 255);
+    presenter.Present(frame.View());
+
+    const std::string& bytes = presenter.GetLastFrameBytes();
+    EXPECT_EQ(std::count(bytes.begin(), bytes.end(), GlyphRamp().back()), 40 * 20);
+}
+
+TEST_F(TerminalPresenter, NativeUsesAnUnscaledTopLeftCrop)
+{
+    TerminalSurfacePresenter presenter(pty_.Device(), pty_.Device(),
+                                       TerminalColourDepth::Monochrome, 60, 60);
+    presenter.SetScaleMode(PresentScaleMode::Native, PresentFilter::Nearest);
+
+    // Native maps one cell to its natural 1x2 source block and anchors at (0,0). Only the exact
+    // top-left 40x40 crop is white, so a centred crop (the distinct None mode) would expose black.
+    Frame frame(60, 60, 0, 0, 0);
+    for (int y = 0; y < 40; ++y)
+        for (int x = 0; x < 40; ++x)
+            frame.SetPixel(x, y, 255, 255, 255);
+    presenter.Present(frame.View());
+
+    const std::string& bytes = presenter.GetLastFrameBytes();
+    EXPECT_EQ(std::count(bytes.begin(), bytes.end(), GlyphRamp().back()), 40 * 20);
+}
+
 TEST_F(TerminalPresenter, AMalformedFrameIsRefused)
 {
     TerminalSurfacePresenter presenter(pty_.Device(), pty_.Device(),

@@ -13,6 +13,7 @@
 #include "CNA/Internal/Renderers/OpenVg/OpenVgSpriteBatchRenderer.hpp"
 #include "CNA/Internal/Renderers/OpenVg/OpenVgTextureRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -33,6 +34,8 @@ using namespace CNA::Internal::Renderers::OpenVg;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Internal::Graphics::ImageData;
+using CNA::Examples::SdlTestGlContext;
+using CNA::Examples::SdlTestRendererArgs;
 
 namespace
 {
@@ -102,7 +105,10 @@ int main()
     {
         SDL_Window* window = SDL_CreateWindow("openvg-texture-orientation", 300, 200, SDL_WINDOW_OPENGL);
         if (!window) throw std::runtime_error(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
-        OpenVgRenderer renderer(window, 0, 0, CnaPresentationMode::NativeBackBuffer);
+        {
+            SdlTestGlContext glContext(window);
+            OpenVgRenderer renderer(SdlTestRendererArgs(
+                window, &glContext, nullptr, 0, 0, CnaPresentationMode::NativeBackBuffer));
         // Opaque (blending disabled): every readback below is the pure, unblended texel colour.
         renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, BlendWriteState{});
 
@@ -223,6 +229,7 @@ int main()
         catch (const std::runtime_error&) { threw = true; }
         Check(threw, "OOB Wrap/Mirror TextureAddressMode is rejected, not silently mis-rendered");
 
+        }
         SDL_DestroyWindow(window);
     }
     catch (const std::exception& ex)

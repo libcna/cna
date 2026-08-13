@@ -2,6 +2,7 @@
 // SKIA-18: owner-thread, active-surface, presenter, and destruction-order failure boundaries.
 
 #include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -18,6 +19,8 @@ using CNA::Internal::Renderers::IGraphicsRenderer;
 using CNA::Internal::Renderers::IRenderTargetRenderer;
 using CNA::Internal::Renderers::ISpriteBatchRenderer;
 using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Examples::SdlTestRendererArgs;
+using CNA::Examples::SdlTestSurfacePresenter;
 
 namespace
 {
@@ -55,7 +58,10 @@ int main()
     std::unique_ptr<ISpriteBatchRenderer> lateBatch;
     std::unique_ptr<IRenderTargetRenderer> lateTarget;
     {
-        SkiaRenderer renderer(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
+        SdlTestSurfacePresenter presenter(window);
+        SkiaRenderer renderer(SdlTestRendererArgs(
+            window, nullptr, &presenter, 16, 12,
+            CnaPresentationMode::NativeBackBuffer, 0));
         Check(IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == &renderer
                   && SDL_GetRenderer(window) != nullptr,
               "renderer owns the registered SDL presenter on its construction thread");

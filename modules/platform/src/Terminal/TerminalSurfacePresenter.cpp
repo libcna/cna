@@ -170,6 +170,33 @@ namespace CNA::Platform::Terminal {
                 break;
             }
 
+            case PresentScaleMode::Overscan:
+            {
+                // Fill the grid while retaining aspect ratio by cropping the centred excess from
+                // the source. Account for the same approximately 1:2 terminal-cell aspect used by
+                // Letterbox above so switching modes does not change the picture's proportions.
+                const long long frameAspect =
+                    static_cast<long long>(frame.width) * size.rows * kCellAspect;
+                const long long gridAspect = static_cast<long long>(frame.height) * size.columns;
+                if (frameAspect > gridAspect)
+                {
+                    sourceWidth = static_cast<int>(
+                        (static_cast<long long>(frame.height) * size.columns) /
+                        (static_cast<long long>(size.rows) * kCellAspect));
+                    sourceWidth = std::clamp(sourceWidth, 1, frame.width);
+                    sourceX = (frame.width - sourceWidth) / 2;
+                }
+                else
+                {
+                    sourceHeight = static_cast<int>(
+                        (static_cast<long long>(frame.width) * size.rows * kCellAspect) /
+                        size.columns);
+                    sourceHeight = std::clamp(sourceHeight, 1, frame.height);
+                    sourceY = (frame.height - sourceHeight) / 2;
+                }
+                break;
+            }
+
             case PresentScaleMode::None:
             {
                 // "No scaling" with a cell as the destination unit means one source pixel block
@@ -182,6 +209,15 @@ namespace CNA::Platform::Terminal {
                 destinationRows = std::max(1, sourceHeight / kCellAspect);
                 destinationColumn = (size.columns - destinationColumns) / 2;
                 destinationRow = (size.rows - destinationRows) / 2;
+                break;
+            }
+
+            case PresentScaleMode::Native:
+            {
+                sourceWidth = std::min(frame.width, size.columns);
+                sourceHeight = std::min(frame.height, size.rows * kCellAspect);
+                destinationColumns = sourceWidth;
+                destinationRows = std::max(1, sourceHeight / kCellAspect);
                 break;
             }
         }

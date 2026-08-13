@@ -42,6 +42,7 @@
 namespace CNA::Platform
 {
     class IPlatform;
+    class IPlatformSurfacePresenter;
     class IPlatformWindow;
 }
 
@@ -1110,6 +1111,9 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Platform::IPlatform* platform_;
         std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow_;
         bool videoSubsystemAcquired_;
+        // Declared before renderer_: reverse destruction keeps presentation alive through the
+        // raster renderer's final destructor calls.
+        std::unique_ptr<CNA::Platform::IPlatformSurfacePresenter> surfacePresenter_;
         std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
         bool rendererStartupNameLogged_ = false;
         Viewport viewport_;

@@ -119,6 +119,9 @@ constexpr bool kExpectCustomEffects         = false;
 // OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query concept
 // at all -- and no programmable shader stage for a genuinely custom Effect (same reasoning as
 // Canvas/Skia's own arms just above/below).
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
 #elif defined(CNA_RENDERER_PORTABLEGL)
 // PortableGL owns exactly one framebuffer per context and creates no render targets at all
 // (SetRenderTargets refuses every non-empty binding), has no occlusion-query mechanism, and its

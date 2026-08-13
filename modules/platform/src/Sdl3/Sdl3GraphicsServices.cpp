@@ -331,14 +331,30 @@ namespace CNA::Platform::Sdl3 {
             throw PlatformException("SurfacePresenter::Present", SDL_GetError());
         }
 
-        SDL_SetRenderLogicalPresentation(
-            renderer_, frame.width, frame.height,
+        const SDL_RendererLogicalPresentation logicalPresentation =
             scaleMode_ == PresentScaleMode::Letterbox ? SDL_LOGICAL_PRESENTATION_LETTERBOX
+            : scaleMode_ == PresentScaleMode::Overscan ? SDL_LOGICAL_PRESENTATION_OVERSCAN
             : scaleMode_ == PresentScaleMode::Stretch ? SDL_LOGICAL_PRESENTATION_STRETCH
-                                                      : SDL_LOGICAL_PRESENTATION_DISABLED);
+                                                      : SDL_LOGICAL_PRESENTATION_DISABLED;
+        SDL_SetRenderLogicalPresentation(renderer_, frame.width, frame.height, logicalPresentation);
 
         SDL_RenderClear(renderer_);
-        SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
+        SDL_FRect unscaledDestination{};
+        const SDL_FRect* destination = nullptr;
+        if (scaleMode_ == PresentScaleMode::None || scaleMode_ == PresentScaleMode::Native)
+        {
+            int targetWidth = 0;
+            int targetHeight = 0;
+            GetTargetSize(targetWidth, targetHeight);
+            unscaledDestination.x = scaleMode_ == PresentScaleMode::None
+                ? static_cast<float>(targetWidth - frame.width) * 0.5f : 0.0f;
+            unscaledDestination.y = scaleMode_ == PresentScaleMode::None
+                ? static_cast<float>(targetHeight - frame.height) * 0.5f : 0.0f;
+            unscaledDestination.w = static_cast<float>(frame.width);
+            unscaledDestination.h = static_cast<float>(frame.height);
+            destination = &unscaledDestination;
+        }
+        SDL_RenderTexture(renderer_, texture_, nullptr, destination);
         SDL_RenderPresent(renderer_);
     }
 

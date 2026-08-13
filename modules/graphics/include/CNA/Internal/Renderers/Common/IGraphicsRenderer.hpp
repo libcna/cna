@@ -31,7 +31,7 @@
 #include "CNA/GraphicsCapability.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
-namespace CNA::Platform { class IPlatformGlContext; }
+namespace CNA::Platform { class IPlatformGlContext; class IPlatformSurfacePresenter; }
 
 namespace CNA::Internal::Renderers
 {
@@ -2039,6 +2039,13 @@ namespace CNA::Internal::Renderers
          * native window-toolkit type.
          */
         CNA::Platform::IPlatformGlContext* glContext = nullptr;
+        /**
+         * @brief CPU-frame presentation service for raster renderers, otherwise null.
+         *
+         * The pointer is non-owning. GraphicsDevice keeps the presenter alive until after its
+         * renderer has been destroyed, and the presenter in turn remains bound to @ref surface.
+         */
+        CNA::Platform::IPlatformSurfacePresenter* surfacePresenter = nullptr;
         /// Virtual (game-logic) resolution the renderer should present at. A renderer maps this
         /// coordinate space onto the actual platform surface according to presentationMode.
         /// 0 means "unset"; the renderer should ignore logical presentation.

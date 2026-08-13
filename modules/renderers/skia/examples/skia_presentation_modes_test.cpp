@@ -2,6 +2,7 @@
 // SKIA-13/SKIA-14: all raster presentation mappings, coordinate transforms, and a real resize.
 
 #include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -15,6 +16,8 @@
 
 using CNA::Internal::Renderers::CnaPresentationMode;
 using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Examples::SdlTestRendererArgs;
+using CNA::Examples::SdlTestSurfacePresenter;
 
 namespace
 {
@@ -117,8 +120,10 @@ int main()
 
     try
     {
-        SkiaRenderer renderer(window, kVirtualWidth, kVirtualHeight,
-                                    CnaPresentationMode::FixedHeightDynamicWidth, 0);
+        SdlTestSurfacePresenter presenter(window);
+        SkiaRenderer renderer(SdlTestRendererArgs(
+            window, nullptr, &presenter, kVirtualWidth, kVirtualHeight,
+            CnaPresentationMode::FixedHeightDynamicWidth, 0));
         int windowWidth = 0;
         int windowHeight = 0;
         int outputWidth = 0;

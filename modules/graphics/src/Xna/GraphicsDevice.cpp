@@ -133,10 +133,9 @@ namespace Microsoft::Xna::Framework::Graphics
             requirements.renderIntent = CNA::Platform::WindowRenderIntent::OpenGl;
 #endif
 
-            // The OPENVG renderer creates its own real desktop OpenGL context (SDL_GL_CreateContext,
-            // same "own GL context, no EasyGL" shape as OPENGL1/OPENGL2/OPENGL4 above) and attaches
-            // ShivaVG's OpenVG context on top of it via vgCreateContextSH -- same "SDL rejects a
-            // non-SDL_WINDOW_OPENGL window" requirement as every other renderer in this block.
+            // OPENVG creates a real desktop OpenGL context through the platform GL service and
+            // attaches ShivaVG's OpenVG context on top of it via vgCreateContextSH. The native
+            // window therefore needs an OpenGL-capable visual before the renderer is constructed.
 #ifdef CNA_RENDERER_OPENVG
             requirements.renderIntent = CNA::Platform::WindowRenderIntent::OpenGl;
 #endif
@@ -151,11 +150,10 @@ namespace Microsoft::Xna::Framework::Graphics
             requirements.renderIntent = CNA::Platform::WindowRenderIntent::Vulkan;
 #endif
 
-            // plan_sokol.md SOKOL-4: sokol_gfx does not create its own window or context -- the
-            // SOKOL renderer calls SDL_GL_CreateContext on this window (design decision 1), which
-            // SDL rejects outright unless the window was created with SDL_WINDOW_OPENGL. The GL
-            // APIs are the only ones CNA_SOKOL_API can currently reach (see that option's own
-            // configure-time warning), so the flag is unconditional here.
+            // plan_sokol.md SOKOL-4: sokol_gfx does not create its own window or context. The
+            // renderer obtains a GL context from the platform service, so the native window must
+            // be created with an OpenGL-capable visual. The GL APIs are the only ones
+            // CNA_SOKOL_API can currently reach, so the intent is unconditional here.
 #ifdef CNA_RENDERER_SOKOL
             requirements.renderIntent = CNA::Platform::WindowRenderIntent::OpenGl;
 #endif
@@ -270,6 +268,7 @@ namespace Microsoft::Xna::Framework::Graphics
         : platform_(&CNA::Platform::GetCurrentPlatform()),
           platformWindow_(nullptr),
           videoSubsystemAcquired_(false),
+          surfacePresenter_(nullptr),
           renderer_(nullptr),
           viewport_(),
           currentVertexBuffer_(nullptr),
@@ -2305,7 +2304,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
 #if defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGL2) || \
     defined(CNA_RENDERER_OPENGL4) || defined(CNA_RENDERER_OPENGLES1) || \
-    defined(CNA_RENDERER_MAGNUM)
+    defined(CNA_RENDERER_MAGNUM) || defined(CNA_RENDERER_SOKOL)
         // A desktop GLX visual fixes these attributes when the window is created, before the
         // renderer asks IPlatformGlContext for a context. Supplying them at this boundary also
         // keeps the equivalent EGL selection deterministic on ES hosts.
@@ -2313,10 +2312,14 @@ namespace Microsoft::Xna::Framework::Graphics
         description.openGlFramebuffer.stencilBits = 8;
         description.openGlFramebuffer.doubleBuffered = true;
 #if defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGLES1) || \
-    defined(CNA_RENDERER_MAGNUM)
+    defined(CNA_RENDERER_MAGNUM) || defined(CNA_RENDERER_OPENVG) || \
+    defined(CNA_RENDERER_SOKOL)
         description.openGlFramebuffer.samples =
             presentationParameters_.getMultiSampleCountProperty();
 #endif
+#endif
+#ifdef CNA_RENDERER_OPENVG
+        description.openGlFramebuffer.doubleBuffered = true;
 #endif
 
         platformWindow_ = platform_->CreateWindow(description);
@@ -2369,9 +2372,15 @@ namespace Microsoft::Xna::Framework::Graphics
             args.surface.drawableSize = platformWindow_->GetPixelSize();
             args.surface.displayScale = platformWindow_->GetDisplayScale();
         }
+#ifdef CNA_RENDERER_SKIA
+        if (surfacePresenter_ == nullptr && platformWindow_ != nullptr)
+            surfacePresenter_ = platform_->CreateSurfacePresenter(*platformWindow_);
+        args.surfacePresenter = surfacePresenter_.get();
+#endif
 #if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL1) || \
     defined(CNA_RENDERER_OPENGL2) || defined(CNA_RENDERER_OPENGL4) || \
-    defined(CNA_RENDERER_OPENGLES1) || defined(CNA_RENDERER_MAGNUM)
+    defined(CNA_RENDERER_OPENGLES1) || defined(CNA_RENDERER_MAGNUM) || \
+    defined(CNA_RENDERER_OPENVG) || defined(CNA_RENDERER_SOKOL)
         // Context-backed renderers receive only the narrow GL service plus the surface value
         // snapshot. They never resolve a native window or reach through IPlatform.
         args.glContext = platform_->GetGlContext();
@@ -2435,6 +2444,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::destroyNativeResources()
     {
         renderer_.reset();
+        surfacePresenter_.reset();
 
         if (platformWindow_ != nullptr)
         {

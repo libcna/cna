@@ -2,6 +2,7 @@
 // SKIA-8: zero/minimized output, repeated physical resize, and presenter recovery.
 
 #include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -14,6 +15,8 @@
 
 using CNA::Internal::Renderers::CnaPresentationMode;
 using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Examples::SdlTestRendererArgs;
+using CNA::Examples::SdlTestSurfacePresenter;
 
 namespace
 {
@@ -69,8 +72,10 @@ int main()
 
     try
     {
-        SkiaRenderer renderer(window, kVirtualWidth, kVirtualHeight,
-                                    CnaPresentationMode::FixedHeightDynamicWidth, 0);
+        SdlTestSurfacePresenter presenter(window);
+        SkiaRenderer renderer(SdlTestRendererArgs(
+            window, nullptr, &presenter, kVirtualWidth, kVirtualHeight,
+            CnaPresentationMode::FixedHeightDynamicWidth, 0));
         int initialOutputWidth = 0;
         int initialOutputHeight = 0;
         const bool initialOutput = SDL_GetRenderOutputSize(

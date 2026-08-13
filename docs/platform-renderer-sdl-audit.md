@@ -9,9 +9,9 @@
 |---|---:|---|
 | `sdl-native` | 2 | Identity **is** an SDL3 API. Permanently allowlisted. |
 | `sdl-upstream` | 2 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
-| `cpu-presentation` | 2 | CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service. |
-| `migratable` | 26 | Uses platform services only (native handle, GL/Vulkan, window, events). |
-| `sdl-free` | 10 | No SDL references at all. |
+| `cpu-presentation` | 1 | CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service. |
+| `migratable` | 24 | Uses platform services only (native handle, GL/Vulkan, window, events). |
+| `sdl-free` | 13 | No SDL references at all. |
 
 ## Per-family detail
 
@@ -21,11 +21,8 @@
 | `sdl-renderer` | SDL_RENDERER | `sdl-native` | 308 / 204 | `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderLogicalPresentationRect`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderReadPixels`, `SDL_RenderTexture`, `SDL_SetRenderClipRect`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderTarget`, `SDL_SetRenderVSync`, `SDL_SetTextureBlendMode`, `SDL_SetTextureScaleMode`, `SDL_UpdateTexture` |
 | `freedirect` | FREEDIRECT | `sdl-upstream` | 19 / 3 | `window` | — |
 | `fna3d` | FNA3D | `sdl-upstream` | 10 / 8 | `window` | — |
-| `skia` | SKIA | `cpu-presentation` | 96 / 82 | `gl-vulkan-interop`, `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderTexture`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderVSync`, `SDL_UpdateTexture` |
 | `blend2d` | BLEND2D | `cpu-presentation` | 50 / 41 | `window` | `SDL_CreateRenderer`, `SDL_CreateTexture`, `SDL_DestroyRenderer`, `SDL_DestroyTexture`, `SDL_GetRenderOutputSize`, `SDL_RenderClear`, `SDL_RenderPresent`, `SDL_RenderTexture`, `SDL_SetRenderDrawColor`, `SDL_SetRenderLogicalPresentation`, `SDL_SetRenderVSync`, `SDL_UpdateTexture` |
-| `sokol` | SOKOL | `migratable` | 58 / 43 | `gl-vulkan-interop`, `window` | — |
 | `diligent` | DILIGENT | `migratable` | 43 / 33 | `native-handle`, `gl-vulkan-interop`, `window`, `display` | — |
-| `openvg` | OPENVG | `migratable` | 43 / 35 | `gl-vulkan-interop`, `window` | — |
 | `gdi` | GDI | `migratable` | 39 / 36 | `native-handle`, `event`, `window` | — |
 | `webgpu` | WEBGPU | `migratable` | 39 / 38 | `native-handle`, `gl-vulkan-interop`, `window`, `display` | — |
 | `bgfx` | BGFX | `migratable` | 36 / 33 | `native-handle`, `window`, `display` | — |
@@ -56,8 +53,11 @@
 | `opengl2` | OPENGL2 | `sdl-free` | 0 / 0 | — | — |
 | `opengl4` | OPENGL4 | `sdl-free` | 0 / 0 | — | — |
 | `opengles1` | OPENGLES1 | `sdl-free` | 0 / 0 | — | — |
+| `openvg` | OPENVG | `sdl-free` | 0 / 0 | — | — |
 | `portablegl` | PORTABLEGL | `sdl-free` | 0 / 0 | — | — |
+| `skia` | SKIA | `sdl-free` | 0 / 0 | — | — |
 | `software` | SOFTWARE | `sdl-free` | 0 / 0 | — | — |
+| `sokol` | SOKOL | `sdl-free` | 0 / 0 | — | — |
 | `stub` | STUB | `sdl-free` | 0 / 0 | — | — |
 
 ## Findings
@@ -67,7 +67,7 @@
    internal `SDL_Renderer` CNA never sees — so no amount of migrating CNA code removes
    their dependency. That is a different kind of exception and is recorded as one.
 
-2. **2 CPU rasterisers present through `SDL_Renderer`:** `blend2d`, `skia`.
+2. **1 CPU rasterisers present through `SDL_Renderer`:** `blend2d`.
    They are not SDL renderers by identity — they rasterise on the CPU and then use
    `SDL_CreateTexture`/`SDL_UpdateTexture`/`SDL_RenderTexture`/`SDL_RenderPresent` purely
    to get finished pixels onto the window, with letterbox scaling and vsync. The platform

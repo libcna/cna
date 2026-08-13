@@ -93,6 +93,9 @@ namespace CNA::Internal::Renderers
         /** @brief Presents this context's window back buffer. */
         void SwapBuffers() { service_.SwapBuffers(window_); }
 
+        /** @brief Re-establishes this context as current after another GL consumer changed it. */
+        void MakeCurrent() { service_.MakeCurrent(window_, context_); }
+
         /** @brief Applies a swap interval to the current context. */
         bool SetSwapInterval(const int interval) { return service_.SetSwapInterval(interval); }
 

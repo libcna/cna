@@ -2,6 +2,7 @@
 // SKIA-12: transactional construction, window registry ownership, and repeated cleanup.
 
 #include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -15,6 +16,8 @@ using CNA::Internal::Renderers::CnaPresentationMode;
 using CNA::Internal::Renderers::IGraphicsRenderer;
 using CNA::Internal::Renderers::Skia::SkiaRenderer;
 using CNA::Internal::Renderers::Skia::SkiaInitializationFailurePointEXT;
+using CNA::Examples::SdlTestRendererArgs;
+using CNA::Examples::SdlTestSurfacePresenter;
 
 namespace
 {
@@ -43,7 +46,10 @@ namespace
     {
         bool usable = false;
         {
-            SkiaRenderer renderer(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
+            SdlTestSurfacePresenter presenter(window);
+            SkiaRenderer renderer(SdlTestRendererArgs(
+                window, nullptr, &presenter, 16, 12,
+                CnaPresentationMode::NativeBackBuffer, 0));
             std::array<std::uint8_t, 4> pixel{};
             renderer.Clear(1.0f, 0.0f, 0.0f, 1.0f);
             renderer.ReadBackbuffer(0, 0, 1, 1, pixel.data());
@@ -77,15 +83,15 @@ int main()
     std::string nullDiagnostic;
     try
     {
-        SkiaRenderer invalid(nullptr, 16, 12, CnaPresentationMode::NativeBackBuffer, 0);
+        SkiaRenderer invalid({});
     }
     catch (const std::exception& exception)
     {
         nullRejected = true;
         nullDiagnostic = exception.what();
     }
-    Check(nullRejected && nullDiagnostic.find("null window") != std::string::npos,
-          "null-window construction fails with an actionable diagnostic");
+    Check(nullRejected && nullDiagnostic.find("without a platform window") != std::string::npos,
+          "missing-platform-window construction fails with an actionable diagnostic");
 
     for (const FailureCase& failure : kFailureCases)
     {
@@ -93,8 +99,10 @@ int main()
         std::string diagnostic;
         try
         {
-            SkiaRenderer renderer(window, 16, 12, CnaPresentationMode::NativeBackBuffer, 0,
-                                        {}, failure.point);
+            SdlTestSurfacePresenter presenter(window);
+            SkiaRenderer renderer(SdlTestRendererArgs(
+                window, nullptr, &presenter, 16, 12,
+                CnaPresentationMode::NativeBackBuffer, 0), failure.point);
         }
         catch (const std::exception& exception)
         {

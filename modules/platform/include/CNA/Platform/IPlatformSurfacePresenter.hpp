@@ -14,8 +14,12 @@ namespace CNA::Platform {
         Stretch,
         /** @brief Scale to fit while preserving aspect ratio, padding the remainder. */
         Letterbox,
+        /** @brief Scale to cover while preserving aspect ratio, cropping the excess. */
+        Overscan,
         /** @brief Present at 1:1 without scaling, centred. */
-        None
+        None,
+        /** @brief Present at 1:1 without scaling, aligned to the top-left corner. */
+        Native
     };
 
     /** @brief How a presented image is filtered when scaled. */

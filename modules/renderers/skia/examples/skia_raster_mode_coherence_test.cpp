@@ -4,6 +4,7 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaStartupDiagnostic.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -18,6 +19,8 @@ using CNA::Internal::Renderers::RendererDeviceEvent;
 using CNA::Internal::Renderers::CnaPresentationMode;
 using CNA::Internal::Renderers::Skia::SkiaRenderer;
 using CNA::Internal::Renderers::Skia::kSkiaStartupDiagnostic;
+using CNA::Examples::SdlTestRendererArgs;
+using CNA::Examples::SdlTestSurfacePresenter;
 
 namespace
 {
@@ -70,9 +73,10 @@ int main()
 
     std::vector<RendererDeviceEvent> events;
     {
-        SkiaRenderer renderer(
-            window, 8, 8, CnaPresentationMode::NativeBackBuffer, 0,
-            [&events](RendererDeviceEvent event) { events.push_back(event); });
+        SdlTestSurfacePresenter presenter(window);
+        SkiaRenderer renderer(SdlTestRendererArgs(
+            window, nullptr, &presenter, 8, 8, CnaPresentationMode::NativeBackBuffer, 0,
+            [&events](RendererDeviceEvent event) { events.push_back(event); }));
 
         const std::string_view report = renderer.GetStartupDiagnosticEXT();
         Check(report == kSkiaStartupDiagnostic && report.find("surface=raster") != std::string_view::npos,
@@ -84,7 +88,7 @@ int main()
         Check(HasExactCapabilities(renderer),
               "runtime capabilities agree with the raster diagnostic and transfer-only Texture3D");
         Check(SDL_GetRenderer(window) != nullptr,
-              "the SDL renderer is presentation-only and remains owned by the Skia renderer");
+              "the SDL test adapter supplies the platform presentation service");
 
         // Components are chosen so conversion through 8-bit premultiplied storage round-trips
         // exactly. This observes the public backbuffer boundary rather than only SkSurface internals.
@@ -102,7 +106,7 @@ int main()
         Check(HasExactCapabilities(renderer) && renderer.GetStartupDiagnosticEXT() == report,
               "recovery cannot change mode, capabilities or the immutable diagnostic");
         Check(SDL_GetRenderer(window) != nullptr,
-              "recovery rebuilds only the owned SDL presenter and does not switch Skia modes");
+              "recovery reconfigures the borrowed presenter without switching Skia modes");
     }
 
     Check(SDL_GetRenderer(window) == nullptr && SDL_GetWindowID(window) != 0,
