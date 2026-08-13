@@ -99,6 +99,21 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 /// slightly different curves.
 #define CNA_GL_SRGB_TRANSFER_DECL CNA_GLSL_SRGB_TRANSFER
 
+// plan_gltf.md GLTF-264: a normal follows the inverse transpose of the blended skin matrix.
+// All EasyGL profiles, including GLSL ES 1.00, support cross/dot but ES 1.00 has no inverse() for
+// matrices. The three cross products are the columns of det(m)*inverseTranspose(m). Normalisation
+// cancels abs(det); multiplying by sign(det) retains the orientation under a mirrored joint. A
+// nearly singular blend falls back to the historical direct transform, after which each caller's
+// existing zero-length guard prevents a NaN from poisoning the lighting calculation.
+#define CNA_GL_SKIN_NORMAL_DECL \
+"vec3 cnaSkinNormal(mat3 m,vec3 n){\n" \
+"    vec3 c0=m[0],c1=m[1],c2=m[2];\n" \
+"    vec3 co0=cross(c1,c2),co1=cross(c2,c0),co2=cross(c0,c1);\n" \
+"    float det=dot(c0,co0);\n" \
+"    vec3 transformed=mat3(co0,co1,co2)*n;\n" \
+"    return (abs(det)>1e-6)?transformed*sign(det):m*n;\n" \
+"}\n"
+
 // REMED-GFX-122: stock EasyGL effects share one optional per-instance world matrix input. Locations
 // 12-15 reserve the final four slots of GLES 3's guaranteed 16-attribute floor. That leaves the
 // complete XNA profile budget (12 per-vertex elements + 4 matrix columns) available instead of
@@ -5512,6 +5527,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "out vec4 vColor;\n"
+CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
 // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
@@ -5532,15 +5548,16 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // normal for just that vertex rather than propagating NaN; XNA/FNA's own Skin() was
 // never validated against this degenerate case, so this is a numerical-safety guard,
 // not a deviation from its intended per-vertex transform.
-"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
 // (uNormalMatrix = transpose(inverse(World3x3)), CPU-precomputed in BindDrawParams() exactly as
-// every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx Skin() applies
-// the bone 3x3, then Lighting.fxh applies mul(normal, WorldInverseTranspose); this shader dropped
-// the outer world factor entirely (audit Variant A), so any rotated or non-uniformly-scaled
-// skinned model was lit as if World were identity. The fragment stage re-normalizes vNormal.
+// every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx establishes the
+// composition order; GLTF-264 strengthens its direct bone 3x3 to inverse-transpose because glTF
+// joints may carry non-uniform scale. This shader also used to drop the outer world factor entirely
+// (audit Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
+// identity. The fragment stage re-normalizes vNormal.
 "    vNormal=uNormalMatrix*cnaInstanceDirection(boneNormal);\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
@@ -5710,6 +5727,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec3 vLitRGB;\n"
 "out vec3 vSpecularRGB;\n"
 "out vec4 vColor;\n"
+CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
@@ -5730,7 +5748,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // Same degenerate-blend-normal guard as EnsureSkinnedProgram() above (see its own
 // comment for the root cause) -- this vertex-lit sibling does the identical skinning
 // and normal transform, just with lighting evaluated per-vertex instead of per-pixel.
-"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix (uNormalMatrix =
@@ -6037,6 +6055,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
+CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
@@ -6044,14 +6063,17 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"
-"    mat3 skinNormalMat=mat3(skinMat);\n"
+"    mat3 skinDirectionMat=mat3(skinMat);\n"
 // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix (uNormalMatrix),
 // not raw mat3(uWorld). Raw World is only correct for rotation and uniform scale and diverges from
 // FNA's mul(normal, WorldInverseTranspose) under non-uniform scale; it also contradicted this
 // file's own unskinned EnsurePbrProgram, which already uses uNormalMatrix. The tangent stays on
 // raw World: tangents transform as directions, not as normals (glTF convention, unchanged).
-"    vNormal=normalize(uNormalMatrix*cnaInstanceDirection(skinNormalMat*aNormal));\n"
-"    vTangent=mat3(uWorld)*cnaInstanceDirection(skinNormalMat*aTangent.xyz);\n"
+"    vec3 skinnedNormal=cnaSkinNormal(skinDirectionMat,aNormal);\n"
+"    float skinnedNormalLen=length(skinnedNormal);\n"
+"    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
+"    vNormal=normalize(uNormalMatrix*cnaInstanceDirection(boneNormal));\n"
+"    vTangent=mat3(uWorld)*cnaInstanceDirection(skinDirectionMat*aTangent.xyz);\n"
 "    vBitangentSign=aTangent.w;\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"

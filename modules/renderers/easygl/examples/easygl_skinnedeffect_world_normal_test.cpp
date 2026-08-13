@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-006: SkinnedEffect world-space normal transform, EasyGL renderer.
+// REMED-GFX-006 / plan_gltf.md GLTF-264: SkinnedEffect world- and joint-space normal transforms.
 //
-// FNA's authoritative path (SkinnedEffect.fx + Lighting.fxh):
+// FNA's stock path (SkinnedEffect.fx + Lighting.fxh):
 //   Skin():                        vin.Normal = mul(vin.Normal, (float3x3)skinning);
 //   ComputeCommonVSOutput...():    worldNormal = normalize(mul(normal, WorldInverseTranspose));
-// so the correct world-space normal is
-//   normalize( InverseTranspose(World3x3) * ( mat3(skinMatrix) * objectNormal ) ).
+// assumes the bone palette has no non-uniform scale. glTF does allow scale in joint transforms;
+// preserving a surface normal under that affine transform requires
+//   normalize( InverseTranspose(World3x3)
+//            * InverseTranspose(skinMatrix3x3) * objectNormal ).
 //
 // EasyGL's three skinned vertex programs (EnsureSkinnedProgram/EnsureSkinnedVertexLitProgram --
 // audit Variant A, no world factor at all -- and EnsurePbrSkinnedProgram -- audit Variant B, raw
@@ -21,8 +23,8 @@
 //     accidental "the geometry moved/turned edge-on" artifact.
 //   * The vertex normal is deliberately NOT the face normal. It is an in-plane direction, so a
 //     rotation ABOUT Z changes the world normal while leaving the quad's coverage untouched.
-//   * Bones are an identity bind pose, so mat3(skinMatrix) = I and the measurement isolates the
-//     World factor alone -- the exact term under test.
+//   * The original cases use an identity bind pose to isolate the World factor. GLTF-264's added
+//     cases hold World at identity and vary the bone scale, isolating the other factor.
 //   * AmbientLightColor = 0 and a single directional light, so the pixel is a pure N.L readout.
 //
 // Cases and analytically-derived expectations (light chosen so -Direction = (0,1,0), diffuse
@@ -36,6 +38,10 @@
 //        no-world  (Variant A)                 = norm(1,1,0)   -> N.L = 0.707 -> ~180
 //      Three-way distinguishable, so this case rejects an incorrect raw-World "fix" too.
 //   4. World = RotationZ(90) * Scale(2,1,1): CPU-derived by the same formula, cross-checked.
+//   5. Bone = Scale(2,2,2), n0 = (0,.6,.8): uniform-scale control -> N.L=.6 -> ~153
+//   6. Bone = Scale(1,2,1), n0 = (0,.6,.8):
+//        correct inverse-transpose = norm(0,.3,.8) -> N.L=.351 -> ~90
+//        wrong direct joint matrix  = norm(0,1.2,.8) -> N.L=.832 -> ~212
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -77,15 +83,20 @@ namespace
     constexpr float kQuad = 0.9f;
 
     // Upper-left 3x3 of the inverse transpose, computed on the CPU exactly as the shader must.
-    Vector3 ExpectedWorldNormal(const Matrix& world, const Vector3& n)
+    Vector3 InverseTransposeNormal(const Matrix& transform, const Vector3& n)
     {
-        const Matrix nm = Matrix::Transpose(Matrix::Invert(world));
+        const Matrix nm = Matrix::Transpose(Matrix::Invert(transform));
         Vector3 r(
             nm.M11 * n.X + nm.M21 * n.Y + nm.M31 * n.Z,
             nm.M12 * n.X + nm.M22 * n.Y + nm.M32 * n.Z,
             nm.M13 * n.X + nm.M23 * n.Y + nm.M33 * n.Z);
         const float len = std::sqrt(r.X * r.X + r.Y * r.Y + r.Z * r.Z);
         return len > 0.0f ? Vector3(r.X / len, r.Y / len, r.Z / len) : r;
+    }
+
+    Vector3 ExpectedNormal(const Matrix& world, const Matrix& bone, const Vector3& n)
+    {
+        return InverseTransposeNormal(world, InverseTransposeNormal(bone, n));
     }
 }
 
@@ -101,7 +112,8 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
     // (per-vertex/Gouraud) -- both are audit Variant A and both must be fixed. The quad's normal
     // and World are spatially constant, so the per-vertex Gouraud result at the centre equals the
     // per-pixel result to the byte, letting a single analytic expectation cover both programs.
-    Color Render(GraphicsDevice& dev, const Matrix& world, const Vector3& n, bool preferPerPixel)
+    Color Render(GraphicsDevice& dev, const Matrix& world, const Matrix& bone,
+                 const Vector3& n, bool preferPerPixel)
     {
         dev.Clear(Color(0, 0, 0, 255));
         dev.SetDepthTestEnabled(false);
@@ -129,7 +141,7 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
         fx.DirectionalLight1.setEnabledProperty(false);
         fx.DirectionalLight2.setEnabledProperty(false);
 
-        std::vector<Matrix> bones = { Matrix::getIdentityProperty() };
+        std::vector<Matrix> bones = { bone };
         fx.SetBoneTransforms(bones);
         fx.setWeightsPerVertexProperty(1);
         fx.Apply();
@@ -160,14 +172,14 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
         return px;
     }
 
-    void Case(GraphicsDevice& dev, const char* label, const Matrix& world, const Vector3& n,
-              bool preferPerPixel)
+    void Case(GraphicsDevice& dev, const char* label, const Matrix& world, const Matrix& bone,
+              const Vector3& n, bool preferPerPixel)
     {
-        const Vector3 wn = ExpectedWorldNormal(world, n);
+        const Vector3 wn = ExpectedNormal(world, bone, n);
         const float   ndotl = wn.Y > 0.0f ? wn.Y : 0.0f;      // L = (0,1,0)
         const int     want  = static_cast<int>(ndotl * 255.0f + 0.5f);
 
-        const Color got = Render(dev, world, n, preferPerPixel);
+        const Color got = Render(dev, world, bone, n, preferPerPixel);
         // The texture is white and DiffuseColor is white, so all three channels track N.L.
         const int gotV = got.getRProperty();
         const bool ok = std::abs(gotV - want) <= 12;
@@ -180,10 +192,9 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
         else
         {
             ++fail_;
-            std::printf("       expected the FNA transform InvTranspose(World3x3)*(skin*n); "
-                        "a result matching the un-worlded normal means the outer world normal "
-                        "matrix is still missing (Variant A), and one matching raw-World means "
-                        "the inverse transpose is still not applied (Variant B)\n");
+            std::printf("       expected InvTranspose(World3x3)*"
+                        "InvTranspose(Skin3x3)*normal; a direct skin 3x3 multiply is wrong under "
+                        "a non-uniform joint scale (GLTF-264)\n");
         }
         std::fflush(stdout);
     }
@@ -194,18 +205,30 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
         const Vector3 nXY(0.70710678f, 0.70710678f, 0.0f);
 
         // 1. identity World -- control; must agree with the existing identity-World tests.
-        Case(dev, "identity World", Matrix::getIdentityProperty(), nX, preferPerPixel);
+        const Matrix identity = Matrix::getIdentityProperty();
+        Case(dev, "identity World", identity, identity, nX, preferPerPixel);
 
         // 2. pure rotation -- discriminates Variant A maximally (WHITE vs BLACK).
-        Case(dev, "rotationZ(90)", Matrix::CreateRotationZ(MathHelper::PiOver2), nX, preferPerPixel);
+        Case(dev, "rotationZ(90)", Matrix::CreateRotationZ(MathHelper::PiOver2), identity,
+             nX, preferPerPixel);
 
         // 3. non-uniform scale -- discriminates Variant A *and* a naive raw-World fix (Variant B).
-        Case(dev, "scale(2,1,1)", Matrix::CreateScale(2.0f, 1.0f, 1.0f), nXY, preferPerPixel);
+        Case(dev, "scale(2,1,1)", Matrix::CreateScale(2.0f, 1.0f, 1.0f), identity,
+             nXY, preferPerPixel);
 
         // 4. rotation + non-uniform scale.
         Case(dev, "rotationZ(90)*scale(2,1,1)",
              Matrix::CreateScale(2.0f, 1.0f, 1.0f) * Matrix::CreateRotationZ(MathHelper::PiOver2),
-             nXY, preferPerPixel);
+             identity, nXY, preferPerPixel);
+
+        // GLTF-264 / skin-nonuniform-joint-scale: isolate the bone normal matrix with World=I.
+        // The uniform case is a control where direct and inverse-transpose point the same way;
+        // the non-uniform case separates them by 122 framebuffer levels.
+        const Vector3 nYZ(0.0f, 0.6f, 0.8f);
+        Case(dev, "uniform bone scale(2,2,2)", identity,
+             Matrix::CreateScale(2.0f, 2.0f, 2.0f), nYZ, preferPerPixel);
+        Case(dev, "non-uniform bone scale(1,2,1)", identity,
+             Matrix::CreateScale(1.0f, 2.0f, 1.0f), nYZ, preferPerPixel);
     }
 
 protected:

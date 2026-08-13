@@ -722,7 +722,10 @@ bypassed, and produce the analytic 92/112 factor/composition cases. Thus `GLTF-0
 no longer an environment blocker. `EasyGL_Pbr_MaterialMaps` adds an equally discriminating
 material-map witness on both programs: asymmetric texture channels lock occlusion to red, three
 strengths lock its interpolation formula, and three normal scales lock `rgb*2-1` plus XY-only
-scaling before TBN transformation.
+scaling before TBN transformation. The same test now also locks the skinned-PBR joint normal under
+`S=[1,2,1]` at byte 93 instead of the old direct-matrix result 139; the stock-effect companion
+locks the manifest's exact `(0,.351123,.936329)` direction in both per-pixel and per-vertex programs
+as byte 90 instead of 212. Both focused oracles pass on OPENGLES2 and OPENGLES3.
 
 What those focused tests do **not** provide is the corpus rung: generated fixtures still need a
 fixed camera/light rig, a documented per-renderer tolerance, a reproducible capture path and the

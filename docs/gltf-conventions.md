@@ -110,6 +110,22 @@ The normal matrix is the inverse transpose rather than the world 3×3 because a 
 skews a normal that is merely multiplied by the world matrix. Under uniform scale the two agree,
 which is exactly why the difference goes unnoticed until an asset with a non-uniform scale arrives.
 
+Skinning applies the same distinction a second time. For a blended joint matrix `S`, the shader
+uses these model-space quantities before applying the outer world transforms above:
+
+```
+position' = S * position
+normal'   = normalize(transpose(inverse(S₃ₓ₃)) * normal)
+tangent'  = S₃ₓ₃ * tangent
+```
+
+Tangents are directions, then PBR re-orthogonalises them against `normal'` before constructing the
+TBN basis. Normals are plane covectors: multiplying one directly by `S₃ₓ₃` is correct for rotation
+or uniform scale, but `skin-nonuniform-joint-scale`'s `S=[1,2,1]` separates the two directions by
+about 51 degrees. EasyGL evaluates the inverse transpose through cofactors so the GLSL ES 1.00
+profiles do not require a matrix `inverse()` intrinsic; determinant sign is retained for mirrors,
+and a nearly singular blend takes the established finite fallback instead of producing NaN.
+
 ### Defaults, and the values they are not
 
 | Field | Omitted value | The wrong default, and what it does |
