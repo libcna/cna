@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
@@ -15,16 +16,21 @@
 
 struct SDL_Window;
 
+namespace CNA::Platform
+{
+    class IPlatformWindow;
+}
+
 namespace Microsoft::Xna::Framework
 {
     class Game;
     class GraphicsDeviceManager;
 
     /**
-     * @brief Represents the game window backed by an SDL window.
+     * @brief Represents the game window backed by the selected platform.
      *
-     * FNA defines GameWindow as abstract with per-platform subclasses; CNA collapses
-     * that hierarchy into one concrete SDL-backed class.
+     * FNA defines GameWindow as abstract with per-platform subclasses; CNA keeps one concrete
+     * facade and delegates its behavior to `IPlatformWindow`.
      */
     class GameWindow : public System::Object
     {
@@ -56,7 +62,7 @@ namespace Microsoft::Xna::Framework
         CNAEXT explicit GameWindow(SDL_Window* window);
 
         /** @brief Destructor. */
-        ~GameWindow() override = default;
+        ~GameWindow() override;
 
         /**
          * @brief Gets whether the user may resize the window.
@@ -205,7 +211,11 @@ namespace Microsoft::Xna::Framework
         virtual void SetTitle(const String& title);
 
     private:
-        SDL_Window* window_;
+        // Owns only the compatibility wrapper created by the public SDL constructor. A normal
+        // GameWindow borrows GraphicsDevice's platform-owned window through window_.
+        std::unique_ptr<CNA::Platform::IPlatformWindow> adoptedWindow_;
+        CNA::Platform::IPlatformWindow* window_;
+        SharpRuntime::IntPtr legacyHandle_;
         String title_;
         String screenDeviceName_;
         Rectangle clientBounds_;
@@ -216,12 +226,13 @@ namespace Microsoft::Xna::Framework
         bool pendingFullScreen_;
         bool hasPendingScreenDeviceChange_;
 
-        void setWindowInternal(SDL_Window* window);
+        void setWindowInternal(CNA::Platform::IPlatformWindow* window,
+                               SharpRuntime::IntPtr legacyHandle);
         void setCurrentOrientationProperty(DisplayOrientation value);
-        void updateFromSDL();
-        void refreshCachedSDLState(bool raiseEvents);
-        [[nodiscard]] Rectangle queryClientBoundsFromSDL() const;
-        [[nodiscard]] String queryScreenDeviceNameFromSDL() const;
+        void updateFromPlatform();
+        void refreshCachedPlatformState(bool raiseEvents);
+        [[nodiscard]] Rectangle queryClientBoundsFromPlatform() const;
+        [[nodiscard]] String queryScreenDeviceNameFromPlatform() const;
         [[nodiscard]] DisplayOrientation orientationFromBounds(const Rectangle& bounds) const;
         [[nodiscard]] bool orientationIsSupported(DisplayOrientation orientation) const;
     };

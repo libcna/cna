@@ -27,7 +27,7 @@
 // avoid that requirement - confirmed not feasible, and not valuable enough to justify diverging
 // from the real XNA API to force it:
 //   1. Game's own constructor unconditionally stands up a real GraphicsDevice/backend/window
-//      (`Window_.setWindowInternal(GraphicsDevice_.GetWindowInternal());` in
+//      (`Window_.setWindowInternal(GraphicsDevice_.GetPlatformWindowInternal(), ...);` in
 //      Game::Game()) - there is no "lightweight" Game to fake; any Game instance needs a real
 //      backend regardless.
 //   2. GamerServicesComponent's public constructor signature (`GamerServicesComponent(Game&

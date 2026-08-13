@@ -67,8 +67,8 @@ public:
     [[nodiscard]] std::string GetDisplayName() const override { return {}; }
 
     [[nodiscard]] bool IsVisible() const { return visible_; }
-    [[nodiscard]] bool IsResizable() const { return resizable_; }
-    [[nodiscard]] bool IsBorderless() const { return borderless_; }
+    [[nodiscard]] bool IsResizable() const override { return resizable_; }
+    [[nodiscard]] bool IsBorderless() const override { return borderless_; }
 
 private:
     std::string title_;

@@ -219,7 +219,9 @@ namespace Microsoft::Xna::Framework
             previousSleepTime = System::TimeSpan::FromMilliseconds(1.0);
         }
 
-        Window_.setWindowInternal(GraphicsDevice_.GetWindowInternal());
+        Window_.setWindowInternal(
+            GraphicsDevice_.GetPlatformWindowInternal(),
+            reinterpret_cast<SharpRuntime::IntPtr>(GraphicsDevice_.GetWindowInternal()));
         Content_.setGraphicsDevice(GraphicsDevice_);
 
         FrameworkDispatcher::Update();
@@ -348,7 +350,7 @@ namespace Microsoft::Xna::Framework
         // Still gated on there being a window: cursor visibility is meaningless without one, and
         // the platform's mouse service is null when the platform has no pointer at all (headless,
         // and eventually terminal), which is a second reason the same call can be a no-op.
-        if (GraphicsDevice_.GetWindowInternal() != nullptr)
+        if (GraphicsDevice_.GetPlatformWindowInternal() != nullptr)
         {
             if (CNA::Platform::IPlatformMouse* mouse = platform_->GetMouse())
             {
@@ -1045,7 +1047,7 @@ namespace Microsoft::Xna::Framework
                     {
                     case CNA::Platform::WindowEventKind::Resized:
                     case CNA::Platform::WindowEventKind::PixelSizeChanged:
-                        Window_.updateFromSDL();
+                        Window_.updateFromPlatform();
                         break;
                     case CNA::Platform::WindowEventKind::FocusLost:
                         setIsActiveProperty(false);

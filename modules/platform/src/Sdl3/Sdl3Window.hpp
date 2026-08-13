@@ -58,8 +58,14 @@ namespace CNA::Platform::Sdl3 {
         /** @brief Gets the display scale. @return Logical-to-physical scale factor. */
         [[nodiscard]] float GetDisplayScale() const override;
 
+        /** @brief Gets whether the user may resize. @return True when resizing is enabled. */
+        [[nodiscard]] bool IsResizable() const override;
+
         /** @brief Sets whether the user may resize. @param resizable True to allow resizing. */
         void SetResizable(bool resizable) override;
+
+        /** @brief Gets whether the window is undecorated. @return True when borderless. */
+        [[nodiscard]] bool IsBorderless() const override;
 
         /** @brief Sets whether the window is undecorated. @param borderless True to remove the border. */
         void SetBorderless(bool borderless) override;
@@ -111,6 +117,9 @@ namespace CNA::Platform::Sdl3 {
     private:
         SDL_Window* window_;
         bool ownsWindow_;
+        // SDL's web backend may transiently fail a size query immediately after creation while
+        // its canvas finishes asynchronously. Preserve the last good value across that tick.
+        mutable WindowBounds lastKnownBounds_;
     };
 
 } // namespace CNA::Platform::Sdl3

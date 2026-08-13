@@ -70,7 +70,9 @@ namespace CNA::Platform::Headless {
             }
 
             [[nodiscard]] float GetDisplayScale() const override { return 1.0f; }
+            [[nodiscard]] bool IsResizable() const override { return resizable_; }
             void SetResizable(const bool resizable) override { resizable_ = resizable; }
+            [[nodiscard]] bool IsBorderless() const override { return borderless_; }
             void SetBorderless(const bool borderless) override { borderless_ = borderless; }
             void SetFullscreenMode(const WindowFullscreenMode mode) override { mode_ = mode; }
             [[nodiscard]] WindowFullscreenMode GetFullscreenMode() const override { return mode_; }

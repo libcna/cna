@@ -112,11 +112,25 @@ namespace CNA::Platform {
         [[nodiscard]] virtual float GetDisplayScale() const = 0;
 
         /**
+         * @brief Gets whether the user may resize the window.
+         *
+         * @return True when user resizing is enabled.
+         */
+        [[nodiscard]] virtual bool IsResizable() const = 0;
+
+        /**
          * @brief Sets whether the user may resize the window.
          *
          * @param resizable True to allow resizing.
          */
         virtual void SetResizable(bool resizable) = 0;
+
+        /**
+         * @brief Gets whether the window is drawn without decorations.
+         *
+         * @return True when the border is hidden.
+         */
+        [[nodiscard]] virtual bool IsBorderless() const = 0;
 
         /**
          * @brief Sets whether the window is drawn without decorations.

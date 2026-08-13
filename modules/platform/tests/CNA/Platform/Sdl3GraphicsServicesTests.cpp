@@ -170,7 +170,9 @@ TEST_F(Sdl3GraphicsServiceTest, GlServiceRejectsAWindowItDidNotCreate)
         [[nodiscard]] WindowSize GetPixelSize() const override { return {}; }
         void SetSize(int, int) override {}
         [[nodiscard]] float GetDisplayScale() const override { return 1.0f; }
+        [[nodiscard]] bool IsResizable() const override { return false; }
         void SetResizable(bool) override {}
+        [[nodiscard]] bool IsBorderless() const override { return false; }
         void SetBorderless(bool) override {}
         void SetFullscreenMode(WindowFullscreenMode) override {}
         [[nodiscard]] WindowFullscreenMode GetFullscreenMode() const override

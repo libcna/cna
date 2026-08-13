@@ -144,3 +144,30 @@ TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
     GameWindow window;
     EXPECT_NO_THROW(window.EndScreenDeviceChange("test"));
 }
+
+TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindow)
+{
+#if defined(CNA_PLATFORM_SDL3)
+    GTEST_SKIP() << "the HEADLESS renderer intentionally creates no SDL platform window";
+#else
+    Game game;
+    GameWindow& window = game.getWindowProperty();
+
+    EXPECT_EQ(window.getTitleProperty(), "Game");
+    EXPECT_TRUE(window.getAllowUserResizingProperty());
+    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 800, 480));
+
+    window.setTitleProperty("platform-window");
+    EXPECT_EQ(window.getTitleProperty(), "platform-window");
+    window.setAllowUserResizingProperty(false);
+    EXPECT_FALSE(window.getAllowUserResizingProperty());
+    window.setIsBorderlessEXTProperty(true);
+    EXPECT_TRUE(window.getIsBorderlessEXTProperty());
+
+    window.BeginScreenDeviceChange(false);
+    window.EndScreenDeviceChange("virtual-display", 320, 240);
+    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 320, 240));
+    EXPECT_NO_THROW(window.MinimizeEXT());
+    EXPECT_NO_THROW(window.RestoreEXT());
+#endif
+}

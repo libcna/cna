@@ -66,7 +66,9 @@ public:
         pendingHeight_ = height;
     }
     [[nodiscard]] float GetDisplayScale() const override { return 2.0f; }
+    [[nodiscard]] bool IsResizable() const override { return true; }
     void SetResizable(bool) override {}
+    [[nodiscard]] bool IsBorderless() const override { return false; }
     void SetBorderless(bool) override {}
     void SetFullscreenMode(const WindowFullscreenMode mode) override
     {

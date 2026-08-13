@@ -47,6 +47,8 @@ namespace CNA::Platform::Sdl3 {
         {
             throw PlatformException("Sdl3Window", "constructed with a null SDL_Window");
         }
+        SDL_GetWindowPosition(window_, &lastKnownBounds_.x, &lastKnownBounds_.y);
+        SDL_GetWindowSize(window_, &lastKnownBounds_.width, &lastKnownBounds_.height);
     }
 
     Sdl3Window::~Sdl3Window()
@@ -120,10 +122,22 @@ namespace CNA::Platform::Sdl3 {
 
     WindowBounds Sdl3Window::GetClientBounds() const
     {
-        WindowBounds bounds;
-        SDL_GetWindowPosition(window_, &bounds.x, &bounds.y);
-        SDL_GetWindowSize(window_, &bounds.width, &bounds.height);
-        return bounds;
+        int x = lastKnownBounds_.x;
+        int y = lastKnownBounds_.y;
+        if (SDL_GetWindowPosition(window_, &x, &y))
+        {
+            lastKnownBounds_.x = x;
+            lastKnownBounds_.y = y;
+        }
+
+        int width = lastKnownBounds_.width;
+        int height = lastKnownBounds_.height;
+        if (SDL_GetWindowSize(window_, &width, &height))
+        {
+            lastKnownBounds_.width = width;
+            lastKnownBounds_.height = height;
+        }
+        return lastKnownBounds_;
     }
 
     WindowSize Sdl3Window::GetPixelSize() const
@@ -148,9 +162,19 @@ namespace CNA::Platform::Sdl3 {
         return scale > 0.0f ? scale : 1.0f;
     }
 
+    bool Sdl3Window::IsResizable() const
+    {
+        return (SDL_GetWindowFlags(window_) & SDL_WINDOW_RESIZABLE) != 0;
+    }
+
     void Sdl3Window::SetResizable(const bool resizable)
     {
         SDL_SetWindowResizable(window_, resizable);
+    }
+
+    bool Sdl3Window::IsBorderless() const
+    {
+        return (SDL_GetWindowFlags(window_) & SDL_WINDOW_BORDERLESS) != 0;
     }
 
     void Sdl3Window::SetBorderless(const bool borderless)

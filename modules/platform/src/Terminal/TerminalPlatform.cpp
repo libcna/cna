@@ -96,8 +96,10 @@ namespace CNA::Platform::Terminal {
         }
 
         [[nodiscard]] float GetDisplayScale() const override { return 1.0f; }
+        [[nodiscard]] bool IsResizable() const override { return resizable_; }
         void SetResizable(const bool resizable) override { resizable_ = resizable; }
-        void SetBorderless(bool) override {}
+        [[nodiscard]] bool IsBorderless() const override { return borderless_; }
+        void SetBorderless(const bool borderless) override { borderless_ = borderless; }
         void SetFullscreenMode(const WindowFullscreenMode mode) override { mode_ = mode; }
         [[nodiscard]] WindowFullscreenMode GetFullscreenMode() const override { return mode_; }
         void Show() override { visible_ = true; }
@@ -135,7 +137,7 @@ namespace CNA::Platform::Terminal {
         std::string title_;
         int width_ = 0, height_ = 0;
         int pendingWidth_ = 0, pendingHeight_ = 0;
-        bool resizable_ = true, visible_ = true, minimized_ = false;
+        bool resizable_ = true, borderless_ = false, visible_ = true, minimized_ = false;
         WindowFullscreenMode mode_ = WindowFullscreenMode::Windowed;
     };
 
