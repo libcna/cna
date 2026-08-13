@@ -716,7 +716,10 @@ configuration is now available and genuinely rasterises: the registered rigid an
 EasyGL PBR golden tests both render, read the framebuffer and compare four 8×8 PNG regions. The
 `GLTF-212` refresh also gives a discriminating colour-space witness: the former linear-space byte
 oracle `(64,74,87)` becomes `(137,146,158)` after the independently calculated sRGB OETF, and both
-programs produce the latter. Thus `GLTF-009` is open work, no longer an environment blocker.
+programs produce the latter. A second registered test uses mid-grey rather than endpoint textures:
+both programs return byte 128 through sRGB decode+encode, return 188 when each decode is deliberately
+bypassed, and produce the analytic 92/112 factor/composition cases. Thus `GLTF-009` is open work,
+no longer an environment blocker.
 
 What those focused tests do **not** provide is the corpus rung: generated fixtures still need a
 fixed camera/light rig, a documented per-renderer tolerance, a reproducible capture path and the

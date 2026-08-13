@@ -408,18 +408,19 @@ other half and belongs with the `SurfaceFormat` work, not here.
 **Renderer verification.** `EasyGLRenderer.cpp` now compiles in a real OPENGLES3 configuration,
 and its rigid and skinned PBR programs both execute in registered framebuffer tests. The focused
 `GLTF-212` witness produces the independently calculated sRGB-encoded bytes and compares four
-golden regions on both programs. The macro-splicing unit test remains valuable: the first version
-used a `const char*` variable, which **cannot** join adjacent shader-source literals and would not
-have compiled. The remaining colour-space gap is narrower: current pixel textures use endpoint
-colours, so a mid-grey base-colour/emissive texture still has to discriminate the decode itself.
+golden regions on both programs. `EasyGL_Pbr_SrgbTransfer` supplies the witness those endpoint
+textures could not: byte 128 round-trips through decode+encode, while deliberately disabling each
+decode independently produces byte 188. The macro-splicing unit test remains valuable: the first
+version used a `const char*` variable, which **cannot** join adjacent shader-source literals and
+would not have compiled.
 
 **Test.** `SrgbTransferTests` holds the C++ transfer to the specification's own values — endpoints,
 mid-grey, both knees evaluated branch-against-branch, a 256-level round trip, and the no-clamp
 property — and checks the GLSL declares both functions with the same constants. `GltfConformanceL6`
 asserts every PBR draw in the corpus declares both maps sRGB and the encode on, and that the three
-flags move independently. Focused EasyGL framebuffer tests now prove the shader executes and the
-output encode is applied exactly once. The mid-grey texture-decode witness and the corpus-wide L7
-matrix remain open (§5.3 of `docs/gltf-conformance.md`).
+flags move independently. Focused EasyGL framebuffer tests now prove the shader executes, both
+texture decodes move independently and the output encode is applied exactly once. The
+cross-renderer/corpus-wide L7 matrix remains open (§5.3 of `docs/gltf-conformance.md`).
 
 ---
 

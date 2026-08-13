@@ -190,6 +190,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_Pbr_FresnelFactors COMMAND cna_test_easygl_pbr_fresnel_factors
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-210/212/223: mid-grey texture decode and final sRGB encode on both
+        # rigid and skinned PBR programs. Endpoint textures cannot prove the decode path.
+        cna_easygl_test(cna_test_easygl_pbr_srgb_transfer
+                        easygl_pbr_srgb_transfer_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Pbr_SrgbTransfer COMMAND cna_test_easygl_pbr_srgb_transfer
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         easygl_render_target_test.cpp)
