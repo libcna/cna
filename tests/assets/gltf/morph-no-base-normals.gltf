@@ -1,0 +1,106 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "CNA gltf_fixtures"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "MeshNode",
+      "mesh": 0
+    }
+  ],
+  "meshes": [
+    {
+      "name": "morphnobasenormalsMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "mode": 4,
+          "targets": [
+            {
+              "POSITION": 2
+            }
+          ]
+        }
+      ],
+      "weights": [
+        1.0
+      ]
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5123,
+      "count": 3,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "max": [
+        0.0,
+        0.0,
+        2.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        2.0
+      ]
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 36
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 36,
+      "byteLength": 6
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 44,
+      "byteLength": 36
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 80,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAABAAIAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAEA="
+    }
+  ]
+}

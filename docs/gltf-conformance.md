@@ -594,7 +594,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**69 of the 76** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**81 of the 88** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. The seven without one are the fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`); their manifests record
@@ -808,6 +808,18 @@ written for this document: two descriptions of the same fixture are two things t
 | `skin-unnormalized` | skinning | L1, L2, L3 | unnormalized WEIGHTS_0; zero-weight vertex; renormalisation policy |
 | `skin-73-joints` | skinning | L1, L2 | skin.joints beyond MaxBones; palette limit; import rejection |
 | `skin-eight-influences` | skinning | L1, L2, L3 | JOINTS_1/WEIGHTS_1; eight influences per vertex; influence-set truncation; renormalisation after truncation |
+| `morph-position-only` | animation | L1, L2, L3 | one morph target; POSITION deltas only |
+| `morph-position-normal` | animation | L1, L2, L3 | POSITION and NORMAL deltas; normal renormalisation |
+| `morph-position-normal-tangent` | animation | L1, L2, L3 | POSITION, NORMAL and TANGENT deltas; tangent handedness preserved; GLTF-289 residue |
+| `morph-two-targets` | animation | L1, L2, L3 | two morph targets; weighted accumulation |
+| `morph-eight-targets` | animation | L1, L2, L3 | eight morph targets; interleaved zero weights |
+| `morph-zero-weights` | animation | L1, L2, L3 | zero weight; rest pose is exact |
+| `morph-overdriven-weight` | animation | L1, L2, L3 | weight above 1; negative weight; no clamping |
+| `morph-normal-only-target` | animation | L1, L2, L3 | target without POSITION; partial target semantics |
+| `morph-mesh-weights-only` | animation | L1, L2, L3 | mesh.weights without node.weights; absent is not zero |
+| `morph-node-weights-zero` | animation | L1, L2, L3 | node.weights overrides mesh.weights; explicit zero |
+| `morph-asymmetric-deltas` | animation | L1, L2, L3 | per-vertex distinct deltas; index-order sensitivity |
+| `morph-no-base-normals` | animation | L1, L2, L3 | morph without authored normals; generated normal basis |
 | `anim-rigid-node` | animation | L1, L2, L3, L4 | animation.channel targeting a non-joint node; rotation path; LINEAR interpolation; no skin |
 | `anim-nonzero-start` | animation | L1, L2, L3, L4 | animation with a non-zero first key time; clip duration; pre-first-key clamping; rotation path; no skin |
 | `anim-translation-scale` | animation | L1, L2, L3, L4 | translation path; scale path; channels keyed at disjoint times; union resampling; bind-pose fill of an undriven component |

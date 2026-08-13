@@ -947,6 +947,298 @@ def anim_out_of_scene_target() -> Fixture:
     )
 
 
-FIXTURES = [anim_rigid_node, anim_nonzero_start, anim_translation_scale, anim_step,
+
+# --- The morph-target family (`GLTF-292`) --------------------------------------------------------
+#
+# One builder for a family of small, deliberately-differing fixtures. Each states what it authors
+# and the blended result its own weights produce, computed here from §3.7.2.2's own equation --
+# `final = base + sum(weight_t * delta_t)` -- rather than read back from CNA. That is the point of
+# a fixture: the expectation is derived from the specification, and the loader is the thing under
+# test.
+#
+# A tilted base normal is used throughout rather than `(0,0,1)`: a normal delta added to a normal
+# that is already the answer proves nothing, which is the mistake `normal-absent` was written to
+# stop repeating.
+_MORPH_BASE_NORMALS = [(0.6, 0.0, 0.8), (0.6, 0.0, 0.8), (0.6, 0.0, 0.8)]
+#: A tangent basis authored so the fixtures that carry tangent deltas can state a handedness that
+#: must survive: `w = -1` is the mirrored case, and blending must never touch it (`GLTF-287`).
+_MORPH_BASE_TANGENTS = [(1.0, 0.0, 0.0, -1.0)] * 3
+
+
+def _blend(base, targets, weights):
+    """§3.7.2.2's own equation: `final = base + sum(weight_t * delta_t)`, component-wise."""
+    out = []
+    for v, point in enumerate(base):
+        blended = list(point)
+        for t, deltas in enumerate(targets):
+            if not deltas:
+                continue
+            for c in range(len(blended)):
+                blended[c] += weights[t] * deltas[v][c]
+        out.append(tuple(blended))
+    return out
+
+
+def _morph_fixture(*, name, targets, mesh_weights, description, features, docstring,
+                   node_weights=None, with_normals=True, with_tangents=False,
+                   spec_anchors=("morph-targets", "meshes-overview")):
+    """Builds one member of the morph family.
+
+    :param targets: one entry per morph target, each a dict with any of ``POSITION``/``NORMAL``/
+        ``TANGENT`` mapped to a per-vertex delta list. A target with no ``POSITION`` is legal and
+        is one of the cases this family exists to cover.
+    :param mesh_weights: the mesh's own ``weights``.
+    :param node_weights: the instancing node's ``weights``, or ``None`` to leave the mesh's in
+        force -- §3.7.2.2 gives the node the final say, and "absent" is not "zero".
+    """
+    b = GltfBuilder(name)
+    position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
+                                     accessor_type="VEC3", with_bounds=True)
+    attributes = {"POSITION": position}
+    if with_normals:
+        attributes["NORMAL"] = b.add_packed_accessor(usage="NORMAL", values=_MORPH_BASE_NORMALS,
+                                                      accessor_type="VEC3")
+    if with_tangents:
+        attributes["TANGENT"] = b.add_packed_accessor(usage="TANGENT", values=_MORPH_BASE_TANGENTS,
+                                                       accessor_type="VEC4")
+    indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
+                                    accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+
+    target_blocks = []
+    for i, target in enumerate(targets):
+        block = {}
+        for semantic, deltas in target.items():
+            accessor_type = "VEC3"
+            block[semantic] = b.add_packed_accessor(
+                usage=f"morph {semantic} delta {i}", values=deltas, accessor_type=accessor_type,
+                with_bounds=(semantic == "POSITION"))
+        target_blocks.append(block)
+
+    mesh = b.add_mesh([{
+        "attributes": attributes,
+        "indices": indices,
+        "targets": target_blocks,
+        "mode": TRIANGLES,
+    }], name=name.replace("-", "") + "Mesh", weights=list(mesh_weights))
+    node = (b.add_node(name="MeshNode", mesh=mesh, weights=list(node_weights))
+            if node_weights is not None else b.add_node(name="MeshNode", mesh=mesh))
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    effective = list(node_weights if node_weights is not None else mesh_weights)
+    position_targets = [t.get("POSITION") for t in targets]
+    normal_targets = [t.get("NORMAL") for t in targets]
+    l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    l4["morph"] = {
+        "targetCount": len(targets),
+        "meshWeights": list(mesh_weights),
+        "effectiveWeights": effective,
+        "targetsWithoutPositions": sum(1 for t in targets if "POSITION" not in t),
+        "targetsWithoutNormals": sum(1 for t in targets if "NORMAL" not in t),
+        "targetsWithoutTangents": sum(1 for t in targets if "TANGENT" not in t),
+        # The blended pose at the effective weights, from §3.7.2.2's equation rather than from CNA.
+        "blendedPositions": [list(p) for p in _blend(TRIANGLE_POSITIONS, position_targets, effective)],
+        "blendedNormalsBeforeRenormalisation":
+            [list(n) for n in _blend(_MORPH_BASE_NORMALS, normal_targets, effective)]
+            if with_normals else [],
+        "blendRule": "final = base + sum(weight_t * delta_t). Normals are renormalised afterwards "
+                     "because a weighted sum of unit vectors is not unit length; positions are "
+                     "not, and tangent handedness (w) is never blended at all.",
+    }
+    return Fixture(
+        id=name, audit_fixture=None, owning_group="animation",
+        description=description, builder=b, validated_layers=["L1", "L2", "L3"],
+        features=list(features),
+        spec_anchors=list(spec_anchors),
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name=name.replace("-", "") + "Mesh", primitive=0, mode=TRIANGLES,
+            positions=TRIANGLE_POSITIONS,
+            normals=_MORPH_BASE_NORMALS if with_normals else None,
+            tangents=_MORPH_BASE_TANGENTS if with_tangents else None,
+            indices=TRIANGLE_INDICES)]},
+        l4=l4,
+    )
+
+
+def morph_position_only() -> Fixture:
+    """One target carrying only ``POSITION`` deltas -- the simplest morph there is."""
+    return _morph_fixture(
+        name="morph-position-only",
+        targets=[{"POSITION": [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (0.0, 0.0, 4.0)]}],
+        mesh_weights=[1.0],
+        description="One morph target with POSITION deltas only, at full weight. Each vertex moves "
+                    "along a different axis, so a delta applied to the wrong vertex is a different "
+                    "shape rather than a scaled one.",
+        features=["one morph target", "POSITION deltas only"],
+        docstring="")
+
+
+def morph_position_normal() -> Fixture:
+    """Position and normal deltas together, with the renormalisation that follows."""
+    return _morph_fixture(
+        name="morph-position-normal",
+        targets=[{"POSITION": [(1.0, 0.0, 0.0)] * 3,
+                  "NORMAL": [(-0.6, 0.8, 0.0)] * 3}],
+        mesh_weights=[0.5],
+        description="A target carrying POSITION and NORMAL deltas at weight 0.5. The blended normal "
+                    "is deliberately not unit length before renormalisation, which is what makes "
+                    "the renormalisation step observable rather than a no-op.",
+        features=["POSITION and NORMAL deltas", "normal renormalisation"],
+        docstring="")
+
+
+def morph_position_normal_tangent() -> Fixture:
+    """All three delta semantics, including the one the `.cnj` sidecar drops (`GLTF-289`)."""
+    return _morph_fixture(
+        name="morph-position-normal-tangent",
+        targets=[{"POSITION": [(0.0, 0.0, 1.0)] * 3,
+                  "NORMAL": [(-0.6, 0.8, 0.0)] * 3,
+                  "TANGENT": [(0.0, 1.0, 0.0)] * 3}],
+        mesh_weights=[1.0],
+        with_tangents=True,
+        description="A target carrying POSITION, NORMAL and TANGENT deltas. This is the fixture "
+                    "GLTF-289's open residue is measured on: tangent deltas import correctly on "
+                    "the runtime path and are NOT written to the .cnj sidecar, so the offline path "
+                    "morphs positions and normals and keeps its rest-pose tangents. The base "
+                    "tangent's handedness is -1, which blending must never touch.",
+        features=["POSITION, NORMAL and TANGENT deltas", "tangent handedness preserved",
+                  "GLTF-289 residue"],
+        docstring="")
+
+
+def morph_two_targets() -> Fixture:
+    """Two targets whose contributions must add rather than overwrite."""
+    return _morph_fixture(
+        name="morph-two-targets",
+        targets=[{"POSITION": [(1.0, 0.0, 0.0)] * 3},
+                 {"POSITION": [(0.0, 2.0, 0.0)] * 3}],
+        mesh_weights=[0.25, 0.75],
+        description="Two targets at 0.25 and 0.75, moving along different axes. The weights sum to "
+                    "1 but the result is neither target: an implementation that took the last "
+                    "target, or the heaviest, produces a point on an axis rather than off both.",
+        features=["two morph targets", "weighted accumulation"],
+        docstring="")
+
+
+def morph_eight_targets() -> Fixture:
+    """Eight targets at once -- the count a facial rig actually uses."""
+    return _morph_fixture(
+        name="morph-eight-targets",
+        targets=[{"POSITION": [(float(i + 1) * 0.125, 0.0, 0.0)] * 3} for i in range(8)],
+        mesh_weights=[0.1, 0.0, 0.2, 0.0, 0.3, 0.0, 0.4, 0.0],
+        description="Eight targets with alternating zero weights, each contributing a different "
+                    "amount along +X. Half the targets contribute nothing, so an implementation "
+                    "that iterated targets instead of weights -- or stopped at the first zero -- "
+                    "lands somewhere else entirely.",
+        features=["eight morph targets", "interleaved zero weights"],
+        docstring="")
+
+
+def morph_zero_weights() -> Fixture:
+    """Every weight zero: the rest pose, which must be the base pose exactly."""
+    return _morph_fixture(
+        name="morph-zero-weights",
+        targets=[{"POSITION": [(5.0, 5.0, 5.0)] * 3}],
+        mesh_weights=[0.0],
+        description="One target with large deltas and a weight of zero. The blended pose must be "
+                    "the base pose EXACTLY -- not approximately -- which is the control for every "
+                    "other fixture in this family: if this one moves, the blend is applying "
+                    "something it was not asked for.",
+        features=["zero weight", "rest pose is exact"],
+        docstring="")
+
+
+def morph_overdriven_weight() -> Fixture:
+    """A weight above 1 and one below 0 -- both legal, and both routinely clamped by mistake."""
+    return _morph_fixture(
+        name="morph-overdriven-weight",
+        targets=[{"POSITION": [(1.0, 0.0, 0.0)] * 3},
+                 {"POSITION": [(0.0, 1.0, 0.0)] * 3}],
+        mesh_weights=[1.75, -0.5],
+        description="Weights of 1.75 and -0.5. §3.7.2.2 does not bound morph weights, and an "
+                    "animator overdriving a shape past 1 or pulling it below 0 is ordinary "
+                    "practice -- so a reader that clamps to [0,1] produces a pose the file did not "
+                    "ask for, silently.",
+        features=["weight above 1", "negative weight", "no clamping"],
+        docstring="")
+
+
+def morph_normal_only_target() -> Fixture:
+    """A target with no ``POSITION`` at all -- legal, and a natural place to index off the end."""
+    return _morph_fixture(
+        name="morph-normal-only-target",
+        targets=[{"NORMAL": [(-0.6, 0.8, 0.0)] * 3}],
+        mesh_weights=[1.0],
+        description="A target carrying only NORMAL deltas. §3.7.2.2 allows any subset of "
+                    "POSITION/NORMAL/TANGENT per target, so the position array must be left "
+                    "untouched rather than indexed into an absent delta list -- which is the "
+                    "shape of the bug this fixture exists to catch.",
+        features=["target without POSITION", "partial target semantics"],
+        docstring="")
+
+
+def morph_mesh_weights_only() -> Fixture:
+    """``mesh.weights`` with no ``node.weights`` -- the mesh's own value must survive."""
+    return _morph_fixture(
+        name="morph-mesh-weights-only",
+        targets=[{"POSITION": [(3.0, 0.0, 0.0)] * 3}],
+        mesh_weights=[0.5],
+        node_weights=None,
+        description="The mesh declares weights [0.5] and the instancing node declares none. §3.7.2.2 "
+                    "gives the node the final say only when it HAS one: absent is not zero, and an "
+                    "importer that defaulted the node's weights to zero would render every such "
+                    "mesh at rest.",
+        features=["mesh.weights without node.weights", "absent is not zero"],
+        docstring="")
+
+
+def morph_node_weights_zero() -> Fixture:
+    """The converse: a node that explicitly says zero must override a non-zero mesh weight."""
+    return _morph_fixture(
+        name="morph-node-weights-zero",
+        targets=[{"POSITION": [(3.0, 0.0, 0.0)] * 3}],
+        mesh_weights=[1.0],
+        node_weights=[0.0],
+        description="The mesh declares [1.0] and the node declares [0.0]. The pair with "
+                    "morph-mesh-weights-only is what separates 'the node overrides' from 'the node "
+                    "is ignored when it looks like a default' -- an explicit zero is a decision, "
+                    "and both fixtures fail if an implementation confuses the two.",
+        features=["node.weights overrides mesh.weights", "explicit zero"],
+        docstring="")
+
+
+def morph_asymmetric_deltas() -> Fixture:
+    """Per-vertex deltas that differ, so a per-vertex indexing error is visible."""
+    return _morph_fixture(
+        name="morph-asymmetric-deltas",
+        targets=[{"POSITION": [(1.0, 0.0, 0.0), (0.0, 2.0, 0.0), (0.0, 0.0, 3.0)],
+                  "NORMAL": [(0.4, 0.0, -0.3), (-0.6, 0.8, 0.0), (0.0, -0.8, 0.6)]}],
+        mesh_weights=[1.0],
+        description="Every vertex gets a different POSITION and NORMAL delta. Most morph fixtures "
+                    "give every vertex the same delta, which is exactly the case a swapped or "
+                    "repeated index survives -- this one does not let it.",
+        features=["per-vertex distinct deltas", "index-order sensitivity"],
+        docstring="")
+
+
+def morph_no_normals_in_base() -> Fixture:
+    """A morphed primitive whose base has no ``NORMAL`` -- the generated basis must still blend."""
+    return _morph_fixture(
+        name="morph-no-base-normals",
+        targets=[{"POSITION": [(0.0, 0.0, 2.0)] * 3}],
+        mesh_weights=[1.0],
+        with_normals=False,
+        description="A morphed primitive authoring no NORMAL at all. GLTF-173 computes one, and "
+                    "the morph path then blends against a normal CNA produced rather than one the "
+                    "file wrote -- a combination neither feature's own fixtures cover.",
+        features=["morph without authored normals", "generated normal basis"],
+        docstring="")
+
+
+FIXTURES = [morph_position_only, morph_position_normal, morph_position_normal_tangent,
+            morph_two_targets, morph_eight_targets, morph_zero_weights, morph_overdriven_weight,
+            morph_normal_only_target, morph_mesh_weights_only, morph_node_weights_zero,
+            morph_asymmetric_deltas, morph_no_normals_in_base,
+            anim_rigid_node, anim_nonzero_start, anim_translation_scale, anim_step,
             anim_cubicspline, anim_two_clips, anim_repeated_time, anim_parent_child,
             anim_weights_path, anim_out_of_scene_target, morph_node_weights_override]

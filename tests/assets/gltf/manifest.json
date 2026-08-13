@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 76,
+  "distinctAssetCount": 88,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 5,
@@ -23,7 +23,7 @@
     "materials": 10,
     "textures": 3,
     "skinning": 10,
-    "animation": 11,
+    "animation": 23,
     "cameras": 5,
     "lights": 2,
     "scenes": 1,
@@ -1133,6 +1133,188 @@
         "eight influences per vertex",
         "influence-set truncation",
         "renormalisation after truncation"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-position-only",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "one morph target",
+        "POSITION deltas only"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-position-normal",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "POSITION and NORMAL deltas",
+        "normal renormalisation"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-position-normal-tangent",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "POSITION, NORMAL and TANGENT deltas",
+        "tangent handedness preserved",
+        "GLTF-289 residue"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-two-targets",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "two morph targets",
+        "weighted accumulation"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-eight-targets",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "eight morph targets",
+        "interleaved zero weights"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-zero-weights",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "zero weight",
+        "rest pose is exact"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-overdriven-weight",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "weight above 1",
+        "negative weight",
+        "no clamping"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-normal-only-target",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "target without POSITION",
+        "partial target semantics"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-mesh-weights-only",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "mesh.weights without node.weights",
+        "absent is not zero"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-node-weights-zero",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "node.weights overrides mesh.weights",
+        "explicit zero"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-asymmetric-deltas",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "per-vertex distinct deltas",
+        "index-order sensitivity"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "morph-no-base-normals",
+      "owningGroup": "animation",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "features": [
+        "morph without authored normals",
+        "generated normal basis"
       ],
       "auditFixture": null
     },
@@ -2606,6 +2788,106 @@
       "sha256": "d45c2a7b330952e43844558a80a8f860e3499d85b41d0a7111c1a964de25ee43"
     },
     {
+      "path": "morph-asymmetric-deltas.expected.json",
+      "bytes": 8593,
+      "sha256": "70fd1f38c7c9911c4a98d88fc496db12df3d12f080dd76c84790366a2d88a6ba"
+    },
+    {
+      "path": "morph-asymmetric-deltas.glb",
+      "bytes": 1184,
+      "sha256": "d614c32c273b519b319aedb622319d02bd98416a4468fdb01d6b2da5d7c5501a"
+    },
+    {
+      "path": "morph-asymmetric-deltas.gltf",
+      "bytes": 2194,
+      "sha256": "fb5cf4777aa4ba907122ebf3c7beb3d30a63cd941ba82d6ce8f495fccf77f3aa"
+    },
+    {
+      "path": "morph-asymmetric-deltas.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-asymmetric-deltas.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+    },
+    {
+      "path": "morph-eight-targets.expected.json",
+      "bytes": 12267,
+      "sha256": "a3c6c3f799110c03eda446138e1c93f228f7e370b74493308e73c166cdcbeef1"
+    },
+    {
+      "path": "morph-eight-targets.glb",
+      "bytes": 2468,
+      "sha256": "d083d20aa3c8f8f17ba395bd8cd523f3d5c79b5fa9ab6786711371e37484cf7f"
+    },
+    {
+      "path": "morph-eight-targets.gltf",
+      "bytes": 4935,
+      "sha256": "81eb47e831f585d2f3a4818d076088982d0f7abc30a0d43d77a7ca068fd750e9"
+    },
+    {
+      "path": "morph-eight-targets.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-eight-targets.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+    },
+    {
+      "path": "morph-mesh-weights-only.expected.json",
+      "bytes": 8070,
+      "sha256": "d45a5e0b3b44cf95268d6230df68dfa22c25510ebbef74b5131d5c2003fee2f9"
+    },
+    {
+      "path": "morph-mesh-weights-only.glb",
+      "bytes": 1028,
+      "sha256": "da04341f8d63d1b7d1265ffa22f5745ae98cf177d42953cc55ced8e569f6a779"
+    },
+    {
+      "path": "morph-mesh-weights-only.gltf",
+      "bytes": 1934,
+      "sha256": "1f1c82db40dc932b3b4e13823502c059abd3f6c8228a81508e09f8572df737f0"
+    },
+    {
+      "path": "morph-mesh-weights-only.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-mesh-weights-only.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+    },
+    {
+      "path": "morph-no-base-normals.expected.json",
+      "bytes": 7038,
+      "sha256": "4e7e13f47fe06d4f8fb1ad7b1d35e122e4ff3ba0796002e90ad9a53270dd4267"
+    },
+    {
+      "path": "morph-no-base-normals.glb",
+      "bytes": 872,
+      "sha256": "0346158cf6aa1937ec6164240e11dd871ff644e43609d5034bb91210ab216420"
+    },
+    {
+      "path": "morph-no-base-normals.gltf",
+      "bytes": 1675,
+      "sha256": "2e82140d4f17124ca0591c620c745ec68815a2928dd718b1a61c804b9c7328e1"
+    },
+    {
+      "path": "morph-no-base-normals.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-no-base-normals.vb.bin",
+      "bytes": 144,
+      "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
       "path": "morph-node-weights-override.expected.json",
       "bytes": 8742,
       "sha256": "a6b37d674993a4a7cdda730f87861a30839acee2c51fcc79c9a013c7b896cfa7"
@@ -2629,6 +2911,206 @@
       "path": "morph-node-weights-override.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "morph-node-weights-zero.expected.json",
+      "bytes": 8098,
+      "sha256": "c44b812fef7364c1977eb1f330707fd3619a59c17b99267ed6622c93bc69371c"
+    },
+    {
+      "path": "morph-node-weights-zero.glb",
+      "bytes": 1044,
+      "sha256": "96e96257467b5bae4cb059475f4c6f81d17bba65f34dbd7adf852dce1b7efe29"
+    },
+    {
+      "path": "morph-node-weights-zero.gltf",
+      "bytes": 1974,
+      "sha256": "a01315a7511c5fd8c0c4c8c9113be1c901c29ef0ed1eeb0726e0d0a23ffd6f1c"
+    },
+    {
+      "path": "morph-node-weights-zero.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-node-weights-zero.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+    },
+    {
+      "path": "morph-normal-only-target.expected.json",
+      "bytes": 8083,
+      "sha256": "d7a0390cfc0a482803dbe64d6942b31f580e40ef83e29487d855cca765a5350b"
+    },
+    {
+      "path": "morph-normal-only-target.glb",
+      "bytes": 988,
+      "sha256": "fd91bbba76d1ce26809006878ac7450f472f923ad3976d99b176b1c215313096"
+    },
+    {
+      "path": "morph-normal-only-target.gltf",
+      "bytes": 1809,
+      "sha256": "d4b1ff7497dc83734753a102db2dbbdb4289210228f4468c197c44b99c7255fd"
+    },
+    {
+      "path": "morph-normal-only-target.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-normal-only-target.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+    },
+    {
+      "path": "morph-overdriven-weight.expected.json",
+      "bytes": 8668,
+      "sha256": "69082a9e57ec527b38f5a202e7015ff314880cb3d4034f2f40e594e376b0c3e7"
+    },
+    {
+      "path": "morph-overdriven-weight.glb",
+      "bytes": 1236,
+      "sha256": "fdb077376af92dd5dca69f755ddd336098d683371f614a86df9b8b8f614cbb37"
+    },
+    {
+      "path": "morph-overdriven-weight.gltf",
+      "bytes": 2363,
+      "sha256": "89c42e76f0c0446f52516fb7a13a36c15ba850628eb3338e81acf7bd71f7587b"
+    },
+    {
+      "path": "morph-overdriven-weight.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-overdriven-weight.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+    },
+    {
+      "path": "morph-position-normal-tangent.expected.json",
+      "bytes": 10281,
+      "sha256": "3e338cbea5c1e686b2c84a96b44a57abf1b65d6edaaf420dd1d7458674962c74"
+    },
+    {
+      "path": "morph-position-normal-tangent.glb",
+      "bytes": 1516,
+      "sha256": "2dbe66ae5b6ff19fe1fd868cd455b3f827077efc48ff6512cfac3d97ffb9f93f"
+    },
+    {
+      "path": "morph-position-normal-tangent.gltf",
+      "bytes": 2734,
+      "sha256": "3b60be6967a17cc2af6228178268d2c264ac2b4981f5ed69fea3bd49875d001e"
+    },
+    {
+      "path": "morph-position-normal-tangent.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-position-normal-tangent.vb.bin",
+      "bytes": 144,
+      "sha256": "f4faf856ec1a361d00a750f16f27abb67156bae2ed70796b6b737d17456e729d"
+    },
+    {
+      "path": "morph-position-normal.expected.json",
+      "bytes": 8590,
+      "sha256": "699646a0caec8d7015c8491845a9449fa955d1d8203ad05967d99fc09de20613"
+    },
+    {
+      "path": "morph-position-normal.glb",
+      "bytes": 1184,
+      "sha256": "0753c81389068203a5a333a8a546998845b154cfece18db3a85e172f93c87131"
+    },
+    {
+      "path": "morph-position-normal.gltf",
+      "bytes": 2192,
+      "sha256": "b25fc5dcde520a50d21aefd845f565d7a8400914d5e6dca2b8e57c917202bf91"
+    },
+    {
+      "path": "morph-position-normal.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-position-normal.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+    },
+    {
+      "path": "morph-position-only.expected.json",
+      "bytes": 7972,
+      "sha256": "38bd09fec964bac5440454444f52b214eda307cbf5a0f4ae35e3c720022fed0b"
+    },
+    {
+      "path": "morph-position-only.glb",
+      "bytes": 1028,
+      "sha256": "b65dcfe75893d7cf787f9422c81d485170e5839d159ce08cdb72e352bb00889b"
+    },
+    {
+      "path": "morph-position-only.gltf",
+      "bytes": 1931,
+      "sha256": "066600a2d26942242bc809208c61a611e8c8576b0a9fb020ecad91d1cf55b124"
+    },
+    {
+      "path": "morph-position-only.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-position-only.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+    },
+    {
+      "path": "morph-two-targets.expected.json",
+      "bytes": 8606,
+      "sha256": "1984021c9395e213591dc222d94340ff768c66e4bee8ec73490f9cf4fcb56f7d"
+    },
+    {
+      "path": "morph-two-targets.glb",
+      "bytes": 1228,
+      "sha256": "9b1074639142946522bc1f1f87894c5dfdc483578aabebed8a96ee5233a8089e"
+    },
+    {
+      "path": "morph-two-targets.gltf",
+      "bytes": 2357,
+      "sha256": "89e1683db68f72fb6c96acb5a92bcdf54c436b52e4de7599c66159436348c4f9"
+    },
+    {
+      "path": "morph-two-targets.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-two-targets.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
+    },
+    {
+      "path": "morph-zero-weights.expected.json",
+      "bytes": 8028,
+      "sha256": "8797adaf9bf9c66a901b3eebaa39a7f2aa82d1512c1911470a07ef230687b9fb"
+    },
+    {
+      "path": "morph-zero-weights.glb",
+      "bytes": 1024,
+      "sha256": "a0d294883b2a84e53151f555828f831756157d3f9180f3e1294bfff823cc8f2d"
+    },
+    {
+      "path": "morph-zero-weights.gltf",
+      "bytes": 1930,
+      "sha256": "120bf544d38ff96d77a2852afac526596c8a352828442793c77f8496a823e3a3"
+    },
+    {
+      "path": "morph-zero-weights.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "morph-zero-weights.vb.bin",
+      "bytes": 144,
+      "sha256": "596d55ababd79c382727b38674754a611388b5f8265007111bab8dd4cd094862"
     },
     {
       "path": "non-indexed-triangles.expected.json",

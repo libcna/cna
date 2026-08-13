@@ -1,0 +1,485 @@
+{
+  "id": "morph-position-normal-tangent",
+  "description": "A target carrying POSITION, NORMAL and TANGENT deltas. This is the fixture GLTF-289's open residue is measured on: tangent deltas import correctly on the runtime path and are NOT written to the .cnj sidecar, so the offline path morphs positions and normals and keeps its rest-pose tangents. The base tangent's handedness is -1, which blending must never touch.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "morph-targets",
+    "meshes-overview"
+  ],
+  "inventory": {
+    "id": "morph-position-normal-tangent",
+    "owningGroup": "animation",
+    "referencingGroups": [],
+    "validatedLayers": [
+      "L1",
+      "L2",
+      "L3"
+    ],
+    "features": [
+      "POSITION, NORMAL and TANGENT deltas",
+      "tangent handedness preserved",
+      "GLTF-289 residue"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 1,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 0,
+    "animationCount": 0,
+    "accessorCount": 7,
+    "bufferViewCount": 7,
+    "bufferCount": 1,
+    "bufferByteLength": 236,
+    "extensionsUsed": [],
+    "extensionsRequired": [],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 0,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 0,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 36,
+        "bufferViewByteStride": null,
+        "values": [
+          0.6,
+          0.0,
+          0.8,
+          0.6,
+          0.0,
+          0.8,
+          0.6,
+          0.0,
+          0.8
+        ]
+      },
+      {
+        "index": 2,
+        "usage": "TANGENT",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 72,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          -1.0
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 120,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "index": 4,
+        "usage": "morph POSITION delta 0",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 4,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 128,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 5,
+        "usage": "morph NORMAL delta 0",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 5,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 164,
+        "bufferViewByteStride": null,
+        "values": [
+          -0.6,
+          0.8,
+          0.0,
+          -0.6,
+          0.8,
+          0.0,
+          -0.6,
+          0.8,
+          0.0
+        ]
+      },
+      {
+        "index": 6,
+        "usage": "morph TANGENT delta 0",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 6,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 200,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "morphpositionnormaltangentMesh",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.6,
+            0.0,
+            0.8
+          ],
+          [
+            0.6,
+            0.0,
+            0.8
+          ],
+          [
+            0.6,
+            0.0,
+            0.8
+          ]
+        ],
+        "tangents": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            -1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            -1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            -1.0
+          ]
+        ],
+        "texcoords": [],
+        "colors": [],
+        "joints": [],
+        "weights": [],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 0,
+        "nodeName": "MeshNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ]
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    },
+    "morph": {
+      "targetCount": 1,
+      "meshWeights": [
+        1.0
+      ],
+      "effectiveWeights": [
+        1.0
+      ],
+      "targetsWithoutPositions": 0,
+      "targetsWithoutNormals": 0,
+      "targetsWithoutTangents": 0,
+      "blendedPositions": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "blendedNormalsBeforeRenormalisation": [
+        [
+          0.0,
+          0.8,
+          0.8
+        ],
+        [
+          0.0,
+          0.8,
+          0.8
+        ],
+        [
+          0.0,
+          0.8,
+          0.8
+        ]
+      ],
+      "blendRule": "final = base + sum(weight_t * delta_t). Normals are renormalised afterwards because a weighted sum of unit vectors is not unit length; positions are not, and tangent handedness (w) is never blended at all."
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 48,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          }
+        ],
+        "vertexBufferFile": "morph-position-normal-tangent.vb.bin",
+        "vertexBufferBytes": 144,
+        "vertexBufferSha256": "f4faf856ec1a361d00a750f16f27abb67156bae2ed70796b6b737d17456e729d",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "morph-position-normal-tangent.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": []
+}

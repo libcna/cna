@@ -2945,10 +2945,17 @@ namespace CNA::Internal::GltfImport
         {
             const cgltf_morph_target& target = prim.targets[ti];
 
+            // plan_gltf.md GLTF-292. The resize is INSIDE the branch, and that is the fix rather
+            // than a detail: it used to run unconditionally, so a target authoring no POSITION got
+            // a zero-filled delta array indistinguishable from one authoring zeros. Two things
+            // followed. `MorphReportEXT::targetsWithoutPositions` could never fire -- a diagnostic
+            // that structurally cannot report -- and the blend added a zero vector per vertex per
+            // such target. Normals and tangents already used emptiness to mean "this target
+            // contributes nothing"; positions now do too, which is one rule instead of two.
             const cgltf_accessor* posDeltaAcc = FindMorphTargetAttribute(target, cgltf_attribute_type_position);
-            out.morphPositionDeltas[ti].resize(vertexCount);
             if (posDeltaAcc)
             {
+                out.morphPositionDeltas[ti].resize(vertexCount);
                 const std::vector<float> deltas = UnpackAccessor(posDeltaAcc, 3, "morph target POSITION delta");
                 for (cgltf_size v = 0; v < vertexCount; ++v)
                 {

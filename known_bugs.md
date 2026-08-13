@@ -98,6 +98,33 @@ Fixed in three places: the ladder now matches a suite whose name **contains** `G
 carries `RuntimeGltfModelTest.*`, and the CI job filters on `*Gltf*`. The four cases now assert the
 effect the material model selects, and say why in a comment.
 
+## A morph target with no POSITION was indistinguishable from one full of zeros — FIXED 2026-08-13
+
+Found while building `GLTF-292`'s morph fixture family, by a fixture authored specifically to have
+a target carrying **only** `NORMAL` deltas.
+
+`ExtractMesh` sized every target's position-delta array *before* checking whether the target
+authored one:
+
+```cpp
+out.morphPositionDeltas[ti].resize(vertexCount);   // unconditional
+if (posDeltaAcc) { /* fill it */ }
+```
+
+So a spec-legal target with no `POSITION` arrived as `vertexCount` zero vectors — byte-identical to
+a target that authored zeros. Two consequences, neither of which any test could have caught,
+because both are about a *distinction that no longer existed*:
+
+* **`MorphReportEXT::targetsWithoutPositions` could never be non-zero.** A counter that is
+  structurally unable to report is worse than a missing one: it reads as evidence that nothing was
+  missing.
+* The blend added a zero vector per vertex per such target, and `BlendMorphTargetsEXT` indexed
+  `PositionDeltas[t][v]` unconditionally — safe only because the array was never empty.
+
+Fixed by moving the `resize` inside the branch, so **emptiness means "this target contributes
+nothing"** for positions exactly as it already did for normals and tangents, and by guarding the
+blend's read. One rule instead of two, and the report can now say what it was written to say.
+
 ## glTF import: the eight defects the forensic audit found (`plan_gltf.md` D1–D8)
 
 `plan_gltf.md` `GLTF-012`. Every one was found by the conformance campaign's own oracle ladder

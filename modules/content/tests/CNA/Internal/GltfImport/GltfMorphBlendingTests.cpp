@@ -23,9 +23,28 @@
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "GltfFixtureCorpus.hpp"
+
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using CNA::Internal::JsonType;
+using CNA::Internal::JsonValue;
+using CnaTest::GltfOracle::CorpusDirectory;
+using CnaTest::GltfOracle::CorpusFixtureIds;
+using CnaTest::GltfOracle::LoadedFixture;
+using CnaTest::GltfOracle::Member;
+using CnaTest::GltfOracle::NumberOr;
+using CnaTest::GltfOracle::Numbers;
+using CnaTest::GltfOracle::Path;
+using Microsoft::Xna::Framework::Content::ContentManager;
 
 namespace
 {
@@ -424,4 +443,128 @@ TEST(GltfMorphBlending, AnImpossibleTargetCountIsRefusedOnTheGltfPathToo)
     // A well-formed file is unaffected -- the bound is a sanity ceiling, not a feature limit.
     EXPECT_NO_THROW((void)ExtractMesh(doc.data, doc.data->meshes[0].primitives[0], "probe",
                                        nullptr, 1.0f));
+}
+
+// --- plan_gltf.md GLTF-292: the whole morph family, blended against its own stated expectation ----
+
+TEST(GltfMorphBlending, EveryMorphFixtureBlendsToTheWeightsAndPoseItsManifestStates)
+{
+    // Twelve fixtures, each differing in exactly one way that a plausible implementation gets
+    // wrong: one target or eight, weights above 1 and below 0, a target with no POSITION, a mesh
+    // weight with no node weight and a node weight of zero over a mesh weight of one, per-vertex
+    // distinct deltas, and a base with no authored NORMAL at all.
+    //
+    // The expectation is not read back from CNA: each fixture's manifest states the blended pose
+    // computed from §3.7.2.2's own equation in the generator (`final = base + sum(w_t * delta_t)`),
+    // so this compares two independent derivations rather than one against itself.
+    using Microsoft::Xna::Framework::Graphics::BlendMorphTargetsEXT;
+    using Microsoft::Xna::Framework::Graphics::MorphTargetDataEXT;
+
+    std::size_t checked = 0;
+    for (const std::string& id : CorpusFixtureIds())
+    {
+        if (id.rfind("morph-", 0) != 0) { continue; }
+        SCOPED_TRACE(id);
+        const LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const JsonValue& morph = Path(fixture.Expected(), "l4.morph");
+        ASSERT_EQ(JsonType::Object, morph.type) << "a morph-* fixture with no l4.morph block";
+
+        GraphicsDevice gd;
+        ContentManager cm(nullptr, CorpusDirectory().string());
+        cm.setGraphicsDevice(gd);
+        Model model = cm.Load<Model>(id);
+
+        MorphTargetDataEXT* data = nullptr;
+        const auto& meshes = model.getMeshesProperty();
+        for (int mi = 0; mi < meshes.getCountProperty() && data == nullptr; ++mi)
+        {
+            const auto& parts = meshes[mi]->getMeshPartsProperty();
+            for (int pi = 0; pi < parts.getCountProperty(); ++pi)
+            {
+                if (auto* found = dynamic_cast<MorphTargetDataEXT*>(parts[pi]->getTagProperty()))
+                {
+                    data = found;
+                    break;
+                }
+            }
+        }
+        ASSERT_NE(nullptr, data) << "the fixture declares morph targets and the import carried none";
+        ++checked;
+
+        const auto targetCount = static_cast<std::size_t>(NumberOr(morph, "targetCount", -1));
+        EXPECT_EQ(targetCount, data->PositionDeltas.size());
+
+        // §3.7.2.2: the instancing node's weights win when it has them, and "absent" is not
+        // "zero" -- which is what morph-mesh-weights-only and morph-node-weights-zero separate.
+        //
+        // A fixture instanced by several nodes states its weights per instance instead (each
+        // instance is its own part, GLTF-282), and `NodeWeightsOverrideTheMeshsOwnRatherThan
+        // MergingWithThem` owns that case in full; here it is enough that this sweep does not
+        // pretend a single effective vector exists.
+        const std::vector<double> effective = Numbers(Member(morph, "effectiveWeights"));
+        if (!effective.empty())
+        {
+            ASSERT_EQ(effective.size(), data->Weights.size())
+                << "the imported weight vector is a different length than the file's";
+            for (std::size_t i = 0; i < effective.size(); ++i)
+            {
+                EXPECT_NEAR(static_cast<float>(effective[i]), data->Weights[i], 1e-5f)
+                    << "weight " << i << " is not the effective weight the file asks for";
+            }
+        }
+        else
+        {
+            EXPECT_EQ(JsonType::Array, Member(morph, "instances").type)
+                << "the fixture states neither effectiveWeights nor per-instance weights, so "
+                   "nothing here compares its weights to anything";
+        }
+
+        // The report's own counts, taken from the IMPORTER rather than reconstructed from the
+        // loaded model -- and the difference is the point. `MorphTargetDataEXT` carries a
+        // zero-filled delta array for a target that authored none, because the blend indexes it
+        // per vertex; `MeshOut` carries what the FILE said. A report built from the former would
+        // answer "no target is missing anything", which is true of the runtime data and false of
+        // the file, and `morph-normal-only-target` is the fixture that tells them apart.
+        using namespace CNA::Internal::GltfImport;
+        const MeshOut extracted = ExtractMesh(
+            &fixture.Data(), fixture.Data().meshes[0].primitives[0], id.c_str(), nullptr, 1.0f);
+        const MorphReportEXT report = BuildMorphReportEXT(extracted, data->Weights);
+        for (const auto& [key, counter] : {
+                 std::pair{std::string("targetsWithoutPositions"), report.targetsWithoutPositions},
+                 std::pair{std::string("targetsWithoutNormals"), report.targetsWithoutNormals},
+                 std::pair{std::string("targetsWithoutTangents"), report.targetsWithoutTangents}})
+        {
+            const JsonValue& stated = Member(morph, key);
+            if (stated.type != JsonType::Number) { continue; }  // an older fixture states fewer
+            EXPECT_EQ(static_cast<int>(stated.numberValue), counter) << key;
+        }
+
+        // The blended pose itself, at the file's own effective weights.
+        const std::vector<float> weights(data->Weights.begin(), data->Weights.end());
+        const std::vector<std::uint8_t> blended = BlendMorphTargetsEXT(*data, weights);
+        ASSERT_EQ(data->BaseVertexBytes.size(), blended.size());
+
+        const std::vector<double> expectedPositions = Numbers(Member(morph, "blendedPositions"));
+        if (expectedPositions.empty()) { continue; }  // a per-instance fixture; see above
+        ASSERT_EQ(0u, expectedPositions.size() % 3);
+        const std::size_t vertexCount = expectedPositions.size() / 3;
+        ASSERT_EQ(vertexCount * static_cast<std::size_t>(data->Stride), blended.size())
+            << "the blended buffer is not " << vertexCount << " vertices at stride " << data->Stride;
+
+        for (std::size_t v = 0; v < vertexCount; ++v)
+        {
+            float position[3] = {0.0f, 0.0f, 0.0f};
+            std::memcpy(position, blended.data() + v * static_cast<std::size_t>(data->Stride),
+                        sizeof(position));
+            for (std::size_t c = 0; c < 3; ++c)
+            {
+                EXPECT_NEAR(static_cast<float>(expectedPositions[v * 3 + c]), position[c], 1e-5f)
+                    << "vertex " << v << " component " << c
+                    << ": the blended position is not the one §3.7.2.2's equation gives";
+            }
+        }
+    }
+    EXPECT_GE(checked, 12u)
+        << "fewer than twelve morph fixtures were blended -- the family has shrunk";
 }

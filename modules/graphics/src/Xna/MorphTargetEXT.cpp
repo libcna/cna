@@ -75,7 +75,13 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 const float w = weights[t];
                 if (w == 0.0f) { continue; }
-                posDelta = posDelta + w * morph.PositionDeltas[t][static_cast<std::size_t>(v)];
+                // Empty means "this target authors no POSITION delta", the same convention the
+                // normal and tangent arrays already used (plan_gltf.md GLTF-292). Before that,
+                // such a target arrived zero-filled and this read was safe by accident.
+                if (!morph.PositionDeltas[t].empty())
+                {
+                    posDelta = posDelta + w * morph.PositionDeltas[t][static_cast<std::size_t>(v)];
+                }
                 if (!morph.NormalDeltas[t].empty())
                 {
                     normDelta = normDelta + w * morph.NormalDeltas[t][static_cast<std::size_t>(v)];
