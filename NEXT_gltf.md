@@ -10,8 +10,8 @@ session needs to start work without re-deriving the state.
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
 - **Working document:** `plan_gltf.md`, 460 numbered rows. **378 closed (`✔` 252, `✅` 126),
-  65 `⬜` remaining.** The other 17 carry a deliberate partial marker: 8 `🔬` (investigation, no
-  implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
+  63 `⬜` remaining.** The other 19 carry a deliberate partial marker: 8 `🔬` (investigation, no
+  implementation owed), 9 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
   `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
   (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
@@ -44,7 +44,7 @@ Expected as of this writing:
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite | **6 367 passed, 191 skipped, 18 failed** |
 | generator `--check` | **140 assets, 694 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **474 passed, 26 skipped** / **500 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` / `OPENGLES3` | **475 passed, 26 skipped** / **501 passed, 0 skipped** / **501 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -53,14 +53,17 @@ capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS 
 Do not attempt to "fix" them as part of this campaign, and do not report a run as clean without
 saying they are there.
 
-There is a third tree for the **second renderer**,
-`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless` (`-DCNA_GRAPHICS_RENDERER=HEADLESS`).
-It matters more than it sounds: `HEADLESS` reports `GraphicsCapability::ThreeD`, so the 17
-`GltfToCnjToolTest` cases that **skip on `STUB`** actually run there — and two of them were failing
-on stale pre-`GLTF-215` effect expectations that the skip had hidden. Compare the two renderers with
+There are additional trees for **HEADLESS** and the now-working **OPENGLES3** renderer:
+`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless` and
+`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-opengles3`. HEADLESS reports
+`GraphicsCapability::ThreeD`, so STUB's 26 capability-gated glTF cases really run there — and two
+were failing on stale pre-`GLTF-215` effect expectations that the skip had hidden. OPENGLES3 runs
+the same 501 cases and also supplies registered framebuffer tests. Compare them with
 
 ```bash
 scripts/gltf-renderer-parity.sh "$B" /media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless
+scripts/gltf-renderer-parity.sh /media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless \
+  /media/robertvokac/claude/tmp/cna/cmake-build-gltf-opengles3
 ```
 
 which fails on any L1–L5 difference and tolerates only `SKIPPED`-vs-`OK`.
@@ -75,7 +78,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 474 passed, 26 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 475 passed, 26 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -184,8 +187,8 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
    former 135/136/141 count disagreement cannot recur. **Only Draco 0/4 remains**, blocked on the
    pinned `libdraco` encoder/decoder integration.
    The normals group now has all four named witnesses at L1–L5. `GLTF-175`/`GLTF-176` remain
-   partial because their L7 acceptance needs a rasterising renderer; in particular the current
-   shaders still omit `sign(det(world))` from mirrored tangent handedness.
+   partial because their fixture-driven L7 cases still need to be written; in particular the
+   current shaders still omit `sign(det(world))` from mirrored tangent handedness.
 2. **Phase 21 viewer rows are the largest *blocked* group and the only path to `GLTF-458`.**
    `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
    without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —
@@ -200,9 +203,10 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
 4. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
    `apt-get install libdraco-dev` — the *cheapest* unblock on the list if the owner allows it, and
    it turns eight blocked rows into ordinary work.
-5. **Second-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
-   `398`). `scripts/gltf-renderer-parity.sh` already does the comparison; what is missing is a
-   third and fourth renderer to point it at.
+5. **Cross-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
+   `398`). STUB, HEADLESS and OPENGLES3 now agree on all 41 L1–L5 tests; HEADLESS and OPENGLES3
+   agree on the full 501-test glTF selection. Vulkan and the corpus L7 rung are the remaining
+   renderer residues.
 
 **Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to
 add a fixture and when a document belongs inline instead — both were learned the expensive way.

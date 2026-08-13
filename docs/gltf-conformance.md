@@ -37,7 +37,7 @@ cmake -S . -B cmake-build-tests -G Ninja \
       -DCNA_BUILD_EXAMPLES=OFF \
       -DCNA_ENABLE_NET=OFF
 cmake --build cmake-build-tests --target CnaTests -j4
-./cmake-build-tests/CnaTests --gtest_filter='Gltf*'                   # run from the repository root
+./cmake-build-tests/CnaTests --gtest_filter='*Gltf*'                  # run from the repository root
 ```
 
 Both build directories are gitignored and survive between sessions; never build the glTF campaign in

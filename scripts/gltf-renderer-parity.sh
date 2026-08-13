@@ -65,8 +65,10 @@ echo "gltf-renderer-parity: identical ($(grep -c '^\[       OK \]' "$tmp_a") tes
 
 echo
 echo "gltf-renderer-parity: the whole glTF selection"
-run "$A" 'Gltf*' > "$tmp_a"
-run "$B" 'Gltf*' > "$tmp_b"
+# Contains, not starts-with: RuntimeGltfModelTest is part of the Tool rung and was the exact suite
+# that a historical `Gltf*` prefix filter silently omitted (GLTF-010/383).
+run "$A" '*Gltf*' > "$tmp_a"
+run "$B" '*Gltf*' > "$tmp_b"
 if diff -u "$tmp_a" "$tmp_b"; then
     echo "gltf-renderer-parity: identical ($(grep -c '^\[       OK \]' "$tmp_a") tests)"
     exit 0

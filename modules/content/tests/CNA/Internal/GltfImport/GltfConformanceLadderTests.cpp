@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iterator>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -210,6 +211,22 @@ TEST(GltfConformanceLadder, EveryGltfSuiteBelongsToExactlyOneRung)
                 << "', which is not registered -- that CTest entry runs zero tests";
         }
     }
+}
+
+TEST(GltfConformanceLadder, RendererParityIncludesSuitesWhoseNameContainsGltf)
+{
+    const std::filesystem::path script =
+        RepositoryRoot() / "scripts" / "gltf-renderer-parity.sh";
+    std::ifstream file(script);
+    ASSERT_TRUE(file.is_open()) << "cannot open " << script;
+
+    const std::string source((std::istreambuf_iterator<char>(file)),
+                             std::istreambuf_iterator<char>());
+    // RuntimeGltfModelTest does not begin with `Gltf`. Checking both invocations pins the actual
+    // comparison rather than a nearby comment that could say the right thing while the script
+    // still omits the suite on either side.
+    EXPECT_NE(std::string::npos, source.find("run \"$A\" '*Gltf*' > \"$tmp_a\""));
+    EXPECT_NE(std::string::npos, source.find("run \"$B\" '*Gltf*' > \"$tmp_b\""));
 }
 
 // --- plan_gltf.md GLTF-403 / GLTF-413: §27.1's evidence must exist ------------------------------
