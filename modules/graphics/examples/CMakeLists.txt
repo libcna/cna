@@ -80,7 +80,7 @@ endif()
 # A full terminal-platform smoke test.  The Python runner owns a pseudo-terminal so the real demo
 # receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.  It is kept
 # to the one tuple that has a CPU presenter capable of reaching a terminal.
-if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "TERMINAL"
+if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES AND CNA_PLATFORM STREQUAL "TERMINAL"
    AND CNA_GRAPHICS_RENDERER STREQUAL "BLEND2D" AND TARGET Python3::Interpreter)
     add_test(NAME TerminalBlend2DDemoIntegration
         COMMAND Python3::Interpreter
