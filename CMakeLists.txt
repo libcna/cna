@@ -127,6 +127,10 @@ include(cmake/RendererSelection.cmake)
 # where the window, events and input come from.
 include(cmake/PlatformSelection.cmake)
 
+# Playback/capture implementation selection (plan_platform.md PLAT-93). This is intentionally
+# independent from CNA_PLATFORM: window/input and audio backends are orthogonal choices.
+include(cmake/AudioPlatformSelection.cmake)
+
 # Platform ratchet (plan_platform.md PLAT-8): reports how much of CNA still calls SDL
 # directly outside the PLAT-3 allowlist, and warns when that count has gone up. Warning
 # only until PLAT-121 flips it strict; skips itself cleanly with no Python 3 present.

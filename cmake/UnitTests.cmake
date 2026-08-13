@@ -461,8 +461,34 @@ if(CNA_BUILD_TESTS)
     # contract visible as a dedicated CTest; future SDL3 and NULL conformance cases join this
     # filter in PLAT-94/99.
     cna_register_renderer_test(NAME CnaAudioPlatformTests
-        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.* --gtest_shuffle --gtest_repeat=3
+        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:AudioPlatformSelectionCompileTests.* --gtest_shuffle --gtest_repeat=3
         LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+
+    # plan_platform.md PLAT-93: test the cache default, both implemented values, every reserved
+    # future identifier, and an unknown value without spawning six full nested project configs.
+    # The selection file is intentionally script-mode-safe for exactly this validation path.
+    foreach(_cna_audio_selection_case IN ITEMS DEFAULT SDL3 NULL OPENAL WASAPI ALSA BOGUS)
+        if(_cna_audio_selection_case STREQUAL "DEFAULT" OR
+           _cna_audio_selection_case STREQUAL "SDL3")
+            set(_cna_audio_selection_expected "Using SDL3 audio platform implementation")
+        elseif(_cna_audio_selection_case STREQUAL "NULL")
+            set(_cna_audio_selection_expected "Using NULL audio platform implementation")
+        elseif(_cna_audio_selection_case STREQUAL "BOGUS")
+            set(_cna_audio_selection_expected "not a known audio platform")
+        else()
+            # CMake line-wraps the full diagnostic between "NOT" and "implemented" depending
+            # on terminal width; this stable prefix still proves the reserved-value branch ran.
+            set(_cna_audio_selection_expected "is a reserved identifier")
+        endif()
+        add_test(NAME CnaAudioPlatformSelection_${_cna_audio_selection_case}
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_AUDIO_SELECTION_FILE=${CMAKE_SOURCE_DIR}/cmake/AudioPlatformSelection.cmake
+                -DCNA_AUDIO_SELECTION_CASE=${_cna_audio_selection_case}
+                -DCNA_AUDIO_SELECTION_EXPECTED=${_cna_audio_selection_expected}
+                -P ${CMAKE_SOURCE_DIR}/cmake/Tests/AudioPlatformSelectionCase.cmake)
+        set_tests_properties(CnaAudioPlatformSelection_${_cna_audio_selection_case}
+            PROPERTIES LABELS "audio;platform")
+    endforeach()
 
     # plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
     # get one from SDL's dummy driver rather than a display server. That only works in a process

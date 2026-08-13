@@ -293,12 +293,13 @@ each, zero difference). The round trip is now checked before it is trusted.
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
 2. **Phase 6 audio continuation.** PLAT-91/92 established independent SDL-free playback and
-   recording contracts. Recording is an optional provider (unsupported is null; supported with
-   no attached hardware is an empty enumeration), with stable default/physical identities,
-   negotiated pull sessions, and non-blocking results that preserve would-block/device-lost/error
-   distinctions. Continue with **PLAT-93**, adding the validated `CNA_AUDIO_PLATFORM` selection
-   axis (`SDL3`/`NULL`) and the single factory/current-platform ownership point that will supply
-   these contracts without coupling them to the general `CNA_PLATFORM` choice.
+   recording contracts; PLAT-93 added the orthogonal, validated `CNA_AUDIO_PLATFORM` selection
+   (`SDL3` default / `NULL`) with hard refusals for reserved and unknown identifiers. Continue
+   with **PLAT-94**, implementing the selected SDL3 playback device at the native edge. It must
+   keep the stream paused until `Open` can return its negotiated application format, dispatch one
+   callback per complete buffer, contain callback failures, and close only after native callbacks
+   have stopped. Factory/current ownership should land with this first real implementation rather
+   than PLAT-93 manufacturing a temporary backend merely to satisfy construction.
 
 ---
 
