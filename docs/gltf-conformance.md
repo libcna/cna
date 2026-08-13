@@ -725,12 +725,17 @@ strengths lock its interpolation formula, and three normal scales lock `rgb*2-1`
 scaling before TBN transformation. The same test now also locks the skinned-PBR joint normal under
 `S=[1,2,1]` at byte 93 instead of the old direct-matrix result 139; the stock-effect companion
 locks the manifest's exact `(0,.351123,.936329)` direction in both per-pixel and per-vertex programs
-as byte 90 instead of 212. Both focused oracles pass on OPENGLES2 and OPENGLES3.
+as byte 90 instead of 212. Both focused oracles pass on OPENGLES2 and OPENGLES3. The byte-93 case
+also has the first fixture-driven pilot: `EasyGL_Gltf_SkinnedPbrNonUniformJoint` loads the committed
+`skin-nonuniform-joint-scale.gltf`, verifies its stride-selected effect and non-identity bind palette,
+then renders it through `Model::Draw` twice. Thus L1-L6 and focused framebuffer evidence now meet on
+one generated asset rather than only on equivalent hand-built geometry.
 
-What those focused tests do **not** provide is the corpus rung: generated fixtures still need a
-fixed camera/light rig, a documented per-renderer tolerance, a reproducible capture path and the
-two-run determinism check. Registering an existing non-corpus demo under an L7-shaped name would
-make the ladder look complete without testing the corpus. `STUB` still cannot be used as a shortcut:
+What those focused tests do **not** provide is the corpus rung: beyond that one pilot, generated
+fixtures still need fixed camera/light rigs, a documented per-renderer tolerance, a reproducible
+PNG capture path and the independent two-process determinism check. Registering one successful
+asset as `CnaGltfConformanceL7` would make the ladder look complete without testing the corpus.
+`STUB` still cannot be used as a shortcut:
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
 bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.
 

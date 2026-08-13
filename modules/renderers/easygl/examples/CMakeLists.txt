@@ -204,6 +204,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_Pbr_MaterialMaps COMMAND cna_test_easygl_pbr_material_maps
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-268: the generated stride-68 skinned PBR corpus fixture through the
+        # real ContentManager.Load<Model> -> bind-pose palette -> Model.Draw -> EasyGL pixel path.
+        cna_easygl_test(cna_test_easygl_gltf_skinned_pbr_nonuniform_joint
+                        easygl_gltf_skinned_pbr_nonuniform_joint_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Gltf_SkinnedPbrNonUniformJoint
+            COMMAND cna_test_easygl_gltf_skinned_pbr_nonuniform_joint
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         easygl_render_target_test.cpp)
