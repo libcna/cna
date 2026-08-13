@@ -355,12 +355,12 @@ TEST(HtmlDomDrawCommand, ColorIsPackedRgbaAndBlendOpSelectsTheVariant)
 {
     const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
                                        Color(0x11, 0x22, 0x33, 0x44), 0.0f, Vector2(0, 0),
-                                       SpriteEffects::None, true, 1, 1, DomCompositeOp::AlphaBlend);
+                                       SpriteEffects::None, true, 1, 1, DomCompositeOp::NonPremultiplied);
     EXPECT_EQ(c.packedColor & 0xFFu, 0x11u);
     EXPECT_EQ((c.packedColor >> 8) & 0xFFu, 0x22u);
     EXPECT_EQ((c.packedColor >> 16) & 0xFFu, 0x33u);
     EXPECT_EQ((c.packedColor >> 24) & 0xFFu, 0x44u);
-    EXPECT_EQ(c.variantMode, 1);
+    EXPECT_EQ(c.variantMode, 0);
     EXPECT_EQ(c.flags & FlagAdditive, 0);
 
     const HtmlDomDrawCommand additive =
@@ -373,6 +373,56 @@ TEST(HtmlDomDrawCommand, ColorIsPackedRgbaAndBlendOpSelectsTheVariant)
         Build(Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16), Color(255, 255, 255, 255), 0.0f,
               Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::Opaque);
     EXPECT_EQ(opaque.variantMode, 2);
+}
+
+TEST(HtmlDomDrawCommand, AlphaBlendConvertsPremultipliedTintToStraightRgb)
+{
+    const Color premultiplied = Color::FromNonPremultiplied(255, 128, 64, 128);
+    const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
+                                       premultiplied, 0.0f, Vector2(0, 0), SpriteEffects::None,
+                                       true, 1, 1, DomCompositeOp::AlphaBlend);
+    EXPECT_EQ(c.packedColor & 0xFFu, 255u);
+    EXPECT_EQ((c.packedColor >> 8) & 0xFFu, 128u);
+    EXPECT_EQ((c.packedColor >> 16) & 0xFFu, 64u);
+    EXPECT_EQ((c.packedColor >> 24) & 0xFFu, 128u);
+    EXPECT_EQ(c.variantMode, 1);
+}
+
+TEST(HtmlDomDrawCommand, AlphaOnlyFadeKeepsOneRgbVariantKey)
+{
+    std::uint32_t expectedRgb = 0;
+    for (const int alpha : {255, 192, 128, 64, 1})
+    {
+        const HtmlDomDrawCommand c = Build(
+            Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
+            Color::FromNonPremultiplied(255, 255, 255, alpha), 0.0f, Vector2(0, 0),
+            SpriteEffects::None, true, 1, 1, DomCompositeOp::AlphaBlend);
+        const std::uint32_t rgb = c.packedColor & 0x00FFFFFFu;
+        if (expectedRgb == 0) expectedRgb = rgb;
+        EXPECT_EQ(rgb, expectedRgb);
+        EXPECT_EQ(rgb, 0x00FFFFFFu);
+        EXPECT_EQ((c.packedColor >> 24) & 0xFFu, static_cast<std::uint32_t>(alpha));
+    }
+
+    const HtmlDomDrawCommand transparent = Build(
+        Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
+        Color::FromNonPremultiplied(12, 34, 56, 0), 0.0f, Vector2(0, 0),
+        SpriteEffects::None, true, 1, 1, DomCompositeOp::AlphaBlend);
+    EXPECT_EQ(transparent.packedColor, 0x00FFFFFFu);
+}
+
+TEST(HtmlDomDrawCommand, NonAlphaBlendModesKeepRawTintChannels)
+{
+    const Color raw(17, 34, 51, 68);
+    for (const DomCompositeOp op : {DomCompositeOp::Opaque,
+                                    DomCompositeOp::NonPremultiplied,
+                                    DomCompositeOp::Additive})
+    {
+        const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
+                                           raw, 0.0f, Vector2(0, 0), SpriteEffects::None,
+                                           true, 1, 1, op);
+        EXPECT_EQ(c.packedColor, 0x44332211u);
+    }
 }
 
 TEST(HtmlDomDrawCommand, PointFilteringClearsTheSmoothingFlag)
