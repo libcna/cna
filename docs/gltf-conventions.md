@@ -104,6 +104,7 @@ At draw time, again left-operand-first:
 ```
 World bound for a part = absoluteBoneTransform(mesh.ParentBone) * callerWorld
 uNormalMatrix          = transpose(inverse(World₃ₓ₃))
+worldTangent.w         = localTangent.w * sign(det(World₃ₓ₃))
 ```
 
 The normal matrix is the inverse transpose rather than the world 3×3 because a **non-uniform** scale
@@ -117,6 +118,7 @@ uses these model-space quantities before applying the outer world transforms abo
 position' = S * position
 normal'   = normalize(transpose(inverse(S₃ₓ₃)) * normal)
 tangent'  = S₃ₓ₃ * tangent
+tangent.w'= tangent.w * sign(det(S₃ₓ₃))
 ```
 
 Tangents are directions, then PBR re-orthogonalises them against `normal'` before constructing the
@@ -125,6 +127,10 @@ or uniform scale, but `skin-nonuniform-joint-scale`'s `S=[1,2,1]` separates the 
 about 51 degrees. EasyGL evaluates the inverse transpose through cofactors so the GLSL ES 1.00
 profiles do not require a matrix `inverse()` intrinsic; determinant sign is retained for mirrors,
 and a nearly singular blend takes the established finite fallback instead of producing NaN.
+EasyGL's PBR tangent path likewise uses a scalar triple product rather than a GLSL `determinant()`
+intrinsic and combines the world, optional instance and blended-skin signs. A zero determinant keeps
+the authored sign: the tangent frame is undefined there, but turning `w` into zero would erase it
+for every later operation too.
 
 ### Defaults, and the values they are not
 
@@ -141,11 +147,12 @@ A node whose composed world transform has a **negative determinant** mirrors its
 property belongs to the composed transform, never to the instancing node's own scale: an odd number
 of mirroring ancestors mirrors, an even number does not.
 
-CNA **detects** this (`MeshInstanceOut::mirroredEXT`) and reports it; it does not apply it. That is
-not an omission but a consequence of Option A: one mesh instanced by both a mirrored and an
-unmirrored node shares a single index buffer and a single vertex buffer, so reversing the winding —
-or flipping `TANGENT.w`, which mirroring also inverts — at import would fix one placement by
-breaking the other. Both are per-draw raster decisions, the same boundary `doubleSided` sits behind.
+CNA **detects** this (`MeshInstanceOut::mirroredEXT`) and reports it. It does not rewrite the shared
+index or vertex buffer: one mesh instanced by both a mirrored and an unmirrored node would have one
+placement fixed and the other broken. The two consequences then separate at draw time. Winding
+remains an application-owned `RasterizerState` decision, the same boundary `doubleSided` sits
+behind. PBR tangent handedness is shader-owned instead: EasyGL multiplies the unchanged local
+`TANGENT.w` by the direction transform's determinant sign per placement (`GLTF-176`).
 
 ### Bounds follow the same placement
 

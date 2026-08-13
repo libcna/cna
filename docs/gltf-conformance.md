@@ -740,14 +740,17 @@ base-colour sampler on device slot zero.
 `EasyGL_Gltf_TangentHandedness` adds the generated two-primitive tangent witness: its common
 tangent-space approximately-`+Y` normal map becomes world `+Y`/`-Y` solely through the two authored
 `tangent.w` signs, producing analytic bytes 151/0 under one light on both EasyGL profiles.
+`EasyGL_Gltf_MirroredTangent` uses one shared `(+X,+1)` tangent buffer for ordinary and mirrored
+node placements. Both reconstruct world `B=+Y` and produce byte 151; before `GLTF-176` multiplied
+the per-draw determinant sign into `w`, the mirrored placement produced exact black.
 `EasyGL_Gltf_AlphaBlend` adds `mat-factor-only-gold`: its straight gold RGB at alpha 0.5 composites
 over blue to `(128,92,168)` with application-selected `NonPremultiplied`, while `Opaque` and the
 wrong premultiplied preset produce distinct `(255,184,80)` and `(255,184,208)` controls.
 
-What those focused tests do **not** provide is the corpus rung: beyond those seven fixture
+What those focused tests do **not** provide is the corpus rung: beyond those eight fixture
 witnesses, generated fixtures still need fixed camera/light rigs, a documented per-renderer
 tolerance, a reproducible PNG capture path and the independent two-process determinism check.
-Registering seven successful assets as `CnaGltfConformanceL7` would make the ladder look complete
+Registering eight successful assets as `CnaGltfConformanceL7` would make the ladder look complete
 without testing the corpus.
 `STUB` still cannot be used as a shortcut:
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden

@@ -9,9 +9,9 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **384 closed (`✔` 256, `✅` 128),
-  58 `⬜` remaining.** The other 18 carry a deliberate partial marker: 8 `🔬` (investigation, no
-  implementation owed), 8 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **385 closed (`✔` 256, `✅` 129),
+  58 `⬜` remaining.** The other 17 carry a deliberate partial marker: 8 `🔬` (investigation, no
+  implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
   `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
   (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
@@ -164,7 +164,7 @@ blocked on those backends.
 
 | Blocker | Rows | Note |
 |---|---|---|
-| **corpus L7 work** | 11 — `GLTF-016`, `176`, `182`, `244`, `340`, `343`, `344`, `386`, `387`, `390`, `397` | No longer environment-blocked on EasyGL. Seven generated fixture witnesses now rasterise successfully, but these rows still need their stated fixture/harness work; do not infer corpus coverage from those focused cases. `GLTF-213` is listed below because its acceptance explicitly requires Vulkan too. |
+| **corpus L7 work** | 10 — `GLTF-016`, `182`, `244`, `340`, `343`, `344`, `386`, `387`, `390`, `397` | No longer environment-blocked on EasyGL. Eight generated fixture witnesses now rasterise successfully, but these rows still need their stated fixture/harness work; do not infer corpus coverage from those focused cases. `GLTF-213` is listed below because its acceptance explicitly requires Vulkan too. |
 | **second/third renderer** | 11 — `GLTF-158`, `160`, `168`, `213`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs L1–L6 comparisons. OPENGLES3 is now present; Vulkan and the platform-specific renderers are not. Some EasyGL-only halves are therefore actionable even where the whole cross-renderer row is not. |
 | **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
 | **`cna-gltf-viewer` repo** | 12 — `GLTF-323`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
@@ -172,7 +172,7 @@ blocked on those backends.
 | **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
 | **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |
 
-The remaining **~30 are doable in this environment.**
+The remaining **~29 are doable in this environment.**
 
 ## Suggested next clusters
 
@@ -186,9 +186,9 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
    are generated into `manifest.json`; current + missing = target is checked per group, so the
    former 135/136/141 count disagreement cannot recur. **Only Draco 0/4 remains**, blocked on the
    pinned `libdraco` encoder/decoder integration.
-   The normals group now has all four named witnesses at L1–L5. `GLTF-175` is also closed at L7
-   by the two-primitive tangent-sign fixture; `GLTF-176` remains partial because the current
-   shaders still omit `sign(det(world))` from mirrored tangent handedness.
+   The normals group now has all four named witnesses at L1–L5. `GLTF-175` and `GLTF-176` are also
+   closed at L7: the two-primitive sign fixture and the shared-buffer mirrored placement both pass
+   on OPENGLES2/3, including the per-draw determinant correction.
 2. **Phase 21 viewer rows are the largest *blocked* group and the only path to `GLTF-458`.**
    `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
    without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —

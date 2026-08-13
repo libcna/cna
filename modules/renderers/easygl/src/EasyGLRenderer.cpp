@@ -114,6 +114,16 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "    return (abs(det)>1e-6)?transformed*sign(det):m*n;\n" \
 "}\n"
 
+// plan_gltf.md GLTF-176: a tangent frame changes orientation under a negative-determinant
+// direction transform. GLSL ES 1.00 has no determinant(mat3), so compute the scalar triple product
+// shared by both PBR vertex programs. A singular transform has no meaningful tangent frame; +1 is
+// the stable fallback and, unlike sign(0), does not erase an otherwise valid authored sign.
+#define CNA_GL_DIRECTION_HANDEDNESS_DECL \
+"float cnaDirectionHandedness(mat3 m){\n" \
+"    float det=dot(m[0],cross(m[1],m[2]));\n" \
+"    return (det<0.0)?-1.0:1.0;\n" \
+"}\n"
+
 // REMED-GFX-122: stock EasyGL effects share one optional per-instance world matrix input. Locations
 // 12-15 reserve the final four slots of GLES 3's guaranteed 16-attribute floor. That leaves the
 // complete XNA profile budget (12 per-vertex elements + 4 matrix columns) available instead of
@@ -5837,7 +5847,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
     // rather than image-based lighting (a much larger, separate feature: irradiance/prefiltered
     // environment maps + a BRDF LUT). Normal mapping via a per-pixel TBN basis built from the
     // vertex tangent (re-orthogonalized against the interpolated normal) and glTF's own
-    // bitangent-handedness-sign convention (Bitangent = cross(Normal,Tangent.xyz)*Tangent.w).
+    // bitangent-handedness-sign convention (Bitangent = cross(Normal,Tangent.xyz)*Tangent.w),
+    // including GLTF-176's per-draw determinant correction under mirrored direction transforms.
     // Only the EasyGL renderer implements this program (CNB-58 explicitly scopes other renderers to
     // separate follow-ups, CNB-61) -- PbrEffect::FillGpuDrawParams() still fills GpuDrawParams
     // completely, so a non-EasyGL renderer simply ignores the new pbr*/texture fields already,
@@ -5854,6 +5865,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=2) in vec4 aTangent;\n"
 "layout(location=3) in vec2 aUV;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
+CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -5872,8 +5884,10 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // uNormalMatrix use for the normal) -- correct for uniform-scale World transforms, a documented
 // simplification for non-uniform scale shared with most real-time engines lacking a full
 // per-tangent inverse-transpose.
-"    vTangent=mat3(uWorld)*cnaInstanceDirection(aTangent.xyz);\n"
-"    vBitangentSign=aTangent.w;\n"
+"    mat3 worldDirectionMat=mat3(uWorld);\n"
+"    vTangent=worldDirectionMat*cnaInstanceDirection(aTangent.xyz);\n"
+"    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
+"    vBitangentSign=aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness;\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -6043,6 +6057,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=4) in vec4 aBoneWeights;\n"
 "layout(location=5) in uvec4 aBoneIndices;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
+CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -6073,8 +6088,10 @@ CNA_GL_SKIN_NORMAL_DECL
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 "    vNormal=normalize(uNormalMatrix*cnaInstanceDirection(boneNormal));\n"
-"    vTangent=mat3(uWorld)*cnaInstanceDirection(skinDirectionMat*aTangent.xyz);\n"
-"    vBitangentSign=aTangent.w;\n"
+"    mat3 worldDirectionMat=mat3(uWorld);\n"
+"    vTangent=worldDirectionMat*cnaInstanceDirection(skinDirectionMat*aTangent.xyz);\n"
+"    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
+"    vBitangentSign=aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness*cnaDirectionHandedness(skinDirectionMat);\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
