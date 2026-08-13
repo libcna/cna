@@ -48,8 +48,12 @@ endif()
 # sibling repo at all. -sNO_DISABLE_EXCEPTION_CATCHING is a legacy-JS-EH-only linker setting with
 # no Wasm-EH equivalent (Wasm EH can always catch), so it is dropped rather than replaced.
 if(EMSCRIPTEN)
-    add_compile_options(-fwasm-exceptions)
-    add_link_options(-fwasm-exceptions)
+    # Emscripten still defaults WASM_LEGACY_EXCEPTIONS to ON, which emits the
+    # deprecated legacy `try` instruction. Select the standardized
+    # `try_table` exception ABI explicitly and keep every object and final
+    # executable on that same ABI.
+    add_compile_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
+    add_link_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
 endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)

@@ -2889,10 +2889,18 @@ void main()
                 1, std::min({4, static_cast<int>(maxDrawBuffers),
                              static_cast<int>(maxColorAttachments)}));
             const auto& capabilities = device.capabilities();
+            // WebGL 2 identifies as an ES 3.0-shaped API, but indexed colour masks are not part
+            // of its core surface. The old two-way GLES/desktop test sent WebGL through the
+            // desktop >= 3.0 branch and then called a null glColorMaski entry point during
+            // GraphicsDevice construction. Require both the correct API/version contract and
+            // the function that meta-gl actually loaded. Extension-backed WebGL support can be
+            // enabled later when meta-gl maps the browser extension entry point explicitly.
             supportsIndexedColorMasks_ =
-                capabilities.is_opengles()
-                    ? capabilities.is_at_least(3, 2)
-                    : capabilities.is_at_least(3, 0);
+                !capabilities.is_webgl()
+                && (capabilities.is_opengles()
+                        ? capabilities.is_at_least(3, 2)
+                        : capabilities.is_opengl() && capabilities.is_at_least(3, 0))
+                && metagl::IsFunctionAvailable("glColorMaski");
 #endif
             const bool hasAniso = metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
             GLfloat maxAnisoCap = 1.0f;
