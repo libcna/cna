@@ -197,6 +197,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_Pbr_SrgbTransfer COMMAND cna_test_easygl_pbr_srgb_transfer
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-224..227: channel-discriminating normal/occlusion texture semantics,
+        # including XY-only normal scale and the specification's occlusion-strength formula.
+        cna_easygl_test(cna_test_easygl_pbr_material_maps
+                        easygl_pbr_material_maps_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Pbr_MaterialMaps COMMAND cna_test_easygl_pbr_material_maps
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         easygl_render_target_test.cpp)

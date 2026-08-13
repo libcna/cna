@@ -719,7 +719,10 @@ oracle `(64,74,87)` becomes `(137,146,158)` after the independently calculated s
 programs produce the latter. A second registered test uses mid-grey rather than endpoint textures:
 both programs return byte 128 through sRGB decode+encode, return 188 when each decode is deliberately
 bypassed, and produce the analytic 92/112 factor/composition cases. Thus `GLTF-009` is open work,
-no longer an environment blocker.
+no longer an environment blocker. `EasyGL_Pbr_MaterialMaps` adds an equally discriminating
+material-map witness on both programs: asymmetric texture channels lock occlusion to red, three
+strengths lock its interpolation formula, and three normal scales lock `rgb*2-1` plus XY-only
+scaling before TBN transformation.
 
 What those focused tests do **not** provide is the corpus rung: generated fixtures still need a
 fixed camera/light rig, a documented per-renderer tolerance, a reproducible capture path and the

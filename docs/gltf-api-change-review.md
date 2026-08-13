@@ -716,18 +716,23 @@ and proves applying skin A leaves skin B's palette unchanged and vice versa on H
 
 ---
 
-## 2. Reviewed and deferred
+## 2. Reviewed dispositions
 
 ### 2.1 `PbrEffect::NormalScale`, `OcclusionStrength` — `GLTF-224`, `GLTF-225`
 
 **Shape approved** as plain additive CNAEXT float properties on an existing CNAEXT effect, defaults
 `1.0` — the glTF defaults, so an unconfigured effect is unchanged.
 
-**Deferred, and why.** Both scale a *texture*, and no corpus fixture carries a texture at all. The
-L5 golden packer likewise refuses a textured material rather than emitting a golden nobody has
-checked. Implementing them now would add two properties whose only test could be "the setter sets
-it", which is not evidence that the value reaches a shader. They land with the fixtures that need
-them.
+**Landed after the original deferral.** Both values now exist on `PbrEffect` and
+`SkinnedPbrEffect`, flow through `GpuDrawParams`, and are consumed by EasyGL's rigid and skinned PBR
+programs. The generated `mat-normal-occlusion-scale` asset proves the authored 0.35/0.8 values and
+the undeclared 1.0 defaults reach L6. This is more than a setter test: registered
+`EasyGL_Pbr_MaterialMaps` binds channel-asymmetric one-pixel textures and reads back the real
+framebuffer from both programs. Occlusion produces bytes 137/207/255 for strengths 1/.5/0, while a
+normal sample `(255,128,191)` produces 104/138/151 for scales 1/.35/0. Those results discriminate
+the red occlusion channel, the specification's strength formula, `rgb*2-1` decoding, and XY-only
+normal scaling. The corpus-wide L7 rung remains `GLTF-009`; the API and EasyGL behavior no longer
+remain deferred.
 
 ### 2.2 Per-part sampler state — `GLTF-207`
 
