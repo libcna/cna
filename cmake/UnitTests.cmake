@@ -466,7 +466,7 @@ if(CNA_BUILD_TESTS)
     # the display-independent suite would have exercised only the implementations that need no
     # display. It ran nowhere at all until PLAT-130 -- the other suite's *PlatformConformance*
     # token does not match the string "PlatformWindowConformance".
-    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:*PlatformWindowConformance*
+    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
     # The rest of the platform contract is display-independent by construction, so it runs

@@ -6,9 +6,9 @@
 #include "Sdl3JoystickControls.hpp"
 #include "Sdl3KeyCodes.hpp"
 #include "Sdl3Modifiers.hpp"
+#include "Sdl3TextInputTypes.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
-#include "Sdl3Window.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -21,14 +21,14 @@ namespace CNA::Platform::Sdl3 {
 
     namespace {
 
-        Sdl3Window& RequireSdl3Window(IPlatformWindow& window, const char* operation)
+        SDL_Window* RequireWindow(const WindowId window, const char* operation)
         {
-            auto* sdlWindow = dynamic_cast<Sdl3Window*>(&window);
-            if (sdlWindow == nullptr)
+            SDL_Window* nativeWindow = window != 0 ? SDL_GetWindowFromID(window) : nullptr;
+            if (nativeWindow == nullptr)
             {
-                throw PlatformException(operation, "window was not created by the SDL3 platform");
+                throw PlatformException(operation, "window id does not identify a live SDL3 window");
             }
-            return *sdlWindow;
+            return nativeWindow;
         }
 
         SDL_SystemCursor ToSdlCursor(const SystemCursor cursor)
@@ -878,30 +878,62 @@ namespace CNA::Platform::Sdl3 {
 
     // --- text input (PLAT-87) --------------------------------------------------------------------
 
-    void Sdl3TextInput::Start(IPlatformWindow& window)
+    void Sdl3TextInput::Start(const WindowId window, const TextInputType type)
     {
-        Sdl3Window& sdlWindow = RequireSdl3Window(window, "TextInput::Start");
-        if (!SDL_StartTextInput(sdlWindow.GetSdlWindow()))
+        SDL_Window* nativeWindow = RequireWindow(window, "TextInput::Start");
+        if (type == TextInputType::Default)
+        {
+            if (!SDL_StartTextInput(nativeWindow))
+            {
+                throw PlatformException("TextInput::Start", SDL_GetError());
+            }
+            return;
+        }
+
+        SDL_PropertiesID properties = SDL_CreateProperties();
+        if (properties == 0)
         {
             throw PlatformException("TextInput::Start", SDL_GetError());
         }
-        active_ = true;
+
+        const bool typeSet = SDL_SetNumberProperty(
+            properties, SDL_PROP_TEXTINPUT_TYPE_NUMBER, ToSdlTextInputType(type));
+        const bool started = typeSet && SDL_StartTextInputWithProperties(nativeWindow, properties);
+        SDL_DestroyProperties(properties);
+        if (!started)
+        {
+            throw PlatformException("TextInput::Start", SDL_GetError());
+        }
     }
 
-    void Sdl3TextInput::Stop(IPlatformWindow& window)
+    void Sdl3TextInput::Stop(const WindowId window)
     {
-        Sdl3Window& sdlWindow = RequireSdl3Window(window, "TextInput::Stop");
-        SDL_StopTextInput(sdlWindow.GetSdlWindow());
-        active_ = false;
+        if (!SDL_StopTextInput(RequireWindow(window, "TextInput::Stop")))
+        {
+            throw PlatformException("TextInput::Stop", SDL_GetError());
+        }
     }
 
-    bool Sdl3TextInput::IsActive() const { return active_; }
-
-    void Sdl3TextInput::SetInputArea(IPlatformWindow& window, const TextInputArea& area)
+    bool Sdl3TextInput::IsActive(const WindowId window) const
     {
-        Sdl3Window& sdlWindow = RequireSdl3Window(window, "TextInput::SetInputArea");
+        SDL_Window* nativeWindow = window != 0 ? SDL_GetWindowFromID(window) : nullptr;
+        return nativeWindow != nullptr && SDL_TextInputActive(nativeWindow);
+    }
+
+    bool Sdl3TextInput::IsScreenKeyboardShown(const WindowId window) const
+    {
+        SDL_Window* nativeWindow = window != 0 ? SDL_GetWindowFromID(window) : nullptr;
+        return nativeWindow != nullptr && SDL_ScreenKeyboardShown(nativeWindow);
+    }
+
+    void Sdl3TextInput::SetInputArea(const WindowId window, const TextInputArea& area)
+    {
         const SDL_Rect rect{area.x, area.y, area.width, area.height};
-        SDL_SetTextInputArea(sdlWindow.GetSdlWindow(), &rect, area.cursorOffset);
+        if (!SDL_SetTextInputArea(
+                RequireWindow(window, "TextInput::SetInputArea"), &rect, area.cursorOffset))
+        {
+            throw PlatformException("TextInput::SetInputArea", SDL_GetError());
+        }
     }
 
     // --- input device enumeration (PLAT-77b) ----------------------------------------------------

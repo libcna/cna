@@ -38,7 +38,7 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `MouseCursor` | `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp` | yes | 5 |  |
 | `MouseState` | `include/Microsoft/Xna/Framework/Input/MouseState.hpp` | yes | 6 |  |
 | `TextInputEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | yes | 9 |  |
-| `TextInputTypeEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | no | 2 | covered via TextInputEXTTests.cpp (TextInputEXTTest) — all 9 values iterated in StartTextInputWithTypeWithoutWindowIsSafeNoOpForEveryType and StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType |
+| `TextInputTypeEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | no | 2 | covered via TextInputEXTTests.cpp (TextInputEXTTest) — all 9 values are null-window safe and `EveryExtensionTypeMapsToThePortableContract` pins their contract mapping; `Sdl3TextInputTypesTest` pins the native edge separately |
 | `TouchCollection` | `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | yes | 7 |  |
 | `TouchLocation` | `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp` | yes | 5 |  |
 | `TouchLocationState` | `include/Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp` | yes | 9 |  |

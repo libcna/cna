@@ -8,6 +8,7 @@
 
 #include "../../../src/Sdl3/Sdl3InputServices.hpp"
 #include "../../../src/Sdl3/Sdl3JoystickControls.hpp"
+#include "../../../src/Sdl3/Sdl3TextInputTypes.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
@@ -369,42 +370,79 @@ TEST(Sdl3JoystickControlsTest, NativePowerStatesMapWithoutAPlatformLeak)
 
 TEST_F(Sdl3InputTest, TextInputStartsInactive)
 {
-    EXPECT_FALSE(platform_->GetTextInput()->IsActive());
+    EXPECT_FALSE(platform_->GetTextInput()->IsActive(0));
+    EXPECT_FALSE(platform_->GetTextInput()->IsScreenKeyboardShown(0));
 }
 
-TEST_F(Sdl3InputTest, TextInputRefusesAWindowItDidNotCreate)
+TEST_F(Sdl3InputTest, TextInputCommandsRefuseAnUnknownWindowId)
 {
-    class ForeignWindow final : public IPlatformWindow
-    {
-    public:
-        [[nodiscard]] WindowId GetId() const override { return 1; }
-        [[nodiscard]] NativeWindowHandle GetNativeHandle() const override { return {}; }
-        [[nodiscard]] std::string GetTitle() const override { return {}; }
-        void SetTitle(const std::string&) override {}
-        [[nodiscard]] WindowBounds GetClientBounds() const override { return {}; }
-        [[nodiscard]] WindowSize GetPixelSize() const override { return {}; }
-        void SetSize(int, int) override {}
-        [[nodiscard]] float GetDisplayScale() const override { return 1.0f; }
-        void SetResizable(bool) override {}
-        void SetBorderless(bool) override {}
-        void SetFullscreenMode(WindowFullscreenMode) override {}
-        [[nodiscard]] WindowFullscreenMode GetFullscreenMode() const override
-        {
-            return WindowFullscreenMode::Windowed;
-        }
-        void Show() override {}
-        void Hide() override {}
-        void Minimize() override {}
-        void Maximize() override {}
-        void Restore() override {}
-        void Sync() override {}
-        [[nodiscard]] bool HasFocus() const override { return false; }
-        [[nodiscard]] bool IsMinimized() const override { return false; }
-        [[nodiscard]] std::string GetDisplayName() const override { return {}; }
-    };
+    constexpr WindowId missing = 0xFFFFFFFFu;
+    IPlatformTextInput* input = platform_->GetTextInput();
 
-    ForeignWindow foreign;
-    EXPECT_THROW(platform_->GetTextInput()->Start(foreign), PlatformException);
+    EXPECT_THROW(input->Start(missing, TextInputType::Default), PlatformException);
+    EXPECT_THROW(input->Stop(missing), PlatformException);
+    EXPECT_THROW(input->SetInputArea(missing, TextInputArea{}), PlatformException);
+    EXPECT_FALSE(input->IsActive(missing));
+    EXPECT_FALSE(input->IsScreenKeyboardShown(missing));
+}
+
+TEST_F(Sdl3InputTest, TextInputLifecycleAndAreaReachALivePlatformWindow)
+{
+    try
+    {
+        platform_->AcquireSubsystem(PlatformSubsystem::Video);
+    }
+    catch (const std::exception& error)
+    {
+        GTEST_SKIP() << "no video subsystem (no display): " << error.what();
+    }
+
+    WindowDescription description;
+    description.title = "Sdl3TextInputTest";
+    description.width = 64;
+    description.height = 64;
+    description.visible = false;
+
+    std::unique_ptr<IPlatformWindow> window;
+    try
+    {
+        window = platform_->CreateWindow(description);
+    }
+    catch (const std::exception& error)
+    {
+        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+        GTEST_SKIP() << "no hidden platform window: " << error.what();
+    }
+
+    IPlatformTextInput* input = platform_->GetTextInput();
+    const WindowId id = window->GetId();
+    EXPECT_NO_THROW(input->Start(id, TextInputType::Default));
+    EXPECT_TRUE(input->IsActive(id));
+    EXPECT_NO_THROW(input->SetInputArea(id, TextInputArea{4, 5, 32, 16, 3}));
+    EXPECT_NO_THROW(input->Stop(id));
+    EXPECT_FALSE(input->IsActive(id));
+
+    window.reset();
+    platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+}
+
+TEST(Sdl3TextInputTypesTest, EveryPortablePurposeMapsToTheExpectedNativeHint)
+{
+    using CNA::Platform::Sdl3::ToSdlTextInputType;
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::Default), SDL_TEXTINPUT_TYPE_TEXT);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::Text), SDL_TEXTINPUT_TYPE_TEXT);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextName), SDL_TEXTINPUT_TYPE_TEXT_NAME);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextEmail), SDL_TEXTINPUT_TYPE_TEXT_EMAIL);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextUsername), SDL_TEXTINPUT_TYPE_TEXT_USERNAME);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextPasswordHidden),
+              SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextPasswordVisible),
+              SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_VISIBLE);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::Number), SDL_TEXTINPUT_TYPE_NUMBER);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::NumberPasswordHidden),
+              SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_HIDDEN);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::NumberPasswordVisible),
+              SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_VISIBLE);
 }
 
 } // namespace

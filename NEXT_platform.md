@@ -292,12 +292,13 @@ each, zero difference). The round trip is now checked before it is trusted.
    **Remember to add new suite names to the `CnaPlatformTests` gtest filter** in
    `cmake/UnitTests.cmake` — a suite absent from that filter is never run by ctest, silently.
 
-2. **Phase 5 input continuation.** PLAT-86 is complete: `TouchPanel` owns its event-driven touch
-   state, `InputManager` no longer stores touches, and touch/gesture integration tests inject
-   `TouchEvent` through `PlatformInputBridge` rather than the raw SDL adapter. Continue with
-   **PLAT-87**, re-pointing `TextInputEXT` lifecycle and IME-area control at `IPlatformTextInput`
-   while preserving the existing UTF-8/UTF-16 event semantics. The raw adapter remains test-only
-   compatibility until PLAT-90 retires the remaining native doubles.
+2. **Phase 5 input continuation.** PLAT-87 is complete: `TextInputEXT` lifecycle, screen-keyboard
+   queries, all nine type hints and IME-area control now use `IPlatformTextInput`; the raw native
+   handle is retained only as the frozen public property and paired internally with `WindowId`.
+   Continue with **PLAT-90**, inventorying and retiring the remaining `FakeSdl*Backend` doubles.
+   Keep only fakes that implement a surviving platform interface, preserve their behavioural
+   coverage, and leave the raw event adapter only where a still-unmigrated production caller
+   genuinely requires it.
 
 ---
 

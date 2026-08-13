@@ -2296,6 +2296,8 @@ namespace Microsoft::Xna::Framework::Graphics
             // the GraphicsDevice was destroyed.
             Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(
                 reinterpret_cast<std::uintptr_t>(window_));
+            Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_setWindowId(
+                SDL_GetWindowID(window_));
             Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(
                 reinterpret_cast<std::uintptr_t>(window_));
             return;
@@ -2351,6 +2353,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // TextInputEXT.WindowHandle at window creation). Required for StartTextInput etc.
         Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(
             reinterpret_cast<std::uintptr_t>(window_));
+        Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_setWindowId(
+            SDL_GetWindowID(window_));
 
         // Publish the same window to Mouse (mirrors FNA setting Mouse.WindowHandle at window
         // creation, SDL3_FNAPlatform.cs). Lets SetPosition / relative-mouse-mode target the

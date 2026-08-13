@@ -220,21 +220,20 @@ namespace CNA::Platform::Sdl3 {
     class Sdl3TextInput final : public IPlatformTextInput
     {
     public:
-        /** @brief Begins text input. @param window The window to receive text events. */
-        void Start(IPlatformWindow& window) override;
+        /** @brief Begins text input for a window with a purpose hint. */
+        void Start(WindowId window, TextInputType type) override;
         /** @brief Ends text input. @param window The window to stop for. */
-        void Stop(IPlatformWindow& window) override;
-        /** @brief Gets whether text input is active. @return True while active. */
-        [[nodiscard]] bool IsActive() const override;
+        void Stop(WindowId window) override;
+        /** @brief Gets whether text input is active for a window. */
+        [[nodiscard]] bool IsActive(WindowId window) const override;
+        /** @brief Gets whether the screen keyboard is shown for a window. */
+        [[nodiscard]] bool IsScreenKeyboardShown(WindowId window) const override;
         /**
          * @brief Tells the input method where the edited text is.
          * @param window The window being edited in.
          * @param area The area to avoid covering.
          */
-        void SetInputArea(IPlatformWindow& window, const TextInputArea& area) override;
-
-    private:
-        bool active_ = false;
+        void SetInputArea(WindowId window, const TextInputArea& area) override;
     };
 
     /** @brief SDL3-backed enumeration of attached input devices. */
