@@ -16,6 +16,7 @@ struct SDL_Window;
 
 namespace CNA::Internal::Renderers::Fna3d
 {
+    class Fna3dCompiledEffect;
     class Fna3dRenderer;
 
     /**
@@ -712,6 +713,9 @@ namespace CNA::Internal::Renderers::Fna3d
         /** @brief Flushes every queued sprite. */
         void End() override;
 
+        /** @brief Selects a compiled Effect Framework effect for subsequent sprite runs. */
+        void SetCustomEffect(Effect* effect) override;
+
         /**
          * @brief Sets the transform applied on top of the 2D orthographic projection.
          * @param m Transform matrix.
@@ -786,6 +790,7 @@ namespace CNA::Internal::Renderers::Fna3d
         Fna3dRenderer& renderer_;
         std::vector<SpriteVertex> vertices_;
         const ITextureRenderer* batchTexture_ = nullptr;
+        Effect* customEffect_ = nullptr;
         Matrix transform_;
         int samplerFilter_ = 0;
         int addressU_ = 1;
@@ -1030,6 +1035,10 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                               const std::string& fragSrc) override;
+
+        /** @brief Creates a MojoShader/FNA3D runtime for compiled XNA Effect bytecode. */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeLength) override;
 
         /**
          * @brief Binds a single 2D render target, or the back buffer when null.
@@ -1335,7 +1344,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         /**
-         * @brief CNAEXT. Draws one queued sprite run through the stock SpriteEffect.
+         * @brief CNAEXT. Draws one queued sprite run through the stock or supplied effect.
          * @param texture     FNA3D texture bound to sampler 0.
          * @param vertices    Interleaved position/colour/texcoord vertices, 24 bytes each.
          * @param vertexCount Number of vertices; must be a multiple of four.
@@ -1345,7 +1354,8 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param addressV    Raw `TextureAddressMode` ordinal for V.
          */
         void DrawSpriteRunEXT(FNA3D_Texture* texture, const void* vertices, int vertexCount,
-                              const Matrix& transform, int filter, int addressU, int addressV);
+                              const Matrix& transform, int filter, int addressU, int addressV,
+                              Effect* customEffect);
 
         /**
          * @brief CNAEXT. Re-applies the currently bound render-target set to FNA3D.
@@ -1460,6 +1470,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                     bool withSpecular);
 
     private:
+        friend class Fna3dCompiledEffect;
         struct BoundTarget
         {
             FNA3D_RenderTargetBinding binding{};
@@ -1487,6 +1498,12 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_DepthStencilState depthStencilState_{};
         FNA3D_RasterizerState rasterizerState_{};
         std::array<FNA3D_SamplerState, 16> samplerStates_{};
+        std::array<FNA3D_SamplerState, 4> vertexSamplerStates_{};
+        // Native textures currently verified at each stage. Compiled Effect parameters follow
+        // FNA semantics: a null texture parameter leaves the slot unchanged while still allowing
+        // the pass to update that slot's sampler state.
+        std::array<FNA3D_Texture*, 16> boundPixelTextures_{};
+        std::array<FNA3D_Texture*, 4> boundVertexTextures_{};
 
         std::array<Fna3dStockEffect, static_cast<std::size_t>(StockEffectKind::Count)> effects_{};
 

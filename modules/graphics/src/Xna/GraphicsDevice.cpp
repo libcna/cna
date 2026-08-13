@@ -1372,8 +1372,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Renderers::GpuDrawParams drawParams;
+        currentEffect_->FillGpuDrawParams(drawParams);
+        drawParams.vertexColorEnabled = true;
         applySamplerStatesToRenderer();
-        renderer_->DrawColoredPrimitives(*tmpVb, world, view, proj, primitiveType, primitiveCount);
+        renderer_->DrawPrimitivesEx(*tmpVb, world, view, proj, primitiveType, primitiveCount,
+                                    drawParams);
     }
 
     void GraphicsDevice::DrawUserIndexedPrimitives(
@@ -1430,8 +1434,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Renderers::GpuDrawParams drawParams;
+        currentEffect_->FillGpuDrawParams(drawParams);
+        drawParams.vertexColorEnabled = true;
+        drawParams.numVertices = numVertices;
         applySamplerStatesToRenderer();
-        renderer_->DrawIndexedColoredPrimitives(*tmpVb, *tmpIb, world, view, proj, primitiveType, primitiveCount);
+        renderer_->DrawIndexedPrimitivesEx(*tmpVb, *tmpIb, world, view, proj, primitiveType,
+                                           primitiveCount, drawParams);
     }
 
     // -----------------------------------------------------------------------

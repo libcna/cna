@@ -44,6 +44,9 @@
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using CNA::GraphicsCapability;
 
+static_assert(static_cast<int>(GraphicsCapability::CompiledEffects) == 13,
+              "CompiledEffects must remain appended so existing capability ordinals stay stable");
+
 // This test target is built for multiple renderer families. Per-renderer arms below preserve each
 // accepted capability boundary rather than assuming one principal renderer's answers are universal.
 //
@@ -152,6 +155,12 @@ constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = true;
 #endif
 
+#if defined(CNA_RENDERER_FNA3D)
+constexpr bool kExpectCompiledEffects = true;
+#else
+constexpr bool kExpectCompiledEffects = false;
+#endif
+
 // Both of these assert `true` for every 3D-capable renderer. A deliberately 2D-only renderer
 // answers false, and that is the correct answer, not a gap -- so it gets its own arm rather than
 // a standing red. Only the arm for the renderer being added is written here; the other 2D-only
@@ -225,6 +234,13 @@ TEST(GraphicsDeviceCapabilityTest, SupportsCustomEffects)
 {
     GraphicsDevice gd;
     EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CustomEffects), kExpectCustomEffects);
+}
+
+TEST(GraphicsDeviceCapabilityTest, SupportsCompiledEffectsOnlyOnCompletedBackends)
+{
+    GraphicsDevice gd;
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CompiledEffects),
+              kExpectCompiledEffects);
 }
 
 // MSAA/anisotropic filtering are genuinely device/driver-dependent -- don't assert a specific

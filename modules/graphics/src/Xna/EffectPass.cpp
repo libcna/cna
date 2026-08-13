@@ -6,8 +6,9 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    EffectPass::EffectPass(Effect* owner, std::string name, std::uint64_t techniqueId)
-        : owner_(owner), name_(std::move(name)), techniqueId_(techniqueId)
+    EffectPass::EffectPass(Effect* owner, std::string name, std::uint64_t techniqueId,
+                           std::uint32_t passIndex)
+        : owner_(owner), name_(std::move(name)), techniqueId_(techniqueId), passIndex_(passIndex)
     {
     }
 
@@ -26,6 +27,6 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException("Applied a pass not in the current technique!");
         }
 
-        owner_->Apply();
+        owner_->ApplyPassInternal(passIndex_);
     }
 }

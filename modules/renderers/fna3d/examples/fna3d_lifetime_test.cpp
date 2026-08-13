@@ -213,9 +213,8 @@ private:
             [&] { (void) fna3d->CreateTextureCube(8, false, 9999); }, message);
         Check(ordinalRefused, "an out-of-contract SurfaceFormat ordinal is refused");
 
-        // Instancing: reported false, and the draw route says so rather than stacking instances.
-        Check(!fna3d->SupportsCapability(CNA::GraphicsCapability::Instancing),
-              "Instancing is reported false");
+        // Stock effects still cannot consume an instance stream even on a driver with native
+        // instancing. Compiled custom effects opt into that path with their own input semantics.
     }
 
     // ---- Check F --------------------------------------------------------------------------

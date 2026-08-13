@@ -2,6 +2,7 @@
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dWindowFlags.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -179,6 +180,16 @@ namespace CNA::Internal::Renderers::Fna3d
         rasterizerState_.multiSampleAntiAlias = 1;
 
         for (FNA3D_SamplerState& sampler : samplerStates_)
+        {
+            sampler.filter = FNA3D_TEXTUREFILTER_LINEAR;
+            sampler.addressU = FNA3D_TEXTUREADDRESSMODE_WRAP;
+            sampler.addressV = FNA3D_TEXTUREADDRESSMODE_WRAP;
+            sampler.addressW = FNA3D_TEXTUREADDRESSMODE_WRAP;
+            sampler.mipMapLevelOfDetailBias = 0.0f;
+            sampler.maxAnisotropy = 4;
+            sampler.maxMipLevel = 0;
+        }
+        for (FNA3D_SamplerState& sampler : vertexSamplerStates_)
         {
             sampler.filter = FNA3D_TEXTUREFILTER_LINEAR;
             sampler.addressU = FNA3D_TEXTUREADDRESSMODE_WRAP;
@@ -888,14 +899,14 @@ namespace CNA::Internal::Renderers::Fna3d
             case CNA::GraphicsCapability::CustomEffects:
                 return false;
 
-            // FNA3D_SupportsHardwareInstancing is true on the drivers CNA reaches, and FNA3D's
-            // own instanced draw and per-stream InstanceFrequency are both real -- but this
-            // renderer's shaders are XNA's compiled stock effects, and none of them declares a
-            // per-instance vertex input, so a per-instance stream could not reach a shader that
-            // reads it. Reporting true would promise instancing that renders every instance from
-            // record 0; DrawInstancedPrimitivesEx refuses with the same reason spelled out.
+            case CNA::GraphicsCapability::CompiledEffects:
+                return true;
+
+            // Hardware instancing becomes usable with a compiled Effect that declares the
+            // per-instance semantics. DrawInstancedPrimitivesEx still rejects the stock-effect
+            // path because none of XNA's stock shaders consumes such a stream.
             case CNA::GraphicsCapability::Instancing:
-                return false;
+                return FNA3D_SupportsHardwareInstancing(device_) != 0;
 
             // FNA3D_ApplyVertexBufferBindings takes an array of bindings, each carrying its own
             // declaration, vertex offset and instance frequency -- multi-stream input is the
@@ -935,6 +946,12 @@ namespace CNA::Internal::Renderers::Fna3d
         const std::string& /*vertSrc*/, const std::string& /*fragSrc*/)
     {
         return nullptr;
+    }
+
+    std::unique_ptr<ICompiledEffectRuntime> Fna3dRenderer::CreateCompiledEffect(
+        const std::uint8_t* effectCode, std::size_t effectCodeLength)
+    {
+        return std::make_unique<Fna3dCompiledEffect>(*this, effectCode, effectCodeLength);
     }
 }
 

@@ -121,7 +121,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, RegistersEveryOtherBuiltInReader)
         "Microsoft.Xna.Framework.Content.VertexBufferReader",
         "Microsoft.Xna.Framework.Content.IndexBufferReader",
         "Microsoft.Xna.Framework.Content.ModelReader",
-        "Microsoft.Xna.Framework.Content.EffectReader", // known-unsupported placeholder (XNB-32A)
+        "Microsoft.Xna.Framework.Content.EffectReader",
     };
     for (const char* name : kNames)
     {

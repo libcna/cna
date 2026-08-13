@@ -3,10 +3,11 @@
 // plan_xnb.md XNB-14/XNB-14A/XNB-14B: unit tests for ContentTypeReaderManager's registration
 // surface. Does not call ReadUntyped()/Read() on any reader -- that needs a real ContentReader&
 // (plan_xnb.md XNB-15/16), out of scope for this task; these tests cover only registration,
-// per-call instance freshness, and the known-unsupported placeholder's identity.
+// per-call instance freshness, and concrete EffectReader registration.
 
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/Xnb/EffectContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Content/KnownUnsupportedContentTypeReader.hpp"
@@ -15,8 +16,8 @@ using Microsoft::Xna::Framework::Content::ContentReader;
 using Microsoft::Xna::Framework::Content::ContentTypeReader;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderBase;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
-using Microsoft::Xna::Framework::Content::KnownUnsupportedContentTypeReader;
-using Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders;
+using CNA::Internal::Xnb::EffectReader;
+using CNA::Internal::Xnb::RegisterEffectXnbReader;
 
 namespace
 {
@@ -101,21 +102,21 @@ TEST_F(ContentTypeReaderManagerTest, ClearTypeCreatorsRemovesRegistration)
     EXPECT_EQ(ContentTypeReaderManager::CreateReader("CNA.Test.Int32Reader"), nullptr);
 }
 
-TEST_F(ContentTypeReaderManagerTest, RegisterKnownUnsupportedXnbReadersRegistersEffectReaderPlaceholder)
+TEST_F(ContentTypeReaderManagerTest, RegisterEffectXnbReaderRegistersConcreteReader)
 {
-    RegisterKnownUnsupportedXnbReaders();
+    RegisterEffectXnbReader();
 
     auto reader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.EffectReader");
 
     ASSERT_NE(reader, nullptr);
-    EXPECT_NE(dynamic_cast<KnownUnsupportedContentTypeReader*>(reader.get()), nullptr);
+    EXPECT_NE(dynamic_cast<EffectReader*>(reader.get()), nullptr);
     EXPECT_EQ(reader->getTargetTypeNameProperty(), "Microsoft.Xna.Framework.Graphics.Effect");
 }
 
-TEST_F(ContentTypeReaderManagerTest, RegisterKnownUnsupportedXnbReadersIsIdempotent)
+TEST_F(ContentTypeReaderManagerTest, RegisterEffectXnbReaderIsIdempotent)
 {
-    RegisterKnownUnsupportedXnbReaders();
-    RegisterKnownUnsupportedXnbReaders(); // must not throw or replace the first registration
+    RegisterEffectXnbReader();
+    RegisterEffectXnbReader();
 
     auto reader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.EffectReader");
     ASSERT_NE(reader, nullptr);

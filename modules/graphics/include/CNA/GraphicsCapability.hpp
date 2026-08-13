@@ -110,6 +110,16 @@ namespace CNA
          * compositing. Each renderer reports the fidelity of its CNA implementation, not merely
          * whether its underlying graphics API could theoretically express additive blending.
          */
-        AdditiveBlending
+        AdditiveBlending,
+
+        /**
+         * @brief XNA/FNA Direct3D 9 Effect Framework bytecode, including reflected parameters,
+         * techniques, passes, shaders, samplers, and pass state.
+         *
+         * This is intentionally separate from CustomEffects, which describes CNAEXT
+         * ShaderEffect's caller-supplied source-pair contract. A renderer may support either
+         * format independently. Appended to preserve every existing numeric capability value.
+         */
+        CompiledEffects
     };
 } // CNA

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// Task 351: Effect base class audit — constructors, parameters, techniques,
-// Apply()/OnApply() dispatch, GetTypeName(), and disposal, against FNA's
-// Graphics/Effect/Effect.cs. CNA's Effect has no MojoShader/.fx-bytecode
-// pipeline (OnApply() is pure virtual), so these tests exercise the
-// construction-time single-"Default"-technique contract CNA actually uses,
-// not FNA's byte[]-blob constructor (that policy is Task 352's scope).
+// Effect base class coverage for the stock-derived path plus format/capability checks shared by
+// the compiled XNA Effect Framework path. Native bytecode integration lives with each backend.
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 
 #include "CNA/GraphicsCapability.hpp"
@@ -23,7 +22,8 @@
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
-#include "System/NotImplementedException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
@@ -43,8 +43,15 @@ using Microsoft::Xna::Framework::Vector3;
 
 namespace
 {
-    // Minimal concrete Effect: OnApply() is pure virtual in CNA (no base-class
-    // bytecode/MojoShader pipeline exists), so every test needs a subclass.
+    std::vector<SharpRuntime::bytecs> LoadValidCompiledEffectFixture()
+    {
+        const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
+            "../../../../../../renderers/fna3d/effects/BasicEffect.fxb";
+        std::ifstream input(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
+    // Minimal derived Effect used to observe OnApply dispatch on the stock-style path.
     class TestEffect : public Effect
     {
     public:
@@ -111,21 +118,19 @@ TEST(EffectTest, GraphicsDeviceInternalReturnsOwningDevice)
 }
 
 // -----------------------------------------------------------------------
-// Task 353: interim safety net — the bytecode constructor exists (matching
-// FNA's public API surface) but must throw until Phase 74's real MojoShader-
-// equivalent bytecode pipeline lands, rather than silently building a
-// broken/fake Effect.
+// Compiled bytecode is an explicit renderer capability. A renderer without a
+// D3D9 Effect Framework runtime must reject it before attempting to parse it.
 // -----------------------------------------------------------------------
 
-TEST(EffectTest, BytecodeConstructorThrowsNotImplementedException)
+TEST(EffectTest, BytecodeConstructorUsesExplicitRendererCapability)
 {
     GraphicsDevice gd;
     const std::vector<SharpRuntime::bytecs> fakeBytecode{ 1, 2, 3, 4 };
 
-    EXPECT_THROW(TestEffect(gd, fakeBytecode), System::NotImplementedException);
+    EXPECT_THROW(TestEffect(gd, fakeBytecode), System::ArgumentException);
 }
 
-TEST(EffectTest, BytecodeConstructorMessageMentionsPhase74Roadmap)
+TEST(EffectTest, BytecodeConstructorFailureIsActionable)
 {
     GraphicsDevice gd;
     const std::vector<SharpRuntime::bytecs> fakeBytecode{ 1, 2, 3, 4 };
@@ -133,12 +138,49 @@ TEST(EffectTest, BytecodeConstructorMessageMentionsPhase74Roadmap)
     try
     {
         TestEffect fx(gd, fakeBytecode);
-        FAIL() << "Expected System::NotImplementedException";
+        FAIL() << "Expected invalid or unsupported bytecode to throw";
     }
-    catch (const System::NotImplementedException& e)
+    catch (const System::ArgumentException& e)
     {
-        EXPECT_NE(std::string(e.what()).find("Phase 74"), std::string::npos);
+        EXPECT_NE(std::string(e.what()).find("effect bytecode"), std::string::npos);
     }
+}
+
+TEST(EffectTest, MgfxIsRejectedAsADistinctUnsupportedFormat)
+{
+    GraphicsDevice gd;
+    const std::vector<SharpRuntime::bytecs> mgfx{
+        'M', 'G', 'F', 'X', 1, 0, 0, 0
+    };
+
+    EXPECT_THROW(TestEffect(gd, mgfx), System::NotSupportedException);
+}
+
+TEST(EffectTest, StructurallyValidFxReachesRendererCapabilityGate)
+{
+    GraphicsDevice gd;
+    const auto validEffect = LoadValidCompiledEffectFixture();
+    ASSERT_FALSE(validEffect.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        EXPECT_THROW(TestEffect(gd, validEffect), System::NotSupportedException);
+    }
+    else
+    {
+        EXPECT_NO_THROW(TestEffect(gd, validEffect));
+    }
+}
+
+TEST(EffectTest, RejectsUnsafeXna4WrapperOffsetBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    const std::vector<SharpRuntime::bytecs> malformedWrapper{
+        0xCF, 0x0B, 0xF0, 0xBC, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    };
+    EXPECT_THROW(TestEffect(gd, malformedWrapper), System::ArgumentException);
 }
 
 // -----------------------------------------------------------------------

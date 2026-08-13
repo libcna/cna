@@ -13,13 +13,14 @@ namespace Microsoft::Xna::Framework::Content
      *
      * Extend as later phases identify further known-but-out-of-scope readers -- this is not
      * meant to grow unbounded; each value should map to a real, documented scope decision
-     * (see plan_xnb.md/cnj.md for the general `EffectReader` case this was introduced for).
+     * The general `EffectReader` originally motivated this type but is now implemented; the enum
+     * value remains source-compatible for external placeholder registrations.
      */
     enum class CNAEXT UnsupportedContentReaderReason
     {
         /**
          * @brief The general `Microsoft.Xna.Framework.Content.EffectReader` (compiled
-         * platform shader bytecode) -- see plan_xnb.md XNB-32A / plan_graphics.md Phase 74.
+         * platform shader bytecode), retained for source compatibility with older integrations.
          */
         CompiledPlatformShaderBytecode,
     };
@@ -42,10 +43,8 @@ namespace Microsoft::Xna::Framework::Content
     };
 
     /**
-     * @brief Pre-registers the known-unsupported reader placeholders (currently: the general
-     *        `EffectReader`) with ContentTypeReaderManager, so a fixture referencing one of them
-     *        fails with a clear "recognized but unsupported" error even before the corresponding
-     *        phase (e.g. Phase E's stock-effect readers) exists. Idempotent.
+     * @brief Registers built-in known-unsupported placeholders. Currently a no-op because every
+     *        formerly listed reader has a concrete implementation. Idempotent.
      */
     CNAEXT void RegisterKnownUnsupportedXnbReaders();
 }

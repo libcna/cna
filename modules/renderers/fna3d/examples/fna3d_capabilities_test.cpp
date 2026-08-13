@@ -97,8 +97,11 @@ public:
               "a cube render target can be created");
 
         // Check D -- instancing is reported false and refused, with the reason.
-        Check(!renderer.SupportsCapability(GraphicsCapability::Instancing),
-              "Instancing is reported false: the stock effects declare no per-instance input");
+        Check(renderer.SupportsCapability(GraphicsCapability::CompiledEffects),
+              "CompiledEffects is true: FNA3D executes Effect Framework binaries");
+        const bool nativeInstancing = FNA3D_SupportsHardwareInstancing(renderer.GetDeviceEXT()) != 0;
+        Check(renderer.SupportsCapability(GraphicsCapability::Instancing) == nativeInstancing,
+              "Instancing follows the running FNA3D driver");
         Check(!renderer.SupportsCapability(GraphicsCapability::CustomEffects),
               "and the reason -- no custom-effect compilation -- is reported alongside it");
 

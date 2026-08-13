@@ -1,122 +1,89 @@
-# `ShaderEffect` vs. compiled XNA `.fx` bytecode (Task 354)
+# `ShaderEffect` vs. compiled XNA `.fx` bytecode
 
-This is a practical, developer-facing guide for anyone porting an XNA/FNA game (or writing a new
-one) against CNA and wondering how custom shaders/effects work today. For the internal audit trail
-behind these decisions, see `plan_graphics.md` Tasks 351–354 and `docs/fx-bytecode-support-plan.md`
-(the Phase 74 implementation plan referenced below). For per-renderer pixel-test coverage of every
-stock effect, see `docs/xna-4-api-coverage.md` §7.
+CNA has two deliberately separate custom-shader contracts. Query the matching capability; support
+for one never implies support for the other.
 
-## What works today
+| API | Input | Capability | Current renderer support |
+|---|---|---|---|
+| `CNAEXT::ShaderEffect` | Caller-authored GLSL, SPIR-V, or another backend-native source pair | `CustomEffects` | Renderer-specific |
+| `Effect(GraphicsDevice&, byte[])` | XNA/FNA Direct3D 9 Effect Framework binary (`.fxb`, normally stored in XNB) | `CompiledEffects` | FNA3D |
 
-**1. The 6 stock XNA effects** — for standard XNA-style rendering, use these directly, exactly as
-in XNA/FNA:
+The six stock effects remain portable CNA APIs and do not require either custom-effect capability.
 
-| Effect | What it's for |
-|--------|----------------|
-| `BasicEffect` | Vertex color / texture / lighting / fog — the default effect for most geometry. |
-| `AlphaTestEffect` | Discards pixels based on a `CompareFunction` against a reference alpha. |
-| `DualTextureEffect` | Blends two textures in a single draw (e.g. lightmaps). |
-| `EnvironmentMapEffect` | Cubemap-based reflective/emissive surfaces. |
-| `SkinnedEffect` | Bone-weighted vertex skinning (stride-52 vertices, up to per-vertex bone blending). |
-| `SpriteEffect` | The default effect `SpriteBatch` uses internally. |
+## Compiled effects on FNA3D
 
-All 6 are implemented natively in C++ (not translated from bytecode) and are pixel-tested on
-EasyGL; see `docs/xna-4-api-coverage.md` §7 for exact per-renderer/per-effect status (Vulkan and
-Bgfx support varies by effect).
-
-**2. `ShaderEffect`** (`Microsoft::Xna::Framework::Graphics::ShaderEffect`, `CNAEXT` — a CNA
-extension, not part of the XNA 4.0 API) — for custom shaders, construct it directly from
-hand-written GPU shader source:
+FNA3D already owns the MojoShader integration used by FNA. CNA uses that same device-local path to
+parse reflection, translate the embedded Shader Model 2/3 programs for the selected FNA3D driver,
+apply pass state, and bind samplers. It does not reinterpret a compiled effect as `ShaderEffect`.
 
 ```cpp
-// EasyGL: GLSL ES 3.0 source strings
-ShaderEffect fx(device, vertexGlslSource, fragmentGlslSource);
+std::vector<SharpRuntime::bytecs> bytes = ReadAllBytes("BloomExtract.fxb");
+Effect effect(device, bytes);
 
-// Vulkan: pre-compiled SPIR-V, passed as raw bytes packed into std::string
-std::string vertSpv(reinterpret_cast<const char*>(vertSpirvBytes), vertSpirvSize);
-std::string fragSpv(reinterpret_cast<const char*>(fragSpirvBytes), fragSpirvSize);
-ShaderEffect fx(device, vertSpv, fragSpv);
+effect.getParametersProperty()["Threshold"]->SetValue(0.25f);
+effect.setCurrentTechniqueProperty(effect.getTechniquesProperty()["Bloom"]);
+for (auto& pass : effect.getCurrentTechniqueProperty()->getPassesProperty())
+{
+    pass.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+}
 ```
 
-(See `modules/renderers/easygl/examples/easygl_shader_effect_test.cpp` and `modules/renderers/vulkan/examples/vulkan_shader_effect_test.cpp` for
-full working examples.) **Bgfx's `ShaderEffect` renderer is currently a no-op stub** — both source
-strings are accepted but ignored, per `docs/xna-4-api-coverage.md` §7 — so this path is EasyGL/
-Vulkan only today.
+The reflected graph includes parameters, array elements, structure members, annotations,
+techniques, and passes. Numeric values preserve Effect Framework register padding; texture
+parameters are connected to their sampler declarations rather than guessed by uniform name.
+`Clone()` creates independent native and public value storage and preserves the selected
+technique.
 
-`ShaderEffect` also exposes (Task 946, EasyGL only so far):
+`SpriteBatch.Begin(..., &effect)` also executes every pass of a compiled effect. As in FNA,
+SpriteBatch binds its sprite texture to slot zero after each pass is applied.
+
+## Loading from XNB
+
+The canonical `Microsoft.Xna.Framework.Content.EffectReader` is registered by the built-in XNB
+reader set and returns `std::shared_ptr<Effect>`:
 
 ```cpp
-fx.Apply();  // bind the program before setting any uniform, so the write reaches the right one
-fx.SetUniformFloatArray("uWeights", weights, count);   // uniform float uWeights[count];
-fx.SetUniformVec2Array("uOffsets", offsets, count);    // uniform vec2 uOffsets[count]; (offsets holds count*2 floats)
-fx.SetTexture(1, someTexture2D);                        // binds sampler unit 1 (unit 0 is normally
-                                                          // driven by the caller, e.g. SpriteBatch's
-                                                          // own texture parameter)
+auto effect = content.Load<std::shared_ptr<Effect>>("Effects/BloomExtract");
 ```
 
-Use `SetTexture()` for any shader that samples more than one texture in a single draw (matching
-real XNA's `GraphicsDevice.Textures[unit] = someTexture`) — see
-`modules/renderers/easygl/examples/easygl_bloom_combine_test.cpp` for a worked example (two independent flat-color
-textures combined via a ported `BloomCombine.fx`).
+The reader bounds the length prefix at 64 MiB, requires an exact payload read, assigns the asset
+name, and wraps construction failures in `ContentLoadException` with asset context. On a renderer
+whose `CompiledEffects` capability is false, the same asset fails explicitly; it is never replaced
+with a stock shader.
 
-**Loading via `ContentManager`**: `Content.Load<std::shared_ptr<Effect>>("name")` reads a
-`name.shader.json` descriptor (`{"vertex": "...", "fragment": "..."}`, paths relative to the
-content root) and constructs a `ShaderEffect` from the referenced GLSL files — see
-`modules/renderers/easygl/examples/easygl_bloom_extract_test.cpp` for a full round-trip example.
+## Accepted and rejected formats
 
-## What doesn't work yet: loading a real compiled `.fx` file
+The byte-array constructor accepts the XNA/FNA Direct3D 9 Effect Framework format, including the
+XNA 4 wrapper understood by MojoShader. It rejects:
 
-A real XNA/FNA game's content build produces a compiled **effect bytecode** blob (the XNA Content
-Pipeline's `EffectProcessor` output) — a binary container holding parameter/technique/pass
-reflection metadata plus embedded Direct3D9 Shader Model 2/3 bytecode. FNA loads this via
-`Effect(GraphicsDevice, byte[] effectCode)`, which hands the whole blob to MojoShader (through
-FNA3D) for parsing and GPU-shader translation.
+- empty or structurally truncated input;
+- input larger than 64 MiB;
+- impossible wrapper offsets or unreasonable top-level reflection counts;
+- MonoGame `MGFX`/`mgfxo`, which is a distinct container and needs a separate future runtime;
+- a valid FX binary on any backend that reports `CompiledEffects == false`.
 
-CNA has the matching constructor signature —
-`Effect(GraphicsDevice&, const std::vector<SharpRuntime::bytecs>& effectCode)` — but it does not
-yet parse or translate that bytecode. Calling it throws immediately:
+Malformed content and an unsupported backend are intentionally distinguishable:
+`ArgumentException` identifies invalid FX input, while `NotSupportedException` identifies a
+format/backend mismatch. The XNB reader translates either into an asset-scoped
+`ContentLoadException`.
 
-```
-System::NotImplementedException:
-Effect(GraphicsDevice&, const std::vector<bytecs>&): compiled XNA .fx bytecode is not yet
-supported (tracked as Phase 74, see docs/fx-bytecode-support-plan.md). Use a hand-authored
-ShaderEffect or one of the built-in stock effects instead.
-```
+## Non-FNA3D renderers
 
-This is a deliberate, honest interim guard (Task 353) — CNA never silently produces a broken or
-fake effect from a bytecode blob it can't actually translate.
+Every other renderer currently inherits the common `CreateCompiledEffect()` refusal and reports
+`CompiledEffects == false`. This is the correct quality gate: parsing metadata alone, translating
+only one shader stage, ignoring pass state, or falling back to pass zero is not advertised as
+support.
 
-## Practical guidance if you're porting a game today
+Future programmable backends should implement the renderer-neutral `ICompiledEffectRuntime` and
+pass the same reflection, mutation, clone, draw, SpriteBatch, state, sampler, malformed-input, and
+lifecycle suite before enabling the capability. Fixed-function and CPU renderers can remain
+explicitly unsupported. The audited rollout and backend-specific feasibility work are tracked in
+[`plan_fx.md`](../plan_fx.md).
 
-If your game ships a compiled `.fx` effect, the current recommended path is: **hand-port the
-original HLSL shader source to GLSL (EasyGL) or SPIR-V (Vulkan) and use `ShaderEffect` directly.**
-The compiled binary itself isn't loadable yet, but the original `.fx`/HLSL source is usually
-available (it's what the content build compiled from), and hand-porting a handful of custom
-shaders is almost always a smaller, more tractable task than waiting on full bytecode support —
-especially since most XNA games' custom effects are fairly small (a handful of techniques/passes
-around one of the standard vertex layouts).
+## `ShaderEffect` remains useful
 
-## Roadmap: Phase 74 — full compiled-bytecode support
-
-The long-term policy decision (Task 352) is **full support** for real compiled `.fx` bytecode,
-not a permanent throw. This is real, currently-unimplemented, multi-phase work (Tasks 10200–10208,
-`plan_graphics.md` Phase 74), summarized here — see `docs/fx-bytecode-support-plan.md` for the
-full reasoning:
-
-1. Vendor MojoShader (its zlib-licensed C source is already available locally and reads XNA's
-   exact compiled-effect container format — no from-scratch parser needed).
-2. Wrap MojoShader's effect-parsing API to produce CNA-native technique/pass/parameter reflection
-   data from a raw bytecode blob.
-3. EasyGL path: MojoShader can transpile the embedded Shader Model 2/3 bytecode directly to GLSL.
-4. Vulkan path: MojoShader has no SPIR-V output profile, so this needs a second hop — GLSL through
-   a GLSL→SPIR-V compiler (glslang is the leading candidate; vendoring it is its own tracked task).
-5. Bgfx path: needs its own feasibility investigation first — bgfx's native shader pipeline isn't
-   raw GLSL or SPIR-V source, so there's no default path.
-6. Wire the parsed metadata + compiled per-renderer programs into `Effect`, replacing Task 353's
-   throwing constructor with a real one, and implement `Clone()` (Task 883).
-7. Real test fixtures (this project has no XNA Content Pipeline tooling to produce fresh compiled
-   bytecode, so sourcing/hand-producing real test blobs is its own tracked step).
-8. Full developer documentation once the feature actually works.
-
-Until Phase 74 lands, this document — not `docs/fx-bytecode-support-plan.md` — is the one to point
-game developers at: it describes what's usable *right now*.
+Use `ShaderEffect` when the port owns backend-specific shader source or bytecode and does not need
+XNA Effect Framework techniques, passes, annotations, or pass state. Its support matrix is
+independent, so code should query `CustomEffects` and supply the source dialect required by the
+selected renderer.

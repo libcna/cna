@@ -27,6 +27,7 @@
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -1017,6 +1018,10 @@ namespace CNA::Internal::Renderers
         /// safely ignore it, matching the established accepted-and-ignored pattern for other
         /// not-yet-renderer-supported `GpuDrawParams` fields.
         IEffectRenderer* customEffectRenderer = nullptr;
+        /// Runtime for a compiled XNA/FNA Effect Framework pass. This is deliberately separate
+        /// from customEffectRenderer: ShaderEffect is a source pair, while a compiled effect owns
+        /// reflection, techniques, passes, samplers, and state assignments.
+        ICompiledEffectRuntime* compiledEffectRuntime = nullptr;
         /// plan_cnj.md CNB-58 (Phase 13A): PbrEffect's normal map (tangent-space, RGB), or null.
         /// When null the surface normal from the vertex stream is used unperturbed.
         const ITextureRenderer* pbrNormalMap = nullptr;
@@ -1487,6 +1492,15 @@ namespace CNA::Internal::Renderers
                                                                       const std::string& fragSrc)
         { return nullptr; }
 
+        /// Parses and compiles a Direct3D 9 Effect Framework binary for this renderer/device.
+        /// The default is an explicit unsupported result; callers must pair this with the
+        /// CompiledEffects capability and never silently substitute a stock shader.
+        virtual std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* /*effectCode*/, std::size_t /*effectCodeBytes*/)
+        {
+            return nullptr;
+        }
+
         /// Activates a specific face of a cube-map render target for rendering.
         /// Pass nullptr to restore the default back buffer.
         virtual void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
@@ -1829,6 +1843,8 @@ namespace CNA::Internal::Renderers
             // second per-vertex stream is real work it must opt into by name; defaulting to true
             // would make a renderer that silently renders from stream 0 alone claim otherwise.
             if (capability == CNA::GraphicsCapability::MultiStreamVertexInput)
+                return false;
+            if (capability == CNA::GraphicsCapability::CompiledEffects)
                 return false;
             return true;
         }

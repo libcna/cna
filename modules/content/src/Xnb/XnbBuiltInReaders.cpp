@@ -4,6 +4,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/CurveContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp"
+#include "CNA/Internal/Xnb/EffectContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/ModelContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
@@ -39,6 +40,7 @@ namespace CNA::Internal::Xnb
         RegisterVideoXnbReader();
 #endif
         RegisterStockEffectXnbReaders();
+        RegisterEffectXnbReader();
         RegisterModelXnbReaders();
         Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders();
     }
