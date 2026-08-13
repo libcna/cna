@@ -461,7 +461,7 @@ if(CNA_BUILD_TESTS)
     # contract visible as a dedicated CTest; future SDL3 and NULL conformance cases join this
     # filter in PLAT-94/99.
     cna_register_renderer_test(NAME CnaAudioPlatformTests
-        COMMAND CnaTests --gtest_filter=AudioDeviceContractTests.* --gtest_shuffle --gtest_repeat=3
+        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.* --gtest_shuffle --gtest_repeat=3
         LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     # plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they

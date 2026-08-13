@@ -11,6 +11,7 @@
 // contract header cannot quietly escape the check by not being listed.
 
 #include "CNA/Audio/Platform/IAudioDevice.hpp"
+#include "CNA/Audio/Platform/IAudioRecordingDevice.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformGlContext.hpp"
