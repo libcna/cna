@@ -19,7 +19,9 @@
 #include "GltfFixtureCorpus.hpp"
 
 using CNA::Internal::GltfImport::MapGltfSamplerEXT;
+using CNA::Internal::GltfImport::MeshOut;
 using CNA::Internal::GltfImport::SamplerOut;
+using CNA::Internal::GltfImport::TextureSlotEXT;
 using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
 using Microsoft::Xna::Framework::Graphics::TextureFilter;
 
@@ -153,6 +155,74 @@ TEST(GltfSamplerMapping, AnUndefinedSamplerIsGltfsOwnDefaultAndSaysSo)
            "tell 'the author chose repeat' from 'the author said nothing'";
     EXPECT_FALSE(mapped.minFilterHasNoMipStage)
         << "the default filter is the auto one, which does mipmap";
+}
+
+// GLTF-399's texture group turns the raw-enum table above into real-file witnesses. The cases are
+// deliberately not one sampler per asset only: `texture-shared-two-samplers` points two textures
+// at the SAME image and asks for different states per material slot, which catches a cache keyed by
+// image accidentally swallowing texture-owned sampler state.
+TEST(GltfSamplerMapping, TextureCorpusCarriesAuthoredSamplerStatePerTextureSlot)
+{
+    struct Row
+    {
+        const char* fixture;
+        TextureSlotEXT slot;
+        TextureFilter filter;
+        TextureAddressMode addressU;
+        TextureAddressMode addressV;
+        bool declared;
+        bool noMipStage;
+    };
+
+    const Row rows[] = {
+        {"tex-reference-checkerboard", TextureSlotEXT::BaseColor, TextureFilter::Point,
+         TextureAddressMode::Clamp, TextureAddressMode::Clamp, true, true},
+        {"uv1-material", TextureSlotEXT::BaseColor, TextureFilter::Linear,
+         TextureAddressMode::Wrap, TextureAddressMode::Wrap, false, false},
+        {"uv-out-of-range-clamp", TextureSlotEXT::BaseColor, TextureFilter::Linear,
+         TextureAddressMode::Clamp, TextureAddressMode::Clamp, true, false},
+        {"uv-out-of-range-wrap", TextureSlotEXT::BaseColor, TextureFilter::Linear,
+         TextureAddressMode::Wrap, TextureAddressMode::Wrap, true, false},
+        {"uv-out-of-range-mirror", TextureSlotEXT::BaseColor, TextureFilter::Linear,
+         TextureAddressMode::Mirror, TextureAddressMode::Mirror, true, false},
+        {"sampler-trilinear", TextureSlotEXT::BaseColor, TextureFilter::Linear,
+         TextureAddressMode::Wrap, TextureAddressMode::Wrap, true, false},
+        {"texture-shared-two-samplers", TextureSlotEXT::BaseColor, TextureFilter::Point,
+         TextureAddressMode::Clamp, TextureAddressMode::Clamp, true, true},
+        {"texture-shared-two-samplers", TextureSlotEXT::Normal, TextureFilter::Linear,
+         TextureAddressMode::Mirror, TextureAddressMode::Wrap, true, false},
+    };
+
+    // Prove the hardest row actually has the shape its name claims. Without this control, two
+    // independent images with two independent samplers would pass while never exercising the
+    // image-cache boundary this fixture exists for.
+    {
+        const CnaTest::GltfOracle::LoadedFixture shared("texture-shared-two-samplers");
+        ASSERT_TRUE(shared.Ok()) << shared.Error();
+        ASSERT_EQ(2u, shared.Data().textures_count);
+        ASSERT_EQ(1u, shared.Data().images_count);
+        EXPECT_EQ(shared.Data().textures[0].image, shared.Data().textures[1].image);
+        EXPECT_NE(shared.Data().textures[0].sampler, shared.Data().textures[1].sampler);
+    }
+
+    for (const Row& row : rows)
+    {
+        SCOPED_TRACE(std::string(row.fixture) + " slot " +
+                     std::to_string(static_cast<int>(row.slot)));
+        const CnaTest::GltfOracle::LoadedFixture fixture(row.fixture);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        ASSERT_GT(fixture.Data().meshes_count, 0u);
+        ASSERT_GT(fixture.Data().meshes[0].primitives_count, 0u);
+
+        const MeshOut mesh = CNA::Internal::GltfImport::ExtractMesh(
+            &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", nullptr, 1.0f);
+        const SamplerOut& actual = mesh.samplers[static_cast<std::size_t>(row.slot)];
+        EXPECT_EQ(row.filter, actual.filter);
+        EXPECT_EQ(row.addressU, actual.addressU);
+        EXPECT_EQ(row.addressV, actual.addressV);
+        EXPECT_EQ(row.declared, actual.declared);
+        EXPECT_EQ(row.noMipStage, actual.minFilterHasNoMipStage);
+    }
 }
 
 // --- plan_gltf.md GLTF-060 / GLTF-097: attribute count agreement, as a shared assertion ------------

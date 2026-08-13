@@ -33,6 +33,12 @@ _QUAD_NORMALS = [(0.0, 0.0, 1.0)] * 4
 #: TOP-left -- quadrant 1. A V flip sends it to quadrant 3, which is a different colour AND a
 #: different numeral.
 _QUAD_TEXCOORDS = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+#: A second set whose values are disjoint from TEXCOORD_0 at every vertex. A reader hard-wired to
+#: set zero therefore produces four wrong pairs rather than accidentally agreeing at a corner.
+_QUAD_TEXCOORDS_1 = [(0.125, 0.25), (0.875, 0.125), (0.25, 0.875), (0.75, 0.625)]
+#: Coordinates outside [0,1] on both axes. The fractional offsets and unequal upper bounds make
+#: CLAMP, REPEAT and MIRRORED_REPEAT three distinct sampling patterns at every edge.
+_OUT_OF_RANGE_TEXCOORDS = [(-0.25, -0.5), (1.25, -0.5), (-0.25, 1.75), (1.25, 1.75)]
 _QUAD_INDICES = [0, 1, 2, 2, 1, 3]
 #: An authored tangent basis. The quad is in the XY plane with U along +X, so +X with a +1
 #: handedness is the basis its own UVs imply -- authored rather than left to generation, because
@@ -43,11 +49,15 @@ _QUAD_TANGENTS = [(1.0, 0.0, 0.0, 1.0)] * 4
 #: glTF's own enum values, spelled out so a fixture reads as the specification does.
 _NEAREST = 9728
 _LINEAR = 9729
+_LINEAR_MIPMAP_LINEAR = 9987
+_REPEAT = 10497
 _CLAMP_TO_EDGE = 33071
 _MIRRORED_REPEAT = 33648
 
 
-def _quad(builder: GltfBuilder, material: int, mesh_name: str) -> int:
+def _quad(builder: GltfBuilder, material: int, mesh_name: str, *,
+          texcoords: list[tuple[float, float]] = _QUAD_TEXCOORDS,
+          texcoords1: list[tuple[float, float]] | None = None) -> int:
     """Adds the shared textured quad as mesh ``mesh_name`` and returns its mesh index."""
     position = builder.add_packed_accessor(usage="POSITION", values=_QUAD_POSITIONS,
                                            accessor_type="VEC3", with_bounds=True)
@@ -55,13 +65,17 @@ def _quad(builder: GltfBuilder, material: int, mesh_name: str) -> int:
                                          accessor_type="VEC3")
     tangent = builder.add_packed_accessor(usage="TANGENT", values=_QUAD_TANGENTS,
                                           accessor_type="VEC4")
-    texcoord = builder.add_packed_accessor(usage="TEXCOORD_0", values=_QUAD_TEXCOORDS,
+    texcoord = builder.add_packed_accessor(usage="TEXCOORD_0", values=texcoords,
                                            accessor_type="VEC2")
+    attributes = {"POSITION": position, "NORMAL": normal, "TANGENT": tangent,
+                  "TEXCOORD_0": texcoord}
+    if texcoords1 is not None:
+        attributes["TEXCOORD_1"] = builder.add_packed_accessor(
+            usage="TEXCOORD_1", values=texcoords1, accessor_type="VEC2")
     indices = builder.add_packed_accessor(usage="indices", values=_QUAD_INDICES,
                                           accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
     return builder.add_mesh([{
-        "attributes": {"POSITION": position, "NORMAL": normal, "TANGENT": tangent,
-                       "TEXCOORD_0": texcoord},
+        "attributes": attributes,
         "indices": indices,
         "material": material,
         "mode": TRIANGLES,
@@ -69,7 +83,8 @@ def _quad(builder: GltfBuilder, material: int, mesh_name: str) -> int:
 
 
 def _expected_material(index: int, name: str, *, base_color: bool = False,
-                       occlusion: bool = False, model: str | None = None) -> dict:
+                       normal: bool = False, occlusion: bool = False,
+                       model: str | None = None) -> dict:
     """The L3 material record for the fixtures below, with every field the comparison reads."""
     record = {
         "index": index,
@@ -82,7 +97,7 @@ def _expected_material(index: int, name: str, *, base_color: bool = False,
         "alphaCutoff": 0.5,
         "doubleSided": False,
         "hasBaseColorTexture": base_color,
-        "hasNormalTexture": False,
+        "hasNormalTexture": normal,
         "hasMetallicRoughnessTexture": False,
         "hasOcclusionTexture": occlusion,
         "hasEmissiveTexture": False,
@@ -128,6 +143,129 @@ def tex_reference_checkerboard() -> Fixture:
             texcoords=_QUAD_TEXCOORDS, indices=_QUAD_INDICES,
             material=_expected_material(material, "Textured", base_color=True))]},
         l4=world_positions(b, {mesh: list(_QUAD_POSITIONS)}),
+    )
+
+
+def uv1_material() -> Fixture:
+    """A base-colour texture selecting TEXCOORD_1 while TEXCOORD_0 also exists.
+
+    The two sets disagree at every vertex. This is the supported half of CNA's documented
+    single-channel policy: one material may select any one authored set, but maps which select
+    different sets cannot coexist without a reported loss (`GLTF-181`/`GLTF-188`).
+    """
+    b = GltfBuilder("uv1-material")
+    image = b.add_image(reference_texture(), name="Reference")
+    texture = b.add_texture(source=image, name="Uv1Texture")
+    material = b.add_material({
+        "name": "Uv1Material",
+        "pbrMetallicRoughness": {"baseColorTexture": {"index": texture, "texCoord": 1}},
+    })
+    mesh = _quad(b, material, "Uv1Quad", texcoords=_QUAD_TEXCOORDS,
+                 texcoords1=_QUAD_TEXCOORDS_1)
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="uv1-material", audit_fixture=None, owning_group="textures",
+        description="A textured quad with disjoint TEXCOORD_0 and TEXCOORD_1 streams whose "
+                    "base-colour texture explicitly selects set 1. The packed UVs must be set 1, "
+                    "so an importer hard-wired to TEXCOORD_0 disagrees at every vertex.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["TEXCOORD_0", "TEXCOORD_1", "baseColorTexture.texCoord 1",
+                  "single selected UV channel"],
+        spec_anchors=_SPEC + ["texture-coordinate"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="Uv1Quad", primitive=0, mode=TRIANGLES,
+            positions=_QUAD_POSITIONS, normals=_QUAD_NORMALS, tangents=_QUAD_TANGENTS,
+            texcoords=_QUAD_TEXCOORDS_1, indices=_QUAD_INDICES,
+            material=_expected_material(material, "Uv1Material", base_color=True))]},
+        l4=world_positions(b, {mesh: list(_QUAD_POSITIONS)}),
+    )
+
+
+def _single_sampler_fixture(*, fixture_id: str, description: str,
+                            texcoords: list[tuple[float, float]], sampler_fields: dict,
+                            sampler_features: list[str]) -> Fixture:
+    """Builds one base-colour quad whose sampler is the fixture's distinguishing state."""
+    b = GltfBuilder(fixture_id)
+    image = b.add_image(reference_texture(), name="Reference")
+    sampler = b.add_sampler(sampler_fields)
+    texture = b.add_texture(source=image, sampler=sampler, name="SampledTexture")
+    material = b.add_material({
+        "name": "SampledMaterial",
+        "pbrMetallicRoughness": {"baseColorTexture": {"index": texture}},
+    })
+    mesh = _quad(b, material, "SampledQuad", texcoords=texcoords)
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id=fixture_id, audit_fixture=None, owning_group="textures", description=description,
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["base-colour texture"] + sampler_features,
+        spec_anchors=_SPEC,
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SampledQuad", primitive=0, mode=TRIANGLES,
+            positions=_QUAD_POSITIONS, normals=_QUAD_NORMALS, tangents=_QUAD_TANGENTS,
+            texcoords=texcoords, indices=_QUAD_INDICES,
+            material=_expected_material(material, "SampledMaterial", base_color=True))]},
+        l4=world_positions(b, {mesh: list(_QUAD_POSITIONS)}),
+    )
+
+
+def uv_out_of_range_clamp() -> Fixture:
+    """Out-of-range UVs paired with CLAMP_TO_EDGE on both axes (`GLTF-189`)."""
+    return _single_sampler_fixture(
+        fixture_id="uv-out-of-range-clamp",
+        description="A quad with U and V outside [0,1] and a CLAMP_TO_EDGE sampler. It shares "
+                    "geometry and image with the repeat and mirror controls, so only address mode "
+                    "can explain a different edge sample.",
+        texcoords=_OUT_OF_RANGE_TEXCOORDS,
+        sampler_fields={"magFilter": _LINEAR, "minFilter": _LINEAR_MIPMAP_LINEAR,
+                        "wrapS": _CLAMP_TO_EDGE, "wrapT": _CLAMP_TO_EDGE},
+        sampler_features=["out-of-range UV", "CLAMP_TO_EDGE"],
+    )
+
+
+def uv_out_of_range_wrap() -> Fixture:
+    """Out-of-range UVs paired with REPEAT on both axes (`GLTF-189`)."""
+    return _single_sampler_fixture(
+        fixture_id="uv-out-of-range-wrap",
+        description="The clamp fixture's byte-identical geometry and image with REPEAT instead. "
+                    "Both axes cross both boundaries, so a mapper that applies wrapS to V as well "
+                    "cannot hide behind coordinates that never leave the unit square.",
+        texcoords=_OUT_OF_RANGE_TEXCOORDS,
+        sampler_fields={"magFilter": _LINEAR, "minFilter": _LINEAR_MIPMAP_LINEAR,
+                        "wrapS": _REPEAT, "wrapT": _REPEAT},
+        sampler_features=["out-of-range UV", "REPEAT"],
+    )
+
+
+def uv_out_of_range_mirror() -> Fixture:
+    """Out-of-range UVs paired with MIRRORED_REPEAT on both axes (`GLTF-189`)."""
+    return _single_sampler_fixture(
+        fixture_id="uv-out-of-range-mirror",
+        description="The clamp/repeat control geometry with MIRRORED_REPEAT. Fractional negative "
+                    "coordinates and coordinates beyond one make mirroring differ from both "
+                    "ordinary repeat and clamping on each axis.",
+        texcoords=_OUT_OF_RANGE_TEXCOORDS,
+        sampler_fields={"magFilter": _LINEAR, "minFilter": _LINEAR_MIPMAP_LINEAR,
+                        "wrapS": _MIRRORED_REPEAT, "wrapT": _MIRRORED_REPEAT},
+        sampler_features=["out-of-range UV", "MIRRORED_REPEAT"],
+    )
+
+
+def sampler_trilinear() -> Fixture:
+    """A real-file witness for LINEAR_MIPMAP_LINEAR rather than only the raw-enum unit table."""
+    return _single_sampler_fixture(
+        fixture_id="sampler-trilinear",
+        description="A textured quad declaring LINEAR magnification and LINEAR_MIPMAP_LINEAR "
+                    "minification. The sampler must arrive as XNA Linear rather than the point or "
+                    "mixed filters used by the neighbouring mapping-table rows.",
+        texcoords=_QUAD_TEXCOORDS,
+        sampler_fields={"magFilter": _LINEAR, "minFilter": _LINEAR_MIPMAP_LINEAR,
+                        "wrapS": _REPEAT, "wrapT": _REPEAT},
+        sampler_features=["LINEAR", "LINEAR_MIPMAP_LINEAR", "trilinear filtering"],
     )
 
 
@@ -305,4 +443,133 @@ def tex_texture_transform() -> Fixture:
     )
 
 
-FIXTURES = [tex_reference_checkerboard, tex_texture_transform, tex_dual_texture_stride]
+def texture_transform_per_map() -> Fixture:
+    """Base colour and normal maps with deliberately different texture transforms.
+
+    CNA bakes the base-colour transform into its one shared UV stream and reports the normal map's
+    different transform as unrepresentable. This fixture makes that documented `GLTF-184` limit a
+    corpus statement instead of leaving it only in an inline probe.
+    """
+    b = GltfBuilder("texture-transform-per-map")
+    base_image = b.add_image(reference_texture(), name="BaseColor")
+    normal_image = b.add_image(_flat_png(), name="Normal")
+    base_texture = b.add_texture(source=base_image, name="BaseColorTexture")
+    normal_texture = b.add_texture(source=normal_image, name="NormalTexture")
+    normal_transform = {
+        "offset": [0.625, 0.25],
+        "rotation": -math.pi / 4.0,
+        "scale": [0.75, 1.5],
+    }
+    material = b.add_material({
+        "name": "PerMapTransforms",
+        "pbrMetallicRoughness": {"baseColorTexture": {
+            "index": base_texture,
+            "extensions": {"KHR_texture_transform": {
+                "offset": list(_TRANSFORM_OFFSET),
+                "rotation": _TRANSFORM_ROTATION,
+                "scale": list(_TRANSFORM_SCALE),
+            }},
+        }},
+        "normalTexture": {
+            "index": normal_texture,
+            "extensions": {"KHR_texture_transform": normal_transform},
+        },
+    })
+    b.declare_extensions(used=["KHR_texture_transform"])
+    mesh = _quad(b, material, "PerMapTransformQuad")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+
+    baked = [_baked_uv(u, v) for u, v in _QUAD_TEXCOORDS]
+    l4 = world_positions(b, {mesh: list(_QUAD_POSITIONS)})
+    l4["textureTransforms"] = {
+        "bakedMap": "baseColor",
+        "reportedUnbakedMaps": ["normal"],
+        "baseColor": {
+            "offset": list(_TRANSFORM_OFFSET),
+            "rotation": _TRANSFORM_ROTATION,
+            "scale": list(_TRANSFORM_SCALE),
+        },
+        "normal": normal_transform,
+        "reason": "CNA has one shared UV stream. The base-colour transform is baked into it; a "
+                  "different per-map transform requires shader uniforms and is reported rather "
+                  "than silently represented as if it matched.",
+    }
+    return Fixture(
+        id="texture-transform-per-map", audit_fixture=None, owning_group="textures",
+        description="A base-colour map and normal map selecting the same UV set but declaring "
+                    "different KHR_texture_transform values. The base transform is baked and the "
+                    "normal transform must be named in unbakedTextureTransformsEXT.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["KHR_texture_transform", "per-map transforms", "base-colour texture",
+                  "normal texture", "reported single-transform limit"],
+        spec_anchors=_SPEC + ["texture-transform"],
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="PerMapTransformQuad", primitive=0, mode=TRIANGLES,
+            positions=_QUAD_POSITIONS, normals=_QUAD_NORMALS, tangents=_QUAD_TANGENTS,
+            texcoords=baked, indices=_QUAD_INDICES,
+            material=_expected_material(material, "PerMapTransforms", base_color=True,
+                                        normal=True))]},
+        l4=l4,
+    )
+
+
+def texture_shared_two_samplers() -> Fixture:
+    """Two textures share one image but retain independent sampler objects and material slots."""
+    b = GltfBuilder("texture-shared-two-samplers")
+    image = b.add_image(reference_texture(), name="SharedImage")
+    base_sampler = b.add_sampler({
+        "magFilter": _NEAREST,
+        "minFilter": _NEAREST,
+        "wrapS": _CLAMP_TO_EDGE,
+        "wrapT": _CLAMP_TO_EDGE,
+    })
+    normal_sampler = b.add_sampler({
+        "magFilter": _LINEAR,
+        "minFilter": _LINEAR_MIPMAP_LINEAR,
+        "wrapS": _MIRRORED_REPEAT,
+        "wrapT": _REPEAT,
+    })
+    base_texture = b.add_texture(source=image, sampler=base_sampler, name="BaseFromShared")
+    normal_texture = b.add_texture(source=image, sampler=normal_sampler, name="NormalFromShared")
+    material = b.add_material({
+        "name": "SharedImageTwoSamplers",
+        "pbrMetallicRoughness": {"baseColorTexture": {"index": base_texture}},
+        "normalTexture": {"index": normal_texture},
+    })
+    mesh = _quad(b, material, "SharedSamplerQuad")
+    node = b.add_node(name="MeshNode", mesh=mesh)
+    b.add_scene([node], name="Scene")
+    b.set_default_scene(0)
+    return Fixture(
+        id="texture-shared-two-samplers", audit_fixture=None, owning_group="textures",
+        description="One image is referenced by two textures: Point/Clamp for base colour and "
+                    "Linear/Mirror-U/Wrap-V for the normal map. Caching by image must not collapse "
+                    "the texture-owned sampler state into one shared value.",
+        builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
+        features=["shared image", "two textures", "two samplers", "per-slot sampler state",
+                  "independent U/V addressing"],
+        spec_anchors=_SPEC,
+        l3={"primitives": [l3_primitive(
+            mesh=mesh, mesh_name="SharedSamplerQuad", primitive=0, mode=TRIANGLES,
+            positions=_QUAD_POSITIONS, normals=_QUAD_NORMALS, tangents=_QUAD_TANGENTS,
+            texcoords=_QUAD_TEXCOORDS, indices=_QUAD_INDICES,
+            material=_expected_material(material, "SharedImageTwoSamplers", base_color=True,
+                                        normal=True))]},
+        l4=world_positions(b, {mesh: list(_QUAD_POSITIONS)}),
+    )
+
+
+FIXTURES = [
+    tex_reference_checkerboard,
+    uv1_material,
+    uv_out_of_range_clamp,
+    uv_out_of_range_wrap,
+    uv_out_of_range_mirror,
+    sampler_trilinear,
+    tex_texture_transform,
+    texture_transform_per_map,
+    texture_shared_two_samplers,
+    tex_dual_texture_stride,
+]

@@ -17,6 +17,7 @@
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "GltfFixtureCorpus.hpp"
 
 using namespace CNA::Internal::GltfImport;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -253,6 +254,23 @@ TEST(GltfUvChannel, AnIdentityTextureTransformLeavesTheUvsExactlyAlone)
     const std::vector<float> uv = UvOfVertex(mesh, 0);
     EXPECT_NEAR(kUv0[0], uv[0], kTolerance);
     EXPECT_NEAR(kUv0[1], uv[1], kTolerance);
+}
+
+TEST(GltfUvChannel, CorpusPerMapTransformNamesTheMapThatCannotShareTheBakedTransform)
+{
+    // This is `GLTF-184`'s documented limit in a permanent corpus asset. The base colour and
+    // normal map both use TEXCOORD_0 but author different non-neutral transforms. One shared UV
+    // stream can carry only the base colour's baked result, so the normal map must be named rather
+    // than silently sampled with somebody else's transform.
+    const CnaTest::GltfOracle::LoadedFixture fixture("texture-transform-per-map");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ASSERT_GT(fixture.Data().meshes_count, 0u);
+    ASSERT_GT(fixture.Data().meshes[0].primitives_count, 0u);
+
+    const MeshOut mesh = ExtractMesh(&fixture.Data(), fixture.Data().meshes[0].primitives[0],
+                                     "probe", nullptr, 1.0f);
+    ASSERT_EQ(1u, mesh.unbakedTextureTransformsEXT.size());
+    EXPECT_EQ("normal", mesh.unbakedTextureTransformsEXT.front());
 }
 
 // --- GLTF-174: tangent generation uses the generated normals ---------------------------------------

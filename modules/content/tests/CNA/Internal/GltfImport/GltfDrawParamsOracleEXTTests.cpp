@@ -17,6 +17,7 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "GltfDrawParamsOracleEXT.hpp"
 #include "GltfFixtureCorpus.hpp"
 
@@ -54,6 +55,7 @@ using CnaTest::GltfOracle::Numbers;
 using CnaTest::GltfOracle::Path;
 using CnaTest::GltfOracle::StringOr;
 using CnaTest::GltfOracle::ToJson;
+using CNA::Internal::GltfImport::TextureSlotEXT;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -1211,6 +1213,40 @@ TEST(GltfConformanceL6, ADeclaredSamplerSurvivesImportOntoThePartThatDrawsWithIt
     EXPECT_EQ(expectedAddress, d.samplers.front().addressU)
         << "CLAMP_TO_EDGE did not arrive on U; UVs outside [0,1] tile instead of clamping";
     EXPECT_EQ(expectedAddress, d.samplers.front().addressV);
+}
+
+TEST(GltfConformanceL6, SamplersStayPerSlotWhenTwoTexturesShareOneImage)
+{
+    // An image cache is allowed (and desirable), but sampler state belongs to the texture object,
+    // not the image. This fixture references one cgltf_image from two cgltf_texture objects and
+    // deliberately gives the base-colour and normal slots different filters and address modes.
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("texture-shared-two-samplers");
+
+    const std::vector<DrawParamsDump> captured = CaptureDrawParamsEXT(
+        model, Matrix::getIdentityProperty(), TestView(), TestProjection());
+    ASSERT_EQ(1u, captured.size());
+    const DrawParamsDump& d = captured.front();
+    SCOPED_TRACE(ToJson(d));
+
+    const auto slot = [](TextureSlotEXT value) { return static_cast<std::size_t>(value); };
+    ASSERT_GT(d.samplers.size(), slot(TextureSlotEXT::Normal));
+    const auto& base = d.samplers[slot(TextureSlotEXT::BaseColor)];
+    const auto& normal = d.samplers[slot(TextureSlotEXT::Normal)];
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureFilter::Point),
+              base.filter);
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Clamp),
+              base.addressU);
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Clamp),
+              base.addressV);
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureFilter::Linear),
+              normal.filter);
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Mirror),
+              normal.addressU);
+    EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap),
+              normal.addressV);
 }
 
 TEST(GltfConformanceL6, APartWithNoDeclaredSamplerKeepsTheDefaultRatherThanTheLastFilesOne)

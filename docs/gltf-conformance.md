@@ -594,11 +594,13 @@ produced them.
 
 ### 4.3 Coverage today
 
-**112 of the 120** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**119 of the 127** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
-width-selection rule. The seven without one are the fixtures the importer must **refuse**
-(`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`); their manifests record
-`l5.supported = false` with a reason and the owning task, so the layer is visibly absent rather than
+width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
+(`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
+`interleaved-pos-nrm-uv` is the one positive asset whose packed bytes contain a generated tangent
+basis, an importer policy the spec-derived generator deliberately does not duplicate. Every one
+records `l5.supported = false` with its own reason, so the layer is visibly absent rather than
 quietly unasserted.
 
 A converted topology's golden holds the **converted** index list, not the authored one — a strip's
@@ -819,7 +821,14 @@ written for this document: two descriptions of the same fixture are two things t
 | `mat-specular-glossiness` | materials | L1, L2, L3, L4, L5 | KHR_materials_pbrSpecularGlossiness; archived extension; converted to metallic-roughness; dropped specular tint |
 | `mat-authored-tangent` | materials | L1, L2, L3, L4, L5 | authored TANGENT; tangent handedness; vertex stride 48 |
 | `tex-reference-checkerboard` | textures | L1, L2, L3, L4, L5 | base-colour texture; image data: URI; sampler NEAREST; CLAMP_TO_EDGE |
+| `uv1-material` | textures | L1, L2, L3, L4, L5 | TEXCOORD_0; TEXCOORD_1; baseColorTexture.texCoord 1; single selected UV channel |
+| `uv-out-of-range-clamp` | textures | L1, L2, L3, L4, L5 | base-colour texture; out-of-range UV; CLAMP_TO_EDGE |
+| `uv-out-of-range-wrap` | textures | L1, L2, L3, L4, L5 | base-colour texture; out-of-range UV; REPEAT |
+| `uv-out-of-range-mirror` | textures | L1, L2, L3, L4, L5 | base-colour texture; out-of-range UV; MIRRORED_REPEAT |
+| `sampler-trilinear` | textures | L1, L2, L3, L4, L5 | base-colour texture; LINEAR; LINEAR_MIPMAP_LINEAR; trilinear filtering |
 | `tex-texture-transform` | textures | L1, L2, L3, L4, L5 | KHR_texture_transform; offset; rotation; non-square scale; transform baked into UVs |
+| `texture-transform-per-map` | textures | L1, L2, L3, L4, L5 | KHR_texture_transform; per-map transforms; base-colour texture; normal texture; reported single-transform limit |
+| `texture-shared-two-samplers` | textures | L1, L2, L3, L4, L5 | shared image; two textures; two samplers; per-slot sampler state; independent U/V addressing |
 | `tex-dual-texture-stride` | textures | L1, L2, L3, L4, L5 | base-colour texture; occlusion texture; KHR_materials_unlit; vertex stride 20 |
 | `skin-armature-ancestor` | skinning | L1, L2, L3, L4 | skin.joints; skin.inverseBindMatrices; armature ancestor above the joint set; JOINTS_0 / WEIGHTS_0 |
 | `skin-mesh-node-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh-space cancellation; skin.inverseBindMatrices; JOINTS_0 / WEIGHTS_0 |

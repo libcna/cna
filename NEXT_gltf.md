@@ -6,7 +6,7 @@ session needs to start work without re-deriving the state.
 
 ## Session status
 
-- **Branch:** `feature/gltf_`, pushed. Never push elsewhere without explicit permission. No pull
+- **Branch:** `feature/gltf`, pushed. Never push elsewhere without explicit permission. No pull
   request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
 - **Working document:** `plan_gltf.md`, 460 numbered rows. **366 closed (`✔` 245, `✅` 121),
@@ -43,9 +43,9 @@ Expected as of this writing:
 | Check | Expected |
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
-| full suite | **6 324 passed, 18 failed** |
-| generator `--check` | **111 assets, 544 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` | **439 passed, 23 skipped** / **462 passed, 0 skipped** |
+| full suite | **6 332 passed, 188 skipped, 18 failed** |
+| generator `--check` | **127 assets, 624 files — byte-identical** |
+| `*Gltf*` on `STUB` / `HEADLESS` | **445 passed, 23 skipped** / **468 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -76,7 +76,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 437 passed, 23 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 445 passed, 23 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -174,15 +174,16 @@ The remaining **~39 are doable in this environment.**
 Ordered by value, not by number. Each is a coherent unit with its own tests and one commit.
 Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is superseded.
 
-1. **`GLTF-399` — finish the corpus (109 of 136).** This is now the highest-value *mechanical*
-   work, and four groups are already complete (transforms 17/17, component types 8/8, accessors
-   12/13, morph 12). What is left, in the order it is worth doing:
-   - **skinning 10/16**, **materials 10/12** and **robustness 7/8** (scenes is now 3/3) — ordinary
-     work with existing machinery. Start here.
-   - **textures 3/10** — needs real images; `tools/gltf_fixtures/png.py` already emits PNGs, so
-     this is closer than it looks.
-   - **container 1/8** — needs the generator to emit external `.bin`/image sidecars, which it does
-     not do yet. That is the one piece of new machinery.
+1. **`GLTF-399` — finish the corpus (127 assets today).** Eight owning groups are complete:
+   transforms 17/17, component types 8/8, scenes 3/3, materials 12/12, robustness 8/8, skinning
+   16/16 and textures 10/10; accessors are 12/13. What is left, in the order it is worth doing:
+   - **reconcile §24.2's final count first** — its heading says 135, two historical corrections
+     say 136, and the current table arithmetic says 141. `GLTF-399` now records this explicitly;
+     none is a valid CI contract until the named inventory and its later additions agree.
+   - **the accessor oracle gap** — teach L4 and `world_positions` to enumerate per primitive, then
+     restore `two-primitives-one-buffer` to one mesh with two primitives.
+   - **container 1/8** — extend the generator to emit external `.bin`/image sidecars. This is the
+     main remaining piece of generator machinery.
    - **Draco 0/4** — `libdraco`-blocked.
    One residue is an **oracle limitation, not a missing fixture**: the L4 oracle enumerates one
    instance per node-with-a-mesh while CNA enumerates one per primitive, so a multi-primitive mesh
@@ -251,7 +252,7 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 |---|---|
 | `plan_gltf.md` | The 460-row campaign record. Each closed row carries its own evidence. |
 | `tools/gltf_fixtures/` | The corpus generator. Edit here, never the assets. |
-| `tests/assets/gltf/` | Generated corpus: **75 assets, 364 files**, including `manifest.json`'s defect ledger. Never edited by hand. |
+| `tests/assets/gltf/` | Generated corpus: **127 assets, 624 files**, including `manifest.json`'s defect ledger. Never edited by hand. |
 | `modules/content/src/GltfImport/GltfImportCore.cpp` | The importer. Extraction, skeletons, clips, lights, cameras, the extension registry, the stride table. |
 | `modules/content/src/Xna/ContentManager.cpp` | The runtime `.gltf` loader **and** the `.cnj` reader. Both must agree; several tests assert exactly that. |
 | `tools/gltf_to_cnj/gltf_to_cnj.cpp` | The offline converter — the second loader. |

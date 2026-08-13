@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 120,
+  "distinctAssetCount": 127,
   "owningGroupCounts": {
     "container": 1,
     "accessors": 12,
@@ -21,7 +21,7 @@
     "normals": 2,
     "transforms": 17,
     "materials": 12,
-    "textures": 3,
+    "textures": 10,
     "skinning": 16,
     "animation": 23,
     "cameras": 5,
@@ -1290,6 +1290,98 @@
       "auditFixture": null
     },
     {
+      "id": "uv1-material",
+      "owningGroup": "textures",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "TEXCOORD_0",
+        "TEXCOORD_1",
+        "baseColorTexture.texCoord 1",
+        "single selected UV channel"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "uv-out-of-range-clamp",
+      "owningGroup": "textures",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "base-colour texture",
+        "out-of-range UV",
+        "CLAMP_TO_EDGE"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "uv-out-of-range-wrap",
+      "owningGroup": "textures",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "base-colour texture",
+        "out-of-range UV",
+        "REPEAT"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "uv-out-of-range-mirror",
+      "owningGroup": "textures",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "base-colour texture",
+        "out-of-range UV",
+        "MIRRORED_REPEAT"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "sampler-trilinear",
+      "owningGroup": "textures",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "base-colour texture",
+        "LINEAR",
+        "LINEAR_MIPMAP_LINEAR",
+        "trilinear filtering"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "tex-texture-transform",
       "owningGroup": "textures",
       "referencingGroups": [],
@@ -1306,6 +1398,46 @@
         "rotation",
         "non-square scale",
         "transform baked into UVs"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "texture-transform-per-map",
+      "owningGroup": "textures",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "KHR_texture_transform",
+        "per-map transforms",
+        "base-colour texture",
+        "normal texture",
+        "reported single-transform limit"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "texture-shared-two-samplers",
+      "owningGroup": "textures",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "shared image",
+        "two textures",
+        "two samplers",
+        "per-slot sampler state",
+        "independent U/V addressing"
       ],
       "auditFixture": null
     },
@@ -4005,6 +4137,31 @@
       "sha256": "a9d7469337c7f09463242302b16a6522e3a31f0a1df6ac18047baf83a733de70"
     },
     {
+      "path": "sampler-trilinear.expected.json",
+      "bytes": 9502,
+      "sha256": "e7f658276cead60fa97cd7e83ac1194c2cb51aa7b939266167def2c78fe12655"
+    },
+    {
+      "path": "sampler-trilinear.glb",
+      "bytes": 1696,
+      "sha256": "da0b005ee18d80ba0e9d99657e069ab839541b0bd4f611fc694a77b0089d98eb"
+    },
+    {
+      "path": "sampler-trilinear.gltf",
+      "bytes": 2775,
+      "sha256": "8d0d427c66b9d3b7b947bae09e5af3ed10e9c2ccfedcb50e7f5ed6f57a88bf4b"
+    },
+    {
+      "path": "sampler-trilinear.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "sampler-trilinear.vb.bin",
+      "bytes": 192,
+      "sha256": "7f3db77e1a5e5e23bac03018d9e5397b8e7378f31026d1e317a92b9f39f756c7"
+    },
+    {
       "path": "scene-default-selection.expected.json",
       "bytes": 8117,
       "sha256": "b9176273bd6c64ead1c09cf014097a52f0743a9977b0af02f8d512b3ca6db15a"
@@ -4695,6 +4852,56 @@
       "sha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5"
     },
     {
+      "path": "texture-shared-two-samplers.expected.json",
+      "bytes": 9582,
+      "sha256": "1948c118411164268bb0f171942d78e2423c4bc5a04e3d9662c88b345b08586b"
+    },
+    {
+      "path": "texture-shared-two-samplers.glb",
+      "bytes": 1856,
+      "sha256": "2a958df3038aff2f7d747d2c2ce43fb58cfd6c48675f352714d6df20ffd511ac"
+    },
+    {
+      "path": "texture-shared-two-samplers.gltf",
+      "bytes": 3034,
+      "sha256": "7ec73ae0e93455e3c058d1647acc4383dd9ce1e6b1c6354711fec5816149d7c2"
+    },
+    {
+      "path": "texture-shared-two-samplers.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "texture-shared-two-samplers.vb.bin",
+      "bytes": 192,
+      "sha256": "7f3db77e1a5e5e23bac03018d9e5397b8e7378f31026d1e317a92b9f39f756c7"
+    },
+    {
+      "path": "texture-transform-per-map.expected.json",
+      "bytes": 10431,
+      "sha256": "8494fecc0ba8cad4cb82d72cb200f6e45c21fa8f1d33b84f946e09442859766f"
+    },
+    {
+      "path": "texture-transform-per-map.glb",
+      "bytes": 2124,
+      "sha256": "f84c7aa08f236d284911aff5b6a2a047f6a1d224e6489196f9e4fbca864ac33b"
+    },
+    {
+      "path": "texture-transform-per-map.gltf",
+      "bytes": 3607,
+      "sha256": "bb891967a8a2cc3f617d4fa40e35e7547d56fca87d110769d8609ef26fd109a1"
+    },
+    {
+      "path": "texture-transform-per-map.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "texture-transform-per-map.vb.bin",
+      "bytes": 192,
+      "sha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5"
+    },
+    {
       "path": "two-primitives-one-buffer.expected.json",
       "bytes": 10377,
       "sha256": "774efd3a5c383e51042a5dc0730720b8a872dfbc3992fca39daa29383e5fab0f"
@@ -4803,6 +5010,106 @@
       "path": "u8-idx.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "uv-out-of-range-clamp.expected.json",
+      "bytes": 9490,
+      "sha256": "57221f2fdffdb19c53061d5e57dd9799ac266b67c98e6f753818422a9ef39031"
+    },
+    {
+      "path": "uv-out-of-range-clamp.glb",
+      "bytes": 1696,
+      "sha256": "3ce875718d0b30b11a5619f7226bf626cc296d197d1a8b6846326e295725f7f0"
+    },
+    {
+      "path": "uv-out-of-range-clamp.gltf",
+      "bytes": 2775,
+      "sha256": "ac0e64a989f878c1f8bc8260d0fd32133aa7cc8d7b7488f578e0f8f083cf0058"
+    },
+    {
+      "path": "uv-out-of-range-clamp.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "uv-out-of-range-clamp.vb.bin",
+      "bytes": 192,
+      "sha256": "cb8a8ea81650e5ce8707d002d106724b2af7f6e073d244361b62db76fb355302"
+    },
+    {
+      "path": "uv-out-of-range-mirror.expected.json",
+      "bytes": 9499,
+      "sha256": "f3f5612a99f5ec79818f8ed7fd6dd22050bc4d5d760f96db873f48f5d3cc46cb"
+    },
+    {
+      "path": "uv-out-of-range-mirror.glb",
+      "bytes": 1696,
+      "sha256": "1805749667bf66d109f964992ce944a551440417bda789b092dad1e5c1e88365"
+    },
+    {
+      "path": "uv-out-of-range-mirror.gltf",
+      "bytes": 2775,
+      "sha256": "f7a05ac43f576b0d396fbcaad1fc56bf5c741cb8260eb699ed470ef5b87cd818"
+    },
+    {
+      "path": "uv-out-of-range-mirror.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "uv-out-of-range-mirror.vb.bin",
+      "bytes": 192,
+      "sha256": "cb8a8ea81650e5ce8707d002d106724b2af7f6e073d244361b62db76fb355302"
+    },
+    {
+      "path": "uv-out-of-range-wrap.expected.json",
+      "bytes": 9509,
+      "sha256": "dba73cc5972a4e13ee3354204964dc2b95f48617f659acc4650467ae4f3b375c"
+    },
+    {
+      "path": "uv-out-of-range-wrap.glb",
+      "bytes": 1696,
+      "sha256": "d31e3cda52b46936b5ca9b6ce0b5b951066c825c6d012d0a08bd84c584424862"
+    },
+    {
+      "path": "uv-out-of-range-wrap.gltf",
+      "bytes": 2775,
+      "sha256": "fb86ca5d2d9402e1c2da168bc4eb6493ce157d08b54b33f5ea8e90f4323a6eed"
+    },
+    {
+      "path": "uv-out-of-range-wrap.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "uv-out-of-range-wrap.vb.bin",
+      "bytes": 192,
+      "sha256": "cb8a8ea81650e5ce8707d002d106724b2af7f6e073d244361b62db76fb355302"
+    },
+    {
+      "path": "uv1-material.expected.json",
+      "bytes": 10084,
+      "sha256": "c4312d918efc812e2f4c4b2fa8791d03dc4d6466bf92a1511240f42200c2916f"
+    },
+    {
+      "path": "uv1-material.glb",
+      "bytes": 1764,
+      "sha256": "de158a71a0c2bfdef585c729a061e14f774a19648b04e1026926e88fb431af0f"
+    },
+    {
+      "path": "uv1-material.gltf",
+      "bytes": 2899,
+      "sha256": "951035f55ac27c293a52e6ef8d9f88ff7670aec0c116819296d72972e1afa54f"
+    },
+    {
+      "path": "uv1-material.ib.bin",
+      "bytes": 12,
+      "sha256": "769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b"
+    },
+    {
+      "path": "uv1-material.vb.bin",
+      "bytes": 192,
+      "sha256": "fadf32ea10762b9c9829382a325414401217be300f6ec81a82afa841cf62f5fd"
     },
     {
       "path": "xf-deep-chain.expected.json",
