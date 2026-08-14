@@ -101,6 +101,11 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_lifecycle_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_lifecycle_smoke)
     add_test(NAME CApi_LifecycleSmoke COMMAND cna_c_api_lifecycle_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_LifecycleSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
 
     add_library(cna_c_api_header_c OBJECT tests/pure_c/AbiHeaderC.c)
     set_target_properties(cna_c_api_header_c PROPERTIES

@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B3 HEADLESS vertical slice completed; native-renderer smoke pending (2026-08-14).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B3 vertical slice completed under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -190,7 +190,7 @@ handle, conversion, ownership or exception-escape defect in the exercised paths.
 | CBIND-018 | Implement lifecycle callback bridge | ✅ | The copied C callback table covers load/update/draw/unload/exit with a caller context, callback-scoped game handle, `CNA_GameTime` where applicable and copied versioned callback diagnostics. Failure stops the loop and reports `CNA_RESULT_CALLBACK`; run/destroy re-entry is refused. |
 | CBIND-019 | Expose frame timing, clear and window-title minimum | ✅ | `CNA_GameTime`, one-frame/blocking run, exit request, `CNA_Color` clear and UTF-8 title functions adapt canonical `Game`, `GraphicsDevice` and `GameWindow` operations without exposing their C++ types. |
 | CBIND-020 | Add C-only headless lifecycle test | ✅ | `LifecycleSmoke.c` creates, drives, clears, exits and destroys C games under HEADLESS; it tests callback order/values, callback diagnostics, stale handles, wrong-thread rejection and a blocking run path. |
-| CBIND-021 | Add native-renderer lifecycle smoke test | 🔄 | SDL renderer configuration and display availability were verified on 2026-08-14, but its clean build stops before C API linkage at the existing `cna_graphics_core` archive failure (`ranlib: libcna_graphics_core.a: No such file`). The C lifecycle source has therefore not run on a native renderer; HEADLESS remains the only completed execution evidence. |
+| CBIND-021 | Add native-renderer lifecycle smoke test | ✅ | The same strict-C lifecycle source builds and passes against `SDL_RENDERER` with SDL's dummy video driver and software renderer. The earlier `ranlib` failure was traced to overlapping verification builds rather than a CNA archive defect; a single clean serial build completed through `cna_c_api_lifecycle_smoke`. |
 
 **B3 gate:** a C application can own its lifecycle, receive callbacks, exercise UTF-8 and error
 conversion, and shut down cleanly without any C++ source or header dependency.
@@ -304,9 +304,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-020` are ✅; `CBIND-021` is 🔄 on an existing native-renderer archive
-build failure; `CBIND-022` through `CBIND-044` are ⬜ **not started**. The exported ABI is still
-experimental `0.1.0`: it contains the version/error substrate and the HEADLESS-tested C game
-lifecycle slice, not complete public CNA coverage. No language-specific binding exists. After the
-native-renderer archive issue is resolved, rerun CBIND-021; B4 2D graphics/input and the complete
-public-surface inventory remain subsequent work.
+`CBIND-000` through `CBIND-021` are ✅; `CBIND-022` through `CBIND-044` are ⬜ **not started**. The
+exported ABI is still experimental `0.1.0`: it contains the version/error substrate and the
+HEADLESS- and SDL_RENDERER-tested C game lifecycle slice, not complete public CNA coverage. No
+language-specific binding exists. B4 2D graphics/input and the complete public-surface inventory
+remain subsequent work.
