@@ -328,6 +328,17 @@ namespace CNA::Internal::Graphics
             {VertexElementUsage::Color,             0, 52, VertexElementFormat::Color},
         };
 
+        // GLTF-182 deliberately pads the naturally 56-byte rigid PBR+UV1 record to 60 bytes:
+        // stride 56 already denotes skinned+colour, and keeping one meaning per stride avoids an
+        // effect-dependent interpretation of the same vertex declaration.
+        inline constexpr InferredVertexElement kStride60[] = {
+            {VertexElementUsage::Position,          0,  0, VertexElementFormat::Vector3},
+            {VertexElementUsage::Normal,            0, 12, VertexElementFormat::Vector3},
+            {VertexElementUsage::Tangent,           0, 24, VertexElementFormat::Vector4},
+            {VertexElementUsage::TextureCoordinate, 0, 40, VertexElementFormat::Vector2},
+            {VertexElementUsage::TextureCoordinate, 1, 48, VertexElementFormat::Vector2},
+        };
+
         inline constexpr InferredVertexElement kStride68[] = {
             {VertexElementUsage::Position,          0,  0, VertexElementFormat::Vector3},
             {VertexElementUsage::Normal,            0, 12, VertexElementFormat::Vector3},
@@ -335,6 +346,16 @@ namespace CNA::Internal::Graphics
             {VertexElementUsage::TextureCoordinate, 0, 40, VertexElementFormat::Vector2},
             {VertexElementUsage::BlendWeight,       0, 48, VertexElementFormat::Vector4},
             {VertexElementUsage::BlendIndices,      0, 64, VertexElementFormat::Byte4},
+        };
+
+        inline constexpr InferredVertexElement kStride76[] = {
+            {VertexElementUsage::Position,          0,  0, VertexElementFormat::Vector3},
+            {VertexElementUsage::Normal,            0, 12, VertexElementFormat::Vector3},
+            {VertexElementUsage::Tangent,           0, 24, VertexElementFormat::Vector4},
+            {VertexElementUsage::TextureCoordinate, 0, 40, VertexElementFormat::Vector2},
+            {VertexElementUsage::BlendWeight,       0, 48, VertexElementFormat::Vector4},
+            {VertexElementUsage::BlendIndices,      0, 64, VertexElementFormat::Byte4},
+            {VertexElementUsage::TextureCoordinate, 1, 68, VertexElementFormat::Vector2},
         };
 
         // The two fallbacks a renderer uses for a stride the table above does not list. Both are
@@ -377,7 +398,9 @@ namespace CNA::Internal::Graphics
             case 48: return detail::Layout(detail::kStride48);
             case 52: return detail::Layout(detail::kStride52);
             case 56: return detail::Layout(detail::kStride56);
+            case 60: return detail::Layout(detail::kStride60);
             case 68: return detail::Layout(detail::kStride68);
+            case 76: return detail::Layout(detail::kStride76);
             default: break;
         }
         switch (fallback)

@@ -2849,7 +2849,7 @@ namespace CNA::Internal::GltfImport
         // TextureCoordinate+BlendWeight+BlendIndices+Color). Skinned + PBR meshes use the new
         // stride-68 layout (Position+Normal+Tangent+TextureCoordinate+BlendWeight+BlendIndices).
         const VertexLayoutRequestEXT layoutRequest{out.skinned, out.colored, out.usePbr,
-                                                    out.useDualTexture};
+                                                    out.useDualTexture, false};
         const VertexLayoutRuleEXT& layoutRule = SelectVertexLayoutEXT(layoutRequest);
         out.stride = layoutRule.stride;
         // plan_gltf.md GLTF-100: what this row cannot carry, taken from the table rather than
@@ -3935,26 +3935,28 @@ namespace CNA::Internal::GltfImport
     {
         static const std::vector<VertexLayoutRuleEXT> table = {
             // Skinned. A skinned primitive always carries a Normal, so nothing here loses one.
-            {{true, true, false, false}, 56,
+            {{true, true, false, false, false}, 56,
              "the material's PBR factors and maps: no PBR shader reads a colour stream"},
-            {{true, true, true, false}, 56,
+            {{true, true, true, false, false}, 56,
              "the material's PBR factors and maps: no PBR shader reads a colour stream"},
-            {{true, false, true, false}, 68, ""},
-            {{true, false, false, false}, 52, ""},
+            {{true, false, true, false, true}, 76, ""},
+            {{true, false, true, false, false}, 68, ""},
+            {{true, false, false, false, false}, 52, ""},
             // Unskinned, coloured. Stride 24 is XNA's own VertexPositionColorTexture, which has no
             // Normal slot at all -- so a coloured primitive loses its normals whatever its
             // material, and its PBR material on top of that (GLTF-241/GLTF-085).
-            {{false, true, true, false}, 24,
+            {{false, true, true, false, false}, 24,
              "the Normal stream and the material's PBR factors and maps: stride 24 has no normal "
              "slot and no PBR shader reads a colour stream"},
-            {{false, true, false, false}, 24,
+            {{false, true, false, false, false}, 24,
              "the Normal stream: stride 24 (Position+Color+TextureCoordinate) has no normal slot"},
             // Unskinned, uncoloured.
-            {{false, false, true, false}, 48, ""},
-            {{false, false, false, true}, 20,
+            {{false, false, true, false, true}, 60, ""},
+            {{false, false, true, false, false}, 48, ""},
+            {{false, false, false, true, false}, 20,
              "the Normal and Tangent streams: DualTextureEffect's layout is "
              "Position+TextureCoordinate only, so the primitive cannot be lit"},
-            {{false, false, false, false}, 32, ""},
+            {{false, false, false, false, false}, 32, ""},
         };
         return table;
     }
@@ -3970,6 +3972,7 @@ namespace CNA::Internal::GltfImport
             if (rule.request.skinned == request.skinned &&
                 rule.request.colored == request.colored &&
                 rule.request.usePbr == request.usePbr &&
+                rule.request.hasSecondTexcoord == request.hasSecondTexcoord &&
                 (rule.request.useDualTexture == request.useDualTexture ||
                  (!rule.request.useDualTexture && !request.useDualTexture)))
             {

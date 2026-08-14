@@ -111,6 +111,20 @@ namespace
                           offsetof(PositionNormalTangentTextureStream, u)),
                   "stride 48: TextureCoordinate moved in the struct but not in the table");
 
+    // --- stride 60: PositionNormalTangentTexture2PaddedStream -------------------------------
+    static_assert(sizeof(PositionNormalTangentTexture2PaddedStream) == 60,
+                  "the rigid PBR+UV1 stream no longer matches its padded stride-60 record");
+    static_assert(TableOffset(fidelity::kStride60, 5, VertexElementUsage::Position) ==
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, x)));
+    static_assert(TableOffset(fidelity::kStride60, 5, VertexElementUsage::Normal) ==
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, nx)));
+    static_assert(TableOffset(fidelity::kStride60, 5, VertexElementUsage::Tangent) ==
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, tx)));
+    static_assert(fidelity::kStride60[3].offset ==
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, u0)));
+    static_assert(fidelity::kStride60[4].offset ==
+                      static_cast<int>(offsetof(PositionNormalTangentTexture2PaddedStream, u1)));
+
     // --- stride 52: PositionNormalTextureSkinnedStream ----------------------------------------
     static_assert(sizeof(PositionNormalTextureSkinnedStream) == 52,
                   "PositionNormalTextureSkinnedStream no longer matches the canonical stride-52 "
@@ -161,6 +175,24 @@ namespace
         TableOffset(fidelity::kStride68, 6, VertexElementUsage::BlendIndices) ==
             static_cast<int>(offsetof(PositionNormalTangentTextureSkinnedStream, i0)),
         "stride 68: BlendIndices moved in the struct but not in the table");
+
+    // --- stride 76: PositionNormalTangentTextureSkinned2Stream ------------------------------
+    static_assert(sizeof(PositionNormalTangentTextureSkinned2Stream) == 76,
+                  "the skinned PBR+UV1 stream no longer matches its stride-76 record");
+    static_assert(fidelity::kStride76[0].offset ==
+                      static_cast<int>(offsetof(PositionNormalTangentTextureSkinned2Stream, x)));
+    static_assert(fidelity::kStride76[1].offset ==
+                      static_cast<int>(offsetof(PositionNormalTangentTextureSkinned2Stream, nx)));
+    static_assert(fidelity::kStride76[2].offset ==
+                      static_cast<int>(offsetof(PositionNormalTangentTextureSkinned2Stream, tx)));
+    static_assert(fidelity::kStride76[3].offset ==
+                      static_cast<int>(offsetof(PositionNormalTangentTextureSkinned2Stream, u0)));
+    static_assert(fidelity::kStride76[4].offset ==
+                      static_cast<int>(offsetof(PositionNormalTangentTextureSkinned2Stream, w0)));
+    static_assert(fidelity::kStride76[5].offset ==
+                      static_cast<int>(offsetof(PositionNormalTangentTextureSkinned2Stream, i0)));
+    static_assert(fidelity::kStride76[6].offset ==
+                      static_cast<int>(offsetof(PositionNormalTangentTextureSkinned2Stream, u1)));
 
     // --- stride 56 -----------------------------------------------------------------------------
     //

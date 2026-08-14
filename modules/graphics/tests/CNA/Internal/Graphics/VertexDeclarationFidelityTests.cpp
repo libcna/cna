@@ -432,7 +432,7 @@ TEST(VertexDeclarationFidelityTest, StockProgramRefusesAColourWhereItExpectsANor
 
 TEST(VertexDeclarationFidelity, EveryStrideTheGltfImporterCanEmitIsInTheCanonicalTable)
 {
-    for (const int stride : {16, 20, 24, 32, 48, 52, 56, 68})
+    for (const int stride : {16, 20, 24, 32, 48, 52, 56, 60, 68, 76})
     {
         SCOPED_TRACE("stride " + std::to_string(stride));
         const CNA::Internal::Graphics::InferredVertexLayout layout =

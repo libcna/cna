@@ -450,7 +450,7 @@ namespace CNA::Internal::GltfImport
         PrimitiveTopology sourceTopology = PrimitiveTopology::Triangles;
         /** @brief Tightly-packed vertex bytes, `vertexBytes.size() / stride` vertices. */
         std::vector<std::uint8_t> vertexBytes;
-        /** @brief Byte stride of one vertex (16/20/24/32/48/52/56/68 — see CLAUDE.md's stride table). */
+        /** @brief Byte stride of one vertex (16/20/24/32/48/52/56/60/68/76). */
         int stride = 32;
         /** @brief Tightly-packed index bytes (16- or 32-bit, per `use32BitIndices`). */
         std::vector<std::uint8_t> indexBytes;
@@ -1716,7 +1716,7 @@ namespace CNA::Internal::GltfImport
      * @brief The attribute combination one primitive presents to the stride selector.
      *
      * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-099`). Exactly the four
-     * booleans §2.3's table is indexed by, named so a row reads as a sentence rather than as a
+     * flags §2.3's table is indexed by, named so a row reads as a sentence rather than as a
      * position in a nested ternary.
      */
     struct VertexLayoutRequestEXT
@@ -1729,6 +1729,8 @@ namespace CNA::Internal::GltfImport
         bool usePbr = false;
         /** @brief A non-PBR material carrying both a base-colour and an occlusion map. */
         bool useDualTexture = false;
+        /** @brief The PBR vertex must carry a second authored texture-coordinate set. */
+        bool hasSecondTexcoord = false;
     };
 
     /**

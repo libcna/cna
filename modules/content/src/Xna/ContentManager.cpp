@@ -2041,10 +2041,18 @@ namespace Microsoft::Xna::Framework::Content
                 vb->SetDataRaw(vertBytes.data(), numVertices, 52);
             } else if (stride == 56) {
                 vb->SetDataRaw(vertBytes.data(), numVertices, 56);
+            } else if (stride == 60) {
+                // GLTF-182: rigid PBR with TEXCOORD_0 and TEXCOORD_1. The four padding bytes are
+                // already present in the source record and are copied verbatim.
+                vb->SetDataRaw(vertBytes.data(), numVertices, 60);
             } else if (stride == 68) {
                 // PBR + skinning combo: VertexPositionNormalTangentTextureSkinned (SkinnedPbrEffect)
                 // -- raw byte upload for the same vtable-inflation reason as stride 48/52/56 above.
                 vb->SetDataRaw(vertBytes.data(), numVertices, 68);
+            } else if (stride == 76) {
+                // GLTF-182: skinned PBR with a second texture-coordinate set appended to the
+                // byte-compatible stride-68 prefix.
+                vb->SetDataRaw(vertBytes.data(), numVertices, 76);
             }
             else
             {

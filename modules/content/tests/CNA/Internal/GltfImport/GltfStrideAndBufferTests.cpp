@@ -76,6 +76,7 @@ namespace
         VertexElementUsage usage;
         int offset;
         VertexElementFormat format;
+        int usageIndex = 0;
     };
 
     /// Asserts a stride's whole layout, element for element and in order -- so a table entry that
@@ -96,8 +97,7 @@ namespace
             EXPECT_EQ(expected[i].offset, layout.elements[i].offset);
             EXPECT_EQ(static_cast<int>(expected[i].format),
                       static_cast<int>(layout.elements[i].format));
-            EXPECT_EQ(0, layout.elements[i].usageIndex)
-                << "every built-in stream uses usage index 0";
+            EXPECT_EQ(expected[i].usageIndex, layout.elements[i].usageIndex);
         }
     }
 
@@ -222,6 +222,13 @@ TEST(GltfStrideAndBuffer, EveryCanonicalStrideHasExactlyTheElementsSection23Stat
         {VertexElementUsage::BlendIndices, 48, VertexElementFormat::Byte4},
         {VertexElementUsage::Color, 52, VertexElementFormat::Color},
     });
+    ExpectStrideLayout(60, {
+        {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
+        {VertexElementUsage::Normal, 12, VertexElementFormat::Vector3},
+        {VertexElementUsage::Tangent, 24, VertexElementFormat::Vector4},
+        {VertexElementUsage::TextureCoordinate, 40, VertexElementFormat::Vector2, 0},
+        {VertexElementUsage::TextureCoordinate, 48, VertexElementFormat::Vector2, 1},
+    });
     ExpectStrideLayout(68, {
         {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
         {VertexElementUsage::Normal, 12, VertexElementFormat::Vector3},
@@ -230,6 +237,15 @@ TEST(GltfStrideAndBuffer, EveryCanonicalStrideHasExactlyTheElementsSection23Stat
         {VertexElementUsage::BlendWeight, 48, VertexElementFormat::Vector4},
         {VertexElementUsage::BlendIndices, 64, VertexElementFormat::Byte4},
     });
+    ExpectStrideLayout(76, {
+        {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
+        {VertexElementUsage::Normal, 12, VertexElementFormat::Vector3},
+        {VertexElementUsage::Tangent, 24, VertexElementFormat::Vector4},
+        {VertexElementUsage::TextureCoordinate, 40, VertexElementFormat::Vector2, 0},
+        {VertexElementUsage::BlendWeight, 48, VertexElementFormat::Vector4},
+        {VertexElementUsage::BlendIndices, 64, VertexElementFormat::Byte4},
+        {VertexElementUsage::TextureCoordinate, 68, VertexElementFormat::Vector2, 1},
+    });
 }
 
 TEST(GltfStrideAndBuffer, EveryElementFitsInsideItsOwnStride)
@@ -237,7 +253,7 @@ TEST(GltfStrideAndBuffer, EveryElementFitsInsideItsOwnStride)
     // The property no individual offset assertion states: an element whose bytes run past the end
     // of the record reads into the next vertex, which produces a mesh that looks progressively
     // more wrong along the buffer rather than uniformly wrong -- the hardest kind to diagnose.
-    for (const int stride : {16, 20, 24, 32, 48, 52, 56, 68})
+    for (const int stride : {16, 20, 24, 32, 48, 52, 56, 60, 68, 76})
     {
         SCOPED_TRACE("stride " + std::to_string(stride));
         const InferredVertexLayout layout =

@@ -35,14 +35,15 @@ namespace
     using Usage = Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
     /// True when the ABI's canonical layout for @p stride carries @p usage.
-    bool StrideCarries(int stride, Usage usage)
+    bool StrideCarries(int stride, Usage usage, int usageIndex = 0)
     {
         const fidelity::InferredVertexLayout layout = fidelity::InferredLayoutForStride(
             stride, fidelity::UnlistedStrideLayout::RendererRefusesIt);
         if (!layout.known) { return false; }
         for (std::size_t i = 0; i < layout.count; ++i)
         {
-            if (layout.elements[i].usage == usage) { return true; }
+            if (layout.elements[i].usage == usage &&
+                layout.elements[i].usageIndex == usageIndex) { return true; }
         }
         return false;
     }
@@ -58,20 +59,23 @@ namespace
         out += r.usePbr ? "1" : "0";
         out += " useDualTexture=";
         out += r.useDualTexture ? "1" : "0";
+        out += " hasSecondTexcoord=";
+        out += r.hasSecondTexcoord ? "1" : "0";
         return out;
     }
 }
 
-TEST(GltfVertexLayoutTable, EveryCombinationOfTheFourFlagsSelectsARowFromTheAbiTable)
+TEST(GltfVertexLayoutTable, EveryCombinationOfTheFiveFlagsSelectsARowFromTheAbiTable)
 {
-    // Totality, over all sixteen combinations rather than the nine the table spells. A selector
+    // Totality, over all 32 combinations rather than only the reachable rows the table spells. A selector
     // with no answer for a combination is not a hypothetical: `useDualTexture` is only ever set
     // alongside three other falses today, and a future change that set it elsewhere would fall
     // through a ternary chain silently.
-    for (int bits = 0; bits < 16; ++bits)
+    for (int bits = 0; bits < 32; ++bits)
     {
         const VertexLayoutRequestEXT request{
-            (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0};
+            (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0,
+            (bits & 16) != 0};
         SCOPED_TRACE(Describe(request));
         const VertexLayoutRuleEXT& rule = SelectVertexLayoutEXT(request);
 
@@ -118,6 +122,12 @@ TEST(GltfVertexLayoutTable, EveryRowSelectsAStrideThatCarriesWhatTheCombinationA
                 EXPECT_TRUE(StrideCarries(rule.stride, Usage::Tangent))
                     << "a PBR row must carry a tangent, or a normal map lights with a rest-pose "
                        "basis and looks like a material bug";
+                if (rule.request.hasSecondTexcoord)
+                {
+                    EXPECT_TRUE(StrideCarries(
+                        rule.stride, Usage::TextureCoordinate, 1))
+                        << "a two-UV PBR row must carry TextureCoordinate1";
+                }
             }
         }
     }
@@ -207,11 +217,11 @@ TEST(GltfVertexLayoutTable, TheCorpusAgreesWithTheTableOnEveryPrimitiveItExtract
 
                 const VertexLayoutRuleEXT& rule = SelectVertexLayoutEXT(
                     VertexLayoutRequestEXT{out.skinned, out.colored, out.usePbr,
-                                            out.useDualTexture});
+                                            out.useDualTexture, false});
                 EXPECT_EQ(rule.stride, out.stride)
                     << "the importer and the table disagree for " << Describe(
                            VertexLayoutRequestEXT{out.skinned, out.colored, out.usePbr,
-                                                   out.useDualTexture});
+                                                   out.useDualTexture, false});
                 EXPECT_EQ(rule.unrepresentable, out.unrepresentableForStrideEXT);
                 stridesSeen.insert(out.stride);
                 ++compared;
