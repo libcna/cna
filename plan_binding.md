@@ -257,7 +257,7 @@ mechanical wrapper.
 |---|---|---|---|
 | CBIND-035B1 | Complete Point and Rectangle operations | ✅ | `math.h` maps both complete source headers through 37 exported operations covering constructors, named zero/empty values, every property/overload/operator, hashes and exact UTF-8 count/copy strings. Unsigned-bit arithmetic preserves C# unchecked 32-bit wraparound without C++ signed-overflow UB; division rejects zero and the unrepresentable minimum/-1 quotient without partial output. `MathValuesSmoke.c` calls every entry point and covers boundaries, mutation, half-open containment, intersection/union, capacity and null failures under HEADLESS, SDL_RENDERER and ASan+UBSan. |
 | CBIND-035B2 | Complete MathHelper and Vector2/3/4 operations | ✅ | `math.h` and `vectors.h` map every MathHelper and Vector2/3/4 public inventory row through exact constants and fallible scalar/value/bulk operations. All overload-equivalent, finite/non-finite, exact-string, null/range-atomicity and sequential-aliasing contracts are covered in strict C under HEADLESS, SDL_RENDERER and ASan+UBSan. Completed as CBIND-035B2a–B2d. |
-| CBIND-035B3 | Complete Quaternion and Matrix operations | ⬜ | Map all constructors, constants, decomposition/interpolation/transformation/factory functions and operators with row-major layout, singular and numeric edge evidence. |
+| CBIND-035B3 | Complete Quaternion and Matrix operations | 🟨 | Map all constructors, constants, decomposition/interpolation/transformation/factory functions and operators with row-major layout, singular and numeric edge evidence. Work is decomposed into CBIND-035B3a–B3b below. |
 | CBIND-035B4 | Complete planes, rays and bounding-volume operations | ⬜ | Map every construction, containment, intersection, merge, corner and equality/string/hash route with optional-hit and caller-capacity forms. |
 | CBIND-035B5 | Complete Curve value, collection and evaluation operations | ⬜ | Map Curve, CurveKey and CurveKeyCollection through C-owned/bulk values without leaking `std::vector`, including loop/tangent/evaluation and mutation behavior. |
 | CBIND-035B6 | Complete Color operations and named constants | ⬜ | Map all constructors/conversions, channels, packed value, arithmetic/interpolation/equality/string/hash routes and every public named Color constant with exact packed values. |
@@ -271,6 +271,13 @@ mechanical wrapper.
 | CBIND-035B2b | Complete Vector2 | ✅ | `vectors.h` maps all 75 remaining Vector2 rows through 41 exported operations: three constructors, four constants, complete member/static/operator math, exact UTF-8 count/copy and single/bulk matrix, quaternion and normal transforms. Value/out-ref pairs intentionally share the C result-plus-output form; full/range vector overloads share a count/index/length descriptor with preflight validation and defined sequential aliasing. `VectorSmoke.c` calls every entry point and covers IEEE division, normalization, hashes/strings, overload-equivalent results, transforms, capacity/null/range atomicity under both backends and ASan+UBSan. |
 | CBIND-035B2c | Complete Vector3 | ✅ | `vectors.h` maps all 87 remaining Vector3 rows through 50 exported operations: four constructors, eleven direction/value constants, complete member/static/operator math including cross products, exact UTF-8 count/copy and single/bulk matrix, quaternion and normal transforms. Value/out-ref pairs share the C result-plus-output form; full/range overloads use preflight-validated raw array ranges with defined sequential aliasing. `VectorSmoke.c` calls every entry point and covers IEEE division, normalization, hashes/strings, direction identities, transforms, capacity/null/range atomicity under both backends and ASan+UBSan. |
 | CBIND-035B2d | Complete Vector4 | ✅ | `vectors.h` maps all 81 remaining Vector4 rows through 46 exported operations: five constructors, six constants, complete member/static/operator math, exact UTF-8 count/copy, typed Vector2/3/4 matrix and quaternion transforms, and validated Vector4 bulk ranges. Value/out-ref and full/range overloads collapse to the established output/range forms with defined IEEE and sequential-alias behavior. `VectorSmoke.c` calls every entry point under both backends and ASan+UBSan. This closes parent CBIND-035B2. |
+
+##### CBIND-035B3 quaternion/matrix slices
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---|---|
+| CBIND-035B3a | Complete Quaternion | ✅ | `quaternion.h` maps all 50 remaining Quaternion rows through 28 exported operations: both constructors, identity, complete member/static/operator math, axis/matrix/yaw-pitch-roll factories, concatenation, inversion, Lerp/Slerp and exact UTF-8 count/copy. Value/out-ref overloads share the result-plus-output form. `QuaternionSmoke.c` calls every entry point and covers rotation identities, normalized interpolation, IEEE zero normalization, aliasing, exact strings and null/capacity failures under both backends and ASan+UBSan. |
+| CBIND-035B3b | Complete Matrix and close parent B3 | ⬜ | Map the complete Matrix header, including construction, directional/translation properties, determinant, decomposition, inversion, interpolation, all creation/transformation factories and operators with singular and row-major evidence. |
 
 ## Phase B7 — hardening, documentation and experimental release
 
@@ -352,5 +359,5 @@ now maps the full CBIND-034 graphics family through C-native state/display PODs,
 owned render targets and SpriteFonts. CBIND-035A establishes the public 3D value and identity ABI
 without claiming its still-unimplemented operations. CBIND-035B1 completes the Point and Rectangle
 operation families, and completed CBIND-035B2a–B2d cover stateless MathHelper plus all Vector2/3/4
-rows. The current snapshot is 1,294 implemented, 21 partial, 5,030 planned and 70 not applicable;
-CBIND-035B3 Quaternion and Matrix operations are next.
+rows. CBIND-035B3a completes Quaternion. The current snapshot is 1,344 implemented, 21 partial,
+4,980 planned and 70 not applicable; CBIND-035B3b Matrix operations are next.

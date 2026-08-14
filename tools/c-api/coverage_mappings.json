@@ -799,6 +799,16 @@
       "tests": "every entry point, overload-equivalent math, IEEE division/normalization, strings, null/range atomicity, aliasing and single/bulk transforms in strict-C `VectorSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B2d"
+    },
+    {
+      "id": "quaternion-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Quaternion\\.hpp$",
+      "kinds": ["constant", "constructor", "method", "operator"],
+      "mapping": "`cna_quaternion_*` construction, identity, member/static/operator math, rotation factories, interpolation and exact UTF-8 count/copy operations",
+      "tests": "every entry point, overload-equivalent operations, rotation factories, interpolation, IEEE normalization, exact strings, aliasing and null failures in strict-C `QuaternionSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B3a"
     }
   ]
 }

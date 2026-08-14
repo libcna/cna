@@ -89,3 +89,13 @@ The bulk form takes source/destination counts, indices and a length, validates t
 before writing anything, and permits the same sequential aliasing behavior as the native indexed
 loop. A zero-length operation accepts null zero-count arrays. No `std::vector` layout crosses the C
 ABI.
+
+## Quaternion operations
+
+`quaternion.h` exposes both constructors, Identity, member and static arithmetic, named operator
+equivalents, axis-angle/rotation-matrix/yaw-pitch-roll factories, concatenation, inversion and
+normalized linear or spherical interpolation. Value-returning and out-ref native overloads share
+one fallible result-plus-output C operation. Normalization and inversion preserve canonical IEEE
+behavior rather than introducing a C-only zero-length rejection.
+
+Quaternion strings follow the same exact UTF-8 count/copy contract as the vector surfaces.
