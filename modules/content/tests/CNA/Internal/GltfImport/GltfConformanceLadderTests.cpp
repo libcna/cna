@@ -146,6 +146,33 @@ namespace
         std::sort(names.begin(), names.end());
         return names;
     }
+
+    /// Suites deliberately omitted from CnaTests on this target by cmake/UnitTests.cmake.
+    ///
+    /// GltfToCnjToolTest launches the converter through POSIX process APIs, so it cannot be linked
+    /// into Windows, Emscripten or Android builds. It still belongs to the Tool rung and remains
+    /// valid traceability evidence; the source-presence check below prevents this exception from
+    /// hiding a removed or renamed suite on one of those targets.
+    std::vector<std::string> PlatformExcludedGltfSuites()
+    {
+#if defined(_WIN32) || defined(__EMSCRIPTEN__) || defined(__ANDROID__)
+        return {"GltfToCnjToolTest"};
+#else
+        return {};
+#endif
+    }
+
+    bool SourceDeclaresPlatformExcludedGltfSuite(const std::string& suite)
+    {
+        if (suite != "GltfToCnjToolTest") { return false; }
+        const std::filesystem::path source = RepositoryRoot() / "modules" / "content" / "tests" /
+            "Microsoft" / "Xna" / "Framework" / "Content" / "GltfToCnjToolTests.cpp";
+        std::ifstream file(source);
+        if (!file) { return false; }
+        const std::string text((std::istreambuf_iterator<char>(file)),
+                               std::istreambuf_iterator<char>());
+        return text.find("TEST(GltfToCnjToolTest,") != std::string::npos;
+    }
 }
 
 // The rung list must be readable at all. If this fails, every assertion below is vacuous, so it is
@@ -182,6 +209,7 @@ TEST(GltfConformanceLadder, EveryGltfSuiteBelongsToExactlyOneRung)
     ASSERT_FALSE(rungs.empty());
 
     const std::vector<std::string> suites = RegisteredGltfSuites();
+    const std::vector<std::string> platformExcluded = PlatformExcludedGltfSuites();
     ASSERT_FALSE(suites.empty()) << "no Gltf test suite is registered at all";
 
     for (const std::string& suite : suites)
@@ -206,6 +234,14 @@ TEST(GltfConformanceLadder, EveryGltfSuiteBelongsToExactlyOneRung)
     {
         for (const std::string& prefix : rung.suitePrefixes)
         {
+            if (std::find(platformExcluded.begin(), platformExcluded.end(), prefix) !=
+                platformExcluded.end())
+            {
+                EXPECT_TRUE(SourceDeclaresPlatformExcludedGltfSuite(prefix))
+                    << "platform-excluded suite '" << prefix
+                    << "' is no longer declared by its source file";
+                continue;
+            }
             EXPECT_NE(suites.end(), std::find(suites.begin(), suites.end(), prefix))
                 << "rung " << rung.layer << " names suite '" << prefix
                 << "', which is not registered -- that CTest entry runs zero tests";
@@ -255,6 +291,17 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
         registeredEvidenceNames.insert(unitTest.GetTestSuite(i)->name());
     }
     ASSERT_FALSE(registeredEvidenceNames.empty());
+
+    // A platform may intentionally omit a suite whose implementation needs unavailable process
+    // APIs. It remains evidence only while its real source still declares that suite; this is not
+    // a free-form allow-list for stale plan references.
+    for (const std::string& suite : PlatformExcludedGltfSuites())
+    {
+        EXPECT_TRUE(SourceDeclaresPlatformExcludedGltfSuite(suite))
+            << "platform-excluded evidence suite '" << suite
+            << "' is no longer declared by its source file";
+        registeredEvidenceNames.insert(suite);
+    }
 
     // EasyGL L7 checks are standalone executables registered with CTest, not gtest suites linked
     // into CnaTests. Read their one authoritative CMake registration rather than maintaining a

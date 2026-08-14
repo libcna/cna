@@ -3782,6 +3782,17 @@ namespace CNA::Internal::GltfImport
         std::vector<char> decoded(uri.begin(), uri.end());
         decoded.push_back('\0');
         cgltf_decode_uri(decoded.data());
+        // RFC 3986 uses '/' for an absolute-path reference independently of the host platform.
+        // std::filesystem::path("/etc/passwd").is_absolute() is false with Windows path
+        // semantics, where it is only root-relative to the current drive, so relying on the
+        // filesystem below made the diagnostic platform-dependent. A leading backslash is the
+        // equivalent Windows root-relative spelling and is no more valid as a glTF relative URI.
+        if (decoded.front() == '/' || decoded.front() == '\\')
+        {
+            throw std::runtime_error(
+                "Refusing " + subject + ": it is an absolute path, and a glTF file may only "
+                "reference files inside its own directory.");
+        }
         const fs::path relative(decoded.data());
 
         // (2) An absolute path ignores the asset directory by construction, so containment is not

@@ -188,9 +188,15 @@ TEST(GltfUriContainment, APercentEncodedTraversalIsRefused)
 TEST(GltfUriContainment, AnAbsolutePathIsRefusedAndSaysSo)
 {
     const ContainmentScratch scratch;
-    const std::string message = RefusalFor(scratch.AssetDir(), "/etc/passwd");
-    ASSERT_FALSE(message.empty());
-    EXPECT_NE(message.find("absolute path"), std::string::npos) << message;
+    // URI '/' remains absolute under Windows path semantics too; a percent-encoded slash must be
+    // classified after decoding, and '\\' is the equivalent Windows root-relative spelling.
+    for (const char* uri : {"/etc/passwd", "%2Fetc/passwd", "\\Windows\\win.ini"})
+    {
+        SCOPED_TRACE(uri);
+        const std::string message = RefusalFor(scratch.AssetDir(), uri);
+        ASSERT_FALSE(message.empty());
+        EXPECT_NE(message.find("absolute path"), std::string::npos) << message;
+    }
 }
 
 TEST(GltfUriContainment, ADriveAbsolutePathIsRefusedOnEveryPlatform)

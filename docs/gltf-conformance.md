@@ -915,6 +915,18 @@ gap: `PointListEXT` fell through to triangle topology with a zero vertex count. 
 now passes the shared 15-case framebuffer suite, including 32-bit indices and the actual PBR point
 pipeline, with no Vulkan validation messages.
 
+`GLTF-386` adds a deliberately separate Windows data point rather than silently widening that
+four-renderer capability table. A MinGW DirectX11 build ran its complete registered `*Gltf*`
+selection through Wine and DXVK 2.6.0 on the Intel Iris Xe Vulkan device at D3D feature level 11.1:
+493 of 494 tests passed, and the symlink-escape case was the one explicit skip because the Wine
+filesystem reports symlink creation as unimplemented. DXVK's own version line satisfied the
+project wrapper's authenticity gate. The 26 registered `GltfToCnjToolTest` cases are not part of a
+Windows `CnaTests` binary because that suite launches the converter with POSIX process APIs; the
+converter itself still cross-builds. This run therefore establishes the available L1–L6 and
+loader/upload boundary, not corpus L7 pixels. It also exposed and fixed two host assumptions: an
+RFC `/`-absolute URI is now classified as absolute even under Windows path semantics, and ladder
+traceability accepts the platform-excluded tool suite only while its source still declares it.
+
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
 directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a
