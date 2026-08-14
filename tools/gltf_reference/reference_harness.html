@@ -36,8 +36,20 @@ await loader.initDracoLib(dracoFactory);
 state.gltf = await loader.loadGltf(`./corpus/${asset}`);
 state.sceneIndex = 0;
 state.cameraNodeIndex = undefined;
-state.animationIndices = [];
-state.animationTimer.pause();
+const animationTime = camera.animationTime ?? 0;
+if (camera.animationName === undefined) {
+    state.animationIndices = [];
+    state.animationTimer.pause();
+} else {
+    const animationIndex = state.gltf.animations?.findIndex(
+        animation => animation.name === camera.animationName
+    ) ?? -1;
+    if (animationIndex < 0) {
+        throw new Error(`Animation '${camera.animationName}' was not found`);
+    }
+    state.animationIndices = [animationIndex];
+    state.animationTimer.setFixedTime(animationTime);
+}
 state.userCamera.setVerticalFoV(Math.PI / 4);
 state.userCamera.perspective.znear = camera.near;
 state.userCamera.perspective.zfar = camera.far;
@@ -103,7 +115,8 @@ globalThis.cnaReferenceResult = {
     unmaskedRenderer: debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : null,
     state: {
         canvas: [512, 512], deviceScaleFactor: 1, webgl: 2, antialias: false,
-        preserveDrawingBuffer: true, sceneIndex: 0, animationTime: 0,
+        preserveDrawingBuffer: true, sceneIndex: 0,
+        animationName: camera.animationName ?? null, animationTime,
         morphing: true, skinning: true, variant: null, clearColor: [0, 0, 0, 0],
         exposure: 1, useIBL: false, usePunctual: true,
         useDirectionalLightsWithDisabledIBL: true, renderEnvironmentMap: false,
