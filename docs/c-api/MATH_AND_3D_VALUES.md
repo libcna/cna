@@ -14,8 +14,9 @@ stores its defining matrix; later operations derive planes and corners from that
 exposing native cached storage.
 
 `CNA_VertexElement` is a 16-byte value containing a byte offset, format, semantic usage and usage
-index. It is only a declaration element: vertex-declaration ownership and buffer submission remain
-future CBIND-035C/F work.
+index. `vertex_values.h` completes its constructors (aggregate initialization), equality, hash and
+exact-string routes. Vertex-declaration ownership and buffer submission remain later CBIND-035C/F
+work.
 
 The 17 `CNA_Packed*` names are raw unsigned storage aliases with the same 8-, 16-, 32- or 64-bit
 width as the corresponding public PackedVector value. They represent packed-value get/set storage
@@ -230,3 +231,20 @@ The three `cna_half_*` helpers expose the native float, binary32-bit-pattern and
 routes directly. Strict-C tests cover exact packed bits and unpacked values for every format,
 half special values, format/width validation, equality and failure atomicity; C17/C++23 header
 tests freeze all format ordinals.
+
+## Built-in vertex values
+
+`vertex_values.h` defines fixed-layout PODs for all seven built-in `VertexPosition*` values. Their
+field order and sizes match the canonical packed GPU streams rather than CNA's polymorphic C++
+object layouts. `CNA_VertexType` selects the active `CNA_VertexValue` union member for generic
+default, equality/inequality, hash and exact UTF-8 count/copy operations. Parameterized native
+constructors collapse to normal C aggregate initialization; the default operation preserves the
+native white color of `VertexPositionColor` and zero defaults elsewhere.
+
+`cna_vertex_type_get_stride` and `cna_vertex_type_copy_elements` replace both static declaration
+properties and the `IVertexType` route without exporting a polymorphic object. The returned
+declarations describe the actual packed GPU streams, including byte-packed color and blend-index
+channels. Element copies always report the required count and never write a partial declaration.
+Unknown vertex, format or semantic identities fail before output mutation. Strict-C tests exercise
+every operation and exact native string/declaration under both configured backends; C17/C++23
+assertions freeze all identities, sizes and field offsets.

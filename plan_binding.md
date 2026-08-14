@@ -245,7 +245,7 @@ mechanical wrapper.
 |---|---|---|---|
 | CBIND-035A | Establish 3D value and identity ABI | ✅ | `math_values.h` now defines fixed-layout Point, Vector4, Quaternion, Matrix, Plane, Ray and bounding-volume PODs, all 17 public PackedVector raw-storage aliases and stable containment/plane/curve identities. `graphics3d.h` freezes buffer/index/primitive/SetData/vertex identities and the four-field `CNA_VertexElement`. Strict C17 and C++23 assertions cover every represented storage width, representative/full field offsets and identity ordinals under HEADLESS and SDL_RENDERER. Coverage maps only the 169 directly represented type/field/property/identity rows; all constructors, constants and operations remain owned by CBIND-035B. |
 | CBIND-035B | Complete math, geometry and packed-value operations | ✅ | Every public math and PackedVector row is mapped through fixed values, validated handles or C-native scalar/bulk operations. Numeric, IEEE, lifetime, capacity, aliasing and failure behavior is covered in strict C under HEADLESS and SDL_RENDERER plus focused ASan+UBSan runs. Completed as CBIND-035B1–B7. |
-| CBIND-035C | Add texture, buffer and vertex-resource coverage | ⬜ | Complete Texture/Texture2D/3D/Cube transfer variants, vertex/index buffers, declarations/bindings and resource lifetime through validated handles and bulk byte/value operations. |
+| CBIND-035C | Add texture, buffer and vertex-resource coverage | 🟨 | Complete Texture/Texture2D/3D/Cube transfer variants, vertex/index buffers, declarations/bindings and resource lifetime through validated handles and bulk byte/value operations. Decomposed into CBIND-035C1–C7; C1 is complete. |
 | CBIND-035D | Add effects, shaders and parameter coverage | ⬜ | Map Effect/technique/pass/parameter/annotation collections, stock/custom effects and shader/material extensions without exposing bytecode objects, C++ containers or backend pointers. |
 | CBIND-035E | Add model, mesh and animation coverage | ⬜ | Map model/bone/mesh/part collections, animation and morph/skinning/material extensions through stable handles, count/copy and bulk transforms. |
 | CBIND-035F | Complete graphics-device and draw submission | ⬜ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. |
@@ -262,6 +262,22 @@ mechanical wrapper.
 | CBIND-035B5 | Complete Curve value, collection and evaluation operations | ✅ | `curve.h` maps all 60 Curve, CurveKey and CurveKeyCollection rows through fixed values and validated handles without leaking C++ containers. Ordered collection mutation, retained mutable key views, all loop/evaluation/tangent behavior and lifetime/error boundaries are covered in strict C under both backends and ASan+UBSan. Completed as CBIND-035B5a–B5c. |
 | CBIND-035B6 | Complete Color operations and named constants | ✅ | `color.h` and `named_colors.h` map the complete 175-row Color header through the four-byte POD, direct channels, 24 operations and 141 directly usable named value expressions. Every packed value is checked independently and all value/error behavior passes strict C under both backends and ASan+UBSan. Completed as CBIND-035B6a–B6b. |
 | CBIND-035B7 | Complete PackedVector operations and close math coverage | ✅ | `packed_vectors.h` maps all 132 remaining concrete PackedVector, HalfTypeHelper and IPackedVector rows through 17 stable format identities, four generic format-tagged pack/unpack/equality operations and three half conversions. Raw/default constructors remain direct fixed-width values; specialized scalar/Vector2 routes collapse to the matching generic output. Integer formats reject non-finite consumed components before native conversion, half formats preserve IEEE special values, and narrower raw values reject upper bits without output mutation. `PackedVectorSmoke.c` covers every operation and format under both backends and ASan+UBSan; C/C++ assertions freeze every identity. This closes parent CBIND-035B. |
+
+#### CBIND-035C resource implementation slices
+
+The 402 rows owned by CBIND-035C are partitioned once by dependency boundary so each slice is
+reviewable and independently committable. The counts below are inventory rows, not exported
+function counts.
+
+| # | Rows | Task | Status | Acceptance criteria |
+|---|---:|---|---|---|
+| CBIND-035C1 | 104 | Complete built-in vertex values | ✅ | `vertex_values.h` maps the seven built-in `VertexPosition*` structures, all remaining `VertexElement` operations and `IVertexType` declaration routes through seven fixed POD layouts, a stable type tag and generic default/equality/hash/string/stride/element-copy operations. Parameterized constructors remain aggregate initialization. Strict C17 tests cover every operation/type, exact native strings and canonical GPU declarations; C/C++ assertions freeze identities, sizes and offsets under HEADLESS and SDL_RENDERER plus ASan+UBSan. |
+| CBIND-035C2 | 14 | Complete vertex declarations and bindings | ⬜ | Add validated declaration ownership, element/stride queries and binding value behavior without exposing native vectors or references. |
+| CBIND-035C3 | 21 | Complete the GraphicsResource common contract | ⬜ | Map name/device/disposal/lifetime behavior shared by graphics resources through validated handles and explicit type-safe routes. |
+| CBIND-035C4 | 134 | Complete Texture and Texture2D | ⬜ | Extend the existing owned Texture2D slice to all constructors/properties/transfers/stream routes and inherited Texture behavior with checked byte/range descriptors. |
+| CBIND-035C5 | 40 | Complete Texture3D and TextureCube | ⬜ | Add owned 3D/cube textures, complete region/mip/face transfers and explicit backend capability failures. |
+| CBIND-035C6 | 57 | Complete vertex buffers | ⬜ | Add static/dynamic vertex buffers, declaration association and complete byte/value SetData/GetData variants with ownership and thread validation. |
+| CBIND-035C7 | 32 | Complete index buffers | ⬜ | Add static/dynamic index buffers and complete 16/32-bit SetData/GetData variants with ownership and thread validation, closing CBIND-035C. |
 
 ##### CBIND-035B2 scalar/vector slices
 
@@ -368,8 +384,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-034` and slices `CBIND-035A`–`CBIND-035B` are ✅; parent `CBIND-035`
-is 🟨 and `CBIND-035C` through `CBIND-044` remain ⬜. The
+`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035B` and `CBIND-035C1` are ✅;
+parents `CBIND-035` and `CBIND-035C` are 🟨, while `CBIND-035C2` through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -398,4 +414,7 @@ Color constants next. CBIND-035B6b completes all 141 named Color rows and closes
 snapshot becomes 1,803 implemented, 21 partial, 4,521 planned and 70 not applicable. CBIND-035B7
 completes all 132 remaining PackedVector/HalfTypeHelper/interface rows and closes parent B; the
 current snapshot is 1,935 implemented, 21 partial, 4,389 planned and 70 not applicable, with
-CBIND-035C texture, buffer and vertex-resource coverage next.
+CBIND-035C texture, buffer and vertex-resource coverage next. CBIND-035C1 maps 104 built-in
+vertex-value, VertexElement-operation and IVertexType rows through fixed PODs and type-tagged
+operations; the snapshot is now 2,039 implemented, 21 partial, 4,285 planned and 70 not applicable,
+with CBIND-035C2 vertex declarations and bindings next.

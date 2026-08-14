@@ -30,6 +30,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiQuaternion.cpp
     src/CnaCApiRuntime.cpp
     src/CnaCApiVectors.cpp
+    src/CnaCApiVertexValues.cpp
 )
 add_library(CNA::CApi ALIAS cna_c_api)
 
@@ -245,6 +246,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_packed_vector_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_packed_vector_smoke)
     add_test(NAME CApi_PackedVectorSmoke COMMAND cna_c_api_packed_vector_smoke)
+
+    add_executable(cna_c_api_vertex_value_smoke
+        tests/pure_c/VertexValueSmoke.c
+    )
+    set_target_properties(cna_c_api_vertex_value_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_vertex_value_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_vertex_value_smoke)
+    add_test(NAME CApi_VertexValueSmoke COMMAND cna_c_api_vertex_value_smoke)
 
     add_executable(cna_c_api_lifecycle_smoke
         tests/pure_c/LifecycleSmoke.c

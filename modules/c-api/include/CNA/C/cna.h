@@ -22,6 +22,7 @@
 #include "CNA/C/graphics.h"
 #include "CNA/C/graphics_state.h"
 #include "CNA/C/graphics3d.h"
+#include "CNA/C/vertex_values.h"
 #include "CNA/C/render_target.h"
 #include "CNA/C/sprite_font.h"
 #include "CNA/C/input.h"

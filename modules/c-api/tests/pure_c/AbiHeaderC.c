@@ -366,3 +366,32 @@ _Static_assert(offsetof(CNA_VertexElement, offset) == 0U &&
                    offsetof(CNA_VertexElement, usage) == 8U &&
                    offsetof(CNA_VertexElement, usage_index) == 12U,
                "CNA_VertexElement fields must remain stable");
+_Static_assert(sizeof(CNA_VertexType) == sizeof(uint32_t) &&
+                   CNA_VERTEX_TYPE_POSITION_COLOR == UINT32_C(0) &&
+                   CNA_VERTEX_TYPE_POSITION_COLOR_TEXTURE == UINT32_C(1) &&
+                   CNA_VERTEX_TYPE_POSITION_NORMAL_TANGENT_TEXTURE == UINT32_C(2) &&
+                   CNA_VERTEX_TYPE_POSITION_NORMAL_TANGENT_TEXTURE_SKINNED == UINT32_C(3) &&
+                   CNA_VERTEX_TYPE_POSITION_NORMAL_TEXTURE == UINT32_C(4) &&
+                   CNA_VERTEX_TYPE_POSITION_NORMAL_TEXTURE_SKINNED == UINT32_C(5) &&
+                   CNA_VERTEX_TYPE_POSITION_TEXTURE == UINT32_C(6),
+               "CNA built-in vertex identities must remain stable");
+_Static_assert(sizeof(CNA_VertexPositionColor) == 16U &&
+                   sizeof(CNA_VertexPositionColorTexture) == 24U &&
+                   sizeof(CNA_VertexPositionNormalTangentTexture) == 48U &&
+                   sizeof(CNA_VertexPositionNormalTangentTextureSkinned) == 68U &&
+                   sizeof(CNA_VertexPositionNormalTexture) == 32U &&
+                   sizeof(CNA_VertexPositionNormalTextureSkinned) == 52U &&
+                   sizeof(CNA_VertexPositionTexture) == 20U &&
+                   sizeof(CNA_VertexValue) == 68U && _Alignof(CNA_VertexValue) == 4U,
+               "CNA built-in vertex layouts must remain stable");
+_Static_assert(offsetof(CNA_VertexPositionColor, color) == 12U &&
+                   offsetof(CNA_VertexPositionColorTexture, texture_coordinate) == 16U &&
+                   offsetof(CNA_VertexPositionNormalTangentTexture, tangent) == 24U &&
+                   offsetof(CNA_VertexPositionNormalTangentTexture, texture_coordinate) == 40U &&
+                   offsetof(CNA_VertexPositionNormalTangentTextureSkinned, blend_weight) == 48U &&
+                   offsetof(CNA_VertexPositionNormalTangentTextureSkinned, blend_indices) == 64U &&
+                   offsetof(CNA_VertexPositionNormalTexture, texture_coordinate) == 24U &&
+                   offsetof(CNA_VertexPositionNormalTextureSkinned, blend_weight) == 32U &&
+                   offsetof(CNA_VertexPositionNormalTextureSkinned, blend_indices) == 48U &&
+                   offsetof(CNA_VertexPositionTexture, texture_coordinate) == 12U,
+               "CNA built-in vertex fields must remain stable");

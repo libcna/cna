@@ -949,6 +949,36 @@
       "tests": "all 141 named expressions packed independently against their canonical AABBGGRR literals in strict-C `ColorSmoke.c`, plus strict C17/C++23 public-header compilation",
       "status": "implemented",
       "task": "CBIND-035B6b"
+    },
+    {
+      "id": "vertex-element-operations",
+      "qualified_name_regex": "^(?!Microsoft::Xna::Framework::Graphics::VertexElement::(?:get|set)(?:Offset|VertexElementFormat|VertexElementUsage|UsageIndex)Property$).*$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexElement\\.hpp$",
+      "kinds": ["constructor", "method", "operator"],
+      "mapping": "fixed-layout `CNA_VertexElement`; direct fields plus `cna_vertex_element_equals`, `cna_vertex_element_not_equals`, `cna_vertex_element_get_hash_code` and exact UTF-8 count/copy operations; constructors collapse to aggregate initialization",
+      "tests": "all operations, exact formatting, invalid format/usage identities, null outputs and capacity atomicity in strict-C `VertexValueSmoke.c`, plus C/C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-035C1"
+    },
+    {
+      "id": "built-in-vertex-values",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPosition(?:Color|ColorTexture|NormalTangentTexture|NormalTangentTextureSkinned|NormalTexture|NormalTextureSkinned|Texture)\\.hpp$",
+      "kinds": ["struct", "field", "constructor", "method", "operator"],
+      "mapping": "seven fixed-layout `CNA_VertexPosition*` POD values selected by `CNA_VertexType`; direct fields plus generic default, equality, hash, exact UTF-8 count/copy, GPU stride and canonical element-copy operations; parameterized constructors collapse to aggregate initialization",
+      "tests": "all seven types, defaults, fields, equality/inequality, hashes, exact strings, stable POD layouts and complete GPU declarations under strict C in `VertexValueSmoke.c`, plus C/C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-035C1"
+    },
+    {
+      "id": "vertex-type-interface-routes",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/IVertexType\\.hpp$",
+      "kinds": ["class", "destructor", "method"],
+      "mapping": "`CNA_VertexType` identity plus stateless stride and canonical element-copy operations provide the declaration route without a C-owned polymorphic object or destructor",
+      "tests": "all built-in vertex identities and their exact declarations in strict-C `VertexValueSmoke.c`, plus C/C++ identity assertions",
+      "status": "implemented",
+      "task": "CBIND-035C1"
     }
   ]
 }
