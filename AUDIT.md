@@ -9,10 +9,11 @@ Systematic per-class, per-method comparison: FNA (reference) vs CNA (implementat
 
 For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 
-> **C ABI tracking note (2026-08-14):** CNA has no C API implementation or C API audit rows yet.
-> Its design and implementation status are tracked separately in `plan_binding.md`; this XNA C++
-> API audit remains unchanged until an implemented C ABI adapter needs a corresponding native API
-> audit.
+> **C ABI tracking note (2026-08-14):** The experimental C ABI foundation is now implemented in
+> `modules/c-api/` (`CBIND-007`–`011`): version/error-query declarations, a shared library and
+> pure-C smoke tests. It does not yet adapt an XNA/CNA framework type, so this XNA C++ API audit has
+> no additional rows. C API status and the complete-public-surface mapping are tracked in
+> `plan_binding.md` and `docs/c-api/COVERAGE.md`.
 
 ---
 

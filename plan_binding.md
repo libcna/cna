@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — Phase B0 completed (2026-08-14).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — Phase B1 completed; Phase B2 in progress (2026-08-14).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -159,11 +159,11 @@ added before their decisions are consistent with each other and with current CNA
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-007 | Add opt-in physical C API module | ⬜ | Add `modules/c-api/` to the physical-module composition and source-partition validator behind a clearly documented CMake option. It links canonical CNA module targets rather than duplicating source. Its option defaults and supported renderer configurations are deliberate and tested. |
-| CBIND-008 | Enable a real C consumer build path | ⬜ | Enable the C language only when the C API/test option needs it, set the documented minimum C standard, and compile a standalone `.c` fixture through the normal build. Existing C++-only configurations stay unaffected when the option is off. |
-| CBIND-009 | Produce a consumable native library | ⬜ | Define the shared-library-first and static-library policy, target aliases, install/export rules, transitive native dependencies and position-independent-code requirements. A C compiler can link and run the shared-library smoke executable without depending on C++ headers. |
-| CBIND-010 | Establish visibility and symbol discipline | ⬜ | Implement cross-platform import/export declarations; verify that documented `cna_*` symbols are exported and unintended C++/Sharp Runtime implementation symbols are not part of the declared ABI. |
-| CBIND-011 | Establish public-header quality gates | ⬜ | Add C17 (or the B0-selected standard) compile tests with strict warnings; reject C++ tokens/Sharp Runtime leakage; compile each leaf header alone and the umbrella header under C and C++. |
+| CBIND-007 | Add opt-in physical C API module | ✅ | `modules/c-api/` is an opt-in physical module included in the source-partition validator. Its initial shared library links only canonical `cna_core`; each later C API family must add the exact CNA module it adapts rather than prematurely linking the renderer aggregate. |
+| CBIND-008 | Enable a real C consumer build path | ✅ | `CNA_BUILD_C_API=ON` enables C17 before dependencies/modules are created. C17 smoke executables compile and link through the normal CMake build without changing C++-only configurations when the option is off. |
+| CBIND-009 | Produce a consumable native library | ✅ | `cna_c_api` / `CNA::CApi` builds as `libcna_c_api` with CMake install/export rules, public include installation and PIC enabled before static dependencies are created. A C compiler links and runs smoke executables against the shared library. |
+| CBIND-010 | Establish visibility and symbol discipline | ✅ | `CNA_C_API` supplies platform export/import declarations; ELF C++ visibility is hidden by default. The HEADLESS build's dynamic export inspection contains only the documented `cna_get_abi_version` and error-query symbols. |
+| CBIND-011 | Establish public-header quality gates | ✅ | C17 and C++23 object targets compile both leaf headers and the umbrella header under strict direct compiler checks; CTest smoke consumers include only `CNA/C/cna.h`. |
 
 **B1 gate:** a minimal `cna_get_abi_version()`/capability query can be included, compiled from C,
 linked to the intended library form and run on a supported native configuration. It must not expose
@@ -173,8 +173,8 @@ any CNA C++ object.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-012 | Implement result and structured-error boundary | ⬜ | Every prototype entry point is wrapped by an exception firewall that maps known native failures and catch-all failures to `CNA_Result` plus documented error information. Error text is copied through the B0 buffer contract and is isolated per documented thread/context scope. |
-| CBIND-013 | Implement validated handle registry | ⬜ | Create/destroy/lookup validates null, kind, generation and shutdown state. Tests prove invalid, stale, cross-kind and double-release calls fail safely and cannot alias a later object. |
+| CBIND-012 | Implement result and structured-error boundary | 🔄 | `CNA_Result`, error categories, versioned `CNA_ErrorInfo`, thread-local query/copy APIs and C smoke coverage exist. The reusable exception firewall will be added before the first CNA C++ operation is exposed. |
+| CBIND-013 | Implement validated handle registry | 🔄 | Internal slot/generation/kind/thread-affinity registry and C++ stale/double-release/reuse tests exist. Runtime ownership and public handle operations arrive with the B3 game/runtime adapter. |
 | CBIND-014 | Implement neutral value and string conversion | ⬜ | Add only approved POD values (including `CNA_GameTime`, geometry/math and color representations needed by the first vertical slice) plus UTF-8 conversion. Test byte layout and semantic conversion independently; never reinterpret a C struct as a C++ XNA object. |
 | CBIND-015 | Implement buffer/count-copy helpers | ⬜ | Provide reusable checked conversion and query/copy helpers for fixed-width counts, pointer ranges and destination capacity. Test zero length, null-with-zero, null-with-nonzero, undersized capacity, oversized values and all integer-overflow paths. |
 | CBIND-016 | Audit the Sharp Runtime boundary | ⬜ | Produce `docs/c-api/SHARP_RUNTIME_BOUNDARY.md` with a C++/Sharp Runtime → C ABI mapping table for strings, exceptions, collections, spans, time, streams, tasks and delegates. Add a header scanner plus C compiler gate that rejects forbidden surface tokens. |
@@ -304,6 +304,7 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-006` are ✅. `CBIND-007` through `CBIND-044` are ⬜ **not started**.
-Phase B0 added the contract only: no C headers, C/C++ source, CMake target, generated code,
-language-specific binding, package, test binary or released ABI exists yet. Phase B1 is next.
+`CBIND-000` through `CBIND-011` are ✅; `CBIND-012` and `CBIND-013` are 🔄; `CBIND-014` through
+`CBIND-044` are ⬜ **not started**. The exported ABI is still experimental `0.1.0` and currently
+contains only the version and error-query substrate. No language-specific binding exists. Phase B2
+continues with conversion helpers, exception translation and a public-header leakage checker.

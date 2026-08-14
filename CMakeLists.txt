@@ -6,6 +6,18 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# The native C ABI is intentionally opt-in while it is experimental. Enabling it must happen
+# before sharp-runtime and the CNA static modules are created: the exported shared C API links
+# those archives, so they all need position-independent code.
+option(CNA_BUILD_C_API "Build the experimental native CNA C API shared library" OFF)
+if(CNA_BUILD_C_API)
+    enable_language(C)
+    set(CMAKE_C_STANDARD 17)
+    set(CMAKE_C_STANDARD_REQUIRED ON)
+    set(CMAKE_C_EXTENSIONS OFF)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 # Reuse compiler output across build directories when ccache is available.
 # This is intentionally configured before sharp-runtime is added so the cache
 # also covers that comparatively large dependency. Disable with

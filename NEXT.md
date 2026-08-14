@@ -1,18 +1,19 @@
 # NEXT.md
 
-## C BINDING / C ABI — IMPLEMENTATION AUTHORIZED; PHASE B0 COMPLETE (2026-08-14)
+## C BINDING / C ABI — IMPLEMENTATION AUTHORIZED; PHASE B1 COMPLETE (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. Phase B0 (`CBIND-001`–`006`) is complete: the public contract is
-> now in `docs/c-api/`. No C ABI code exists yet. Phase B1 will add an opt-in `modules/c-api/`
-> module, C-compatible public headers, an exported native library and pure-C compile/link/runtime
-> tests. The work deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig, Go,
-> Swift, or other language-binding work.
+> API** through C-native mappings. Phases B0 (`CBIND-001`–`006`) and B1 (`CBIND-007`–`011`) are
+> complete: `docs/c-api/` defines the contract and the opt-in `modules/c-api/` now builds a C17
+> `libcna_c_api` with only public `cna_*` exports plus pure-C compile/link/runtime tests. The work
+> deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig, Go, Swift, or other
+> language-binding work.
 
-> Next action: `CBIND-007`–`011`, the CMake/export/header foundation. A machine-checked coverage
-> matrix will prevent untracked public CNA symbols from being omitted from the final C API.
+> Next action: finish B2 (`CBIND-012`–`016`): exception translation, handle/runtime ownership,
+> value/string conversion, checked buffer helpers and the public-header leakage checker. A
+> machine-checked coverage matrix will prevent untracked public CNA symbols from being omitted.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
