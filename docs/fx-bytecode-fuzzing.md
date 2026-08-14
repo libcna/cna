@@ -123,6 +123,7 @@ iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then aw
 | `mojoshader_profile_spirv.c` `spv_loadreg` | Dereferenced the result of `reglist_find` for a sampler register the shader never declared, and asserted rather than failed when a register had no declaration id |
 | `mojoshader_profile_spirv.c` `spv_swizzle` | Asserted on a zero type id, on a write mask outside the four legal values, and on a type it could not classify -- all three come straight from a destination token |
 | `mojoshader_profile_spirv.c` `emit_SPIRV_dotproduct` | Asserted that both operands share a type; either can be a value whose load was already refused |
+| `mojoshader_profile_spirv.c` `spv_output_color_location`, `spv_output_attrib_location` | A colour-output register number, a vertex attribute usage and its register number all index fixed sixteen-entry tables with no bound, so an out-of-range one wrote past the patch table into whatever followed it |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
 asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
@@ -148,8 +149,8 @@ itself is stale. Reproduce with:
 ./cna_compiled_effect_fuzzer --campaign fx-corpus 28000 0x4658534F414B
 ```
 
-**On FNA3D's SDL_GPU driver (SPIR-V profile)** the campaign now completes 3,000 iterations clean,
-up from stopping at iteration 100. That emitter still validates untrusted shader bytecode with
+**On FNA3D's SDL_GPU driver (SPIR-V profile)** the campaign now completes 4,000 iterations clean
+on two seeds, up from stopping at iteration 100. That emitter still validates untrusted shader bytecode with
 `assert()` in about fifty places, so the ones fixed so far are the ones a campaign actually
 reached; expect more as it runs longer. Reproduce by dropping `FNA3D_FORCE_DRIVER=OpenGL`.
 

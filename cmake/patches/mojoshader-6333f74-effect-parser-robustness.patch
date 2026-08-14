@@ -951,10 +951,37 @@ index 036f18d..e785971 100644
          }
      effect->ctx.mapUniformBufferMemory(effect->ctx.shaderContext,
 diff --git a/profiles/mojoshader_profile_spirv.c b/profiles/mojoshader_profile_spirv.c
-index 5d5999b..4d330d6 100644
+index 5d5999b..ec28b94 100644
 --- a/profiles/mojoshader_profile_spirv.c
 +++ b/profiles/mojoshader_profile_spirv.c
-@@ -668,8 +668,14 @@ static void spv_check_read_reg_id(Context *ctx, RegisterList *r)
+@@ -274,6 +274,12 @@ static uint32 spv_output_location(Context *ctx, uint32 id, uint32 loc)
+ static void spv_output_color_location(Context *ctx, uint32 id, uint32 index)
+ {
+     SpirvPatchTable* table = &ctx->spirv.patch_table;
++    // The register number comes from parsed bytecode and indexes a fixed table. -CNA
++    if (index >= STATICARRAYLEN(table->output_offsets))
++    {
++        fail(ctx, "Colour output register is out of range.");
++        return;
++    } // if
+     push_output(ctx, &ctx->helpers);
+     spv_emit(ctx, 4, SpvOpDecorate, id, SpvDecorationLocation, index);
+     pop_output(ctx);
+@@ -284,6 +290,13 @@ static void spv_output_attrib_location(Context *ctx, uint32 id,
+                                        MOJOSHADER_usage usage, uint32 index)
+ {
+     SpirvPatchTable* table = &ctx->spirv.patch_table;
++    // Both the usage and the register number come from parsed bytecode. -CNA
++    if (((unsigned int) usage >= STATICARRAYLEN(table->attrib_offsets)) ||
++        (index >= STATICARRAYLEN(table->attrib_offsets[0])))
++    {
++        fail(ctx, "Vertex attribute usage or register is out of range.");
++        return;
++    } // if
+     push_output(ctx, &ctx->helpers);
+     spv_emit(ctx, 4, SpvOpDecorate, id, SpvDecorationLocation, 0xDEADBEEF);
+     pop_output(ctx);
+@@ -668,8 +681,14 @@ static void spv_check_read_reg_id(Context *ctx, RegisterList *r)
  {
      if (r->spirv.iddecl == 0)
      {
@@ -971,7 +998,7 @@ index 5d5999b..4d330d6 100644
          switch (r->regtype)
          {
              case REG_TYPE_SAMPLER: // s# (only ps_1_1)
-@@ -790,7 +796,11 @@ static void spv_add_attrib_fixup(Context *ctx, RegisterList *r, unsigned int typ
+@@ -790,7 +809,11 @@ static void spv_add_attrib_fixup(Context *ctx, RegisterList *r, unsigned int typ
      uint32* next_types;
      uint32* next_opcodes;
  
@@ -984,7 +1011,7 @@ index 5d5999b..4d330d6 100644
      #define TYPE_LOAD_OFFSET ctx->spirv.patch_table.attrib_type_load_offsets[r->usage][r->index]
  
      next_types = (uint32*) Malloc(ctx, sizeof(uint32) * (TYPE_LOAD_OFFSET.num_loads + 1));
-@@ -821,9 +831,17 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
+@@ -821,9 +844,17 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
  
      uint32 id_src = r->spirv.iddecl;
      SpirvResult result;
@@ -1002,7 +1029,7 @@ index 5d5999b..4d330d6 100644
          result.tid = spv_image_from_texturetype(ctx, (TextureType)sreg->index);
      } // if
      else if (regtype == REG_TYPE_CONSTBOOL)
-@@ -862,7 +880,13 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
+@@ -862,7 +893,13 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
          return result;
      } // if
  
@@ -1017,7 +1044,7 @@ index 5d5999b..4d330d6 100644
      result.id = spv_bumpid(ctx);
  
      push_output(ctx, &ctx->mainline);
-@@ -928,12 +952,18 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+@@ -928,12 +965,18 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
      if (no_swizzle(swizzle) && writemask_xyzw(writemask))
          return arg;
  
@@ -1042,7 +1069,7 @@ index 5d5999b..4d330d6 100644
  
      SpirvTypeIdx sti_arg = STI_VOID;
      for (i = STI_CORE_START_; i < STI_CORE_END_; i++)
-@@ -944,7 +974,11 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+@@ -944,7 +987,11 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
              break;
          } // if
      } // for
@@ -1055,7 +1082,7 @@ index 5d5999b..4d330d6 100644
  
      // We should not leave any value undefined, as it may end up used (eg. dot
      // product), which will make everything relying on it's result undefined.
-@@ -969,9 +1003,8 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+@@ -969,9 +1016,8 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
              break;
  
          default:
@@ -1067,7 +1094,7 @@ index 5d5999b..4d330d6 100644
      } // switch
  
      SpirvTypeIdx sti_result = spv_change_base_type_vec_dim(sti_arg, resdim);
-@@ -2867,7 +2900,13 @@ static void emit_SPIRV_dotproduct(Context *ctx, SpirvResult src0, SpirvResult sr
+@@ -2867,7 +2913,13 @@ static void emit_SPIRV_dotproduct(Context *ctx, SpirvResult src0, SpirvResult sr
  {
      SpirvResult result;
  
