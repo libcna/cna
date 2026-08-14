@@ -135,6 +135,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
     cna_register_diligent_test(Diligent_Pbr_SrgbTransfer cna_test_diligent_pbr_srgb_transfer)
 
+    # GLTF-343/344: KHR_materials_ior and factor-only specular alter F0/F90 on both PBR programs.
+    cna_diligent_test(cna_test_diligent_pbr_fresnel_factors
+                      ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    cna_register_diligent_test(Diligent_Pbr_FresnelFactors cna_test_diligent_pbr_fresnel_factors)
+
     # plan_diligent.md DILIGENT-49: RasterizerState.DepthBias/SlopeScaleDepthBias pixel verification.
     cna_diligent_test(cna_test_diligent_depthbias diligent_depthbias_test.cpp)
     cna_register_diligent_test(Diligent_DepthBias cna_test_diligent_depthbias)

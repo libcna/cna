@@ -615,6 +615,7 @@ cbuffer PbrConstants
     float4 g_PbrEmissiveRoughness; // xyz = emissive colour, w = roughness factor
     // x = normal scale, y = occlusion strength, z = decode base, w = decode emissive.
     float4 g_PbrMapScales;
+    float4 g_PbrDielectricFresnel; // xyz = dielectric F0, w = dielectric F90
 };
 
 struct PSInput
@@ -635,7 +636,7 @@ struct PSOutput
 static const float kPbrPi = 3.14159265;
 
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
-                float roughness, float metallic)
+                float3 F90, float roughness, float metallic)
 {
     float3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -647,7 +648,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
     float D = a2 / (kPbrPi * dTerm * dTerm + 1e-7);
     float k = (roughness + 1.0); k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
-    float3 F = F0 + (float3(1.0, 1.0, 1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    float3 F = F0 + (F90 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
     float3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     float3 diffuseColor = albedo * (1.0 - metallic);
     float3 kd = float3(1.0, 1.0, 1.0) - F;
@@ -665,22 +666,26 @@ void main(in PSInput psIn, out PSOutput psOut)
     float3 N = normalize(psIn.Normal);
     float3 T = normalize(psIn.Tangent.xyz - N * dot(N, psIn.Tangent.xyz));
     float3 B = cross(N, T) * psIn.Tangent.w;
-    float3x3 TBN = float3x3(T, B, N);
     float3 sampledNormal = g_NormalMap.Sample(g_NormalMap_sampler, psIn.UV).rgb * 2.0 - 1.0;
     sampledNormal.xy *= g_PbrMapScales.x;
-    float3 finalNormal = normalize(mul(sampledNormal, TBN));
+    // Spell out the tangent-basis transform. HLSL-to-GLSL conversion otherwise disagrees with
+    // native HLSL/SPIR-V about mul(float3, float3x3)'s row/column interpretation for non-axis-
+    // aligned normals, while this linear combination states the intended basis unambiguously.
+    float3 finalNormal = normalize(sampledNormal.x * T + sampledNormal.y * B + sampledNormal.z * N);
 
     float4 mr = g_MetallicRoughnessMap.Sample(g_MetallicRoughnessMap_sampler, psIn.UV);
     float roughness = clamp(mr.g * g_PbrEmissiveRoughness.w, 0.045, 1.0);
     float metallic  = clamp(mr.b * g_PbrAmbientMetallic.w, 0.0, 1.0);
 
     float3 V = normalize(g_EyePositionSpecularPower.xyz - psIn.WorldPos);
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float3 F0 = lerp(g_PbrDielectricFresnel.xyz, albedo, metallic);
+    float3 F90 = lerp(float3(g_PbrDielectricFresnel.w, g_PbrDielectricFresnel.w,
+                             g_PbrDielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic);
 
     float3 Lo = float3(0.0, 0.0, 0.0);
-    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[0].xyz), g_LightDiffuse[0].xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[1].xyz), g_LightDiffuse[1].xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[2].xyz), g_LightDiffuse[2].xyz, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[0].xyz), g_LightDiffuse[0].xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[1].xyz), g_LightDiffuse[1].xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[2].xyz), g_LightDiffuse[2].xyz, albedo, F0, F90, roughness, metallic);
 
     float occlusion = g_OcclusionMap.Sample(g_OcclusionMap_sampler, psIn.UV).r;
     occlusion = 1.0 + g_PbrMapScales.y * (occlusion - 1.0);
