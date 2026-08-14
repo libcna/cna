@@ -322,10 +322,530 @@ incrementally, per phase, not in one sweep.
 
 ---
 
+## Design decisions
+
+The numbered decisions this plan is built on. Source comments may cite them as
+`plan_runtimerenderer.md design decision N`, following the convention of `plan_svg_dom.md` and
+`plan_html_dom.md`.
+
+**1. Compile-time selection stays the default.** `-DCNA_GRAPHICS_RENDERER=<X>` must keep producing
+byte-identical behaviour and an identical macro environment. Multi-renderer is an opt-in second
+mode (`-DCNA_GRAPHICS_RENDERERS=<A>;<B>;…`), never something an existing build acquires silently.
+
+**2. One descriptor per family, consulted before construction.** Everything `GraphicsDevice` needs
+to know before an `IGraphicsRenderer` exists — window flags, whether a window is needed at all,
+whether SDL's video subsystem must be initialized, pre-window GL attributes, an availability probe
+— lives in a `GraphicsRendererDescriptor`, not in `#ifdef` chains inside `GraphicsDevice.cpp`.
+
+**3. Explicit generated registry, not static-init self-registration.** A self-registering
+translation unit inside a static archive is discarded by the linker when nothing references it.
+CMake generates the table instead. This also avoids interacting with the declared
+`cna_graphics_core` ↔ renderer archive cycles.
+
+**4. The factory symbol moves into the family namespace.**
+`CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer` replaces the single colliding
+`CNA::Internal::Renderers::CreateGraphicsRenderer`. This is the change that makes two renderer
+archives linkable at all.
+
+**5. The selection latches at the start of `GraphicsDevice` construction**, not at the first
+factory call — `createOrAttachWindow()` consumes the decision before `createRenderer()` runs.
+Latching forbids *changing the selection*, not *calling the factory again*:
+`RecreateRendererForMultiSampleCount()` legitimately reconstructs the same renderer on a live
+device.
+
+**6. Failure is hard by default.** An unavailable renderer, or one whose initialization throws, is
+an error — `System::InvalidOperationException` for a selection/latch violation, the family's own
+exception propagated for an initialization failure. CNA never silently substitutes a different
+renderer. This follows the project's standing refusal to fake capability.
+
+**7. Fallback is opt-in, ordered, and always reported.** `SetFallbackChain()` /
+`EnableAutomaticFallback()` enable it; both latch like `SetPreferred()`. Both failure triggers are
+covered (probe says unavailable, or `create()` throws). Every step is logged at warning level and
+recorded in `GetFallbackHistory()`; `GetActive()` reports what was really created.
+
+**8. A cross-flag fallback requires window recreation, and is refused when CNA does not own the
+window.** SDL3 rejects a window carrying both `SDL_WINDOW_OPENGL` and `SDL_WINDOW_VULKAN`.
+Falling back across that boundary means destroying and recreating the SDL window, which is only
+legal while `ownsWindow_` is true. With a caller-supplied `DeviceWindowHandle`, the attempt fails
+with a clear diagnostic rather than being silently skipped.
+
+**9. Renderer-specific behaviour leaves the XNA layer.** The `DIRECTX9` profile ceilings, `SKIA`
+format promotion and `GDI` multisample write-back become `IGraphicsRenderer` virtuals, joining the
+existing `GetAppliedBackBufferFormatEXT()`/`SupportsCapability()`/`ApplyMultiSampleCount()` family.
+This is worth doing on its own merits, independently of runtime dispatch.
+
+**10. No new public renderer identity.** 46 identities stay 46; `scripts/check_renderer_identities.py`
+keeps passing unchanged throughout.
+
+**11. Incompatible combinations are rejected at configure time, with a reason.** `PORTABLEGL` with
+any real-GL family, `GDI` with `SOFTWARE`, two GL profiles sharing the EasyGL target, and any
+cross-platform combination are configure errors — never a link error the user has to decode.
+
+**12. The test corpus converts incrementally.** 892 `#ifdef` sites are not swept in one pass. Each
+phase converts only what it needs, and single-renderer builds keep compiling the corpus exactly as
+they do today.
+
+---
+
 ## Phases and tasks
 
-Task IDs use the `RTR-` prefix. Tasks are listed in dependency order within each phase; phases are
-ordered so that **phases 1–4 have standalone value and change no behaviour**, and only phases 5+
-alter the build model.
+Task IDs use the `RTR-` prefix. Phases are ordered so that **P0–P5 change no observable behaviour
+and have standalone value**; only P6 onward alters the build model. Every phase ends with a
+verification task, and no phase may be marked ✅ until a single-renderer build of at least one
+Linux renderer plus `CnaTests` is green.
 
-*(Task tables follow in the next revision of this document.)*
+Per-family tasks are enumerated individually rather than collapsed into "do all 42", because they
+land independently, review independently, and each one is where a family-specific surprise will
+surface.
+
+**Family/identity map used throughout** (42 families, 46 identities): `easygl` serves `OPENGLES2`,
+`OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`; every other family serves exactly one identity.
+
+---
+
+### P0 — Foundations: types, headers, no behaviour change
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P0-1 | ⬜ | Add `modules/graphics/include/CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp` — the `GraphicsRendererDescriptor` POD of design decision 2. Full Doxygen on every member per `CLAUDE.md`. No consumer yet. |
+| RTR-P0-2 | ⬜ | Add `RendererPreWindowRequest` (the subset of `PresentationParameters` a pre-window hook may read: back-buffer size, MSAA count, depth/stencil format, fullscreen) so descriptors never include the XNA headers. |
+| RTR-P0-3 | ⬜ | Add `RendererWindowKind` enum (`None`, `Plain`, `OpenGL`, `Vulkan`, `Metal`) — the *coarse* classification used for conflict detection and window-recreation decisions, distinct from the exact `SDL_WindowFlags` bitmask. |
+| RTR-P0-4 | ⬜ | Add `GraphicsRendererFallbackRecord` (`type`, `reason` enum `NotCompiledIn`/`ProbeUnavailable`/`InitializationFailed`/`WindowKindConflict`, `message`) — the record type `GetFallbackHistory()` returns. |
+| RTR-P0-5 | ⬜ | Add `GraphicsRendererRegistry` interface in `CNA::Internal::Renderers`: `All()`, `Find(GraphicsRendererType)`, `Find(std::string_view)`, `Count()`. Declaration only; the definition arrives generated in P2. |
+| RTR-P0-6 | ⬜ | Verify `System::InvalidOperationException` in the pinned sharp-runtime covers the message/inner-exception shape needed by design decision 6; if not, extend sharp-runtime first (per `CLAUDE.md`'s sharp-runtime-first rule) rather than working around it in CNA. |
+| RTR-P0-7 | ⬜ | Unit tests for the new value types: descriptor is trivially copyable, `RendererWindowKind` conflict matrix (`OpenGL` vs `Vulkan` = conflict, `None` vs anything = compatible), fallback-record construction. |
+| RTR-P0-8 | ⬜ | `docs/runtime-renderer-selection.md` skeleton — capability/status document, this project's convention (`docs/webgpu-renderer.md` as the shape reference). States plainly that nothing is implemented yet. |
+| RTR-P0-9 | ⬜ | Confirm the new headers pass the physical source-partition validator in `modules/CMakeLists.txt` (header-only additions to an existing module's `include/` root). |
+| RTR-P0-10 | ⬜ | **Phase gate.** Single-renderer `OPENGLES3` build + `CnaTests` green, zero behaviour delta. |
+
+---
+
+### P1 — Extract the pre-window contract (design decision 2)
+
+Removes the `#ifdef` chains from `GraphicsDevice.cpp` that decide things before any renderer exists.
+Still exactly one renderer per build throughout.
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P1-1 | ⬜ | Introduce `CNA::Internal::Renderers::ActiveDescriptor()` — returns the single compiled-in descriptor. Temporary shim so P1 can proceed before the registry exists. |
+| RTR-P1-2 | ⬜ | Replace `getRendererWindowFlags()` (`GraphicsDevice.cpp:138`) with `descriptor.prepareWindowFlags()`. Delete all 14 `#ifdef` branches inside it. |
+| RTR-P1-3 | ⬜ | Replace the `SDL_INIT_VIDEO` guard (`GraphicsDevice.cpp:317`) with `descriptor.needsVideoSubsystem`. |
+| RTR-P1-4 | ⬜ | Replace the no-window branch of `createOrAttachWindow()` (`GraphicsDevice.cpp:2270`) with `descriptor.needsWindow`. |
+| RTR-P1-5 | ⬜ | Replace the `OPENGL1` `SDL_GL_SetAttribute` block with `descriptor.applyPreWindowAttributes(request)`. |
+| RTR-P1-6 | ⬜ | Assert in a test that `modules/graphics/src/Xna/GraphicsDevice.cpp` contains **zero** `CNA_RENDERER_*` occurrences related to window creation (down from 25 total; the `GDI` write-back leaves in P3). |
+| RTR-P1-7 | ⬜ | Cross-renderer regression: window flags produced through the descriptor are bit-identical to the previous `#ifdef` result, verified per renderer as its descriptor lands. |
+| RTR-P1-8 | ⬜ | Document in `docs/runtime-renderer-selection.md` which four families (`BGFX`, `LLGL`, `FNA3D`, `DILIGENT`) already decided window flags at runtime before this plan, and that the descriptor generalizes their existing mechanism. |
+
+#### P1 descriptors, one task per family
+
+Each task: implement `<Family>::GetDescriptor()` in that family's module, exporting `needsWindow`,
+`needsVideoSubsystem`, `prepareWindowFlags`, `applyPreWindowAttributes`, `isAvailable`, and wire it
+to `ActiveDescriptor()` for that configuration. Each must be verified by actually building and
+running that family's own smoke/example target where one exists.
+
+| ID | St | Family → identity |
+|---|---|---|
+| RTR-P1-D01 | ⬜ | `sdl-renderer` → `SDL_RENDERER` (plain window, no GL flag) |
+| RTR-P1-D02 | ⬜ | `easygl` → `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` — one descriptor, profile still compile-time (`CNA_GL_PROFILE_*`); the 5-identity split is P11 |
+| RTR-P1-D03 | ⬜ | `bgfx` → `BGFX` — `prepareWindowFlags` wraps the existing `Bgfx::Detail::ResolveRendererType()` |
+| RTR-P1-D04 | ⬜ | `vulkan` → `VULKAN` (`SDL_WINDOW_VULKAN`; `isAvailable` = real `vkEnumerateInstanceVersion` probe) |
+| RTR-P1-D05 | ⬜ | `webgpu` → `WEBGPU` |
+| RTR-P1-D06 | ⬜ | `magnum` → `MAGNUM` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D07 | ⬜ | `headless` → `HEADLESS` (`needsWindow=false`, `needsVideoSubsystem=false`) |
+| RTR-P1-D08 | ⬜ | `software` → `SOFTWARE` (`needsWindow=false`, `needsVideoSubsystem=false`) |
+| RTR-P1-D09 | ⬜ | `stub` → `STUB` (`needsWindow=false`, `needsVideoSubsystem=false`) |
+| RTR-P1-D10 | ⬜ | `portablegl` → `PORTABLEGL` (`needsWindow=false`, `needsVideoSubsystem=false`) |
+| RTR-P1-D11 | ⬜ | `directx11` → `DIRECTX11` |
+| RTR-P1-D12 | ⬜ | `directx12` → `DIRECTX12` (honours `PresentationParameters::HeadlessEXT`) |
+| RTR-P1-D13 | ⬜ | `direct2d` → `DIRECT2D` |
+| RTR-P1-D14 | ⬜ | `canvas` → `CANVAS` (Emscripten) |
+| RTR-P1-D15 | ⬜ | `html-dom` → `HTML_DOM` (Emscripten) |
+| RTR-P1-D16 | ⬜ | `svg-dom` → `SVG_DOM` (Emscripten) |
+| RTR-P1-D17 | ⬜ | `skia` → `SKIA` |
+| RTR-P1-D18 | ⬜ | `blend2d` → `BLEND2D` |
+| RTR-P1-D19 | ⬜ | `freedirect` → `FREEDIRECT` |
+| RTR-P1-D20 | ⬜ | `directx9` → `DIRECTX9` |
+| RTR-P1-D21 | ⬜ | `directx1` → `DIRECTX1` |
+| RTR-P1-D22 | ⬜ | `directx2` → `DIRECTX2` |
+| RTR-P1-D23 | ⬜ | `directx3` → `DIRECTX3` |
+| RTR-P1-D24 | ⬜ | `directx5` → `DIRECTX5` |
+| RTR-P1-D25 | ⬜ | `directx6` → `DIRECTX6` |
+| RTR-P1-D26 | ⬜ | `directx7` → `DIRECTX7` |
+| RTR-P1-D27 | ⬜ | `directx8` → `DIRECTX8` |
+| RTR-P1-D28 | ⬜ | `directx10` → `DIRECTX10` |
+| RTR-P1-D29 | ⬜ | `sdl-gpu` → `SDL_GPU` |
+| RTR-P1-D30 | ⬜ | `opengles1` → `OPENGLES1` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D31 | ⬜ | `opengl4` → `OPENGL4` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D32 | ⬜ | `opengl1` → `OPENGL1` — owns `applyPreWindowAttributes` (GLX visual: depth 24, stencil 8, double buffer, MSAA) |
+| RTR-P1-D33 | ⬜ | `opengl2` → `OPENGL2` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D34 | ⬜ | `wicked` → `WICKED` |
+| RTR-P1-D35 | ⬜ | `sokol` → `SOKOL` (`SDL_WINDOW_OPENGL`; `CNA_SOKOL_API` stays compile-time) |
+| RTR-P1-D36 | ⬜ | `diligent` → `DILIGENT` — `prepareWindowFlags` wraps `ParseDeviceTypeOverride()`; keeps the documented single-flag limitation |
+| RTR-P1-D37 | ⬜ | `glide` → `GLIDE` |
+| RTR-P1-D38 | ⬜ | `gdi` → `GDI` |
+| RTR-P1-D39 | ⬜ | `llgl` → `LLGL` — `prepareWindowFlags` wraps `RendererModuleNeedsOpenGLWindow()` |
+| RTR-P1-D40 | ⬜ | `metal` → `METAL` (`SDL_WINDOW_METAL` \| `SDL_WINDOW_HIGH_PIXEL_DENSITY`; descriptor in the `.mm` unit) |
+| RTR-P1-D41 | ⬜ | `fna3d` → `FNA3D` — `prepareWindowFlags` wraps `Fna3d::Detail::PrepareWindowFlags()` |
+| RTR-P1-D42 | ⬜ | `openvg` → `OPENVG` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D43 | ⬜ | **Coverage gate.** A test enumerates all 46 identities and fails if any lacks a descriptor in its own configuration — the mechanical equivalent of `check_renderer_identities.py` for descriptors. |
+
+---
+
+### P2 — Namespace the factory, generate a one-entry registry (design decisions 3, 4)
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P2-1 | ⬜ | Declare `CreateGraphicsRenderer` inside each family namespace in `IGraphicsRenderer.hpp` (or better: drop the global declaration entirely and let each family's own public header declare it). |
+| RTR-P2-2 | ⬜ | Write `cmake/RendererRegistry.cmake` — generates `CnaRendererRegistry.generated.cpp` into the build tree from the enabled-family list. |
+| RTR-P2-3 | ⬜ | Implement `GraphicsRendererRegistry` over the generated table. With one family enabled, `Count() == 1`. |
+| RTR-P2-4 | ⬜ | Replace `renderer_ = CreateGraphicsRenderer(args)` (`GraphicsDevice.cpp:2419`) with a registry lookup + `descriptor.create(args)`. |
+| RTR-P2-5 | ⬜ | Retire the `ActiveDescriptor()` shim from RTR-P1-1 in favour of the registry. |
+| RTR-P2-6 | ⬜ | Confirm the generated file is regenerated on reconfigure and is correctly `.gitignore`d (build tree only, never committed). |
+| RTR-P2-7 | ⬜ | Verify the declared `cna_graphics_core` ↔ renderer archive cycle still resolves after the symbol move, on both the GNU linker and the MinGW cross-link. |
+| RTR-P2-8 | ⬜ | **Phase gate.** All Linux-buildable renderers configure, build and pass their own smoke targets. |
+
+#### P2 factory renames, one task per family
+
+Each: move the family's `CreateGraphicsRenderer` definition into `CNA::Internal::Renderers::<Family>`,
+export `GetDescriptor()` with a populated `create` pointer, verify the family's smoke/example target.
+
+| ID | St | Family |
+|---|---|---|
+| RTR-P2-F01 | ⬜ | `sdl-renderer` |
+| RTR-P2-F02 | ⬜ | `easygl` |
+| RTR-P2-F03 | ⬜ | `bgfx` |
+| RTR-P2-F04 | ⬜ | `vulkan` |
+| RTR-P2-F05 | ⬜ | `webgpu` |
+| RTR-P2-F06 | ⬜ | `magnum` |
+| RTR-P2-F07 | ⬜ | `headless` |
+| RTR-P2-F08 | ⬜ | `software` — must not disturb the `CNA_SOFTWARE_2D_ONLY` re-compilation `GDI` depends on |
+| RTR-P2-F09 | ⬜ | `stub` |
+| RTR-P2-F10 | ⬜ | `portablegl` |
+| RTR-P2-F11 | ⬜ | `directx11` |
+| RTR-P2-F12 | ⬜ | `directx12` |
+| RTR-P2-F13 | ⬜ | `direct2d` |
+| RTR-P2-F14 | ⬜ | `canvas` |
+| RTR-P2-F15 | ⬜ | `html-dom` |
+| RTR-P2-F16 | ⬜ | `svg-dom` — also update the standalone `cna_test_svgdom_host` target |
+| RTR-P2-F17 | ⬜ | `skia` |
+| RTR-P2-F18 | ⬜ | `blend2d` |
+| RTR-P2-F19 | ⬜ | `freedirect` |
+| RTR-P2-F20 | ⬜ | `directx9` |
+| RTR-P2-F21 | ⬜ | `directx1` |
+| RTR-P2-F22 | ⬜ | `directx2` |
+| RTR-P2-F23 | ⬜ | `directx3` |
+| RTR-P2-F24 | ⬜ | `directx5` |
+| RTR-P2-F25 | ⬜ | `directx6` |
+| RTR-P2-F26 | ⬜ | `directx7` |
+| RTR-P2-F27 | ⬜ | `directx8` |
+| RTR-P2-F28 | ⬜ | `directx10` |
+| RTR-P2-F29 | ⬜ | `sdl-gpu` |
+| RTR-P2-F30 | ⬜ | `opengles1` |
+| RTR-P2-F31 | ⬜ | `opengl4` |
+| RTR-P2-F32 | ⬜ | `opengl1` — its one-line factory is currently a single packed line; expand it |
+| RTR-P2-F33 | ⬜ | `opengl2` |
+| RTR-P2-F34 | ⬜ | `wicked` |
+| RTR-P2-F35 | ⬜ | `sokol` |
+| RTR-P2-F36 | ⬜ | `diligent` |
+| RTR-P2-F37 | ⬜ | `glide` |
+| RTR-P2-F38 | ⬜ | `gdi` — also update the three `gdi/examples/*` targets that call `CreateGraphicsRenderer` directly |
+| RTR-P2-F39 | ⬜ | `llgl` |
+| RTR-P2-F40 | ⬜ | `metal` (`.mm` unit) |
+| RTR-P2-F41 | ⬜ | `fna3d` |
+| RTR-P2-F42 | ⬜ | `openvg` |
+
+---
+
+### P3 — Move renderer-specific behaviour out of the XNA layer (design decision 9)
+
+Worth doing on its own merits. After this phase, `modules/graphics/src` should contain zero
+`CNA_RENDERER_*` occurrences.
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P3-1 | ⬜ | Add `IGraphicsRenderer::GetMaxTextureSizeForProfileEXT(int profile)` — default: no ceiling (`INT_MAX`). |
+| RTR-P3-2 | ⬜ | `DirectX9Renderer` overrides it with the real `D9-100` table currently in `D3D9ProfileCapabilities.hpp`. |
+| RTR-P3-3 | ⬜ | `Texture2D.cpp` — replace both `#ifdef CNA_RENDERER_DIRECTX9` `ValidateTextureSizeForProfileEXT` call sites with the virtual. |
+| RTR-P3-4 | ⬜ | `Texture3D.cpp` — same conversion (3 sites). |
+| RTR-P3-5 | ⬜ | `TextureCube.cpp` — same conversion (3 sites). |
+| RTR-P3-6 | ⬜ | `GraphicsDevice.cpp` — same conversion for the `MaxRenderTargets` Reach ceiling (`:2922`). |
+| RTR-P3-7 | ⬜ | Add `IGraphicsRenderer::IsProfileSupportedEXT(int profile)` — default `true` (the honest current answer for 45 renderers). |
+| RTR-P3-8 | ⬜ | `GraphicsAdapter::IsProfileSupported()` — route through the virtual, delete the `#ifdef`. |
+| RTR-P3-9 | ⬜ | Add `IGraphicsRenderer::QueryRenderTargetFormatEXT(...)` / `QueryBackBufferFormatEXT(...)` — defaults preserve the current fall-back-to-`Color` stub behaviour. |
+| RTR-P3-10 | ⬜ | `GraphicsAdapter::QueryRenderTargetFormat()` / `QueryBackBufferFormat()` — route through the virtuals, delete both `#ifdef`s. |
+| RTR-P3-11 | ⬜ | Add `IGraphicsRenderer::IsSurfaceFormatSupportedEXT(int format)` and `IsColorTransferFormatEXT(int format)` — defaults are the current non-Skia behaviour. |
+| RTR-P3-12 | ⬜ | `SkiaRenderer` overrides all three format predicates with its real promoted-format table. |
+| RTR-P3-13 | ⬜ | `Texture2D.cpp` — replace the three `#ifdef CNA_RENDERER_SKIA` blocks (`ValidateTexture2DFormatEXT`, the `Color*` transfer predicate, `IsCompressedTransferFormatEXT`). |
+| RTR-P3-14 | ⬜ | `RenderTarget2D.cpp` — replace both `#ifdef CNA_RENDERER_SKIA` blocks. |
+| RTR-P3-15 | ⬜ | `GDI` multisample write-back: `GraphicsDevice::SetPresentationParameters()` and `createRenderer()` currently special-case `GDI`. Generalize to "always echo `GetMultiSampleCount()` back" — verify no other renderer regresses, since every other one already returns what it was given. |
+| RTR-P3-16 | ⬜ | `GraphicsAdapter.cpp` — drop the now-unused `D3D9FormatMapping.hpp`/`D3D9ProfileCapabilities.hpp` includes from the XNA layer. |
+| RTR-P3-17 | ⬜ | Verification: a test asserts `grep -c CNA_RENDERER_ modules/graphics/src` is **0**. |
+| RTR-P3-18 | ⬜ | Re-run the D3D9 divergence suite (`docs/d3d9-divergence-report.md`) and the Skia 2D oracle diff (`scripts/run-skia-2d-oracle-diff.sh`) — behaviour must be unchanged, this is a pure relocation. |
+| RTR-P3-19 | ⬜ | **Phase gate.** `DIRECTX9` (Wine), `SKIA`, `GDI` (Wine) and `OPENGLES3` builds all green with their existing suites. |
+
+---
+
+### P4 — Selection API and latch (design decisions 5, 6)
+
+Still single-renderer builds: the API validates the request against the one compiled-in renderer.
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P4-1 | ⬜ | Add `modules/core/include/CNA/GraphicsRendererSelection.hpp` — `SetPreferred(GraphicsRendererType)`, `SetPreferred(std::string_view)`, `GetSelected()`, `IsLatched()`, `GetAvailable()`. Full Doxygen; `CNAEXT` throughout (this is not XNA 4.0 API). |
+| RTR-P4-2 | ⬜ | Implement the latch: a process-wide flag set at the top of every `GraphicsDevice` constructor. |
+| RTR-P4-3 | ⬜ | `SetPreferred()` after latch → `System::InvalidOperationException` naming both the latched renderer and the rejected request. |
+| RTR-P4-4 | ⬜ | `SetPreferred()` with an identity not compiled into this build → `System::InvalidOperationException` listing what *is* available (design decision 6; fallback does not apply to a build-time absence unless a chain was configured). |
+| RTR-P4-5 | ⬜ | `SetPreferred(std::string_view)` accepts exactly the `CNA_GRAPHICS_RENDERER` spellings (`"SDL_RENDERER"`, `"OPENGLES3"`, …); unknown name → `System::ArgumentException`. |
+| RTR-P4-6 | ⬜ | Case-insensitive name matching, decided and documented one way (recommend: case-insensitive, since env vars and command lines are typed by hand). |
+| RTR-P4-7 | ⬜ | `CNA_GRAPHICS_RENDERER` **environment variable** read at first use, below an explicit `SetPreferred()` in precedence (following `CNA_BGFX_RENDERER`/`CNA_DILIGENT_DEVICE`). |
+| RTR-P4-8 | ⬜ | An env-var value naming a renderer not compiled in: warn via `CNA::Logger` and ignore, or throw? Decide explicitly and document — recommend **throw**, consistent with design decision 6. |
+| RTR-P4-9 | ⬜ | `GetSelected()` before any selection returns the compile-time default without latching. |
+| RTR-P4-10 | ⬜ | `RecreateRendererForMultiSampleCount()` must keep working post-latch (design decision 5) — regression test. |
+| RTR-P4-11 | ⬜ | Multiple sequential `GraphicsDevice` instances in one process keep the latch (it is process-wide, not per-device) — regression test. |
+| RTR-P4-12 | ⬜ | Thread safety: document that `SetPreferred()` must be called before any graphics thread starts; guard the latch with an atomic so a violation is detected rather than racing. |
+| RTR-P4-13 | ⬜ | Unit tests: set-then-get; set-after-latch throws; unknown name throws; not-compiled-in throws; env var honoured; explicit call beats env var. |
+| RTR-P4-14 | ⬜ | Example program `examples/` demonstrating pre-start selection — the reference a game author copies. |
+| RTR-P4-15 | ⬜ | `docs/runtime-renderer-selection.md` — document the API, the precedence order and the latch semantics. |
+| RTR-P4-16 | ⬜ | **Phase gate.** Single-renderer builds behave identically whether or not the new API is called. |
+
+---
+
+### P5 — Fallback API (design decisions 6, 7, 8)
+
+Still single-renderer builds: a chain of length 1 exercises every code path except the actual
+substitution, which arrives with P8.
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P5-1 | ⬜ | Add `SetFallbackChain(std::span<const GraphicsRendererType>)` — latches like `SetPreferred()`. |
+| RTR-P5-2 | ⬜ | Add `EnableAutomaticFallback(bool)` — derives the chain from every compiled-in renderer. |
+| RTR-P5-3 | ⬜ | Define and document the automatic chain's ordering. Recommend deriving it from the existing `CNA::GraphicsBackendCategory`/`GraphicsBackendMaturity` enums (`modules/core/include/CNA/`) rather than inventing a new ranking — mature GPU renderers first, CPU renderers next, `STUB` last. |
+| RTR-P5-4 | ⬜ | Add `GetActive()` — what was really created; equals `GetSelected()` when no fallback occurred. |
+| RTR-P5-5 | ⬜ | Add `GetFallbackHistory()` returning `std::span<const GraphicsRendererFallbackRecord>`. |
+| RTR-P5-6 | ⬜ | Wire the `isAvailable()` probe into the selection path: probe failure on the preferred renderer is `ProbeUnavailable`. |
+| RTR-P5-7 | ⬜ | Wire initialization failure: `descriptor.create()` throwing is caught, recorded as `InitializationFailed` with the exception message, and the next chain entry is tried. |
+| RTR-P5-8 | ⬜ | Exhausted chain → throw, carrying the **first** failure as primary cause and every subsequent one as accumulated detail in the message. |
+| RTR-P5-9 | ⬜ | Fallback disabled (the default) → the first failure propagates unchanged, exactly as today. Regression test that the existing exception type and message survive. |
+| RTR-P5-10 | ⬜ | `CNA::Logger` warning per fallback step: what was tried, why it failed, what is being tried next (design decision 7). |
+| RTR-P5-11 | ⬜ | Window-kind conflict detection: comparing `RendererWindowKind` of the failed and candidate renderers (design decision 8). |
+| RTR-P5-12 | ⬜ | Cross-kind fallback with `ownsWindow_ == true`: destroy and recreate the SDL window with the candidate's flags, re-publishing `Mouse`/`TextInputEXT` window handles. |
+| RTR-P5-13 | ⬜ | Cross-kind fallback with a caller-supplied `DeviceWindowHandle`: record `WindowKindConflict` and skip that candidate with a clear log line — never silently reuse an incompatible window. |
+| RTR-P5-14 | ⬜ | `applyPreWindowAttributes` must re-run for the candidate before its window is recreated (`OPENGL1`'s GLX visual would otherwise be wrong). |
+| RTR-P5-15 | ⬜ | Fallback across `needsVideoSubsystem` (e.g. `VULKAN` → `HEADLESS`): `SDL_QuitSubSystem(SDL_INIT_VIDEO)` handling, and the reverse direction. |
+| RTR-P5-16 | ⬜ | Fallback interaction with `PresentationParameters::HeadlessEXT` — a headless request must not silently fall back to a windowed renderer. |
+| RTR-P5-17 | ⬜ | Fallback must **not** engage for `RecreateRendererForMultiSampleCount()`: an MSAA reconstruction failure is a genuine error on an already-chosen renderer, not a reason to change renderer mid-game. |
+| RTR-P5-18 | ⬜ | Unit tests with a fake registry: probe-fail → next; create-throw → next; both → third; exhausted → throw with accumulated causes; disabled → first exception propagates. |
+| RTR-P5-19 | ⬜ | Unit tests for history/active reporting: empty history on clean first hit, ordered history otherwise, `GetActive() != GetSelected()` after substitution. |
+| RTR-P5-20 | ⬜ | Test that `GetActive()` before latch throws (nothing has been created yet, so there is no honest answer). |
+| RTR-P5-21 | ⬜ | Example program demonstrating a fallback chain and printing `GetFallbackHistory()`. |
+| RTR-P5-22 | ⬜ | `docs/runtime-renderer-selection.md` — fallback section: default-throw policy, opt-in, ordering, the window-kind limitation, and the explicit statement that fallback never happens silently. |
+| RTR-P5-23 | ⬜ | **Phase gate.** Chain-of-1 exercises every path; default behaviour unchanged. |
+
+---
+
+### P6 — CMake multi-renderer builds (design decisions 1, 11)
+
+The first phase that changes the build model.
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P6-1 | ⬜ | Add `CNA_GRAPHICS_RENDERERS` (semicolon list). When set, `CNA_GRAPHICS_RENDERER` names the *default* preferred renderer and must be a member of the list. |
+| RTR-P6-2 | ⬜ | Define `CNA_MULTI_RENDERER` globally when the list has more than one entry. |
+| RTR-P6-3 | ⬜ | Convert `RENDERER_TARGET` (scalar) to `CNA_RENDERER_TARGETS` (list) — **128 references across 40+ files**; split into reviewable batches by module. |
+| RTR-P6-4 | ⬜ | Convert `add_compile_definitions(CNA_RENDERER_<X>)` to per-target `target_compile_definitions(... PRIVATE ...)` for every family. |
+| RTR-P6-5 | ⬜ | Rework `modules/renderers/CMakeLists.txt`'s single `CNA_SELECTED_RENDERER` dispatch into a loop over the selected family list. |
+| RTR-P6-6 | ⬜ | Rework `cna_add_renderer()` / `cna_renderer_common_setup()` to take the family's own target name instead of reading the global `${RENDERER_TARGET}`. |
+| RTR-P6-7 | ⬜ | `modules/graphics/CMakeLists.txt` — link every selected renderer target, preserving the declared archive cycles. |
+| RTR-P6-8 | ⬜ | Third-party configure functions (`cna_configure_webgpu`, `cna_configure_magnum`, `cna_configure_diligent`, `cna_configure_wicked`, `cna_configure_sokol`, `cna_configure_llgl`, `cna_configure_fna3d`, `cna_configure_openvg`, `cna_configure_portablegl`, Skia, Blend2D) must be callable in combination without clobbering each other's cache variables. |
+| RTR-P6-9 | ⬜ | Extend `cmake/RendererRegistry.cmake` to emit an N-entry table. |
+| RTR-P6-10 | ⬜ | **Conflict matrix at configure time** (design decision 11) — reject with a specific message, never a link error: |
+| RTR-P6-11 | ⬜ |  · `PORTABLEGL` together with any real-GL family (`easygl`, `opengl1`, `opengl2`, `opengl4`, `opengles1`, `openvg`, `magnum`, `sokol` on GL) — global `gl*` symbol collision |
+| RTR-P6-12 | ⬜ |  · `GDI` together with `SOFTWARE` — the `CNA_SOFTWARE_2D_ONLY` re-compilation is an ODR violation |
+| RTR-P6-13 | ⬜ |  · two GL profile identities from the shared `easygl` target (until P11) |
+| RTR-P6-14 | ⬜ |  · any two families whose platform gates disagree (Windows-only + Emscripten-only, etc.) |
+| RTR-P6-15 | ⬜ |  · `GLIDE` with anything (32-bit-only ABI, `CMAKE_SIZEOF_VOID_P EQUAL 4`) |
+| RTR-P6-16 | ⬜ | Document every rejected combination and its reason in `docs/runtime-renderer-selection.md` — a user hitting one must be able to look it up. |
+| RTR-P6-17 | ⬜ | Preserve every existing per-renderer platform `FATAL_ERROR` in the list form (each member is gated individually). |
+| RTR-P6-18 | ⬜ | `scripts/check_renderer_identities.py` still passes: 46 identities, unchanged (design decision 10). |
+| RTR-P6-19 | ⬜ | New `scripts/check_renderer_combinations.py` — mechanically verifies the conflict matrix in CMake matches the documented table, the same registry-gate shape as `check_renderer_identities.py`. |
+| RTR-P6-20 | ⬜ | Verify build-directory discipline: multi builds go into a stable in-repo `cmake-build-multi/`, per `CLAUDE.md` — no new per-combination directories. |
+| RTR-P6-21 | ⬜ | Measure and record multi-build cost (configure time, build time at `-j3`, binary size) for the P8 reference set, so the cost of the mode is documented rather than discovered. |
+| RTR-P6-22 | ⬜ | `CMakePresets.json` — one preset for the reference multi set. |
+| RTR-P6-23 | ⬜ | Confirm single-renderer configures are **bit-identical** to before P6 (same defines, same targets, same link line). |
+| RTR-P6-24 | ⬜ | **Phase gate.** Single-renderer builds unchanged; a two-entry multi build configures, builds and links. |
+
+---
+
+### P7 — Identity reporting in multi builds (design decision 1)
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P7-1 | ⬜ | Split `GraphicsRendererType.hpp`: keep `constexpr getCurrentGraphicsRendererType()` under `#ifndef CNA_MULTI_RENDERER`; add a non-`constexpr` `CNA::getActiveGraphicsRendererType()` available in both modes. |
+| RTR-P7-2 | ⬜ | Same split for `getCurrentGraphicsRendererName()` / `getActiveGraphicsRendererName()`. |
+| RTR-P7-3 | ⬜ | `GraphicsDevice::GetGraphicsRendererType()` (`GraphicsDevice.hpp:989`) — non-`constexpr` in multi mode, returning the device's real renderer. Document the intentional deviation. |
+| RTR-P7-4 | ⬜ | `GraphicsDevice::GetGraphicsRendererName()` — same treatment. |
+| RTR-P7-5 | ⬜ | Move the name table out of the `constexpr` switch into a shared function usable by both modes, so the 46 names exist exactly once. |
+| RTR-P7-6 | ⬜ | `GraphicsBackendMaturity.hpp` / `GraphicsBackendCategory.hpp` — their `getCurrent*()` convenience wrappers need the same dual treatment. |
+| RTR-P7-7 | ⬜ | `modules/renderers/fna3d/examples/fna3d_smoke_test.cpp:74` — its `static_assert` must be guarded for multi mode. |
+| RTR-P7-8 | ⬜ | `GraphicsRendererCompileDefinitionTests.cpp:172` — the `EXPECT_EQ(enabled, 1)` assertion becomes "exactly one in single mode, at least one in multi mode". |
+| RTR-P7-9 | ⬜ | `tests/modules/probe_core.cpp` uses `getCurrentGraphicsRendererType()` — update the minimal-link probe. |
+| RTR-P7-10 | ⬜ | The startup log line in `createRenderer()` (`GraphicsDevice.cpp:2435`) must print the **active** renderer, and in multi mode also how it was chosen (default / API / env / fallback). |
+| RTR-P7-11 | ⬜ | **Phase gate.** Both modes report identity correctly; no `constexpr` regression in single mode. |
+
+---
+
+### P8 — First real multi-renderer set: `STUB + HEADLESS + SOFTWARE`
+
+Chosen deliberately: no window, no GPU dependency, no third-party closure, all three Linux-native
+and CI-runnable. This is where fallback substitution is proven for the first time.
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P8-1 | ⬜ | Configure and build `-DCNA_GRAPHICS_RENDERERS="STUB;HEADLESS;SOFTWARE"`. |
+| RTR-P8-2 | ⬜ | Runtime selection of each of the three, verified by `GetActive()` and by real observable behaviour (`SOFTWARE` produces pixels, `STUB` produces none). |
+| RTR-P8-3 | ⬜ | `SetPreferred()` before `Game::Run()` reaches the right renderer end to end. |
+| RTR-P8-4 | ⬜ | Env-var selection verified in the same binary. |
+| RTR-P8-5 | ⬜ | **First real fallback:** an injected `isAvailable() == false` on the preferred renderer substitutes the next in chain; `GetFallbackHistory()` records it. |
+| RTR-P8-6 | ⬜ | **First real init-failure fallback:** an injected constructor throw substitutes the next in chain. |
+| RTR-P8-7 | ⬜ | Exhausted-chain behaviour verified end to end. |
+| RTR-P8-8 | ⬜ | Latch verified end to end: `SetPreferred()` after `GraphicsDevice` construction throws `System::InvalidOperationException`. |
+| RTR-P8-9 | ⬜ | Two `GraphicsDevice` lifetimes in one process, same renderer both times. |
+| RTR-P8-10 | ⬜ | A CTest suite pinning all of the above, runnable in CI with no display server. |
+| RTR-P8-11 | ⬜ | Record binary-size and build-time delta versus the three single-renderer builds. |
+| RTR-P8-12 | ⬜ | **Phase gate.** The reference multi set is green in CI. |
+
+---
+
+### P9 — Test and example corpus (design decision 12)
+
+The largest volume of work: 892 `#ifdef` sites, 86 CMake conditions. Single-renderer builds must
+keep compiling the corpus exactly as today throughout.
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P9-1 | ⬜ | Decide and document the conversion idiom: a runtime `SkipIfNotRenderer(GraphicsRendererType)` GTest helper replacing `#ifdef` where the test body is renderer-agnostic. |
+| RTR-P9-2 | ⬜ | Add that helper plus its multi-mode-aware counterpart to the shared test fixture headers. |
+| RTR-P9-3 | ⬜ | Audit the 335 `modules/graphics/tests` sites and classify each: (a) mechanically convertible to runtime skip, (b) genuinely needs a compile-time include of renderer headers, (c) obsolete. Publish the counts. |
+| RTR-P9-4 | ⬜ | Convert class (a) in `modules/graphics/tests` — batch 1: capability/format suites. |
+| RTR-P9-5 | ⬜ | Convert class (a) — batch 2: draw/indexed-draw suites. |
+| RTR-P9-6 | ⬜ | Convert class (a) — batch 3: vertex-layout/declaration suites. |
+| RTR-P9-7 | ⬜ | Convert class (a) — batch 4: render-target/readback suites. |
+| RTR-P9-8 | ⬜ | Convert class (a) — batch 5: SpriteBatch/2D suites. |
+| RTR-P9-9 | ⬜ | Class (b) sites keep `#ifdef`, but on the family's **private** define, so a multi build compiles them for each family that is present. |
+| RTR-P9-10 | ⬜ | Delete class (c). |
+| RTR-P9-11 | ⬜ | Same audit and conversion for the 16 `modules/content/tests` sites. |
+| RTR-P9-12 | ⬜ | Audit the 557 `modules/graphics/examples` sites. Examples differ from tests: many are renderer-specific *demonstrations* and should stay compile-time. Publish the split. |
+| RTR-P9-13 | ⬜ | Convert the genuinely renderer-agnostic examples to runtime gating. |
+| RTR-P9-14 | ⬜ | The 86 CMake conditions gating example/test targets on `CNA_GRAPHICS_RENDERER` become list-membership checks (`IF <X> IN_LIST CNA_GRAPHICS_RENDERERS`). |
+| RTR-P9-15 | ⬜ | `modules/renderers/easygl/examples/CMakeLists.txt` — 17 conditions, the densest single file. |
+| RTR-P9-16 | ⬜ | `modules/graphics/examples/CMakeLists.txt` — 10 conditions. |
+| RTR-P9-17 | ⬜ | `modules/net/examples` (4), `modules/gamer-services/examples` (4), `modules/graphics-ext/examples` (3). |
+| RTR-P9-18 | ⬜ | Remaining single-condition example CMakeLists across ~20 renderer families. |
+| RTR-P9-19 | ⬜ | `cmake/UnitTests.cmake` (19 references) — list-aware. |
+| RTR-P9-20 | ⬜ | `cmake/Harnesses.cmake` (4 references) — list-aware. |
+| RTR-P9-21 | ⬜ | `cmake/Tests/ModuleProbes.cmake` and `cmake/Tests/WickedTests.cmake` — list-aware. |
+| RTR-P9-22 | ⬜ | `scripts/run-all-renderer-smoke-tests.sh` — teach it the multi mode (build once, run N times with different `CNA_GRAPHICS_RENDERER` values). This is where multi builds actually pay for themselves in CI time. |
+| RTR-P9-23 | ⬜ | New suite: for every pair in a multi build, assert both renderers produce their own documented `SupportsCapability()` answers from the same binary. |
+| RTR-P9-24 | ⬜ | New suite: the same oracle-corpus comparison run twice from one binary against two renderers, proving cross-renderer parity without two builds. |
+| RTR-P9-25 | ⬜ | Verify the golden/fixture assets under top-level `tests/` need no per-mode duplication. |
+| RTR-P9-26 | ⬜ | Regression: single-renderer `CnaTests` test count is unchanged after every batch above. |
+| RTR-P9-27 | ⬜ | **Phase gate.** Single-renderer test counts unchanged; the P8 multi set runs the converted corpus. |
+
+---
+
+### P10 — Wider multi sets
+
+Each set is its own task because each will surface its own third-party integration problem.
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P10-1 | ⬜ | `SDL_RENDERER + SOFTWARE + HEADLESS + STUB` — first set with a real window. |
+| RTR-P10-2 | ⬜ | `SDL_RENDERER + OPENGLES3` — first set crossing `RendererWindowKind::Plain` → `OpenGL`, exercising window recreation on fallback. |
+| RTR-P10-3 | ⬜ | `OPENGLES3 + VULKAN` — the `OpenGL`/`Vulkan` window-flag conflict (design decision 8) proven end to end, including the refusal path with a caller-supplied window. |
+| RTR-P10-4 | ⬜ | `OPENGLES3 + VULKAN + SOFTWARE + HEADLESS + STUB` — the realistic Linux "everything native" set. |
+| RTR-P10-5 | ⬜ | `+ SDL_GPU`. |
+| RTR-P10-6 | ⬜ | `+ SKIA` — first heavy external artifact in a multi build. |
+| RTR-P10-7 | ⬜ | `+ BLEND2D`. |
+| RTR-P10-8 | ⬜ | `+ OPENVG` — ShivaVG's own GL context alongside another GL renderer in the same binary. |
+| RTR-P10-9 | ⬜ | `+ BGFX` — its runtime `ResolveRendererType()` must not fight CNA's own selection. |
+| RTR-P10-10 | ⬜ | `+ LLGL` — likewise for `ResolveRendererModule()`. |
+| RTR-P10-11 | ⬜ | `+ DILIGENT` — a runtime-dispatching renderer inside a runtime-dispatching framework; document the two-level selection clearly. |
+| RTR-P10-12 | ⬜ | `+ FNA3D` — likewise, plus MojoShader's symbol surface. |
+| RTR-P10-13 | ⬜ | `+ MAGNUM`. |
+| RTR-P10-14 | ⬜ | `+ WICKED`. |
+| RTR-P10-15 | ⬜ | `+ SOKOL` (GL). |
+| RTR-P10-16 | ⬜ | `+ WEBGPU` (native wgpu-native). |
+| RTR-P10-17 | ⬜ | `+ OPENGL1 + OPENGL2 + OPENGL4` — three native GL renderers coexisting; verify no loader/symbol conflict. |
+| RTR-P10-18 | ⬜ | `+ OPENGLES1`. |
+| RTR-P10-19 | ⬜ | Windows/MinGW multi set: `DIRECTX9 + DIRECTX11 + DIRECTX12`. |
+| RTR-P10-20 | ⬜ | Windows legacy multi set: `DIRECTX1 + DIRECTX2 + DIRECTX3 + DIRECTX5 + DIRECTX6 + DIRECTX7 + DIRECTX8` — seven families sharing DirectDraw-era headers. |
+| RTR-P10-21 | ⬜ | `+ DIRECT2D + GDI + FREEDIRECT` on Windows (`GDI` excludes `SOFTWARE`, per the conflict matrix). |
+| RTR-P10-22 | ⬜ | Emscripten multi set: `WEBGL2 + CANVAS + HTML_DOM + SVG_DOM` — one wasm bundle, renderer chosen from JS before start. Highest practical payoff of the whole plan. |
+| RTR-P10-23 | ⬜ | JS-side selection surface for that Emscripten set (a `Module` property or exported function feeding `SetPreferred()`), documented in `docs/runtime-renderer-selection.md`. |
+| RTR-P10-24 | ⬜ | macOS multi set: `METAL + OPENGL4 + SOFTWARE`. |
+| RTR-P10-25 | ⬜ | Record binary size and build time for every set above; publish the table so the cost of each addition is visible. |
+
+---
+
+### P11 — EasyGL runtime profile (unblocks 5 identities coexisting)
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P11-1 | ⬜ | Audit every `CNA_GL_PROFILE_*` use inside `modules/renderers/easygl/` and classify: context-creation attributes, shader-source selection, feature gating. |
+| RTR-P11-2 | ⬜ | Convert context-creation attribute choice to a runtime profile parameter on `EasyGLRenderer`. |
+| RTR-P11-3 | ⬜ | Convert shader-header/source selection to runtime — the largest sub-item; GLSL ES 1.00 vs 3.00 vs 3.30 sources must all be compiled into the binary. |
+| RTR-P11-4 | ⬜ | Convert remaining feature gates to runtime profile queries. |
+| RTR-P11-5 | ⬜ | Five descriptors from one `easygl` target, one per GL identity, each pinning its profile. |
+| RTR-P11-6 | ⬜ | Remove the "two GL profiles conflict" entry from the P6 conflict matrix. |
+| RTR-P11-7 | ⬜ | Multi set `OPENGLES2 + OPENGLES3 + OPENGL33` proven on Linux. |
+| RTR-P11-8 | ⬜ | Multi set `WEBGL1 + WEBGL2` proven under Emscripten. |
+| RTR-P11-9 | ⬜ | Measure the binary-size cost of carrying all shader variants; document it. |
+| RTR-P11-10 | ⬜ | Verify `plan_glbackends.md`'s documented invariants still hold and update it with the runtime-profile addition. |
+| RTR-P11-11 | ⬜ | Re-run `scripts/run-oracle-corpus-diff-easygl.sh` for each profile from a single multi binary. |
+| RTR-P11-12 | ⬜ | **Phase gate.** All five GL identities selectable at runtime from one binary. |
+
+---
+
+### P12 — Documentation, gates and closing
+
+| ID | St | Task |
+|---|---|---|
+| RTR-P12-1 | ⬜ | `docs/runtime-renderer-selection.md` complete: API reference, precedence, latch, fallback, conflict matrix, per-platform supported sets, cost table. |
+| RTR-P12-2 | ⬜ | `CLAUDE.md` — document the second build mode and the `cmake-build-multi/` directory (the build-directory list is closed; this is a deliberate, reviewed addition, not an ad-hoc one). |
+| RTR-P12-3 | ⬜ | `README.md` — short section on choosing a renderer at runtime, linking the doc. |
+| RTR-P12-4 | ⬜ | `AUDIT.md` — record the new CNAEXT public surface (`GraphicsRendererSelection`, `GetActive`, fallback API) with its test status. |
+| RTR-P12-5 | ⬜ | `NEXT.md` — record what remains after this plan closes. |
+| RTR-P12-6 | ⬜ | Every renderer plan document that describes the single-renderer assumption gets a one-line pointer to this plan (do not rewrite them). |
+| RTR-P12-7 | ⬜ | CI: single-renderer matrix unchanged, plus the P8 reference multi set. |
+| RTR-P12-8 | ⬜ | CI: the Emscripten multi set from RTR-P10-22, since that is the one with real end-user value. |
+| RTR-P12-9 | ⬜ | Doxygen coverage check on every new public header (`CLAUDE.md` requires a full block on every public member). |
+| RTR-P12-10 | ⬜ | `CHECKLIST.md` — add the runtime-dispatch items a new renderer family must now provide (descriptor, namespaced factory, availability probe, registry entry). |
+| RTR-P12-11 | ⬜ | Update `scripts/check_renderer_identities.py`'s stale "42" docstring to 46 while touching this area. |
+| RTR-P12-12 | ⬜ | Remove the stale `CNA_RENDERER_SDL` reference in `modules/core/include/CNA/Entrypoint.hpp:22` — it names an identity that does not exist. |
+| RTR-P12-13 | ⬜ | Final sweep: no `CNA_RENDERER_*` occurrence remains in `modules/graphics/src`; every remaining occurrence elsewhere is deliberate and documented. |
+| RTR-P12-14 | ⬜ | Performance check: confirm the added indirection (one function-pointer call per device construction, none per frame) is not measurable — and say so with numbers rather than asserting it. |
+| RTR-P12-15 | ⬜ | **Plan gate.** Single-renderer builds byte-identical in behaviour; multi-renderer mode documented, tested and CI-covered. |
+
+---
+
+## Task count
+
+| Phase | Tasks |
+|---|---|
+| P0 Foundations | 10 |
+| P1 Pre-window contract | 8 + 43 descriptors = 51 |
+| P2 Factory + registry | 8 + 42 renames = 50 |
+| P3 XNA-layer cleanup | 19 |
+| P4 Selection API | 16 |
+| P5 Fallback API | 23 |
+| P6 CMake multi-build | 24 |
+| P7 Identity reporting | 11 |
+| P8 First multi set | 12 |
+| P9 Test/example corpus | 27 |
+| P10 Wider multi sets | 25 |
+| P11 EasyGL runtime profile | 12 |
+| P12 Documentation and gates | 15 |
+| **Total** | **295** |
+
+P0–P5 (169 tasks) change no observable behaviour and are individually valuable refactors. P6
+onward introduces the second build mode.
