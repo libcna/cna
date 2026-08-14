@@ -182,12 +182,12 @@ rather than always passing.
 - **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and
-  the GPU renderers' GFX-072 contract. The default full-target viewport is byte-identical to the
-  previous behavior. Two related gaps remain (their own tasks): the **3D** raster path still maps NDC
-  over the full framebuffer and ignores a custom viewport's origin/size/depth-range
-  (`REMED-GFX-079`), and `ScissorRectangle` is not yet honored on any path
-  (`SetScissorRect` is a no-op — `REMED-GFX-080`). `Viewport.MinDepth/MaxDepth` are stored but not
-  consumed (the sprite path uses `layerDepth` directly).
+  the GPU renderers' GFX-072 contract. The **3D** path also honors X/Y, Width/Height, raster clipping
+  and `MinDepth/MaxDepth` (`REMED-GFX-079`, 25/25 focused checks), and an enabled
+  `ScissorRectangle` intersects both paths in target space (`REMED-GFX-080`). The default
+  full-target viewport remains byte-identical to the earlier behavior. SOFTWARE's homogeneous
+  clipping is still limited to the eye plane described above; viewport clipping does not turn that
+  into a complete six-plane frustum clip.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
   only effects whose `FillGpuDrawParams()` output matches this renderer's fixed `BasicEffect`-subset

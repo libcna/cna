@@ -945,6 +945,15 @@ boundary. It covers both windings under all three cull modes, ordinary/MSAA targ
 entry point, stock textured effects, mirrored transforms and SpriteBatch. Corpus-wide L7 remains
 open.
 
+`GLTF-396` records the adjacent clip/depth boundary in `docs/gltf-conventions.md`. CNA projection
+matrices emit Direct3D/XNA `0 <= z <= w`: Vulkan consumes that range natively, EasyGL accepts it as
+the upper half of OpenGL's wider clip-depth interval, and SOFTWARE maps `z/w` directly but clips
+only at its eye plane rather than every homogeneous frustum plane. The mappings are all monotonic
+for stock in-frustum draws. EasyGL and Vulkan each pass the shared 39/39 viewport suite (including
+both depth-range checks), while SOFTWARE passes 25/25 plus the 4/4 public depth contract; the
+renderer-independent L5/L6 outputs and all four raster/capability corpus selections remain green.
+No importer compensation is permitted for these renderer-owned differences.
+
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
 directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a
