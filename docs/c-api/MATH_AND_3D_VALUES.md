@@ -59,3 +59,17 @@ intersection returns the canonical empty rectangle.
 Point and Rectangle strings use the native formats and the standard count/copy contract: byte
 counts exclude a terminator, insufficient capacity writes no prefix, and the required count is
 still returned.
+
+## MathHelper
+
+The stateless MathHelper class maps to the `cna_math_*` prefix rather than an artificial C object.
+Its eight public scalar constants are exact `CNA_MATH_*` float macros, and its 15 callable members
+use the usual result-plus-output convention. Interpolation, clamp, distance, degree/radian, angle
+wrap and epsilon comparisons delegate to the canonical CNA implementation, including its NaN and
+infinity behavior.
+
+`cna_math_closest_msaa_power` accepts the meaningful nonnegative sample-count domain. It computes
+the largest power of two at or below the input with unsigned operations, including the complete
+positive `int32_t` range; one maps to zero because it is not multisampling. A negative input returns
+`CNA_RESULT_INVALID_ARGUMENT` and preserves the caller's output instead of entering the native
+helper's signed-shift/overflow edge case.

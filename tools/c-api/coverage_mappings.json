@@ -759,6 +759,16 @@
       "tests": "strict-C property, half-open bounds, mutation, wraparound, overload-equivalent, exact-string, capacity and null cases in `MathValuesSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B1"
+    },
+    {
+      "id": "math-helper-surface",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/MathHelper\\.hpp$",
+      "kinds": ["class", "constant", "method"],
+      "mapping": "stateless `cna_math_*` prefix, exact `CNA_MATH_*` constants and fallible scalar output operations",
+      "tests": "C/C++ constant checks plus every interpolation, clamp, distance, angle, epsilon and full-range MSAA operation in strict-C `MathValuesSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B2a"
     }
   ]
 }

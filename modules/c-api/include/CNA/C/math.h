@@ -9,6 +9,225 @@
 extern "C" {
 #endif
 
+/** @brief Mathematical constant e. */
+#define CNA_MATH_E 2.71828175F
+/** @brief Base-10 logarithm of e. */
+#define CNA_MATH_LOG10_E 0.4342945F
+/** @brief Base-2 logarithm of e. */
+#define CNA_MATH_LOG2_E 1.442695F
+/** @brief The value of pi. */
+#define CNA_MATH_PI 3.14159274F
+/** @brief Pi divided by two. */
+#define CNA_MATH_PI_OVER_2 1.57079637F
+/** @brief Pi divided by four. */
+#define CNA_MATH_PI_OVER_4 0.7853982F
+/** @brief Pi multiplied by two. */
+#define CNA_MATH_TWO_PI 6.28318548F
+/** @brief CNA framework float-comparison epsilon. */
+#define CNA_MATH_MACHINE_EPSILON_FLOAT 5.96046448E-8F
+
+/**
+ * @brief Computes a scalar barycentric coordinate.
+ *
+ * @param value1 First interpolation value.
+ * @param value2 Second interpolation value.
+ * @param value3 Third interpolation value.
+ * @param amount1 Weight of @p value2 relative to @p value1.
+ * @param amount2 Weight of @p value3 relative to @p value1.
+ * @param out_value Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_barycentric(
+    float value1,
+    float value2,
+    float value3,
+    float amount1,
+    float amount2,
+    float* out_value);
+
+/**
+ * @brief Performs scalar Catmull-Rom interpolation.
+ *
+ * @param value1 First control value.
+ * @param value2 Second control value.
+ * @param value3 Third control value.
+ * @param value4 Fourth control value.
+ * @param amount Interpolation amount.
+ * @param out_value Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_catmull_rom(
+    float value1,
+    float value2,
+    float value3,
+    float value4,
+    float amount,
+    float* out_value);
+
+/**
+ * @brief Clamps a float to inclusive bounds using canonical CNA comparison semantics.
+ *
+ * @param value Value to clamp.
+ * @param minimum Minimum bound.
+ * @param maximum Maximum bound.
+ * @param out_value Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_clamp_float(
+    float value,
+    float minimum,
+    float maximum,
+    float* out_value);
+
+/**
+ * @brief Computes the absolute distance between two floats.
+ *
+ * @param value1 First value.
+ * @param value2 Second value.
+ * @param out_value Receives the distance.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_distance(
+    float value1,
+    float value2,
+    float* out_value);
+
+/**
+ * @brief Performs scalar Hermite interpolation.
+ *
+ * @param value1 Source value.
+ * @param tangent1 Source tangent.
+ * @param value2 Destination value.
+ * @param tangent2 Destination tangent.
+ * @param amount Interpolation amount.
+ * @param out_value Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_hermite(
+    float value1,
+    float tangent1,
+    float value2,
+    float tangent2,
+    float amount,
+    float* out_value);
+
+/**
+ * @brief Performs scalar linear interpolation.
+ *
+ * @param value1 Source value.
+ * @param value2 Destination value.
+ * @param amount Interpolation amount.
+ * @param out_value Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_lerp(
+    float value1,
+    float value2,
+    float amount,
+    float* out_value);
+
+/**
+ * @brief Selects the canonical maximum of two floats.
+ *
+ * @param value1 First value.
+ * @param value2 Second value.
+ * @param out_value Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_max(float value1, float value2, float* out_value);
+
+/**
+ * @brief Selects the canonical minimum of two floats.
+ *
+ * @param value1 First value.
+ * @param value2 Second value.
+ * @param out_value Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_min(float value1, float value2, float* out_value);
+
+/**
+ * @brief Performs clamped smooth-step interpolation.
+ *
+ * @param value1 Source value.
+ * @param value2 Destination value.
+ * @param amount Interpolation amount, clamped to zero through one.
+ * @param out_value Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_smooth_step(
+    float value1,
+    float value2,
+    float amount,
+    float* out_value);
+
+/**
+ * @brief Converts radians to degrees.
+ *
+ * @param radians Angle in radians.
+ * @param out_degrees Receives the angle in degrees.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_to_degrees(float radians, float* out_degrees);
+
+/**
+ * @brief Converts degrees to radians.
+ *
+ * @param degrees Angle in degrees.
+ * @param out_radians Receives the angle in radians.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_to_radians(float degrees, float* out_radians);
+
+/**
+ * @brief Wraps radians to the canonical range `(-pi, pi]`.
+ *
+ * @param angle Angle to wrap.
+ * @param out_angle Receives the wrapped angle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_wrap_angle(float angle, float* out_angle);
+
+/**
+ * @brief Clamps a signed 32-bit integer to inclusive bounds.
+ *
+ * @param value Value to clamp.
+ * @param minimum Minimum bound.
+ * @param maximum Maximum bound.
+ * @param out_value Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_clamp_int32(
+    int32_t value,
+    int32_t minimum,
+    int32_t maximum,
+    int32_t* out_value);
+
+/**
+ * @brief Tests whether two floats differ by less than the framework epsilon.
+ *
+ * @param value1 First value.
+ * @param value2 Second value.
+ * @param out_within_epsilon Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_math_within_epsilon(
+    float value1,
+    float value2,
+    CNA_Bool* out_within_epsilon);
+
+/**
+ * @brief Gets the largest valid power-of-two MSAA count not exceeding an input.
+ *
+ * @param value Nonnegative sample-count input; one maps to zero because 1x is not MSAA.
+ * @param out_value Receives zero or the closest power of two.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a negative input or null
+ * output.
+ */
+CNA_C_API CNA_Result cna_math_closest_msaa_power(
+    int32_t value,
+    int32_t* out_value);
+
 /**
  * @brief Initializes a point to zero.
  *

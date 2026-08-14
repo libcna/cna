@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — POINT/RECTANGLE COMPLETE THROUGH CBIND-035B1 (2026-08-14)
+## C BINDING / C ABI — MATHHELPER COMPLETE THROUGH CBIND-035B2a (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -56,7 +56,10 @@
 > operations. Its defined unsigned-bit calculations preserve unchecked 32-bit behavior without
 > signed-overflow UB; division failures preserve output. The strict-C suite passes under HEADLESS,
 > SDL_RENDERER and ASan+UBSan. The inventory is now 1,027 implemented, 21 partial, 5,297 planned
-> and 70 N/A. CBIND-035B2 MathHelper and Vector2/3/4 operations is next.
+> and 70 N/A. B2 is split into MathHelper plus Vector2/3/4 slices. B2a now exposes all eight exact
+> scalar constants and all 15 MathHelper operations, including canonical NaN/infinity/epsilon
+> behavior and a defined full-positive-int32 MSAA-power calculation. The inventory is now 1,051
+> implemented, 21 partial, 5,273 planned and 70 N/A. CBIND-035B2b Vector2 is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

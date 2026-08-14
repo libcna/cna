@@ -3,6 +3,7 @@
 #include "CNA/C/math.h"
 #include "CnaCApiDetail.hpp"
 
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Point.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
@@ -17,6 +18,7 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::Fail;
+using Microsoft::Xna::Framework::MathHelper;
 using Microsoft::Xna::Framework::Point;
 using Microsoft::Xna::Framework::Rectangle;
 
@@ -125,6 +127,182 @@ template<typename TCallable>
 }
 
 } // namespace
+
+CNA_Result cna_math_barycentric(
+    const float value1,
+    const float value2,
+    const float value3,
+    const float amount1,
+    const float amount2,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return MathHelper::Barycentric(value1, value2, value3, amount1, amount2);
+    });
+}
+
+CNA_Result cna_math_catmull_rom(
+    const float value1,
+    const float value2,
+    const float value3,
+    const float value4,
+    const float amount,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return MathHelper::CatmullRom(value1, value2, value3, value4, amount);
+    });
+}
+
+CNA_Result cna_math_clamp_float(
+    const float value,
+    const float minimum,
+    const float maximum,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return MathHelper::Clamp(value, minimum, maximum);
+    });
+}
+
+CNA_Result cna_math_distance(
+    const float value1,
+    const float value2,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return MathHelper::Distance(value1, value2);
+    });
+}
+
+CNA_Result cna_math_hermite(
+    const float value1,
+    const float tangent1,
+    const float value2,
+    const float tangent2,
+    const float amount,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return MathHelper::Hermite(value1, tangent1, value2, tangent2, amount);
+    });
+}
+
+CNA_Result cna_math_lerp(
+    const float value1,
+    const float value2,
+    const float amount,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return MathHelper::Lerp(value1, value2, amount);
+    });
+}
+
+CNA_Result cna_math_max(
+    const float value1,
+    const float value2,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return MathHelper::Max(value1, value2);
+    });
+}
+
+CNA_Result cna_math_min(
+    const float value1,
+    const float value2,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return MathHelper::Min(value1, value2);
+    });
+}
+
+CNA_Result cna_math_smooth_step(
+    const float value1,
+    const float value2,
+    const float amount,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return MathHelper::SmoothStep(value1, value2, amount);
+    });
+}
+
+CNA_Result cna_math_to_degrees(
+    const float radians,
+    float* const outDegrees)
+{
+    return StoreOutput(outDegrees, "The float output is null.", [=] {
+        return MathHelper::ToDegrees(radians);
+    });
+}
+
+CNA_Result cna_math_to_radians(
+    const float degrees,
+    float* const outRadians)
+{
+    return StoreOutput(outRadians, "The float output is null.", [=] {
+        return MathHelper::ToRadians(degrees);
+    });
+}
+
+CNA_Result cna_math_wrap_angle(
+    const float angle,
+    float* const outAngle)
+{
+    return StoreOutput(outAngle, "The float output is null.", [=] {
+        return MathHelper::WrapAngle(angle);
+    });
+}
+
+CNA_Result cna_math_clamp_int32(
+    const int32_t value,
+    const int32_t minimum,
+    const int32_t maximum,
+    int32_t* const outValue)
+{
+    return StoreOutput(outValue, "The integer output is null.", [=] {
+        return MathHelper::Clamp(value, minimum, maximum);
+    });
+}
+
+CNA_Result cna_math_within_epsilon(
+    const float value1,
+    const float value2,
+    CNA_Bool* const outWithinEpsilon)
+{
+    return StoreOutput(outWithinEpsilon, "The Boolean output is null.", [=] {
+        return MathHelper::WithinEpsilon(value1, value2) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_math_closest_msaa_power(
+    const int32_t value,
+    int32_t* const outValue)
+{
+    if (outValue == nullptr || value < 0) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The MSAA input is negative or its output is null.");
+    }
+    if (value <= 1) {
+        *outValue = 0;
+        return CNA_RESULT_SUCCESS;
+    }
+
+    uint32_t power = static_cast<uint32_t>(value);
+    power |= power >> 1U;
+    power |= power >> 2U;
+    power |= power >> 4U;
+    power |= power >> 8U;
+    power |= power >> 16U;
+    power -= power >> 1U;
+    *outValue = static_cast<int32_t>(power);
+    return CNA_RESULT_SUCCESS;
+}
 
 CNA_Result cna_point_init(CNA_Point* const outValue)
 {

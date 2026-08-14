@@ -2,8 +2,78 @@
 
 #include <CNA/C/cna.h>
 
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
+
+static int near_float(float left, float right)
+{
+    return fabsf(left - right) <= 0.00001F;
+}
+
+static int validate_math_helper(void)
+{
+    float value = 0.0F;
+    int32_t integer = -1;
+    CNA_Bool predicate = CNA_FALSE;
+    if (CNA_MATH_E != 2.71828175F || CNA_MATH_LOG10_E != 0.4342945F ||
+        CNA_MATH_LOG2_E != 1.442695F || CNA_MATH_PI != 3.14159274F ||
+        CNA_MATH_PI_OVER_2 != 1.57079637F || CNA_MATH_PI_OVER_4 != 0.7853982F ||
+        CNA_MATH_TWO_PI != 6.28318548F ||
+        CNA_MATH_MACHINE_EPSILON_FLOAT != 5.96046448E-8F ||
+        cna_math_barycentric(1.0F, 3.0F, 5.0F, 0.25F, 0.5F, &value) !=
+            CNA_RESULT_SUCCESS || !near_float(value, 3.5F) ||
+        cna_math_catmull_rom(0.0F, 1.0F, 2.0F, 3.0F, 0.5F, &value) !=
+            CNA_RESULT_SUCCESS || !near_float(value, 1.5F) ||
+        cna_math_clamp_float(3.0F, 0.0F, 2.0F, &value) != CNA_RESULT_SUCCESS ||
+        value != 2.0F ||
+        cna_math_distance(-2.0F, 3.0F, &value) != CNA_RESULT_SUCCESS || value != 5.0F ||
+        cna_math_hermite(0.0F, 0.0F, 10.0F, 0.0F, 0.5F, &value) !=
+            CNA_RESULT_SUCCESS || !near_float(value, 5.0F) ||
+        cna_math_lerp(0.0F, 10.0F, 0.25F, &value) != CNA_RESULT_SUCCESS || value != 2.5F ||
+        cna_math_max(-1.0F, 2.0F, &value) != CNA_RESULT_SUCCESS || value != 2.0F ||
+        cna_math_min(-1.0F, 2.0F, &value) != CNA_RESULT_SUCCESS || value != -1.0F ||
+        cna_math_smooth_step(0.0F, 10.0F, 0.5F, &value) != CNA_RESULT_SUCCESS ||
+        !near_float(value, 5.0F) ||
+        cna_math_smooth_step(0.0F, 10.0F, 2.0F, &value) != CNA_RESULT_SUCCESS ||
+        value != 10.0F ||
+        cna_math_to_degrees(CNA_MATH_PI, &value) != CNA_RESULT_SUCCESS ||
+        !near_float(value, 180.0F) ||
+        cna_math_to_radians(180.0F, &value) != CNA_RESULT_SUCCESS ||
+        !near_float(value, CNA_MATH_PI) ||
+        cna_math_wrap_angle(-CNA_MATH_PI, &value) != CNA_RESULT_SUCCESS ||
+        !near_float(value, CNA_MATH_PI) ||
+        cna_math_clamp_int32(12, -3, 7, &integer) != CNA_RESULT_SUCCESS || integer != 7 ||
+        cna_math_within_epsilon(
+            0.0F, CNA_MATH_MACHINE_EPSILON_FLOAT * 0.5F, &predicate) !=
+            CNA_RESULT_SUCCESS || predicate != CNA_TRUE ||
+        cna_math_within_epsilon(0.0F, CNA_MATH_MACHINE_EPSILON_FLOAT, &predicate) !=
+            CNA_RESULT_SUCCESS || predicate != CNA_FALSE) {
+        return 0;
+    }
+
+    if (cna_math_closest_msaa_power(0, &integer) != CNA_RESULT_SUCCESS || integer != 0 ||
+        cna_math_closest_msaa_power(1, &integer) != CNA_RESULT_SUCCESS || integer != 0 ||
+        cna_math_closest_msaa_power(3, &integer) != CNA_RESULT_SUCCESS || integer != 2 ||
+        cna_math_closest_msaa_power(8, &integer) != CNA_RESULT_SUCCESS || integer != 8 ||
+        cna_math_closest_msaa_power(INT32_MAX, &integer) != CNA_RESULT_SUCCESS ||
+        integer != INT32_C(1073741824)) {
+        return 0;
+    }
+
+    integer = 77;
+    if (cna_math_closest_msaa_power(-1, &integer) != CNA_RESULT_INVALID_ARGUMENT ||
+        integer != 77 ||
+        cna_math_closest_msaa_power(2, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_math_barycentric(0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_math_clamp_float(NAN, 0.0F, 1.0F, &value) != CNA_RESULT_SUCCESS ||
+        !isnan(value) ||
+        cna_math_wrap_angle(INFINITY, &value) != CNA_RESULT_SUCCESS || !isnan(value)) {
+        return 0;
+    }
+    return 1;
+}
 
 static int point_equals(CNA_Point left, CNA_Point right)
 {
@@ -184,5 +254,5 @@ static int validate_rectangle(void)
 
 int main(void)
 {
-    return validate_point() && validate_rectangle() ? 0 : 1;
+    return validate_math_helper() && validate_point() && validate_rectangle() ? 0 : 1;
 }
