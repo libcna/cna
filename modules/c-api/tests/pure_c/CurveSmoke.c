@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <threads.h>
 
 _Static_assert(sizeof(CNA_CurveKey) == 20U, "CNA_CurveKey size changed");
 _Static_assert(_Alignof(CNA_CurveKey) == 4U, "CNA_CurveKey alignment changed");
@@ -13,6 +14,7 @@ _Static_assert(offsetof(CNA_CurveKey, value) == 4U, "value offset changed");
 _Static_assert(offsetof(CNA_CurveKey, tangent_in) == 8U, "tangent_in offset changed");
 _Static_assert(offsetof(CNA_CurveKey, tangent_out) == 12U, "tangent_out offset changed");
 _Static_assert(offsetof(CNA_CurveKey, continuity) == 16U, "continuity offset changed");
+_Static_assert(sizeof(CNA_CurveKeyCollectionHandle) == 8U, "collection handle size changed");
 
 static int validate_construction_and_properties(void)
 {
@@ -122,7 +124,130 @@ static int validate_value_operations(void)
     return 1;
 }
 
+typedef struct WrongThreadState {
+    CNA_CurveKeyCollectionHandle collection;
+    CNA_Result result;
+} WrongThreadState;
+
+static int get_collection_count_on_wrong_thread(void* const context)
+{
+    WrongThreadState* const state = (WrongThreadState*)context;
+    uint64_t count = 0U;
+    state->result = cna_curve_key_collection_get_count(state->collection, &count);
+    return 0;
+}
+
+static int validate_collection(void)
+{
+    CNA_CurveKeyCollectionHandle collection = UINT64_MAX;
+    CNA_CurveKeyCollectionHandle clone = CNA_INVALID_HANDLE;
+    if (cna_curve_key_collection_create(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_key_collection_create(&collection) != CNA_RESULT_SUCCESS ||
+        collection == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    uint64_t count = UINT64_MAX;
+    CNA_Bool predicate = CNA_TRUE;
+    if (cna_curve_key_collection_get_count(collection, &count) != CNA_RESULT_SUCCESS ||
+        count != 0U ||
+        cna_curve_key_collection_get_is_read_only(collection, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_FALSE) {
+        return 0;
+    }
+
+    CNA_CurveKey key0;
+    CNA_CurveKey key1;
+    CNA_CurveKey key2;
+    CNA_CurveKey key3;
+    if (cna_curve_key_init_position_value(0.0F, 10.0F, &key0) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_init_position_value(1.0F, 11.0F, &key1) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_init_position_value(2.0F, 12.0F, &key2) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_init_position_value(3.0F, 13.0F, &key3) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_add(collection, key2) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_add(collection, key0) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_add(collection, key1) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get_count(collection, &count) != CNA_RESULT_SUCCESS ||
+        count != 3U) {
+        return 0;
+    }
+
+    CNA_CurveKey result = key3;
+    int32_t index = -2;
+    if (cna_curve_key_collection_get(collection, 0, &result) != CNA_RESULT_SUCCESS ||
+        result.position != 0.0F ||
+        cna_curve_key_collection_get(collection, 1, &result) != CNA_RESULT_SUCCESS ||
+        result.position != 1.0F ||
+        cna_curve_key_collection_get(collection, 2, &result) != CNA_RESULT_SUCCESS ||
+        result.position != 2.0F ||
+        cna_curve_key_collection_contains(collection, key1, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_curve_key_collection_index_of(collection, key1, &index) != CNA_RESULT_SUCCESS ||
+        index != 1 ||
+        cna_curve_key_collection_set(collection, 0, key3) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get(collection, 2, &result) != CNA_RESULT_SUCCESS ||
+        result.position != 3.0F) {
+        return 0;
+    }
+
+    CNA_CurveKey destination[4] = {key0, key0, key0, key0};
+    if (cna_curve_key_collection_copy_to(collection, destination, 2U, 0, &count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL || count != 3U || destination[0].position != 0.0F ||
+        cna_curve_key_collection_copy_to(collection, destination, 4U, 1, &count) !=
+            CNA_RESULT_SUCCESS || count != 3U || destination[0].position != 0.0F ||
+        destination[1].position != 1.0F || destination[2].position != 2.0F ||
+        destination[3].position != 3.0F ||
+        cna_curve_key_collection_copy_to(collection, destination, 4U, -1, &count) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_curve_key_collection_clone(collection, &clone) != CNA_RESULT_SUCCESS ||
+        clone == CNA_INVALID_HANDLE || clone == collection ||
+        cna_curve_key_collection_clear(collection) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get_count(collection, &count) != CNA_RESULT_SUCCESS ||
+        count != 0U ||
+        cna_curve_key_collection_get_count(clone, &count) != CNA_RESULT_SUCCESS || count != 3U ||
+        cna_curve_key_collection_remove(clone, key0, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_FALSE ||
+        cna_curve_key_collection_remove(clone, key1, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_curve_key_collection_remove_at(clone, 1) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get_count(clone, &count) != CNA_RESULT_SUCCESS || count != 1U) {
+        return 0;
+    }
+
+    result = key3;
+    CNA_CurveKey invalid = key2;
+    invalid.continuity = UINT32_MAX;
+    if (cna_curve_key_collection_get(clone, 2, &result) != CNA_RESULT_INVALID_ARGUMENT ||
+        result.position != 3.0F ||
+        cna_curve_key_collection_set(clone, 0, invalid) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_key_collection_get(clone, 0, &result) != CNA_RESULT_SUCCESS ||
+        result.position != 2.0F ||
+        cna_curve_key_collection_get_count(CNA_INVALID_HANDLE, &count) !=
+            CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+
+    WrongThreadState wrong_thread = {clone, CNA_RESULT_SUCCESS};
+    thrd_t thread;
+    if (thrd_create(&thread, get_collection_count_on_wrong_thread, &wrong_thread) != thrd_success ||
+        thrd_join(thread, 0) != thrd_success || wrong_thread.result != CNA_RESULT_THREAD) {
+        return 0;
+    }
+
+    if (cna_curve_key_collection_destroy(collection) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get_count(collection, &count) != CNA_RESULT_INVALID_HANDLE ||
+        cna_curve_key_collection_destroy(collection) != CNA_RESULT_INVALID_HANDLE ||
+        cna_curve_key_collection_destroy(clone) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
-    return validate_construction_and_properties() && validate_value_operations() ? 0 : 1;
+    return validate_construction_and_properties() && validate_value_operations() &&
+            validate_collection() ? 0 : 1;
 }

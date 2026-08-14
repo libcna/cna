@@ -293,7 +293,7 @@ mechanical wrapper.
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | CBIND-035B5a | Complete CurveKey value operations | ✅ | `curve.h` maps all 19 CurveKey rows through a fixed 20-byte `CNA_CurveKey` and 17 operations covering every constructor/property, clone, comparison, equality/operator and hash route. Unknown continuity values are rejected before output mutation; native IEEE/NaN comparison behavior is preserved. Strict C17 and C++23 assertions freeze size, alignment and every field offset, while `CurveSmoke.c` calls every entry point under both backends and ASan+UBSan. |
-| CBIND-035B5b | Complete CurveKeyCollection ownership and mutation | ⬜ | Add a validated owned collection handle with ordered add/set, count/get/copy, clone, contains/index/remove/clear and explicit iterator-to-count/copy mapping. |
+| CBIND-035B5b | Complete CurveKeyCollection ownership and mutation | ✅ | `curve.h` maps all 26 CurveKeyCollection rows through an owned, generation/type/thread-validated handle and 14 operations. Count/get and atomic destination-index copy replace native aliases, indexers and all iterator routes; add/set preserve native position ordering, while clear/clone/contains/index/remove map collection behavior without leaking `std::vector`. `CurveSmoke.c` calls every entry point and covers ordering, repositioning, clone independence, capacity atomicity, invalid keys/indices and invalid/stale/wrong-thread handles under both backends and ASan+UBSan. |
 | CBIND-035B5c | Complete Curve evaluation and close parent B5 | ⬜ | Add an owned Curve handle with key collection access, loop properties, clone, evaluation and every tangent overload; close parent B5. |
 
 ## Phase B7 — hardening, documentation and experimental release
@@ -381,5 +381,6 @@ implemented, 21 partial, 4,882 planned and 70 not applicable. CBIND-035B4a compl
 CBIND-035B4b completes BoundingBox, CBIND-035B4c completes BoundingSphere and CBIND-035B4d
 completes BoundingFrustum, closing parent CBIND-035B4. The current snapshot is 1,577 implemented,
 21 partial, 4,747 planned and 70 not applicable. CBIND-035B5a completes all 19 CurveKey rows; the
-current snapshot is 1,596 implemented, 21 partial, 4,728 planned and 70 not applicable, with
-CBIND-035B5b CurveKeyCollection next.
+current snapshot is 1,596 implemented, 21 partial, 4,728 planned and 70 not applicable.
+CBIND-035B5b completes all 26 CurveKeyCollection rows; the current snapshot is 1,622 implemented,
+21 partial, 4,702 planned and 70 not applicable, with CBIND-035B5c Curve evaluation next.

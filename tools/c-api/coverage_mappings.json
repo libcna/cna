@@ -879,6 +879,16 @@
       "tests": "C/C++ ABI size/alignment/offset assertions plus every entry point, constructors, mutation, NaN comparison, equality/hash and invalid-continuity/null atomicity in strict-C `CurveSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B5a"
+    },
+    {
+      "id": "curve-key-collection-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/CurveKeyCollection\\.hpp$",
+      "kinds": ["alias", "class", "constructor", "method", "operator"],
+      "mapping": "owned validated `CNA_CurveKeyCollectionHandle` plus `cna_curve_key_collection_*` count/read-only, indexed mutation, ordered add, clear/clone, contains/index/remove and atomic destination-index copy operations; native aliases/iterators collapse to count/copy",
+      "tests": "every entry point, handle ABI, ordering/repositioning, clone independence, count/index/copy, capacity atomicity, invalid keys/indices and invalid/stale/wrong-thread handles in strict-C `CurveSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B5b"
     }
   ]
 }

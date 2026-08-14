@@ -39,6 +39,7 @@ enum class ObjectKind : uint32_t {
     RenderTarget2D = 10,
     RenderTargetCube = 11,
     SpriteFont = 12,
+    CurveKeyCollection = 13,
     Test = UINT32_MAX
 };
 

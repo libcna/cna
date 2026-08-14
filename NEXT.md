@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — CURVEKEY COMPLETE THROUGH CBIND-035B5a (2026-08-15)
+## C BINDING / C ABI — CURVE KEY COLLECTION COMPLETE THROUGH CBIND-035B5b (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -99,7 +99,10 @@
 > B5a maps all 19 CurveKey rows through a fixed 20-byte POD and 17 C operations with complete ABI,
 > property, construction, comparison, equality/hash, invalid-enum and null-output coverage. The
 > inventory is now 1,596 implemented, 21 partial, 4,728 planned and 70 N/A. CBIND-035B5b
-> CurveKeyCollection is next.
+> maps all 26 CurveKeyCollection rows through a validated owned handle and 14 C operations.
+> Ordering/repositioning, clone independence, count/index/copy, atomic capacity failure and
+> invalid/stale/wrong-thread handles are covered. The inventory is now 1,622 implemented, 21
+> partial, 4,702 planned and 70 N/A. CBIND-035B5c Curve evaluation is next and will close B5.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

@@ -215,6 +215,173 @@ CNA_C_API CNA_Result cna_curve_key_not_equals(
  */
 CNA_C_API CNA_Result cna_curve_key_get_hash_code(CNA_CurveKey key, int32_t* out_hash);
 
+/** @brief Owned handle for an independent CurveKeyCollection. */
+typedef CNA_Handle CNA_CurveKeyCollectionHandle;
+
+/**
+ * @brief Creates an empty mutable curve-key collection.
+ *
+ * @param out_collection Receives the owned handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_create(
+    CNA_CurveKeyCollectionHandle* out_collection);
+
+/**
+ * @brief Destroys an owned curve-key collection.
+ *
+ * @param collection Collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_destroy(
+    CNA_CurveKeyCollectionHandle collection);
+
+/**
+ * @brief Gets the number of keys.
+ *
+ * @param collection Collection handle.
+ * @param out_count Receives the key count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_get_count(
+    CNA_CurveKeyCollectionHandle collection,
+    uint64_t* out_count);
+
+/**
+ * @brief Gets whether the collection is read-only.
+ *
+ * @param collection Collection handle.
+ * @param out_is_read_only Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_get_is_read_only(
+    CNA_CurveKeyCollectionHandle collection,
+    CNA_Bool* out_is_read_only);
+
+/**
+ * @brief Gets a key by index.
+ *
+ * @param collection Collection handle.
+ * @param index Zero-based key index.
+ * @param out_key Receives the key.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_get(
+    CNA_CurveKeyCollectionHandle collection,
+    int32_t index,
+    CNA_CurveKey* out_key);
+
+/**
+ * @brief Replaces a key and preserves ascending position order.
+ *
+ * @param collection Collection handle.
+ * @param index Zero-based key index.
+ * @param key Replacement key.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_set(
+    CNA_CurveKeyCollectionHandle collection,
+    int32_t index,
+    CNA_CurveKey key);
+
+/**
+ * @brief Adds a key in ascending position order.
+ *
+ * @param collection Collection handle.
+ * @param key Key to add.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_add(
+    CNA_CurveKeyCollectionHandle collection,
+    CNA_CurveKey key);
+
+/**
+ * @brief Removes all keys.
+ *
+ * @param collection Collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_clear(
+    CNA_CurveKeyCollectionHandle collection);
+
+/**
+ * @brief Creates an independent deep copy of a collection.
+ *
+ * @param collection Source collection handle.
+ * @param out_collection Receives the owned clone handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_clone(
+    CNA_CurveKeyCollectionHandle collection,
+    CNA_CurveKeyCollectionHandle* out_collection);
+
+/**
+ * @brief Tests whether a collection contains a key.
+ *
+ * @param collection Collection handle.
+ * @param key Key to find.
+ * @param out_contains Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_contains(
+    CNA_CurveKeyCollectionHandle collection,
+    CNA_CurveKey key,
+    CNA_Bool* out_contains);
+
+/**
+ * @brief Copies all keys into a caller array at a destination index.
+ *
+ * @param collection Collection handle.
+ * @param destination Destination array, or null only for zero capacity.
+ * @param capacity Total destination element capacity.
+ * @param destination_index First destination index to write.
+ * @param out_count Receives the number of collection keys.
+ * @return A CNA result code; validation and capacity failures write no key.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_copy_to(
+    CNA_CurveKeyCollectionHandle collection,
+    CNA_CurveKey* destination,
+    uint64_t capacity,
+    int32_t destination_index,
+    uint64_t* out_count);
+
+/**
+ * @brief Finds a key index or returns -1.
+ *
+ * @param collection Collection handle.
+ * @param key Key to find.
+ * @param out_index Receives the index or -1.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_index_of(
+    CNA_CurveKeyCollectionHandle collection,
+    CNA_CurveKey key,
+    int32_t* out_index);
+
+/**
+ * @brief Removes the first equal key.
+ *
+ * @param collection Collection handle.
+ * @param key Key to remove.
+ * @param out_removed Receives whether a key was removed.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_remove(
+    CNA_CurveKeyCollectionHandle collection,
+    CNA_CurveKey key,
+    CNA_Bool* out_removed);
+
+/**
+ * @brief Removes a key by index.
+ *
+ * @param collection Collection handle.
+ * @param index Zero-based key index.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_key_collection_remove_at(
+    CNA_CurveKeyCollectionHandle collection,
+    int32_t index);
+
 #ifdef __cplusplus
 }
 #endif

@@ -216,6 +216,7 @@ if(CNA_BUILD_TESTS)
         C_EXTENSIONS OFF
     )
     target_link_libraries(cna_c_api_curve_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_curve_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_curve_smoke)
     add_test(NAME CApi_CurveSmoke COMMAND cna_c_api_curve_smoke)
 

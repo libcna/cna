@@ -173,3 +173,15 @@ Every operation consuming a key validates its continuity identity. Unknown value
 mutating outputs; float values retain native IEEE behavior, including the current CNA NaN position
 comparison result. Dynamic CurveKeyCollection ownership and Curve evaluation follow in the next
 CBIND-035B5 slices and are not implied by the value ABI.
+
+## CurveKeyCollection operations
+
+An independent collection is owned through `CNA_CurveKeyCollectionHandle`. Handles validate type,
+generation and creation thread; destruction invalidates the generation. Ordered add and indexed
+replacement delegate to the native collection, including repositioning a replacement whose
+position changes. Clone produces an independent collection.
+
+Count/get and `cna_curve_key_collection_copy_to` replace C++ aliases, indexers and iterator routes.
+Copy-to accepts a caller capacity and destination index, always reports the collection key count
+once the handle is valid, and writes nothing unless the full range fits. All input keys are checked
+for a recognized continuity value before collection mutation.

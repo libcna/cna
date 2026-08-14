@@ -269,6 +269,8 @@ _Static_assert(offsetof(CNA_BoundingBox, min) == 0U &&
                "CNA bounding-volume fields must remain stable");
 _Static_assert(sizeof(CNA_CurveKey) == 20U && _Alignof(CNA_CurveKey) == 4U,
                "CNA curve-key layout must remain stable");
+_Static_assert(sizeof(CNA_CurveKeyCollectionHandle) == 8U,
+               "CNA curve-key collection handle must remain stable");
 _Static_assert(offsetof(CNA_CurveKey, position) == 0U &&
                    offsetof(CNA_CurveKey, value) == 4U &&
                    offsetof(CNA_CurveKey, tangent_in) == 8U &&
