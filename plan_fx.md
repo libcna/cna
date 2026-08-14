@@ -29,6 +29,8 @@ Delivered task groups:
 - pass state published through the public `GraphicsDevice` state objects and sampler/texture
   collections exactly as FNA's `Effect.cs` does, instead of into renderer-private caches, with a
   group the pass never assigned left as the game selected it (`FX-022`, `FX-024`);
+- a performance baseline for construction, clone, dirty upload, clean apply and draw, with the
+  immutable-artifact-cache question decided against on those numbers (`FX-053`);
 - porter-facing documentation covering the whole compiled path, its error table, and the
   dependency/licence notices, plus a fuzzing guide (`FX-055`, `docs/fx-compiled-effects.md`,
   `docs/fx-bytecode-fuzzing.md`);
@@ -432,6 +434,7 @@ must be accepted before a row can close.
 | FX-021 | Synchronize only dirty parameters/textures before native pass application | FX-016, FX-020 | Mock counters prove correct first upload, no redundant upload, and subview invalidation |
 | FX-022 | Implement complete neutral-to-CNA blend/depth/stencil/rasterizer state translation | FX-002, FX-020 | Table-driven tests cover every supported legacy render-state token and unknown-token policy |
 | FX-023 | Implement texture/sampler state translation without mutating shared immutable state objects | FX-017, FX-020 | **Done.** Per-slot tests cover every filter-component combination, addressing, LOD bias, mip level, anisotropy, exact register targeting, reflected texture binding, and clone isolation |
+| FX-026 | Carry `SamplerState.AddressW` through the renderer-neutral sampler contract | FX-023 | `IGraphicsRenderer::ApplySamplerState` takes only U and V, so FNA3D mirrors U into W and a draw overwrites an effect's assigned `ADDRESSW`. Pre-existing shared-layer gap, observable only for volume textures; the value is already translated and published on the device |
 | FX-024 | Integrate compiled selection/disposal with `GraphicsDevice` and every primitive draw entry point | FX-013, FX-019, FX-020 | Draws cannot use stale runtimes and stock application cannot overwrite compiled passes |
 | FX-025 | Integrate compiled effects into SpriteBatch Begin/flush/end behavior | FX-024 | SpriteBatch pixel tests pass across multiple flushes and texture switches |
 
@@ -465,7 +468,7 @@ must be accepted before a row can close.
 | FX-050 | Add parser/reflection limits and checked arithmetic throughout common and FNA3D paths | FX-032, FX-040 | Boundary tests prove all configured limits and overflow failures |
 | FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Harness and corpus **done** (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`); the sustained coverage-guided campaign under ASan/UBSan is still to run |
 | FX-052 | Run ASan/UBSan and renderer teardown/reset stress suites | FX-038, FX-050 | Clean supported-platform sanitizer reports |
-| FX-053 | Benchmark construction, clone, dirty uploads, and draw overhead; add immutable artifact cache only if justified | FX-037 | Baselines recorded; any cache preserves per-instance mutable isolation |
+| FX-053 | Benchmark construction, clone, dirty uploads, and draw overhead; add immutable artifact cache only if justified | FX-037 | **Done.** `tools/graphics/compiled_effect_benchmark.cpp` plus the baseline table in `docs/fx-compiled-effects.md`. Decision: **no cache**. Construction cost tracks embedded shader work rather than file size, `Clone()` is ~7.5x cheaper than constructing the same effect because the native clone reuses translated artifacts, dirty tracking keeps a no-change apply at ~2.9 us, and a compiled pass draws no slower than a stock effect. A bytecode-keyed cache would add cross-instance sharing risk for a case `Clone()` already covers |
 | FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | No unexplained regression from the develop baseline |
 | FX-055 | Publish FNA3D support documentation, format/error guide, capability matrix, dependency notices, and migration examples | FX-043, FX-054 | **Done.** `docs/fx-compiled-effects.md` covers the format boundary, loading, reflection, values, techniques/passes, published pass state, samplers, clone, lifetime, the renderer matrix, an error table, XNA-to-CNA migration, and the dependency/licence notices |
 | FX-056 | Update/supersede the old FX plan documents and Phase 74 rows without erasing their historical record | FX-055 | **Done.** `docs/fx-bytecode-support-plan.md` and `docs/shader-effect-vs-fx-bytecode.md` carry supersession banners and point at the current guide; `plan_graphics.md` Phase 74 keeps its original rows and adds a row-by-row disposition (obsolete / delivered / re-scoped / carried forward) so none of them can be picked up again |

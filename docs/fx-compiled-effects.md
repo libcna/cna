@@ -160,6 +160,15 @@ Rules worth knowing when porting:
 `Border` and `MirrorOnce` addressing have no XNA 4.0 `SamplerState` representation and are
 rejected by name.
 
+**Known limitation — `AddressW`.** A pass that assigns `ADDRESSW` is translated and published, so
+`device.getSamplerStatesProperty()[slot].getAddressWProperty()` reports it correctly. CNA's shared
+renderer interface, however, carries no W addressing at all: `IGraphicsRenderer::ApplySamplerState`
+takes only U and V, and the FNA3D renderer mirrors U into W. The next draw that re-applies sampler
+state from the device therefore overwrites the effect's W mode with its U mode. This is a
+pre-existing gap in the renderer-neutral sampler contract rather than a compiled-effect one -- it
+affects `SamplerState.AddressW` set directly by a game in exactly the same way -- and it only
+matters for volume textures. `plan_fx.md` FX-026 tracks closing it.
+
 ## 8. Cloning
 
 ```cpp
@@ -248,3 +257,41 @@ exactly one MojoShader — the revision FNA3D pins — and never builds a second
   recorded in that directory's `README.md` and verified by a test.
 
 See [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) for the full notice set.
+
+## 14. Performance baseline (FX-053)
+
+Measured with `cna_compiled_effect_benchmark` on an FNA3D/SDL_GPU (Vulkan, Intel Iris Xe) Debug
+build, `SDL_VIDEODRIVER=offscreen`, while a sanitizer build was competing for the same machine —
+so treat the absolutes as pessimistic and compare runs, not numbers.
+
+| Operation | Iterations | Median | Mean |
+|---|---:|---:|---:|
+| construct `SpriteEffect.fxb` (1 KiB) | 200 | 105.8 us | 98.6 us |
+| construct `BasicEffect.fxb` (28 KiB) | 100 | 1964.9 us | 1972.8 us |
+| construct `SkinnedEffect.fxb` (54 KiB) | 50 | 1636.8 us | 1641.4 us |
+| clone `BasicEffect` | 200 | 261.8 us | 264.6 us |
+| apply pass, nothing dirty | 2000 | 2.9 us | 3.0 us |
+| set one `float4` + apply pass | 2000 | 3.3 us | 3.3 us |
+| set matrix + `float4` + int + apply pass | 2000 | 5.1 us | 5.2 us |
+| compiled effect: apply + draw 2 triangles | 500 | 10.9 us | 13.5 us |
+| stock `BasicEffect`: apply + draw 2 triangles | 500 | 11.5 us | 12.3 us |
+
+What the numbers say:
+
+- **Construction cost tracks shader work, not file size.** The 54 KiB `SkinnedEffect` constructs
+  faster than the 28 KiB `BasicEffect`; the byte count is not the predictor, the embedded programs
+  are. Construction belongs at load time, not in a frame.
+- **`Clone()` is roughly 7.5x cheaper than constructing the same effect**, because the native clone
+  reuses the already-translated shader artifacts and copies only mutable state. A game that needs
+  many instances of one effect should clone.
+- **Dirty tracking works.** A pass applied with nothing changed costs about 2.9 us; one changed
+  `float4` adds ~0.4 us and a matrix plus two scalars ~2.2 us. Unchanged parameters are not
+  re-uploaded.
+- **A compiled pass is not more expensive to draw with than a stock effect** (10.9 us vs 11.5 us
+  for the same geometry), so porting an effect to the compiled path costs nothing per draw.
+
+**Decision on the immutable artifact cache:** not justified. The expensive step is native shader
+translation during construction, and `Clone()` already reuses it without sharing any mutable value,
+texture, selected technique or pass state. A bytecode-keyed cache would add cross-instance sharing
+risk for a case the existing API already covers. `plan_fx.md` FX-053 records this as decided, to be
+revisited only if a real port shows repeated construction of identical bytecode in a hot path.
