@@ -217,11 +217,12 @@ TEST(GltfVertexLayoutTable, TheCorpusAgreesWithTheTableOnEveryPrimitiveItExtract
 
                 const VertexLayoutRuleEXT& rule = SelectVertexLayoutEXT(
                     VertexLayoutRequestEXT{out.skinned, out.colored, out.usePbr,
-                                            out.useDualTexture, false});
+                                            out.useDualTexture, out.hasSecondTexcoordEXT});
                 EXPECT_EQ(rule.stride, out.stride)
                     << "the importer and the table disagree for " << Describe(
                            VertexLayoutRequestEXT{out.skinned, out.colored, out.usePbr,
-                                                   out.useDualTexture, false});
+                                                   out.useDualTexture,
+                                                   out.hasSecondTexcoordEXT});
                 EXPECT_EQ(rule.unrepresentable, out.unrepresentableForStrideEXT);
                 stridesSeen.insert(out.stride);
                 ++compared;

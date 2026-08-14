@@ -318,13 +318,17 @@ namespace
 })GLTF";
 }
 
-TEST(GltfImportCoreTest, ExtractMeshDetectsMismatchedPbrMapUvSets)
+TEST(GltfImportCoreTest, ExtractMeshCarriesTwoDifferentPbrMapUvSetsWithoutAFalseLoss)
 {
     const MeshOut out = ExtractPrimitive0(kMismatchedUvGltf);
     ASSERT_TRUE(out.usePbr);
-    // GLTF-188: named rather than a bare flag, so a report can say which map to look at.
-    ASSERT_EQ(1u, out.uvSetMismatchedMapsEXT.size());
-    EXPECT_EQ("normalTexture", out.uvSetMismatchedMapsEXT.front());
+    EXPECT_EQ(60, out.stride);
+    EXPECT_TRUE(out.hasSecondTexcoordEXT);
+    EXPECT_EQ(0u, out.material.textureCoordinateSetsEXT[
+                      static_cast<std::size_t>(TextureSlotEXT::BaseColor)]);
+    EXPECT_EQ(1u, out.material.textureCoordinateSetsEXT[
+                      static_cast<std::size_t>(TextureSlotEXT::Normal)]);
+    EXPECT_TRUE(out.uvSetMismatchedMapsEXT.empty());
 }
 
 TEST(GltfImportCoreTest, ExtractMeshDoesNotFlagMatchedPbrMapUvSets)

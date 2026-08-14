@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-087 / GLTF-088 / GLTF-096 / GLTF-185 / GLTF-187: which UV channel a primitive
-// bakes, and what is baked into it.
+// plan_gltf.md GLTF-087 / GLTF-088 / GLTF-096 / GLTF-182 / GLTF-185 / GLTF-187: which UV
+// channels a primitive packs, and what is baked into them.
 //
-// CNA carries one UV channel (`GLTF-181`'s documented limit), so the choice of *which* glTF
-// TEXCOORD set fills it, and which `KHR_texture_transform` is applied to it, are decisions made
-// once per primitive and invisible afterwards. Choosing wrong does not fail: it samples a texture
-// with somebody else's coordinates and produces a plausible, wrong image.
+// CNA carries two UV channels for PBR material maps. A one-set material keeps the compact legacy
+// layout; a two-set material maps its two authored suffixes onto TextureCoordinate0/1. Choosing
+// wrong does not fail: it samples a texture with somebody else's coordinates and produces a
+// plausible, wrong image.
 
 #include <cmath>
 #include <cstdint>
@@ -130,7 +130,7 @@ namespace
                             1.0f);
     }
 
-    std::vector<float> UvOfVertex(const MeshOut& mesh, std::size_t vertex)
+    std::vector<float> UvOfVertex(const MeshOut& mesh, std::size_t vertex, int usageIndex = 0)
     {
         const CNA::Internal::Graphics::InferredVertexLayout layout =
             CNA::Internal::Graphics::InferredLayoutForStride(
@@ -140,7 +140,7 @@ namespace
         for (std::size_t i = 0; layout.known && i < layout.count; ++i)
         {
             if (layout.elements[i].usage == VertexElementUsage::TextureCoordinate &&
-                layout.elements[i].usageIndex == 0)
+                layout.elements[i].usageIndex == usageIndex)
             {
                 offset = layout.elements[i].offset;
             }
@@ -192,6 +192,48 @@ TEST(GltfUvChannel, TheBaseColourTexturesTexCoordSelectsWhichSetIsBaked)
         EXPECT_NEAR(kUv1[v * 2], uv[0], kTolerance)
             << "TEXCOORD_0 was baked although the base-colour texture names set 1";
         EXPECT_NEAR(kUv1[v * 2 + 1], uv[1], kTolerance);
+    }
+}
+
+// --- GLTF-182: two independently selected sets arrive together --------------------------------
+
+TEST(GltfUvChannel, TwoSampledTexcoordSetsAreBothPackedExactlyAndMappedPerTexture)
+{
+    std::string document = TwoUvSetDocument(R"(, "texCoord": 0)");
+    const std::string materialEnd = "  } } ],";
+    const std::size_t materialEndAt = document.find(materialEnd);
+    ASSERT_NE(std::string::npos, materialEndAt);
+    document.replace(materialEndAt, materialEnd.size(),
+                     "  }, \"normalTexture\": { \"index\": 0, \"texCoord\": 1 } } ],");
+    const MeshOut mesh = ExtractFirst(document);
+
+    ASSERT_TRUE(mesh.hasSecondTexcoordEXT);
+    ASSERT_EQ(60, mesh.stride)
+        << "the naturally 56-byte record must use the collision-free padded layout";
+    EXPECT_EQ(0, mesh.packedTexcoordSourceSetsEXT[0]);
+    EXPECT_EQ(1, mesh.packedTexcoordSourceSetsEXT[1]);
+    EXPECT_EQ(0u, mesh.material.textureCoordinateSetsEXT[
+                      static_cast<std::size_t>(TextureSlotEXT::BaseColor)]);
+    EXPECT_EQ(1u, mesh.material.textureCoordinateSetsEXT[
+                      static_cast<std::size_t>(TextureSlotEXT::Normal)]);
+    EXPECT_TRUE(mesh.uvSetMismatchedMapsEXT.empty());
+
+    ASSERT_EQ(3u, mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride));
+    for (std::size_t vertex = 0; vertex < 3; ++vertex)
+    {
+        SCOPED_TRACE("vertex " + std::to_string(vertex));
+        const std::vector<float> uv0 = UvOfVertex(mesh, vertex, 0);
+        const std::vector<float> uv1 = UvOfVertex(mesh, vertex, 1);
+        EXPECT_NEAR(kUv0[vertex * 2], uv0[0], kTolerance);
+        EXPECT_NEAR(kUv0[vertex * 2 + 1], uv0[1], kTolerance);
+        EXPECT_NEAR(kUv1[vertex * 2], uv1[0], kTolerance);
+        EXPECT_NEAR(kUv1[vertex * 2 + 1], uv1[1], kTolerance);
+
+        float padding = 1.0f;
+        std::memcpy(&padding,
+                    mesh.vertexBytes.data() + vertex * static_cast<std::size_t>(mesh.stride) + 56,
+                    sizeof(padding));
+        EXPECT_FLOAT_EQ(0.0f, padding) << "the stride discriminator padding must be deterministic";
     }
 }
 

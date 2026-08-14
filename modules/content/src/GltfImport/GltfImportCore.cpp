@@ -1157,7 +1157,8 @@ namespace CNA::Internal::GltfImport
         {
             AddImportDiagnosticEXT(
                 destination, "uv-set-mismatch", GltfImportDiagnosticKindEXT::DroppedData,
-                "These maps select a different TEXCOORD set than CNA's one shared UV channel.",
+                "These maps need a third distinct TEXCOORD set beyond CNA's two carried channels "
+                "and fall back to the first.",
                 mesh.uvSetMismatchedMapsEXT.size(), 0.0, subject,
                 mesh.uvSetMismatchedMapsEXT);
         }
@@ -2057,6 +2058,34 @@ namespace CNA::Internal::GltfImport
         return out;
     }
 
+    /// The TEXCOORD suffix a texture view actually selects. KHR_texture_transform's own selector
+    /// overrides the view-level one (§3.9.2), including for non-base-colour maps.
+    int EffectiveTexcoordSetEXT(const cgltf_texture_view& view)
+    {
+        if (view.has_transform && view.transform.has_texcoord)
+        {
+            return view.transform.texcoord;
+        }
+        return view.texcoord;
+    }
+
+    /// The texture view CNA treats as base colour after the archived specular-glossiness
+    /// conversion. Kept beside FindBaseColorImage so image, sampler and UV selection cannot choose
+    /// different source views.
+    const cgltf_texture_view* BaseColorTextureViewEXT(const cgltf_material* material)
+    {
+        if (material == nullptr) { return nullptr; }
+        if (material->has_pbr_specular_glossiness)
+        {
+            return &material->pbr_specular_glossiness.diffuse_texture;
+        }
+        if (material->has_pbr_metallic_roughness)
+        {
+            return &material->pbr_metallic_roughness.base_color_texture;
+        }
+        return nullptr;
+    }
+
     int FindDracoUniqueIdEXT(const cgltf_primitive& prim, const cgltf_data* data,
                              cgltf_attribute_type type, int index)
     {
@@ -2451,25 +2480,20 @@ namespace CNA::Internal::GltfImport
         if (!posAcc) { throw std::runtime_error("Primitive '" + name + "' has no POSITION attribute."); }
         const cgltf_accessor* normAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_normal, 0);
 
-        // Use whichever TEXCOORD set the base-color texture actually references (glTF allows a
-        // texture reference to select TEXCOORD_1/2/... via its own "texcoord" index, defaulting
-        // to 0) -- a hardcoded TEXCOORD_0 would silently mismatch a texture authored against a
-        // different UV set. CNB-97 (Phase 14H): KHR_texture_transform's own "texcoord" (when
-        // present) overrides the base-color texture view's own material-level one, per spec.
+        // The base-colour view remains the transform-baking policy owner (GLTF-184/186). UV stream
+        // selection itself is finalised after all decoded material images are known, because
+        // GLTF-182 can now carry the first two DISTINCT sets sampled by those maps.
         int texcoordIndex = 0;
         const cgltf_texture_transform* baseColorTransform = nullptr;
-        if (prim.material && prim.material->has_pbr_metallic_roughness &&
-            prim.material->pbr_metallic_roughness.base_color_texture.texture)
+        const cgltf_texture_view* baseColorView = BaseColorTextureViewEXT(prim.material);
+        if (baseColorView != nullptr && baseColorView->texture != nullptr)
         {
-            const cgltf_texture_view& baseColorView = prim.material->pbr_metallic_roughness.base_color_texture;
-            texcoordIndex = baseColorView.texcoord;
-            if (baseColorView.has_transform)
+            texcoordIndex = EffectiveTexcoordSetEXT(*baseColorView);
+            if (baseColorView->has_transform)
             {
-                baseColorTransform = &baseColorView.transform;
-                if (baseColorTransform->has_texcoord) { texcoordIndex = baseColorTransform->texcoord; }
+                baseColorTransform = &baseColorView->transform;
             }
         }
-        const cgltf_accessor* uvAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord, texcoordIndex);
 
         const cgltf_accessor* colorAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_color, 0);
         const cgltf_accessor* jointsAcc = skel ? cgltf_find_accessor(&prim, cgltf_attribute_type_joints, 0) : nullptr;
@@ -2810,36 +2834,64 @@ namespace CNA::Internal::GltfImport
                                 out.material.occlusionImage, "occlusionTexture");
         }
 
-        // Each of a glTF material's texture references (baseColorTexture, normalTexture,
-        // metallicRoughnessTexture, emissiveTexture, occlusionTexture) can independently select
-        // its own TEXCOORD set via its own "texcoord" index -- but PbrEffect/SkinnedPbrEffect only
-        // sample from ONE shared UV channel (the one baked into TextureCoordinate, itself always
-        // taken from the base-color texture's own texcoord, `texcoordIndex` above). Detect (but do
-        // not attempt to fix -- see MeshOut::pbrUv2Mismatch's own doc comment) any present map
-        // that disagrees, so the caller can at least warn instead of silently mis-rendering it.
-        // GLTF-188 narrowed this from a single bool to the map NAMES, for two reasons: a flag
-        // could not say which map to go and look at, and it counted maps CNA never samples --
-        // a texture whose source it cannot decode (GLTF-200) is not rendered from the wrong UV
-        // set, it is not rendered at all, so warning about its UVs pointed at the wrong problem.
+        // GLTF-182/183: choose at most two DISTINCT source TEXCOORD sets across the maps CNA will
+        // really sample, then record each map's packed attribute selector. The base-colour view is
+        // considered first to preserve the old one-channel layout as a byte-for-byte prefix. A
+        // map whose image could not be decoded is excluded: its relevant diagnostic is the missing
+        // image, not which coordinates an absent sample would have used.
         if (out.usePbr && prim.material)
         {
-            const auto noteIfDifferent = [&](const cgltf_texture_view& view, const char* mapName)
+            const std::array<const cgltf_texture_view*, 5> views{{
+                BaseColorTextureViewEXT(prim.material),
+                &prim.material->normal_texture,
+                prim.material->has_pbr_metallic_roughness
+                    ? &prim.material->pbr_metallic_roughness.metallic_roughness_texture : nullptr,
+                &prim.material->emissive_texture,
+                &prim.material->occlusion_texture,
+            }};
+            const std::array<const cgltf_image*, 5> images{{
+                out.material.baseColorImage,
+                out.material.normalImage,
+                out.material.metallicRoughnessImage,
+                out.material.emissiveImage,
+                out.material.occlusionImage,
+            }};
+            static constexpr const char* names[5] = {
+                "baseColorTexture", "normalTexture", "metallicRoughnessTexture",
+                "emissiveTexture", "occlusionTexture"};
+
+            std::vector<int> packedSets;
+            for (std::size_t slotIndex = 0; slotIndex < views.size(); ++slotIndex)
             {
-                if (view.texture == nullptr || view.texcoord == texcoordIndex) { return; }
-                // A map CNA could not decode is reported by GLTF-200 instead; its UV set is moot.
-                // The scratch list is discarded: this call is asking "is there a usable image",
-                // and the unsupported-source report itself belongs to the extraction below.
-                std::vector<std::string> ignored;
-                if (ImageForTexture(view.texture, mapName, &ignored) == nullptr) { return; }
-                out.uvSetMismatchedMapsEXT.emplace_back(mapName);
-            };
-            noteIfDifferent(prim.material->normal_texture, "normalTexture");
-            noteIfDifferent(prim.material->emissive_texture, "emissiveTexture");
-            noteIfDifferent(prim.material->occlusion_texture, "occlusionTexture");
-            if (prim.material->has_pbr_metallic_roughness)
+                if (views[slotIndex] == nullptr || images[slotIndex] == nullptr) { continue; }
+                const int sourceSet = EffectiveTexcoordSetEXT(*views[slotIndex]);
+                if (std::find(packedSets.begin(), packedSets.end(), sourceSet) == packedSets.end() &&
+                    packedSets.size() < 2)
+                {
+                    packedSets.push_back(sourceSet);
+                }
+            }
+            if (packedSets.empty()) { packedSets.push_back(texcoordIndex); }
+            texcoordIndex = packedSets.front();
+            out.packedTexcoordSourceSetsEXT[0] = packedSets[0];
+            if (packedSets.size() == 2)
             {
-                noteIfDifferent(prim.material->pbr_metallic_roughness.metallic_roughness_texture,
-                                "metallicRoughnessTexture");
+                out.hasSecondTexcoordEXT = true;
+                out.packedTexcoordSourceSetsEXT[1] = packedSets[1];
+            }
+
+            for (std::size_t slotIndex = 0; slotIndex < views.size(); ++slotIndex)
+            {
+                if (views[slotIndex] == nullptr || images[slotIndex] == nullptr) { continue; }
+                const int sourceSet = EffectiveTexcoordSetEXT(*views[slotIndex]);
+                const auto found = std::find(packedSets.begin(), packedSets.end(), sourceSet);
+                if (found == packedSets.end())
+                {
+                    out.uvSetMismatchedMapsEXT.emplace_back(names[slotIndex]);
+                    continue;
+                }
+                out.material.textureCoordinateSetsEXT[slotIndex] =
+                    static_cast<std::uint8_t>(std::distance(packedSets.begin(), found));
             }
         }
         // Unskinned colored meshes reuse the real XNA VertexPositionColorTexture layout (stride
@@ -2847,9 +2899,11 @@ namespace CNA::Internal::GltfImport
         // by ModelTypeReader and every graphics renderer's existing VertexColorEnabled shader path.
         // Skinned colored meshes use the stride-56 layout instead (Position+Normal+
         // TextureCoordinate+BlendWeight+BlendIndices+Color). Skinned + PBR meshes use the new
-        // stride-68 layout (Position+Normal+Tangent+TextureCoordinate+BlendWeight+BlendIndices).
+        // stride-68 layout (Position+Normal+Tangent+TextureCoordinate+BlendWeight+BlendIndices),
+        // widened to 60/76 when two sampled maps select distinct authored UV sets.
         const VertexLayoutRequestEXT layoutRequest{out.skinned, out.colored, out.usePbr,
-                                                    out.useDualTexture, false};
+                                                    out.useDualTexture,
+                                                    out.hasSecondTexcoordEXT};
         const VertexLayoutRuleEXT& layoutRule = SelectVertexLayoutEXT(layoutRequest);
         out.stride = layoutRule.stride;
         // plan_gltf.md GLTF-100: what this row cannot carry, taken from the table rather than
@@ -3114,11 +3168,25 @@ namespace CNA::Internal::GltfImport
             }
             out.generatedNormalsEXT = true;
         }
+        const cgltf_accessor* uvAcc = cgltf_find_accessor(
+            &prim, cgltf_attribute_type_texcoord, out.packedTexcoordSourceSetsEXT[0]);
         std::vector<float> uvs = uvAcc
-            ? unpackSemantic(cgltf_attribute_type_texcoord, texcoordIndex, uvAcc, 2, "TEXCOORD") : std::vector<float>();
-        // plan_gltf.md GLTF-184/GLTF-336. Exactly ONE transform can be baked, because there is
-        // exactly one UV channel to bake it into -- so every map whose transform differs from the
-        // base colour's is sampled with the wrong texture coordinates, and said nothing about it.
+            ? unpackSemantic(cgltf_attribute_type_texcoord,
+                             out.packedTexcoordSourceSetsEXT[0], uvAcc, 2, "TEXCOORD")
+            : std::vector<float>();
+        const cgltf_accessor* uv1Acc = out.hasSecondTexcoordEXT
+            ? cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord,
+                                  out.packedTexcoordSourceSetsEXT[1])
+            : nullptr;
+        std::vector<float> uvs1 = uv1Acc
+            ? unpackSemantic(cgltf_attribute_type_texcoord,
+                             out.packedTexcoordSourceSetsEXT[1], uv1Acc, 2, "TEXCOORD")
+            : std::vector<float>();
+        // plan_gltf.md GLTF-184/GLTF-336. UV2 removes the attribute shortage, not the per-map
+        // transform shortage: one vertex coordinate cannot simultaneously contain two different
+        // transforms for maps that share it. Until every PBR shader carries per-map transform
+        // uniforms, the base-colour transform remains the one baked policy transform and every
+        // other differing transform is reported.
         //
         // Reported rather than fixed, and the reason is worth separating from GLTF-181's. That one
         // (a real second UV *channel*) needs a vertex attribute, which means a new stride, and the
@@ -3154,21 +3222,25 @@ namespace CNA::Internal::GltfImport
             }
         }
 
-        // CNB-97 (Phase 14H): KHR_texture_transform, applied to the shared UV channel baked into
-        // TextureCoordinate (matching PbrEffect's own single-shared-UV-channel limitation --
-        // see MeshOut::pbrUv2Mismatch's own doc comment) -- the glTF spec's own reference formula
-        // (scale, then rotate, then translate).
+        // CNB-97 (Phase 14H): KHR_texture_transform, applied to the packed channel selected by the
+        // base-colour view, using the glTF spec's own reference formula (scale, then rotate, then
+        // translate). Other map transforms remain GLTF-184's separately reported shader-uniform
+        // residue; UV2 does not make two transforms of the same authored set bakeable.
         if (baseColorTransform)
         {
             const float ox = baseColorTransform->offset[0], oy = baseColorTransform->offset[1];
             const float sx = baseColorTransform->scale[0],  sy = baseColorTransform->scale[1];
             const float rot = baseColorTransform->rotation;
             const float cosR = std::cos(rot), sinR = std::sin(rot);
-            for (std::size_t i = 0; i + 1 < uvs.size(); i += 2)
+            std::vector<float>& transformedUvs =
+                out.hasSecondTexcoordEXT &&
+                        out.packedTexcoordSourceSetsEXT[1] == EffectiveTexcoordSetEXT(*baseColorView)
+                    ? uvs1 : uvs;
+            for (std::size_t i = 0; i + 1 < transformedUvs.size(); i += 2)
             {
-                const float u = uvs[i], v = uvs[i + 1];
-                uvs[i]     = cosR * u * sx - sinR * v * sy + ox;
-                uvs[i + 1] = sinR * u * sx + cosR * v * sy + oy;
+                const float u = transformedUvs[i], v = transformedUvs[i + 1];
+                transformedUvs[i]     = cosR * u * sx - sinR * v * sy + ox;
+                transformedUvs[i + 1] = sinR * u * sx + cosR * v * sy + oy;
             }
         }
         std::vector<float> weights = out.skinned
@@ -3306,7 +3378,13 @@ namespace CNA::Internal::GltfImport
             }
             else
             {
-                tangents = ComputeTangentsEXT(positions, normals, uvs, indices, vertexCount);
+                const std::size_t normalSlot = static_cast<std::size_t>(TextureSlotEXT::Normal);
+                const std::vector<float>& tangentUvs =
+                    out.material.normalImage != nullptr &&
+                            out.material.textureCoordinateSetsEXT[normalSlot] == 1
+                        ? uvs1 : uvs;
+                tangents = ComputeTangentsEXT(
+                    positions, normals, tangentUvs, indices, vertexCount);
             }
         }
 
@@ -3319,6 +3397,8 @@ namespace CNA::Internal::GltfImport
             const float px = positions[i3] * unitScale, py = positions[i3 + 1] * unitScale, pz = positions[i3 + 2] * unitScale;
             const float u = uvs.empty() ? 0.0f : uvs[i2];
             const float v = uvs.empty() ? 0.0f : uvs[i2 + 1];
+            const float u1 = uvs1.empty() ? 0.0f : uvs1[i2];
+            const float v1 = uvs1.empty() ? 0.0f : uvs1[i2 + 1];
 
             AppendFloat(out.vertexBytes, px); AppendFloat(out.vertexBytes, py); AppendFloat(out.vertexBytes, pz);
 
@@ -3406,6 +3486,16 @@ namespace CNA::Internal::GltfImport
                 AppendFloat(out.vertexBytes, tan.Z); AppendFloat(out.vertexBytes, tan.W);
                 AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
                 if (out.skinned) { appendSkinning(); }
+                if (out.hasSecondTexcoordEXT)
+                {
+                    AppendFloat(out.vertexBytes, u1); AppendFloat(out.vertexBytes, v1);
+                    if (!out.skinned)
+                    {
+                        // The naturally 56-byte rigid record collides with skinned+colour. The
+                        // canonical stride-60 layout reserves these four bytes as a discriminator.
+                        AppendFloat(out.vertexBytes, 0.0f);
+                    }
+                }
                 continue;
             }
 

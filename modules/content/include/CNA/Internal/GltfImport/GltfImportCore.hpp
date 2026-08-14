@@ -320,6 +320,14 @@ namespace CNA::Internal::GltfImport
         float occlusionStrength = 1.0f;
         /** @brief One sampler per @ref TextureSlotEXT, including defaults for absent slots. */
         std::array<SamplerOut, 5> samplers{};
+        /**
+         * @brief GPU texture-coordinate attribute (0 or 1) sampled by each texture slot.
+         *
+         * These are packed-stream indices, not necessarily the original glTF suffix. A primitive
+         * using authored sets 1 and 3 can carry them as GPU attributes 0 and 1 while
+         * @ref MeshOut::packedTexcoordSourceSetsEXT preserves that mapping. Absent maps use 0.
+         */
+        std::array<std::uint8_t, 5> textureCoordinateSetsEXT{};
 
         /** @brief `pbrMetallicRoughness.baseColorFactor` (glTF default white/opaque). */
         Microsoft::Xna::Framework::Vector4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
@@ -460,6 +468,16 @@ namespace CNA::Internal::GltfImport
         bool skinned = false;
         /** @brief True when this mesh has a per-vertex COLOR_0 attribute. */
         bool colored = false;
+        /** @brief True when the selected PBR layout carries two texture-coordinate attributes. */
+        bool hasSecondTexcoordEXT = false;
+        /**
+         * @brief Original glTF TEXCOORD suffix packed into GPU attributes 0 and 1.
+         *
+         * The second value is -1 when @ref hasSecondTexcoordEXT is false. Keeping the mapping
+         * explicit lets the importer retain arbitrary authored set numbers without pretending
+         * that GPU attribute 0 always came from `TEXCOORD_0`.
+         */
+        std::array<int, 2> packedTexcoordSourceSetsEXT{0, -1};
         /**
          * @brief `COLOR_1` and beyond, all of them ignored (plan_gltf.md `GLTF-091`).
          *
@@ -780,13 +798,12 @@ namespace CNA::Internal::GltfImport
          */
         bool transmissionHasTextureEXT = false;
         /**
-         * @brief The PBR maps that reference a different TEXCOORD set than the one baked, by name.
+         * @brief The PBR maps whose TEXCOORD set does not fit the two carried channels, by name.
          *
          * plan_gltf.md `GLTF-181`/`GLTF-188`. `PbrEffect`/`SkinnedPbrEffect` sample every map from
-         * **one** shared UV channel — the base-colour texture's own TEXCOORD set, or `TEXCOORD_0`
-         * when there is none — so a map that selects a different set is sampled with the wrong
-         * coordinates. This lists exactly which ones, so the report can name them instead of
-         * saying only that something somewhere disagrees.
+         * GLTF-182/183 carry at most two distinct authored sets. A material using a third distinct
+         * set still has no attribute/varying for it and falls back to packed channel 0. This lists
+         * exactly which maps were remapped, so the report names the remaining loss.
          *
          * `GLTF-188` narrowed it from a bare `bool` for two reasons. A single flag could not say
          * *which* map to go and look at, which is the only actionable part of the warning; and it
@@ -794,8 +811,7 @@ namespace CNA::Internal::GltfImport
          * rendered from the wrong UV set, it is not rendered at all, and warning about its UVs
          * pointed at the wrong problem.
          *
-         * Empty for a material whose maps agree, which is nearly all of them. Carrying a second UV
-         * channel (which would make this list obsolete) is `GLTF-182`, a new vertex stride.
+         * Empty for any material whose sampled maps need at most two distinct authored sets.
          */
         std::vector<std::string> uvSetMismatchedMapsEXT;
     };
