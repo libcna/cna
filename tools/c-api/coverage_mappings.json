@@ -739,6 +739,26 @@
       "tests": "C/C++ ABI size assertions",
       "status": "implemented",
       "task": "CBIND-035A"
+    },
+    {
+      "id": "point-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Point\\.hpp$",
+      "kinds": ["constant", "constructor", "method", "operator"],
+      "mapping": "`cna_point_*` initialization, zero, arithmetic, equality, hash and UTF-8 count/copy operations",
+      "tests": "strict-C normal, wraparound, divide-failure, equality, hash, exact-string, capacity and null cases in `MathValuesSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B1"
+    },
+    {
+      "id": "rectangle-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Rectangle\\.hpp$",
+      "kinds": ["constant", "constructor", "method", "operator"],
+      "mapping": "`cna_rectangle_*` initialization, property, containment, mutation, equality, hash, UTF-8 count/copy, intersection and union operations",
+      "tests": "strict-C property, half-open bounds, mutation, wraparound, overload-equivalent, exact-string, capacity and null cases in `MathValuesSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B1"
     }
   ]
 }

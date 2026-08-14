@@ -21,6 +21,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiRenderTarget.cpp
     src/CnaCApiSpriteFont.cpp
     src/CnaCApiInput.cpp
+    src/CnaCApiMath.cpp
     src/CnaCApiRuntime.cpp
 )
 add_library(CNA::CApi ALIAS cna_c_api)
@@ -140,6 +141,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_error_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_error_smoke)
     add_test(NAME CApi_ErrorSmoke COMMAND cna_c_api_error_smoke)
+
+    add_executable(cna_c_api_math_values_smoke
+        tests/pure_c/MathValuesSmoke.c
+    )
+    set_target_properties(cna_c_api_math_values_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_math_values_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_math_values_smoke)
+    add_test(NAME CApi_MathValuesSmoke COMMAND cna_c_api_math_values_smoke)
 
     add_executable(cna_c_api_lifecycle_smoke
         tests/pure_c/LifecycleSmoke.c

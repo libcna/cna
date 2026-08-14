@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — 3D VALUE/IDENTITY FOUNDATION COMPLETE THROUGH CBIND-035A (2026-08-14)
+## C BINDING / C ABI — POINT/RECTANGLE COMPLETE THROUGH CBIND-035B1 (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -51,7 +51,12 @@
 > numeric operation or resource behavior is claimed by this layout-only foundation. The inventory
 > is now 983 implemented, 21 partial, 5,341 planned and 70 explicitly deleted/not applicable.
 > Deterministic `--check` detects drift; wiring it into CI remains reserved for CBIND-043.
-> CBIND-035B math, geometry and PackedVector operations is next.
+> CBIND-035B is further split into B1–B7. B1 now maps every Point and Rectangle constructor,
+> constant, property, overload, operator, hash and exact UTF-8 count/copy string through 37 C
+> operations. Its defined unsigned-bit calculations preserve unchecked 32-bit behavior without
+> signed-overflow UB; division failures preserve output. The strict-C suite passes under HEADLESS,
+> SDL_RENDERER and ASan+UBSan. The inventory is now 1,027 implemented, 21 partial, 5,297 planned
+> and 70 N/A. CBIND-035B2 MathHelper and Vector2/3/4 operations is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

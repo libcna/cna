@@ -40,3 +40,22 @@ The generated coverage inventory maps only source types, directly represented fi
 and enum identities to this foundation. Constructors, named constants, methods, operators,
 collections, intersections, transforms and packed conversions remain explicitly planned rather
 than being inferred from binary layout compatibility.
+
+## Point and Rectangle operations
+
+`math.h` completes the public Point and Rectangle families. POD initialization represents their
+constructors; `cna_point_get_zero` and `cna_rectangle_get_empty` represent both named constants and
+their property getters. Named operations replace C++ operators and overloads use descriptive
+suffixes. The out-result forms in the C++ surface share the same C function as their value-returning
+counterparts because every fallible C function already uses an output pointer.
+
+The implementation performs integer addition, subtraction and multiplication through unsigned
+bit patterns, preserving unchecked 32-bit wraparound without triggering C++ signed-overflow
+undefined behavior. Point division reports `CNA_RESULT_INVALID_ARGUMENT` for a zero component and
+`CNA_RESULT_OVERFLOW` for `INT32_MIN / -1`; the output remains unchanged. Rectangle containment
+uses half-open right and bottom edges, touching rectangles do not intersect, and no-overlap
+intersection returns the canonical empty rectangle.
+
+Point and Rectangle strings use the native formats and the standard count/copy contract: byte
+counts exclude a terminator, insufficient capacity writes no prefix, and the required count is
+still returned.

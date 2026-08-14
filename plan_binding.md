@@ -244,12 +244,24 @@ mechanical wrapper.
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | CBIND-035A | Establish 3D value and identity ABI | ✅ | `math_values.h` now defines fixed-layout Point, Vector4, Quaternion, Matrix, Plane, Ray and bounding-volume PODs, all 17 public PackedVector raw-storage aliases and stable containment/plane/curve identities. `graphics3d.h` freezes buffer/index/primitive/SetData/vertex identities and the four-field `CNA_VertexElement`. Strict C17 and C++23 assertions cover every represented storage width, representative/full field offsets and identity ordinals under HEADLESS and SDL_RENDERER. Coverage maps only the 169 directly represented type/field/property/identity rows; all constructors, constants and operations remain owned by CBIND-035B. |
-| CBIND-035B | Complete math, geometry and packed-value operations | ⬜ | Map every remaining public math and PackedVector constructor, method, operator, constant and collection behavior to C-native value/bulk operations with numeric edge-case tests. |
+| CBIND-035B | Complete math, geometry and packed-value operations | 🟨 | Map every remaining public math and PackedVector constructor, method, operator, constant and collection behavior to C-native value/bulk operations with numeric edge-case tests. Work is decomposed into CBIND-035B1–B7 below; this row becomes complete only after all seven slices and every corresponding inventory row are closed. |
 | CBIND-035C | Add texture, buffer and vertex-resource coverage | ⬜ | Complete Texture/Texture2D/3D/Cube transfer variants, vertex/index buffers, declarations/bindings and resource lifetime through validated handles and bulk byte/value operations. |
 | CBIND-035D | Add effects, shaders and parameter coverage | ⬜ | Map Effect/technique/pass/parameter/annotation collections, stock/custom effects and shader/material extensions without exposing bytecode objects, C++ containers or backend pointers. |
 | CBIND-035E | Add model, mesh and animation coverage | ⬜ | Map model/bone/mesh/part collections, animation and morph/skinning/material extensions through stable handles, count/copy and bulk transforms. |
 | CBIND-035F | Complete graphics-device and draw submission | ⬜ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. |
 | CBIND-035G | Close and verify CBIND-035 | ⬜ | No planned CBIND-035 inventory row remains; strict C tests cover HEADLESS refusal plus actual 3D/effect/model output on suitable real renderers, with capability gaps recorded honestly. |
+
+#### CBIND-035B math implementation slices
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---|---|
+| CBIND-035B1 | Complete Point and Rectangle operations | ✅ | `math.h` maps both complete source headers through 37 exported operations covering constructors, named zero/empty values, every property/overload/operator, hashes and exact UTF-8 count/copy strings. Unsigned-bit arithmetic preserves C# unchecked 32-bit wraparound without C++ signed-overflow UB; division rejects zero and the unrepresentable minimum/-1 quotient without partial output. `MathValuesSmoke.c` calls every entry point and covers boundaries, mutation, half-open containment, intersection/union, capacity and null failures under HEADLESS, SDL_RENDERER and ASan+UBSan. |
+| CBIND-035B2 | Complete MathHelper and Vector2/3/4 operations | ⬜ | Map scalar helpers and every vector constructor, constant, method, operator and transform/bulk overload with finite/non-finite and aliasing cases. |
+| CBIND-035B3 | Complete Quaternion and Matrix operations | ⬜ | Map all constructors, constants, decomposition/interpolation/transformation/factory functions and operators with row-major layout, singular and numeric edge evidence. |
+| CBIND-035B4 | Complete planes, rays and bounding-volume operations | ⬜ | Map every construction, containment, intersection, merge, corner and equality/string/hash route with optional-hit and caller-capacity forms. |
+| CBIND-035B5 | Complete Curve value, collection and evaluation operations | ⬜ | Map Curve, CurveKey and CurveKeyCollection through C-owned/bulk values without leaking `std::vector`, including loop/tangent/evaluation and mutation behavior. |
+| CBIND-035B6 | Complete Color operations and named constants | ⬜ | Map all constructors/conversions, channels, packed value, arithmetic/interpolation/equality/string/hash routes and every public named Color constant with exact packed values. |
+| CBIND-035B7 | Complete PackedVector operations and close math coverage | ⬜ | Map all concrete packed constructors, float/vector conversions, equality/string/hash behavior and interface-equivalent storage routes; leave no planned math/PackedVector CBIND-035 row. |
 
 ## Phase B7 — hardening, documentation and experimental release
 
@@ -329,6 +341,6 @@ route with stable native playback-availability reporting and isolated success/un
 regressions. B5 is complete. B6 has a deterministic, reviewed 414-header/6,415-symbol baseline and
 now maps the full CBIND-034 graphics family through C-native state/display PODs, adapter queries,
 owned render targets and SpriteFonts. CBIND-035A establishes the public 3D value and identity ABI
-without claiming its still-unimplemented operations. The current snapshot is 983 implemented, 21
-partial, 5,341 planned and 70 not applicable; CBIND-035B math, geometry and PackedVector operations
-are next.
+without claiming its still-unimplemented operations. CBIND-035B1 completes the Point and Rectangle
+operation families. The current snapshot is 1,027 implemented, 21 partial, 5,297 planned and 70 not
+applicable; CBIND-035B2 MathHelper and Vector2/3/4 operations are next.
