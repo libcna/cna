@@ -6,8 +6,9 @@ The native C API is experimental. Its initial `0.1.0` shared library and public 
 the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycle slice
 (`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery) plus
 owned Color-format `Texture2D` creation, bulk RGBA8 transfer, POD-array `SpriteBatch` submission and
-a point-in-time keyboard snapshot. It is not complete public CNA coverage. The contract in this
-directory is binding on implementation until the release gate in
+a point-in-time keyboard snapshot. Exact support and intentional omissions are recorded in
+[`FEATURE_MATRIX.md`](FEATURE_MATRIX.md). It is not complete public CNA coverage. The contract in
+this directory is binding on implementation until the release gate in
 [`../../plan_binding.md`](../../plan_binding.md) is complete.
 
 ## Purpose
@@ -77,4 +78,5 @@ The C API must not expose:
 
 See the sibling contract documents for ABI versioning, handles, ownership, errors, text/buffers,
 callbacks/threading, renderer capability reporting, [input snapshots](INPUT_SNAPSHOTS.md) and the
-Sharp Runtime boundary.
+Sharp Runtime boundary. The [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer
+view; [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record.

@@ -11,6 +11,9 @@ implemented slice, not a substitute for the complete generated inventory require
 Any public symbol without a later inventory row remains **unimplemented**, never implicitly
 unsupported or complete.
 
+[`FEATURE_MATRIX.md`](FEATURE_MATRIX.md) summarizes this initial slice for C consumers. This file
+remains authoritative for per-symbol implementation evidence.
+
 ## Implemented initial adapter slice
 
 | Source header and symbol | C mapping | C header/declaration | Ownership and thread rule | C-only evidence | Status |
