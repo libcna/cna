@@ -10,15 +10,19 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::PbrEffect;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::TextureTransformEXT;
 using CNA::Internal::Renderers::GpuDrawParams;
 
 namespace
@@ -167,6 +171,36 @@ TEST_F(PbrEffectDefaultsTest, TextureCoordinateSelectorsDefaultValidateAndReachD
     EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, 2), std::out_of_range);
 }
 
+TEST_F(PbrEffectDefaultsTest, TextureTransformsDefaultValidateAndReachAffineDrawParams)
+{
+    const TextureTransformEXT identity;
+    EXPECT_EQ(fx.getTextureTransformsEXTProperty(),
+              (std::array<TextureTransformEXT, 5>{identity, identity, identity, identity, identity}));
+
+    const TextureTransformEXT transform{
+        Vector2{0.25f, -0.5f}, Vector2{2.0f, 3.0f}, 1.5707963267948966f};
+    fx.setTextureTransformEXTProperty(2, transform);
+    EXPECT_EQ(fx.getTextureTransformsEXTProperty()[2], transform);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_NEAR(params.pbrTextureTransformRows[4][0], 0.0f, 1e-6f);
+    EXPECT_NEAR(params.pbrTextureTransformRows[4][1], -3.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[4][2], 0.25f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[4][3], 0.0f);
+    EXPECT_NEAR(params.pbrTextureTransformRows[5][0], 2.0f, 1e-6f);
+    EXPECT_NEAR(params.pbrTextureTransformRows[5][1], 0.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[5][2], -0.5f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[5][3], 0.0f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[0][0], 1.0f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[0][1], 0.0f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[1][0], 0.0f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[1][1], 1.0f);
+
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(-1, identity), std::out_of_range);
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(5, identity), std::out_of_range);
+}
+
 TEST_F(PbrEffectDefaultsTest, DirectionalLight0DefaultsToDisabled)
 {
     EXPECT_FALSE(fx.DirectionalLight0.getEnabledProperty());
@@ -262,6 +296,9 @@ TEST_F(PbrEffectDefaultsTest, CloneCopiesMaterialState)
     fx.setSpecularFactorEXTProperty(0.4f);
     fx.setSpecularColorFactorEXTProperty(Vector3(0.2f, 0.3f, 0.4f));
     fx.setTextureCoordinateSetEXTProperty(3, 1);
+    const TextureTransformEXT transform{
+        Vector2{0.2f, 0.4f}, Vector2{0.5f, 0.75f}, 0.3f};
+    fx.setTextureTransformEXTProperty(3, transform);
 
     auto* cloned = dynamic_cast<PbrEffect*>(fx.Clone());
     ASSERT_NE(cloned, nullptr);
@@ -273,6 +310,7 @@ TEST_F(PbrEffectDefaultsTest, CloneCopiesMaterialState)
     EXPECT_EQ(cloned->getSpecularColorFactorEXTProperty(), Vector3(0.2f, 0.3f, 0.4f));
     EXPECT_EQ(cloned->getTextureCoordinateSetsEXTProperty(),
               (std::array<int, 5>{0, 0, 0, 1, 0}));
+    EXPECT_EQ(cloned->getTextureTransformsEXTProperty()[3], transform);
     delete cloned;
 }
 

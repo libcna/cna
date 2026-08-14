@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -268,6 +269,27 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setTextureCoordinateSetEXTProperty(int slot, int set);
 
         /**
+         * @brief Gets the per-map PBR texture-coordinate transforms.
+         *
+         * Entries are base colour, normal, metallic-roughness, emissive and occlusion. All five
+         * default to identity and use scale, then counter-clockwise rotation, then translation.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-184`), identical to
+         * PbrEffect's contract so rigid and skinned materials cannot diverge.
+         * @return The five per-texture transforms.
+         */
+        CNAEXT [[nodiscard]] const std::array<TextureTransformEXT, 5>&
+        getTextureTransformsEXTProperty() const;
+
+        /**
+         * @brief Sets one PBR texture slot's transform.
+         * @param slot Texture slot in [0,4], in the order documented by the getter.
+         * @param value The new transform.
+         * @throws std::out_of_range If @p slot is outside [0,4].
+         */
+        CNAEXT void setTextureTransformEXTProperty(int slot, const TextureTransformEXT& value);
+
+        /**
          * @brief Whether the bound base-colour texture's samples are sRGB-encoded.
          *
          * @note CNAEXT — not part of the XNA 4.0 API. Identical in meaning to `PbrEffect`'s own:
@@ -442,6 +464,7 @@ namespace Microsoft::Xna::Framework::Graphics
         bool emissiveTextureIsSrgb_  = true;
         bool encodeOutputToSrgb_     = true;
         std::array<int, 5> textureCoordinateSetsEXT_{};
+        std::array<TextureTransformEXT, 5> textureTransformsEXT_{};
         Matrix world_      = Matrix::getIdentityProperty();
         Matrix view_       = Matrix::getIdentityProperty();
         Matrix projection_ = Matrix::getIdentityProperty();

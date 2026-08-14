@@ -10,15 +10,19 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::TextureTransformEXT;
 using CNA::Internal::Renderers::GpuDrawParams;
 
 namespace
@@ -80,6 +84,32 @@ TEST_F(SkinnedPbrEffectDefaultsTest, TextureCoordinateSelectorsDefaultValidateAn
     EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(5, 0), std::out_of_range);
     EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, -1), std::out_of_range);
     EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, 2), std::out_of_range);
+}
+
+TEST_F(SkinnedPbrEffectDefaultsTest, TextureTransformsDefaultValidateAndReachAffineDrawParams)
+{
+    const TextureTransformEXT identity;
+    EXPECT_EQ(fx.getTextureTransformsEXTProperty(),
+              (std::array<TextureTransformEXT, 5>{identity, identity, identity, identity, identity}));
+
+    const TextureTransformEXT transform{
+        Vector2{-0.25f, 0.75f}, Vector2{4.0f, 0.5f}, 1.5707963267948966f};
+    fx.setTextureTransformEXTProperty(4, transform);
+    EXPECT_EQ(fx.getTextureTransformsEXTProperty()[4], transform);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_NEAR(params.pbrTextureTransformRows[8][0], 0.0f, 1e-6f);
+    EXPECT_NEAR(params.pbrTextureTransformRows[8][1], -0.5f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[8][2], -0.25f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[8][3], 0.0f);
+    EXPECT_NEAR(params.pbrTextureTransformRows[9][0], 4.0f, 1e-6f);
+    EXPECT_NEAR(params.pbrTextureTransformRows[9][1], 0.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[9][2], 0.75f);
+    EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[9][3], 0.0f);
+
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(-1, identity), std::out_of_range);
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(5, identity), std::out_of_range);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, LightingEnabledIsAlwaysTrue)
@@ -353,6 +383,9 @@ TEST_F(SkinnedPbrEffectDefaultsTest, CloneCopiesMaterialAndBoneState)
     fx.setSpecularFactorEXTProperty(0.4f);
     fx.setSpecularColorFactorEXTProperty(Vector3(0.2f, 0.3f, 0.4f));
     fx.setTextureCoordinateSetEXTProperty(1, 1);
+    const TextureTransformEXT transform{
+        Vector2{0.1f, 0.2f}, Vector2{0.3f, 0.4f}, -0.5f};
+    fx.setTextureTransformEXTProperty(1, transform);
     std::vector<Matrix> bones(SkinnedPbrEffect::MaxBones, Matrix::getIdentityProperty());
     bones[1] = Matrix::CreateTranslation(Vector3(4, 5, 6));
     fx.SetBoneTransforms(bones);
@@ -367,6 +400,7 @@ TEST_F(SkinnedPbrEffectDefaultsTest, CloneCopiesMaterialAndBoneState)
     EXPECT_EQ(cloned->getSpecularColorFactorEXTProperty(), Vector3(0.2f, 0.3f, 0.4f));
     EXPECT_EQ(cloned->getTextureCoordinateSetsEXTProperty(),
               (std::array<int, 5>{0, 1, 0, 0, 0}));
+    EXPECT_EQ(cloned->getTextureTransformsEXTProperty()[1], transform);
     const std::vector<Matrix> clonedBones = cloned->GetBoneTransforms(SkinnedPbrEffect::MaxBones);
     EXPECT_EQ(clonedBones[1], Matrix::CreateTranslation(Vector3(4, 5, 6)));
     delete cloned;

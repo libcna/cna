@@ -11,6 +11,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <array>
+#include <cmath>
 #include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -65,6 +66,7 @@ namespace Microsoft::Xna::Framework::Graphics
         emissiveTextureIsSrgb_  = src.emissiveTextureIsSrgb_;
         encodeOutputToSrgb_     = src.encodeOutputToSrgb_;
         textureCoordinateSetsEXT_ = src.textureCoordinateSetsEXT_;
+        textureTransformsEXT_ = src.textureTransformsEXT_;
 
         DirectionalLight0 = src.DirectionalLight0;
         DirectionalLight1 = src.DirectionalLight1;
@@ -284,6 +286,16 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
         textureCoordinateSetsEXT_[static_cast<std::size_t>(slot)] = set;
     }
+    const std::array<TextureTransformEXT, 5>& PbrEffect::getTextureTransformsEXTProperty() const
+    {
+        return textureTransformsEXT_;
+    }
+    void PbrEffect::setTextureTransformEXTProperty(int slot, const TextureTransformEXT& value)
+    {
+        if (slot < 0 || slot >= static_cast<int>(textureTransformsEXT_.size()))
+            throw std::out_of_range("PBR texture-transform slot must be in range [0, 4].");
+        textureTransformsEXT_[static_cast<std::size_t>(slot)] = value;
+    }
     bool    PbrEffect::getBaseColorTextureIsSrgbEXTProperty() const { return baseColorTextureIsSrgb_; }
     void    PbrEffect::setBaseColorTextureIsSrgbEXTProperty(bool v) { baseColorTextureIsSrgb_ = v; }
     bool    PbrEffect::getEmissiveTextureIsSrgbEXTProperty() const { return emissiveTextureIsSrgb_; }
@@ -391,6 +403,22 @@ namespace Microsoft::Xna::Framework::Graphics
         for (std::size_t i = 0; i < textureCoordinateSetsEXT_.size(); ++i)
             if (textureCoordinateSetsEXT_[i] == 1)
                 p.pbrTextureCoordinateSetMask |= std::uint32_t{1} << i;
+        for (std::size_t i = 0; i < textureTransformsEXT_.size(); ++i)
+        {
+            const TextureTransformEXT& transform = textureTransformsEXT_[i];
+            const float cosine = std::cos(transform.Rotation);
+            const float sine = std::sin(transform.Rotation);
+            float* row0 = p.pbrTextureTransformRows[i * 2];
+            float* row1 = p.pbrTextureTransformRows[i * 2 + 1];
+            row0[0] = cosine * transform.Scale.X;
+            row0[1] = -sine * transform.Scale.Y;
+            row0[2] = transform.Offset.X;
+            row0[3] = 0.0f;
+            row1[0] = sine * transform.Scale.X;
+            row1[1] = cosine * transform.Scale.Y;
+            row1[2] = transform.Offset.Y;
+            row1[3] = 0.0f;
+        }
         p.pbrBaseColorTextureIsSrgb = baseColorTextureIsSrgb_;
         p.pbrEmissiveTextureIsSrgb  = emissiveTextureIsSrgb_;
         p.pbrEncodeOutputToSrgb     = encodeOutputToSrgb_;

@@ -1034,6 +1034,15 @@ namespace CNA::Internal::Renderers
         /// bit selects TextureCoordinate0. The importer maps arbitrary glTF source TEXCOORD_n
         /// indices onto these two collision-free renderer channels before filling the effect.
         std::uint32_t pbrTextureCoordinateSetMask = 0;
+        /// plan_gltf.md GLTF-184: two affine rows per PBR map, in base-colour, normal,
+        /// metallic-roughness, emissive, occlusion order. For row vectors `r0` and `r1`, the
+        /// transformed coordinate is `{dot(float3(uv,1),r0.xyz),
+        /// dot(float3(uv,1),r1.xyz)}`. The fourth component is deterministic padding for native
+        /// constant-buffer alignment. Identity defaults preserve old callers and old content.
+        float pbrTextureTransformRows[10][4] = {
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
+            {1,0,0,0}, {0,1,0,0}};
         /// PbrEffect: metallic factor [0,1], multiplied with pbrMetallicRoughnessMap's B channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrMetallicFactor = 1.0f;

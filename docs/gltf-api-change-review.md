@@ -574,6 +574,55 @@ padding. `GLTF-183` adds direct/offline L6 selector parity and a framebuffer wit
 textures cannot produce the expected image when either map samples the other channel. The old
 `uv-set-mismatch` diagnostic remains only for a third distinct set beyond the adopted two.
 
+### 1.9a Per-map texture transforms — `GLTF-184`, `GLTF-336`
+
+**Problem.** `KHR_texture_transform` belongs to each texture view, but CNA baked only the base
+colour transform into shared vertex coordinates. A normal, metallic-roughness, emissive or
+occlusion map could select the right UV channel after `GLTF-183` and still sample at the wrong
+place whenever its transform differed. Baking five values into at most two streams is impossible:
+two maps may deliberately share one authored set and transform it differently.
+
+**Why not internal.** These are runtime sampling inputs, just like the five channel selectors.
+Keeping them on `MaterialOut` would strand them before the shader, and a non-glTF caller binding a
+map to either public PBR effect needs the same way to transform that map's coordinates.
+
+**Shape.** One shared value type preserves the specification's authored representation rather than
+exposing a renderer-specific matrix packing:
+
+```cpp
+CNAEXT struct TextureTransformEXT {
+    Vector2 Offset{0, 0};
+    Vector2 Scale{1, 1};
+    float Rotation = 0; // counter-clockwise radians
+};
+
+// Identical on PbrEffect and SkinnedPbrEffect:
+CNAEXT [[nodiscard]] const std::array<TextureTransformEXT, 5>&
+    getTextureTransformsEXTProperty() const;
+CNAEXT void setTextureTransformEXTProperty(int slot, const TextureTransformEXT& value);
+```
+
+The slot order is the already-established base-colour, normal, metallic-roughness, emissive,
+occlusion order. Invalid slots throw `std::out_of_range`. `FillGpuDrawParams` converts each value
+once per draw into two padded affine rows, applying exactly scale → counter-clockwise rotation →
+translation. Renderers consume those rows before their storage-origin V adjustment; the latter is
+not part of the asset transform.
+
+**Compatibility.** Additive. Every entry defaults to identity, so existing callers, old `.cnj`
+files and materials without the extension keep their prior samples. The offline field is optional
+and omitted when all five values are identity. Removing the old import-time bake changes vertex
+bytes only for content that declares `KHR_texture_transform`; the new shader result is equivalent
+when maps shared the old transform and becomes correct when they do not.
+
+**Migration.** None for existing callers. A caller that previously pre-transformed its vertex UVs
+continues to leave these properties at identity. New code should retain authored vertex data and set
+the applicable map transform instead.
+
+**Test.** Effect tests lock identity defaults, validation, cloning and the exact two-row affine
+conversion on rigid and skinned effects. `texture-transform-per-map` then compares direct and
+offline L6 state and supplies the discriminating L7 image: its base-colour and normal maps share a
+UV stream but require different transforms, so no single baked coordinate can satisfy both.
+
 ### 1.10 An authored tangent basis with nowhere to live — `GLTF-086`
 
 **Problem.** Only PBR strides 48/60 and 68/76 carry a tangent. A file
