@@ -258,6 +258,270 @@ CNA_C_API CNA_Result cna_bounding_box_create_merged(
     CNA_BoundingBox additional,
     CNA_BoundingBox* out_value);
 
+/**
+ * @brief Initializes a zero bounding sphere.
+ *
+ * @param out_value Receives the sphere.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_init(CNA_BoundingSphere* out_value);
+
+/**
+ * @brief Initializes a bounding sphere from its center and radius.
+ *
+ * @param center Sphere center.
+ * @param radius Sphere radius.
+ * @param out_value Receives the sphere.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_init_center_radius(
+    CNA_Vector3 center,
+    float radius,
+    CNA_BoundingSphere* out_value);
+
+/**
+ * @brief Transforms a bounding sphere by a matrix.
+ *
+ * @param value Source sphere.
+ * @param matrix Transformation matrix.
+ * @param out_value Receives the transformed sphere.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_transform(
+    CNA_BoundingSphere value,
+    CNA_Matrix matrix,
+    CNA_BoundingSphere* out_value);
+
+/**
+ * @brief Classifies a box relative to a sphere.
+ *
+ * @param value Source sphere.
+ * @param box Box to classify.
+ * @param out_containment Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_contains_box(
+    CNA_BoundingSphere value,
+    CNA_BoundingBox box,
+    CNA_ContainmentType* out_containment);
+
+/**
+ * @brief Classifies a frustum relative to a sphere.
+ *
+ * @param value Source sphere.
+ * @param frustum Frustum to classify.
+ * @param out_containment Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_contains_frustum(
+    CNA_BoundingSphere value,
+    CNA_BoundingFrustum frustum,
+    CNA_ContainmentType* out_containment);
+
+/**
+ * @brief Classifies another sphere relative to a sphere.
+ *
+ * @param value Source sphere.
+ * @param sphere Sphere to classify.
+ * @param out_containment Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_contains_sphere(
+    CNA_BoundingSphere value,
+    CNA_BoundingSphere sphere,
+    CNA_ContainmentType* out_containment);
+
+/**
+ * @brief Classifies a point relative to a sphere.
+ *
+ * @param value Source sphere.
+ * @param point Point to classify.
+ * @param out_containment Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_contains_point(
+    CNA_BoundingSphere value,
+    CNA_Vector3 point,
+    CNA_ContainmentType* out_containment);
+
+/**
+ * @brief Tests bounding-sphere equality.
+ *
+ * @param left First sphere.
+ * @param right Second sphere.
+ * @param out_equal Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_equals(
+    CNA_BoundingSphere left,
+    CNA_BoundingSphere right,
+    CNA_Bool* out_equal);
+
+/**
+ * @brief Tests bounding-sphere inequality.
+ *
+ * @param left First sphere.
+ * @param right Second sphere.
+ * @param out_not_equal Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_not_equals(
+    CNA_BoundingSphere left,
+    CNA_BoundingSphere right,
+    CNA_Bool* out_not_equal);
+
+/**
+ * @brief Creates the smallest sphere enclosing a box.
+ *
+ * @param box Source box.
+ * @param out_value Receives the sphere.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_create_from_box(
+    CNA_BoundingBox box,
+    CNA_BoundingSphere* out_value);
+
+/**
+ * @brief Creates a sphere enclosing a frustum.
+ *
+ * @param frustum Source frustum.
+ * @param out_value Receives the sphere.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_create_from_frustum(
+    CNA_BoundingFrustum frustum,
+    CNA_BoundingSphere* out_value);
+
+/**
+ * @brief Creates a sphere enclosing a point array.
+ *
+ * @param points Source points, non-null and nonempty.
+ * @param count Point count.
+ * @param out_value Receives the sphere.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_create_from_points(
+    const CNA_Vector3* points,
+    uint64_t count,
+    CNA_BoundingSphere* out_value);
+
+/**
+ * @brief Creates the smallest sphere enclosing two spheres.
+ *
+ * @param original First sphere.
+ * @param additional Second sphere.
+ * @param out_value Receives the merged sphere.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_create_merged(
+    CNA_BoundingSphere original,
+    CNA_BoundingSphere additional,
+    CNA_BoundingSphere* out_value);
+
+/**
+ * @brief Tests sphere/box intersection.
+ *
+ * @param value Source sphere.
+ * @param box Box to test.
+ * @param out_intersects Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_intersects_box(
+    CNA_BoundingSphere value,
+    CNA_BoundingBox box,
+    CNA_Bool* out_intersects);
+
+/**
+ * @brief Tests sphere/frustum intersection.
+ *
+ * @param value Source sphere.
+ * @param frustum Frustum to test.
+ * @param out_intersects Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_intersects_frustum(
+    CNA_BoundingSphere value,
+    CNA_BoundingFrustum frustum,
+    CNA_Bool* out_intersects);
+
+/**
+ * @brief Tests two spheres for intersection.
+ *
+ * @param value Source sphere.
+ * @param sphere Other sphere.
+ * @param out_intersects Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_intersects_sphere(
+    CNA_BoundingSphere value,
+    CNA_BoundingSphere sphere,
+    CNA_Bool* out_intersects);
+
+/**
+ * @brief Intersects a sphere with a ray.
+ *
+ * @param value Source sphere.
+ * @param ray Ray to test.
+ * @param out_hit Receives whether a hit exists.
+ * @param out_distance Receives distance, or zero on no hit.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_intersects_ray(
+    CNA_BoundingSphere value,
+    CNA_Ray ray,
+    CNA_Bool* out_hit,
+    float* out_distance);
+
+/**
+ * @brief Classifies a sphere against a plane.
+ *
+ * @param value Source sphere.
+ * @param plane Plane to test.
+ * @param out_intersection Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_intersects_plane(
+    CNA_BoundingSphere value,
+    CNA_Plane plane,
+    CNA_PlaneIntersectionType* out_intersection);
+
+/**
+ * @brief Computes a bounding-sphere hash.
+ *
+ * @param value Source sphere.
+ * @param out_hash Receives the hash.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_get_hash_code(
+    CNA_BoundingSphere value,
+    int32_t* out_hash);
+
+/**
+ * @brief Gets a bounding-sphere string byte count.
+ *
+ * @param value Sphere to format.
+ * @param out_bytes Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_get_string_size(
+    CNA_BoundingSphere value,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the canonical bounding-sphere UTF-8 string without a terminator.
+ *
+ * @param value Sphere to format.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity.
+ * @param out_bytes Receives the required count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_sphere_copy_string(
+    CNA_BoundingSphere value,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

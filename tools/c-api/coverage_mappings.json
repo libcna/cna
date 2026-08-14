@@ -849,6 +849,16 @@
       "tests": "every entry point, corner order and capacity atomicity, containment/classification, hit/miss, factories, merge, exact strings and null/empty failures in strict-C `GeometrySmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B4b"
+    },
+    {
+      "id": "bounding-sphere-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/BoundingSphere\\.hpp$",
+      "kinds": ["constructor", "method", "operator"],
+      "mapping": "`cna_bounding_sphere_*` construction, transformation, containment, intersection, factory, merge, equality/hash/string and explicit hit-plus-distance ray operations",
+      "tests": "every entry point, nonuniform transformation, containment/classification, hit/miss, point/frustum/box factories, merge, exact strings and null/empty failures in strict-C `GeometrySmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B4c"
     }
   ]
 }

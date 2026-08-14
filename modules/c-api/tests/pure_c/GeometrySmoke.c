@@ -328,7 +328,147 @@ static int validate_bounding_box(void)
     return 1;
 }
 
+static int validate_bounding_sphere(void)
+{
+    CNA_BoundingSphere zero = {{9.0F, 9.0F, 9.0F}, 9.0F};
+    CNA_BoundingSphere sphere;
+    if (cna_bounding_sphere_init(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_bounding_sphere_init(&zero) != CNA_RESULT_SUCCESS ||
+        !vector3_near(zero.center, 0.0F, 0.0F, 0.0F) || !near_float(zero.radius, 0.0F) ||
+        cna_bounding_sphere_init_center_radius(
+            (CNA_Vector3){1.0F, 2.0F, 3.0F}, 2.0F, &sphere) != CNA_RESULT_SUCCESS ||
+        !vector3_near(sphere.center, 1.0F, 2.0F, 3.0F) || !near_float(sphere.radius, 2.0F)) {
+        return 0;
+    }
+
+    const CNA_Matrix transform = {
+        2.0F, 0.0F, 0.0F, 0.0F,
+        0.0F, 3.0F, 0.0F, 0.0F,
+        0.0F, 0.0F, 4.0F, 0.0F,
+        5.0F, -2.0F, 1.0F, 1.0F
+    };
+    CNA_BoundingSphere transformed;
+    if (cna_bounding_sphere_transform(sphere, transform, &transformed) != CNA_RESULT_SUCCESS ||
+        !vector3_near(transformed.center, 7.0F, 4.0F, 13.0F) ||
+        !near_float(transformed.radius, 8.0F)) {
+        return 0;
+    }
+
+    const CNA_BoundingSphere outer = {{0.0F, 0.0F, 0.0F}, 5.0F};
+    const CNA_BoundingSphere inner = {{0.0F, 0.0F, 0.0F}, 1.0F};
+    const CNA_BoundingBox box = {{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
+    CNA_Matrix projection;
+    CNA_ContainmentType containment = CNA_CONTAINMENT_DISJOINT;
+    if (cna_matrix_create_perspective_field_of_view(
+            1.57079632679F, 1.0F, 1.0F, 10.0F, &projection) != CNA_RESULT_SUCCESS ||
+        cna_bounding_sphere_contains_box(outer, box, &containment) != CNA_RESULT_SUCCESS ||
+        containment != CNA_CONTAINMENT_CONTAINS ||
+        cna_bounding_sphere_contains_frustum(
+            (CNA_BoundingSphere){{0.0F, 0.0F, 0.0F}, 100.0F},
+            (CNA_BoundingFrustum){projection},
+            &containment) != CNA_RESULT_SUCCESS ||
+        containment != CNA_CONTAINMENT_CONTAINS ||
+        cna_bounding_sphere_contains_sphere(outer, inner, &containment) != CNA_RESULT_SUCCESS ||
+        containment != CNA_CONTAINMENT_CONTAINS ||
+        cna_bounding_sphere_contains_point(
+            outer, (CNA_Vector3){5.0F, 0.0F, 0.0F}, &containment) != CNA_RESULT_SUCCESS ||
+        containment != CNA_CONTAINMENT_INTERSECTS) {
+        return 0;
+    }
+
+    CNA_Bool predicate = CNA_FALSE;
+    int32_t hash = 0;
+    int32_t equal_hash = 1;
+    if (cna_bounding_sphere_equals(sphere, sphere, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_bounding_sphere_not_equals(sphere, zero, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_bounding_sphere_get_hash_code(sphere, &hash) != CNA_RESULT_SUCCESS ||
+        cna_bounding_sphere_get_hash_code(sphere, &equal_hash) != CNA_RESULT_SUCCESS ||
+        hash != equal_hash) {
+        return 0;
+    }
+
+    CNA_BoundingSphere created;
+    if (cna_bounding_sphere_create_from_box(box, &created) != CNA_RESULT_SUCCESS ||
+        !vector3_near(created.center, 0.0F, 0.0F, 0.0F) ||
+        !near_float(created.radius, sqrtf(3.0F)) ||
+        cna_bounding_sphere_create_from_frustum(
+            (CNA_BoundingFrustum){projection}, &created) != CNA_RESULT_SUCCESS ||
+        !isfinite(created.radius) || created.radius <= 0.0F) {
+        return 0;
+    }
+
+    const CNA_Vector3 points[] = {
+        {-2.0F, 0.0F, 0.0F}, {2.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F}
+    };
+    if (cna_bounding_sphere_create_from_points(points, 3U, &created) != CNA_RESULT_SUCCESS ||
+        !vector3_near(created.center, 0.0F, 0.0F, 0.0F) || !near_float(created.radius, 2.0F) ||
+        cna_bounding_sphere_create_merged(
+            (CNA_BoundingSphere){{-2.0F, 0.0F, 0.0F}, 1.0F},
+            (CNA_BoundingSphere){{2.0F, 0.0F, 0.0F}, 1.0F},
+            &created) != CNA_RESULT_SUCCESS ||
+        !vector3_near(created.center, 0.0F, 0.0F, 0.0F) || !near_float(created.radius, 3.0F)) {
+        return 0;
+    }
+
+    CNA_Bool hit = CNA_FALSE;
+    float distance = -1.0F;
+    CNA_PlaneIntersectionType plane_intersection = CNA_PLANE_INTERSECTION_BACK;
+    if (cna_bounding_sphere_intersects_box(inner, box, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_bounding_sphere_intersects_frustum(
+            (CNA_BoundingSphere){{0.0F, 0.0F, -2.0F}, 0.5F},
+            (CNA_BoundingFrustum){projection},
+            &predicate) != CNA_RESULT_SUCCESS || predicate != CNA_TRUE ||
+        cna_bounding_sphere_intersects_sphere(
+            (CNA_BoundingSphere){{0.0F, 0.0F, 0.0F}, 2.0F},
+            (CNA_BoundingSphere){{4.0F, 0.0F, 0.0F}, 2.0F},
+            &predicate) != CNA_RESULT_SUCCESS || predicate != CNA_TRUE ||
+        cna_bounding_sphere_intersects_ray(
+            inner,
+            (CNA_Ray){{0.0F, 0.0F, 5.0F}, {0.0F, 0.0F, -1.0F}},
+            &hit,
+            &distance) != CNA_RESULT_SUCCESS || hit != CNA_TRUE || !near_float(distance, 4.0F) ||
+        cna_bounding_sphere_intersects_ray(
+            inner,
+            (CNA_Ray){{5.0F, 5.0F, 5.0F}, {1.0F, 0.0F, 0.0F}},
+            &hit,
+            &distance) != CNA_RESULT_SUCCESS || hit != CNA_FALSE || !near_float(distance, 0.0F) ||
+        cna_bounding_sphere_intersects_plane(
+            (CNA_BoundingSphere){{0.0F, 2.0F, 0.0F}, 0.5F},
+            (CNA_Plane){{0.0F, 1.0F, 0.0F}, 0.0F},
+            &plane_intersection) != CNA_RESULT_SUCCESS ||
+        plane_intersection != CNA_PLANE_INTERSECTION_FRONT) {
+        return 0;
+    }
+
+    static const char Expected[] = "{Center:{X:1 Y:2 Z:3} Radius:2}";
+    uint64_t byte_count = 0U;
+    char bytes[sizeof(Expected) - 1U];
+    char too_small = 's';
+    if (cna_bounding_sphere_get_string_size(sphere, &byte_count) != CNA_RESULT_SUCCESS ||
+        byte_count != sizeof(Expected) - 1U ||
+        cna_bounding_sphere_copy_string(sphere, &too_small, 1U, &byte_count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL || too_small != 's' ||
+        cna_bounding_sphere_copy_string(sphere, bytes, sizeof(bytes), &byte_count) !=
+            CNA_RESULT_SUCCESS || byte_count != sizeof(bytes) ||
+        memcmp(bytes, Expected, sizeof(bytes)) != 0) {
+        return 0;
+    }
+
+    created = sphere;
+    if (cna_bounding_sphere_create_from_points(0, 0U, &created) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        !vector3_near(created.center, sphere.center.x, sphere.center.y, sphere.center.z) ||
+        !near_float(created.radius, sphere.radius)) {
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
-    return validate_plane() && validate_ray() && validate_bounding_box() ? 0 : 1;
+    return validate_plane() && validate_ray() && validate_bounding_box() &&
+            validate_bounding_sphere() ? 0 : 1;
 }

@@ -285,7 +285,7 @@ mechanical wrapper.
 |---|---|---|---|
 | CBIND-035B4a | Complete Plane and Ray | ✅ | `geometry.h` maps all 42 remaining Plane/Ray rows through 31 operations: all constructors, dot/normalization/transforms, volume classification, equality/hash/string and box/sphere/plane/frustum ray intersection. Native optional distances become an explicit hit flag plus distance, with zero distance on miss. `GeometrySmoke.c` calls every entry point and covers classifications, matrix/quaternion transforms, hit/miss distances, frustum containment, exact strings and null/capacity failures under both backends and ASan+UBSan. |
 | CBIND-035B4b | Complete BoundingBox | ✅ | `geometry.h` maps all 31 remaining BoundingBox rows through one corner-count constant and 20 operations: construction, all containment/intersection overloads, factories, merge, equality/hash/string and explicit optional ray distance. Corner copy uses a caller-capacity array, always reports the required count and performs no partial write. `GeometrySmoke.c` calls every entry point and covers canonical corner order, capacity atomicity, classifications, hit/miss distances, factories, exact strings and null/empty failures under both backends and ASan+UBSan. |
-| CBIND-035B4c | Complete BoundingSphere | ⬜ | Map all constructors, containment/intersection overloads, factories, merge, transform, equality/hash/string and optional ray distances. |
+| CBIND-035B4c | Complete BoundingSphere | ✅ | `geometry.h` maps all 31 remaining BoundingSphere rows through 21 operations: construction, nonuniform matrix transformation, every containment/intersection overload, box/frustum/point factories, merge, equality/hash/string and explicit optional ray distance. Point arrays use checked counts and preserve outputs on rejection. `GeometrySmoke.c` calls every entry point and covers containment boundaries, hit/miss distances, touching spheres, all factories, merge, exact strings and null/empty failures under both backends and ASan+UBSan. |
 | CBIND-035B4d | Complete BoundingFrustum and close parent B4 | ⬜ | Map matrix/plane/corner properties, containment/intersection overloads, equality/hash/string and fixed/caller-capacity corner copies; close parent B4. |
 
 ## Phase B7 — hardening, documentation and experimental release
@@ -370,5 +370,6 @@ without claiming its still-unimplemented operations. CBIND-035B1 completes the P
 operation families, and completed CBIND-035B2a–B2d cover stateless MathHelper plus all Vector2/3/4
 rows. Completed CBIND-035B3a–B3b cover Quaternion and Matrix. The current snapshot is 1,442
 implemented, 21 partial, 4,882 planned and 70 not applicable. CBIND-035B4a completes Plane and Ray,
-and CBIND-035B4b completes BoundingBox. The current snapshot is 1,515 implemented, 21 partial,
-4,809 planned and 70 not applicable, with CBIND-035B4c BoundingSphere next.
+CBIND-035B4b completes BoundingBox and CBIND-035B4c completes BoundingSphere. The current snapshot
+is 1,546 implemented, 21 partial, 4,778 planned and 70 not applicable, with CBIND-035B4d
+BoundingFrustum next.

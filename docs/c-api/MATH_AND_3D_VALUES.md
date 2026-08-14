@@ -136,3 +136,15 @@ required count, rejects insufficient capacity without writing a prefix and prese
 native corner order. Point-array construction validates the complete byte count before copying;
 an empty point set is invalid and leaves the caller's output unchanged. No C++ collection layout
 crosses the ABI.
+
+## BoundingSphere operations
+
+`geometry.h` exposes complete BoundingSphere construction, matrix transformation, containment and
+intersection overloads, equality/hash/string routes and factories from boxes, frusta, point arrays
+or merged spheres. Matrix transformation preserves CNA's maximum-axis scale rule, including
+nonuniform transforms. Ray intersections use the same explicit hit-plus-distance convention.
+
+Point-array construction uses the checked raw-array contract: the complete element count is
+validated before copying, an empty set is invalid and failures leave the output unchanged. Box,
+frustum and merge factories operate entirely on fixed-layout values; no native collection or
+cached frustum representation crosses the ABI.

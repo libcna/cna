@@ -106,6 +106,11 @@ using Microsoft::Xna::Framework::Vector4;
     return CNA_BoundingBox{ToC(value.Min), ToC(value.Max)};
 }
 
+[[nodiscard]] CNA_BoundingSphere ToC(const BoundingSphere value) noexcept
+{
+    return CNA_BoundingSphere{ToC(value.Center), value.Radius};
+}
+
 template<typename TValue, typename TCallable>
 [[nodiscard]] CNA_Result StoreOutput(
     TValue* const output,
@@ -729,5 +734,238 @@ CNA_Result cna_bounding_box_create_merged(
 {
     return StoreOutput(outValue, "The BoundingBox output is null.", [=] {
         return ToC(BoundingBox::CreateMerged(ToNative(original), ToNative(additional)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_init(CNA_BoundingSphere* const outValue)
+{
+    return StoreOutput(outValue, "The BoundingSphere output is null.", [] {
+        return ToC(BoundingSphere());
+    });
+}
+
+CNA_Result cna_bounding_sphere_init_center_radius(
+    const CNA_Vector3 center,
+    const float radius,
+    CNA_BoundingSphere* const outValue)
+{
+    return StoreOutput(outValue, "The BoundingSphere output is null.", [=] {
+        return ToC(BoundingSphere(ToNative(center), radius));
+    });
+}
+
+CNA_Result cna_bounding_sphere_transform(
+    const CNA_BoundingSphere value,
+    const CNA_Matrix matrix,
+    CNA_BoundingSphere* const outValue)
+{
+    return StoreOutput(outValue, "The BoundingSphere output is null.", [=] {
+        return ToC(ToNative(value).Transform(ToNative(matrix)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_contains_box(
+    const CNA_BoundingSphere value,
+    const CNA_BoundingBox box,
+    CNA_ContainmentType* const outContainment)
+{
+    return StoreOutput(outContainment, "The containment output is null.", [=] {
+        return static_cast<CNA_ContainmentType>(ToNative(value).Contains(ToNative(box)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_contains_frustum(
+    const CNA_BoundingSphere value,
+    const CNA_BoundingFrustum frustum,
+    CNA_ContainmentType* const outContainment)
+{
+    return StoreOutput(outContainment, "The containment output is null.", [=] {
+        return static_cast<CNA_ContainmentType>(ToNative(value).Contains(ToNative(frustum)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_contains_sphere(
+    const CNA_BoundingSphere value,
+    const CNA_BoundingSphere sphere,
+    CNA_ContainmentType* const outContainment)
+{
+    return StoreOutput(outContainment, "The containment output is null.", [=] {
+        return static_cast<CNA_ContainmentType>(ToNative(value).Contains(ToNative(sphere)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_contains_point(
+    const CNA_BoundingSphere value,
+    const CNA_Vector3 point,
+    CNA_ContainmentType* const outContainment)
+{
+    return StoreOutput(outContainment, "The containment output is null.", [=] {
+        return static_cast<CNA_ContainmentType>(ToNative(value).Contains(ToNative(point)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_equals(
+    const CNA_BoundingSphere left,
+    const CNA_BoundingSphere right,
+    CNA_Bool* const outEqual)
+{
+    return StoreOutput(outEqual, "The Boolean output is null.", [=] {
+        return ToNative(left).Equals(ToNative(right)) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_sphere_not_equals(
+    const CNA_BoundingSphere left,
+    const CNA_BoundingSphere right,
+    CNA_Bool* const outNotEqual)
+{
+    return StoreOutput(outNotEqual, "The Boolean output is null.", [=] {
+        return ToNative(left) != ToNative(right) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_sphere_create_from_box(
+    const CNA_BoundingBox box,
+    CNA_BoundingSphere* const outValue)
+{
+    return StoreOutput(outValue, "The BoundingSphere output is null.", [=] {
+        return ToC(BoundingSphere::CreateFromBoundingBox(ToNative(box)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_create_from_frustum(
+    const CNA_BoundingFrustum frustum,
+    CNA_BoundingSphere* const outValue)
+{
+    return StoreOutput(outValue, "The BoundingSphere output is null.", [=] {
+        return ToC(BoundingSphere::CreateFromFrustum(ToNative(frustum)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_create_from_points(
+    const CNA_Vector3* const points,
+    const uint64_t count,
+    CNA_BoundingSphere* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The BoundingSphere output is null.");
+        }
+        std::size_t byteCount = 0U;
+        const CNA_Result validation = CheckedElementByteCount(
+            points, count, sizeof(CNA_Vector3), &byteCount);
+        if (validation != CNA_RESULT_SUCCESS) {
+            return Fail(
+                validation,
+                ErrorCategoryForResult(validation),
+                "The point array or count is invalid.");
+        }
+        if (count == 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The point array is empty.");
+        }
+        std::vector<Vector3> nativePoints;
+        nativePoints.reserve(byteCount / sizeof(CNA_Vector3));
+        for (uint64_t index = 0U; index < count; ++index) {
+            nativePoints.push_back(ToNative(points[index]));
+        }
+        const CNA_BoundingSphere result = ToC(BoundingSphere::CreateFromPoints(nativePoints));
+        *outValue = result;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_bounding_sphere_create_merged(
+    const CNA_BoundingSphere original,
+    const CNA_BoundingSphere additional,
+    CNA_BoundingSphere* const outValue)
+{
+    return StoreOutput(outValue, "The BoundingSphere output is null.", [=] {
+        return ToC(BoundingSphere::CreateMerged(ToNative(original), ToNative(additional)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_intersects_box(
+    const CNA_BoundingSphere value,
+    const CNA_BoundingBox box,
+    CNA_Bool* const outIntersects)
+{
+    return StoreOutput(outIntersects, "The Boolean output is null.", [=] {
+        return ToNative(value).Intersects(ToNative(box)) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_sphere_intersects_frustum(
+    const CNA_BoundingSphere value,
+    const CNA_BoundingFrustum frustum,
+    CNA_Bool* const outIntersects)
+{
+    return StoreOutput(outIntersects, "The Boolean output is null.", [=] {
+        return ToNative(value).Intersects(ToNative(frustum)) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_sphere_intersects_sphere(
+    const CNA_BoundingSphere value,
+    const CNA_BoundingSphere sphere,
+    CNA_Bool* const outIntersects)
+{
+    return StoreOutput(outIntersects, "The Boolean output is null.", [=] {
+        return ToNative(value).Intersects(ToNative(sphere)) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_sphere_intersects_ray(
+    const CNA_BoundingSphere value,
+    const CNA_Ray ray,
+    CNA_Bool* const outHit,
+    float* const outDistance)
+{
+    return StoreOptionalDistance(outHit, outDistance, [=] {
+        return ToNative(value).Intersects(ToNative(ray));
+    });
+}
+
+CNA_Result cna_bounding_sphere_intersects_plane(
+    const CNA_BoundingSphere value,
+    const CNA_Plane plane,
+    CNA_PlaneIntersectionType* const outIntersection)
+{
+    return StoreOutput(outIntersection, "The intersection output is null.", [=] {
+        return static_cast<CNA_PlaneIntersectionType>(ToNative(value).Intersects(ToNative(plane)));
+    });
+}
+
+CNA_Result cna_bounding_sphere_get_hash_code(
+    const CNA_BoundingSphere value,
+    int32_t* const outHash)
+{
+    return StoreOutput(outHash, "The hash output is null.", [=] {
+        return static_cast<int32_t>(ToNative(value).GetHashCode());
+    });
+}
+
+CNA_Result cna_bounding_sphere_get_string_size(
+    const CNA_BoundingSphere value,
+    uint64_t* const outBytes)
+{
+    return StoreOutput(outBytes, "The required-byte output is null.", [=] {
+        return static_cast<uint64_t>(ToNative(value).ToString().size());
+    });
+}
+
+CNA_Result cna_bounding_sphere_copy_string(
+    const CNA_BoundingSphere value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CopyFormattedString(destination, capacity, outBytes, [=] {
+        return ToNative(value).ToString();
     });
 }
