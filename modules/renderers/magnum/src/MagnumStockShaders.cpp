@@ -181,6 +181,9 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform mat4 uWorld;\n";
             source += "uniform mat3 uNormalMatrix;\n";
             source += "uniform vec4 uFogVector;\n";
+            source += "float cnaDirectionHandedness(mat3 m){\n";
+            source += "    return dot(m[0],cross(m[1],m[2]))<0.0?-1.0:1.0;\n";
+            source += "}\n";
             source += "out vec4 vColor;\n";
             source += "out vec2 vTexCoord;\n";
             source += "out vec3 vNormal;\n";
@@ -400,8 +403,14 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             }
             source += "    gl_Position = uWVP * cnaPosition;\n";
             source += "    vNormal = uNormalMatrix * cnaInstanceDirection(boneNormal);\n";
-            source += "    vTangent = mat3(uWorld) * cnaInstanceDirection(boneTangent);\n";
-            source += "    vBitangentSign = aTangent.w;\n";
+            source += "    mat3 cnaWorldDirection = mat3(uWorld);\n";
+            source += "    vTangent = cnaWorldDirection * cnaInstanceDirection(boneTangent);\n";
+            source += "    float cnaInstanceSign = (uCnaInstanced > 0.5)\n";
+            source += "        ? cnaDirectionHandedness(mat3(cnaInstanceMatrix())) : 1.0;\n";
+            if (skinned)
+                source += "    vBitangentSign = aTangent.w*cnaDirectionHandedness(cnaWorldDirection)*cnaInstanceSign*cnaDirectionHandedness(mat3(skin));\n";
+            else
+                source += "    vBitangentSign = aTangent.w*cnaDirectionHandedness(cnaWorldDirection)*cnaInstanceSign;\n";
             source += "    vTexCoord = aTexCoord;\n";
             source += "    vWorldPosition = (uWorld * cnaPosition).xyz;\n";
             source += kFogVertexTerm;

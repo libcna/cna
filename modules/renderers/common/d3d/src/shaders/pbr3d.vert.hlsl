@@ -55,6 +55,11 @@ float3x3 InverseTranspose3x3(float3x3 m)
     return float3x3(c0, c1, c2) / det;
 }
 
+float CnaDirectionHandedness(float3x3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 VSOutput main(VSInput input)
 {
     VSOutput output;
@@ -68,7 +73,9 @@ VSOutput main(VSInput input)
     // normal above) -- correct for uniform-scale World transforms, matching PbrEffect's EasyGL
     // reference (EnsurePbrProgram) exactly; a documented simplification shared with most real-time
     // engines lacking a full per-tangent inverse-transpose.
-    output.Tangent = float4(mul(input.Tangent.xyz, (float3x3)World), input.Tangent.w);
+    float3x3 worldDirectionMat = (float3x3)World;
+    output.Tangent = float4(mul(input.Tangent.xyz, worldDirectionMat),
+                            input.Tangent.w * CnaDirectionHandedness(worldDirectionMat));
 
     output.UV = input.UV;
     output.WorldPos = mul(float4(input.Position, 1.0), World).xyz;

@@ -52,6 +52,11 @@ vec3 cnaSkinNormal(mat3 m, vec3 n)
     return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
 }
 
+float cnaDirectionHandedness(mat3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 void main()
 {
     float weightsPerVertex = roughnessWeightsPad.y;
@@ -67,7 +72,8 @@ void main()
     mat3 worldNormalMat = transpose(inverse(mat3(worldMatrix)));
     vNormal        = normalize(worldNormalMat * cnaSkinNormal(skinNormalMat, normal));
     vTangent       = mat3(worldMatrix) * (skinNormalMat * tangent.xyz);
-    vBitangentSign = tangent.w;
+    vBitangentSign = tangent.w * cnaDirectionHandedness(mat3(worldMatrix))
+                               * cnaDirectionHandedness(skinNormalMat);
     vWorldPos      = (worldMatrix * skinnedPos).xyz;
     vFogFactor     = clamp(dot(skinnedPos, fogVector), 0.0, 1.0) * fogColor.a;
 }

@@ -36,6 +36,11 @@ layout(location = 3) out float vBitangentSign;
 layout(location = 4) out vec3  vWorldPos;
 layout(location = 5) out float vFogFactor;
 
+float cnaDirectionHandedness(mat3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 void main()
 {
     gl_Position = mvpMatrix * vec4(position, 1.0);
@@ -44,7 +49,7 @@ void main()
     mat3 normalMatrix = transpose(inverse(mat3(worldMatrix)));
     vNormal        = normalize(normalMatrix * normal);
     vTangent       = mat3(worldMatrix) * tangent.xyz;
-    vBitangentSign = tangent.w;
+    vBitangentSign = tangent.w * cnaDirectionHandedness(mat3(worldMatrix));
     vWorldPos      = (worldMatrix * vec4(position, 1.0)).xyz;
     vFogFactor     = clamp(dot(vec4(position, 1.0), fogVector), 0.0, 1.0) * fogColor.a;
 }

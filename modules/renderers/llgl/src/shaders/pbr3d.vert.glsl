@@ -50,6 +50,11 @@ out gl_PerVertex
     vec4 gl_Position;
 };
 
+float cnaDirectionHandedness(mat3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 void main()
 {
     gl_Position = mvpMatrix * vec4(position, 1.0);
@@ -63,7 +68,7 @@ void main()
     // transpose) -- correct for uniform-scale World transforms, matching the Vulkan renderer's own
     // pbr3d.vert.glsl and its documented simplification.
     vTangent       = mat3(worldMatrix) * tangent.xyz;
-    vBitangentSign = tangent.w;
+    vBitangentSign = tangent.w * cnaDirectionHandedness(mat3(worldMatrix));
     vWorldPos      = (worldMatrix * vec4(position, 1.0)).xyz;
     vFogFactor     = clamp(dot(vec4(position, 1.0), fogVector), 0.0, 1.0) * fogColor.a;
 }

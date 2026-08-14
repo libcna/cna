@@ -36,6 +36,12 @@ vec3 cnaSkinNormal(mat3 m, vec3 n)
     return abs(det) > 1e-6 ? transformed * (det < 0.0 ? -1.0 : 1.0) : mul(m, n);
 }
 
+float cnaDirectionHandedness(mat3 m)
+{
+    float det = dot(m[0], cross(m[1], m[2]));
+    return det < 0.0 ? -1.0 : 1.0;
+}
+
 void main()
 {
     // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
@@ -61,7 +67,10 @@ void main()
     v_normal = normalize(mul(u_normalMatrix, skinnedNormal));
 
     vec3 skinnedTangent = mul(skinDirectionMat, a_tangent.xyz);
-    v_tangent = vec4(mul(u_world, vec4(skinnedTangent, 0.0)).xyz, a_tangent.w);
+    mat3 worldDirectionMat = mat3(u_world[0].xyz, u_world[1].xyz, u_world[2].xyz);
+    v_tangent = vec4(mul(u_world, vec4(skinnedTangent, 0.0)).xyz,
+                     a_tangent.w * cnaDirectionHandedness(worldDirectionMat)
+                         * cnaDirectionHandedness(skinDirectionMat));
 
     v_texcoord0 = a_texcoord0;
     v_worldPos = mul(u_world, skinnedPos).xyz;

@@ -148,6 +148,43 @@ transform would be approximately 66. The expanded Vulkan executable passes 6/6 c
 rigid and skinned PBR executables each pass 5/5 under the native backend, and the regenerated D3D9
 shader passes its 6/6 WineD3D pixel suite.
 
+## PBR tangent handedness (`GLTF-175`, `GLTF-176`, `GLTF-379`)
+
+The vertex stream's `tangent.w` describes the local tangent frame. A direction transform with a
+negative determinant reverses that frame, so the shader must multiply the authored sign by the
+determinant sign of every transform applied to the tangent: World, an optional instance matrix and,
+for skinned PBR, the blended joint matrix. A zero determinant keeps the incoming sign instead of
+letting `sign(0)` erase it. The audit found that EasyGL already implemented this after `GLTF-176`;
+the other 14 PBR implementations forwarded only the local sign. The corrected matrix is:
+
+| Renderer | Rigid / skinned PBR handedness |
+|---|---|
+| Bgfx | World determinant / World × blended-skin determinant |
+| Diligent | World determinant / World × blended-skin determinant, in HLSL row-vector form |
+| DirectX 9 | World determinant / World × blended-skin determinant, in the regenerated SM3 shaders |
+| DirectX 11 / 12 | World determinant / World × blended-skin determinant in the shared regenerated SM5 shaders |
+| EasyGL | existing World × optional-instance / World × optional-instance × blended-skin determinants |
+| LLGL | World / World × blended-skin in both Vulkan GLSL and OpenGL GLSL variants |
+| Magnum | World × optional-instance / World × optional-instance × blended-skin determinants |
+| Metal | World / World × blended-skin; the skinned tangent now also receives the previously missing World direction transform |
+| OpenGL 2 | World / World × blended-skin, using a GLSL 1.10-compatible scalar triple product |
+| OpenGL 4 | World / World × blended-skin |
+| SDL GPU | World / World × blended-skin |
+| Vulkan | World / World × blended-skin |
+| WebGPU | World / World × blended-skin in the rigid and skinned WGSL modules |
+| Wicked | World / World × reconstructed blended-skin columns |
+
+`EveryPbrShaderComposesDirectionDeterminantsIntoTangentHandedness` locks both rigid and skinned
+expressions for all 15 implementations. Vulkan supplies two independent real-pixel witnesses with
+local `N=+Z`, `T=+X`, `w=+1` and a tangent-space approximately-`+Y` normal map. Mirroring World in
+the rigid case and the only joint in the skinned case must both reconstruct world `B=+Y`; each
+renders byte 79 under `L=+Y`, while omitting the relevant determinant makes it black. The focused
+Vulkan executable is 8/8. EasyGL retains the fixture-driven mirror witness at byte 151 for both
+placements. Bgfx's four target dialects, LLGL/Vulkan/SDL SPIR-V, D3D9 SM3 and shared D3D11/12 SM5
+bytecode were regenerated from the edited sources; WebGPU's rigid/skinned runtime suites remain
+5/5 each, D3D9 remains 6/6 and Wicked's two PBR vertex entries compile with glslang. Metal's MSL
+path remains source-audited on this Linux host.
+
 `PbrEffect` and `SkinnedPbrEffect` shaders sample five textures unconditionally. A missing glTF map
 therefore cannot mean “leave the slot unbound”; every PBR renderer must bind a semantic identity:
 

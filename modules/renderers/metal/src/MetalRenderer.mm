@@ -471,6 +471,9 @@ struct PbrUniforms {
 };
 struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; };
 struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; };
+float cna_direction_handedness(float3x3 m) {
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
 vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]]) {
     VPbrOut o;
     o.position = t.wvp * float4(in.position, 1.0);
@@ -478,7 +481,7 @@ vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[bu
     o.normal = normalMat * in.normal;
     float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
     o.tangent = world3 * in.tangent.xyz;
-    o.bitangentSign = in.tangent.w;
+    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3);
     o.uv = in.uv;
     o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), pu.fogVector), 0.0, 1.0);
@@ -567,8 +570,10 @@ vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant Skinn
     // Not renormalized here (matches the unskinned cna_v3d_pbr's own o.tangent = world3*tangent.xyz,
     // which is also left unnormalized) -- cna_f3d_pbr's Gram-Schmidt orthogonalization against the
     // interpolated normal already renormalizes it per-pixel regardless.
-    o.tangent = skinMat3 * in.tangent.xyz;
-    o.bitangentSign = in.tangent.w;
+    float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
+    o.tangent = world3 * (skinMat3 * in.tangent.xyz);
+    o.bitangentSign = in.tangent.w * cna_direction_handedness(world3)
+                                   * cna_direction_handedness(skinMat3);
     o.uv = in.uv;
     o.worldPos = (t.world * skinnedPos).xyz;
     o.fogFactor = 1.0 - clamp(dot(skinnedPos, pu.fogVector), 0.0, 1.0);

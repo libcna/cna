@@ -371,6 +371,11 @@ float3 CnaSkinNormal(float3x3 m, float3 n)
         : mul(n, m);
 }
 
+float CnaDirectionHandedness(float3x3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 // A disabled light's direction is left at exactly (0,0,0) by the effect layer (see this file's own
 // note on that convention); plain normalize() of a zero-length vector is undefined/NaN, which would
 // otherwise poison the whole per-light sum through dot()/max() once every enabled light's own math
@@ -555,7 +560,9 @@ void main(in VSInput vsIn, out PSInput psIn)
     // Tangent transforms as a plain direction under World (not the inverse-transpose used for the
     // normal above) -- correct for uniform-scale World transforms, matching this renderer's own
     // established pbr3d.vert.hlsl reference exactly.
-    psIn.Tangent = float4(mul(vsIn.Tangent.xyz, float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz)), vsIn.Tangent.w);
+    float3x3 worldDirectionMat = float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz);
+    psIn.Tangent = float4(mul(vsIn.Tangent.xyz, worldDirectionMat),
+                          vsIn.Tangent.w * CnaDirectionHandedness(worldDirectionMat));
 
     psIn.UV       = vsIn.UV;
     psIn.WorldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
@@ -695,9 +702,12 @@ void main(in VSInput vsIn, out PSInput psIn)
     // GLTF-264: inverse-transpose the complete blended joint matrix before composing it with
     // World's inverse-transpose. Tangents remain ordinary directions on both matrices.
     float3x3 skinNormalMat = float3x3(skin[0].xyz, skin[1].xyz, skin[2].xyz);
-    float3x3 worldNormalMat = InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz));
+    float3x3 worldDirectionMat = float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz);
+    float3x3 worldNormalMat = InverseTranspose3x3(worldDirectionMat);
     psIn.Normal = normalize(mul(CnaSkinNormal(skinNormalMat, vsIn.Normal), worldNormalMat));
-    psIn.Tangent = float4(mul(mul(vsIn.Tangent.xyz, skinNormalMat), float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz)), vsIn.Tangent.w);
+    psIn.Tangent = float4(mul(mul(vsIn.Tangent.xyz, skinNormalMat), worldDirectionMat),
+                          vsIn.Tangent.w * CnaDirectionHandedness(worldDirectionMat)
+                              * CnaDirectionHandedness(skinNormalMat));
 
     psIn.UV       = vsIn.UV;
     psIn.WorldPos = mul(skinnedPos, g_World).xyz;

@@ -874,3 +874,73 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJoi
         "normalMatrix * pbrSkinNormal(skinMat3, input.normal)")))
         << "WebGPU's actual SkinnedPbrEffect WGSL must inverse-transpose the joint matrix";
 }
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsIntoTangentHandedness)
+{
+    struct Audit
+    {
+        const char* name;
+        const char* rigid;
+        const char* skinned;
+    };
+    constexpr std::array<Audit, 15> audits{{
+        {"bgfx",
+         "a_tangent.w * cnaDirectionHandedness(worldDirectionMat)",
+         "* cnaDirectionHandedness(skinDirectionMat)"},
+        {"diligent",
+         "vsIn.Tangent.w * CnaDirectionHandedness(worldDirectionMat)",
+         "* CnaDirectionHandedness(skinNormalMat)"},
+        {"directx9",
+         "vin.Tangent.w * CnaDirectionHandedness(worldDirectionMat)",
+         "* CnaDirectionHandedness(skinNormalMat)"},
+        {"directx11",
+         "input.Tangent.w * CnaDirectionHandedness(worldDirectionMat)",
+         "* CnaDirectionHandedness(skinNormalMat)"},
+        {"directx12",
+         "input.Tangent.w * CnaDirectionHandedness(worldDirectionMat)",
+         "* CnaDirectionHandedness(skinNormalMat)"},
+        {"easygl",
+         "aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness",
+         "*cnaDirectionHandedness(skinDirectionMat)"},
+        {"llgl",
+         "tangent.w * cnaDirectionHandedness(mat3(worldMatrix))",
+         "* cnaDirectionHandedness(skinNormalMat)"},
+        {"magnum",
+         "aTangent.w*cnaDirectionHandedness(cnaWorldDirection)*cnaInstanceSign",
+         "*cnaDirectionHandedness(mat3(skin))"},
+        {"metal",
+         "in.tangent.w * cna_direction_handedness(world3)",
+         "* cna_direction_handedness(skinMat3)"},
+        {"opengl2",
+         "aTangent.w*cnaDirectionHandedness(world3)",
+         "*cnaDirectionHandedness(skinMat3)"},
+        {"opengl4",
+         "aTangent.w * cnaDirectionHandedness(mat3(uWorld))",
+         "* cnaDirectionHandedness(mat3(skinMat))"},
+        {"sdl-gpu",
+         "inTangent.w * cnaDirectionHandedness(mat3(lp.world))",
+         "* cnaDirectionHandedness(skinNormalMat)"},
+        {"vulkan",
+         "aTangent.w * cnaDirectionHandedness(mat3(pbr.world))",
+         "* cnaDirectionHandedness(skinNormalMat)"},
+        {"webgpu",
+         "input.tangent.w * directionHandedness(worldMat3)",
+         "* pbrDirectionHandedness(skinMat3)"},
+        {"wicked",
+         "tangent.w * WorldDirectionHandedness()",
+         "* SkinDirectionHandedness(blendWeights, blendIndices)"},
+    }};
+
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const Audit& audit : audits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(std::string::npos, source.find(Normalize(audit.rigid)))
+            << "missing rigid-PBR transform-handedness evidence: " << audit.rigid;
+        EXPECT_NE(std::string::npos, source.find(Normalize(audit.skinned)))
+            << "missing skinned-PBR transform-handedness evidence: " << audit.skinned;
+    }
+}

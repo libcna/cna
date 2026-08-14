@@ -59,6 +59,10 @@ vec3 cnaSkinNormal(mat3 m, vec3 n) {
     return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
 }
 
+float cnaDirectionHandedness(mat3 m) {
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 void main() {
     float weightsPerVertex = pbr.fogColorEnabled.w; // REMED-GFX-010: alongside the fog vector
     mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x;
@@ -82,7 +86,8 @@ void main() {
     // Tangent stays on raw World: tangents transform as directions, not as normals (glTF
     // convention, and unchanged from the previous behaviour).
     vTangent = mat3(pbr.world) * (skinNormalMat * aTangent.xyz);
-    vBitangentSign = aTangent.w;
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(pbr.world))
+                                * cnaDirectionHandedness(skinNormalMat);
     vUV = aUV;
     vWorldPos = (pbr.world * skinnedPos).xyz;
     vFogFactor = 1.0 - clamp(dot(vec4(skinnedPos.xyz, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector

@@ -49,6 +49,11 @@ struct VSOutput
     float  FogFactor : TEXCOORD4;
 };
 
+float CnaDirectionHandedness(float3x3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 VSOutput VSPbr3D(VSInput vin)
 {
     VSOutput vout;
@@ -58,7 +63,9 @@ VSOutput VSPbr3D(VSInput vin)
     // Tangent transforms as a plain direction under (float3x3)World (not the inverse-transpose
     // NormalMatrix) -- correct for uniform-scale World transforms, matching
     // EnsurePbrProgram()'s own identical documented simplification.
-    vout.TangentWS = float4(mul(vin.Tangent.xyz, (float3x3)World), vin.Tangent.w);
+    float3x3 worldDirectionMat = (float3x3)World;
+    vout.TangentWS = float4(mul(vin.Tangent.xyz, worldDirectionMat),
+                            vin.Tangent.w * CnaDirectionHandedness(worldDirectionMat));
     vout.UV = vin.UV;
     vout.WorldPos = mul(float4(vin.Position, 1.0), World).xyz;
     // REMED-GFX-010: FNA view-space fog. FogParams now carries EffectHelpers.SetFogVector

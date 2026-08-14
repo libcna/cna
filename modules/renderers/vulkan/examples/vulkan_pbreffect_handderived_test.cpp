@@ -261,6 +261,101 @@ class VulkanPbrEffectHandDerivedTest : public Game
         return got;
     }
 
+    // GLTF-176: a mirrored World reverses the transformed tangent frame. The shader must fold
+    // sign(det(World3x3)) into tangent.w so this +Y tangent-space normal remains world +Y.
+    Color renderPbrMirroredWorldTangent(GraphicsDevice& dev, Texture2D& albedoTex,
+                                        Texture2D& positiveYNormal)
+    {
+        PbrEffect fx(dev);
+        fx.setTextureProperty(&albedoTex);
+        fx.setNormalMapProperty(&positiveYNormal);
+        fx.setMetallicFactorProperty(0.0f);
+        fx.setRoughnessFactorProperty(1.0f);
+        fx.setAmbientLightColorProperty(Vector3::Zero);
+        fx.DirectionalLight0.setEnabledProperty(true);
+        fx.DirectionalLight0.setDirectionProperty(Vector3(0.0f, -1.0f, 0.0f));
+        fx.DirectionalLight0.setDiffuseColorProperty(Vector3::One);
+        fx.DirectionalLight1.setEnabledProperty(false);
+        fx.DirectionalLight2.setEnabledProperty(false);
+        fx.setWorldProperty(Matrix::CreateScale(-1.0f, 1.0f, 1.0f));
+        fx.setViewProperty(Matrix::CreateLookAt(
+            Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
+        fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+            MathHelper::PiOver4, 1.0f, 0.1f, 100.0f));
+
+        auto verts = MakeQuad<PbrGpuVertex>();
+        VertexBuffer vb(dev, static_cast<int>(verts.size()));
+        vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()),
+                      static_cast<int>(sizeof(PbrGpuVertex)));
+
+        Color got(0, 0, 0, 0);
+        for (int i = 0; i < 20; ++i)
+        {
+            dev.Clear(Color(0, 255, 0, 255));
+            dev.SetDepthTestEnabled(false);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.SetVertexBuffer(&vb);
+            fx.Apply();
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            got = readCenter(dev);
+            if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
+                break;
+        }
+        return got;
+    }
+
+    // The same handedness rule applies to a negative-determinant blended joint matrix. World is
+    // identity here, so this case cannot accidentally pass on the World correction alone.
+    Color renderSkinnedPbrMirroredJointTangent(GraphicsDevice& dev, Texture2D& albedoTex,
+                                               Texture2D& positiveYNormal)
+    {
+        SkinnedPbrEffect fx(dev);
+        fx.setTextureProperty(&albedoTex);
+        fx.setNormalMapProperty(&positiveYNormal);
+        fx.setMetallicFactorProperty(0.0f);
+        fx.setRoughnessFactorProperty(1.0f);
+        fx.setAmbientLightColorProperty(Vector3::Zero);
+        fx.DirectionalLight0.setEnabledProperty(true);
+        fx.DirectionalLight0.setDirectionProperty(Vector3(0.0f, -1.0f, 0.0f));
+        fx.DirectionalLight0.setDiffuseColorProperty(Vector3::One);
+        fx.DirectionalLight1.setEnabledProperty(false);
+        fx.DirectionalLight2.setEnabledProperty(false);
+        fx.setWorldProperty(Matrix::getIdentityProperty());
+        fx.setViewProperty(Matrix::CreateLookAt(
+            Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
+        fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+            MathHelper::PiOver4, 1.0f, 0.1f, 100.0f));
+        fx.SetBoneTransforms({Matrix::CreateScale(-1.0f, 1.0f, 1.0f)});
+        fx.setWeightsPerVertexProperty(1);
+
+        auto verts = MakeQuad<SkinnedPbrGpuVertex>();
+        for (auto& vertex : verts)
+        {
+            vertex.w0 = 1.0f; vertex.w1 = vertex.w2 = vertex.w3 = 0.0f;
+            vertex.i0 = vertex.i1 = vertex.i2 = vertex.i3 = 0;
+        }
+        VertexBuffer vb(dev, static_cast<int>(verts.size()));
+        vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()),
+                      static_cast<int>(sizeof(SkinnedPbrGpuVertex)));
+
+        Color got(0, 0, 0, 0);
+        for (int i = 0; i < 20; ++i)
+        {
+            dev.Clear(Color(0, 255, 0, 255));
+            dev.SetDepthTestEnabled(false);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.SetVertexBuffer(&vb);
+            fx.Apply();
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            got = readCenter(dev);
+            if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
+                break;
+        }
+        return got;
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -270,6 +365,8 @@ protected:
         Texture2D whiteTex = Texture2D::CreateFromPixels(dev, 1, 1, white);
         const std::vector<std::uint8_t> red = { 255, 0, 0, 255 };
         Texture2D redTex = Texture2D::CreateFromPixels(dev, 1, 1, red);
+        const std::vector<std::uint8_t> positiveY = { 128, 255, 128, 255 };
+        Texture2D positiveYNormal = Texture2D::CreateFromPixels(dev, 1, 1, positiveY);
 
         // (a) White albedo, roughness=0.5, metallic=0.0, light0=(0,0,-1)/(1,1,1), no ambient.
         // At the centre pixel N=V=L=(0,0,1) exactly (see file header), so every dot product is
@@ -319,6 +416,19 @@ protected:
         check(matches(e, Color(28, 28, 28, 255), 4),
               "(e) SkinnedPbrEffect inverse-transposes a non-uniform joint normal", e,
               "(28,28,28), not the old direct-transform (~66)");
+
+        // Decoding (128,255,128) gives approximately tangent-space +Y. Both mirrors transform
+        // T=+X to -X; multiplying the authored +1 by the negative determinant restores B=+Y.
+        // With L=+Y, V=+Z and roughness 1 the analytic dielectric result is about byte 79. Omitting
+        // the relevant determinant leaves B=-Y and therefore renders black.
+        const Color f = renderPbrMirroredWorldTangent(dev, whiteTex, positiveYNormal);
+        check(matches(f, Color(79, 79, 79, 255), 4),
+              "(f) PbrEffect preserves TBN handedness under mirrored World", f,
+              "about (79,79,79), not black");
+        const Color g = renderSkinnedPbrMirroredJointTangent(dev, whiteTex, positiveYNormal);
+        check(matches(g, Color(79, 79, 79, 255), 4),
+              "(g) SkinnedPbrEffect preserves TBN handedness under a mirrored joint", g,
+              "about (79,79,79), not black");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();

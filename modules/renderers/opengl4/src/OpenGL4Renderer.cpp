@@ -833,6 +833,10 @@ out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
 out float vFogFactor;
+float cnaDirectionHandedness(mat3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
 void main()
 {
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
@@ -843,7 +847,7 @@ void main()
     mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
     vNormal = normalMatrix * aNormal;
     vTangent = mat3(uWorld) * aTangent.xyz;
-    vBitangentSign = aTangent.w;
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld));
     vUV = aUV;
     vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
     // REMED-GFX-010: see kColoredParams3DVertSrc's own comment for the fog-vector formula.
@@ -878,6 +882,10 @@ vec3 cnaSkinNormal(mat3 m, vec3 n)
     vec3 transformed = mat3(co0, co1, co2) * n;
     return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
 }
+float cnaDirectionHandedness(mat3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
 void main()
 {
     mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
@@ -895,7 +903,8 @@ void main()
     mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
     vNormal = normalMatrix * skinnedNormal;
     vTangent = mat3(uWorld) * skinnedTangent;
-    vBitangentSign = aTangent.w;
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(uWorld))
+                                * cnaDirectionHandedness(mat3(skinMat));
     vUV = aUV;
     vWorldPos = (uWorld * skinnedPos).xyz;
     vFogFactor = 1.0 - clamp(dot(skinnedPos, uFogVector), 0.0, 1.0);

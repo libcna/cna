@@ -8496,6 +8496,9 @@ struct VertexOutput {
     @location(3) bitangentSign: f32,
     @location(4) worldPos: vec3f,
 };
+fn directionHandedness(m: mat3x3f) -> f32 {
+    return select(1.0, -1.0, dot(m[0], cross(m[1], m[2])) < 0.0);
+}
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
@@ -8506,7 +8509,7 @@ struct VertexOutput {
     // matching EnsurePbrProgram()'s own documented simplification.
     let worldMat3 = mat3x3f(lp.world[0].xyz, lp.world[1].xyz, lp.world[2].xyz);
     output.worldTangent = worldMat3 * input.tangent.xyz;
-    output.bitangentSign = input.tangent.w;
+    output.bitangentSign = input.tangent.w * directionHandedness(worldMat3);
     output.worldPos = (lp.world * vec4f(input.position, 1.0)).xyz;
     return output;
 }
@@ -9992,6 +9995,10 @@ fn pbrSkinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     return m * n;
 }
 
+fn pbrDirectionHandedness(m: mat3x3f) -> f32 {
+    return select(1.0, -1.0, dot(m[0], cross(m[1], m[2])) < 0.0);
+}
+
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
@@ -10008,7 +10015,8 @@ fn pbrSkinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
     output.worldNormal = normalize(normalMatrix * pbrSkinNormal(skinMat3, input.normal));
     output.worldTangent = worldMat3 * (skinMat3 * input.tangent.xyz);
-    output.bitangentSign = input.tangent.w;
+    output.bitangentSign = input.tangent.w * pbrDirectionHandedness(worldMat3)
+                                           * pbrDirectionHandedness(skinMat3);
     output.worldPos = (lp.world * skinnedPos).xyz;
     output.uv = input.uv;
     return output;

@@ -99,6 +99,11 @@ float3 TransformNormalToWorld(float3 n)
     return float3(dot(v, cb.world0), dot(v, cb.world1), dot(v, cb.world2));
 }
 
+float WorldDirectionHandedness()
+{
+    return dot(cb.world0.xyz, cross(cb.world1.xyz, cb.world2.xyz)) < 0.0f ? -1.0f : 1.0f;
+}
+
 VSOut FillCommon(float3 position)
 {
     VSOut o = (VSOut)0;
@@ -292,6 +297,14 @@ float3 ApplySkinNormal(float3 normal, float4 weights, uint4 indices)
         : direct;
 }
 
+float SkinDirectionHandedness(float4 weights, uint4 indices)
+{
+    const float3 c0 = BlendSkinColumn(0, weights, indices);
+    const float3 c1 = BlendSkinColumn(1, weights, indices);
+    const float3 c2 = BlendSkinColumn(2, weights, indices);
+    return dot(c0, cross(c1, c2)) < 0.0f ? -1.0f : 1.0f;
+}
+
 VSOut FillSkinned(float3 position, float3 normal, float2 uv, float4 weights, uint4 indices)
 {
     float3 skinnedPosition;
@@ -372,7 +385,7 @@ PbrVSOut FillPbr(float3 position, float3 normal, float4 tangent, float2 uv)
     const float4 n = float4(normal, 0.0f);
     o.normalWS = normalize(float3(dot(n, cb.worldIT0), dot(n, cb.worldIT1), dot(n, cb.worldIT2)));
     o.tangentWS = TransformNormalToWorld(tangent.xyz);
-    o.bitangentSign = tangent.w;
+    o.bitangentSign = tangent.w * WorldDirectionHandedness();
     o.uv = uv;
     return o;
 }
@@ -420,7 +433,8 @@ PbrVSOut PbrSkinned68VS(float3 position : POSITION, float3 normal : NORMAL,
     const float4 n = float4(skinnedNormal, 0.0f);
     o.normalWS = normalize(float3(dot(n, cb.worldIT0), dot(n, cb.worldIT1), dot(n, cb.worldIT2)));
     o.tangentWS = TransformNormalToWorld(skinnedTangent);
-    o.bitangentSign = tangent.w;
+    o.bitangentSign = tangent.w * WorldDirectionHandedness()
+                              * SkinDirectionHandedness(blendWeights, blendIndices);
     o.uv = uv;
     return o;
 }

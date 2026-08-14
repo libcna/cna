@@ -60,6 +60,11 @@ vec3 cnaSkinNormal(mat3 m, vec3 n)
     return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
 }
 
+float cnaDirectionHandedness(mat3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 out gl_PerVertex
 {
     vec4 gl_Position;
@@ -86,7 +91,8 @@ void main()
     // Tangent: skin then raw world (directions transform differently from normals), matching
     // pbr3d.vert.glsl's own documented simplification for the unskinned case.
     vTangent       = mat3(worldMatrix) * (skinNormalMat * tangent.xyz);
-    vBitangentSign = tangent.w;
+    vBitangentSign = tangent.w * cnaDirectionHandedness(mat3(worldMatrix))
+                               * cnaDirectionHandedness(skinNormalMat);
     vWorldPos      = (worldMatrix * skinnedPos).xyz;
     // Fog factor from the POST-skin position, matching skinned3d.vert.glsl's own convention.
     vFogFactor     = clamp(dot(skinnedPos, fogVector), 0.0, 1.0) * fogColor.a;

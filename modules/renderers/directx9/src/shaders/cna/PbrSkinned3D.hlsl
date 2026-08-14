@@ -85,6 +85,11 @@ float3 CnaSkinNormal(float3x3 m, float3 n)
     return abs(det) > 1e-6 ? transformed * sign(det) : mul(n, m);
 }
 
+float CnaDirectionHandedness(float3x3 m)
+{
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 VSOutput VSPbrSkinned3D(VSInput vin)
 {
     VSOutput vout;
@@ -107,8 +112,11 @@ VSOutput VSPbrSkinned3D(VSInput vin)
     vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj);
     // GLTF-264/REMED-GFX-006: inverse-transpose both the blended joint matrix and World. Tangent
     // stays on their raw direction matrices.
-    vout.Normal = normalize(mul(skinnedNormal, InverseTranspose3x3((float3x3)World)));
-    vout.TangentWS = float4(mul(skinnedTangent, (float3x3)World), vin.Tangent.w);
+    float3x3 worldDirectionMat = (float3x3)World;
+    vout.Normal = normalize(mul(skinnedNormal, InverseTranspose3x3(worldDirectionMat)));
+    vout.TangentWS = float4(mul(skinnedTangent, worldDirectionMat),
+                            vin.Tangent.w * CnaDirectionHandedness(worldDirectionMat)
+                                * CnaDirectionHandedness(skinNormalMat));
     vout.UV = vin.UV;
     vout.WorldPos = mul(float4(skinnedPos, 1.0), World).xyz;
     // REMED-GFX-010: FNA view-space fog on the POST-skin position (FNA Skin() mutates vin.Position

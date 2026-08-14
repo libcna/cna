@@ -48,6 +48,10 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 pbrMapScales;          // x = normal scale, y = occlusion strength
 } pbr;
 
+float cnaDirectionHandedness(mat3 m) {
+    return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
+}
+
 void main() {
     gl_Position = pc.mvp * vec4(aPos, 1.0);
     // REMED-GFX-011: Vulkan NDC Y is inverted vs OpenGL and the C++ side supplies no correction,
@@ -63,7 +67,7 @@ void main() {
     // transpose) — correct for uniform-scale World transforms, matching
     // EasyGLRenderer::EnsurePbrProgram()'s own documented simplification.
     vTangent = mat3(pbr.world) * aTangent.xyz;
-    vBitangentSign = aTangent.w;
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(pbr.world));
     vUV = aUV;
     vWorldPos = (pbr.world * vec4(aPos, 1.0)).xyz;
     vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector

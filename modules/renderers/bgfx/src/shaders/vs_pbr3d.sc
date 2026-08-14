@@ -13,6 +13,12 @@ uniform mat3 u_normalMatrix;
 uniform vec4 u_fogParams;
 uniform vec4 u_depthBias;
 
+float cnaDirectionHandedness(mat3 m)
+{
+    float det = dot(m[0], cross(m[1], m[2]));
+    return det < 0.0 ? -1.0 : 1.0;
+}
+
 void main()
 {
     gl_Position = mul(u_wvp, vec4(a_position, 1.0));
@@ -25,7 +31,9 @@ void main()
     // matrix) -- correct for uniform-scale World transforms, matching EnsurePbrProgram()'s own
     // documented simplification. mul(u_world, vec4(dir, 0.0)) drops the translation row, giving
     // the same result as a mat3(World) multiply.
-    v_tangent = vec4(mul(u_world, vec4(a_tangent.xyz, 0.0)).xyz, a_tangent.w);
+    mat3 worldDirectionMat = mat3(u_world[0].xyz, u_world[1].xyz, u_world[2].xyz);
+    v_tangent = vec4(mul(u_world, vec4(a_tangent.xyz, 0.0)).xyz,
+                     a_tangent.w * cnaDirectionHandedness(worldDirectionMat));
     v_texcoord0 = a_texcoord0;
     v_worldPos = mul(u_world, vec4(a_position, 1.0)).xyz;
     // Task 899/1111 fog-factor convention (see vs_skinned3d.sc's identical comment for the full
