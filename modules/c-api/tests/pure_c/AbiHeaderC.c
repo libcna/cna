@@ -67,3 +67,36 @@ _Static_assert(CNA_KEY_NONE == UINT32_C(0) && CNA_KEY_A == UINT32_C(65) &&
                "Representative CNA keyboard identities must remain stable");
 _Static_assert(sizeof(CNA_KeyboardState) == 40U,
                "CNA_KeyboardState layout must remain stable");
+_Static_assert(sizeof(CNA_MouseState) == 32U,
+               "CNA_MouseState layout must remain stable");
+_Static_assert(CNA_MOUSE_BUTTON_LEFT == UINT32_C(1) &&
+                   CNA_MOUSE_BUTTON_X2 == UINT32_C(16),
+               "CNA mouse button bits must remain stable");
+_Static_assert(sizeof(CNA_PlayerIndex) == sizeof(uint32_t) &&
+                   CNA_PLAYER_INDEX_ONE == UINT32_C(0) &&
+                   CNA_PLAYER_INDEX_FOUR == UINT32_C(3),
+               "CNA player identities must remain stable");
+_Static_assert(sizeof(CNA_GamePadDeadZone) == sizeof(uint32_t) &&
+                   CNA_GAMEPAD_DEAD_ZONE_NONE == UINT32_C(0) &&
+                   CNA_GAMEPAD_DEAD_ZONE_CIRCULAR == UINT32_C(2),
+               "CNA gamepad dead-zone identities must remain stable");
+_Static_assert(CNA_GAMEPAD_BUTTON_DPAD_UP == UINT32_C(1) &&
+                   CNA_GAMEPAD_BUTTON_A == UINT32_C(0x00001000) &&
+                   CNA_GAMEPAD_BUTTON_ALL == UINT32_C(0x7fffffff),
+               "CNA gamepad button bits must remain stable");
+_Static_assert(sizeof(CNA_GamePadAnalogState) == 24U,
+               "CNA_GamePadAnalogState layout must remain stable");
+_Static_assert(sizeof(CNA_GamePadState) == 48U,
+               "CNA_GamePadState layout must remain stable");
+_Static_assert(sizeof(CNA_TouchLocationState) == sizeof(uint32_t) &&
+                   CNA_TOUCH_LOCATION_INVALID == UINT32_C(0) &&
+                   CNA_TOUCH_LOCATION_MOVED == UINT32_C(3),
+               "CNA touch-location identities must remain stable");
+_Static_assert(CNA_TOUCH_MAX_TOUCHES == UINT32_C(8),
+               "CNA touch snapshot capacity must remain stable");
+_Static_assert(sizeof(CNA_TouchLocation) == 32U,
+               "CNA_TouchLocation layout must remain stable");
+_Static_assert(sizeof(CNA_TouchCapabilities) == 16U,
+               "CNA_TouchCapabilities layout must remain stable");
+_Static_assert(sizeof(CNA_TouchState) == 272U,
+               "CNA_TouchState layout must remain stable");

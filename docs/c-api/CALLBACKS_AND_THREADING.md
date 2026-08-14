@@ -53,10 +53,11 @@ after the callback. Root access, loads, unload and destruction remain creation-t
 Resources returned by a content load are independent owned game children rather than borrowed
 manager-cache entries.
 
-`cna_keyboard_get_state` also accepts the active game handle and performs a fresh capture on this
-same creation thread; it is valid inside update/draw callbacks and at other safe points while the
-game handle is live. The resulting `CNA_KeyboardState` is an independent POD value. Its query and
-count/copy helpers touch no runtime state and may inspect a copied snapshot on any thread.
+The keyboard, mouse, gamepad and touch capture functions accept the active game handle and perform
+a fresh capture on this same creation thread; they are valid inside update/draw callbacks and at
+other safe points while the game handle is live. Their returned structures are independent POD
+values. Keyboard queries, gamepad button/dead-zone helpers and touch lookup/previous-location
+helpers touch no runtime state and may inspect copied values on any thread.
 
 A callback result other than `CNA_RESULT_SUCCESS` is handled as described in
 [`ERRORS.md`](ERRORS.md); C code must return normally. Throwing a C++ exception, `longjmp` across a

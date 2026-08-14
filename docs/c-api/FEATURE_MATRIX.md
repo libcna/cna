@@ -26,6 +26,9 @@ fallible calls return `CNA_Result`; no C++ or Sharp Runtime type or exception cr
 | SpriteBatch | Create/destroy, begin with all five sort modes, submit an array of rectangle-based textured commands, end | Fixed XNA default blend/sampler/depth/rasterizer state; no custom state, transform, effect or text draw |
 | Sprite commands | Destination/source rectangles, RGBA tint, finite rotation/origin/depth and both flip bits | Every command is validated before native submission; every texture must belong to the same game |
 | Keyboard | Fresh 256-key snapshot; all 160 canonical `Keys` names; local down/up, pressed count and ascending count/copy helpers | Non-player `Keyboard::GetState()` only; snapshot capture is creation-thread only, copied POD queries are thread-independent |
+| Mouse | Fresh logical position, vertical/horizontal wheel and five-button snapshot | Read-only capture; cursor positioning/capture/events remain planned |
+| Gamepad | Four player slots; default and explicit three-mode dead-zone capture; connection/packet, all 31 button bits, sticks/triggers; local combined-button and pure normalization helpers | Disconnected slots succeed with rest snapshots; capabilities, vibration and extensions remain planned |
+| Touch | Current capabilities and fixed-capacity eight-location collection with previous location and pressure; local find/previous helpers | Platform absence succeeds as disconnected/empty; display, gestures and events remain planned |
 | Content | Own a content manager; UTF-8 root count/copy/set; unload cache; load owned Color Texture2D handles; destroy | Create from a callback-scoped device; returned textures outlive manager unload/destruction; no other asset type yet |
 | Values | ABI layouts for color, `Vector2` fields and `Rectangle` fields | Vector/rectangle methods, operators and named members are not yet mapped |
 
@@ -44,6 +47,8 @@ time. The initial slice currently has this automated evidence:
 | Renderer identity/name/capability discovery | Tested | Tested | Enumerated, not yet C-tested |
 | Color Texture2D upload and exact readback | Tested | Tested | Not yet C-tested |
 | Content Texture2D load, cache/unload lifetime and exact decoded pixel | Tested | Tested | Not yet C-tested |
+| Keyboard, mouse, gamepad and touch capture/thread rules | Tested | Tested with SDL dummy video | Other platform/device combinations not yet C-tested |
+| Pure gamepad dead-zone/button and touch-location helpers | Tested | Tested | Renderer-independent copied POD operations |
 | SpriteBatch validation, state and lifetime | Tested | Tested | Not yet C-tested |
 | Observable SpriteBatch pixels | No raster backbuffer | Exact uploaded red/green/blue texels and clear pixel tested | No initial C evidence |
 | Full RGBA8 backbuffer readback | `CNA_RESULT_NOT_SUPPORTED`, destination unchanged | Tested before presentation | Depends on the selected native backend; not yet C-tested |
@@ -65,11 +70,13 @@ before this table claims support.
 | Game callbacks/context | Table is copied; function pointers and context remain caller-owned and valid through game destruction |
 | POD values and output buffers | Caller-owned; inputs are copied for the call and no output API writes a partial array |
 | Keyboard snapshot | Independent copied POD; it has no handle or game lifetime after capture |
+| Mouse/gamepad/touch snapshot | Independent copied POD; it has no handle or game lifetime after capture |
 | ContentManager | Owned game child; destroy before game; unload/destroy does not destroy issued C resources |
 | Content-loaded Texture2D | New owned game child per successful load; remains valid after manager unload/destruction |
 
 Game, graphics, texture, batch, content and snapshot-capture calls use the game creation/graphics
-thread. Only the pure keyboard snapshot query helpers are currently documented for any thread.
+thread. Pure keyboard/gamepad/touch snapshot and normalization helpers are documented for any
+thread.
 
 ## Error and capacity behavior
 
@@ -93,7 +100,8 @@ The following families are planned work, not implicitly supported and not perman
 - audio, media and video;
 - complete math/value APIs, operators, constants and string conversions;
 - remaining window, platform, service, event and runtime APIs;
-- mouse, game-pad, touch and player-indexed input;
+- player-indexed keyboard capture, input mutation/events, gamepad control/capabilities/extensions
+  and touch display/gesture/event APIs;
 - 3D resources and draws, vertex/index buffers, models, meshes, effects and shaders;
 - render targets, occlusion queries and remaining graphics-device/presentation operations;
 - non-Color texture transfers, texture regions, mip-level transfer and additional texture types;

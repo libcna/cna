@@ -1,11 +1,11 @@
 # NEXT.md
 
-## C BINDING / C ABI — B5 UNDERWAY THROUGH CBIND-028 (2026-08-14)
+## C BINDING / C ABI — B5 UNDERWAY THROUGH CBIND-029 (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. `CBIND-001`–`028` are complete: `docs/c-api/` defines the
+> API** through C-native mappings. `CBIND-001`–`029` are complete: `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
 > `SDL_RENDERER`. The work deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig,
@@ -26,8 +26,10 @@
 > pixels under SDL_RENDERER. `FEATURE_MATRIX.md` now freezes the exact initial supported surface,
 > backend evidence, ownership/error rules and explicit omissions. B5 now owns a native content
 > manager, controls its UTF-8 root/cache and loads Color Texture2D assets into independent C-owned
-> handles. Expanded input follows; the coverage matrix remains the guard against omitted public
-> CNA symbols.
+> handles. Expanded input now adds fresh mouse, four-player GamePad and fixed-capacity touch POD
+> snapshots, exact three-mode dead-zone behavior, all current button bits and thread-independent
+> local helpers, tested from strict C under HEADLESS and SDL_RENDERER. `CBIND-030` minimal audio is
+> next; the coverage matrix remains the guard against omitted public CNA symbols.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

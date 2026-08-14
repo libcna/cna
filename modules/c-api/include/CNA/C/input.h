@@ -333,6 +333,265 @@ typedef uint32_t CNA_Key;
 /** @brief Identifies the OemClear key. */
 #define CNA_KEY_OEM_CLEAR UINT32_C(254)
 
+/** @brief Fixed-width bit set of pressed mouse buttons. */
+typedef uint32_t CNA_MouseButtonFlags;
+
+/** @brief Indicates that no mouse button is pressed. */
+#define CNA_MOUSE_BUTTON_NONE UINT32_C(0)
+/** @brief Bit for the left mouse button. */
+#define CNA_MOUSE_BUTTON_LEFT (UINT32_C(1) << 0)
+/** @brief Bit for the middle mouse button. */
+#define CNA_MOUSE_BUTTON_MIDDLE (UINT32_C(1) << 1)
+/** @brief Bit for the right mouse button. */
+#define CNA_MOUSE_BUTTON_RIGHT (UINT32_C(1) << 2)
+/** @brief Bit for the first extended mouse button. */
+#define CNA_MOUSE_BUTTON_X1 (UINT32_C(1) << 3)
+/** @brief Bit for the second extended mouse button. */
+#define CNA_MOUSE_BUTTON_X2 (UINT32_C(1) << 4)
+
+/** @brief Immutable point-in-time mouse snapshot. */
+typedef struct CNA_MouseState {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Logical horizontal cursor position. */
+    int32_t x;
+
+    /** @brief Logical vertical cursor position. */
+    int32_t y;
+
+    /** @brief Cumulative vertical wheel value in XNA 120-unit notches. */
+    int32_t scroll_wheel;
+
+    /** @brief Cumulative horizontal wheel value in XNA 120-unit notches. */
+    int32_t horizontal_scroll_wheel;
+
+    /** @brief Zero or more `CNA_MOUSE_BUTTON_*` pressed bits. */
+    CNA_MouseButtonFlags pressed_buttons;
+
+    /** @brief Reserved for future use; returned as zero. */
+    uint32_t reserved;
+} CNA_MouseState;
+
+/** @brief Fixed-width identity of an XNA player slot. */
+typedef uint32_t CNA_PlayerIndex;
+
+/** @brief Identifies player one. */
+#define CNA_PLAYER_INDEX_ONE UINT32_C(0)
+/** @brief Identifies player two. */
+#define CNA_PLAYER_INDEX_TWO UINT32_C(1)
+/** @brief Identifies player three. */
+#define CNA_PLAYER_INDEX_THREE UINT32_C(2)
+/** @brief Identifies player four. */
+#define CNA_PLAYER_INDEX_FOUR UINT32_C(3)
+
+/** @brief Fixed-width gamepad dead-zone processing mode. */
+typedef uint32_t CNA_GamePadDeadZone;
+
+/** @brief Preserves raw analog values apart from canonical range clamping. */
+#define CNA_GAMEPAD_DEAD_ZONE_NONE UINT32_C(0)
+/** @brief Excludes each stick axis independently. */
+#define CNA_GAMEPAD_DEAD_ZONE_INDEPENDENT_AXES UINT32_C(1)
+/** @brief Excludes each stick by its combined circular magnitude. */
+#define CNA_GAMEPAD_DEAD_ZONE_CIRCULAR UINT32_C(2)
+
+/** @brief Canonical left-stick dead-zone threshold. */
+#define CNA_GAMEPAD_LEFT_DEAD_ZONE (7849.0f / 32768.0f)
+/** @brief Canonical right-stick dead-zone threshold. */
+#define CNA_GAMEPAD_RIGHT_DEAD_ZONE (8689.0f / 32768.0f)
+/** @brief Canonical trigger dead-zone and pressed threshold. */
+#define CNA_GAMEPAD_TRIGGER_THRESHOLD (30.0f / 255.0f)
+
+/** @brief Fixed-width bit set matching canonical XNA/FNA gamepad button identities. */
+typedef uint32_t CNA_GamePadButtonFlags;
+
+/** @brief Indicates that no gamepad button is pressed. */
+#define CNA_GAMEPAD_BUTTON_NONE UINT32_C(0x00000000)
+/** @brief Directional pad up bit. */
+#define CNA_GAMEPAD_BUTTON_DPAD_UP UINT32_C(0x00000001)
+/** @brief Directional pad down bit. */
+#define CNA_GAMEPAD_BUTTON_DPAD_DOWN UINT32_C(0x00000002)
+/** @brief Directional pad left bit. */
+#define CNA_GAMEPAD_BUTTON_DPAD_LEFT UINT32_C(0x00000004)
+/** @brief Directional pad right bit. */
+#define CNA_GAMEPAD_BUTTON_DPAD_RIGHT UINT32_C(0x00000008)
+/** @brief Start button bit. */
+#define CNA_GAMEPAD_BUTTON_START UINT32_C(0x00000010)
+/** @brief Back button bit. */
+#define CNA_GAMEPAD_BUTTON_BACK UINT32_C(0x00000020)
+/** @brief Left-stick press bit. */
+#define CNA_GAMEPAD_BUTTON_LEFT_STICK UINT32_C(0x00000040)
+/** @brief Right-stick press bit. */
+#define CNA_GAMEPAD_BUTTON_RIGHT_STICK UINT32_C(0x00000080)
+/** @brief Left-shoulder bit. */
+#define CNA_GAMEPAD_BUTTON_LEFT_SHOULDER UINT32_C(0x00000100)
+/** @brief Right-shoulder bit. */
+#define CNA_GAMEPAD_BUTTON_RIGHT_SHOULDER UINT32_C(0x00000200)
+/** @brief Miscellaneous-button extension bit. */
+#define CNA_GAMEPAD_BUTTON_MISC1_EXT UINT32_C(0x00000400)
+/** @brief Big-button bit. */
+#define CNA_GAMEPAD_BUTTON_BIG_BUTTON UINT32_C(0x00000800)
+/** @brief A button bit. */
+#define CNA_GAMEPAD_BUTTON_A UINT32_C(0x00001000)
+/** @brief B button bit. */
+#define CNA_GAMEPAD_BUTTON_B UINT32_C(0x00002000)
+/** @brief X button bit. */
+#define CNA_GAMEPAD_BUTTON_X UINT32_C(0x00004000)
+/** @brief Y button bit. */
+#define CNA_GAMEPAD_BUTTON_Y UINT32_C(0x00008000)
+/** @brief First paddle extension bit. */
+#define CNA_GAMEPAD_BUTTON_PADDLE1_EXT UINT32_C(0x00010000)
+/** @brief Second paddle extension bit. */
+#define CNA_GAMEPAD_BUTTON_PADDLE2_EXT UINT32_C(0x00020000)
+/** @brief Third paddle extension bit. */
+#define CNA_GAMEPAD_BUTTON_PADDLE3_EXT UINT32_C(0x00040000)
+/** @brief Fourth paddle extension bit. */
+#define CNA_GAMEPAD_BUTTON_PADDLE4_EXT UINT32_C(0x00080000)
+/** @brief Touchpad-button extension bit. */
+#define CNA_GAMEPAD_BUTTON_TOUCH_PAD_EXT UINT32_C(0x00100000)
+/** @brief Virtual left-stick-left bit. */
+#define CNA_GAMEPAD_BUTTON_LEFT_THUMBSTICK_LEFT UINT32_C(0x00200000)
+/** @brief Virtual right-trigger bit. */
+#define CNA_GAMEPAD_BUTTON_RIGHT_TRIGGER UINT32_C(0x00400000)
+/** @brief Virtual left-trigger bit. */
+#define CNA_GAMEPAD_BUTTON_LEFT_TRIGGER UINT32_C(0x00800000)
+/** @brief Virtual right-stick-up bit. */
+#define CNA_GAMEPAD_BUTTON_RIGHT_THUMBSTICK_UP UINT32_C(0x01000000)
+/** @brief Virtual right-stick-down bit. */
+#define CNA_GAMEPAD_BUTTON_RIGHT_THUMBSTICK_DOWN UINT32_C(0x02000000)
+/** @brief Virtual right-stick-right bit. */
+#define CNA_GAMEPAD_BUTTON_RIGHT_THUMBSTICK_RIGHT UINT32_C(0x04000000)
+/** @brief Virtual right-stick-left bit. */
+#define CNA_GAMEPAD_BUTTON_RIGHT_THUMBSTICK_LEFT UINT32_C(0x08000000)
+/** @brief Virtual left-stick-up bit. */
+#define CNA_GAMEPAD_BUTTON_LEFT_THUMBSTICK_UP UINT32_C(0x10000000)
+/** @brief Virtual left-stick-down bit. */
+#define CNA_GAMEPAD_BUTTON_LEFT_THUMBSTICK_DOWN UINT32_C(0x20000000)
+/** @brief Virtual left-stick-right bit. */
+#define CNA_GAMEPAD_BUTTON_LEFT_THUMBSTICK_RIGHT UINT32_C(0x40000000)
+/** @brief Mask of every currently defined gamepad button bit. */
+#define CNA_GAMEPAD_BUTTON_ALL UINT32_C(0x7FFFFFFF)
+
+/** @brief Contains normalized gamepad sticks and triggers. */
+typedef struct CNA_GamePadAnalogState {
+    /** @brief Left thumbstick after the selected dead-zone processing. */
+    CNA_Vector2 left_thumb_stick;
+
+    /** @brief Right thumbstick after the selected dead-zone processing. */
+    CNA_Vector2 right_thumb_stick;
+
+    /** @brief Left trigger in the inclusive range zero through one. */
+    float left_trigger;
+
+    /** @brief Right trigger in the inclusive range zero through one. */
+    float right_trigger;
+} CNA_GamePadAnalogState;
+
+/** @brief Immutable point-in-time gamepad snapshot. */
+typedef struct CNA_GamePadState {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief `CNA_TRUE` when the requested controller slot is connected. */
+    CNA_Bool is_connected;
+
+    /** @brief Reserved bytes; returned as zero. */
+    uint8_t reserved0[3];
+
+    /** @brief Native packet number associated with this snapshot. */
+    int32_t packet_number;
+
+    /** @brief Zero or more `CNA_GAMEPAD_BUTTON_*` physical and derived bits. */
+    CNA_GamePadButtonFlags pressed_buttons;
+
+    /** @brief Reserved for future use; returned as zero. */
+    uint32_t reserved1;
+
+    /** @brief Dead-zone-processed analog state. */
+    CNA_GamePadAnalogState analog;
+} CNA_GamePadState;
+
+/** @brief Fixed-width touch-location state identity. */
+typedef uint32_t CNA_TouchLocationState;
+
+/** @brief Indicates an invalid touch location. */
+#define CNA_TOUCH_LOCATION_INVALID UINT32_C(0)
+/** @brief Indicates a released touch location. */
+#define CNA_TOUCH_LOCATION_RELEASED UINT32_C(1)
+/** @brief Indicates a newly pressed touch location. */
+#define CNA_TOUCH_LOCATION_PRESSED UINT32_C(2)
+/** @brief Indicates a moved touch location. */
+#define CNA_TOUCH_LOCATION_MOVED UINT32_C(3)
+
+/** @brief Maximum touch locations stored in one C snapshot. */
+#define CNA_TOUCH_MAX_TOUCHES UINT32_C(8)
+
+/** @brief Describes one touch point and its optional previous location. */
+typedef struct CNA_TouchLocation {
+    /** @brief Stable touch identifier. */
+    int32_t id;
+
+    /** @brief Current `CNA_TOUCH_LOCATION_*` state. */
+    CNA_TouchLocationState state;
+
+    /** @brief Current position in logical display pixels. */
+    CNA_Vector2 position;
+
+    /** @brief Previous state, or `CNA_TOUCH_LOCATION_INVALID` when unavailable. */
+    CNA_TouchLocationState previous_state;
+
+    /** @brief Previous position written even when the previous state is invalid. */
+    CNA_Vector2 previous_position;
+
+    /** @brief CNA pressure extension in the inclusive range zero through one when available. */
+    float pressure;
+} CNA_TouchLocation;
+
+/** @brief Describes current touch-device availability. */
+typedef struct CNA_TouchCapabilities {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief `CNA_TRUE` when a touch device is currently known. */
+    CNA_Bool is_connected;
+
+    /** @brief Reserved bytes; returned as zero. */
+    uint8_t reserved[3];
+
+    /** @brief XNA-reported maximum touch count, currently four when connected. */
+    uint32_t maximum_touch_count;
+} CNA_TouchCapabilities;
+
+/** @brief Immutable fixed-capacity touch collection snapshot. */
+typedef struct CNA_TouchState {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief `CNA_TRUE` when the native collection reports a connected touch device. */
+    CNA_Bool is_connected;
+
+    /** @brief Reserved bytes; returned as zero. */
+    uint8_t reserved[3];
+
+    /** @brief Number of valid entries at the start of @ref touches. */
+    uint32_t touch_count;
+
+    /** @brief Up to @ref CNA_TOUCH_MAX_TOUCHES touch locations. */
+    CNA_TouchLocation touches[CNA_TOUCH_MAX_TOUCHES];
+} CNA_TouchState;
+
 /**
  * @brief Immutable 256-key snapshot captured from CNA's current keyboard state.
  */
@@ -422,6 +681,148 @@ CNA_C_API CNA_Result cna_keyboard_state_copy_pressed_keys(
     CNA_Key* destination,
     uint64_t capacity,
     uint32_t* out_count);
+
+/**
+ * @brief Captures a fresh mouse state for the active game at this call site.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_state Caller-provided versioned structure to receive the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * Capture must run on the game creation thread. The returned POD may then be copied or inspected
+ * on any thread without another platform call.
+ */
+CNA_C_API CNA_Result cna_mouse_get_state(
+    CNA_Handle game,
+    CNA_MouseState* out_state);
+
+/**
+ * @brief Captures gamepad state using canonical IndependentAxes dead-zone processing.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_state Caller-provided versioned structure to receive the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_state(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    CNA_GamePadState* out_state);
+
+/**
+ * @brief Captures gamepad state using an explicit canonical dead-zone mode.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param dead_zone_mode One `CNA_GAMEPAD_DEAD_ZONE_*` identity.
+ * @param out_state Caller-provided versioned structure to receive the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_state_with_dead_zone(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    CNA_GamePadDeadZone dead_zone_mode,
+    CNA_GamePadState* out_state);
+
+/**
+ * @brief Applies CNA's canonical gamepad dead-zone and clamping rules to raw analog values.
+ *
+ * @param dead_zone_mode One `CNA_GAMEPAD_DEAD_ZONE_*` identity.
+ * @param raw Raw analog values to process.
+ * @param out_processed Receives the complete processed analog value.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an invalid mode, pointer or
+ * non-finite input. The output remains unchanged on failure.
+ *
+ * This pure POD operation touches no runtime state and may run on any thread.
+ */
+CNA_C_API CNA_Result cna_gamepad_apply_dead_zone(
+    CNA_GamePadDeadZone dead_zone_mode,
+    const CNA_GamePadAnalogState* raw,
+    CNA_GamePadAnalogState* out_processed);
+
+/**
+ * @brief Tests whether every requested gamepad button bit is down in a snapshot.
+ *
+ * @param state Snapshot to query.
+ * @param buttons Zero or more `CNA_GAMEPAD_BUTTON_*` bits.
+ * @param out_is_down Receives the combined-button result.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT`.
+ *
+ * This pure POD operation touches no runtime state and may run on any thread.
+ */
+CNA_C_API CNA_Result cna_gamepad_state_is_button_down(
+    const CNA_GamePadState* state,
+    CNA_GamePadButtonFlags buttons,
+    CNA_Bool* out_is_down);
+
+/**
+ * @brief Tests whether at least one requested gamepad button bit is up in a snapshot.
+ *
+ * @param state Snapshot to query.
+ * @param buttons Zero or more `CNA_GAMEPAD_BUTTON_*` bits.
+ * @param out_is_up Receives the combined-button result.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT`.
+ *
+ * This pure POD operation touches no runtime state and may run on any thread.
+ */
+CNA_C_API CNA_Result cna_gamepad_state_is_button_up(
+    const CNA_GamePadState* state,
+    CNA_GamePadButtonFlags buttons,
+    CNA_Bool* out_is_up);
+
+/**
+ * @brief Captures current touch-device capability information.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_capabilities Caller-provided versioned structure to receive capabilities.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_touch_get_capabilities(
+    CNA_Handle game,
+    CNA_TouchCapabilities* out_capabilities);
+
+/**
+ * @brief Captures the current fixed-capacity touch collection.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_state Caller-provided versioned structure to receive up to eight touches.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_touch_get_state(
+    CNA_Handle game,
+    CNA_TouchState* out_state);
+
+/**
+ * @brief Finds the first location with a requested id in a copied touch snapshot.
+ *
+ * @param state Snapshot to query.
+ * @param id Touch identifier to find.
+ * @param out_location Receives the matching location or the canonical invalid sentinel.
+ * @param out_found Receives `CNA_TRUE` when a match was found.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT`.
+ *
+ * This pure POD operation touches no runtime state and may run on any thread.
+ */
+CNA_C_API CNA_Result cna_touch_state_find_by_id(
+    const CNA_TouchState* state,
+    int32_t id,
+    CNA_TouchLocation* out_location,
+    CNA_Bool* out_found);
+
+/**
+ * @brief Reconstructs the previous location stored in a copied touch point.
+ *
+ * @param location Touch location to inspect.
+ * @param out_previous Receives the previous location, including the invalid-state result.
+ * @param out_found Receives `CNA_TRUE` when the previous state is valid.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT`.
+ *
+ * This pure POD operation touches no runtime state and may run on any thread.
+ */
+CNA_C_API CNA_Result cna_touch_location_try_get_previous(
+    const CNA_TouchLocation* location,
+    CNA_TouchLocation* out_previous,
+    CNA_Bool* out_found);
 
 #ifdef __cplusplus
 }

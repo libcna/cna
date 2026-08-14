@@ -6,8 +6,8 @@ The native C API is experimental. Its initial `0.1.0` shared library and public 
 the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycle slice
 (`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery) plus
 owned Color-format `Texture2D` creation, bulk RGBA8 transfer, POD-array `SpriteBatch` submission and
-a point-in-time keyboard snapshot. An owned `ContentManager` adds UTF-8 root/cache control and a
-typed Color Texture2D load route. Exact support and intentional omissions are recorded in
+point-in-time keyboard, mouse, gamepad and touch snapshots. An owned `ContentManager` adds UTF-8
+root/cache control and a typed Color Texture2D load route. Exact support and omissions are recorded in
 [`FEATURE_MATRIX.md`](FEATURE_MATRIX.md). It is not complete public CNA coverage. The contract in
 this directory is binding on implementation until the release gate in
 [`../../plan_binding.md`](../../plan_binding.md) is complete.

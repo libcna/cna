@@ -98,6 +98,20 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckKeyIdentities.cmake
     )
 
+    add_custom_target(cna_c_api_gamepad_button_identity_audit
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_C_API_INPUT_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C/input.h
+            -DCNA_NATIVE_BUTTONS_HEADER=${PROJECT_SOURCE_DIR}/modules/input/include/Microsoft/Xna/Framework/Input/Buttons.hpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckGamePadButtonIdentities.cmake
+        VERBATIM
+    )
+    add_test(NAME CApi_GamePadButtonIdentities
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_C_API_INPUT_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C/input.h
+            -DCNA_NATIVE_BUTTONS_HEADER=${PROJECT_SOURCE_DIR}/modules/input/include/Microsoft/Xna/Framework/Input/Buttons.hpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckGamePadButtonIdentities.cmake
+    )
+
     add_executable(cna_c_api_abi_smoke
         tests/pure_c/AbiSmoke.c
     )
@@ -158,6 +172,24 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_input_snapshots_smoke
+        tests/pure_c/InputSnapshotsSmoke.c
+    )
+    set_target_properties(cna_c_api_input_snapshots_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_input_snapshots_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_input_snapshots_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_input_snapshots_smoke)
+    add_test(NAME CApi_InputSnapshotsSmoke COMMAND cna_c_api_input_snapshots_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_InputSnapshotsSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
     add_library(cna_c_api_header_c OBJECT tests/pure_c/AbiHeaderC.c)
     set_target_properties(cna_c_api_header_c PROPERTIES
         C_STANDARD 17
@@ -167,12 +199,14 @@ if(CNA_BUILD_TESTS)
     target_include_directories(cna_c_api_header_c PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_dependencies(cna_c_api_header_c cna_c_api_header_audit)
     add_dependencies(cna_c_api_header_c cna_c_api_key_identity_audit)
+    add_dependencies(cna_c_api_header_c cna_c_api_gamepad_button_identity_audit)
     cna_c_api_enable_strict_warnings(cna_c_api_header_c)
 
     add_library(cna_c_api_header_cpp OBJECT tests/cpp/AbiHeaderCpp.cpp)
     target_include_directories(cna_c_api_header_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_dependencies(cna_c_api_header_cpp cna_c_api_header_audit)
     add_dependencies(cna_c_api_header_cpp cna_c_api_key_identity_audit)
+    add_dependencies(cna_c_api_header_cpp cna_c_api_gamepad_button_identity_audit)
     cna_c_api_enable_strict_warnings(cna_c_api_header_cpp)
 
     add_executable(cna_c_api_handle_registry_test
