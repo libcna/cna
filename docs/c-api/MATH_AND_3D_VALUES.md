@@ -73,3 +73,17 @@ the largest power of two at or below the input with unsigned operations, includi
 positive `int32_t` range; one maps to zero because it is not multisampling. A negative input returns
 `CNA_RESULT_INVALID_ARGUMENT` and preserves the caller's output instead of entering the native
 helper's signed-shift/overflow edge case.
+
+## Vector operations
+
+`vectors.h` begins with the complete Vector2 surface. Constructors and named constants become
+initialization/get operations; value-returning and out-ref native overload pairs collapse to one
+fallible C result-plus-output operation. Named C operations also represent every arithmetic
+operator. Float division retains canonical IEEE infinity/NaN behavior, including zero divisors,
+and zero-vector normalization likewise follows the native result rather than inventing validation.
+
+Matrix, quaternion and normal transformations support both a single value and raw-array ranges.
+The bulk form takes source/destination counts, indices and a length, validates the complete range
+before writing anything, and permits the same sequential aliasing behavior as the native indexed
+loop. A zero-length operation accepts null zero-count arrays. No `std::vector` layout crosses the C
+ABI.

@@ -769,6 +769,16 @@
       "tests": "C/C++ constant checks plus every interpolation, clamp, distance, angle, epsilon and full-range MSAA operation in strict-C `MathValuesSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B2a"
+    },
+    {
+      "id": "vector2-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Vector2\\.hpp$",
+      "kinds": ["constant", "constructor", "method", "operator"],
+      "mapping": "`cna_vector2_*` initialization, constants, scalar/value operations, named operators, exact UTF-8 count/copy and validated raw-array matrix/quaternion transform ranges",
+      "tests": "every entry point, overload-equivalent math, IEEE division, strings, null/range atomicity and single/bulk transforms in strict-C `VectorSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B2b"
     }
   ]
 }

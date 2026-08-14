@@ -268,7 +268,7 @@ mechanical wrapper.
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | CBIND-035B2a | Complete MathHelper | ✅ | Eight exact `CNA_MATH_*` constants and 15 fallible `cna_math_*` operations map every non-deleted public MathHelper row. The implementation delegates canonical interpolation/clamp/distance/angle/epsilon behavior and replaces the native signed-overflow-prone MSAA bit trick with a defined full-positive-int32 equivalent; negative nonsensical sample counts fail without output mutation. Strict-C tests call every operation across endpoints, NaN/infinity, epsilon, full-range MSAA and null/failure cases; C++23 freezes constant values. |
-| CBIND-035B2b | Complete Vector2 | ⬜ | Map the complete Vector2 header, collapsing out-ref pairs while retaining bulk transform semantics and exact overload coverage. |
+| CBIND-035B2b | Complete Vector2 | ✅ | `vectors.h` maps all 75 remaining Vector2 rows through 41 exported operations: three constructors, four constants, complete member/static/operator math, exact UTF-8 count/copy and single/bulk matrix, quaternion and normal transforms. Value/out-ref pairs intentionally share the C result-plus-output form; full/range vector overloads share a count/index/length descriptor with preflight validation and defined sequential aliasing. `VectorSmoke.c` calls every entry point and covers IEEE division, normalization, hashes/strings, overload-equivalent results, transforms, capacity/null/range atomicity under both backends and ASan+UBSan. |
 | CBIND-035B2c | Complete Vector3 | ⬜ | Map the complete Vector3 header, including cross products, matrix/quaternion transforms and bulk overloads. |
 | CBIND-035B2d | Complete Vector4 | ⬜ | Map the complete Vector4 header, including 2D/3D/4D constructors, transforms and bulk overloads; close parent B2. |
 
@@ -351,6 +351,6 @@ regressions. B5 is complete. B6 has a deterministic, reviewed 414-header/6,415-s
 now maps the full CBIND-034 graphics family through C-native state/display PODs, adapter queries,
 owned render targets and SpriteFonts. CBIND-035A establishes the public 3D value and identity ABI
 without claiming its still-unimplemented operations. CBIND-035B1 completes the Point and Rectangle
-operation families, and CBIND-035B2a completes stateless MathHelper. The current snapshot is 1,051
-implemented, 21 partial, 5,273 planned and 70 not applicable; CBIND-035B2b Vector2 operations are
-next.
+operation families, CBIND-035B2a completes stateless MathHelper and CBIND-035B2b completes Vector2.
+The current snapshot is 1,126 implemented, 21 partial, 5,198 planned and 70 not applicable;
+CBIND-035B2c Vector3 operations are next.
