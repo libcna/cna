@@ -31,6 +31,12 @@ Delivered task groups:
   group the pass never assigned left as the game selected it (`FX-022`, `FX-024`);
 - a performance baseline for construction, clone, dirty upload, clean apply and draw, with the
   immutable-artifact-cache question decided against on those numbers (`FX-053`);
+- a full-suite regression run under FNA3D with every remaining failure explained, which caught and
+  fixed one real branch regression (FNA3D's instancing refusal message had moved when compiled
+  effects unlocked instancing, and its test still expected the old wording) and surfaced a
+  pre-existing FNA3D device-lifetime use-after-free now recorded in `known_bugs.md` (`FX-054`);
+- a renderer-neutral conformance suite under `tests/support/CNA/TestSupport/` that a new backend
+  runs with only its own device setup, with FNA3D as its first consumer (`FX-060`);
 - porter-facing documentation covering the whole compiled path, its error table, and the
   dependency/licence notices, plus a fuzzing guide (`FX-055`, `docs/fx-compiled-effects.md`,
   `docs/fx-bytecode-fuzzing.md`);
@@ -479,7 +485,7 @@ must be accepted before a row can close.
 | FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Harness and corpus **done** (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`); the sustained coverage-guided campaign under ASan/UBSan is still to run |
 | FX-052 | Run ASan/UBSan and renderer teardown/reset stress suites | FX-038, FX-050 | **Done for CNA-owned code.** 340 FX/Effect/XNB/capability tests pass under ASan+UBSan with zero address findings and zero CNA undefined-behaviour findings; the FX-038 reset and repeated create/apply/dispose stress cases run inside that suite. LeakSanitizer runs after all (the earlier ptrace claim was wrong) and attributes every leak record to pinned MojoShader's SPIR-V emitter or to `FNA3D_CreateDevice`, none to CNA. The remaining third-party UBSan/leak findings are recorded upstream findings, not a CNA gate |
 | FX-053 | Benchmark construction, clone, dirty uploads, and draw overhead; add immutable artifact cache only if justified | FX-037 | **Done.** `tools/graphics/compiled_effect_benchmark.cpp` plus the baseline table in `docs/fx-compiled-effects.md`. Decision: **no cache**. Construction cost tracks embedded shader work rather than file size, `Clone()` is ~7.5x cheaper than constructing the same effect because the native clone reuses translated artifacts, dirty tracking keeps a no-change apply at ~2.9 us, and a compiled pass draws no slower than a stock effect. A bytecode-keyed cache would add cross-instance sharing risk for a case `Clone()` already covers |
-| FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | No unexplained regression from the develop baseline |
+| FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | **Done.** The whole `CnaTests` binary runs under FNA3D: 5,997 pass and every remaining failure is explained -- one real regression from this branch (a stale FNA3D instancing message) fixed here, three `MouseCursorTest` failures caused by `SDL_VIDEODRIVER=offscreen` having no system cursors, one render-target readback that fails only on the SDL_GPU/Vulkan driver and passes on FNA3D's OpenGL driver, and one pre-existing FNA3D device-lifetime crash unrelated to compiled effects, now recorded in `known_bugs.md` |
 | FX-055 | Publish FNA3D support documentation, format/error guide, capability matrix, dependency notices, and migration examples | FX-043, FX-054 | **Done.** `docs/fx-compiled-effects.md` covers the format boundary, loading, reflection, values, techniques/passes, published pass state, samplers, clone, lifetime, the renderer matrix, an error table, XNA-to-CNA migration, and the dependency/licence notices |
 | FX-056 | Update/supersede the old FX plan documents and Phase 74 rows without erasing their historical record | FX-055 | **Done.** `docs/fx-bytecode-support-plan.md` and `docs/shader-effect-vs-fx-bytecode.md` carry supersession banners and point at the current guide; `plan_graphics.md` Phase 74 keeps its original rows and adds a row-by-row disposition (obsolete / delivered / re-scoped / carried forward) so none of them can be picked up again |
 | FX-057 | Declare the FNA3D vertical slice usable | FX-051, FX-052, FX-054, FX-055, FX-056 | All FNA3D MVP exit criteria in section 10 pass |
@@ -488,7 +494,7 @@ must be accepted before a row can close.
 
 | ID | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
-| FX-060 | Extract a reusable shared backend conformance suite from the FNA3D tests | FX-057 | A new backend can run the same contract with only fixture/device setup adapters |
+| FX-060 | Extract a reusable shared backend conformance suite from the FNA3D tests | FX-057 | **Done.** `tests/support/CNA/TestSupport/` holds the Direct3D 9 Effect Framework format constants, the deterministic fixture builders (including the hand-assembled Shader Model 2.0 program) and nine contract sections -- format, reflection, techniques/passes, render state, state policy, samplers, texture binding, clone and lifecycle -- plus an explicit unsupported-backend contract. A backend adds one test that builds its device and calls `RunCompiledEffectContract`. FNA3D runs it and static-asserts the neutral constants against its parser's own enumerations |
 | FX-061 | Implement and gate SDL_GPU through the MojoShader SDL adapter | FX-030, FX-060 | Full shared suite and native lifecycle tests pass before capability becomes true |
 | FX-062 | Implement and gate EasyGL/OpenGL-family support through MojoShader GL | FX-030, FX-060 | Full shared suite passes and GL state caches remain coherent |
 | FX-063 | Implement and gate DirectX 11 through the MojoShader D3D11 adapter | FX-030, FX-060 | Full shared suite passes on the supported Windows CI matrix |

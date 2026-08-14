@@ -2441,27 +2441,29 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
 #elif defined(CNA_RENDERER_FNA3D)
     // A FIFTH measured outcome (plan_fna3d.md): this renderer claims MultiStreamVertexInput
     // because several PER-VERTEX streams genuinely re-slot -- FNA3D_ApplyVertexBufferBindings
-    // takes an array of per-stream declarations natively -- but it has no shader that could
-    // consume a PER-INSTANCE stream. FNA3D's only shader entry point takes a compiled Direct3D 9
-    // Effect binary, so this renderer draws through XNA's own stock effects, and none of them
-    // declares a per-instance vertex input (in real XNA, hardware instancing needs a custom
-    // Effect that does). Rendering it anyway would stack every instance on top of the first, so
-    // the draw must reach that declared boundary with the message naming the exact reason.
+    // takes an array of per-stream declarations natively. Its instancing boundary moved when
+    // plan_fx.md's compiled-effect support landed: FNA3D now issues a real instanced draw when
+    // the selected effect is a compiled Direct3D 9 Effect whose vertex shader consumes the bound
+    // per-instance stream, which is exactly how hardware instancing works in real XNA. This draw
+    // selects no such effect, so it still reaches a declared boundary rather than stacking every
+    // instance on the first -- but the reason is now "no compiled effect selected", not "this
+    // renderer can never instance". XNA's stock effects declare no instance semantics, so they
+    // remain on the refusing side of that boundary.
     try
     {
         draw();
         ADD_FAILURE()
-            << "this renderer executes XNA's stock effects, which declare no per-instance vertex "
-               "input, and was expected to refuse rather than stack every instance on the first";
+            << "this draw selects a stock effect, which declares no per-instance vertex input, "
+               "and was expected to refuse rather than stack every instance on the first";
     }
     catch (const std::exception& e)
     {
         EXPECT_STREQ(
-            "FNA3D renderer: instanced drawing is not supported. FNA3D's only shader entry point "
-            "takes a compiled Direct3D 9 Effect binary, so this renderer draws through XNA's "
-            "stock effects, none of which declares a per-instance vertex input.",
+            "FNA3D renderer: instanced drawing requires a compiled XNA Effect whose vertex "
+            "shader consumes the bound per-instance stream; stock effects do not declare "
+            "instance semantics.",
             e.what())
-            << "the refusal must be this renderer's own declared stock-effect boundary, not a "
+            << "the refusal must be this renderer's own declared compiled-effect boundary, not a "
                "different failure";
     }
 #elif defined(CNA_RENDERER_WICKED)
