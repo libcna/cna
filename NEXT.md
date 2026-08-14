@@ -1,11 +1,11 @@
 # NEXT.md
 
-## C BINDING / C ABI — B5 UNDERWAY THROUGH CBIND-030 (2026-08-14)
+## C BINDING / C ABI — B5 UNDERWAY THROUGH CBIND-031 (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. `CBIND-001`–`030` are complete: `docs/c-api/` defines the
+> API** through C-native mappings. `CBIND-001`–`031` are complete: `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
 > `SDL_RENDERER`. The work deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig,
@@ -30,9 +30,10 @@
 > snapshots, exact three-mode dead-zone behavior, all current button bits and thread-independent
 > local helpers, tested from strict C under HEADLESS and SDL_RENDERER. Minimal audio now owns
 > copied PCM16LE effects and controllable instances with explicit creation-thread and
-> instance-before-effect-before-game shutdown rules. `CBIND-031` expands the isolated
-> content/audio failure regressions next; the coverage matrix guards against omitted public CNA
-> symbols.
+> instance-before-effect-before-game shutdown rules. Content now proves a real valid-UTF-8 fixture
+> path, and an isolated invalid-audio-driver process proves repeatable `NOT_SUPPORTED` plus clean
+> shutdown. `CBIND-032` capability reporting is next; the coverage matrix guards against omitted
+> public CNA symbols.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

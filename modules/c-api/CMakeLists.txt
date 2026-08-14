@@ -213,6 +213,27 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_audio_unavailable_smoke
+        tests/pure_c/AudioUnavailableSmoke.c
+    )
+    set_target_properties(cna_c_api_audio_unavailable_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_audio_unavailable_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_audio_unavailable_smoke)
+    add_test(NAME CApi_AudioUnavailableSmoke COMMAND cna_c_api_audio_unavailable_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_AudioUnavailableSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=cna_driver_that_does_not_exist;SDL_VIDEODRIVER=dummy"
+        )
+    else()
+        set_tests_properties(CApi_AudioUnavailableSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=cna_driver_that_does_not_exist"
+        )
+    endif()
+
     add_library(cna_c_api_header_c OBJECT tests/pure_c/AbiHeaderC.c)
     set_target_properties(cna_c_api_header_c PROPERTIES
         C_STANDARD 17

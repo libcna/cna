@@ -6,7 +6,7 @@
 #include <string.h>
 #include <threads.h>
 
-static const char FixturePath[] = "cna_c_api_content_fixture.bmp";
+static const char FixturePath[] = "cna_c_api_content_\xC5\xBE_fixture.bmp";
 
 typedef struct ContentState {
     CNA_Handle content_manager;

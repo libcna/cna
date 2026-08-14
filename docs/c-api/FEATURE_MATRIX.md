@@ -51,6 +51,7 @@ time. The initial slice currently has this automated evidence:
 | Keyboard, mouse, gamepad and touch capture/thread rules | Tested | Tested with SDL dummy video | Other platform/device combinations not yet C-tested |
 | Pure gamepad dead-zone/button and touch-location helpers | Tested | Tested | Renderer-independent copied POD operations |
 | PCM sound creation, mixer state transitions, threading and parent order | SDL dummy audio tested | SDL dummy audio/video tested | Audio behavior is renderer-independent; physical devices not C-tested |
+| Unavailable audio device and shutdown after repeated creation failure | Isolated invalid-driver process tested | Isolated invalid-audio/dummy-video process tested | Exact driver availability is platform-specific |
 | SpriteBatch validation, state and lifetime | Tested | Tested | Not yet C-tested |
 | Observable SpriteBatch pixels | No raster backbuffer | Exact uploaded red/green/blue texels and clear pixel tested | No initial C evidence |
 | Full RGBA8 backbuffer readback | `CNA_RESULT_NOT_SUPPORTED`, destination unchanged | Tested before presentation | Depends on the selected native backend; not yet C-tested |

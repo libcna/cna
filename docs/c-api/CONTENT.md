@@ -19,6 +19,10 @@ NUL scalar values and invalid UTF-8 are rejected. The root may be empty; an asse
 Root-directory output uses the normal byte count/copy protocol and never appends a terminator or
 writes a partial string.
 
+The strict-C regression creates and loads an actual fixture whose filename contains valid UTF-8,
+in addition to rejecting malformed and embedded-NUL names. Missing assets deterministically map to
+`CNA_RESULT_IO` without returning a resource handle.
+
 Changing the root directory matches the native property behavior: existing cache entries are not
 automatically removed. Call `cna_content_manager_unload` when a root change must also invalidate
 the native asset cache.

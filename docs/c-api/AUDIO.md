@@ -41,8 +41,9 @@ the current sound finish; destroying that instance still cuts off and releases i
 
 When no audio device can be opened, effect creation returns `CNA_RESULT_NOT_SUPPORTED` and leaves
 the output handle invalid. The positive regression uses SDL's dummy audio driver so it exercises
-real mixer creation and track transitions without requiring speakers. Device-unavailable process
-isolation is the next regression task (`CBIND-031`).
+real mixer creation and track transitions without requiring speakers. A separate regression
+process forces a nonexistent SDL audio driver and proves repeatable `NOT_SUPPORTED`, invalid output
+handles, structured diagnostics and clean game shutdown after failed mixer initialization.
 
 ## Current boundary
 
