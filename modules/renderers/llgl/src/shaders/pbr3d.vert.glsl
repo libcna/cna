@@ -18,16 +18,16 @@ layout(std140, binding = 1) uniform PbrParams
     mat4 mvpMatrix;
     mat4 worldMatrix;
     vec4 diffuseColor;         // rgb = base colour factor, a = alpha (kept independent, not premultiplied)
-    vec4 ambientColorPad;      // xyz = AmbientLightColor
+    vec4 ambientColorPad;      // xyz = AmbientLightColor, w = decode base colour
     vec4 emissiveMetallic;     // xyz = EmissiveFactor, w = MetallicFactor
     vec4 roughnessWeightsPad;  // x=RoughnessFactor, y=WeightsPerVertex (unused), z=NormalScale, w=OcclusionStrength
-    vec4 light0DirPad;
+    vec4 light0DirPad;         // xyz = direction, w = encode output
     vec4 light0DiffusePad;
     vec4 light1DirPad;
     vec4 light1DiffusePad;
     vec4 light2DirPad;
     vec4 light2DiffusePad;
-    vec4 eyePositionWorldPad;
+    vec4 eyePositionWorldPad;  // xyz = eye position, w = decode emissive
     vec4 fogColor;             // xyz = FogColor, w = fogEnabled (0/1)
     vec4 fogVector;
     vec4 alphaTest;            // reference, tolerance, pass weight, fail weight

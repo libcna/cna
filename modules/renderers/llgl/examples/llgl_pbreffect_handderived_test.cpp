@@ -114,6 +114,9 @@ public:
         RenderTarget2D renderTarget(dev, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
 
         PbrEffect fx(dev);
+        fx.setBaseColorTextureIsSrgbEXTProperty(false);
+        fx.setEmissiveTextureIsSrgbEXTProperty(false);
+        fx.setEncodeOutputToSrgbEXTProperty(false);
         fx.setTextureProperty(&albedoTex);
         fx.setNormalMapProperty(nullptr);
         fx.setMetallicFactorProperty(metallic);
@@ -157,6 +160,9 @@ public:
         RenderTarget2D renderTarget(dev, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
 
         SkinnedPbrEffect fx(dev);
+        fx.setBaseColorTextureIsSrgbEXTProperty(false);
+        fx.setEmissiveTextureIsSrgbEXTProperty(false);
+        fx.setEncodeOutputToSrgbEXTProperty(false);
         fx.setTextureProperty(&albedoTex);
         fx.setNormalMapProperty(nullptr);
         fx.setMetallicFactorProperty(0.0f);

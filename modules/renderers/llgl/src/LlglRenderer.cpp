@@ -3349,6 +3349,7 @@ namespace CNA::Internal::Renderers::Llgl
         uniforms[36] = params.ambientColor[0];
         uniforms[37] = params.ambientColor[1];
         uniforms[38] = params.ambientColor[2];
+        uniforms[39] = params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
 
         uniforms[40] = params.emissiveColor[0];
         uniforms[41] = params.emissiveColor[1];
@@ -3363,6 +3364,7 @@ namespace CNA::Internal::Renderers::Llgl
         uniforms[48] = params.light0Dir[0];
         uniforms[49] = params.light0Dir[1];
         uniforms[50] = params.light0Dir[2];
+        uniforms[51] = params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
         uniforms[52] = params.light0Diffuse[0];
         uniforms[53] = params.light0Diffuse[1];
         uniforms[54] = params.light0Diffuse[2];
@@ -3384,6 +3386,7 @@ namespace CNA::Internal::Renderers::Llgl
         uniforms[72] = params.eyePositionWorld[0];
         uniforms[73] = params.eyePositionWorld[1];
         uniforms[74] = params.eyePositionWorld[2];
+        uniforms[75] = params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
 
         if (params.fogEnabled)
         {

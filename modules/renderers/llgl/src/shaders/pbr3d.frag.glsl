@@ -11,16 +11,16 @@ layout(std140, binding = 1) uniform PbrParams
     mat4 mvpMatrix;
     mat4 worldMatrix;
     vec4 diffuseColor;
-    vec4 ambientColorPad;
+    vec4 ambientColorPad;      // xyz=ambient, w=decode base colour
     vec4 emissiveMetallic;
     vec4 roughnessWeightsPad;  // x=roughness, y=skin weights, z=normal scale, w=occlusion strength
-    vec4 light0DirPad;
+    vec4 light0DirPad;         // xyz=direction, w=encode output
     vec4 light0DiffusePad;
     vec4 light1DirPad;
     vec4 light1DiffusePad;
     vec4 light2DirPad;
     vec4 light2DiffusePad;
-    vec4 eyePositionWorldPad;
+    vec4 eyePositionWorldPad;  // xyz=eye position, w=decode emissive
     vec4 fogColor;
     vec4 fogVector;
     vec4 alphaTest;
@@ -54,6 +54,20 @@ vec3 safeNormalize(vec3 v)
     return len2 > 0.0 ? v * inversesqrt(len2) : vec3(0.0);
 }
 
+vec3 cnaSrgbToLinear(vec3 c)
+{
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+
+vec3 cnaLinearToSrgb(vec3 c)
+{
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
+
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.2/B.3.3/B.3.4).
 vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic)
@@ -81,7 +95,8 @@ void main()
     // Base colour factor and alpha are kept independent (not premultiplied) -- the PBR BRDF's
     // albedo and alpha are separate quantities per glTF's own baseColorFactor convention, unlike
     // most other CNA stock effects' DiffuseColor.
-    vec3 albedo = baseColorTex.rgb * diffuseColor.rgb;
+    vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), ambientColorPad.w);
+    vec3 albedo = baseColor * diffuseColor.rgb;
     float alpha = baseColorTex.a * diffuseColor.a;
     bool passesAlphaTest = (alphaTest.y > 0.0)
         ? (abs(alpha - alphaTest.x) < alphaTest.y)
@@ -116,13 +131,17 @@ void main()
     float occlusionSample = texture(sampler2D(occlusionMap, occlusionMapSampler), vTexCoord).r;
     float occlusion = 1.0 + roughnessWeightsPad.w * (occlusionSample - 1.0);
     vec3 ambient = ambientColorPad.xyz * albedo * occlusion;
-    vec3 emissive = emissiveMetallic.xyz * texture(sampler2D(emissiveMap, emissiveMapSampler), vTexCoord).rgb;
+    vec3 emissiveSample = texture(sampler2D(emissiveMap, emissiveMapSampler), vTexCoord).rgb;
+    emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), eyePositionWorldPad.w);
+    vec3 emissive = emissiveMetallic.xyz * emissiveSample;
 
     vec3 rgb = ambient + Lo + emissive;
     // vFogFactor is "how much fog" (0 = none, 1 = full), matching this renderer's own convention
     // (see lit_textured3d.frag.glsl) -- NOT the plain Vulkan renderer's opposite "how much of the
     // original colour to keep" convention.
-    rgb = mix(rgb, fogColor.rgb, vFogFactor);
+    vec3 fogLinear = mix(fogColor.rgb, cnaSrgbToLinear(fogColor.rgb), light0DirPad.w);
+    rgb = mix(rgb, fogLinear, vFogFactor);
+    rgb = mix(rgb, cnaLinearToSrgb(rgb), light0DirPad.w);
 
     fragColor = vec4(rgb, alpha);
 }
