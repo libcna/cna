@@ -219,7 +219,7 @@ they do not export C++ collections or attempt to mirror C++ overload sets mechan
 |---|---|---|---|
 | CBIND-028 | Expose `ContentManager` minimum | ✅ | `content.h` owns a game-child native manager created from the callback-scoped device, copies/counts its UTF-8 root, exposes explicit cache unload/destroy and provides the first approved typed load for Color Texture2D. Every successful load returns a new independently owned existing C texture handle that survives manager unload/destruction; missing assets and invalid names map predictably, and no native path, stream, service provider or template type crosses the ABI. HEADLESS and SDL_RENDERER strict-C tests cover pixels, cache/unload lifetime, parent order, stale handles and thread/UTF-8/capacity failures. |
 | CBIND-029 | Expose expanded input snapshots | ✅ | `input.h` now freezes fixed-layout mouse, four-player gamepad and eight-location touch snapshots. Capture is fresh and creation-thread-bound; disconnected devices return successful rest/empty values. Both native GamePad state overloads, all three dead-zone modes and all 31 current button bits are mapped, with exact pure-POD normalization/button helpers. Touch capability/state includes previous locations and CNA pressure plus local FindById/TryGetPrevious behavior. Strict-C HEADLESS and SDL_RENDERER tests cover all player/mode paths, synthetic numeric edge cases, absence, invalid inputs and wrong-thread refusal; ABI layout tests freeze every new POD. |
-| CBIND-030 | Expose minimal audio resource/control surface | ⬜ | Add only concrete C use-case APIs (for example sound creation/play/stop/volume) with explicit audio-thread and deferred-destruction behavior. No Sharp Runtime collection or async object crosses the boundary. |
+| CBIND-030 | Expose minimal audio resource/control surface | ✅ | `audio.h` maps canonical channel/state identities and a concrete owned PCM16LE `SoundEffect` → controllable `SoundEffectInstance` route: duration, play/pause/resume, immediate/release-tail stop, volume/pitch/pan/loop/info and explicit destruction. Bytes are copied; instance-before-effect-before-game ordering is enforced; all public calls are creation-thread-bound while the internal mixer keeps no C callback/context. No-device creation maps to `NOT_SUPPORTED`, native track disposal defines return-time handle invalidation, and strict-C dummy-audio tests freeze layout, validation, transitions, stale handles, parent order and wrong-thread refusal. |
 | CBIND-031 | Add pure-C content/audio regression programs | ⬜ | Verify UTF-8 paths, predictable load failures, handle ownership, audio shutdown and unavailable-device behavior using fixtures that do not rely on a future language binding. |
 | CBIND-032 | Extend capability reporting | ⬜ | Report feature/platform availability through stable C APIs so a C application can degrade gracefully instead of hard-coding build or renderer assumptions. |
 
@@ -304,12 +304,13 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-029` are ✅; `CBIND-030` through `CBIND-044` are ⬜ **not started**. The
+`CBIND-000` through `CBIND-030` are ✅; `CBIND-031` through `CBIND-044` are ⬜ **not started**. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
 snapshots and
 SDL pixel-verified backbuffer readback, not complete public CNA coverage. No language-specific
 binding exists. B4 is complete; B5 now includes owned content-manager/root/cache control and Color
-Texture2D loads plus keyboard/mouse/gamepad/touch capture. Audio/media and the complete
-public-surface inventory remain subsequent work.
+Texture2D loads, keyboard/mouse/gamepad/touch capture and a PCM16 SoundEffect/instance control
+route. Audio regression hardening, remaining audio/media and the complete public-surface inventory
+remain subsequent work.

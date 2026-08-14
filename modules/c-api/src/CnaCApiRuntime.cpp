@@ -39,6 +39,7 @@ struct RuntimeState final {
     bool hasActiveGame = false;
     uint64_t ownedGraphicsResourceCount = 0U;
     uint64_t ownedContentManagerCount = 0U;
+    uint64_t ownedAudioResourceCount = 0U;
 };
 
 [[nodiscard]] RuntimeState& GetRuntimeState()
@@ -373,6 +374,29 @@ bool HasOwnedContentManagers() noexcept
     return state.ownedContentManagerCount != 0U;
 }
 
+void AddOwnedAudioResource() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    ++state.ownedAudioResourceCount;
+}
+
+void RemoveOwnedAudioResource() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    if (state.ownedAudioResourceCount != 0U) {
+        --state.ownedAudioResourceCount;
+    }
+}
+
+bool HasOwnedAudioResources() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    return state.ownedAudioResourceCount != 0U;
+}
+
 } // namespace CNA::C::Detail
 
 CNA_Result cna_game_create(
@@ -513,7 +537,8 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (HasOwnedGraphicsResources() || CNA::C::Detail::HasOwnedContentManagers()) {
+        if (HasOwnedGraphicsResources() || CNA::C::Detail::HasOwnedContentManagers() ||
+            CNA::C::Detail::HasOwnedAudioResources()) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,

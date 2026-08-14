@@ -12,5 +12,6 @@
 #include "CNA/C/graphics.h"
 #include "CNA/C/input.h"
 #include "CNA/C/content.h"
+#include "CNA/C/audio.h"
 
 #endif

@@ -30,6 +30,7 @@ fallible calls return `CNA_Result`; no C++ or Sharp Runtime type or exception cr
 | Gamepad | Four player slots; default and explicit three-mode dead-zone capture; connection/packet, all 31 button bits, sticks/triggers; local combined-button and pure normalization helpers | Disconnected slots succeed with rest snapshots; capabilities, vibration and extensions remain planned |
 | Touch | Current capabilities and fixed-capacity eight-location collection with previous location and pressure; local find/previous helpers | Platform absence succeeds as disconnected/empty; display, gestures and events remain planned |
 | Content | Own a content manager; UTF-8 root count/copy/set; unload cache; load owned Color Texture2D handles; destroy | Create from a callback-scoped device; returned textures outlive manager unload/destruction; no other asset type yet |
+| Audio | Create owned mono/stereo PCM16LE effects; duration; owned instances; play/pause/resume/immediate or release-tail stop; volume/pitch/pan/loop/state; destroy | Creation-thread control; instances before effect before game; no device maps to `NOT_SUPPORTED`; no file/content, streaming, microphone, XACT or 3D route yet |
 | Values | ABI layouts for color, `Vector2` fields and `Rectangle` fields | Vector/rectangle methods, operators and named members are not yet mapped |
 
 The complete exported-function list is mechanically checked so the shared library exposes only
@@ -49,6 +50,7 @@ time. The initial slice currently has this automated evidence:
 | Content Texture2D load, cache/unload lifetime and exact decoded pixel | Tested | Tested | Not yet C-tested |
 | Keyboard, mouse, gamepad and touch capture/thread rules | Tested | Tested with SDL dummy video | Other platform/device combinations not yet C-tested |
 | Pure gamepad dead-zone/button and touch-location helpers | Tested | Tested | Renderer-independent copied POD operations |
+| PCM sound creation, mixer state transitions, threading and parent order | SDL dummy audio tested | SDL dummy audio/video tested | Audio behavior is renderer-independent; physical devices not C-tested |
 | SpriteBatch validation, state and lifetime | Tested | Tested | Not yet C-tested |
 | Observable SpriteBatch pixels | No raster backbuffer | Exact uploaded red/green/blue texels and clear pixel tested | No initial C evidence |
 | Full RGBA8 backbuffer readback | `CNA_RESULT_NOT_SUPPORTED`, destination unchanged | Tested before presentation | Depends on the selected native backend; not yet C-tested |
@@ -73,6 +75,8 @@ before this table claims support.
 | Mouse/gamepad/touch snapshot | Independent copied POD; it has no handle or game lifetime after capture |
 | ContentManager | Owned game child; destroy before game; unload/destroy does not destroy issued C resources |
 | Content-loaded Texture2D | New owned game child per successful load; remains valid after manager unload/destruction |
+| SoundEffect | Owned game child; copied PCM survives input buffer; destroy after all instances and before game |
+| SoundEffectInstance | Owned effect/game child; destroy before effect; no C callback/context is retained by mixer |
 
 Game, graphics, texture, batch, content and snapshot-capture calls use the game creation/graphics
 thread. Pure keyboard/gamepad/touch snapshot and normalization helpers are documented for any
@@ -97,7 +101,8 @@ thread.
 The following families are planned work, not implicitly supported and not permanent exclusions:
 
 - remaining content asset types, custom readers, manifests and content extensions;
-- audio, media and video;
+- remaining audio (file/content loading, fire-and-forget, globals/3D, streaming, microphone and
+  XACT), plus media and video;
 - complete math/value APIs, operators, constants and string conversions;
 - remaining window, platform, service, event and runtime APIs;
 - player-indexed keyboard capture, input mutation/events, gamepad control/capabilities/extensions

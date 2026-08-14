@@ -53,6 +53,11 @@ after the callback. Root access, loads, unload and destruction remain creation-t
 Resources returned by a content load are independent owned game children rather than borrowed
 manager-cache entries.
 
+Owned PCM sound effects and their instances also use the game creation thread for creation,
+control, query and destruction. The native audio mixer may run its own worker, but the initial C
+audio surface registers no user callback and retains no C context. Destroy instances before their
+effect and every audio handle before game destruction.
+
 The keyboard, mouse, gamepad and touch capture functions accept the active game handle and perform
 a fresh capture on this same creation thread; they are valid inside update/draw callbacks and at
 other safe points while the game handle is live. Their returned structures are independent POD

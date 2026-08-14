@@ -7,7 +7,8 @@ the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycl
 (`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery) plus
 owned Color-format `Texture2D` creation, bulk RGBA8 transfer, POD-array `SpriteBatch` submission and
 point-in-time keyboard, mouse, gamepad and touch snapshots. An owned `ContentManager` adds UTF-8
-root/cache control and a typed Color Texture2D load route. Exact support and omissions are recorded in
+root/cache control and a typed Color Texture2D load route; owned PCM16 sound effects add explicit
+instance playback/control. Exact support and omissions are recorded in
 [`FEATURE_MATRIX.md`](FEATURE_MATRIX.md). It is not complete public CNA coverage. The contract in
 this directory is binding on implementation until the release gate in
 [`../../plan_binding.md`](../../plan_binding.md) is complete.
@@ -55,7 +56,7 @@ no row is incomplete, even if a similar operation happens to work indirectly.
 - Every public declaration receives a Doxygen block in its `.h` header.
 
 The exact modules and headers are defined in the implementation plan. The current header split is
-`abi.h`, `core.h`, `runtime.h`, `graphics.h`, `input.h` and `content.h`; `audio.h` and later family
+`abi.h`, `core.h`, `runtime.h`, `graphics.h`, `input.h`, `content.h` and `audio.h`; later family
 headers follow as coverage requires.
 
 ## Supported configurations
@@ -80,5 +81,6 @@ The C API must not expose:
 See the sibling contract documents for ABI versioning, handles, ownership, errors, text/buffers,
 callbacks/threading, renderer capability reporting, [input snapshots](INPUT_SNAPSHOTS.md) and the
 Sharp Runtime boundary. The owned content/cache contract is in [`CONTENT.md`](CONTENT.md). The
+[audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary. The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record.

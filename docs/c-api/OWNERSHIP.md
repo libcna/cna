@@ -44,6 +44,11 @@ returns a separate owned C resource handle; that handle remains valid after mana
 destruction and keeps its own child-before-game obligation. Manager unload/destruction clears its
 native cache but never implicitly releases handles already issued to C.
 
+An owned C `SoundEffect` copies PCM bytes during creation and is scoped as a child of the active
+game. Each `SoundEffectInstance` is an explicit child of both the effect and game. Destroy all
+instances before the effect, then destroy the effect before the game. Instance destruction
+detaches the native mixer track and invalidates the C handle; the mixer retains no user C pointer.
+
 ## Values, strings and arrays
 
 POD input values are copied on entry. String views and arrays are borrowed only for the duration of

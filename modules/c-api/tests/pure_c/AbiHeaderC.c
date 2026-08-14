@@ -100,3 +100,16 @@ _Static_assert(sizeof(CNA_TouchCapabilities) == 16U,
                "CNA_TouchCapabilities layout must remain stable");
 _Static_assert(sizeof(CNA_TouchState) == 272U,
                "CNA_TouchState layout must remain stable");
+_Static_assert(sizeof(CNA_AudioChannels) == sizeof(uint32_t) &&
+                   CNA_AUDIO_CHANNELS_MONO == UINT32_C(1) &&
+                   CNA_AUDIO_CHANNELS_STEREO == UINT32_C(2),
+               "CNA audio channel identities must remain stable");
+_Static_assert(sizeof(CNA_SoundState) == sizeof(uint32_t) &&
+                   CNA_SOUND_STATE_PLAYING == UINT32_C(0) &&
+                   CNA_SOUND_STATE_PAUSED == UINT32_C(1) &&
+                   CNA_SOUND_STATE_STOPPED == UINT32_C(2),
+               "CNA sound-state identities must remain stable");
+_Static_assert(sizeof(CNA_SoundEffectCreateInfo) == 24U,
+               "CNA_SoundEffectCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_SoundEffectInstanceInfo) == 32U,
+               "CNA_SoundEffectInstanceInfo layout must remain stable");

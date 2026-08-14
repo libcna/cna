@@ -38,6 +38,12 @@ void RemoveOwnedContentManager() noexcept;
 
 [[nodiscard]] bool HasOwnedContentManagers() noexcept;
 
+void AddOwnedAudioResource() noexcept;
+
+void RemoveOwnedAudioResource() noexcept;
+
+[[nodiscard]] bool HasOwnedAudioResources() noexcept;
+
 } // namespace CNA::C::Detail
 
 #endif

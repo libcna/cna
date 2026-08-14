@@ -31,6 +31,8 @@ enum class ObjectKind : uint32_t {
     SpriteBatch = 5,
     EventRegistration = 6,
     ContentManager = 7,
+    SoundEffect = 8,
+    SoundEffectInstance = 9,
     Test = UINT32_MAX
 };
 
