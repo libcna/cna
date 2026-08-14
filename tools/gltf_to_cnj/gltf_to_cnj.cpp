@@ -35,6 +35,7 @@
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
 #include "GltfOracleEXT.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -1091,6 +1092,19 @@ namespace
                     json << ", \"normalScale\": " << e.material.normalScale;
                 if (e.material.occlusionStrength != 1.0f)
                     json << ", \"occlusionStrength\": " << e.material.occlusionStrength;
+                if (std::any_of(e.material.textureCoordinateSetsEXT.begin(),
+                                e.material.textureCoordinateSetsEXT.end(),
+                                [](std::uint8_t set) { return set != 0; }))
+                {
+                    json << ", \"textureCoordinateSets\": [";
+                    for (std::size_t slot = 0;
+                         slot < e.material.textureCoordinateSetsEXT.size(); ++slot)
+                    {
+                        if (slot != 0) json << ", ";
+                        json << static_cast<int>(e.material.textureCoordinateSetsEXT[slot]);
+                    }
+                    json << "]";
+                }
                 // Written only when not the glTF default, so an ordinary opaque material's .cnj is
                 // byte-identical to what it was before GLTF-228.
                 const std::string alphaMode = AlphaModeEXTName(e.material.alphaMode);

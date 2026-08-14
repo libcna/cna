@@ -32,6 +32,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -146,6 +147,8 @@ namespace CnaTest::GltfOracle
         float normalScale = 0.0f;
         /** @brief `GpuDrawParams::pbrOcclusionStrength` (glTF `occlusionTexture.strength`). */
         float occlusionStrength = 0.0f;
+        /** @brief Five-bit packed-UV selector mask from `GpuDrawParams`. */
+        std::uint32_t textureCoordinateSetMask = 0;
         /** @brief `GpuDrawParams::pbrBaseColorTextureIsSrgb`. */
         bool baseColorTextureIsSrgb = false;
         /** @brief `GpuDrawParams::pbrEmissiveTextureIsSrgb`. */

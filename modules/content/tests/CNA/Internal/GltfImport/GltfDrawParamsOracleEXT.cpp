@@ -285,6 +285,7 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                 dump.dielectricF90 = p.pbrDielectricF90;
                 dump.normalScale       = p.pbrNormalScale;
                 dump.occlusionStrength = p.pbrOcclusionStrength;
+                dump.textureCoordinateSetMask = p.pbrTextureCoordinateSetMask;
                 dump.baseColorTextureIsSrgb = p.pbrBaseColorTextureIsSrgb;
                 dump.emissiveTextureIsSrgb  = p.pbrEmissiveTextureIsSrgb;
                 dump.encodeOutputToSrgb     = p.pbrEncodeOutputToSrgb;
@@ -375,6 +376,8 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
         out += ",\"dielectricF90\":" + Num(dump.dielectricF90);
         out += ",\"normalScale\":" + Num(dump.normalScale);
         out += ",\"occlusionStrength\":" + Num(dump.occlusionStrength);
+        out += ",\"textureCoordinateSetMask\":" +
+               std::to_string(dump.textureCoordinateSetMask);
         out += ",\"baseColorTextureIsSrgb\":" + Bool(dump.baseColorTextureIsSrgb);
         out += ",\"emissiveTextureIsSrgb\":" + Bool(dump.emissiveTextureIsSrgb);
         out += ",\"encodeOutputToSrgb\":" + Bool(dump.encodeOutputToSrgb);

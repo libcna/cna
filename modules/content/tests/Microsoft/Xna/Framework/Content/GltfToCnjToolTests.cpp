@@ -443,10 +443,10 @@ namespace
   ]
 })GLTF";
 
-    // TEXCOORD_0 is deliberately filled with (9,9) sentinel values the tool must NEVER pick;
-    // the material's baseColorTexture selects "texCoord": 1, so the real UVs must come from
-    // TEXCOORD_1. Also carries a real embedded 1x1 PNG so the texture-extraction step (unrelated
-    // to what this fixture actually tests) succeeds rather than erroring on a missing file.
+    // TEXCOORD_0 is deliberately filled with (9,9) sentinel values while the base-colour map
+    // selects TEXCOORD_1's ordinary triangle UVs. An emissive map independently selects set 0,
+    // making both packed channels and the per-slot selector observable. Also carries a real
+    // embedded 1x1 PNG so texture extraction succeeds rather than masking the UV contract.
     const char* kTexcoordSelectionGltf = R"GLTF({
   "asset": { "version": "2.0" },
   "scene": 0,
@@ -456,7 +456,10 @@ namespace
       "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "TEXCOORD_1": 3 },
       "material": 0
   } ] } ],
-  "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0, "texCoord": 1 } } } ],
+  "materials": [ {
+    "pbrMetallicRoughness": { "baseColorTexture": { "index": 0, "texCoord": 1 } },
+    "emissiveTexture": { "index": 0, "texCoord": 0 }
+  } ],
   "textures": [ { "source": 0 } ],
   "images": [ { "bufferView": 4, "mimeType": "image/png" } ],
   "buffers": [ {
@@ -983,6 +986,7 @@ namespace
         EXPECT_NEAR(runtime.dielectricF90, offline.dielectricF90, kTolerance);
         EXPECT_NEAR(runtime.normalScale, offline.normalScale, kTolerance);
         EXPECT_NEAR(runtime.occlusionStrength, offline.occlusionStrength, kTolerance);
+        EXPECT_EQ(runtime.textureCoordinateSetMask, offline.textureCoordinateSetMask);
         expectArrayNear(runtime.emissiveColor, offline.emissiveColor, "emissiveColor");
         expectArrayNear(runtime.ambientColor, offline.ambientColor, "ambientColor");
 
@@ -1440,23 +1444,57 @@ TEST(GltfToCnjToolTest, UsesTexcoordSetSelectedByMaterial)
     const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "texc");
     ASSERT_EQ(exitCode, 0);
 
+    std::ifstream cnjFile(contentRoot.path() / "texc.cnj");
+    const std::string cnj((std::istreambuf_iterator<char>(cnjFile)),
+                          std::istreambuf_iterator<char>());
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"textureCoordinateSets\": [0, 0, 0, 1, 0]"));
+
     const std::filesystem::path vertsPath = contentRoot.path() / "texc_mesh0_verts.bin";
     ASSERT_TRUE(std::filesystem::exists(vertsPath));
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 48u); // stride 48, unskinned PBR (GLTF-215)
+    ASSERT_EQ(bytes.size(), 3u * 60u); // collision-free dual-UV unskinned PBR layout
 
-    // UV lives at byte offset 40 within each stride-48 vertex
+    // Packed UV0 lives at byte offset 40 within each stride-60 vertex
     // (pos12 + normal12 + tangent16 + uv8). TEXCOORD_0 was deliberately filled with (9,9)
     // sentinels the tool must never emit; the real values, from TEXCOORD_1 (the set the
-    // material's baseColorTexture actually selects), are (0,0), (1,0), (0,1).
+    // material's baseColorTexture actually selects), are (0,0), (1,0), (0,1). The emissive map
+    // independently selects TEXCOORD_0, so that source set is preserved as packed UV1 at offset
+    // 48 and the material selector maps only its slot to channel 1.
     float uv0[2], uv1[2], uv2[2];
-    std::memcpy(uv0, bytes.data() + 0 * 48 + 40, sizeof(uv0));
-    std::memcpy(uv1, bytes.data() + 1 * 48 + 40, sizeof(uv1));
-    std::memcpy(uv2, bytes.data() + 2 * 48 + 40, sizeof(uv2));
+    std::memcpy(uv0, bytes.data() + 0 * 60 + 40, sizeof(uv0));
+    std::memcpy(uv1, bytes.data() + 1 * 60 + 40, sizeof(uv1));
+    std::memcpy(uv2, bytes.data() + 2 * 60 + 40, sizeof(uv2));
     EXPECT_FLOAT_EQ(uv0[0], 0.0f); EXPECT_FLOAT_EQ(uv0[1], 0.0f);
     EXPECT_FLOAT_EQ(uv1[0], 1.0f); EXPECT_FLOAT_EQ(uv1[1], 0.0f);
     EXPECT_FLOAT_EQ(uv2[0], 0.0f); EXPECT_FLOAT_EQ(uv2[1], 1.0f);
+
+    float emissiveUv[2];
+    std::memcpy(emissiveUv, bytes.data() + 48, sizeof(emissiveUv));
+    EXPECT_FLOAT_EQ(emissiveUv[0], 9.0f);
+    EXPECT_FLOAT_EQ(emissiveUv[1], 9.0f);
+
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ContentManager runtimeCm(nullptr, gltfDir.path().string());
+    runtimeCm.setGraphicsDevice(gd);
+    Model runtimeModel = runtimeCm.Load<Model>("texc");
+    ContentManager offlineCm(nullptr, contentRoot.path().string());
+    offlineCm.setGraphicsDevice(gd);
+    Model offlineModel = offlineCm.Load<Model>("texc");
+
+    auto selectorsOf = [](Model& model) {
+        auto* effect = dynamic_cast<PbrEffect*>(model.getMeshesProperty()[0]
+            ->getMeshPartsProperty()[0]->getEffectProperty());
+        EXPECT_NE(effect, nullptr);
+        return effect != nullptr ? effect->getTextureCoordinateSetsEXTProperty()
+                                 : std::array<int, 5>{};
+    };
+    EXPECT_EQ(selectorsOf(runtimeModel), (std::array<int, 5>{0, 0, 0, 1, 0}));
+    EXPECT_EQ(selectorsOf(offlineModel), (std::array<int, 5>{0, 0, 0, 1, 0}));
 }
 
 TEST(GltfToCnjToolTest, OnlyImportsNodesReachableFromTheDefaultScene)

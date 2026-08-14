@@ -1039,6 +1039,42 @@ namespace Microsoft::Xna::Framework::Content
             return r;
         }
 
+        static std::array<int, 5> ParseTextureCoordinateSetsEXT(
+            const std::string& j, std::size_t from)
+        {
+            std::array<int, 5> r{};
+            if (from == std::string::npos) return r;
+            std::size_t pos = from + 1;
+            for (int i = 0; i < 5; ++i)
+            {
+                while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+                if (pos >= j.size() ||
+                    (!std::isdigit(static_cast<unsigned char>(j[pos])) && j[pos] != '-'))
+                {
+                    throw ContentLoadException(
+                        "Model .cnj 'textureCoordinateSets' must contain exactly five integers.");
+                }
+                std::size_t consumed = 0;
+                r[static_cast<std::size_t>(i)] = std::stoi(j.substr(pos), &consumed);
+                pos += consumed;
+                if (r[static_cast<std::size_t>(i)] < 0 ||
+                    r[static_cast<std::size_t>(i)] > 1)
+                {
+                    throw ContentLoadException(
+                        "Model .cnj 'textureCoordinateSets' entries must be 0 or 1.");
+                }
+                while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+                const char separator = i == 4 ? ']' : ',';
+                if (pos >= j.size() || j[pos] != separator)
+                {
+                    throw ContentLoadException(
+                        "Model .cnj 'textureCoordinateSets' must contain exactly five integers.");
+                }
+                ++pos;
+            }
+            return r;
+        }
+
         static std::array<float, 3> JsonFloatArray3(const std::string& j, std::size_t from)
         {
             std::array<float, 3> r{};
@@ -2710,8 +2746,10 @@ namespace Microsoft::Xna::Framework::Content
             // How many placements each glTF mesh has, so a name only carries its node when the
             // node is what distinguishes it (GLTF-141). Appending the node name unconditionally
             // would rename every mesh in the ordinary one-placement file for no gain.
-            // plan_gltf.md GLTF-238: one Effect per (material, import shape), shared by every
-            // primitive that lands on it.
+            // plan_gltf.md GLTF-238: one Effect per (material, import shape, packed UV mapping),
+            // shared by every primitive that lands on it. The last component matters when the
+            // same source material is used by primitives with different available TEXCOORD sets:
+            // source set 1 can become packed channel 0 on one and channel 1 on another.
             struct EffectCacheKey
             {
                 const cgltf_material* material = nullptr;
@@ -2723,6 +2761,7 @@ namespace Microsoft::Xna::Framework::Content
                 bool pbr = false;
                 bool dualTexture = false;
                 bool colored = false;
+                std::array<std::uint8_t, 5> textureCoordinateSets{};
                 bool operator==(const EffectCacheKey& other) const = default;
             };
             struct EffectCacheKeyHash
@@ -2734,7 +2773,10 @@ namespace Microsoft::Xna::Framework::Content
                         (key.dualTexture ? 4u : 0u) | (key.colored ? 8u : 0u);
                     const std::size_t materialHash = std::hash<const void*>{}(key.material);
                     const std::size_t skinHash = std::hash<const void*>{}(key.skinningData);
-                    return (materialHash * 31u + skinHash) * 31u + flags;
+                    std::size_t uvMask = 0;
+                    for (std::size_t i = 0; i < key.textureCoordinateSets.size(); ++i)
+                        if (key.textureCoordinateSets[i] != 0) uvMask |= std::size_t{1} << i;
+                    return ((materialHash * 31u + skinHash) * 31u + flags) * 31u + uvMask;
                 }
             };
             std::unordered_map<EffectCacheKey, Graphics::Effect*, EffectCacheKeyHash> effectCache;
@@ -2750,7 +2792,8 @@ namespace Microsoft::Xna::Framework::Content
                 const EffectCacheKey effectKey{
                     meshOut.material.sourceMaterialEXT,
                     meshOut.skinned ? skinningData : nullptr,
-                    meshOut.skinned, meshOut.usePbr, meshOut.useDualTexture, meshOut.colored};
+                    meshOut.skinned, meshOut.usePbr, meshOut.useDualTexture, meshOut.colored,
+                    meshOut.material.textureCoordinateSetsEXT};
                 if (const auto cached = effectCache.find(effectKey); cached != effectCache.end())
                 {
                     return cached->second;
@@ -2819,6 +2862,13 @@ namespace Microsoft::Xna::Framework::Content
                     pbrFx.setEmissiveFactorProperty(meshOut.material.emissiveFactor);
                     pbrFx.setNormalScaleEXTProperty(meshOut.material.normalScale);
                     pbrFx.setOcclusionStrengthEXTProperty(meshOut.material.occlusionStrength);
+                    for (std::size_t slot = 0;
+                         slot < meshOut.material.textureCoordinateSetsEXT.size(); ++slot)
+                    {
+                        pbrFx.setTextureCoordinateSetEXTProperty(
+                            static_cast<int>(slot),
+                            static_cast<int>(meshOut.material.textureCoordinateSetsEXT[slot]));
+                    }
                     pbrFx.setDiffuseColorProperty(Vector3(
                         meshOut.material.baseColorFactor.X,
                         meshOut.material.baseColorFactor.Y,
@@ -3893,6 +3943,13 @@ namespace Microsoft::Xna::Framework::Content
                             material.normalScale = JsonFloat(mg, "normalScale", 1.0f);
                             material.occlusionStrength =
                                 JsonFloat(mg, "occlusionStrength", 1.0f);
+                            const auto textureCoordinateSets = ParseTextureCoordinateSetsEXT(
+                                mg, FindKeyArray(mg, "textureCoordinateSets"));
+                            for (std::size_t slot = 0; slot < textureCoordinateSets.size(); ++slot)
+                            {
+                                material.textureCoordinateSetsEXT[slot] =
+                                    static_cast<std::uint8_t>(textureCoordinateSets[slot]);
+                            }
                             // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Absent from a .cnj written
                             // before them, whose defaults are glTF's own -- so an older asset loads
                             // as the opaque, single-sided material it could only ever have been.
@@ -4394,6 +4451,13 @@ namespace Microsoft::Xna::Framework::Content
                                 pbrFx->setNormalScaleEXTProperty(material.normalScale);
                                 pbrFx->setOcclusionStrengthEXTProperty(
                                     material.occlusionStrength);
+                                for (std::size_t slot = 0;
+                                     slot < material.textureCoordinateSetsEXT.size(); ++slot)
+                                {
+                                    pbrFx->setTextureCoordinateSetEXTProperty(
+                                        static_cast<int>(slot), static_cast<int>(
+                                            material.textureCoordinateSetsEXT[slot]));
+                                }
                                 pbrFx->setDiffuseColorProperty(Vector3(
                                     material.baseColorFactor.X, material.baseColorFactor.Y,
                                     material.baseColorFactor.Z));
@@ -4433,6 +4497,13 @@ namespace Microsoft::Xna::Framework::Content
                                 skinnedPbrFx->setNormalScaleEXTProperty(material.normalScale);
                                 skinnedPbrFx->setOcclusionStrengthEXTProperty(
                                     material.occlusionStrength);
+                                for (std::size_t slot = 0;
+                                     slot < material.textureCoordinateSetsEXT.size(); ++slot)
+                                {
+                                    skinnedPbrFx->setTextureCoordinateSetEXTProperty(
+                                        static_cast<int>(slot), static_cast<int>(
+                                            material.textureCoordinateSetsEXT[slot]));
+                                }
                                 skinnedPbrFx->setDiffuseColorProperty(Vector3(
                                     material.baseColorFactor.X, material.baseColorFactor.Y,
                                     material.baseColorFactor.Z));
