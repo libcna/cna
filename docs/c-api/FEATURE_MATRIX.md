@@ -30,7 +30,7 @@ fallible calls return `CNA_Result`; no C++ or Sharp Runtime type or exception cr
 | Gamepad | Four player slots; default and explicit three-mode dead-zone capture; connection/packet, all 31 button bits, sticks/triggers; local combined-button and pure normalization helpers | Disconnected slots succeed with rest snapshots; capabilities, vibration and extensions remain planned |
 | Touch | Current capabilities and fixed-capacity eight-location collection with previous location and pressure; local find/previous helpers | Platform absence succeeds as disconnected/empty; display, gestures and events remain planned |
 | Content | Own a content manager; UTF-8 root count/copy/set; unload cache; load owned Color Texture2D handles; destroy | Create from a callback-scoped device; returned textures outlive manager unload/destruction; no other asset type yet |
-| Audio | Create owned mono/stereo PCM16LE effects; duration; owned instances; play/pause/resume/immediate or release-tail stop; volume/pitch/pan/loop/state; destroy | Creation-thread control; instances before effect before game; no device maps to `NOT_SUPPORTED`; no file/content, streaming, microphone, XACT or 3D route yet |
+| Audio | Probe real playback availability; create owned mono/stereo PCM16LE effects; duration; owned instances; play/pause/resume/immediate or release-tail stop; volume/pitch/pan/loop/state; destroy | Availability is a successful versioned snapshot; creation-thread control; instances before effect before game; no device maps resource creation to `NOT_SUPPORTED`; no file/content, streaming, microphone, XACT or 3D route yet |
 | Values | ABI layouts for color, `Vector2` fields and `Rectangle` fields | Vector/rectangle methods, operators and named members are not yet mapped |
 
 The complete exported-function list is mechanically checked so the shared library exposes only
@@ -50,15 +50,15 @@ time. The initial slice currently has this automated evidence:
 | Content Texture2D load, cache/unload lifetime and exact decoded pixel | Tested | Tested | Not yet C-tested |
 | Keyboard, mouse, gamepad and touch capture/thread rules | Tested | Tested with SDL dummy video | Other platform/device combinations not yet C-tested |
 | Pure gamepad dead-zone/button and touch-location helpers | Tested | Tested | Renderer-independent copied POD operations |
-| PCM sound creation, mixer state transitions, threading and parent order | SDL dummy audio tested | SDL dummy audio/video tested | Audio behavior is renderer-independent; physical devices not C-tested |
-| Unavailable audio device and shutdown after repeated creation failure | Isolated invalid-driver process tested | Isolated invalid-audio/dummy-video process tested | Exact driver availability is platform-specific |
+| Audio availability, PCM creation, mixer transitions, threading and parent order | Available snapshot plus SDL dummy audio tested | Available snapshot plus SDL dummy audio/video tested | Audio behavior is renderer-independent; physical devices not C-tested |
+| Unavailable audio device and shutdown after repeated probes/creation failures | Successful unavailable snapshots in isolated invalid-driver process | Successful unavailable snapshots in isolated invalid-audio/dummy-video process | Exact driver availability is platform-specific |
 | SpriteBatch validation, state and lifetime | Tested | Tested | Not yet C-tested |
 | Observable SpriteBatch pixels | No raster backbuffer | Exact uploaded red/green/blue texels and clear pixel tested | No initial C evidence |
 | Full RGBA8 backbuffer readback | `CNA_RESULT_NOT_SUPPORTED`, destination unchanged | Tested before presentation | Depends on the selected native backend; not yet C-tested |
 
-An enumerated renderer identity is not a support claim. Applications must query capabilities and
-handle `CNA_RESULT_NOT_SUPPORTED`; future renderer work must add renderer-appropriate C evidence
-before this table claims support.
+An enumerated renderer identity is not a support claim. Applications must query graphics, touch
+and audio capabilities and handle `CNA_RESULT_NOT_SUPPORTED`; future platform work must add
+appropriate C evidence before this table claims support.
 
 ## Ownership and call context
 

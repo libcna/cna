@@ -99,6 +99,43 @@ struct SoundEffectInstanceResource final {
 
 } // namespace
 
+CNA_Result cna_audio_get_capabilities(
+    const CNA_Handle gameHandle,
+    CNA_AudioCapabilities* const outCapabilities)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outCapabilities == nullptr ||
+            outCapabilities->struct_size < sizeof(CNA_AudioCapabilities) ||
+            outCapabilities->struct_version != StructureVersion) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The audio-capabilities output structure is invalid.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        CNA_Bool isPlaybackAvailable = CNA_TRUE;
+        try {
+            static_cast<void>(SoundEffect::getMasterVolumeProperty());
+        } catch (const NoAudioHardwareException&) {
+            isPlaybackAvailable = CNA_FALSE;
+        }
+
+        const CNA_AudioCapabilities capabilities = {
+            sizeof(CNA_AudioCapabilities),
+            StructureVersion,
+            isPlaybackAvailable,
+            {0U, 0U, 0U},
+            0U
+        };
+        *outCapabilities = capabilities;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_sound_effect_create_pcm16(
     const CNA_Handle gameHandle,
     const CNA_SoundEffectCreateInfo* const createInfo,

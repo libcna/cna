@@ -8,7 +8,8 @@ the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycl
 owned Color-format `Texture2D` creation, bulk RGBA8 transfer, POD-array `SpriteBatch` submission and
 point-in-time keyboard, mouse, gamepad and touch snapshots. An owned `ContentManager` adds UTF-8
 root/cache control and a typed Color Texture2D load route; owned PCM16 sound effects add explicit
-instance playback/control. Exact support and omissions are recorded in
+instance playback/control plus a real native playback-availability probe. Exact support and
+omissions are recorded in
 [`FEATURE_MATRIX.md`](FEATURE_MATRIX.md). It is not complete public CNA coverage. The contract in
 this directory is binding on implementation until the release gate in
 [`../../plan_binding.md`](../../plan_binding.md) is complete.
@@ -62,8 +63,9 @@ headers follow as coverage requires.
 ## Supported configurations
 
 The C API shares CNA's compile-time renderer selection. It does not add a second renderer
-selection mechanism. A C program can query the selected renderer and supported capabilities, and
-an unsupported operation returns `CNA_RESULT_NOT_SUPPORTED` instead of silently changing behavior.
+selection mechanism. A C program can query the selected renderer, graphics features, touch-device
+connection and native audio-playback availability. An unsupported operation returns
+`CNA_RESULT_NOT_SUPPORTED` instead of silently changing behavior.
 
 The automated vertical slice runs with HEADLESS for deterministic state and honest unsupported
 readback behavior. The same strict-C source runs under SDL_RENDERER and verifies exact texture,

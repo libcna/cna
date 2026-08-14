@@ -27,6 +27,12 @@ A recognized capability that is unavailable is a successful query returning `CNA
 unset bit. An operation that requires it returns `CNA_RESULT_NOT_SUPPORTED` and leaves documented
 outputs unchanged. An unknown capability identifier returns `CNA_RESULT_INVALID_ARGUMENT`.
 
+Platform-device availability uses the same successful-snapshot rule. `cna_touch_get_capabilities`
+reports connection and maximum touches, while `cna_audio_get_capabilities` probes CNA's real native
+audio mixer and reports whether playback can currently be opened. Applications therefore need not
+infer device support from the graphics renderer, operating-system name or build configuration.
+The audio probe can initialize CNA's process-wide mixer but creates no owned C handle.
+
 ## Initial SpriteBatch state boundary
 
 The initial batched C path maps every native `SpriteSortMode` and the two `SpriteEffects` bits. Its

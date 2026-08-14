@@ -27,6 +27,24 @@ typedef uint32_t CNA_SoundState;
 /** @brief Indicates that a sound instance is stopped. */
 #define CNA_SOUND_STATE_STOPPED UINT32_C(2)
 
+/** @brief Describes current native audio-playback availability. */
+typedef struct CNA_AudioCapabilities {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief `CNA_TRUE` when the native playback device can currently be opened. */
+    CNA_Bool is_playback_available;
+
+    /** @brief Reserved bytes; returned as zero. */
+    uint8_t reserved0[3];
+
+    /** @brief Reserved for future use; returned as zero. */
+    uint32_t reserved1;
+} CNA_AudioCapabilities;
+
 /** @brief Configures creation of an owned sound effect from PCM16LE bytes. */
 typedef struct CNA_SoundEffectCreateInfo {
     /** @brief Size of this caller-provided structure in bytes. */
@@ -74,6 +92,22 @@ typedef struct CNA_SoundEffectInstanceInfo {
     /** @brief Reserved for future use; returned as zero. */
     uint32_t reserved1;
 } CNA_SoundEffectInstanceInfo;
+
+/**
+ * @brief Probes native audio playback and returns an availability snapshot.
+ *
+ * @param game Active owned game handle used for creation-thread scope.
+ * @param out_capabilities Caller-provided versioned structure to receive capabilities.
+ * @return `CNA_RESULT_SUCCESS` even when playback is unavailable, or a documented
+ * argument/handle/thread/native failure when the probe itself cannot be performed.
+ *
+ * The first call may initialize CNA's process-wide native audio mixer. Applications should use
+ * `is_playback_available` instead of inferring support from the operating system, renderer or
+ * build configuration. A false value is not an error and no owned C resource is created.
+ */
+CNA_C_API CNA_Result cna_audio_get_capabilities(
+    CNA_Handle game,
+    CNA_AudioCapabilities* out_capabilities);
 
 /**
  * @brief Creates an owned sound effect by copying headerless signed PCM16LE bytes.

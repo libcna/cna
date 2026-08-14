@@ -73,5 +73,6 @@ static_assert(sizeof(CNA_SoundState) == sizeof(uint32_t));
 static_assert(CNA_SOUND_STATE_PLAYING == UINT32_C(0));
 static_assert(CNA_SOUND_STATE_PAUSED == UINT32_C(1));
 static_assert(CNA_SOUND_STATE_STOPPED == UINT32_C(2));
+static_assert(sizeof(CNA_AudioCapabilities) == 16U);
 static_assert(sizeof(CNA_SoundEffectCreateInfo) == 24U);
 static_assert(sizeof(CNA_SoundEffectInstanceInfo) == 32U);

@@ -221,7 +221,7 @@ they do not export C++ collections or attempt to mirror C++ overload sets mechan
 | CBIND-029 | Expose expanded input snapshots | ✅ | `input.h` now freezes fixed-layout mouse, four-player gamepad and eight-location touch snapshots. Capture is fresh and creation-thread-bound; disconnected devices return successful rest/empty values. Both native GamePad state overloads, all three dead-zone modes and all 31 current button bits are mapped, with exact pure-POD normalization/button helpers. Touch capability/state includes previous locations and CNA pressure plus local FindById/TryGetPrevious behavior. Strict-C HEADLESS and SDL_RENDERER tests cover all player/mode paths, synthetic numeric edge cases, absence, invalid inputs and wrong-thread refusal; ABI layout tests freeze every new POD. |
 | CBIND-030 | Expose minimal audio resource/control surface | ✅ | `audio.h` maps canonical channel/state identities and a concrete owned PCM16LE `SoundEffect` → controllable `SoundEffectInstance` route: duration, play/pause/resume, immediate/release-tail stop, volume/pitch/pan/loop/info and explicit destruction. Bytes are copied; instance-before-effect-before-game ordering is enforced; all public calls are creation-thread-bound while the internal mixer keeps no C callback/context. No-device creation maps to `NOT_SUPPORTED`, native track disposal defines return-time handle invalidation, and strict-C dummy-audio tests freeze layout, validation, transitions, stale handles, parent order and wrong-thread refusal. |
 | CBIND-031 | Add pure-C content/audio regression programs | ✅ | `ContentSmoke.c` now loads its exact pixel fixture through a real valid non-ASCII UTF-8 filename while retaining malformed/embedded-NUL, missing-file IO, cache and ownership coverage. `AudioSmoke.c` covers the successful dummy-device lifecycle, and isolated `AudioUnavailableSmoke.c` forces a nonexistent SDL driver twice to prove stable `NOT_SUPPORTED`, invalid output handles, structured diagnostics, no leaked child count and clean game shutdown. The same strict-C programs pass with HEADLESS and SDL_RENDERER and depend on no future language binding. |
-| CBIND-032 | Extend capability reporting | ⬜ | Report feature/platform availability through stable C APIs so a C application can degrade gracefully instead of hard-coding build or renderer assumptions. |
+| CBIND-032 | Extend capability reporting | ✅ | Graphics renderer identity plus all 13 native graphics capabilities, touch connection/count and now native audio playback availability have stable versioned C query routes. `cna_audio_get_capabilities` probes CNA's real process-wide mixer, returns `SUCCESS` plus false when no device can open, creates no owned C resource, and preserves argument/handle/thread failures. Strict-C dummy and deliberately invalid audio drivers prove both outcomes under HEADLESS and SDL_RENDERER; fixed layout and zeroed reserves are ABI-tested. |
 
 ## Phase B6 — complete public CNA API coverage
 
@@ -304,7 +304,7 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-031` are ✅; `CBIND-032` through `CBIND-044` are ⬜ **not started**. The
+`CBIND-000` through `CBIND-032` are ✅; `CBIND-033` through `CBIND-044` are ⬜ **not started**. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -312,5 +312,5 @@ snapshots and
 SDL pixel-verified backbuffer readback, not complete public CNA coverage. No language-specific
 binding exists. B4 is complete; B5 now includes owned content-manager/root/cache control and Color
 Texture2D loads, keyboard/mouse/gamepad/touch capture and a PCM16 SoundEffect/instance control
-route with isolated success/unavailable-device regressions. Capability extension, remaining
-audio/media and the complete public-surface inventory remain subsequent work.
+route with stable native playback-availability reporting and isolated success/unavailable-device
+regressions. B5 is complete; the generated complete public-surface inventory is next.

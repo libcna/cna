@@ -34,6 +34,13 @@ Creation, query, control and destruction calls all run on the game creation thre
 call returns `CNA_RESULT_THREAD` before touching mixer state. SDL/CNA may mix and finish tracks on
 an internal audio thread, but this initial API installs no C callback and retains no caller context.
 
+`cna_audio_get_capabilities` is the stable preflight for playback availability. It validates an
+active game and probes CNA's real process-wide native mixer rather than guessing from a renderer,
+operating system or compile-time name. The first query may initialize that mixer. A missing device
+is represented by `CNA_RESULT_SUCCESS` plus `is_playback_available == CNA_FALSE`; malformed ABI
+structures, stale handles and wrong-thread calls remain errors. The query creates no owned C
+resource, so a false result does not prevent clean game destruction.
+
 Instance destruction calls native `Dispose`, which stops and detaches its track. CNA/SDL performs
 any mixer-iteration-safe internal cleanup; when the C call returns, the C handle is invalid and no
 later mixer activity can call into user C code. A non-immediate `Stop` merely exits a loop and lets
@@ -41,9 +48,10 @@ the current sound finish; destroying that instance still cuts off and releases i
 
 When no audio device can be opened, effect creation returns `CNA_RESULT_NOT_SUPPORTED` and leaves
 the output handle invalid. The positive regression uses SDL's dummy audio driver so it exercises
-real mixer creation and track transitions without requiring speakers. A separate regression
-process forces a nonexistent SDL audio driver and proves repeatable `NOT_SUPPORTED`, invalid output
-handles, structured diagnostics and clean game shutdown after failed mixer initialization.
+real availability probing, mixer creation and track transitions without requiring speakers. A
+separate regression process forces a nonexistent SDL audio driver and proves repeatable successful
+unavailable snapshots followed by `NOT_SUPPORTED` creation, invalid output handles, structured
+diagnostics and clean game shutdown after failed mixer initialization.
 
 ## Current boundary
 
