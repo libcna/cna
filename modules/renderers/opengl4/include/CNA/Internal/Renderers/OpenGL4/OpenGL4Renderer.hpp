@@ -480,7 +480,12 @@ namespace CNA::Internal::Renderers::OpenGL4
         std::vector<uint16_t> pendingIndices_;
     };
 
-    struct GraphicsRendererCreateArgs;
+    // plan_runtimerenderer.md: a stray forward declaration of GraphicsRendererCreateArgs used to
+    // sit here, inside namespace ...::OpenGL4. It declared a DIFFERENT, never-defined type that
+    // shadowed the real CNA::Internal::Renderers::GraphicsRendererCreateArgs for anything declared
+    // in this namespace. Harmless while nothing here named that type; it broke the moment this
+    // family's factory moved into its own namespace (design decision 4). Unused -- removed.
+    // Only opengl4 had it.
 
     /** @brief Real desktop OpenGL 4.x core-profile `IGraphicsRenderer` implementation. */
     class OpenGL4Renderer final : public IGraphicsRenderer
