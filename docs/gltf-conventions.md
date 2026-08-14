@@ -26,6 +26,29 @@ Because all of these agree, the importer contains **no axis remap, no handedness
 flip anywhere**. A position authored as `(1, 2, 3)` arrives in the vertex buffer as `(1, 2, 3)`; a
 normal of `(0, 0, 1)` stays `(0, 0, 1)`; a UV of `(0.25, 0.75)` stays `(0.25, 0.75)`.
 
+### Asset UVs are not render-target orientation state (`GLTF-192`, `GLTF-397`)
+
+An OpenGL render target may store its native colour attachment bottom-up even though an uploaded
+`Texture2D`, glTF and XNA all define UV `(0,0)` at the logical top-left. That is a resource-storage
+difference, not permission to rewrite an asset's UVs. EasyGL corrects it at sampling time with one
+per-bound-resource flag: `cnaSampleUV(uv, flip)` receives `flip=1` only for a bottom-up render-target
+surface and `0` for an ordinary uploaded texture. Every flag is rebuilt and uploaded on every draw,
+including the all-zero case, so sampling a render target cannot leave state that flips the next glTF
+texture. PBR's base colour, normal, metallic-roughness, emissive and occlusion slots each have their
+own flag; Vulkan and SOFTWARE need no native-storage correction but expose the same top-left public
+result.
+
+The separation is asserted from both sides. `GltfConventions.PositionsNormalsAndUvsPassThroughUnchanged`
+locks asymmetric authored V values byte-for-byte, and `tex-reference-checkerboard` has distinct
+colours/numerals in all four quadrants. The renderer-neutral
+`rendertarget_sampling_orientation_test.cpp` then uses a non-square 8x4 pattern with every texel
+unique and standard, deliberately **unflipped** mesh UVs. Its CD legs require an ordinary
+`Texture2D` to sample upright and a `RenderTarget2D` containing the same logical bytes to match it
+texel-for-texel through stock 3D effects; other legs cover SpriteBatch, target chains, explicit
+public flips, MSAA, mipmaps, viewport and scissor without changing those mesh coordinates. Current
+results are EasyGL **62/62**, Vulkan **58/58** (its unsupported 4x path is recorded explicitly) and
+SOFTWARE **62/62**; HEADLESS passes the declared non-rasterising/refusal boundary.
+
 ### The one thing that *is* converted, and why it is not an exception
 
 glTF stores a matrix as 16 floats in **column-major order with the column-vector convention**

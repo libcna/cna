@@ -954,6 +954,14 @@ both depth-range checks), while SOFTWARE passes 25/25 plus the 4/4 public depth 
 renderer-independent L5/L6 outputs and all four raster/capability corpus selections remain green.
 No importer compensation is permitted for these renderer-owned differences.
 
+`GLTF-397` similarly keeps render-target orientation out of import. The asymmetric asset UV lock
+remains byte-exact, while the shared 8x4 render-target sampling oracle feeds the same deliberately
+unflipped mesh UVs to an ordinary uploaded texture and to a rendered texture. EasyGL is 62/62,
+Vulkan 58/58 and SOFTWARE 62/62; HEADLESS passes its explicit refusal boundary. The stock 3D legs
+prove both sources upright and texel-identical. EasyGL's `cnaSampleUV` flag is recomputed per bound
+resource and uploaded even when zero, so a bottom-up target correction cannot leak into the next
+ordinary glTF/PBR texture draw.
+
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
 directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a
