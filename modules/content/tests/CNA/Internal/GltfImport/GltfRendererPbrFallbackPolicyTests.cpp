@@ -47,6 +47,15 @@ namespace
         return text;
     }
 
+    std::size_t CountOccurrences(const std::string& source, const std::string& fragment)
+    {
+        std::size_t count = 0;
+        for (std::size_t at = source.find(fragment); at != std::string::npos;
+             at = source.find(fragment, at + fragment.size()))
+            ++count;
+        return count;
+    }
+
     std::string RendererText(const std::filesystem::path& renderer)
     {
         std::string result;
@@ -527,7 +536,9 @@ namespace
             R"(sampledNormal.xy *= u_metallicRoughnessFactor.z;)",
             R"(occlusion = 1.0 + u_metallicRoughnessFactor.w * (occlusion - 1.0);)"}}},
         {"diligent", {{
-            R"(params.pbrNormalScale, params.pbrOcclusionStrength, 0.0f, 0.0f)",
+            R"(params.pbrNormalScale, params.pbrOcclusionStrength,
+                params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f)",
             R"(float4 g_PbrMapScales;)",
             R"(sampledNormal.xy *= g_PbrMapScales.x;)",
             R"(occlusion = 1.0 + g_PbrMapScales.y * (occlusion - 1.0);)"}}},
@@ -596,6 +607,81 @@ namespace
             R"(constants.pbrFactors[3] = params->pbrOcclusionStrength;)",
             R"(sampledNormal.xy *= cb.pbrFactors.z;)",
             R"(const float occlusion = 1.0f + cb.pbrFactors.w * (occlusionSample - 1.0f);)"}}},
+    }};
+
+    struct RendererPbrColorSpaceAudit
+    {
+        const char* name;
+        const char* baseDecode;
+        const char* emissiveDecode;
+        const char* outputEncode;
+        std::size_t shaderCopies;
+    };
+
+    // A shared fragment program needs one copy. Backends that compile distinct rigid and skinned
+    // fragment sources need two, so one correct variant cannot hide a stale sibling in aggregate
+    // source text. CPU evidence is checked independently below for all three public draw flags.
+    constexpr std::array<RendererPbrColorSpaceAudit, 15> kPbrColorSpaceAudits{{
+        {"bgfx",
+         "mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), u_srgb.x)",
+         "mix(emissiveSample, cnaSrgbToLinear(emissiveSample), u_srgb.y)",
+         "mix(result.rgb, cnaLinearToSrgb(result.rgb), u_srgb.z)", 1},
+        {"diligent",
+         "lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), g_PbrMapScales.z)",
+         "lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), g_PbrMapScales.w)",
+         "lerp(color.rgb, CnaLinearToSrgb(color.rgb), g_FogColor.w)", 1},
+        {"directx9",
+         "lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w)",
+         "lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), EmissiveColor.w)",
+         "lerp(outColor.rgb, CnaLinearToSrgb(outColor.rgb), FogColor.w)", 2},
+        {"directx11",
+         "lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), PbrMapScales.z)",
+         "lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), PbrMapScales.w)",
+         "lerp(outColor.rgb, CnaLinearToSrgb(outColor.rgb), FogColor.w)", 2},
+        {"directx12",
+         "lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), PbrMapScales.z)",
+         "lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), PbrMapScales.w)",
+         "lerp(outColor.rgb, CnaLinearToSrgb(outColor.rgb), FogColor.w)", 2},
+        {"easygl",
+         "mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x)",
+         "mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y)",
+         "mix(FragColor.rgb,cnaLinearToSrgb(FragColor.rgb),uSrgb.z)", 2},
+        {"llgl",
+         "mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), ambientColorPad.w)",
+         "mix(emissiveSample, cnaSrgbToLinear(emissiveSample), eyePositionWorldPad.w)",
+         "mix(rgb, cnaLinearToSrgb(rgb), light0DirPad.w)", 1},
+        {"magnum",
+         "mix(baseColor.rgb, cnaSrgbToLinear(baseColor.rgb), uSrgb.x)",
+         "mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y)",
+         "mix(fragColor.rgb, cnaLinearToSrgb(fragColor.rgb), uSrgb.z)", 1},
+        {"metal",
+         "mix(baseColorTex.rgb, cna_srgb_to_linear(baseColorTex.rgb), pu.srgbFlags.x)",
+         "mix(emissiveSample, cna_srgb_to_linear(emissiveSample), pu.srgbFlags.y)",
+         "mix(c.rgb, cna_linear_to_srgb(c.rgb), pu.srgbFlags.z)", 1},
+        {"opengl2",
+         "mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),vec3(uSrgb.x))",
+         "mix(emissiveSample,cnaSrgbToLinear(emissiveSample),vec3(uSrgb.y))",
+         "mix(gl_FragData[0].rgb,cnaLinearToSrgb(gl_FragData[0].rgb),vec3(uSrgb.z))", 1},
+        {"opengl4",
+         "mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), uSrgb.x)",
+         "mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y)",
+         "mix(rgb, cnaLinearToSrgb(rgb), uSrgb.z)", 1},
+        {"sdl-gpu",
+         "mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), pbrp.srgbFlags.x)",
+         "mix(emissiveSample, cnaSrgbToLinear(emissiveSample), pbrp.srgbFlags.y)",
+         "mix(outColor.rgb, cnaLinearToSrgb(outColor.rgb), pbrp.srgbFlags.z)", 1},
+        {"vulkan",
+         "mix(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), pbr.srgbFlags.x)",
+         "mix(emissiveSample, CnaSrgbToLinear(emissiveSample), pbr.srgbFlags.y)",
+         "mix(outColor.rgb, CnaLinearToSrgb(outColor.rgb), pbr.srgbFlags.z)", 2},
+        {"webgpu",
+         "select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5)",
+         "select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5)",
+         "select(linearRgb, linearToSrgb(linearRgb), pf.srgbFlags.z > 0.5)", 2},
+        {"wicked",
+         "lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), cb.pbrSrgb.x)",
+         "lerp(emissiveRaw, CnaSrgbToLinear(emissiveRaw), cb.pbrSrgb.y)",
+         "lerp(rgb, CnaLinearToSrgb(rgb), cb.pbrSrgb.z)", 1},
     }};
 
     std::string RendererSlotText(const std::filesystem::path& renderers, const char* name)
@@ -805,18 +891,46 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesNormalScaleAndOcclusio
         }
     }
 
-    // Rigid and skinned WebGPU pipelines share the same two-vec4 PbrFactors ABI. The old 16-byte
-    // minimum accepted the first vector but caused Dawn to reject both pipelines as soon as the
-    // alpha-coverage vector made the WGSL structure 32 bytes.
+    // Rigid and skinned WebGPU pipelines share the same three-vec4 PbrFactors ABI. The old 16-byte
+    // minimum accepted the first vector but caused Dawn to reject both pipelines as the alpha and
+    // colour-transfer vectors expanded the WGSL structure to 48 bytes.
     const std::string webgpu = RendererSlotText(renderers, "webgpu");
     const std::string pbrFactorsSize = Normalize(
-        "uboEntries[2].buffer.minBindingSize = 8 * sizeof(float)");
+        "uboEntries[2].buffer.minBindingSize = 12 * sizeof(float)");
     std::size_t pbrFactorsSizeCount = 0;
     for (std::size_t at = webgpu.find(pbrFactorsSize); at != std::string::npos;
          at = webgpu.find(pbrFactorsSize, at + pbrFactorsSize.size()))
         ++pbrFactorsSizeCount;
     EXPECT_EQ(2u, pbrFactorsSizeCount)
-        << "both WebGPU PBR pipeline layouts must expose the complete 32-byte factors block";
+        << "both WebGPU PBR pipeline layouts must expose the complete 48-byte factors block";
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsColorSpaceDeclarations)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const RendererPbrColorSpaceAudit& audit : kPbrColorSpaceAudits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+
+        for (const char* flag : {"pbrBaseColorTextureIsSrgb",
+                                 "pbrEmissiveTextureIsSrgb",
+                                 "pbrEncodeOutputToSrgb"})
+        {
+            EXPECT_NE(std::string::npos, source.find(flag))
+                << "the renderer does not consume draw flag " << flag;
+        }
+
+        for (const char* evidence :
+             {audit.baseDecode, audit.emissiveDecode, audit.outputEncode})
+        {
+            const std::string normalized = Normalize(evidence);
+            EXPECT_GE(CountOccurrences(source, normalized), audit.shaderCopies)
+                << "missing PBR colour-transfer evidence: " << evidence;
+        }
+    }
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJointMatrix)
