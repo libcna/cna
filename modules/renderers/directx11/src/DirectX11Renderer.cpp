@@ -1585,6 +1585,8 @@ namespace CNA::Internal::Renderers::DirectX11
             perDraw.AlphaTest[3] = params.alphaTest[3];
             perDraw.PbrMapScales[0] = params.pbrNormalScale;
             perDraw.PbrMapScales[1] = params.pbrOcclusionStrength;
+            perDraw.PbrMapScales[2] = params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
+            perDraw.PbrMapScales[3] = params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
 
             D3DCommon::D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];
@@ -1614,6 +1616,7 @@ namespace CNA::Internal::Renderers::DirectX11
             lights.FogColor[0] = params.fogColor[0];
             lights.FogColor[1] = params.fogColor[1];
             lights.FogColor[2] = params.fogColor[2];
+            lights.FogColor[3] = params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
             // REMED-GFX-005/010/061: upload the authoritative FNA view-space fog vector; the
             // shader dots it with the object or post-skin position.
             lights.FogVector[0] = params.fogVector[0];

@@ -146,6 +146,9 @@ protected:
         // --- Quad A: PbrEffect (stride 48, Pbr3d), emissive-only, no lights/ambient. ---
         {
             PbrEffect fx(device);
+            fx.setBaseColorTextureIsSrgbEXTProperty(false);
+            fx.setEmissiveTextureIsSrgbEXTProperty(false);
+            fx.setEncodeOutputToSrgbEXTProperty(false);
             fx.setWorldProperty(Matrix::getIdentityProperty());
             fx.setViewProperty(Matrix::getIdentityProperty());
             fx.setProjectionProperty(Matrix::getIdentityProperty());
@@ -171,6 +174,9 @@ protected:
         // --- Quad B: SkinnedPbrEffect (stride 68, PbrSkinned3d), emissive-only, identity bone. ---
         {
             SkinnedPbrEffect fx(device);
+            fx.setBaseColorTextureIsSrgbEXTProperty(false);
+            fx.setEmissiveTextureIsSrgbEXTProperty(false);
+            fx.setEncodeOutputToSrgbEXTProperty(false);
             fx.setWorldProperty(Matrix::getIdentityProperty());
             fx.setViewProperty(Matrix::getIdentityProperty());
             fx.setProjectionProperty(Matrix::getIdentityProperty());
@@ -249,6 +255,9 @@ protected:
         // below flip, so this discriminates the exact defect.
         {
             PbrEffect fx(device);
+            fx.setBaseColorTextureIsSrgbEXTProperty(false);
+            fx.setEmissiveTextureIsSrgbEXTProperty(false);
+            fx.setEncodeOutputToSrgbEXTProperty(false);
             fx.setWorldProperty(Matrix::getIdentityProperty());
             fx.setViewProperty(Matrix::getIdentityProperty());
             fx.setProjectionProperty(Matrix::getIdentityProperty());

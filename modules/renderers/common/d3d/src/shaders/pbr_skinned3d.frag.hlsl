@@ -24,6 +24,7 @@ cbuffer PerDraw : register(b0)
     float4 AmbientMetallic;
     float4 EmissiveRoughness;
     float4 AlphaTest;
+    // x = normal scale, y = occlusion strength, z = decode base, w = decode emissive
     float4 PbrMapScales;
 };
 
@@ -52,6 +53,21 @@ struct PSInput
 
 static const float kPi = 3.14159265;
 
+float3 CnaSrgbToLinear(float3 color)
+{
+    float3 low = color / 12.92;
+    float3 high = pow((color + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
+    return lerp(low, high, step(float3(0.04045, 0.04045, 0.04045), color));
+}
+
+float3 CnaLinearToSrgb(float3 color)
+{
+    float3 low = color * 12.92;
+    float exponent = 1.0 / 2.4;
+    float3 high = 1.055 * pow(max(color, 0.0), float3(exponent, exponent, exponent)) - 0.055;
+    return lerp(low, high, step(float3(0.0031308, 0.0031308, 0.0031308), color));
+}
+
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
                 float roughness, float metallic)
 {
@@ -75,7 +91,8 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 float4 main(PSInput input) : SV_Target
 {
     float4 baseColorTex = uTexture.Sample(uTextureSampler, input.UV);
-    float3 albedo = baseColorTex.rgb * DiffuseColor.rgb;
+    float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), PbrMapScales.z);
+    float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
     bool passesAlphaTest = (AlphaTest.y > 0.0)
         ? (abs(alpha - AlphaTest.x) < AlphaTest.y)
@@ -105,9 +122,13 @@ float4 main(PSInput input) : SV_Target
     float occlusion = uOcclusionMap.Sample(uOcclusionMapSampler, input.UV).r;
     occlusion = 1.0 + PbrMapScales.y * (occlusion - 1.0);
     float3 ambient = AmbientMetallic.xyz * albedo * occlusion;
-    float3 emissive = EmissiveRoughness.xyz * uEmissiveMap.Sample(uEmissiveMapSampler, input.UV).rgb;
+    float3 emissiveSample = uEmissiveMap.Sample(uEmissiveMapSampler, input.UV).rgb;
+    emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), PbrMapScales.w);
+    float3 emissive = EmissiveRoughness.xyz * emissiveSample;
 
     float4 outColor = float4(ambient + Lo + emissive, alpha);
-    outColor.rgb = lerp(FogColor.xyz, outColor.rgb, input.FogFactor);
+    float3 fogLinear = lerp(FogColor.xyz, CnaSrgbToLinear(FogColor.xyz), FogColor.w);
+    outColor.rgb = lerp(fogLinear, outColor.rgb, input.FogFactor);
+    outColor.rgb = lerp(outColor.rgb, CnaLinearToSrgb(outColor.rgb), FogColor.w);
     return outColor;
 }

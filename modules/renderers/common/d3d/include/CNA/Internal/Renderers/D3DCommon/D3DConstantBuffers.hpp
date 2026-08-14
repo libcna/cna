@@ -235,7 +235,7 @@ namespace CNA::Internal::Renderers::D3DCommon
         float AmbientMetallic[4];   ///< offset 144: xyz = AmbientColor, w = MetallicFactor
         float EmissiveRoughness[4]; ///< offset 160: xyz = EmissiveColor, w = RoughnessFactor
         float AlphaTest[4];          ///< offset 176: reference, tolerance, pass/fail weights
-        float PbrMapScales[4];       ///< offset 192: x = normal scale, y = occlusion strength
+        float PbrMapScales[4];       ///< offset 192: x/y = map scales, z/w = base/emissive decode
     };
     static_assert(sizeof(D3DPbrPerDrawConstants) == 208, "D3DPbrPerDrawConstants must match pbr3d's real 208-byte PerDraw cbuffer size");
     static_assert(offsetof(D3DPbrPerDrawConstants, World) == 64, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
@@ -261,7 +261,7 @@ namespace CNA::Internal::Renderers::D3DCommon
         float Light1Diffuse[4];     ///< offset 64
         float Light2Dir[4];         ///< offset 80:  xyz + pad
         float Light2Diffuse[4];     ///< offset 96
-        float FogColor[4];          ///< offset 112: xyz = FogColor, w = reserved padding
+        float FogColor[4];          ///< offset 112: xyz = FogColor, w = PBR output sRGB encode
         float FogVector[4];         ///< offset 128: CPU-prepared FNA view-space fog vector
     };
     static_assert(sizeof(D3DPbrLightConstants) == 144, "D3DPbrLightConstants must match PbrLights's real 144-byte HLSL cbuffer size");

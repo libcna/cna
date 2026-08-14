@@ -103,6 +103,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     cna_register_renderer_test(NAME DirectX11_Pbr_VertexColor COMMAND ${_directx11_pbr_vertexcolor_cmd}
         TIMEOUT 60 LABELS "DIRECTX11")
 
+    # GLTF-213: exact mid-grey transfer witnesses on the shared D3D PBR pixel shaders.
+    cna_directx11_test(cna_test_directx11_pbr_srgb_transfer
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+    cna_directx11_ctest_command(_directx11_pbr_srgb_cmd cna_test_directx11_pbr_srgb_transfer)
+    cna_register_renderer_test(NAME DirectX11_Pbr_SrgbTransfer COMMAND ${_directx11_pbr_srgb_cmd}
+        TIMEOUT 60 LABELS "DIRECTX11")
+
     # REMED-GFX-007: EnvironmentMapEffect emissive must be added UNSCALED (FNA Lighting.fxh:
     # litRGB = lightSum*Diffuse + Emissive). The shared, renderer-agnostic amount-zero test carries
     # the discriminating non-white-Diffuse case (pre-fix D3DCommon env_map3d.frag gives (50,25,12),
