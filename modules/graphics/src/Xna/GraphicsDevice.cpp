@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -16,30 +17,6 @@
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
-
-#ifdef CNA_RENDERER_BGFX
-#include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
-#endif
-
-#ifdef CNA_RENDERER_DILIGENT
-// The minimal, DiligentCore-independent header -- GraphicsDevice.cpp is part of the CNA target,
-// which (unlike the Diligent renderer target itself) has no DiligentCore include path wired up.
-#include "CNA/Internal/Renderers/Diligent/DiligentDeviceSelection.hpp"
-#endif
-
-// plan_llgl.md: only the renderer-selection header, deliberately not the renderer header -- the
-// window flags below need the runtime module choice, and this header is free of LLGL (and
-// therefore of Xlib) includes.
-#ifdef CNA_RENDERER_LLGL
-#include "CNA/Internal/Renderers/Llgl/LlglRendererSelection.hpp"
-#endif
-
-// plan_fna3d.md: only the window-flag header, deliberately not the renderer header -- FNA3D picks
-// its driver at runtime and reports the SDL flags that driver needs, and this header is free of
-// FNA3D (and therefore of SDL/MojoShader) includes, exactly like the LLGL selection header above.
-#ifdef CNA_RENDERER_FNA3D
-#include "CNA/Internal/Renderers/Fna3d/Fna3dWindowFlags.hpp"
-#endif
 
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach's own MaxRenderTargets=1
 // ceiling, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_DIRECTX9
@@ -135,138 +112,35 @@ namespace Microsoft::Xna::Framework::Graphics
             );
         }
 
+        /// plan_runtimerenderer.md RTR-P1-5: narrows PresentationParameters to the few fields a
+        /// pre-window hook is allowed to read, so renderer descriptors never include the XNA
+        /// graphics headers.
+        [[nodiscard]] CNA::Internal::Renderers::RendererPreWindowRequest makePreWindowRequest(
+            const PresentationParameters& parameters)
+        {
+            CNA::Internal::Renderers::RendererPreWindowRequest request;
+            request.backBufferWidth    = parameters.getBackBufferWidthProperty();
+            request.backBufferHeight   = parameters.getBackBufferHeightProperty();
+            request.multiSampleCount   = parameters.getMultiSampleCountProperty();
+            request.backBufferFormat   = static_cast<int>(parameters.getBackBufferFormatProperty());
+            request.depthStencilFormat = static_cast<int>(parameters.getDepthStencilFormatProperty());
+            request.isFullScreen       = parameters.getIsFullScreenProperty();
+            return request;
+        }
+
         [[nodiscard]] SDL_WindowFlags getRendererWindowFlags()
         {
-            SDL_WindowFlags windowFlags = SDL_WINDOW_RESIZABLE;
-
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGL2)
-            windowFlags |= SDL_WINDOW_OPENGL;
-#endif
-
-#ifdef CNA_RENDERER_OPENGLES1
-            windowFlags |= SDL_WINDOW_OPENGL;
-#endif
-
-#ifdef CNA_RENDERER_OPENGL4
-            windowFlags |= SDL_WINDOW_OPENGL;
-#endif
-
-            // The OPENVG renderer creates its own real desktop OpenGL context (SDL_GL_CreateContext,
-            // same "own GL context, no EasyGL" shape as OPENGL1/OPENGL2/OPENGL4 above) and attaches
-            // ShivaVG's OpenVG context on top of it via vgCreateContextSH -- same "SDL rejects a
-            // non-SDL_WINDOW_OPENGL window" requirement as every other renderer in this block.
-#ifdef CNA_RENDERER_OPENVG
-            windowFlags |= SDL_WINDOW_OPENGL;
-#endif
-
-            // plan_magnum.md MAGNUM-3: Magnum renders through an OpenGL context CNA creates on
-            // this same SDL window, so the window needs the identical OpenGL flag EasyGL asks for
-            // just above -- SDL cannot attach a GL context to a window that was not created with
-            // it.
-#ifdef CNA_RENDERER_MAGNUM
-            windowFlags |= SDL_WINDOW_OPENGL;
-#endif
-
-#ifdef CNA_RENDERER_VULKAN
-            windowFlags |= SDL_WINDOW_VULKAN;
-#endif
-
-            // plan_sokol.md SOKOL-4: sokol_gfx does not create its own window or context -- the
-            // SOKOL renderer calls SDL_GL_CreateContext on this window (design decision 1), which
-            // SDL rejects outright unless the window was created with SDL_WINDOW_OPENGL. The GL
-            // APIs are the only ones CNA_SOKOL_API can currently reach (see that option's own
-            // configure-time warning), so the flag is unconditional here.
-#ifdef CNA_RENDERER_SOKOL
-            windowFlags |= SDL_WINDOW_OPENGL;
-#endif
-
-#ifdef CNA_RENDERER_DILIGENT
-            // Diligent picks its concrete device type (D3D12/Vulkan/D3D11/OpenGL) at RUNTIME, after
-            // this window already exists -- but unlike CNA_RENDERER_BGFX's identical problem below,
-            // SDL3 rejects a window created with BOTH SDL_WINDOW_VULKAN and SDL_WINDOW_OPENGL set
-            // ("Conflicting window graphics flags specified"), so only one can be requested.
+            // plan_runtimerenderer.md RTR-P1-2 / design decision 2: the per-renderer half of this
+            // decision now lives in each family's own GraphicsRendererDescriptor. SDL_WINDOW_RESIZABLE
+            // is the renderer-agnostic base every configuration has always started from.
             //
-            // DILIGENT-57: this used to re-parse CNA_DILIGENT_DEVICE with its own narrow
-            // "opengl"/"gl"-only check, silently disagreeing with
-            // DiligentRenderer::ParseDeviceTypeOverride()'s own full alias set (gles, vk,
-            // dx11/direct3d11, dx12/direct3d12, ...) -- e.g. CNA_DILIGENT_DEVICE=gles created a
-            // Vulkan-flagged window here, then DiligentRenderer::TryCreateDevice() correctly
-            // resolved "gles" to OpenGL and failed with "the specified window isn't an OpenGL
-            // window". Calling the SAME shared parser here closes that gap for every alias.
-            //
-            // CNA_DILIGENT_DEVICE=auto (or unset) resolves to GetDeviceTypePreferenceOrder()'s own
-            // first entry, matching the first candidate TryCreateDevice() itself will attempt. Only
-            // one SDL flag can ever be requested for this window, so an auto build whose first
-            // preference (Vulkan) fails at runtime cannot then successfully fall through to OpenGL
-            // against this already-created window -- TryCreateDevice()'s own candidate loop still
-            // tries every candidate and reports each failure, but a Vulkan/OpenGL crossing specifically
-            // is a known, explicitly documented limitation (plan_diligent.md DILIGENT-57), not a
-            // silently broken promise: recreating the window mid-construction would need
-            // DiligentRenderer to own (not just borrow) it, a larger change out of this
-            // task's scope.
-            windowFlags |= [] {
-                using CNA::Internal::Renderers::Diligent::DiligentDeviceType;
-                using CNA::Internal::Renderers::Diligent::ParseDeviceTypeOverride;
-
-                const char* override = SDL_getenv("CNA_DILIGENT_DEVICE");
-                const std::vector<DiligentDeviceType> resolved =
-                    ParseDeviceTypeOverride(override != nullptr ? override : "");
-                const DiligentDeviceType chosen =
-                    !resolved.empty() ? resolved.front() : DiligentDeviceType::Vulkan;
-                return chosen == DiligentDeviceType::OpenGL ? SDL_WINDOW_OPENGL : SDL_WINDOW_VULKAN;
-            }();
-#endif
-
-#ifdef CNA_RENDERER_METAL
-            windowFlags |= SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-#endif
-
-#ifdef CNA_RENDERER_BGFX
-            const auto rendererType = CNA::Internal::Renderers::Bgfx::Detail::ResolveRendererType(
-                SDL_getenv("CNA_BGFX_RENDERER"));
-            switch (rendererType)
-            {
-            case bgfx::RendererType::Vulkan:
-                windowFlags |= SDL_WINDOW_VULKAN;
-                break;
-
-            case bgfx::RendererType::OpenGL:
-            case bgfx::RendererType::OpenGLES:
-            case bgfx::RendererType::Count:
-                windowFlags |= SDL_WINDOW_OPENGL;
-                break;
-
-            default:
-                break;
-            }
-#endif
-
-#ifdef CNA_RENDERER_LLGL
-            // LLGL picks its renderer module at runtime, so the window flag has to follow that
-            // decision rather than the compile-time renderer choice. Only the OpenGL module needs
-            // one: it creates a GL context on this very window, which therefore has to have been
-            // created with a visual that can carry one. LLGL's Vulkan module builds its surface
-            // from the native window handle alone and needs no SDL flag at all -- which is just as
-            // well, since SDL refuses to create a window that is both.
-            if (CNA::Internal::Renderers::Llgl::Detail::RendererModuleNeedsOpenGLWindow(
-                    CNA::Internal::Renderers::Llgl::Detail::ResolveRendererModule()))
-            {
-                windowFlags |= SDL_WINDOW_OPENGL;
-            }
-#endif
-
-            // plan_fna3d.md: FNA3D selects its driver (SDL_GPU / Direct3D 11 / OpenGL) inside
-            // FNA3D_PrepareWindowAttributes and returns the SDL window flags that driver needs --
-            // SDL_WINDOW_OPENGL for the GL driver, none for the others. That call must happen
-            // before SDL_CreateWindow below, because it also primes the GL attributes the window's
-            // visual is chosen from; same runtime-decides-the-flag shape as LLGL/Diligent/bgfx
-            // above, except that FNA3D makes the decision itself rather than CNA re-deriving it.
-#ifdef CNA_RENDERER_FNA3D
-            windowFlags |= static_cast<SDL_WindowFlags>(
-                CNA::Internal::Renderers::Fna3d::Detail::PrepareWindowFlags());
-#endif
-
-            return windowFlags;
+            // The four renderers that genuinely decide their flags at runtime -- BGFX, LLGL, FNA3D
+            // and DILIGENT, each of which picks its native API itself -- keep doing exactly that;
+            // their computation moved into their own prepareWindowFlags() hook rather than being
+            // reached through an #ifdef here.
+            const auto& descriptor = CNA::Internal::Renderers::ActiveDescriptor();
+            return static_cast<SDL_WindowFlags>(
+                SDL_WINDOW_RESIZABLE | descriptor.prepareWindowFlags());
         }
     }
 
@@ -314,19 +188,18 @@ namespace Microsoft::Xna::Framework::Graphics
         // no display server present -- not just a headless-but-present one. PortableGL joins them:
         // it is a CPU software OpenGL 3.x-ish renderer (rswinkle/PortableGL) with the same "no
         // window, no GPU library, no SDL video subsystem" shape.
-#if !defined(CNA_RENDERER_HEADLESS) && !defined(CNA_RENDERER_SOFTWARE) && !defined(CNA_RENDERER_STUB) && !defined(CNA_RENDERER_PORTABLEGL)
-        // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the compile-time
-        // guard above: a renderer that normally wants a window (D3D12) can be asked for a genuinely
-        // off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what lets such a
-        // device run with no display server at all, not merely without a visible window.
-        if (!presentationParameters_.getHeadlessEXTProperty())
+        // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the descriptor's
+        // own needsVideoSubsystem: a renderer that normally wants a window (D3D12) can be asked for
+        // a genuinely off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what
+        // lets such a device run with no display server at all, not merely without a visible window.
+        if (CNA::Internal::Renderers::ActiveDescriptor().needsVideoSubsystem
+            && !presentationParameters_.getHeadlessEXTProperty())
         {
             if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
             {
                 throw makeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO)");
             }
         }
-#endif
 
         // The Touch Panel needs this for normalized-to-pixel touch coordinate scaling.
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
@@ -2267,16 +2140,22 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::createOrAttachWindow()
     {
-#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)
-        // No real window, ever -- see the constructor's matching guard above.
-        // GraphicsRendererCreateArgs::window stays nullptr; UpdateViewportFromWindow() already
-        // falls back to the renderer's own GetViewportSize() first and only touches window_ if
-        // that yields nothing, and applyPresentationParametersToWindow() already early-returns
-        // when window_ is null, so neither needs its own guard.
-        window_ = nullptr;
-        ownsWindow_ = false;
-#else
-        // Runtime opt-in, same effect as the compile-time branch above. Only renderers that can
+        const auto& descriptor = CNA::Internal::Renderers::ActiveDescriptor();
+
+        // No real window, ever -- HEADLESS/SOFTWARE/STUB/PORTABLEGL, matching the constructor's own
+        // needsVideoSubsystem check. GraphicsRendererCreateArgs::window stays nullptr;
+        // UpdateViewportFromWindow() already falls back to the renderer's own GetViewportSize()
+        // first and only touches window_ if that yields nothing, and
+        // applyPresentationParametersToWindow() already early-returns when window_ is null, so
+        // neither needs its own guard.
+        if (!descriptor.needsWindow)
+        {
+            window_ = nullptr;
+            ownsWindow_ = false;
+            return;
+        }
+
+        // Runtime opt-in, same effect as the descriptor check above. Only renderers that can
         // genuinely run without a swap chain support this (D3D12 today) -- see
         // PresentationParameters::getHeadlessEXTProperty()'s own doc comment. A renderer that cannot
         // (D3D11's constructor always creates a swap chain; EasyGL's GL context is bound to a
@@ -2308,31 +2187,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
         SDL_WindowFlags windowFlags = getRendererWindowFlags();
 
-        // OPENGL1 requests a legacy/compatibility (non-ES) GL context, which on X11 goes through
-        // GLX rather than EasyGL's EGL path (SDL_GL_CONTEXT_PROFILE_MASK=ES steers SDL to EGL,
-        // where the framebuffer config can still be chosen at SDL_GL_CreateContext() time). GLX
-        // fixes the window's X visual -- and therefore its depth/stencil buffer bits -- at
-        // SDL_CreateWindow() time; setting SDL_GL_STENCIL_SIZE afterward (as
-        // OpenGL1Renderer's own constructor also does, for self-containment) is too late
-        // and silently produces a 0-bit stencil buffer, making every DepthStencilState.
-        // StencilEnable a permanent no-op. Confirmed empirically: GL_STENCIL_BITS read back 0
-        // without this block and 8 with it. Must run before SDL_CreateWindow() below.
-#if defined(CNA_RENDERER_OPENGL1)
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-        // plan_opengl1.md item 22 (EasyGL parity): same GLX-visual-fixed-at-window-creation-time
-        // constraint as the depth/stencil attributes above -- SDL_GL_MULTISAMPLEBUFFERS/SAMPLES
-        // must also be requested before SDL_CreateWindow() below, or the window's X visual is
-        // fixed without a multisample buffer and OpenGL1Renderer's own constructor (which
-        // runs after the window already exists) can never recover it.
-        if (presentationParameters_.getMultiSampleCountProperty() > 1)
-        {
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES,
-                                 presentationParameters_.getMultiSampleCountProperty());
-        }
-#endif
+        // plan_runtimerenderer.md RTR-P1-5: attributes that must be set before SDL_CreateWindow.
+        // OPENGL1 is the one renderer with real work here -- it requests a legacy/compatibility
+        // (non-ES) GL context, which on X11 goes through GLX rather than EasyGL's EGL path, and GLX
+        // fixes the window's X visual (and therefore its depth/stencil/multisample bits) at
+        // SDL_CreateWindow() time. Setting those attributes from the renderer's own constructor is
+        // too late. Every other family supplies a no-op hook.
+        descriptor.applyPreWindowAttributes(makePreWindowRequest(presentationParameters_));
 
         const int width = presentationParameters_.getBackBufferWidthProperty() > 0
                               ? presentationParameters_.getBackBufferWidthProperty()
@@ -2364,7 +2225,6 @@ namespace Microsoft::Xna::Framework::Graphics
             reinterpret_cast<std::uintptr_t>(window_));
 
         LogWindowDebugState(window_, "after SDL_CreateWindow");
-#endif
     }
 
     void GraphicsDevice::SetContextRecoveryEnabled(bool enabled)

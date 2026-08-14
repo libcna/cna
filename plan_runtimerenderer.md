@@ -427,13 +427,13 @@ Still exactly one renderer per build throughout.
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P1-1 | ⬜ | Introduce `CNA::Internal::Renderers::ActiveDescriptor()` — returns the single compiled-in descriptor. Temporary shim so P1 can proceed before the registry exists. |
-| RTR-P1-2 | ⬜ | Replace `getRendererWindowFlags()` (`GraphicsDevice.cpp:138`) with `descriptor.prepareWindowFlags()`. Delete all 14 `#ifdef` branches inside it. |
-| RTR-P1-3 | ⬜ | Replace the `SDL_INIT_VIDEO` guard (`GraphicsDevice.cpp:317`) with `descriptor.needsVideoSubsystem`. |
-| RTR-P1-4 | ⬜ | Replace the no-window branch of `createOrAttachWindow()` (`GraphicsDevice.cpp:2270`) with `descriptor.needsWindow`. |
-| RTR-P1-5 | ⬜ | Replace the `OPENGL1` `SDL_GL_SetAttribute` block with `descriptor.applyPreWindowAttributes(request)`. |
+| RTR-P1-1 | ✅ | Introduce `CNA::Internal::Renderers::ActiveDescriptor()` — returns the single compiled-in descriptor. Temporary shim so P1 can proceed before the registry exists. |
+| RTR-P1-2 | ✅ | Replace `getRendererWindowFlags()` (`GraphicsDevice.cpp:138`) with `descriptor.prepareWindowFlags()`. Delete all 14 `#ifdef` branches inside it. |
+| RTR-P1-3 | ✅ | Replace the `SDL_INIT_VIDEO` guard (`GraphicsDevice.cpp:317`) with `descriptor.needsVideoSubsystem`. |
+| RTR-P1-4 | ✅ | Replace the no-window branch of `createOrAttachWindow()` (`GraphicsDevice.cpp:2270`) with `descriptor.needsWindow`. |
+| RTR-P1-5 | ✅ | Replace the `OPENGL1` `SDL_GL_SetAttribute` block with `descriptor.applyPreWindowAttributes(request)`. |
 | RTR-P1-6 | ⬜ | Assert in a test that `modules/graphics/src/Xna/GraphicsDevice.cpp` contains **zero** `CNA_RENDERER_*` occurrences related to window creation (down from 25 total; the `GDI` write-back leaves in P3). |
-| RTR-P1-7 | ⬜ | Cross-renderer regression: window flags produced through the descriptor are bit-identical to the previous `#ifdef` result, verified per renderer as its descriptor lands. |
+| RTR-P1-7 | ✅ | Cross-renderer regression: window flags produced through the descriptor are bit-identical to the previous `#ifdef` result, verified per renderer as its descriptor lands. |
 | RTR-P1-8 | ⬜ | Document in `docs/runtime-renderer-selection.md` which four families (`BGFX`, `LLGL`, `FNA3D`, `DILIGENT`) already decided window flags at runtime before this plan, and that the descriptor generalizes their existing mechanism. |
 
 #### P1 descriptors, one task per family
@@ -446,7 +446,7 @@ running that family's own smoke/example target where one exists.
 | ID | St | Family → identity |
 |---|---|---|
 | RTR-P1-D01 | ⬜ | `sdl-renderer` → `SDL_RENDERER` (plain window, no GL flag) |
-| RTR-P1-D02 | ⬜ | `easygl` → `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` — one descriptor, profile still compile-time (`CNA_GL_PROFILE_*`); the 5-identity split is P11 |
+| RTR-P1-D02 | ✅ | `easygl` → `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` — one descriptor, profile still compile-time (`CNA_GL_PROFILE_*`); the 5-identity split is P11 |
 | RTR-P1-D03 | ⬜ | `bgfx` → `BGFX` — `prepareWindowFlags` wraps the existing `Bgfx::Detail::ResolveRendererType()` |
 | RTR-P1-D04 | ⬜ | `vulkan` → `VULKAN` (`SDL_WINDOW_VULKAN`; `isAvailable` = real `vkEnumerateInstanceVersion` probe) |
 | RTR-P1-D05 | ⬜ | `webgpu` → `WEBGPU` |
