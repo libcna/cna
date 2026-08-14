@@ -59,8 +59,8 @@ fi
 declare -A seen_models=()
 sparse_paths=()
 for model in "${models[@]}"; do
-    if [[ ! "$model" =~ ^[A-Za-z0-9._-]+$ ]]; then
-        printf "error: model must be one Models/ directory name, without slashes: %s\n" \
+    if [[ ! "$model" =~ ^[A-Za-z0-9._-]+$ || "$model" == "." || "$model" == ".." ]]; then
+        printf "error: model must be one Models/ directory name, without slashes or dot paths: %s\n" \
             "$model" >&2
         exit 2
     fi

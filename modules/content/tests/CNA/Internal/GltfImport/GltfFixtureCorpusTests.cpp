@@ -389,6 +389,8 @@ TEST(GltfFixtureCorpus, SampleAssetsFetcherIsPinnedSparseExplicitAndDeveloperOnl
     EXPECT_NE(std::string::npos,
               text.find("[[ -e \"$destination\" || -L \"$destination\" ]]"));
     EXPECT_NE(std::string::npos, text.find("^[A-Za-z0-9._-]+$"));
+    EXPECT_NE(std::string::npos, text.find("\"$model\" == \".\" || \"$model\" == \"..\""))
+        << "dot paths canonicalise outside Models/<name> and must be rejected before Git runs";
     EXPECT_NE(std::string::npos, text.find("No model licence was reviewed by this fetch"));
     EXPECT_EQ(std::string::npos, text.find("rm -"))
         << "the fetcher must never erase an existing or partial checkout";
