@@ -655,14 +655,13 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 > `ComputeTangentsEXT` (13A's own Lengyel's-method fallback for a primitive with no TANGENT
 > accessor) already documented its own gap vs. the glTF spec's explicit MikkTSpace recommendation:
 > no angle weighting, no degenerate-UV handling (the latter was already implemented — see the
-> existing `denom` check). Morten Mikkelsen's own canonical `mikktspace.c` reference implementation
-> is not available to vendor in this environment (unlike `cgltf.h`/`stb_image.h`, for which genuine
-> unmodified upstream copies were found locally) and downloading it is not appropriate here — so
-> this closes the achievable, honest part (real angle-weighted per-corner accumulation, matching
+> existing `denom` check). This phase therefore closed the achievable, honest part (real
+> angle-weighted per-corner accumulation, matching
 > MikkTSpace's own stated rationale) while explicitly NOT claiming bit-for-bit MikkTSpace
-> compatibility (real MikkTSpace additionally welds corners sharing position+normal across UV-seam
-> boundaries into shared "TSpace" groups before accumulating, which this per-glTF-vertex
-> accumulation does not replicate).
+> compatibility. `plan_gltf.md` `GLTF-179` subsequently measured the official reference at commit
+> `3e895b49d05ea07e4c2133156cfa94369e19e409`: its compatible-corner welding differs from this
+> per-glTF-vertex accumulation by 34.4110 degrees RMS / 42.1447 degrees maximum on the pinned
+> duplicated-edge witness, with 0/6 handedness differences.
 
 | # | Task | Status | Notes |
 |---|---|---|---|

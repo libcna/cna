@@ -238,6 +238,41 @@ namespace
   ]
 })GLTF";
 
+    // GLTF-179: two triangles meet along a data-identical but separately indexed edge. Their UV
+    // gradients produce tangents +X and normalize((1,10,0)) respectively. CNA owns one tangent per
+    // glTF vertex, so it keeps those two bases separate; reference MikkTSpace internally welds the
+    // compatible face corners and returns one shared basis along the edge. This is the smallest
+    // input that measures the representation-level divergence instead of merely stating it.
+    const char* kMikkWeldDivergenceGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2
+  }, "indices": 3, "material": 0 } ] } ],
+  "materials": [ { "normalTexture": { "index": 0 } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 4, "mimeType": "image/png" } ],
+  "buffers": [ {
+    "byteLength": 273,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAACAvwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAgL8AACBBAAABAAIAAwAEAAUAiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 72 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 72 },
+    { "buffer": 0, "byteOffset": 144, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 192, "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 204, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 6, "type": "VEC3", "min": [-1,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 6, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 6, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 6, "type": "SCALAR" }
+  ]
+})GLTF";
+
     // glTF extensions (CNB-97, Phase 14H): a single triangle whose material combines
     // KHR_texture_transform (on the base-color texture: offset=[0.1,0.2], scale=[2.0,0.5],
     // rotation=0 -- chosen to avoid trig in hand-verification) and KHR_materials_emissive_strength
@@ -462,6 +497,53 @@ TEST(GltfImportCoreTest, ComputeTangentsEXTAngleWeightsTriangleContributions)
     EXPECT_NEAR(tangent[1], 0.40639884f, 1e-4f);
     EXPECT_NEAR(tangent[2], 0.0f, 1e-4f);
     EXPECT_FLOAT_EQ(tangent[3], 1.0f); // handedness
+}
+
+TEST(GltfImportCoreTest, GeneratedTangentsHaveAQuantifiedMikkTSpaceWeldDivergence)
+{
+    // Reference: upstream mmikk/MikkTSpace commit 3e895b49d05ea07e4c2133156cfa94369e19e409,
+    // mikktspace.c SHA-256 de87e74107df766ce68108801262bd8d53899414236b59810509a8fc2a51e288,
+    // genTangSpaceDefault() with one callback vertex per face corner. The six values below are its
+    // m_setTSpaceBasic results on kMikkWeldDivergenceGltf, not another CNA implementation.
+    constexpr std::array<std::array<float, 4>, 6> kMikkReference{{
+        {{0.741452575f, 0.671005368f, 0.0f, 1.0f}},
+        {{1.000000000f, 0.000000000f, 0.0f, 1.0f}},
+        {{0.741452575f, 0.671005368f, 0.0f, 1.0f}},
+        {{0.741452575f, 0.671005368f, 0.0f, 1.0f}},
+        {{0.741452575f, 0.671005368f, 0.0f, 1.0f}},
+        {{0.099503718f, 0.995037138f, 0.0f, 1.0f}},
+    }};
+
+    const MeshOut out = ExtractPrimitive0(kMikkWeldDivergenceGltf);
+    ASSERT_TRUE(out.usePbr);
+    ASSERT_EQ(48, out.stride);
+    ASSERT_EQ(6u * 48u, out.vertexBytes.size());
+
+    double squaredDegrees = 0.0;
+    double maxDegrees = 0.0;
+    for (std::size_t vertex = 0; vertex < kMikkReference.size(); ++vertex)
+    {
+        std::array<float, 4> actual{};
+        std::memcpy(actual.data(), out.vertexBytes.data() + vertex * 48u + 24u,
+                    sizeof(actual));
+
+        // Both algorithms still return valid unit frames with the same handedness. The measured
+        // difference is the tangent direction Mikk welded across the duplicated shared edge.
+        EXPECT_NEAR(1.0f, std::sqrt(actual[0] * actual[0] + actual[1] * actual[1] +
+                                    actual[2] * actual[2]), 1e-6f);
+        EXPECT_FLOAT_EQ(kMikkReference[vertex][3], actual[3]);
+        const float cosine = std::clamp(
+            actual[0] * kMikkReference[vertex][0] +
+            actual[1] * kMikkReference[vertex][1] +
+            actual[2] * kMikkReference[vertex][2], -1.0f, 1.0f);
+        const double degrees = std::acos(cosine) * 180.0 / 3.14159265358979323846;
+        squaredDegrees += degrees * degrees;
+        maxDegrees = std::max(maxDegrees, degrees);
+    }
+
+    const double rmsDegrees = std::sqrt(squaredDegrees / kMikkReference.size());
+    EXPECT_NEAR(42.1447, maxDegrees, 1e-3);
+    EXPECT_NEAR(34.4110, rmsDegrees, 1e-3);
 }
 
 #ifdef CNA_DRACO_AVAILABLE

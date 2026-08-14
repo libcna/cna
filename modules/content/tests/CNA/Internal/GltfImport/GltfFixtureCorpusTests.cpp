@@ -1310,7 +1310,10 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     //
     // Hence a ceiling rather than a ban. Adding one is fine; raising this number is the deliberate
     // act that says so, and the commit that raises it is where the reason goes.
-    constexpr int kCeiling = 260;
+    // GLTF-179 adds one loader-algorithm probe, not a corpus conformance asset: it exists only to
+    // compare ExtractMesh's generated tangent bytes with six outputs measured from the external
+    // MikkTSpace reference implementation. The corpus cannot derive those reference values itself.
+    constexpr int kCeiling = 261;
 
     int found = 0;
     std::map<std::string, int> perFile;

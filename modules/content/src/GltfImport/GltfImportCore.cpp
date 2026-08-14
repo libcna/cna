@@ -828,13 +828,14 @@ namespace CNA::Internal::GltfImport
         // from agreement with the accumulated bitangent -- the same finalization step real
         // MikkTSpace itself also uses.
         //
-        // This is NOT a bit-for-bit port of Morten Mikkelsen's own reference `mikktspace.c`
-        // implementation (not available to vendor in this environment, unlike cgltf.h/stb_image.h,
-        // for which genuine unmodified upstream copies were found locally) -- in particular, real
-        // MikkTSpace additionally welds corners sharing the same position+normal (but not
-        // necessarily the same UV, e.g. across a hard-seam boundary) into shared "TSpace" groups
-        // before angle-weighted accumulation, which this simpler per-glTF-vertex accumulation does
-        // not replicate. A documented, deliberate scope cut, not an oversight.
+        // This is NOT a bit-for-bit port of Morten Mikkelsen's reference `mikktspace.c`. Real
+        // MikkTSpace internally welds compatible face corners into shared "TSpace" groups and
+        // returns an unindexed result; its own API explicitly forbids averaging that result back
+        // through an existing index list. This simpler routine owns exactly one tangent per glTF
+        // vertex and cannot reproduce that topology step. GLTF-179 measures the consequence on a
+        // duplicated compatible edge: 42.1447 degrees maximum / 34.4110 degrees RMS across its six
+        // corners, with no handedness mismatch. A documented, deliberate scope cut, not an
+        // unmeasured claim of parity.
         std::vector<Vector4> ComputeTangentsEXT(const std::vector<float>& positions,
                                                  const std::vector<float>& normals,
                                                  const std::vector<float>& uvs,

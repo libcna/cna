@@ -1019,9 +1019,10 @@ vertex's normal (Gram-Schmidt) and its handedness taken from the sign of `dot(cr
 ### Its bound, stated plainly
 
 This is **not MikkTSpace**. MikkTSpace is the de-facto standard most authoring tools bake normal
-maps against, and matching it exactly requires its own vertex-splitting and welding rules, which
-change the vertex count. The difference shows on surfaces where a normal map was baked against a
-tangent basis that splits where CNA's averages — a hard UV seam, most visibly.
+maps against, and matching it exactly requires its own per-corner welding and output topology. Its
+reference API returns an unindexed result and explicitly says not to average it back through the
+existing index list. CNA owns one result per already-indexed glTF vertex, so those representations
+cannot be bit-for-bit equivalent on every mesh.
 
 Three consequences worth being explicit about:
 
@@ -1031,9 +1032,34 @@ Three consequences worth being explicit about:
   nothing rather than a NaN, and a vertex left with no usable accumulation falls back to `+X` with
   a `+1` handedness — a valid frame that is simply arbitrary, which is the only honest answer when
   the UVs carry no direction to derive one from.
-* **Matching MikkTSpace is `GLTF-179`**, and it is an investigation rather than a defect: the
-  generated basis is a valid tangent frame, it is simply not the same one the map was baked
-  against. Which of the two a given asset needs is a property of that asset's authoring pipeline.
+* **The MikkTSpace difference is measured by `GLTF-179`**, and remains a deliberate fallback
+  limitation rather than a claim of parity. The generated basis is valid, but may not be the basis
+  against which a normal map was baked. Which one an asset needs is a property of its authoring
+  pipeline.
+
+### Reference parity measurement (`GLTF-179`)
+
+The reference is Morten Mikkelsen's unmodified
+[`mikktspace.c`](https://github.com/mmikk/MikkTSpace/blob/3e895b49d05ea07e4c2133156cfa94369e19e409/mikktspace.c)
+at commit `3e895b49d05ea07e4c2133156cfa94369e19e409` (source SHA-256
+`de87e74107df766ce68108801262bd8d53899414236b59810509a8fc2a51e288`), invoked through
+`genTangSpaceDefault`. The measured inline fixture has two triangles meeting along a completely
+compatible but separately indexed edge. One face's UV gradient produces tangent `(+1,0,0)`; the
+other produces `normalize(1,10,0) = (0.0995037,0.995037,0)`. CNA retains those per-index bases.
+MikkTSpace welds the four compatible edge corners and returns `(0.741453,0.671005,0)` for them.
+
+Across all six face corners, the angular difference is **34.4110 degrees RMS** and **42.1447
+degrees maximum**; handedness differs on **0/6** corners. The two unshared corners agree within
+float rounding. `GeneratedTangentsHaveAQuantifiedMikkTSpaceWeldDivergence` feeds the fixture through
+the real `ExtractMesh` path and locks CNA's side against those reference outputs and both aggregate
+numbers.
+
+This is a discriminating measurement, not a universal error bound: a different mesh can diverge
+less or more. The current policy is accepted because generation is only the fallback when an asset
+omits `TANGENT`; an authored MikkTSpace basis still passes through byte-exact. Full parity is
+scheduled only when the importer can accept per-corner output, split vertices as required, rewrite
+every affected per-vertex stream and re-index afterward. Quietly averaging the reference output
+back into today's index list is specifically invalid according to the reference contract.
 
 ---
 
