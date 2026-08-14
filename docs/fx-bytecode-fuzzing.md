@@ -73,10 +73,57 @@ through exactly the same construction/reflection/clone/apply path, and fails on 
 mutation description in every failure trace, so a finding there is reproducible without the corpus
 directory.
 
-## Current status
+## Mutation campaign
 
-The standalone replay shape and the deterministic in-build corpus are green. A sustained
-coverage-guided campaign is still to run; it is tracked by FX-051's remaining acceptance criteria.
+The standalone harness can also drive a deterministic mutation campaign, which is what actually
+found the parser defects listed below. It needs no clang, no libFuzzer and no new build tree:
+
+```sh
+mkdir -p fx-corpus && cp modules/renderers/fna3d/effects/*.fxb fx-corpus/
+SDL_VIDEODRIVER=offscreen SDL_ASSERT=abort ASAN_OPTIONS=detect_leaks=0   ./cmake-build-fna3d-asan/cna_compiled_effect_fuzzer --campaign fx-corpus 10000 [seed]
+```
+
+It picks a seed at random, applies one to six mutations (bit flip, byte set, whole little-endian
+word -- offsets and counts live in those -- or truncation), and runs the result through the same
+entry point. Progress is printed every hundred iterations with the generator state, so a finding
+reproduces from the printed seed and iteration without writing candidates to disk.
+
+`SDL_ASSERT=abort` matters: MojoShader's asserts otherwise open an interactive prompt and stall
+the campaign.
+
+## What the campaign found (2026-08-14)
+
+Every finding was in the pinned MojoShader, none in CNA. Each is now fixed by
+`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`, and each fix was confirmed by
+the campaign running measurably deeper afterwards (first crash at iteration 0, then 100, 300, 500,
+700, 1200, 3700, 4000).
+
+| Site | Defect |
+|---|---|
+| `mojoshader_effects.c` `readlargeobjects` | `MOJOSHADER_parsePreshader`'s NULL result dereferenced on the next line -- upstream's own `// !!! FIXME: check for errors.` |
+| `mojoshader_profile_spirv.c` `spv_add_attrib_fixup` | `assert(r != NULL)` on a fixup with no matching attribute register; a release build would dereference NULL |
+| `mojoshader_effects.c` `copy_parameter_data` | Copies sized by the shader constant table's register count rather than by the parameter storage that was actually parsed |
+| `mojoshader.c` `parse_preshader` | Instruction operand count taken from tokens with no bound against the fixed four-entry operand array |
+| `mojoshader.c` `parse_preshader` | `assert(0)` on an unrecognised operand type; a release build would carry on with an unassigned type |
+| `mojoshader.c` `parse_preshader` | Instruction count used to allocate and zero a buffer *before* the block-size check that bounds it |
+| `mojoshader.c` `parse_preshader` | `assert()` on a constant-table symbol in the wrong register set, and an unbounded array-register count allocated before validation -- upstream's other FIXME |
+| `mojoshader_effects.c` `MOJOSHADER_effectCommitChanges` | Shader-array selector used as an unchecked index into a parameter's values and then into the object table, and register copies unbounded by the preshader's register file |
+
+The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
+asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
+
+## Exposure that remains
+
+The campaign now reaches roughly iteration 4,000 before an out-of-bounds read inside
+`run_preshader`, MojoShader's preshader *interpreter*. That code needs its own systematic bounds
+pass, which is a larger change than the targeted parser fixes above.
+
+So the honest statement is: **CNA's own compiled-effect code is clean under ASan, UBSan and LSan,
+and the parser paths reached so far are hardened, but CNA cannot yet promise that arbitrary
+hostile compiled-effect content fails safely.** Ship your own effects; do not load one a user
+supplied. `plan_fx.md` FX-051 tracks continuing the campaign until it runs dry.
+
+## Current status
 
 What has run (2026-08-14) is a full ASan+UBSan+LSan pass over the 340 FX, Effect, XNB, capability
 and content-reader tests on the SDL_GPU/Vulkan driver. All pass. AddressSanitizer reports nothing.

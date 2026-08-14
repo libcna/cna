@@ -147,46 +147,147 @@ namespace
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }
 
-    int ReplayOne(const std::filesystem::path& path)
+    std::vector<std::vector<std::uint8_t>> ReadCorpus(const std::filesystem::path& path,
+                                                      int& unreadable)
     {
-        const std::vector<std::uint8_t> bytes = ReadFile(path);
-        if (bytes.empty())
+        std::vector<std::vector<std::uint8_t>> corpus;
+        std::error_code error;
+        const auto take = [&](const std::filesystem::path& file) {
+            std::vector<std::uint8_t> bytes = ReadFile(file);
+            if (bytes.empty())
+            {
+                std::cerr << "compiled_effect_fuzzer: cannot read " << file << "\n";
+                ++unreadable;
+                return;
+            }
+            corpus.push_back(std::move(bytes));
+        };
+        if (std::filesystem::is_directory(path, error))
         {
-            std::cerr << "compiled_effect_fuzzer: cannot read " << path << "\n";
-            return 1;
+            for (const auto& entry : std::filesystem::directory_iterator(path, error))
+                if (entry.is_regular_file(error)) take(entry.path());
         }
-        LLVMFuzzerTestOneInput(bytes.data(), bytes.size());
-        std::cout << "ok " << path.filename().string() << " (" << bytes.size() << " bytes)\n";
-        return 0;
+        else
+        {
+            take(path);
+        }
+        return corpus;
+    }
+
+    /// Same generator the in-build deterministic corpus uses, so a campaign finding reproduces
+    /// from its printed seed alone.
+    struct Rng
+    {
+        std::uint64_t state;
+
+        std::uint32_t Next()
+        {
+            state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+            return static_cast<std::uint32_t>(state >> 33);
+        }
+
+        std::uint32_t Below(std::uint32_t bound) { return bound == 0 ? 0 : Next() % bound; }
+    };
+
+    void Mutate(Rng& random, std::vector<std::uint8_t>& bytes)
+    {
+        if (bytes.empty()) return;
+        const std::uint32_t mutations = 1 + random.Below(6);
+        for (std::uint32_t i = 0; i < mutations; ++i)
+        {
+            switch (random.Below(4))
+            {
+                case 0:
+                    bytes[random.Below(static_cast<std::uint32_t>(bytes.size()))] ^=
+                        static_cast<std::uint8_t>(1u << random.Below(8));
+                    break;
+                case 1:
+                    bytes[random.Below(static_cast<std::uint32_t>(bytes.size()))] =
+                        static_cast<std::uint8_t>(random.Below(256));
+                    break;
+                case 2:
+                {
+                    // Overwrite a whole little-endian word: offsets and counts live in these, so
+                    // byte flips alone rarely reach the bounds checks that matter.
+                    const std::uint32_t word =
+                        random.Below(static_cast<std::uint32_t>(bytes.size() / 4));
+                    const std::uint32_t value = random.Below(4) == 0
+                        ? 0xFFFFFFFFu : random.Next();
+                    for (std::size_t b = 0; b < 4; ++b)
+                        bytes[word * 4 + b] = static_cast<std::uint8_t>(value >> (b * 8));
+                    break;
+                }
+                default:
+                    bytes.resize(1 + random.Below(static_cast<std::uint32_t>(bytes.size())));
+                    break;
+            }
+        }
     }
 }
 
 int main(int argc, char** argv)
 {
-    if (argc < 2)
+    const std::string mode = argc > 1 ? argv[1] : "";
+    if (argc < 2 || mode == "--help")
     {
-        std::cerr << "usage: compiled_effect_fuzzer <corpus-file-or-directory>...\n"
-                  << "Replays each input through the libFuzzer entry point. Build with\n"
-                  << "-DCNA_FX_FUZZER_ENTRY_POINT=ON under clang for a real campaign.\n";
+        std::cerr
+            << "usage:\n"
+            << "  compiled_effect_fuzzer <corpus-file-or-directory>...\n"
+            << "      Replays each input once through the libFuzzer entry point.\n"
+            << "  compiled_effect_fuzzer --campaign <corpus-dir> <iterations> [seed]\n"
+            << "      Runs a deterministic mutation campaign over the corpus. Intended to be\n"
+            << "      run from a sanitizer build; a finding reproduces from the printed seed.\n"
+            << "Build with -DCNA_FX_FUZZER_ENTRY_POINT=ON under clang for a coverage-guided\n"
+            << "libFuzzer campaign instead.\n";
         return 2;
     }
 
-    int failures = 0;
+    int unreadable = 0;
+    if (mode == "--campaign")
+    {
+        if (argc < 4)
+        {
+            std::cerr << "compiled_effect_fuzzer: --campaign needs a corpus and an iteration "
+                         "count\n";
+            return 2;
+        }
+        const auto corpus = ReadCorpus(std::filesystem::path(argv[2]), unreadable);
+        if (corpus.empty())
+        {
+            std::cerr << "compiled_effect_fuzzer: the corpus is empty\n";
+            return 1;
+        }
+        const long iterations = std::strtol(argv[3], nullptr, 10);
+        Rng random{argc > 4 ? std::strtoull(argv[4], nullptr, 0) : 0x4658465556555AULL};
+        std::cout << "campaign: " << corpus.size() << " seeds, " << iterations
+                  << " iterations, seed 0x" << std::hex << random.state << std::dec << "\n";
+        for (long i = 0; i < iterations; ++i)
+        {
+            std::vector<std::uint8_t> candidate = corpus[random.Below(
+                static_cast<std::uint32_t>(corpus.size()))];
+            Mutate(random, candidate);
+            LLVMFuzzerTestOneInput(candidate.data(), candidate.size());
+            // Flushed progress: a campaign that dies inside a native parser leaves no other
+            // record of how far it got, and the iteration index plus the seed is what makes the
+            // failing input reproducible without writing every candidate to disk.
+            if ((i % 100) == 0)
+                std::cout << "  iteration " << i << ", rng 0x" << std::hex << random.state
+                          << std::dec << std::endl;
+        }
+        std::cout << "campaign complete: " << iterations << " iterations, no crash\n";
+        return unreadable == 0 ? 0 : 1;
+    }
+
     for (int i = 1; i < argc; ++i)
     {
-        const std::filesystem::path path(argv[i]);
-        std::error_code error;
-        if (std::filesystem::is_directory(path, error))
+        const auto corpus = ReadCorpus(std::filesystem::path(argv[i]), unreadable);
+        for (const auto& bytes : corpus)
         {
-            for (const auto& entry : std::filesystem::directory_iterator(path, error))
-                if (entry.is_regular_file(error)) failures += ReplayOne(entry.path());
-        }
-        else
-        {
-            failures += ReplayOne(path);
+            LLVMFuzzerTestOneInput(bytes.data(), bytes.size());
+            std::cout << "ok (" << bytes.size() << " bytes)\n";
         }
     }
-    if (failures != 0) std::cerr << failures << " input(s) could not be read\n";
-    return failures == 0 ? 0 : 1;
+    if (unreadable != 0) std::cerr << unreadable << " input(s) could not be read\n";
+    return unreadable == 0 ? 0 : 1;
 }
 #endif

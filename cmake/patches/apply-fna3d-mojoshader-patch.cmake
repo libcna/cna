@@ -32,7 +32,7 @@ execute_process(
     ERROR_QUIET
 )
 if(CNA_FNA3D_MOJOSHADER_ALREADY_PATCHED EQUAL 0)
-    message(STATUS "CNA: MojoShader Effect parameter-lookup patch already applied -- skipping")
+    message(STATUS "CNA: MojoShader Effect parser robustness patch already applied -- skipping")
     return()
 endif()
 
@@ -48,4 +48,4 @@ if(NOT CNA_FNA3D_MOJOSHADER_PATCH_APPLY_RESULT EQUAL 0)
         "submodule -- the pinned FNA3D/MojoShader revisions may no longer match the patch.")
 endif()
 
-message(STATUS "CNA: applied MojoShader Effect parameter-lookup robustness patch")
+message(STATUS "CNA: applied MojoShader Effect parser robustness patch")

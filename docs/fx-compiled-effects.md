@@ -23,6 +23,13 @@ For the difference from the CNAEXT source-based shader API, see
 The binary is untrusted input. It is bounded at 64 MiB, its reflected object graph is bounded and
 arithmetic-checked, and every rejection is a specific exception rather than a generic failure.
 
+**Trust boundary.** That holds for CNA's own code and for the parser paths CNA has hardened, but
+not yet for arbitrary hostile content: the pinned MojoShader's preshader interpreter still has
+reachable out-of-bounds reads that a fuzz campaign finds, and CNA carries fixes only for what has
+been found so far. Treat compiled effects the way you would treat any other native-parsed asset --
+ship your own, do not load one a user supplied. `plan_fx.md` FX-051 and
+[`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) track the remaining exposure.
+
 ## 2. Loading
 
 ### From bytes
@@ -247,11 +254,13 @@ exactly one MojoShader — the revision FNA3D pins — and never builds a second
 
 - FNA3D: pinned at `3240147` by `cmake/ThirdPartyFNA3D.cmake`.
 - MojoShader: `6333f74dbd5644789a63e903816441b16c1e8b60`, zlib licence.
-- CNA applies one narrow, versioned parser patch to that exact MojoShader revision
-  (`cmake/patches/mojoshader-6333f74-effect-parameter-lookup.patch`), which turns a missing
-  shader-to-effect parameter match from an unchecked dereference into an ordinary parser error.
-  CMake applies it automatically and idempotently, for fetched checkouts and for an explicit
-  `FETCHCONTENT_SOURCE_DIR_FNA3D` override alike.
+- CNA applies one narrow, versioned robustness patch to that exact MojoShader revision
+  (`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`), which turns eight ways
+  untrusted bytecode could crash the process into ordinary parser errors. Seven of the eight were
+  found by the FX-051 fuzz campaign; see [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) for
+  the list and for the exposure that remains. CMake applies the patch automatically and
+  idempotently, for fetched checkouts and for an explicit `FETCHCONTENT_SOURCE_DIR_FNA3D` override
+  alike.
 - The stock `.fxb` fixtures under `modules/renderers/fna3d/effects/` are Microsoft's XNA stock
   effects as redistributed by FNA under `LICENSE.StockEffects`; their provenance and hashes are
   recorded in that directory's `README.md` and verified by a test.
