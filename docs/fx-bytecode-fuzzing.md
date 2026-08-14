@@ -97,8 +97,9 @@ the campaign.
 
 Every finding was in the pinned MojoShader, none in CNA. Each is now fixed by
 `cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`, and each fix was confirmed by
-the campaign running measurably deeper afterwards: the first crash moved from iteration 0 to 100,
-300, 500, 700, 1,200, 3,700, 4,000 and finally past 6,000.
+the campaign running measurably deeper afterwards: on the GLSL profile the first crash moved from
+iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400 and finally past 8,700, with one seed
+now running 10,000 iterations clean.
 
 | Site | Defect |
 |---|---|
@@ -113,22 +114,35 @@ the campaign running measurably deeper afterwards: the first crash moved from it
 | `mojoshader_effects.c` `run_preshader` | Every literal, input, output and temp index in the preshader interpreter guarded only by asserts; the output register span was not even reported to it, so a one-float selector output could be written past |
 | `mojoshader_effects.c` `copy_parameter_data` | Destination register index never bounded against the register file it writes into, and the int/bool files written through NULL when a preshader's float-only file was the target |
 | `mojoshader_effects.c` `MOJOSHADER_effectBeginPass` | A pass's shader object index taken from parsed content with no range check, and no check that the object is a shader at all -- `MOJOSHADER_effectObject` is a union, so a string or sampler object read as a shader yields garbage pointers |
+| `mojoshader_effects.c` shader-array selector | The selector a preshader computes was converted to an integer before being range-checked. Converting an out-of-range float is undefined and yields `INT_MIN` on x86, which then indexed far below the parameter's values. It is now range-checked as a float, which also rejects NaN |
+| `mojoshader_effects.c` `run_preshader`, preshader register copy | The bounds added above were written as `index + span > count`, which wraps for an index near `UINT_MAX` and passes. All of them now subtract instead |
+| `mojoshader_profile_spirv.c` `spv_check_read_reg_id` | `assert()` on a sampler or texture register in a shader model that cannot declare one |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
 asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
 
 ## Exposure that remains
 
-The campaign now reaches roughly iteration 6,400 before a wild read inside
-`MOJOSHADER_effectCommitChanges`'s shader-array selection path. Reproduce it with
+Two distinct areas, and they differ by driver.
+
+**On FNA3D's OpenGL driver (GLSL profile)** the campaign now runs 10,000 iterations clean on one
+seed and reaches roughly 8,700 on another, where it stops in `MOJOSHADER_cloneEffect` copying a
+technique name. The root cause is upstream's own `readstring()`, which carries the comments
+`// !!! FIXME: sanity checks!` and `// !!! FIXME: verify this doesn't go past EOF looking for a
+null.` -- it takes a base pointer and an offset but no length, so bounding it means threading the
+payload length through the parser rather than adding another local check. Reproduce with:
 
 ```sh
-./cna_compiled_effect_fuzzer --campaign fx-corpus 6500 0x4658465556555A
+./cna_compiled_effect_fuzzer --campaign fx-corpus 8800 0x434E41464658
 ```
 
-Narrowing it further needs a debugger on the failing candidate; the index and pointer guards that
-were obvious from reading the code are already in place, so the next step is inspection rather
-than another round of reasoning about the source.
+**On FNA3D's SDL_GPU driver (SPIR-V profile)** the campaign stops much earlier, in the SPIR-V
+emitter's own asserts (`spv_loadreg`, and others behind it). That emitter validates untrusted
+shader bytecode with `assert()` throughout, so hardening it is a systematic pass of its own rather
+than a handful of checks. Reproduce by dropping `FNA3D_FORCE_DRIVER=OpenGL`.
+
+Neither is a CNA defect, but both are reachable through CNA's public API, which is why the porter
+guide states the trust boundary plainly instead of promising safe failure.
 
 So the honest statement is: **CNA's own compiled-effect code is clean under ASan, UBSan and LSan,
 and the parser paths reached so far are hardened, but CNA cannot yet promise that arbitrary
