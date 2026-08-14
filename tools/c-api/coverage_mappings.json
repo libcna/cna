@@ -909,6 +909,16 @@
       "tests": "every entry point, ABI layout, direct channels, all constructors, packed order, exact strings, conversions, equality/hash, clamp/truncation/wrap behavior, null and capacity atomicity in strict-C `ColorSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B6a"
+    },
+    {
+      "id": "color-named-values",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Color::[A-Za-z0-9_]+$",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Color\\.hpp$",
+      "kinds": ["constant"],
+      "mapping": "directly usable C/C++ `CNA_COLOR_*` value expression with exact RGBA channels and canonical AABBGGRR packed value in `named_colors.h`",
+      "tests": "all 141 named expressions packed independently against their canonical AABBGGRR literals in strict-C `ColorSmoke.c`, plus strict C17/C++23 public-header compilation",
+      "status": "implemented",
+      "task": "CBIND-035B6b"
     }
   ]
 }

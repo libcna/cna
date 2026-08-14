@@ -221,7 +221,7 @@ CNA_Result cna_color_set_packed_value(
                 CNA_ERROR_CATEGORY_ARGUMENT,
                 "The Color pointer is null.");
         }
-        Color native = ToNative(*color);
+        Color native(UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
         native.setPackedValueProperty(packedValue);
         const CNA_Color result = ToC(native);
         *color = result;

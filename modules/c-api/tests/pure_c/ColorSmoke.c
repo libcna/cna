@@ -3,6 +3,7 @@
 #include <CNA/C/cna.h>
 
 #include <math.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -163,8 +164,172 @@ static int validate_value_operations(void)
     return 1;
 }
 
+typedef struct NamedColorCase {
+    CNA_Color color;
+    uint32_t packed;
+} NamedColorCase;
+
+static int validate_named_colors(void)
+{
+    const NamedColorCase cases[] = {
+        {CNA_COLOR_TRANSPARENT, UINT32_C(0x00000000)},
+        {CNA_COLOR_ALICE_BLUE, UINT32_C(0xfffff8f0)},
+        {CNA_COLOR_ANTIQUE_WHITE, UINT32_C(0xffd7ebfa)},
+        {CNA_COLOR_AQUA, UINT32_C(0xffffff00)},
+        {CNA_COLOR_AQUAMARINE, UINT32_C(0xffd4ff7f)},
+        {CNA_COLOR_AZURE, UINT32_C(0xfffffff0)},
+        {CNA_COLOR_BEIGE, UINT32_C(0xffdcf5f5)},
+        {CNA_COLOR_BISQUE, UINT32_C(0xffc4e4ff)},
+        {CNA_COLOR_BLACK, UINT32_C(0xff000000)},
+        {CNA_COLOR_BLANCHED_ALMOND, UINT32_C(0xffcdebff)},
+        {CNA_COLOR_BLUE, UINT32_C(0xffff0000)},
+        {CNA_COLOR_BLUE_VIOLET, UINT32_C(0xffe22b8a)},
+        {CNA_COLOR_BROWN, UINT32_C(0xff2a2aa5)},
+        {CNA_COLOR_BURLY_WOOD, UINT32_C(0xff87b8de)},
+        {CNA_COLOR_CADET_BLUE, UINT32_C(0xffa09e5f)},
+        {CNA_COLOR_CHARTREUSE, UINT32_C(0xff00ff7f)},
+        {CNA_COLOR_CHOCOLATE, UINT32_C(0xff1e69d2)},
+        {CNA_COLOR_CORAL, UINT32_C(0xff507fff)},
+        {CNA_COLOR_CORNFLOWER_BLUE, UINT32_C(0xffed9564)},
+        {CNA_COLOR_CORNSILK, UINT32_C(0xffdcf8ff)},
+        {CNA_COLOR_CRIMSON, UINT32_C(0xff3c14dc)},
+        {CNA_COLOR_CYAN, UINT32_C(0xffffff00)},
+        {CNA_COLOR_DARK_BLUE, UINT32_C(0xff8b0000)},
+        {CNA_COLOR_DARK_CYAN, UINT32_C(0xff8b8b00)},
+        {CNA_COLOR_DARK_GOLDENROD, UINT32_C(0xff0b86b8)},
+        {CNA_COLOR_DARK_GRAY, UINT32_C(0xffa9a9a9)},
+        {CNA_COLOR_DARK_GREEN, UINT32_C(0xff006400)},
+        {CNA_COLOR_DARK_KHAKI, UINT32_C(0xff6bb7bd)},
+        {CNA_COLOR_DARK_MAGENTA, UINT32_C(0xff8b008b)},
+        {CNA_COLOR_DARK_OLIVE_GREEN, UINT32_C(0xff2f6b55)},
+        {CNA_COLOR_DARK_ORANGE, UINT32_C(0xff008cff)},
+        {CNA_COLOR_DARK_ORCHID, UINT32_C(0xffcc3299)},
+        {CNA_COLOR_DARK_RED, UINT32_C(0xff00008b)},
+        {CNA_COLOR_DARK_SALMON, UINT32_C(0xff7a96e9)},
+        {CNA_COLOR_DARK_SEA_GREEN, UINT32_C(0xff8bbc8f)},
+        {CNA_COLOR_DARK_SLATE_BLUE, UINT32_C(0xff8b3d48)},
+        {CNA_COLOR_DARK_SLATE_GRAY, UINT32_C(0xff4f4f2f)},
+        {CNA_COLOR_DARK_TURQUOISE, UINT32_C(0xffd1ce00)},
+        {CNA_COLOR_DARK_VIOLET, UINT32_C(0xffd30094)},
+        {CNA_COLOR_DEEP_PINK, UINT32_C(0xff9314ff)},
+        {CNA_COLOR_DEEP_SKY_BLUE, UINT32_C(0xffffbf00)},
+        {CNA_COLOR_DIM_GRAY, UINT32_C(0xff696969)},
+        {CNA_COLOR_DODGER_BLUE, UINT32_C(0xffff901e)},
+        {CNA_COLOR_FIREBRICK, UINT32_C(0xff2222b2)},
+        {CNA_COLOR_FLORAL_WHITE, UINT32_C(0xfff0faff)},
+        {CNA_COLOR_FOREST_GREEN, UINT32_C(0xff228b22)},
+        {CNA_COLOR_FUCHSIA, UINT32_C(0xffff00ff)},
+        {CNA_COLOR_GAINSBORO, UINT32_C(0xffdcdcdc)},
+        {CNA_COLOR_GHOST_WHITE, UINT32_C(0xfffff8f8)},
+        {CNA_COLOR_GOLD, UINT32_C(0xff00d7ff)},
+        {CNA_COLOR_GOLDENROD, UINT32_C(0xff20a5da)},
+        {CNA_COLOR_GRAY, UINT32_C(0xff808080)},
+        {CNA_COLOR_GREEN, UINT32_C(0xff008000)},
+        {CNA_COLOR_GREEN_YELLOW, UINT32_C(0xff2fffad)},
+        {CNA_COLOR_HONEYDEW, UINT32_C(0xfff0fff0)},
+        {CNA_COLOR_HOT_PINK, UINT32_C(0xffb469ff)},
+        {CNA_COLOR_INDIAN_RED, UINT32_C(0xff5c5ccd)},
+        {CNA_COLOR_INDIGO, UINT32_C(0xff82004b)},
+        {CNA_COLOR_IVORY, UINT32_C(0xfff0ffff)},
+        {CNA_COLOR_KHAKI, UINT32_C(0xff8ce6f0)},
+        {CNA_COLOR_LAVENDER, UINT32_C(0xfffae6e6)},
+        {CNA_COLOR_LAVENDER_BLUSH, UINT32_C(0xfff5f0ff)},
+        {CNA_COLOR_LAWN_GREEN, UINT32_C(0xff00fc7c)},
+        {CNA_COLOR_LEMON_CHIFFON, UINT32_C(0xffcdfaff)},
+        {CNA_COLOR_LIGHT_BLUE, UINT32_C(0xffe6d8ad)},
+        {CNA_COLOR_LIGHT_CORAL, UINT32_C(0xff8080f0)},
+        {CNA_COLOR_LIGHT_CYAN, UINT32_C(0xffffffe0)},
+        {CNA_COLOR_LIGHT_GOLDENROD_YELLOW, UINT32_C(0xffd2fafa)},
+        {CNA_COLOR_LIGHT_GRAY, UINT32_C(0xffd3d3d3)},
+        {CNA_COLOR_LIGHT_GREEN, UINT32_C(0xff90ee90)},
+        {CNA_COLOR_LIGHT_PINK, UINT32_C(0xffc1b6ff)},
+        {CNA_COLOR_LIGHT_SALMON, UINT32_C(0xff7aa0ff)},
+        {CNA_COLOR_LIGHT_SEA_GREEN, UINT32_C(0xffaab220)},
+        {CNA_COLOR_LIGHT_SKY_BLUE, UINT32_C(0xffface87)},
+        {CNA_COLOR_LIGHT_SLATE_GRAY, UINT32_C(0xff998877)},
+        {CNA_COLOR_LIGHT_STEEL_BLUE, UINT32_C(0xffdec4b0)},
+        {CNA_COLOR_LIGHT_YELLOW, UINT32_C(0xffe0ffff)},
+        {CNA_COLOR_LIME, UINT32_C(0xff00ff00)},
+        {CNA_COLOR_LIME_GREEN, UINT32_C(0xff32cd32)},
+        {CNA_COLOR_LINEN, UINT32_C(0xffe6f0fa)},
+        {CNA_COLOR_MAGENTA, UINT32_C(0xffff00ff)},
+        {CNA_COLOR_MAROON, UINT32_C(0xff000080)},
+        {CNA_COLOR_MEDIUM_AQUAMARINE, UINT32_C(0xffaacd66)},
+        {CNA_COLOR_MEDIUM_BLUE, UINT32_C(0xffcd0000)},
+        {CNA_COLOR_MEDIUM_ORCHID, UINT32_C(0xffd355ba)},
+        {CNA_COLOR_MEDIUM_PURPLE, UINT32_C(0xffdb7093)},
+        {CNA_COLOR_MEDIUM_SEA_GREEN, UINT32_C(0xff71b33c)},
+        {CNA_COLOR_MEDIUM_SLATE_BLUE, UINT32_C(0xffee687b)},
+        {CNA_COLOR_MEDIUM_SPRING_GREEN, UINT32_C(0xff9afa00)},
+        {CNA_COLOR_MEDIUM_TURQUOISE, UINT32_C(0xffccd148)},
+        {CNA_COLOR_MEDIUM_VIOLET_RED, UINT32_C(0xff8515c7)},
+        {CNA_COLOR_MIDNIGHT_BLUE, UINT32_C(0xff701919)},
+        {CNA_COLOR_MINT_CREAM, UINT32_C(0xfffafff5)},
+        {CNA_COLOR_MISTY_ROSE, UINT32_C(0xffe1e4ff)},
+        {CNA_COLOR_MOCCASIN, UINT32_C(0xffb5e4ff)},
+        {CNA_COLOR_NAVAJO_WHITE, UINT32_C(0xffaddeff)},
+        {CNA_COLOR_NAVY, UINT32_C(0xff800000)},
+        {CNA_COLOR_OLD_LACE, UINT32_C(0xffe6f5fd)},
+        {CNA_COLOR_OLIVE, UINT32_C(0xff008080)},
+        {CNA_COLOR_OLIVE_DRAB, UINT32_C(0xff238e6b)},
+        {CNA_COLOR_ORANGE, UINT32_C(0xff00a5ff)},
+        {CNA_COLOR_ORANGE_RED, UINT32_C(0xff0045ff)},
+        {CNA_COLOR_ORCHID, UINT32_C(0xffd670da)},
+        {CNA_COLOR_PALE_GOLDENROD, UINT32_C(0xffaae8ee)},
+        {CNA_COLOR_PALE_GREEN, UINT32_C(0xff98fb98)},
+        {CNA_COLOR_PALE_TURQUOISE, UINT32_C(0xffeeeeaf)},
+        {CNA_COLOR_PALE_VIOLET_RED, UINT32_C(0xff9370db)},
+        {CNA_COLOR_PAPAYA_WHIP, UINT32_C(0xffd5efff)},
+        {CNA_COLOR_PEACH_PUFF, UINT32_C(0xffb9daff)},
+        {CNA_COLOR_PERU, UINT32_C(0xff3f85cd)},
+        {CNA_COLOR_PINK, UINT32_C(0xffcbc0ff)},
+        {CNA_COLOR_PLUM, UINT32_C(0xffdda0dd)},
+        {CNA_COLOR_POWDER_BLUE, UINT32_C(0xffe6e0b0)},
+        {CNA_COLOR_PURPLE, UINT32_C(0xff800080)},
+        {CNA_COLOR_RED, UINT32_C(0xff0000ff)},
+        {CNA_COLOR_ROSY_BROWN, UINT32_C(0xff8f8fbc)},
+        {CNA_COLOR_ROYAL_BLUE, UINT32_C(0xffe16941)},
+        {CNA_COLOR_SADDLE_BROWN, UINT32_C(0xff13458b)},
+        {CNA_COLOR_SALMON, UINT32_C(0xff7280fa)},
+        {CNA_COLOR_SANDY_BROWN, UINT32_C(0xff60a4f4)},
+        {CNA_COLOR_SEA_GREEN, UINT32_C(0xff578b2e)},
+        {CNA_COLOR_SEA_SHELL, UINT32_C(0xffeef5ff)},
+        {CNA_COLOR_SIENNA, UINT32_C(0xff2d52a0)},
+        {CNA_COLOR_SILVER, UINT32_C(0xffc0c0c0)},
+        {CNA_COLOR_SKY_BLUE, UINT32_C(0xffebce87)},
+        {CNA_COLOR_SLATE_BLUE, UINT32_C(0xffcd5a6a)},
+        {CNA_COLOR_SLATE_GRAY, UINT32_C(0xff908070)},
+        {CNA_COLOR_SNOW, UINT32_C(0xfffafaff)},
+        {CNA_COLOR_SPRING_GREEN, UINT32_C(0xff7fff00)},
+        {CNA_COLOR_STEEL_BLUE, UINT32_C(0xffb48246)},
+        {CNA_COLOR_TAN, UINT32_C(0xff8cb4d2)},
+        {CNA_COLOR_TEAL, UINT32_C(0xff808000)},
+        {CNA_COLOR_THISTLE, UINT32_C(0xffd8bfd8)},
+        {CNA_COLOR_TOMATO, UINT32_C(0xff4763ff)},
+        {CNA_COLOR_TURQUOISE, UINT32_C(0xffd0e040)},
+        {CNA_COLOR_VIOLET, UINT32_C(0xffee82ee)},
+        {CNA_COLOR_WHEAT, UINT32_C(0xffb3def5)},
+        {CNA_COLOR_WHITE, UINT32_C(0xffffffff)},
+        {CNA_COLOR_WHITE_SMOKE, UINT32_C(0xfff5f5f5)},
+        {CNA_COLOR_YELLOW, UINT32_C(0xff00ffff)},
+        {CNA_COLOR_YELLOW_GREEN, UINT32_C(0xff32cd9a)},
+    };
+    _Static_assert(
+        sizeof(cases) / sizeof(cases[0]) == 141U,
+        "the complete named-color table must remain covered");
+
+    for (size_t index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        uint32_t packed = 0U;
+        if (cna_color_get_packed_value(cases[index].color, &packed) != CNA_RESULT_SUCCESS ||
+            packed != cases[index].packed) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int main(void)
 {
     return validate_construction() && validate_properties_and_strings() &&
-            validate_value_operations() ? 0 : 1;
+            validate_value_operations() && validate_named_colors() ? 0 : 1;
 }

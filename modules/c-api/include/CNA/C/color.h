@@ -5,6 +5,7 @@
 
 #include "CNA/C/core.h"
 #include "CNA/C/math_values.h"
+#include "CNA/C/named_colors.h"
 
 #ifdef __cplusplus
 extern "C" {

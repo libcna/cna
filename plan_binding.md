@@ -260,7 +260,7 @@ mechanical wrapper.
 | CBIND-035B3 | Complete Quaternion and Matrix operations | ✅ | `quaternion.h` and `matrix.h` map every remaining public row through 85 fallible operations. Both constructors/constants/properties and all member/static/operator math, decomposition/interpolation/transformation/factory routes are covered with row-major, singular, projection-failure, non-finite and aliasing evidence under both backends and ASan+UBSan. Completed as CBIND-035B3a–B3b. |
 | CBIND-035B4 | Complete planes, rays and bounding-volume operations | ✅ | `geometry.h` maps every remaining Plane, Ray, BoundingBox, BoundingSphere and BoundingFrustum row through C-native values, explicit optional hits and caller-capacity corners. Strict-C HEADLESS/SDL_RENDERER and ASan+UBSan tests cover every exported operation, including atomic capacity/failure paths and the canonical unsupported boundary-ray case. Completed as CBIND-035B4a–B4d. |
 | CBIND-035B5 | Complete Curve value, collection and evaluation operations | ✅ | `curve.h` maps all 60 Curve, CurveKey and CurveKeyCollection rows through fixed values and validated handles without leaking C++ containers. Ordered collection mutation, retained mutable key views, all loop/evaluation/tangent behavior and lifetime/error boundaries are covered in strict C under both backends and ASan+UBSan. Completed as CBIND-035B5a–B5c. |
-| CBIND-035B6 | Complete Color operations and named constants | 🟨 | Map all constructors/conversions, channels, packed value, arithmetic/interpolation/equality/string/hash routes and every public named Color constant with exact packed values. Work is decomposed into CBIND-035B6a–B6b below. |
+| CBIND-035B6 | Complete Color operations and named constants | ✅ | `color.h` and `named_colors.h` map the complete 175-row Color header through the four-byte POD, direct channels, 24 operations and 141 directly usable named value expressions. Every packed value is checked independently and all value/error behavior passes strict C under both backends and ASan+UBSan. Completed as CBIND-035B6a–B6b. |
 | CBIND-035B7 | Complete PackedVector operations and close math coverage | ⬜ | Map all concrete packed constructors, float/vector conversions, equality/string/hash behavior and interface-equivalent storage routes; leave no planned math/PackedVector CBIND-035 row. |
 
 ##### CBIND-035B2 scalar/vector slices
@@ -301,7 +301,7 @@ mechanical wrapper.
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | CBIND-035B6a | Complete Color value operations | ✅ | `color.h` maps all 25 previously planned non-constant Color rows through the existing four-byte `CNA_Color`, direct channel fields and 24 operations covering all constructors, packed value, exact/debug strings, conversions, equality/hash, Lerp, both premultiplication routes, multiplication/operators and packed-vector mutation. Integer premultiplication explicitly preserves FNA's unchecked Int32 product without C++ signed-overflow UB. `ColorSmoke.c` calls every entry point and covers ABI/order, clamp/truncation/wrap, exact strings, capacity atomicity and null failures under both backends and ASan+UBSan. |
-| CBIND-035B6b | Complete named Color constants and close parent B6 | ⬜ | Map all 141 public named colors through stable C identities and canonical exact packed values; test the complete table and close parent B6. |
+| CBIND-035B6b | Complete named Color constants and close parent B6 | ✅ | `named_colors.h` maps all 141 public named colors to directly usable C17/C++23 `CNA_COLOR_*` value expressions built from exact RGBA channels. `ColorSmoke.c` passes every expression through the packed-value API and independently compares it with the canonical AABBGGRR literal, while public-header builds prove both language modes. This closes parent CBIND-035B6. |
 
 ## Phase B7 — hardening, documentation and experimental release
 
@@ -394,4 +394,6 @@ CBIND-035B5b completes all 26 CurveKeyCollection rows; the current snapshot is 1
 parent B5; the current snapshot is 1,637 implemented, 21 partial, 4,687 planned and 70 not
 applicable. CBIND-035B6a completes the remaining 25 non-constant Color rows; the current snapshot
 is 1,662 implemented, 21 partial, 4,662 planned and 70 not applicable, with CBIND-035B6b named
-Color constants next.
+Color constants next. CBIND-035B6b completes all 141 named Color rows and closes parent B6; the
+current snapshot is 1,803 implemented, 21 partial, 4,521 planned and 70 not applicable, with
+CBIND-035B7 PackedVector operations next.

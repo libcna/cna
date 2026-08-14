@@ -208,5 +208,7 @@ Lerp, non-premultiplied conversion, multiplication and packed-vector mutation ro
 Constructor clamping and packed-vector truncation delegate to the canonical implementation.
 Integer premultiplication reproduces FNA's unchecked 32-bit multiplication with defined unsigned
 arithmetic before division, avoiding signed-overflow undefined behavior at the C boundary. String
-copies are caller-capacity operations and never partially write. The 141 named colors remain the
-only Color rows reserved for CBIND-035B6b.
+copies are caller-capacity operations and never partially write. `named_colors.h` exposes all 141
+named colors as directly usable `CNA_COLOR_*` value
+expression. Their RGBA channels are compiled in strict C17 and C++23, and the strict-C suite
+independently verifies every canonical AABBGGRR packed value.
