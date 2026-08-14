@@ -761,7 +761,7 @@ Each set is its own task because each will surface its own third-party integrati
 |---|---|---|
 | RTR-P10-1 | ✅ | `SDL_RENDERER + SOFTWARE + HEADLESS + STUB` — first set with a real window. |
 | RTR-P10-2 | ✅ | `SDL_RENDERER + OPENGLES3` — first set crossing `RendererWindowKind::Plain` → `OpenGL`, exercising window recreation on fallback. |
-| RTR-P10-3 | ⬜ | `OPENGLES3 + VULKAN` — the `OpenGL`/`Vulkan` window-flag conflict (design decision 8) proven end to end, including the refusal path with a caller-supplied window. |
+| RTR-P10-3 | ✅ | `OPENGLES3 + VULKAN` — the `OpenGL`/`Vulkan` window-flag conflict (design decision 8) proven end to end, including the refusal path with a caller-supplied window. |
 | RTR-P10-4 | ✅ | `OPENGLES3 + VULKAN + SOFTWARE + HEADLESS + STUB` — the realistic Linux "everything native" set. |
 | RTR-P10-5 | ⬜ | `+ SDL_GPU`. |
 | RTR-P10-6 | ⬜ | `+ SKIA` — first heavy external artifact in a multi build. |

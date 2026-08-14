@@ -204,6 +204,7 @@ Not every pair of renderers can be linked into one binary. Incompatible combinat
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
+| `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6379 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
 
 Cost of that set versus a single-renderer `HEADLESS` build: the `CnaTests` binary grows from
 238.5 MB to 241.2 MB (**+1.2 %**) for two additional renderers. The runtime cost is one
