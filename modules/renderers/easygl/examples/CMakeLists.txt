@@ -271,8 +271,9 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plan_gltf.md GLTF-230: a real imported BLEND material remains straight-alpha output;
-        # the application selects NonPremultiplied and owns the draw order around Model::Draw.
+        # plan_gltf.md GLTF-230/231: a real imported BLEND + doubleSided material remains
+        # straight-alpha output; the application selects blend/cull state and draw order around
+        # Model::Draw, which preserves caller-owned device state.
         cna_easygl_test(cna_test_easygl_gltf_alpha_blend
                         easygl_gltf_alpha_blend_test.cpp)
         cna_register_renderer_test(NAME EasyGL_Gltf_AlphaBlend

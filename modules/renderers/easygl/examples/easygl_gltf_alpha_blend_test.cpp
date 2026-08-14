@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-230: a committed BLEND fixture through application-owned GPU state.
+// plan_gltf.md GLTF-230 / GLTF-231: a committed BLEND + doubleSided fixture through
+// application-owned GPU state.
 //
 // PbrEffect deliberately outputs straight RGB plus coverage alpha. Consequently glTF BLEND needs
 // BlendState::NonPremultiplied (SourceAlpha/InverseSourceAlpha), not XNA's premultiplied
 // BlendState::AlphaBlend. Model::Draw must preserve the state selected by the application because
-// it neither owns the surfaces behind a primitive nor sorts them back-to-front.
+// it neither owns the surfaces behind a primitive nor sorts them back-to-front. The same boundary
+// applies to glTF doubleSided: the effect carries the bit and the application resolves it to
+// RasterizerState without Model::Draw mutating global device state.
 
 #include "common/PixelTestGame.hpp"
 
@@ -48,12 +51,13 @@ protected:
             return;
 
         const Vector3 factor = effect->getDiffuseColorProperty();
-        if (!ExpectTrue("loader carries straight gold RGB, half alpha, and BLEND mode",
+        if (!ExpectTrue("loader carries straight gold RGB, half alpha, BLEND and doubleSided",
                         effect->getAlphaModeEXTProperty() == AlphaModeEXT::Blend
                             && std::abs(factor.X - 1.0f) < 1e-6f
                             && std::abs(factor.Y - 0.72f) < 1e-6f
                             && std::abs(factor.Z - 0.315f) < 1e-6f
-                            && std::abs(effect->getAlphaProperty() - 0.5f) < 1e-6f))
+                            && std::abs(effect->getAlphaProperty() - 0.5f) < 1e-6f
+                            && effect->getDoubleSidedEXTProperty()))
             return;
 
         // Ambient=1 makes the fragment exactly the imported straight baseColorFactor. Disabling
@@ -99,6 +103,31 @@ protected:
         model.Draw(world, view, projection);
         ExpectPixel("premultiplied preset is observably wrong for straight glTF output",
                     centre, Color(255, 184, 208, 255), 2);
+
+        // Flip only Y around the triangle's screen-space bounds: the same centre pixel stays
+        // strictly inside, but the authored CCW front becomes clockwise. Ignoring doubleSided and
+        // keeping the ordinary glTF CullClockwiseFace state must therefore remove it completely.
+        // This is the distinguishing control that a front-facing-only double-sided test lacks.
+        const Matrix backFacingWorld = Matrix::CreateScale(1.0f, -1.0f, 1.0f)
+            * Matrix::CreateTranslation(-1.0f / 3.0f, 1.0f / 3.0f, 0.0f);
+        const Color black(0, 0, 0, 255);
+        device.Clear(black);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setRasterizerStateProperty(RasterizerState::CullClockwise);
+        model.Draw(backFacingWorld, view, projection);
+        ExpectPixel("single-sided control culls the back face",
+                    centre, black, 0);
+
+        // The application consumes the imported property at the public boundary. Model::Draw
+        // still preserves that state; the back face is now the exact straight gold source colour.
+        device.Clear(black);
+        device.setRasterizerStateProperty(
+            effect->getDoubleSidedEXTProperty()
+                ? RasterizerState::CullNone
+                : RasterizerState::CullClockwise);
+        model.Draw(backFacingWorld, view, projection);
+        ExpectPixel("doubleSided selects CullNone and renders the same back face",
+                    centre, Color(255, 184, 80, 255), 2);
     }
 };
 
