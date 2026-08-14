@@ -71,12 +71,12 @@ namespace CNA::Internal::Renderers::Llgl
         constexpr std::size_t kSkinnedBoneFloats = 72 * 16;
 
         /// Floats in PbrEffect's own dedicated uniform block (see shaders/pbr3d.vert.glsl's
-        /// PbrParams for the byte layout): 88 floats = 352 bytes. This effect's field set (base
+        /// PbrParams for the byte layout): 92 floats = 368 bytes. This effect's field set (base
         /// colour factor kept independent from alpha, raw AmbientLightColor, metallic/roughness
         /// factors, normal/occlusion map scales and alpha coverage) doesn't fit the shared
         /// 100-float Transform block, and its
         /// shader pair is never linked with any other shader here.
-        constexpr std::size_t kPbrUniformFloats = 88;
+        constexpr std::size_t kPbrUniformFloats = 92;
 
         /// Floats per sprite vertex: position (2), texture coordinate (2), colour (4).
         constexpr std::size_t kSpriteVertexFloats = 8;
@@ -3401,6 +3401,11 @@ namespace CNA::Internal::Renderers::Llgl
             uniforms[82] = params.fogVector[2];
             uniforms[83] = params.fogVector[3];
         }
+
+        uniforms[88] = params.pbrDielectricF0[0];
+        uniforms[89] = params.pbrDielectricF0[1];
+        uniforms[90] = params.pbrDielectricF0[2];
+        uniforms[91] = params.pbrDielectricF90;
     }
 
     void LlglRenderer::EnsureDefaultPbrTexturesEXT()

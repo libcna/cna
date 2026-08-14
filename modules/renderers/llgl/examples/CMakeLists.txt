@@ -273,6 +273,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # GLTF-343/344: IOR-derived dielectric F0 and factor-only KHR_materials_specular F0/F90,
+    # repeated on both rigid and identity-skinned PBR programs and both LLGL modules.
+    cna_llgl_test(cna_test_llgl_pbr_fresnel_factors
+                  ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    cna_register_renderer_test(NAME Llgl_Pbr_FresnelFactors COMMAND cna_test_llgl_pbr_fresnel_factors
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-26 MSAA follow-up: real multisampling into a RenderTarget2D's own colour attachment,
     # resolved automatically by LLGL at the end of each render pass this renderer replays. Mirrors
     # llgl_msaa_test.cpp's own diagonal-hypotenuse antialiasing technique. Plain RenderTarget2D
@@ -388,6 +396,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_renderer_test(NAME Llgl_Pbr_SrgbTransfer_OpenGL COMMAND cna_test_llgl_pbr_srgb_transfer
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_renderer_test(NAME Llgl_Pbr_FresnelFactors_OpenGL COMMAND cna_test_llgl_pbr_fresnel_factors
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_renderer_test(NAME Llgl_Msaa_RenderTarget_OpenGL COMMAND cna_test_llgl_msaa_rendertarget

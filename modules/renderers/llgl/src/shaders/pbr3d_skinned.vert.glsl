@@ -30,6 +30,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 fogColor;
     vec4 fogVector;
     vec4 alphaTest;
+    vec4 dielectricFresnel;    // xyz = dielectric F0, w = dielectric F90
 };
 
 layout(std140, binding = 12) uniform BoneBlock

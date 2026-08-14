@@ -24,6 +24,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 fogColor;
     vec4 fogVector;
     vec4 alphaTest;
+    vec4 dielectricFresnel;    // xyz = dielectric F0, w = dielectric F90
 };
 
 layout(binding = 2) uniform texture2D colorMap;
@@ -70,7 +71,7 @@ vec3 cnaLinearToSrgb(vec3 c)
 
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.2/B.3.3/B.3.4).
-vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic)
+vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic)
 {
     vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -82,7 +83,7 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
     float D = a2 / (3.14159265 * dTerm * dTerm + 1e-7);
     float k = (roughness + 1.0); k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
-    vec3 F = F0 + (vec3(1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    vec3 F = F0 + (F90 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
     vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     vec3 diffuseTerm = albedo * (1.0 - metallic);
     vec3 kd = vec3(1.0) - F;
@@ -118,14 +119,15 @@ void main()
     float metallic  = clamp(mr.b * emissiveMetallic.w, 0.0, 1.0);
 
     vec3 V = safeNormalize(eyePositionWorldPad.xyz - vWorldPos);
-    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+    vec3 F0 = mix(dielectricFresnel.xyz, albedo, metallic);
+    vec3 F90 = mix(vec3(dielectricFresnel.w), vec3(1.0), metallic);
 
     // Direction fields point FROM the light, so negate for the "surface to light" vector PbrLight
     // expects.
     vec3 Lo = vec3(0.0);
-    Lo += PbrLight(finalNormal, V, safeNormalize(-light0DirPad.xyz), light0DiffusePad.xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, safeNormalize(-light1DirPad.xyz), light1DiffusePad.xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, safeNormalize(-light2DirPad.xyz), light2DiffusePad.xyz, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, safeNormalize(-light0DirPad.xyz), light0DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, safeNormalize(-light1DirPad.xyz), light1DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, safeNormalize(-light2DirPad.xyz), light2DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
 
     // R channel, 1x1 white default = fully lit (no darkening) when no occlusion map is bound.
     float occlusionSample = texture(sampler2D(occlusionMap, occlusionMapSampler), vTexCoord).r;
