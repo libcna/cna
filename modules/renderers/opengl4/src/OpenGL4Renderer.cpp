@@ -144,7 +144,22 @@ uniform vec4 uDiffuseColor;
 uniform bool uVertexColorEnabled;
 uniform vec4 uAlphaTest;
 uniform vec3 uFogColor;
+uniform vec3 uSrgb;
 out vec4 fragColor;
+
+vec3 cnaSrgbToLinear(vec3 c)
+{
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+
+vec3 cnaLinearToSrgb(vec3 c)
+{
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
 void main()
 {
     vec4 vc = uVertexColorEnabled ? vColor : vec4(1.0);
@@ -969,7 +984,8 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
 void main()
 {
     vec4 baseColorTex = texture(uTexture, vUV);
-    vec3 albedo = baseColorTex.rgb * uDiffuseColor.rgb;
+    vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), uSrgb.x);
+    vec3 albedo = baseColor * uDiffuseColor.rgb;
     float alpha = baseColorTex.a * uDiffuseColor.a;
     bool passesAlphaTest = (uAlphaTest.y > 0.0)
         ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y)
@@ -999,9 +1015,13 @@ void main()
     float occlusionSample = texture(uOcclusionMap, vUV).r;
     float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);
     vec3 ambient = uAmbientColor * albedo * occlusion;
-    vec3 emissive = uEmissiveColor * texture(uEmissiveMap, vUV).rgb;
+    vec3 emissiveSample = texture(uEmissiveMap, vUV).rgb;
+    emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y);
+    vec3 emissive = uEmissiveColor * emissiveSample;
 
-    vec3 rgb = mix(uFogColor, ambient + Lo + emissive, vFogFactor);
+    vec3 fogLinear = mix(uFogColor, cnaSrgbToLinear(uFogColor), uSrgb.z);
+    vec3 rgb = mix(fogLinear, ambient + Lo + emissive, vFogFactor);
+    rgb = mix(rgb, cnaLinearToSrgb(rgb), uSrgb.z);
     fragColor = vec4(rgb, alpha);
 }
 )GLSL";
@@ -3313,6 +3333,12 @@ void main()
             if (normalScaleLoc >= 0) gl4_glUniform1f(normalScaleLoc, params.pbrNormalScale);
             const int occlusionStrengthLoc = prog.UniformLocation("uOcclusionStrength");
             if (occlusionStrengthLoc >= 0) gl4_glUniform1f(occlusionStrengthLoc, params.pbrOcclusionStrength);
+            const int srgbLoc = prog.UniformLocation("uSrgb");
+            if (srgbLoc >= 0)
+                gl4_glUniform3f(srgbLoc,
+                                params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                                params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                                params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f);
             const int alphaTestLoc = prog.UniformLocation("uAlphaTest");
             if (alphaTestLoc >= 0)
                 gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],

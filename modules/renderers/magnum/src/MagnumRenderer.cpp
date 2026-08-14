@@ -1055,6 +1055,10 @@ namespace CNA::Internal::Renderers::Magnum
             program.SetFloat(program.LocationOf("uRoughnessFactor"), params.pbrRoughnessFactor);
             program.SetFloat(program.LocationOf("uNormalScale"), params.pbrNormalScale);
             program.SetFloat(program.LocationOf("uOcclusionStrength"), params.pbrOcclusionStrength);
+            program.SetVector3(program.LocationOf("uSrgb"), Mg::Vector3{
+                params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f});
             program.SetVector3(program.LocationOf("uAmbientColor"), Mg::Vector3{
                 params.ambientColor[0], params.ambientColor[1], params.ambientColor[2]});
             program.SetVector3(program.LocationOf("uEmissiveColor"), Mg::Vector3{

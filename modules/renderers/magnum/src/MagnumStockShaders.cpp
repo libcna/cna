@@ -237,6 +237,7 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             }
             source += "uniform vec4 uAlphaTest;\n";
             source += "uniform vec3 uFogColor;\n";
+            source += "uniform vec3 uSrgb;\n";
             source += "uniform float uVertexColorEnabled;\n";
             source += "uniform float uTextureEnabled;\n";
             source += "uniform float uLightingEnabled;\n";
@@ -456,6 +457,16 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             // The glTF metallic-roughness BRDF: GGX distribution, Smith-Schlick geometry and a
             // Schlick Fresnel, with the diffuse lobe scaled away as the surface becomes metallic.
             source += R"(
+vec3 cnaSrgbToLinear(vec3 c){
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+vec3 cnaLinearToSrgb(vec3 c){
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
 vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
                  vec3 albedo, vec3 f0, float roughness, float metallic){
     vec3 halfway = normalize(view + light);
@@ -477,7 +488,8 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
 )";
             source += "void main(){\n";
             source += "    vec4 baseColor = texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
-            source += "    vec3 albedo = baseColor.rgb * uDiffuseColor.rgb;\n";
+            source += "    vec3 baseLinear = mix(baseColor.rgb, cnaSrgbToLinear(baseColor.rgb), uSrgb.x);\n";
+            source += "    vec3 albedo = baseLinear * uDiffuseColor.rgb;\n";
             source += "    float alpha = baseColor.a * uDiffuseColor.a;\n";
             source += "    vec3 normal = normalize(vNormal);\n";
             // Gram-Schmidt: the interpolated tangent is no longer exactly perpendicular to the
@@ -506,11 +518,14 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             source += "    float occlusionSample = texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x)).r;\n";
             source += "    float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);\n";
             source += "    vec3 ambient = uAmbientColor * albedo * occlusion;\n";
-            source += "    vec3 emissive =\n";
-            source += "        uEmissiveColor * texture(uEmissiveMap, cnaSampleUV(vTexCoord, uRtFlipV.w)).rgb;\n";
+            source += "    vec3 emissiveSample = texture(uEmissiveMap, cnaSampleUV(vTexCoord, uRtFlipV.w)).rgb;\n";
+            source += "    emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y);\n";
+            source += "    vec3 emissive = uEmissiveColor * emissiveSample;\n";
             source += "    fragColor = vec4(ambient + reflected + emissive, alpha);\n";
             source += kAlphaTestFragmentTerm;
-            source += kFogFragmentTerm;
+            source += "    vec3 fogLinear = mix(uFogColor, cnaSrgbToLinear(uFogColor), uSrgb.z);\n";
+            source += "    fragColor.rgb = mix(fogLinear, fragColor.rgb, vFogFactor);\n";
+            source += "    fragColor.rgb = mix(fragColor.rgb, cnaLinearToSrgb(fragColor.rgb), uSrgb.z);\n";
             source += "}\n";
             return source;
         }

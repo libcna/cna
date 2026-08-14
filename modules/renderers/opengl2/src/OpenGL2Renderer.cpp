@@ -2336,7 +2336,12 @@ namespace CNA::Internal::Renderers::OpenGL2
             "uniform vec3 uLight0Dir;uniform vec3 uLight0Diffuse;"
             "uniform vec3 uLight1Dir;uniform vec3 uLight1Diffuse;"
             "uniform vec3 uLight2Dir;uniform vec3 uLight2Diffuse;"
-            "uniform vec3 uEyePosition;uniform vec4 uAlphaTest;uniform vec3 uFogColor;"
+            "uniform vec3 uEyePosition;uniform vec4 uAlphaTest;uniform vec3 uFogColor;uniform vec3 uSrgb;"
+            "vec3 cnaSrgbToLinear(vec3 c){vec3 lo=c/12.92;vec3 hi=pow((c+0.055)/1.055,vec3(2.4));"
+            "return mix(lo,hi,step(vec3(0.04045),c));}"
+            "vec3 cnaLinearToSrgb(vec3 c){vec3 lo=c*12.92;"
+            "vec3 hi=1.055*pow(max(c,vec3(0.0)),vec3(1.0/2.4))-0.055;"
+            "return mix(lo,hi,step(vec3(0.0031308),c));}"
             "vec3 PbrLight(vec3 N,vec3 V,vec3 L,vec3 lightColor,vec3 albedo,vec3 F0,float roughness,float metallic){"
             "vec3 H=normalize(V+L);"
             "float NdotL=max(dot(N,L),0.0);float NdotV=max(dot(N,V),1e-4);"
@@ -2354,7 +2359,8 @@ namespace CNA::Internal::Renderers::OpenGL2
             "}"
             "void main(){"
             "vec4 baseColorTex=texture2D(uTex,vTex);"
-            "vec3 albedo=baseColorTex.rgb*uDiffuse.rgb;"
+            "vec3 baseColor=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),vec3(uSrgb.x));"
+            "vec3 albedo=baseColor*uDiffuse.rgb;"
             "float alpha=baseColorTex.a*uDiffuse.a;"
             "vec3 N=normalize(vNormal);"
             "vec3 T=normalize(vTangent-N*dot(N,vTangent));"
@@ -2375,11 +2381,15 @@ namespace CNA::Internal::Renderers::OpenGL2
             "float occlusionSample=texture2D(uOcclusionMap,vTex).r;"
             "float occlusion=1.0+uOcclusionStrength*(occlusionSample-1.0);"
             "vec3 ambient=uAmbientColor*albedo*occlusion;"
-            "vec3 emissive=uEmissiveColor*texture2D(uEmissiveMap,vTex).rgb;"
+            "vec3 emissiveSample=texture2D(uEmissiveMap,vTex).rgb;"
+            "emissiveSample=mix(emissiveSample,cnaSrgbToLinear(emissiveSample),vec3(uSrgb.y));"
+            "vec3 emissive=uEmissiveColor*emissiveSample;"
             "gl_FragData[0]=vec4(ambient+Lo+emissive,alpha);"
             "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragData[0].a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
             "((gl_FragData[0].a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
-            "gl_FragData[0].rgb=mix(uFogColor,gl_FragData[0].rgb,vFogFactor);"
+            "vec3 fogLinear=mix(uFogColor,cnaSrgbToLinear(uFogColor),vec3(uSrgb.z));"
+            "gl_FragData[0].rgb=mix(fogLinear,gl_FragData[0].rgb,vFogFactor);"
+            "gl_FragData[0].rgb=mix(gl_FragData[0].rgb,cnaLinearToSrgb(gl_FragData[0].rgb),vec3(uSrgb.z));"
             "}";
 
         const char* pbrVertexSrc =
@@ -3228,6 +3238,10 @@ namespace CNA::Internal::Renderers::OpenGL2
                 glUniform1f(glGetUniformLocation(program, "uRoughnessFactor"), params->pbrRoughnessFactor);
                 glUniform1f(glGetUniformLocation(program, "uNormalScale"), params->pbrNormalScale);
                 glUniform1f(glGetUniformLocation(program, "uOcclusionStrength"), params->pbrOcclusionStrength);
+                glUniform3f(glGetUniformLocation(program, "uSrgb"),
+                            params->pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                            params->pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                            params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f);
             }
         }
 
