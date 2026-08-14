@@ -7,8 +7,12 @@
 #include <string>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -22,6 +26,12 @@ namespace CNA::Internal::Renderers
     using EffectParameterType =
         Microsoft::Xna::Framework::Graphics::EffectParameterType;
     using Texture = Microsoft::Xna::Framework::Graphics::Texture;
+    using BlendState = Microsoft::Xna::Framework::Graphics::BlendState;
+    using DepthStencilState = Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using RasterizerState = Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using SamplerState = Microsoft::Xna::Framework::Graphics::SamplerState;
+    using SamplerStateCollection =
+        Microsoft::Xna::Framework::Graphics::SamplerStateCollection;
 
     /**
      * @brief Renderer-neutral value reflected from a compiled XNA Effect Framework binary.
@@ -77,6 +87,50 @@ namespace CNA::Internal::Renderers
         std::vector<CompiledEffectTechniqueDescription> techniques;
     };
 
+    /** @brief One texture slot a compiled pass reassigned while it was applied. */
+    struct CompiledEffectSamplerChange
+    {
+        std::uint32_t slot = 0;
+        bool vertexStage = false;
+        bool samplerChanged = false;
+        SamplerState sampler;
+        bool textureChanged = false;
+        Texture* texture = nullptr;
+    };
+
+    /**
+     * @brief Device state a compiled pass starts from when it translates its state assignments.
+     *
+     * A legacy Effect Framework pass assigns individual Direct3D 9 render states, so every group
+     * it touches has to be rebuilt from the state currently selected on the device rather than
+     * from a default-constructed object.
+     */
+    struct CompiledEffectDeviceState
+    {
+        const BlendState* blend = nullptr;
+        const DepthStencilState* depthStencil = nullptr;
+        const RasterizerState* rasterizer = nullptr;
+        const SamplerStateCollection* samplerStates = nullptr;
+        const SamplerStateCollection* vertexSamplerStates = nullptr;
+    };
+
+    /**
+     * @brief Complete state a compiled pass assigned, grouped for atomic installation.
+     *
+     * Each group is published only when the pass actually assigned at least one of its states, so
+     * an unrelated state object selected by the game is never replaced by a rebuilt copy.
+     */
+    struct CompiledEffectPassStateChanges
+    {
+        bool blendChanged = false;
+        BlendState blend;
+        bool depthStencilChanged = false;
+        DepthStencilState depthStencil;
+        bool rasterizerChanged = false;
+        RasterizerState rasterizer;
+        std::vector<CompiledEffectSamplerChange> samplers;
+    };
+
     /**
      * @brief Device-bound implementation of one compiled XNA effect.
      *
@@ -106,7 +160,16 @@ namespace CNA::Internal::Renderers
         /** @brief Associates a public texture parameter with its renderer-native sampler binding. */
         virtual void SetParameterTexture(std::uint32_t runtimeIndex, Texture* texture) = 0;
 
-        /** @brief Applies the exact pass of the currently selected technique. */
-        virtual void ApplyPass(std::uint32_t passIndex) = 0;
+        /**
+         * @brief Applies the exact pass of the currently selected technique.
+         *
+         * @param passIndex Zero-based pass index inside the selected technique.
+         * @param deviceState State groups currently selected on the owning GraphicsDevice.
+         * @param changes Receives every state group the pass assigned. The runtime never installs
+         *                these itself: the public graphics layer owns GraphicsDevice state.
+         */
+        virtual void ApplyPass(std::uint32_t passIndex,
+                               const CompiledEffectDeviceState& deviceState,
+                               CompiledEffectPassStateChanges& changes) = 0;
     };
 }

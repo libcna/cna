@@ -695,6 +695,85 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureAcceptsEveryFnaRenderStateToken)
     EXPECT_NO_THROW(effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply());
 }
 
+TEST(Fna3dCompiledEffectTest, CompiledPassPublishesRenderStatesThroughGraphicsDevice)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    const std::vector<SyntheticRenderState> states = {
+        {MOJOSHADER_RS_ZENABLE, MOJOSHADER_ZB_FALSE},
+        {MOJOSHADER_RS_ZWRITEENABLE, 0},
+        {MOJOSHADER_RS_ZFUNC, MOJOSHADER_CMP_GREATER},
+        {MOJOSHADER_RS_STENCILREF, 7},
+        {MOJOSHADER_RS_STENCILMASK, 0x0Fu},
+        {MOJOSHADER_RS_CULLMODE, MOJOSHADER_CULL_CW},
+        {MOJOSHADER_RS_FILLMODE, MOJOSHADER_FILL_WIREFRAME},
+        {MOJOSHADER_RS_SLOPESCALEDEPTHBIAS, FloatBits(0.5f), true},
+        {MOJOSHADER_RS_DEPTHBIAS, FloatBits(0.25f), true},
+        {MOJOSHADER_RS_SRCBLEND, MOJOSHADER_BLEND_SRCALPHA},
+        {MOJOSHADER_RS_DESTBLEND, MOJOSHADER_BLEND_INVSRCALPHA},
+        {MOJOSHADER_RS_BLENDOP, MOJOSHADER_BLENDOP_REVSUBTRACT},
+        {MOJOSHADER_RS_COLORWRITEENABLE, 5},
+        {MOJOSHADER_RS_MULTISAMPLEMASK, 0x0F0F0F0Fu},
+        {MOJOSHADER_RS_BLENDFACTOR, 0x10203040u},
+    };
+
+    GraphicsDevice device;
+    Effect effect(device, BuildSyntheticConformanceEffect(states));
+    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+
+    // XNA and FNA both publish a compiled pass's render states through the device's own state
+    // objects, so a game sees exactly the state the effect selected.
+    const DepthStencilState& depth = device.getDepthStencilStateProperty();
+    EXPECT_FALSE(depth.getDepthBufferEnableProperty());
+    EXPECT_FALSE(depth.getDepthBufferWriteEnableProperty());
+    EXPECT_EQ(depth.getDepthBufferFunctionProperty(), CompareFunction::Greater);
+    EXPECT_EQ(depth.getReferenceStencilProperty(), 7);
+    EXPECT_EQ(depth.getStencilMaskProperty(), 0x0F);
+
+    const RasterizerState& rasterizer = device.getRasterizerStateProperty();
+    EXPECT_EQ(rasterizer.getCullModeProperty(), CullMode::CullClockwiseFace);
+    EXPECT_EQ(rasterizer.getFillModeProperty(), FillMode::WireFrame);
+    EXPECT_FLOAT_EQ(rasterizer.getSlopeScaleDepthBiasProperty(), 0.5f);
+    EXPECT_FLOAT_EQ(rasterizer.getDepthBiasProperty(), 0.25f);
+
+    const BlendState& blend = device.getBlendStateProperty();
+    EXPECT_EQ(blend.getColorSourceBlendProperty(), Blend::SourceAlpha);
+    EXPECT_EQ(blend.getColorDestinationBlendProperty(), Blend::InverseSourceAlpha);
+    // Without SEPARATEALPHABLENDENABLE the alpha factors follow the colour ones, but BLENDOP
+    // alone never changes the alpha blend function -- exactly as FNA's Effect.cs behaves.
+    EXPECT_EQ(blend.getAlphaSourceBlendProperty(), Blend::SourceAlpha);
+    EXPECT_EQ(blend.getAlphaDestinationBlendProperty(), Blend::InverseSourceAlpha);
+    EXPECT_EQ(blend.getColorBlendFunctionProperty(), BlendFunction::ReverseSubtract);
+    EXPECT_EQ(blend.getAlphaBlendFunctionProperty(), BlendFunction::Add);
+    EXPECT_EQ(static_cast<int>(blend.getColorWriteChannelsProperty()), 5);
+    EXPECT_EQ(blend.getMultiSampleMaskProperty(), 0x0F0F0F0F);
+    EXPECT_EQ(blend.getBlendFactorProperty(), Color(0x10, 0x20, 0x30, 0x40));
+}
+
+TEST(Fna3dCompiledEffectTest, CompiledPassLeavesUnassignedStateGroupsSelected)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    device.setBlendStateProperty(BlendState::NonPremultiplied);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+
+    // A pass that assigns only a rasterizer token must not rebuild the other two groups.
+    Effect effect(device, BuildSyntheticConformanceEffect(
+        {{MOJOSHADER_RS_FILLMODE, MOJOSHADER_FILL_WIREFRAME}}));
+    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorSourceBlendProperty(),
+              BlendState::NonPremultiplied.getColorSourceBlendProperty());
+    EXPECT_EQ(device.getDepthStencilStateProperty().getDepthBufferEnableProperty(),
+              DepthStencilState::None.getDepthBufferEnableProperty());
+    EXPECT_EQ(device.getRasterizerStateProperty().getFillModeProperty(), FillMode::WireFrame);
+    // The untouched rasterizer fields keep the values the game selected.
+    EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+}
+
 TEST(Fna3dCompiledEffectTest, SyntheticBlendFactorStateMatchesFnaByteOrderingInPixels)
 {
     using namespace Microsoft::Xna::Framework;

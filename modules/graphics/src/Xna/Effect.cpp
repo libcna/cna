@@ -899,9 +899,51 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             SyncCompiledParameters();
             compiledRuntime_->SetTechnique(currentTechnique_->getIndexInternal());
-            compiledRuntime_->ApplyPass(passIndex);
+            ApplyCompiledPassState(passIndex);
         }
         if (device_) device_->SetCurrentEffect(this);
+    }
+
+    void Effect::ApplyCompiledPassState(std::uint32_t passIndex)
+    {
+        CNA::Internal::Renderers::CompiledEffectDeviceState deviceState;
+        CNA::Internal::Renderers::CompiledEffectPassStateChanges changes;
+        if (device_ != nullptr)
+        {
+            deviceState.blend = &device_->getBlendStateProperty();
+            deviceState.depthStencil = &device_->getDepthStencilStateProperty();
+            deviceState.rasterizer = &device_->getRasterizerStateProperty();
+            deviceState.samplerStates = &device_->getSamplerStatesProperty();
+            deviceState.vertexSamplerStates = &device_->getVertexSamplerStatesProperty();
+        }
+        compiledRuntime_->ApplyPass(passIndex, deviceState, changes);
+        if (device_ == nullptr) return;
+
+        // XNA/FNA publish every state a compiled pass assigns through the device's own state
+        // objects and collections, so a game observes them exactly as if it had assigned them.
+        if (changes.blendChanged) device_->setBlendStateProperty(changes.blend);
+        if (changes.depthStencilChanged)
+            device_->setDepthStencilStateProperty(changes.depthStencil);
+        if (changes.rasterizerChanged)
+            device_->setRasterizerStateProperty(changes.rasterizer);
+        for (const auto& sampler : changes.samplers)
+        {
+            const int slot = static_cast<int>(sampler.slot);
+            if (sampler.samplerChanged)
+            {
+                if (sampler.vertexStage)
+                    device_->getVertexSamplerStatesProperty()[slot] = sampler.sampler;
+                else
+                    device_->getSamplerStatesProperty()[slot] = sampler.sampler;
+            }
+            if (sampler.textureChanged)
+            {
+                if (sampler.vertexStage)
+                    device_->getVertexTexturesProperty()(slot, sampler.texture);
+                else
+                    device_->getTexturesProperty()(slot, sampler.texture);
+            }
+        }
     }
 
     void Effect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const

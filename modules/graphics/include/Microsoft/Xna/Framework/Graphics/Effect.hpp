@@ -219,6 +219,7 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] EffectParameter BuildCompiledParameter(
             const CNA::Internal::Renderers::CompiledEffectParameterDescription& description);
         void ApplyPassInternal(std::uint32_t passIndex);
+        void ApplyCompiledPassState(std::uint32_t passIndex);
         void SyncCompiledParameters();
 
         EffectParameterCollection parameters_;

@@ -2,9 +2,19 @@
 #include "CNA/Internal/Renderers/Fna3d/Fna3dCompiledEffect.hpp"
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
 #include <SDL3/SDL_stdinc.h>
 
@@ -18,6 +28,16 @@
 
 namespace CNA::Internal::Renderers::Fna3d
 {
+    using Microsoft::Xna::Framework::Graphics::Blend;
+    using Microsoft::Xna::Framework::Graphics::BlendFunction;
+    using Microsoft::Xna::Framework::Graphics::ColorWriteChannels;
+    using Microsoft::Xna::Framework::Graphics::CompareFunction;
+    using Microsoft::Xna::Framework::Graphics::CullMode;
+    using Microsoft::Xna::Framework::Graphics::FillMode;
+    using Microsoft::Xna::Framework::Graphics::StencilOperation;
+    using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+    using Microsoft::Xna::Framework::Graphics::TextureFilter;
+
     namespace
     {
         constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
@@ -223,23 +243,23 @@ namespace CNA::Internal::Renderers::Fna3d
             return result;
         }
 
-        FNA3D_Blend ToBlend(MOJOSHADER_blendMode value)
+        Blend ToBlend(MOJOSHADER_blendMode value)
         {
             switch (value)
             {
-                case MOJOSHADER_BLEND_ZERO:           return FNA3D_BLEND_ZERO;
-                case MOJOSHADER_BLEND_ONE:            return FNA3D_BLEND_ONE;
-                case MOJOSHADER_BLEND_SRCCOLOR:       return FNA3D_BLEND_SOURCECOLOR;
-                case MOJOSHADER_BLEND_INVSRCCOLOR:    return FNA3D_BLEND_INVERSESOURCECOLOR;
-                case MOJOSHADER_BLEND_SRCALPHA:       return FNA3D_BLEND_SOURCEALPHA;
-                case MOJOSHADER_BLEND_INVSRCALPHA:    return FNA3D_BLEND_INVERSESOURCEALPHA;
-                case MOJOSHADER_BLEND_DESTALPHA:      return FNA3D_BLEND_DESTINATIONALPHA;
-                case MOJOSHADER_BLEND_INVDESTALPHA:   return FNA3D_BLEND_INVERSEDESTINATIONALPHA;
-                case MOJOSHADER_BLEND_DESTCOLOR:      return FNA3D_BLEND_DESTINATIONCOLOR;
-                case MOJOSHADER_BLEND_INVDESTCOLOR:   return FNA3D_BLEND_INVERSEDESTINATIONCOLOR;
-                case MOJOSHADER_BLEND_SRCALPHASAT:    return FNA3D_BLEND_SOURCEALPHASATURATION;
-                case MOJOSHADER_BLEND_BLENDFACTOR:    return FNA3D_BLEND_BLENDFACTOR;
-                case MOJOSHADER_BLEND_INVBLENDFACTOR: return FNA3D_BLEND_INVERSEBLENDFACTOR;
+                case MOJOSHADER_BLEND_ZERO:           return Blend::Zero;
+                case MOJOSHADER_BLEND_ONE:            return Blend::One;
+                case MOJOSHADER_BLEND_SRCCOLOR:       return Blend::SourceColor;
+                case MOJOSHADER_BLEND_INVSRCCOLOR:    return Blend::InverseSourceColor;
+                case MOJOSHADER_BLEND_SRCALPHA:       return Blend::SourceAlpha;
+                case MOJOSHADER_BLEND_INVSRCALPHA:    return Blend::InverseSourceAlpha;
+                case MOJOSHADER_BLEND_DESTALPHA:      return Blend::DestinationAlpha;
+                case MOJOSHADER_BLEND_INVDESTALPHA:   return Blend::InverseDestinationAlpha;
+                case MOJOSHADER_BLEND_DESTCOLOR:      return Blend::DestinationColor;
+                case MOJOSHADER_BLEND_INVDESTCOLOR:   return Blend::InverseDestinationColor;
+                case MOJOSHADER_BLEND_SRCALPHASAT:    return Blend::SourceAlphaSaturation;
+                case MOJOSHADER_BLEND_BLENDFACTOR:    return Blend::BlendFactor;
+                case MOJOSHADER_BLEND_INVBLENDFACTOR: return Blend::InverseBlendFactor;
                 default:
                     throw std::runtime_error(
                         "FNA3D compiled effect: unsupported D3D9 blend mode " +
@@ -247,64 +267,64 @@ namespace CNA::Internal::Renderers::Fna3d
             }
         }
 
-        FNA3D_BlendFunction ToBlendFunction(MOJOSHADER_blendOp value)
+        BlendFunction ToBlendFunction(MOJOSHADER_blendOp value)
         {
             switch (value)
             {
-                case MOJOSHADER_BLENDOP_ADD:         return FNA3D_BLENDFUNCTION_ADD;
-                case MOJOSHADER_BLENDOP_SUBTRACT:    return FNA3D_BLENDFUNCTION_SUBTRACT;
-                case MOJOSHADER_BLENDOP_REVSUBTRACT: return FNA3D_BLENDFUNCTION_REVERSESUBTRACT;
-                case MOJOSHADER_BLENDOP_MIN:         return FNA3D_BLENDFUNCTION_MIN;
-                case MOJOSHADER_BLENDOP_MAX:         return FNA3D_BLENDFUNCTION_MAX;
+                case MOJOSHADER_BLENDOP_ADD:         return BlendFunction::Add;
+                case MOJOSHADER_BLENDOP_SUBTRACT:    return BlendFunction::Subtract;
+                case MOJOSHADER_BLENDOP_REVSUBTRACT: return BlendFunction::ReverseSubtract;
+                case MOJOSHADER_BLENDOP_MIN:         return BlendFunction::Min;
+                case MOJOSHADER_BLENDOP_MAX:         return BlendFunction::Max;
                 default:
                     throw std::runtime_error(
                         "FNA3D compiled effect: unsupported D3D9 blend operation.");
             }
         }
 
-        FNA3D_CompareFunction ToCompare(MOJOSHADER_compareFunc value)
+        CompareFunction ToCompare(MOJOSHADER_compareFunc value)
         {
             switch (value)
             {
-                case MOJOSHADER_CMP_NEVER:        return FNA3D_COMPAREFUNCTION_NEVER;
-                case MOJOSHADER_CMP_LESS:         return FNA3D_COMPAREFUNCTION_LESS;
-                case MOJOSHADER_CMP_EQUAL:        return FNA3D_COMPAREFUNCTION_EQUAL;
-                case MOJOSHADER_CMP_LESSEQUAL:    return FNA3D_COMPAREFUNCTION_LESSEQUAL;
-                case MOJOSHADER_CMP_GREATER:      return FNA3D_COMPAREFUNCTION_GREATER;
-                case MOJOSHADER_CMP_NOTEQUAL:     return FNA3D_COMPAREFUNCTION_NOTEQUAL;
-                case MOJOSHADER_CMP_GREATEREQUAL: return FNA3D_COMPAREFUNCTION_GREATEREQUAL;
-                case MOJOSHADER_CMP_ALWAYS:       return FNA3D_COMPAREFUNCTION_ALWAYS;
+                case MOJOSHADER_CMP_NEVER:        return CompareFunction::Never;
+                case MOJOSHADER_CMP_LESS:         return CompareFunction::Less;
+                case MOJOSHADER_CMP_EQUAL:        return CompareFunction::Equal;
+                case MOJOSHADER_CMP_LESSEQUAL:    return CompareFunction::LessEqual;
+                case MOJOSHADER_CMP_GREATER:      return CompareFunction::Greater;
+                case MOJOSHADER_CMP_NOTEQUAL:     return CompareFunction::NotEqual;
+                case MOJOSHADER_CMP_GREATEREQUAL: return CompareFunction::GreaterEqual;
+                case MOJOSHADER_CMP_ALWAYS:       return CompareFunction::Always;
                 default:
                     throw std::runtime_error(
                         "FNA3D compiled effect: unsupported D3D9 comparison function.");
             }
         }
 
-        FNA3D_StencilOperation ToStencil(MOJOSHADER_stencilOp value)
+        StencilOperation ToStencil(MOJOSHADER_stencilOp value)
         {
             switch (value)
             {
-                case MOJOSHADER_STENCILOP_KEEP:    return FNA3D_STENCILOPERATION_KEEP;
-                case MOJOSHADER_STENCILOP_ZERO:    return FNA3D_STENCILOPERATION_ZERO;
-                case MOJOSHADER_STENCILOP_REPLACE: return FNA3D_STENCILOPERATION_REPLACE;
-                case MOJOSHADER_STENCILOP_INCRSAT: return FNA3D_STENCILOPERATION_INCREMENTSATURATION;
-                case MOJOSHADER_STENCILOP_DECRSAT: return FNA3D_STENCILOPERATION_DECREMENTSATURATION;
-                case MOJOSHADER_STENCILOP_INVERT:  return FNA3D_STENCILOPERATION_INVERT;
-                case MOJOSHADER_STENCILOP_INCR:    return FNA3D_STENCILOPERATION_INCREMENT;
-                case MOJOSHADER_STENCILOP_DECR:    return FNA3D_STENCILOPERATION_DECREMENT;
+                case MOJOSHADER_STENCILOP_KEEP:    return StencilOperation::Keep;
+                case MOJOSHADER_STENCILOP_ZERO:    return StencilOperation::Zero;
+                case MOJOSHADER_STENCILOP_REPLACE: return StencilOperation::Replace;
+                case MOJOSHADER_STENCILOP_INCRSAT: return StencilOperation::IncrementSaturation;
+                case MOJOSHADER_STENCILOP_DECRSAT: return StencilOperation::DecrementSaturation;
+                case MOJOSHADER_STENCILOP_INVERT:  return StencilOperation::Invert;
+                case MOJOSHADER_STENCILOP_INCR:    return StencilOperation::Increment;
+                case MOJOSHADER_STENCILOP_DECR:    return StencilOperation::Decrement;
                 default:
                     throw std::runtime_error(
                         "FNA3D compiled effect: unsupported D3D9 stencil operation.");
             }
         }
 
-        FNA3D_TextureAddressMode ToAddress(MOJOSHADER_textureAddress value)
+        TextureAddressMode ToAddress(MOJOSHADER_textureAddress value)
         {
             switch (value)
             {
-                case MOJOSHADER_TADDRESS_WRAP:   return FNA3D_TEXTUREADDRESSMODE_WRAP;
-                case MOJOSHADER_TADDRESS_MIRROR: return FNA3D_TEXTUREADDRESSMODE_MIRROR;
-                case MOJOSHADER_TADDRESS_CLAMP:  return FNA3D_TEXTUREADDRESSMODE_CLAMP;
+                case MOJOSHADER_TADDRESS_WRAP:   return TextureAddressMode::Wrap;
+                case MOJOSHADER_TADDRESS_MIRROR: return TextureAddressMode::Mirror;
+                case MOJOSHADER_TADDRESS_CLAMP:  return TextureAddressMode::Clamp;
                 default:
                     throw std::runtime_error(
                         "FNA3D compiled effect: Border and MirrorOnce sampler addressing are "
@@ -312,9 +332,9 @@ namespace CNA::Internal::Renderers::Fna3d
             }
         }
 
-        FNA3D_TextureFilter ToFilter(MOJOSHADER_textureFilterType mag,
-                                     MOJOSHADER_textureFilterType min,
-                                     MOJOSHADER_textureFilterType mip)
+        TextureFilter ToFilter(MOJOSHADER_textureFilterType mag,
+                               MOJOSHADER_textureFilterType min,
+                               MOJOSHADER_textureFilterType mip)
         {
             // Effect.cs treats anisotropic tokens as linear components when an effect changes
             // an individual filter axis. Preserve that behavior instead of manufacturing an
@@ -336,19 +356,17 @@ namespace CNA::Internal::Renderers::Fna3d
                     "FNA3D compiled effect: unsupported sampler filter component.");
             }
             if (magLinear && minLinear)
-                return mipLinear ? FNA3D_TEXTUREFILTER_LINEAR :
-                                   FNA3D_TEXTUREFILTER_LINEAR_MIPPOINT;
+                return mipLinear ? TextureFilter::Linear : TextureFilter::LinearMipPoint;
             if (magPoint && minPoint)
-                return mipLinear ? FNA3D_TEXTUREFILTER_POINT_MIPLINEAR :
-                                   FNA3D_TEXTUREFILTER_POINT;
+                return mipLinear ? TextureFilter::PointMipLinear : TextureFilter::Point;
             if (magPoint && minLinear)
-                return mipLinear ? FNA3D_TEXTUREFILTER_MINLINEAR_MAGPOINT_MIPLINEAR :
-                                   FNA3D_TEXTUREFILTER_MINLINEAR_MAGPOINT_MIPPOINT;
-            return mipLinear ? FNA3D_TEXTUREFILTER_MINPOINT_MAGLINEAR_MIPLINEAR :
-                               FNA3D_TEXTUREFILTER_MINPOINT_MAGLINEAR_MIPPOINT;
+                return mipLinear ? TextureFilter::MinLinearMagPointMipLinear :
+                                   TextureFilter::MinLinearMagPointMipPoint;
+            return mipLinear ? TextureFilter::MinPointMagLinearMipLinear :
+                               TextureFilter::MinPointMagLinearMipPoint;
         }
 
-        void FromFilter(FNA3D_TextureFilter value, MOJOSHADER_textureFilterType& mag,
+        void FromFilter(TextureFilter value, MOJOSHADER_textureFilterType& mag,
                         MOJOSHADER_textureFilterType& min,
                         MOJOSHADER_textureFilterType& mip)
         {
@@ -357,24 +375,24 @@ namespace CNA::Internal::Renderers::Fna3d
             constexpr Filter linear = MOJOSHADER_TEXTUREFILTER_LINEAR;
             switch (value)
             {
-                case FNA3D_TEXTUREFILTER_LINEAR: mag = linear; min = linear; mip = linear; break;
-                case FNA3D_TEXTUREFILTER_POINT: mag = point; min = point; mip = point; break;
-                case FNA3D_TEXTUREFILTER_ANISOTROPIC:
+                case TextureFilter::Linear: mag = linear; min = linear; mip = linear; break;
+                case TextureFilter::Point: mag = point; min = point; mip = point; break;
+                case TextureFilter::Anisotropic:
                     mag = MOJOSHADER_TEXTUREFILTER_ANISOTROPIC;
                     min = MOJOSHADER_TEXTUREFILTER_ANISOTROPIC;
                     mip = MOJOSHADER_TEXTUREFILTER_ANISOTROPIC;
                     break;
-                case FNA3D_TEXTUREFILTER_LINEAR_MIPPOINT:
+                case TextureFilter::LinearMipPoint:
                     mag = linear; min = linear; mip = point; break;
-                case FNA3D_TEXTUREFILTER_POINT_MIPLINEAR:
+                case TextureFilter::PointMipLinear:
                     mag = point; min = point; mip = linear; break;
-                case FNA3D_TEXTUREFILTER_MINLINEAR_MAGPOINT_MIPLINEAR:
+                case TextureFilter::MinLinearMagPointMipLinear:
                     mag = point; min = linear; mip = linear; break;
-                case FNA3D_TEXTUREFILTER_MINLINEAR_MAGPOINT_MIPPOINT:
+                case TextureFilter::MinLinearMagPointMipPoint:
                     mag = point; min = linear; mip = point; break;
-                case FNA3D_TEXTUREFILTER_MINPOINT_MAGLINEAR_MIPLINEAR:
+                case TextureFilter::MinPointMagLinearMipLinear:
                     mag = linear; min = point; mip = linear; break;
-                case FNA3D_TEXTUREFILTER_MINPOINT_MAGLINEAR_MIPPOINT:
+                case TextureFilter::MinPointMagLinearMipPoint:
                     mag = linear; min = point; mip = point; break;
                 default:
                     throw std::runtime_error(
@@ -382,13 +400,13 @@ namespace CNA::Internal::Renderers::Fna3d
             }
         }
 
-        FNA3D_CullMode ToCullMode(MOJOSHADER_cullMode value)
+        CullMode ToCullMode(MOJOSHADER_cullMode value)
         {
             switch (value)
             {
-                case MOJOSHADER_CULL_NONE: return FNA3D_CULLMODE_NONE;
-                case MOJOSHADER_CULL_CW: return FNA3D_CULLMODE_CULLCLOCKWISEFACE;
-                case MOJOSHADER_CULL_CCW: return FNA3D_CULLMODE_CULLCOUNTERCLOCKWISEFACE;
+                case MOJOSHADER_CULL_NONE: return CullMode::None;
+                case MOJOSHADER_CULL_CW: return CullMode::CullClockwiseFace;
+                case MOJOSHADER_CULL_CCW: return CullMode::CullCounterClockwiseFace;
                 default:
                     throw std::runtime_error(
                         "FNA3D compiled effect: unsupported cull mode.");
@@ -726,7 +744,9 @@ namespace CNA::Internal::Renderers::Fna3d
         textures_[runtimeIndex] = texture;
     }
 
-    void Fna3dCompiledEffect::ApplyPass(std::uint32_t passIndex)
+    void Fna3dCompiledEffect::ApplyPass(std::uint32_t passIndex,
+                                        const CompiledEffectDeviceState& deviceState,
+                                        CompiledEffectPassStateChanges& changes)
     {
         const MOJOSHADER_effectTechnique& technique = effectData_->techniques[techniqueIndex_];
         if (passIndex >= technique.pass_count)
@@ -747,24 +767,30 @@ namespace CNA::Internal::Renderers::Fna3d
             throw std::runtime_error(
                 "FNA3D compiled effect: native pass state changes exceed the safety limit.");
         }
-        ApplyRenderStates();
+        ApplyRenderStates(deviceState, changes);
         ApplySamplers(stateChanges_.sampler_state_changes,
-                      stateChanges_.sampler_state_change_count, false);
+                      stateChanges_.sampler_state_change_count, false,
+                      deviceState, changes);
         ApplySamplers(stateChanges_.vertex_sampler_state_changes,
-                      stateChanges_.vertex_sampler_state_change_count, true);
+                      stateChanges_.vertex_sampler_state_change_count, true,
+                      deviceState, changes);
     }
 
-    void Fna3dCompiledEffect::ApplyRenderStates()
+    void Fna3dCompiledEffect::ApplyRenderStates(const CompiledEffectDeviceState& deviceState,
+                                                CompiledEffectPassStateChanges& changes)
     {
         // FNA builds temporary pipeline-cache values and publishes each state group only after
         // every token has been translated. Keep the same transactional behavior: an unsupported
-        // token must not corrupt the renderer's tracked state for the next draw.
-        FNA3D_BlendState blend = renderer_.blendState_;
-        FNA3D_DepthStencilState depth = renderer_.depthStencilState_;
-        FNA3D_RasterizerState rasterizer = renderer_.rasterizerState_;
+        // token must not corrupt the state the next draw uses.
+        BlendState blend = deviceState.blend != nullptr ? *deviceState.blend : BlendState();
+        DepthStencilState depth =
+            deviceState.depthStencil != nullptr ? *deviceState.depthStencil : DepthStencilState();
+        RasterizerState rasterizer =
+            deviceState.rasterizer != nullptr ? *deviceState.rasterizer : RasterizerState();
         bool separateAlphaBlend =
-            blend.colorBlendFunction != blend.alphaBlendFunction ||
-            blend.colorDestinationBlend != blend.alphaDestinationBlend;
+            blend.getColorBlendFunctionProperty() != blend.getAlphaBlendFunctionProperty() ||
+            blend.getColorDestinationBlendProperty() !=
+                blend.getAlphaDestinationBlendProperty();
         bool blendChanged = false;
         bool depthChanged = false;
         bool rasterizerChanged = false;
@@ -785,155 +811,152 @@ namespace CNA::Internal::Renderers::Fna3d
             switch (state.type)
             {
                 case MOJOSHADER_RS_ZENABLE:
-                    depth.depthBufferEnable =
-                        (*state.value.valuesZBT == MOJOSHADER_ZB_TRUE) ? 1 : 0;
+                    depth.setDepthBufferEnableProperty(
+                        *state.value.valuesZBT == MOJOSHADER_ZB_TRUE);
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_FILLMODE:
                     if (*state.value.valuesFiM == MOJOSHADER_FILL_SOLID)
-                        rasterizer.fillMode = FNA3D_FILLMODE_SOLID;
+                        rasterizer.setFillModeProperty(FillMode::Solid);
                     else if (*state.value.valuesFiM == MOJOSHADER_FILL_WIREFRAME)
-                        rasterizer.fillMode = FNA3D_FILLMODE_WIREFRAME;
+                        rasterizer.setFillModeProperty(FillMode::WireFrame);
                     else
                         throw std::runtime_error(
                             "FNA3D compiled effect: point fill mode is unsupported.");
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_ZWRITEENABLE:
-                    depth.depthBufferWriteEnable =
-                        state.value.valuesI[0] == 1;
+                    depth.setDepthBufferWriteEnableProperty(state.value.valuesI[0] == 1);
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_SRCBLEND:
-                    blend.colorSourceBlend = ToBlend(*state.value.valuesBM);
+                    blend.setColorSourceBlendProperty(ToBlend(*state.value.valuesBM));
                     if (!separateAlphaBlend)
-                        blend.alphaSourceBlend = blend.colorSourceBlend;
+                        blend.setAlphaSourceBlendProperty(blend.getColorSourceBlendProperty());
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_DESTBLEND:
-                    blend.colorDestinationBlend = ToBlend(*state.value.valuesBM);
+                    blend.setColorDestinationBlendProperty(ToBlend(*state.value.valuesBM));
                     if (!separateAlphaBlend)
-                        blend.alphaDestinationBlend = blend.colorDestinationBlend;
+                    {
+                        blend.setAlphaDestinationBlendProperty(
+                            blend.getColorDestinationBlendProperty());
+                    }
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_CULLMODE:
-                    rasterizer.cullMode = ToCullMode(*state.value.valuesCM);
+                    rasterizer.setCullModeProperty(ToCullMode(*state.value.valuesCM));
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_ZFUNC:
-                    depth.depthBufferFunction =
-                        ToCompare(*state.value.valuesCF);
+                    depth.setDepthBufferFunctionProperty(ToCompare(*state.value.valuesCF));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_ALPHABLENDENABLE:
                     if (state.value.valuesI[0] == 0)
                     {
-                        blend.colorSourceBlend = FNA3D_BLEND_ONE;
-                        blend.colorDestinationBlend = FNA3D_BLEND_ZERO;
-                        blend.alphaSourceBlend = FNA3D_BLEND_ONE;
-                        blend.alphaDestinationBlend = FNA3D_BLEND_ZERO;
+                        blend.setColorSourceBlendProperty(Blend::One);
+                        blend.setColorDestinationBlendProperty(Blend::Zero);
+                        blend.setAlphaSourceBlendProperty(Blend::One);
+                        blend.setAlphaDestinationBlendProperty(Blend::Zero);
                         blendChanged = true;
                     }
                     break;
                 case MOJOSHADER_RS_STENCILENABLE:
-                    depth.stencilEnable = state.value.valuesI[0] == 1;
+                    depth.setStencilEnableProperty(state.value.valuesI[0] == 1);
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILFAIL:
-                    depth.stencilFail = ToStencil(*state.value.valuesSO);
+                    depth.setStencilFailProperty(ToStencil(*state.value.valuesSO));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILZFAIL:
-                    depth.stencilDepthBufferFail =
-                        ToStencil(*state.value.valuesSO);
+                    depth.setStencilDepthBufferFailProperty(ToStencil(*state.value.valuesSO));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILPASS:
-                    depth.stencilPass = ToStencil(*state.value.valuesSO);
+                    depth.setStencilPassProperty(ToStencil(*state.value.valuesSO));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILFUNC:
-                    depth.stencilFunction =
-                        ToCompare(*state.value.valuesCF);
+                    depth.setStencilFunctionProperty(ToCompare(*state.value.valuesCF));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILREF:
-                    depth.referenceStencil = state.value.valuesI[0];
+                    depth.setReferenceStencilProperty(state.value.valuesI[0]);
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILMASK:
-                    depth.stencilMask = state.value.valuesI[0];
+                    depth.setStencilMaskProperty(state.value.valuesI[0]);
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILWRITEMASK:
-                    depth.stencilWriteMask = state.value.valuesI[0];
+                    depth.setStencilWriteMaskProperty(state.value.valuesI[0]);
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_MULTISAMPLEANTIALIAS:
-                    rasterizer.multiSampleAntiAlias =
-                        state.value.valuesI[0] == 1;
+                    rasterizer.setMultiSampleAntiAliasProperty(state.value.valuesI[0] == 1);
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_MULTISAMPLEMASK:
-                    blend.multiSampleMask = state.value.valuesI[0];
+                    blend.setMultiSampleMaskProperty(state.value.valuesI[0]);
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_COLORWRITEENABLE:
-                    blend.colorWriteEnable =
-                        static_cast<FNA3D_ColorWriteChannels>(state.value.valuesI[0] & 15);
+                    blend.setColorWriteChannelsProperty(
+                        static_cast<ColorWriteChannels>(state.value.valuesI[0] & 15));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_BLENDOP:
-                    blend.colorBlendFunction =
-                        ToBlendFunction(*state.value.valuesBO);
+                    blend.setColorBlendFunctionProperty(
+                        ToBlendFunction(*state.value.valuesBO));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_SCISSORTESTENABLE:
-                    rasterizer.scissorTestEnable = state.value.valuesI[0] == 1;
+                    rasterizer.setScissorTestEnableProperty(state.value.valuesI[0] == 1);
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_SLOPESCALEDEPTHBIAS:
-                    rasterizer.slopeScaleDepthBias = state.value.valuesF[0];
+                    rasterizer.setSlopeScaleDepthBiasProperty(state.value.valuesF[0]);
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_TWOSIDEDSTENCILMODE:
-                    depth.twoSidedStencilMode =
-                        state.value.valuesI[0] == 1;
+                    depth.setTwoSidedStencilModeProperty(state.value.valuesI[0] == 1);
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_CCW_STENCILFAIL:
-                    depth.ccwStencilFail =
-                        ToStencil(*state.value.valuesSO);
+                    depth.setCounterClockwiseStencilFailProperty(
+                        ToStencil(*state.value.valuesSO));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_CCW_STENCILZFAIL:
-                    depth.ccwStencilDepthBufferFail =
-                        ToStencil(*state.value.valuesSO);
+                    depth.setCounterClockwiseStencilDepthBufferFailProperty(
+                        ToStencil(*state.value.valuesSO));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_CCW_STENCILPASS:
-                    depth.ccwStencilPass =
-                        ToStencil(*state.value.valuesSO);
+                    depth.setCounterClockwiseStencilPassProperty(
+                        ToStencil(*state.value.valuesSO));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_CCW_STENCILFUNC:
-                    depth.ccwStencilFunction =
-                        ToCompare(*state.value.valuesCF);
+                    depth.setCounterClockwiseStencilFunctionProperty(
+                        ToCompare(*state.value.valuesCF));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_COLORWRITEENABLE1:
-                    blend.colorWriteEnable1 =
-                        static_cast<FNA3D_ColorWriteChannels>(state.value.valuesI[0] & 15);
+                    blend.setColorWriteChannels1Property(
+                        static_cast<ColorWriteChannels>(state.value.valuesI[0] & 15));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_COLORWRITEENABLE2:
-                    blend.colorWriteEnable2 =
-                        static_cast<FNA3D_ColorWriteChannels>(state.value.valuesI[0] & 15);
+                    blend.setColorWriteChannels2Property(
+                        static_cast<ColorWriteChannels>(state.value.valuesI[0] & 15));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_COLORWRITEENABLE3:
-                    blend.colorWriteEnable3 =
-                        static_cast<FNA3D_ColorWriteChannels>(state.value.valuesI[0] & 15);
+                    blend.setColorWriteChannels3Property(
+                        static_cast<ColorWriteChannels>(state.value.valuesI[0] & 15));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_BLENDFACTOR:
@@ -941,33 +964,32 @@ namespace CNA::Internal::Renderers::Fna3d
                     const std::uint32_t color =
                         static_cast<std::uint32_t>(state.value.valuesI[0]);
                     // Match FNA Effect.cs exactly, including its historical byte ordering.
-                    blend.blendFactor = {
-                        static_cast<std::uint8_t>((color >> 24) & 0xFF),
-                        static_cast<std::uint8_t>((color >> 16) & 0xFF),
-                        static_cast<std::uint8_t>((color >> 8) & 0xFF),
-                        static_cast<std::uint8_t>(color & 0xFF)
-                    };
+                    blend.setBlendFactorProperty(Microsoft::Xna::Framework::Color(
+                        static_cast<int>((color >> 24) & 0xFF),
+                        static_cast<int>((color >> 16) & 0xFF),
+                        static_cast<int>((color >> 8) & 0xFF),
+                        static_cast<int>(color & 0xFF)));
                     blendChanged = true;
                     break;
                 }
                 case MOJOSHADER_RS_DEPTHBIAS:
-                    rasterizer.depthBias = state.value.valuesF[0];
+                    rasterizer.setDepthBiasProperty(state.value.valuesF[0]);
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_SEPARATEALPHABLENDENABLE:
                     separateAlphaBlend = state.value.valuesI[0] == 1;
                     break;
                 case MOJOSHADER_RS_SRCBLENDALPHA:
-                    blend.alphaSourceBlend = ToBlend(*state.value.valuesBM);
+                    blend.setAlphaSourceBlendProperty(ToBlend(*state.value.valuesBM));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_DESTBLENDALPHA:
-                    blend.alphaDestinationBlend = ToBlend(*state.value.valuesBM);
+                    blend.setAlphaDestinationBlendProperty(ToBlend(*state.value.valuesBM));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_BLENDOPALPHA:
-                    blend.alphaBlendFunction =
-                        ToBlendFunction(*state.value.valuesBO);
+                    blend.setAlphaBlendFunctionProperty(
+                        ToBlendFunction(*state.value.valuesBO));
                     blendChanged = true;
                     break;
                 default:
@@ -981,45 +1003,52 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         if (blendChanged)
         {
-            renderer_.blendState_ = blend;
-            renderer_.ApplyCurrentBlendState();
+            changes.blendChanged = true;
+            changes.blend = blend;
         }
         if (depthChanged)
         {
-            renderer_.depthStencilState_ = depth;
-            renderer_.ApplyCurrentDepthStencilState();
+            changes.depthStencilChanged = true;
+            changes.depthStencil = depth;
         }
         if (rasterizerChanged)
         {
-            renderer_.rasterizerState_ = rasterizer;
-            FNA3D_ApplyRasterizerState(device_, &renderer_.rasterizerState_);
+            changes.rasterizerChanged = true;
+            changes.rasterizer = rasterizer;
         }
     }
 
-    void Fna3dCompiledEffect::ApplySamplers(const MOJOSHADER_samplerStateRegister* changes,
-                                            std::uint32_t count, bool vertexStage)
+    void Fna3dCompiledEffect::ApplySamplers(const MOJOSHADER_samplerStateRegister* changeList,
+                                            std::uint32_t count, bool vertexStage,
+                                            const CompiledEffectDeviceState& deviceState,
+                                            CompiledEffectPassStateChanges& changes)
     {
+        const SamplerStateCollection* tracked = vertexStage
+            ? deviceState.vertexSamplerStates : deviceState.samplerStates;
         for (std::uint32_t i = 0; i < count; ++i)
         {
-            const MOJOSHADER_samplerStateRegister& change = changes[i];
+            const MOJOSHADER_samplerStateRegister& change = changeList[i];
+            // FNA skips a register that carries no sampler state at all, including its texture.
+            if (change.sampler_state_count == 0) continue;
             const std::size_t slot = static_cast<std::size_t>(change.sampler_register);
             const std::size_t samplerCount = vertexStage
                 ? renderer_.vertexSamplerStates_.size()
                 : renderer_.samplerStates_.size();
-            if (slot >= samplerCount)
+            if (slot >= samplerCount ||
+                slot >= static_cast<std::size_t>(SamplerStateCollection::MaxSamplers))
             {
                 throw std::runtime_error(
                     "FNA3D compiled effect: sampler register exceeds CNA's XNA slot limit.");
             }
-            auto& trackedSamplers = vertexStage
-                ? renderer_.vertexSamplerStates_[slot]
-                : renderer_.samplerStates_[slot];
-            FNA3D_SamplerState sampler = trackedSamplers;
+            SamplerState sampler = tracked != nullptr ? (*tracked)[static_cast<int>(slot)]
+                                                      : SamplerState();
             MOJOSHADER_textureFilterType mag;
             MOJOSHADER_textureFilterType min;
             MOJOSHADER_textureFilterType mip;
-            FromFilter(sampler.filter, mag, min, mip);
+            FromFilter(sampler.getFilterProperty(), mag, min, mip);
             bool filterChanged = false;
+            bool samplerChanged = false;
+            bool textureAssigned = false;
 
             if (change.sampler_state_count > kMaximumReflectedItems ||
                 (change.sampler_state_count > 0 && change.sampler_states == nullptr))
@@ -1039,13 +1068,19 @@ namespace CNA::Internal::Renderers::Fna3d
                 }
                 switch (state.type)
                 {
-                    case MOJOSHADER_SAMP_TEXTURE: break;
+                    case MOJOSHADER_SAMP_TEXTURE: textureAssigned = true; break;
                     case MOJOSHADER_SAMP_ADDRESSU:
-                        sampler.addressU = ToAddress(*state.value.valuesTA); break;
+                        sampler.setAddressUProperty(ToAddress(*state.value.valuesTA));
+                        samplerChanged = true;
+                        break;
                     case MOJOSHADER_SAMP_ADDRESSV:
-                        sampler.addressV = ToAddress(*state.value.valuesTA); break;
+                        sampler.setAddressVProperty(ToAddress(*state.value.valuesTA));
+                        samplerChanged = true;
+                        break;
                     case MOJOSHADER_SAMP_ADDRESSW:
-                        sampler.addressW = ToAddress(*state.value.valuesTA); break;
+                        sampler.setAddressWProperty(ToAddress(*state.value.valuesTA));
+                        samplerChanged = true;
+                        break;
                     case MOJOSHADER_SAMP_MAGFILTER:
                         mag = *state.value.valuesTFT; filterChanged = true; break;
                     case MOJOSHADER_SAMP_MINFILTER:
@@ -1053,38 +1088,92 @@ namespace CNA::Internal::Renderers::Fna3d
                     case MOJOSHADER_SAMP_MIPFILTER:
                         mip = *state.value.valuesTFT; filterChanged = true; break;
                     case MOJOSHADER_SAMP_MIPMAPLODBIAS:
-                        sampler.mipMapLevelOfDetailBias = state.value.valuesF[0]; break;
+                        sampler.setMipMapLevelOfDetailBiasProperty(state.value.valuesF[0]);
+                        samplerChanged = true;
+                        break;
                     case MOJOSHADER_SAMP_MAXMIPLEVEL:
-                        sampler.maxMipLevel = state.value.valuesI[0]; break;
+                        sampler.setMaxMipLevelProperty(state.value.valuesI[0]);
+                        samplerChanged = true;
+                        break;
                     case MOJOSHADER_SAMP_MAXANISOTROPY:
-                        sampler.maxAnisotropy = state.value.valuesI[0]; break;
+                        sampler.setMaxAnisotropyProperty(state.value.valuesI[0]);
+                        samplerChanged = true;
+                        break;
                     default:
                         throw std::runtime_error(
                             "FNA3D compiled effect: unsupported sampler state " +
                             std::to_string(static_cast<int>(state.type)) + ".");
                 }
             }
-            if (filterChanged) sampler.filter = ToFilter(mag, min, mip);
+            if (filterChanged)
+            {
+                sampler.setFilterProperty(ToFilter(mag, min, mip));
+                samplerChanged = true;
+            }
 
+            // FNA rebinds a sampler's texture only when the pass assigns SAMP_TEXTURE and the
+            // reflected texture parameter actually holds one.
             Texture* texture = nullptr;
-            const auto mapped = samplerTextureParameters_.find(SafeString(change.sampler_name));
-            if (mapped != samplerTextureParameters_.end() && mapped->second < textures_.size())
-                texture = textures_[mapped->second];
-            const Fna3dSampledTexture* sampled = GetSampledTexture(texture);
-            FNA3D_Texture* native = sampled != nullptr ? sampled->GetFna3dTextureEXT() :
-                (vertexStage ? renderer_.boundVertexTextures_[slot]
-                             : renderer_.boundPixelTextures_[slot]);
-            trackedSamplers = sampler;
-            if (vertexStage)
+            if (textureAssigned)
             {
-                FNA3D_VerifyVertexSampler(device_, static_cast<int32_t>(slot), native, &sampler);
-                renderer_.boundVertexTextures_[slot] = native;
+                const auto mapped =
+                    samplerTextureParameters_.find(SafeString(change.sampler_name));
+                if (mapped != samplerTextureParameters_.end() &&
+                    mapped->second < textures_.size())
+                {
+                    texture = textures_[mapped->second];
+                }
             }
-            else
-            {
-                FNA3D_VerifySampler(device_, static_cast<int32_t>(slot), native, &sampler);
-                renderer_.boundPixelTextures_[slot] = native;
-            }
+            const bool textureChanged = texture != nullptr;
+            if (!samplerChanged && !textureChanged) continue;
+
+            CompiledEffectSamplerChange result;
+            result.slot = static_cast<std::uint32_t>(slot);
+            result.vertexStage = vertexStage;
+            result.samplerChanged = samplerChanged;
+            result.sampler = sampler;
+            result.textureChanged = textureChanged;
+            result.texture = texture;
+            changes.samplers.push_back(std::move(result));
+
+            // CNA's GraphicsDevice publishes pixel sampler state to the renderer at draw time and
+            // has no vertex-stage path at all, so the native binding still happens here. The
+            // published change above is what makes the same state observable through the XNA API.
+            ApplyNativeSampler(slot, vertexStage, sampler, texture);
+        }
+    }
+
+    void Fna3dCompiledEffect::ApplyNativeSampler(std::size_t slot, bool vertexStage,
+                                                 const SamplerState& sampler, Texture* texture)
+    {
+        FNA3D_SamplerState native = vertexStage ? renderer_.vertexSamplerStates_[slot]
+                                                : renderer_.samplerStates_[slot];
+        native.filter = static_cast<FNA3D_TextureFilter>(sampler.getFilterProperty());
+        native.addressU =
+            static_cast<FNA3D_TextureAddressMode>(sampler.getAddressUProperty());
+        native.addressV =
+            static_cast<FNA3D_TextureAddressMode>(sampler.getAddressVProperty());
+        native.addressW =
+            static_cast<FNA3D_TextureAddressMode>(sampler.getAddressWProperty());
+        native.mipMapLevelOfDetailBias = sampler.getMipMapLevelOfDetailBiasProperty();
+        native.maxMipLevel = sampler.getMaxMipLevelProperty();
+        native.maxAnisotropy = sampler.getMaxAnisotropyProperty();
+
+        const Fna3dSampledTexture* sampled = GetSampledTexture(texture);
+        FNA3D_Texture* nativeTexture = sampled != nullptr ? sampled->GetFna3dTextureEXT() :
+            (vertexStage ? renderer_.boundVertexTextures_[slot]
+                         : renderer_.boundPixelTextures_[slot]);
+        if (vertexStage)
+        {
+            renderer_.vertexSamplerStates_[slot] = native;
+            FNA3D_VerifyVertexSampler(device_, static_cast<int32_t>(slot), nativeTexture, &native);
+            renderer_.boundVertexTextures_[slot] = nativeTexture;
+        }
+        else
+        {
+            renderer_.samplerStates_[slot] = native;
+            FNA3D_VerifySampler(device_, static_cast<int32_t>(slot), nativeTexture, &native);
+            renderer_.boundPixelTextures_[slot] = nativeTexture;
         }
     }
 }

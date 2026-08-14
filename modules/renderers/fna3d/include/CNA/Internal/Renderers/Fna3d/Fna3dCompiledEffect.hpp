@@ -36,7 +36,9 @@ namespace CNA::Internal::Renderers::Fna3d
         void SetParameterValue(std::uint32_t runtimeIndex, const void* data,
                                std::size_t dataBytes) override;
         void SetParameterTexture(std::uint32_t runtimeIndex, Texture* texture) override;
-        void ApplyPass(std::uint32_t passIndex) override;
+        void ApplyPass(std::uint32_t passIndex,
+                       const CompiledEffectDeviceState& deviceState,
+                       CompiledEffectPassStateChanges& changes) override;
 
     private:
         explicit Fna3dCompiledEffect(Fna3dRenderer& renderer,
@@ -45,9 +47,14 @@ namespace CNA::Internal::Renderers::Fna3d
         void ValidateNativeEffect(const char* operation);
         void BuildDescription();
         void BuildSamplerMap();
-        void ApplyRenderStates();
-        void ApplySamplers(const MOJOSHADER_samplerStateRegister* changes,
-                           std::uint32_t count, bool vertexStage);
+        void ApplyRenderStates(const CompiledEffectDeviceState& deviceState,
+                               CompiledEffectPassStateChanges& changes);
+        void ApplySamplers(const MOJOSHADER_samplerStateRegister* changeList,
+                           std::uint32_t count, bool vertexStage,
+                           const CompiledEffectDeviceState& deviceState,
+                           CompiledEffectPassStateChanges& changes);
+        void ApplyNativeSampler(std::size_t slot, bool vertexStage,
+                                const SamplerState& sampler, Texture* texture);
 
         Fna3dRenderer& renderer_;
         FNA3D_Device* device_ = nullptr;
