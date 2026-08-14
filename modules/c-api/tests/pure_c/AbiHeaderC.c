@@ -267,6 +267,14 @@ _Static_assert(offsetof(CNA_BoundingBox, min) == 0U &&
                    offsetof(CNA_BoundingSphere, radius) == 12U &&
                    offsetof(CNA_BoundingFrustum, matrix) == 0U,
                "CNA bounding-volume fields must remain stable");
+_Static_assert(sizeof(CNA_CurveKey) == 20U && _Alignof(CNA_CurveKey) == 4U,
+               "CNA curve-key layout must remain stable");
+_Static_assert(offsetof(CNA_CurveKey, position) == 0U &&
+                   offsetof(CNA_CurveKey, value) == 4U &&
+                   offsetof(CNA_CurveKey, tangent_in) == 8U &&
+                   offsetof(CNA_CurveKey, tangent_out) == 12U &&
+                   offsetof(CNA_CurveKey, continuity) == 16U,
+               "CNA curve-key fields must remain stable");
 _Static_assert(sizeof(CNA_PackedAlpha8) == 1U && sizeof(CNA_PackedBgr565) == 2U &&
                    sizeof(CNA_PackedBgra4444) == 2U && sizeof(CNA_PackedBgra5551) == 2U &&
                    sizeof(CNA_PackedByte4) == 4U && sizeof(CNA_PackedHalfSingle) == 2U &&

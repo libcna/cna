@@ -161,3 +161,15 @@ Ray intersections preserve the canonical CNA/FNA behavior: origins inside the fr
 distance zero and disjoint origins report no hit. The native boundary-origin branch is explicitly
 unimplemented; the exception barrier maps it to `CNA_RESULT_NOT_SUPPORTED` and leaves both outputs
 unchanged. This is a reported capability boundary, not an omitted API route.
+
+## CurveKey operations
+
+`curve.h` defines `CNA_CurveKey` as a caller-owned 20-byte value containing position, value,
+incoming/outgoing tangents and the stable continuity identity. Its three constructors, all
+property routes, clone, position comparison, equality/operators and hash behavior delegate to the
+canonical CurveKey implementation through `cna_curve_key_*` operations.
+
+Every operation consuming a key validates its continuity identity. Unknown values fail before
+mutating outputs; float values retain native IEEE behavior, including the current CNA NaN position
+comparison result. Dynamic CurveKeyCollection ownership and Curve evaluation follow in the next
+CBIND-035B5 slices and are not implied by the value ABI.

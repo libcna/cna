@@ -869,6 +869,16 @@
       "tests": "every entry point, matrix value semantics, all planes/corners, capacity atomicity, containment/classification, hit/miss/not-supported boundary rays, exact strings and null failures in strict-C `GeometrySmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B4d"
+    },
+    {
+      "id": "curve-key-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/CurveKey\\.hpp$",
+      "kinds": ["class", "constructor", "method", "operator"],
+      "mapping": "fixed-layout `CNA_CurveKey` plus `cna_curve_key_*` property, construction, clone, comparison, equality and hash operations",
+      "tests": "C/C++ ABI size/alignment/offset assertions plus every entry point, constructors, mutation, NaN comparison, equality/hash and invalid-continuity/null atomicity in strict-C `CurveSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B5a"
     }
   ]
 }

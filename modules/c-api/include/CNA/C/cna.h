@@ -14,6 +14,7 @@
 #include "CNA/C/quaternion.h"
 #include "CNA/C/matrix.h"
 #include "CNA/C/geometry.h"
+#include "CNA/C/curve.h"
 #include "CNA/C/display.h"
 #include "CNA/C/runtime.h"
 #include "CNA/C/graphics.h"

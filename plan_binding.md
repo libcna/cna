@@ -259,7 +259,7 @@ mechanical wrapper.
 | CBIND-035B2 | Complete MathHelper and Vector2/3/4 operations | ✅ | `math.h` and `vectors.h` map every MathHelper and Vector2/3/4 public inventory row through exact constants and fallible scalar/value/bulk operations. All overload-equivalent, finite/non-finite, exact-string, null/range-atomicity and sequential-aliasing contracts are covered in strict C under HEADLESS, SDL_RENDERER and ASan+UBSan. Completed as CBIND-035B2a–B2d. |
 | CBIND-035B3 | Complete Quaternion and Matrix operations | ✅ | `quaternion.h` and `matrix.h` map every remaining public row through 85 fallible operations. Both constructors/constants/properties and all member/static/operator math, decomposition/interpolation/transformation/factory routes are covered with row-major, singular, projection-failure, non-finite and aliasing evidence under both backends and ASan+UBSan. Completed as CBIND-035B3a–B3b. |
 | CBIND-035B4 | Complete planes, rays and bounding-volume operations | ✅ | `geometry.h` maps every remaining Plane, Ray, BoundingBox, BoundingSphere and BoundingFrustum row through C-native values, explicit optional hits and caller-capacity corners. Strict-C HEADLESS/SDL_RENDERER and ASan+UBSan tests cover every exported operation, including atomic capacity/failure paths and the canonical unsupported boundary-ray case. Completed as CBIND-035B4a–B4d. |
-| CBIND-035B5 | Complete Curve value, collection and evaluation operations | ⬜ | Map Curve, CurveKey and CurveKeyCollection through C-owned/bulk values without leaking `std::vector`, including loop/tangent/evaluation and mutation behavior. |
+| CBIND-035B5 | Complete Curve value, collection and evaluation operations | 🟨 | Map Curve, CurveKey and CurveKeyCollection through C-owned/bulk values without leaking `std::vector`, including loop/tangent/evaluation and mutation behavior. Work is decomposed into CBIND-035B5a–B5c below. |
 | CBIND-035B6 | Complete Color operations and named constants | ⬜ | Map all constructors/conversions, channels, packed value, arithmetic/interpolation/equality/string/hash routes and every public named Color constant with exact packed values. |
 | CBIND-035B7 | Complete PackedVector operations and close math coverage | ⬜ | Map all concrete packed constructors, float/vector conversions, equality/string/hash behavior and interface-equivalent storage routes; leave no planned math/PackedVector CBIND-035 row. |
 
@@ -287,6 +287,14 @@ mechanical wrapper.
 | CBIND-035B4b | Complete BoundingBox | ✅ | `geometry.h` maps all 31 remaining BoundingBox rows through one corner-count constant and 20 operations: construction, all containment/intersection overloads, factories, merge, equality/hash/string and explicit optional ray distance. Corner copy uses a caller-capacity array, always reports the required count and performs no partial write. `GeometrySmoke.c` calls every entry point and covers canonical corner order, capacity atomicity, classifications, hit/miss distances, factories, exact strings and null/empty failures under both backends and ASan+UBSan. |
 | CBIND-035B4c | Complete BoundingSphere | ✅ | `geometry.h` maps all 31 remaining BoundingSphere rows through 21 operations: construction, nonuniform matrix transformation, every containment/intersection overload, box/frustum/point factories, merge, equality/hash/string and explicit optional ray distance. Point arrays use checked counts and preserve outputs on rejection. `GeometrySmoke.c` calls every entry point and covers containment boundaries, hit/miss distances, touching spheres, all factories, merge, exact strings and null/empty failures under both backends and ASan+UBSan. |
 | CBIND-035B4d | Complete BoundingFrustum and close parent B4 | ✅ | `geometry.h` maps all 31 remaining BoundingFrustum rows through one corner-count constant and 22 operations. The matrix remains the direct POD property; construction derives all six plane queries and eight canonical corners on demand. Value-equal frusta preserve same-value containment, caller-capacity copies are atomic and native boundary-origin ray `NotImplementedException` becomes `CNA_RESULT_NOT_SUPPORTED` without output mutation. `GeometrySmoke.c` calls every entry point under both backends and ASan+UBSan. This closes parent CBIND-035B4. |
+
+##### CBIND-035B5 curve slices
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---|---|
+| CBIND-035B5a | Complete CurveKey value operations | ✅ | `curve.h` maps all 19 CurveKey rows through a fixed 20-byte `CNA_CurveKey` and 17 operations covering every constructor/property, clone, comparison, equality/operator and hash route. Unknown continuity values are rejected before output mutation; native IEEE/NaN comparison behavior is preserved. Strict C17 and C++23 assertions freeze size, alignment and every field offset, while `CurveSmoke.c` calls every entry point under both backends and ASan+UBSan. |
+| CBIND-035B5b | Complete CurveKeyCollection ownership and mutation | ⬜ | Add a validated owned collection handle with ordered add/set, count/get/copy, clone, contains/index/remove/clear and explicit iterator-to-count/copy mapping. |
+| CBIND-035B5c | Complete Curve evaluation and close parent B5 | ⬜ | Add an owned Curve handle with key collection access, loop properties, clone, evaluation and every tangent overload; close parent B5. |
 
 ## Phase B7 — hardening, documentation and experimental release
 
@@ -372,4 +380,6 @@ rows. Completed CBIND-035B3a–B3b cover Quaternion and Matrix. The current snap
 implemented, 21 partial, 4,882 planned and 70 not applicable. CBIND-035B4a completes Plane and Ray,
 CBIND-035B4b completes BoundingBox, CBIND-035B4c completes BoundingSphere and CBIND-035B4d
 completes BoundingFrustum, closing parent CBIND-035B4. The current snapshot is 1,577 implemented,
-21 partial, 4,747 planned and 70 not applicable, with CBIND-035B5 Curve next.
+21 partial, 4,747 planned and 70 not applicable. CBIND-035B5a completes all 19 CurveKey rows; the
+current snapshot is 1,596 implemented, 21 partial, 4,728 planned and 70 not applicable, with
+CBIND-035B5b CurveKeyCollection next.
