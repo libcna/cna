@@ -35,18 +35,21 @@ namespace CNA::Internal::Renderers::Stub
     class StubIndexBufferRenderer : public IIndexBufferRenderer
     {
     public:
-        explicit StubIndexBufferRenderer(int indexCapacity) : indexCount_(indexCapacity) {}
+        StubIndexBufferRenderer(int indexCapacity, bool isThirtyTwoBit)
+            : indexCount_(indexCapacity), isThirtyTwoBit_(isThirtyTwoBit) {}
 
         void SetData16(const void* data, int index_count) override
         {
+            if (isThirtyTwoBit_)
+                throw std::runtime_error("StubIndexBufferRenderer: SetData16 on a 32-bit buffer");
             indexCount_ = index_count;
-            isThirtyTwoBit_ = false;
         }
 
         void SetData32(const void* data, int index_count) override
         {
+            if (!isThirtyTwoBit_)
+                throw std::runtime_error("StubIndexBufferRenderer: SetData32 on a 16-bit buffer");
             indexCount_ = index_count;
-            isThirtyTwoBit_ = true;
         }
 
         [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
@@ -151,6 +154,7 @@ namespace CNA::Internal::Renderers::Stub
 
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
                                    const Matrix& world,

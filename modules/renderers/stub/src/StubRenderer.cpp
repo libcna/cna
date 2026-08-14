@@ -36,7 +36,12 @@ namespace CNA::Internal::Renderers::Stub
 
     std::unique_ptr<IIndexBufferRenderer> StubRenderer::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<StubIndexBufferRenderer>(index_capacity);
+        return std::make_unique<StubIndexBufferRenderer>(index_capacity, false);
+    }
+
+    std::unique_ptr<IIndexBufferRenderer> StubRenderer::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<StubIndexBufferRenderer>(index_capacity, true);
     }
 }
 

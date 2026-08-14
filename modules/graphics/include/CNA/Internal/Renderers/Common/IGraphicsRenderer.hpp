@@ -1695,11 +1695,12 @@ namespace CNA::Internal::Renderers
          * @brief Creates a renderer-specific 16-bit index buffer.
          */
         virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) = 0;
-        /// Creates a 32-bit index buffer. Default delegates to CreateIndexBuffer16 for
-        /// renderers that do not yet support 32-bit indices.
-        virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity)
+        /// Creates a 32-bit index buffer. A renderer must opt in explicitly: delegating to the
+        /// 16-bit factory makes a valid uint32 upload look successful until draw-time truncation.
+        virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int /*index_capacity*/)
         {
-            return CreateIndexBuffer16(index_capacity);
+            throw std::runtime_error(
+                "IGraphicsRenderer::CreateIndexBuffer32: 32-bit index buffers are not supported by this renderer");
         }
 
         /**

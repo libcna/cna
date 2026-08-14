@@ -85,6 +85,74 @@ RGB. It is not a claim that every native texture or swap-chain format is sRGB. T
 other eleven PBR implementations from silently diverging even when this machine cannot execute
 them.
 
+### All-renderer 32-bit index audit (`GLTF-163`)
+
+This is a source-capability matrix, not a claim that all platform APIs were executed on this Linux
+host. It covers every one of the **42** renderer directories that implements
+`CreateIndexBuffer16`. ✅ means the renderer owns an explicit 32-bit factory and preserves uint32
+values to its draw boundary; ◇ means the exact width is observable but that renderer deliberately
+does not rasterise; `conditional` means the native device extension decides; ❌ means construction
+is rejected clearly because the renderer has no corresponding 3D route.
+
+The shared `IGraphicsRenderer::CreateIndexBuffer32` no longer delegates to
+`CreateIndexBuffer16`: it throws `32-bit index buffers are not supported by this renderer`.
+Therefore a backend outside the ✅/◇ set cannot return a plausible 16-bit handle and later truncate
+a glTF mesh. `GltfRendererIndexWidthPolicy` derives the complete directory inventory and locks the
+provider/rejecter partition; adding a 43rd renderer without a disposition fails L0. The public
+runtime contract is independently exercised by
+`IndexBufferEmptyDataTest.SharedThirtyTwoBitFactoryRejectsInsteadOfDelegatingToSixteenBits`.
+
+| Renderer | Status | 32-bit route / refusal boundary |
+|---|---:|---|
+| Bgfx | ✅ | Explicit factory; bgfx 32-bit index buffer flag. |
+| Blend2D | ❌ | 2D-only; inherits the shared construction-time refusal. |
+| Canvas | ❌ | HTML Canvas 2D; inherits the shared refusal. |
+| Diligent | ✅ | Explicit factory; declared uint32 buffer format. |
+| Direct2D | ❌ | 2D-only; inherits the shared refusal. |
+| DirectX 1 | ❌ | No 3D implementation; inherits the shared refusal. |
+| DirectX 10 | ✅ | Explicit factory; native 32-bit index format. |
+| DirectX 11 | ✅ | Explicit factory; `DXGI_FORMAT_R32_UINT`. |
+| DirectX 12 | ✅ | Explicit factory; `DXGI_FORMAT_R32_UINT`. |
+| DirectX 2 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 3 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 5 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 6 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 7 | ✅ | Exact uint32 CPU index stream consumed by the legacy draw route. |
+| DirectX 8 | ✅ | Width-locked uint32 stream; draw reads each index as uint32. |
+| DirectX 9 | ✅ | Explicit factory; `D3DFMT_INDEX32`. |
+| EasyGL | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
+| FNA3D | ✅ | Explicit factory; FNA3D 32-bit index element size. |
+| FreeDirect | ❌ | DirectDraw-only; inherits the shared refusal. |
+| GDI | ❌ | Local, explicit `32-bit index buffers` unsupported error. |
+| Glide | ✅ | Uint32 values are expanded through the CPU command stream before `grDrawTriangle`. |
+| Headless | ◇ | Width-locked uint32 shadow and validated indexed-draw trace; no pixels. |
+| HTML DOM | ❌ | 2D DOM renderer; inherits the shared refusal. |
+| LLGL | ✅ | Explicit factory; native uint32 index format. |
+| Magnum | ✅ | Explicit factory; `MeshIndexType::UnsignedInt`. |
+| Metal | ✅ | Explicit factory; `MTLIndexTypeUInt32`. |
+| OpenGL 1 | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
+| OpenGL 2 | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
+| OpenGL 4 | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
+| OpenGL ES 1 | conditional | `GL_OES_element_index_uint` → real `GL_UNSIGNED_INT`; absent → shared clear refusal. |
+| OpenVG | ❌ | 2D-only; inherits the shared refusal. |
+| PortableGL | ✅ | Explicit width-locked factory; real PortableGL `GL_UNSIGNED_INT` draw. |
+| SDL_GPU | ✅ | Explicit width-locked factory; `SDL_GPU_INDEXELEMENTSIZE_32BIT`. |
+| SDL_Renderer | ❌ | 2D-only; inherits the shared refusal. |
+| Skia | ❌ | Local `CreateIndexBuffer32` unsupported-3D error. |
+| Software | ✅ | Width-locked uint32 CPU buffer and raster path (2D-only GDI build rejects locally). |
+| Sokol | ✅ | Explicit factory; `SG_INDEXTYPE_UINT32`. |
+| Stub | ◇ | Explicit width-locked handle accepts uint32 exactly; renderer intentionally draws nothing. |
+| SVG DOM | ❌ | 2D DOM renderer; inherits the shared refusal. |
+| Vulkan | ✅ | Explicit factory; `VK_INDEX_TYPE_UINT32`. |
+| WebGPU | ✅ | Explicit factory; `WGPUIndexFormat_Uint32`. |
+| Wicked Engine | ✅ | Explicit factory; native uint32 index-buffer descriptor. |
+
+PortableGL, SDL_GPU and Stub were the three exact-width implementations that previously relied on
+the unsafe shared delegation. They now own explicit factories; PortableGL and Stub also reject a
+direct renderer-level upload whose width disagrees with the factory declaration. OpenGL ES 1 was
+the important unsupported-device case: its pre-existing extension check now reaches the throwing
+base method instead of manufacturing a 16-bit buffer.
+
 The **Wicked Engine** renderer (`CNA_GRAPHICS_RENDERER=WICKED`, tracked in `../plan_wicked.md`) is
 **not** a column here for the same reason WebGPU is not: its feature surface is a first baseline,
 and — more importantly — nothing in it has been executed on real hardware yet, so it has no cell

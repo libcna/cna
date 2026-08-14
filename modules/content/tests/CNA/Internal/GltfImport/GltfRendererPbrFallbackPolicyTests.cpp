@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-373/374/379: every PBR-capable renderer must keep the same texture bindings,
-// packed-channel semantics and neutral fallbacks. This is a repository-wide renderer contract, so
-// it is tested from the renderer sources even when the current host cannot compile or execute a
-// particular backend.
+// plan_gltf.md GLTF-163/373/374/379: repository-wide renderer contracts are tested from the
+// renderer sources even when the current host cannot compile or execute a particular backend.
+// This covers 32-bit index-factory ownership as well as PBR texture bindings, packed-channel
+// semantics and neutral fallbacks.
 
 #include <algorithm>
 #include <array>
@@ -1270,4 +1270,95 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
         EXPECT_NE(std::string::npos, source.find(Normalize(audit.skinned)))
             << "missing skinned-PBR transform-handedness evidence: " << audit.skinned;
     }
+}
+
+TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
+{
+    // A provider has a local CreateIndexBuffer32 implementation. The two explicit rejecters also
+    // implement the method locally because their renderer-specific diagnostic is useful. The
+    // remaining 2D/no-3D backends deliberately inherit the shared, unconditionally throwing
+    // default. Keeping the three sets disjoint makes a new renderer an audit failure, not an
+    // accidental 16-bit fallback.
+    constexpr std::array<const char*, 31> providers{{
+        "bgfx", "diligent", "directx10", "directx11", "directx12", "directx2",
+        "directx3", "directx5", "directx6", "directx7", "directx8", "directx9",
+        "easygl", "fna3d", "glide", "headless", "llgl", "magnum", "metal",
+        "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "sdl-gpu",
+        "software", "sokol", "stub", "vulkan", "webgpu", "wicked",
+    }};
+    constexpr std::array<const char*, 2> explicitRejecters{{"gdi", "skia"}};
+    constexpr std::array<const char*, 9> inheritedRejecters{{
+        "blend2d", "canvas", "direct2d", "directx1", "freedirect", "html-dom",
+        "openvg", "sdl-renderer", "svg-dom",
+    }};
+
+    std::set<std::string> expected;
+    for (const char* name : providers) { expected.insert(name); }
+    for (const char* name : explicitRejecters) { expected.insert(name); }
+    for (const char* name : inheritedRejecters) { expected.insert(name); }
+    ASSERT_EQ(42u, expected.size()) << "the policy sets must be disjoint";
+
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    ASSERT_TRUE(std::filesystem::is_directory(renderers));
+    std::set<std::string> observed;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(renderers))
+    {
+        if (!entry.is_directory()) { continue; }
+        const std::string source = RendererText(entry.path());
+        if (source.find("CreateIndexBuffer16") != std::string::npos)
+            observed.insert(entry.path().filename().string());
+    }
+    EXPECT_EQ(expected, observed)
+        << "a renderer was added/removed without a GLTF-163 index-width disposition";
+}
+
+TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFallBackToSixteenBits)
+{
+    constexpr std::array<const char*, 31> providers{{
+        "bgfx", "diligent", "directx10", "directx11", "directx12", "directx2",
+        "directx3", "directx5", "directx6", "directx7", "directx8", "directx9",
+        "easygl", "fna3d", "glide", "headless", "llgl", "magnum", "metal",
+        "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "sdl-gpu",
+        "software", "sokol", "stub", "vulkan", "webgpu", "wicked",
+    }};
+    constexpr std::array<const char*, 9> inheritedRejecters{{
+        "blend2d", "canvas", "direct2d", "directx1", "freedirect", "html-dom",
+        "openvg", "sdl-renderer", "svg-dom",
+    }};
+
+    const std::filesystem::path root = RepositoryRoot();
+    const std::filesystem::path renderers = root / "modules" / "renderers";
+    for (const char* name : providers)
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererText(renderers / name);
+        EXPECT_NE(std::string::npos, source.find("::CreateIndexBuffer32("))
+            << "32-bit support must be an explicit renderer implementation";
+    }
+    for (const char* name : inheritedRejecters)
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererText(renderers / name);
+        EXPECT_EQ(std::string::npos, source.find("::CreateIndexBuffer32("))
+            << "this no-3D renderer should inherit the shared explicit rejection";
+    }
+
+    const std::string common = Normalize(ReadFile(
+        root / "modules" / "graphics" / "include" / "CNA" / "Internal" /
+        "Renderers" / "Common" / "IGraphicsRenderer.hpp"));
+    EXPECT_NE(std::string::npos, common.find(Normalize(
+        "IGraphicsRenderer::CreateIndexBuffer32: 32-bit index buffers are not supported by this renderer")));
+    EXPECT_NE(std::string::npos, common.find(Normalize(
+        "virtual std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int /*index_capacity*/)")));
+
+    const std::string gles1 = RendererText(renderers / "opengles1");
+    EXPECT_NE(std::string::npos, gles1.find(Normalize(
+        "if (!elementIndexUintSupported_) return IGraphicsRenderer::CreateIndexBuffer32(index_capacity);")))
+        << "OpenGL ES 1 must reject uint32 indices when GL_OES_element_index_uint is absent";
+    EXPECT_NE(std::string::npos, RendererText(renderers / "gdi").find(Normalize(
+        "ThrowUnsupportedFeature(\"32-bit index buffers\")")));
+    EXPECT_NE(std::string::npos, RendererText(renderers / "skia").find(Normalize(
+        "ThrowSkiaUnsupported3D(\"CreateIndexBuffer32\")")));
 }

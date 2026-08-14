@@ -2774,6 +2774,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         return std::make_unique<SdlGpuIndexBufferRenderer>(*this, index_capacity, false);
     }
 
+    std::unique_ptr<IIndexBufferRenderer> SdlGpuRenderer::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<SdlGpuIndexBufferRenderer>(*this, index_capacity, true);
+    }
+
     std::unique_ptr<IRenderTargetRenderer> SdlGpuRenderer::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {

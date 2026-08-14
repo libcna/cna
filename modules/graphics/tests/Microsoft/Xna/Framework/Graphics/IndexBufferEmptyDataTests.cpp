@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 #include <gtest/gtest.h>
 
@@ -38,6 +39,7 @@
 #endif
 
 using CNA::GraphicsCapability;
+using CNA::Internal::Renderers::IGraphicsRenderer;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
@@ -152,6 +154,24 @@ TEST_F(IndexBufferEmptyDataTest, ZeroCapacityConstructionPreservesLogicalCapacit
     EXPECT_EQ(0, static32.getIndexCountProperty());
     EXPECT_EQ(0, dynamic16.getIndexCountProperty());
     EXPECT_EQ(0, dynamic32.getIndexCountProperty());
+}
+
+TEST_F(IndexBufferEmptyDataTest, SharedThirtyTwoBitFactoryRejectsInsteadOfDelegatingToSixteenBits)
+{
+    auto& renderer = device.GetRenderer();
+    try
+    {
+        // Qualify the call deliberately so this tests the shared default even though the active
+        // SOFTWARE renderer has a valid 32-bit override of its own.
+        renderer.IGraphicsRenderer::CreateIndexBuffer32(3);
+        FAIL() << "the shared factory returned a disguised 16-bit buffer";
+    }
+    catch (const std::runtime_error& error)
+    {
+        EXPECT_STREQ(
+            "IGraphicsRenderer::CreateIndexBuffer32: 32-bit index buffers are not supported by this renderer",
+            error.what());
+    }
 }
 
 TEST_F(IndexBufferEmptyDataTest, ZeroCountAcceptsNullForStaticAndDynamicBuffers)

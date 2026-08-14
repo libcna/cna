@@ -96,8 +96,8 @@ TEST(CanvasRendererThrowNo3D, VertexAndIndexBufferCreationThrows)
     CanvasRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
     EXPECT_THROW(renderer.CreateVertexBuffer(3), std::runtime_error);
     EXPECT_THROW(renderer.CreateIndexBuffer16(3), std::runtime_error);
-    // CANVAS-62: CreateIndexBuffer32 has no Canvas-local override -- IGraphicsRenderer's own shared
-    // default delegates to CreateIndexBuffer16(), which already throws.
+    // CANVAS-62 / GLTF-163: no Canvas-local override; the shared default now rejects 32-bit
+    // buffers directly rather than delegating to a 16-bit factory.
     EXPECT_THROW(renderer.CreateIndexBuffer32(3), std::runtime_error);
 }
 
