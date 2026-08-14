@@ -212,6 +212,61 @@ TEST(EffectTest, RejectsExcessiveTopLevelReflectionCountBeforeNativeParser)
     EXPECT_THROW(TestEffect(gd, bytes), System::ArgumentException);
 }
 
+TEST(EffectTest, RejectsOutOfRangeValueOffsetsBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_GE(bytes.size(), 24u);
+    const std::size_t structure = 8u + ReadUInt32LittleEndian(bytes, 4);
+    ASSERT_LE(structure + 24u, bytes.size());
+
+    auto invalidType = bytes;
+    WriteUInt32LittleEndian(invalidType, structure + 16, 0xFFFFFFFFu);
+    EXPECT_THROW(TestEffect(gd, invalidType), System::ArgumentException);
+
+    auto invalidValue = bytes;
+    WriteUInt32LittleEndian(invalidValue, structure + 20, 0xFFFFFFFFu);
+    EXPECT_THROW(TestEffect(gd, invalidValue), System::ArgumentException);
+}
+
+TEST(EffectTest, RejectsUnterminatedReflectionStringsBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_GE(bytes.size(), 24u);
+    const std::size_t base = 8;
+    const std::size_t structure = base + ReadUInt32LittleEndian(bytes, 4);
+    ASSERT_LE(structure + 20u, bytes.size());
+    const std::size_t parameterType =
+        base + ReadUInt32LittleEndian(bytes, structure + 16);
+    ASSERT_LE(parameterType + 12u, bytes.size());
+    const std::size_t parameterName =
+        base + ReadUInt32LittleEndian(bytes, parameterType + 8);
+    ASSERT_LE(parameterName + 4u, bytes.size());
+    const std::uint32_t stringLength = ReadUInt32LittleEndian(bytes, parameterName);
+    ASSERT_GT(stringLength, 0u);
+    ASSERT_LE(parameterName + 4u + stringLength, bytes.size());
+    bytes[parameterName + 4u + stringLength - 1] = 'X';
+
+    EXPECT_THROW(TestEffect(gd, bytes), System::ArgumentException);
+}
+
+TEST(EffectTest, RejectsOutOfRangeObjectReferencesBeforeNativeParser)
+{
+    GraphicsDevice gd;
+    auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_GE(bytes.size(), 24u);
+    const std::size_t base = 8;
+    const std::size_t structure = base + ReadUInt32LittleEndian(bytes, 4);
+    ASSERT_LE(structure + 24u, bytes.size());
+    const std::size_t parameterValue =
+        base + ReadUInt32LittleEndian(bytes, structure + 20);
+    ASSERT_LE(parameterValue + 4u, bytes.size());
+    WriteUInt32LittleEndian(bytes, parameterValue, 0xFFFFFFFFu);
+
+    EXPECT_THROW(TestEffect(gd, bytes), System::ArgumentException);
+}
+
 // -----------------------------------------------------------------------
 // CurrentTechnique — FNA's setter performs zero validation (any
 // EffectTechnique* is accepted, even one not owned by this Effect).

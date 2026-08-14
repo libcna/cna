@@ -13,6 +13,7 @@
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 namespace CNA::Internal::Renderers::Fna3d
@@ -23,12 +24,23 @@ namespace CNA::Internal::Renderers::Fna3d
         constexpr std::size_t kMaximumReflectionDepth = 32u;
         constexpr std::size_t kMaximumReflectedValueBytes = 64u * 1024u * 1024u;
 
+        template<typename TEnum>
+        std::underlying_type_t<TEnum> ReadEnumStorage(const TEnum& value)
+        {
+            static_assert(std::is_enum_v<TEnum>);
+            std::underlying_type_t<TEnum> result{};
+            static_assert(sizeof(result) == sizeof(value));
+            std::memcpy(&result, &value, sizeof(result));
+            return result;
+        }
+
         std::string SafeString(const char* value)
         {
             return value != nullptr ? value : "";
         }
 
-        EffectParameterClass ToParameterClass(MOJOSHADER_symbolClass value)
+        EffectParameterClass ToParameterClass(
+            std::underlying_type_t<MOJOSHADER_symbolClass> value)
         {
             switch (value)
             {
@@ -45,7 +57,8 @@ namespace CNA::Internal::Renderers::Fna3d
             }
         }
 
-        EffectParameterType ToParameterType(MOJOSHADER_symbolType value)
+        EffectParameterType ToParameterType(
+            std::underlying_type_t<MOJOSHADER_symbolType> value)
         {
             switch (value)
             {
@@ -66,19 +79,19 @@ namespace CNA::Internal::Renderers::Fna3d
             }
         }
 
-        bool IsTextureType(MOJOSHADER_symbolType value)
+        bool IsTextureType(std::underlying_type_t<MOJOSHADER_symbolType> value)
         {
             return value >= MOJOSHADER_SYMTYPE_TEXTURE &&
                    value <= MOJOSHADER_SYMTYPE_TEXTURECUBE;
         }
 
-        bool IsSamplerType(MOJOSHADER_symbolType value)
+        bool IsSamplerType(std::underlying_type_t<MOJOSHADER_symbolType> value)
         {
             return value >= MOJOSHADER_SYMTYPE_SAMPLER &&
                    value <= MOJOSHADER_SYMTYPE_SAMPLERCUBE;
         }
 
-        bool IsShaderObjectType(MOJOSHADER_symbolType value)
+        bool IsShaderObjectType(std::underlying_type_t<MOJOSHADER_symbolType> value)
         {
             return value == MOJOSHADER_SYMTYPE_VERTEXSHADER ||
                    value == MOJOSHADER_SYMTYPE_PIXELSHADER ||
@@ -89,7 +102,7 @@ namespace CNA::Internal::Renderers::Fna3d
         std::string ResolveString(const MOJOSHADER_effect* effect,
                                   const MOJOSHADER_effectValue& value)
         {
-            if (value.type.parameter_type != MOJOSHADER_SYMTYPE_STRING ||
+            if (ReadEnumStorage(value.type.parameter_type) != MOJOSHADER_SYMTYPE_STRING ||
                 value.values == nullptr ||
                 value.value_count == 0)
             {
@@ -115,8 +128,10 @@ namespace CNA::Internal::Renderers::Fna3d
             result.rowCount = static_cast<int>(value.type.rows);
             result.columnCount = static_cast<int>(value.type.columns);
             result.elementCount = static_cast<int>(value.type.elements);
-            result.parameterClass = ToParameterClass(value.type.parameter_class);
-            result.parameterType = ToParameterType(value.type.parameter_type);
+            result.parameterClass = ToParameterClass(
+                ReadEnumStorage(value.type.parameter_class));
+            result.parameterType = ToParameterType(
+                ReadEnumStorage(value.type.parameter_type));
             if (value.value_count > kMaximumReflectedValueBytes / 4 ||
                 value.value_count > std::numeric_limits<std::size_t>::max() / 4)
             {
@@ -190,8 +205,10 @@ namespace CNA::Internal::Renderers::Fna3d
             result.rowCount = static_cast<int>(member.info.rows);
             result.columnCount = static_cast<int>(member.info.columns);
             result.elementCount = static_cast<int>(member.info.elements);
-            result.parameterClass = ToParameterClass(member.info.parameter_class);
-            result.parameterType = ToParameterType(member.info.parameter_type);
+            result.parameterClass = ToParameterClass(
+                ReadEnumStorage(member.info.parameter_class));
+            result.parameterType = ToParameterType(
+                ReadEnumStorage(member.info.parameter_type));
             if (member.info.member_count > 0 && member.info.members == nullptr)
             {
                 throw std::runtime_error(
@@ -553,7 +570,7 @@ namespace CNA::Internal::Renderers::Fna3d
         for (int i = 0; i < effectData_->param_count; ++i)
         {
             const MOJOSHADER_effectParam& parameter = effectData_->params[i];
-            const MOJOSHADER_symbolType type = parameter.value.type.parameter_type;
+            const auto type = ReadEnumStorage(parameter.value.type.parameter_type);
             if (IsSamplerType(type) || IsShaderObjectType(type)) continue;
 
             CompiledEffectParameterDescription result;
@@ -626,7 +643,7 @@ namespace CNA::Internal::Renderers::Fna3d
         for (int i = 0; i < effectData_->param_count; ++i)
         {
             const MOJOSHADER_effectValue& value = effectData_->params[i].value;
-            if (IsTextureType(value.type.parameter_type))
+            if (IsTextureType(ReadEnumStorage(value.type.parameter_type)))
             {
                 texturesByName[SafeString(value.name)] = static_cast<std::uint32_t>(i);
             }
@@ -635,7 +652,7 @@ namespace CNA::Internal::Renderers::Fna3d
         for (int i = 0; i < effectData_->param_count; ++i)
         {
             const MOJOSHADER_effectValue& sampler = effectData_->params[i].value;
-            if (!IsSamplerType(sampler.type.parameter_type)) continue;
+            if (!IsSamplerType(ReadEnumStorage(sampler.type.parameter_type))) continue;
             const auto* states = sampler.valuesSS;
             if (sampler.value_count > kMaximumReflectedItems ||
                 (sampler.value_count > 0 && states == nullptr))
@@ -648,7 +665,8 @@ namespace CNA::Internal::Renderers::Fna3d
                  stateIndex < sampler.value_count; ++stateIndex)
             {
                 const MOJOSHADER_effectValue& value = states[stateIndex].value;
-                if (!IsTextureType(value.type.parameter_type) || value.values == nullptr ||
+                if (!IsTextureType(ReadEnumStorage(value.type.parameter_type)) ||
+                    value.values == nullptr ||
                     value.value_count == 0)
                 {
                     continue;
@@ -699,7 +717,8 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         if (runtimeIndex >= textures_.size())
             throw std::out_of_range("FNA3D compiled effect: texture parameter index is out of range.");
-        if (!IsTextureType(effectData_->params[runtimeIndex].value.type.parameter_type))
+        if (!IsTextureType(ReadEnumStorage(
+                effectData_->params[runtimeIndex].value.type.parameter_type)))
             throw std::invalid_argument("FNA3D compiled effect: parameter is not a texture.");
         if (texture != nullptr && GetSampledTexture(texture) == nullptr)
             throw std::invalid_argument(

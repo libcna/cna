@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <functional>
-#include <limits>
+#include <optional>
 
 namespace
 {
@@ -33,45 +33,528 @@ namespace
     }
 
     /**
-     * Performs only the bounded container checks needed before calling MojoShader. In
-     * particular, this mirrors its XNA 4 wrapper seek but rejects the unsigned underflow that a
-     * wrapper offset below eight would otherwise trigger in older MojoShader revisions.
+     * Bounded preflight for the legacy Effect Framework container consumed by pinned MojoShader.
+     * MojoShader's mature parser predates hostile-content parsing and deliberately trusts several
+     * relative offsets. Validate the complete container graph before the native call so malformed
+     * game assets cannot turn those historical assumptions into an out-of-bounds read or an
+     * allocation bomb. Shader object bodies remain opaque and are validated by MojoShader's D3D9
+     * shader parser after their enclosing length/padding has been checked here.
      */
+    class EffectFrameworkPreflight final
+    {
+    public:
+        explicit EffectFrameworkPreflight(const std::vector<SharpRuntime::bytecs>& bytes)
+            : bytes_(bytes)
+        {
+        }
+
+        bool Validate()
+        {
+            if (bytes_.size() < 24) return false;
+
+            std::size_t tokenOffset = 0;
+            const std::uint32_t outerToken = ReadUInt32LittleEndian(bytes_, 0);
+            if (outerToken == kXna4EffectWrapperToken)
+            {
+                const std::uint32_t wrappedOffset = ReadUInt32LittleEndian(bytes_, 4);
+                if (wrappedOffset < 8 || wrappedOffset > bytes_.size() - 8 ||
+                    (wrappedOffset & 3u) != 0)
+                {
+                    return false;
+                }
+                tokenOffset = wrappedOffset;
+            }
+            else if (outerToken != kEffectFrameworkToken)
+            {
+                return false;
+            }
+
+            if (ReadUInt32LittleEndian(bytes_, tokenOffset) != kEffectFrameworkToken) return false;
+            base_ = tokenOffset + 8;
+            const std::uint32_t structureOffset =
+                ReadUInt32LittleEndian(bytes_, tokenOffset + 4);
+            if (structureOffset > bytes_.size() - base_ || (structureOffset & 3u) != 0)
+                return false;
+            std::size_t cursor = base_ + structureOffset;
+
+            std::uint32_t parameterCount = 0;
+            std::uint32_t techniqueCount = 0;
+            std::uint32_t ignored = 0;
+            std::uint32_t objectCount = 0;
+            if (!Read(cursor, parameterCount) || !Read(cursor, techniqueCount) ||
+                !Read(cursor, ignored) || !Read(cursor, objectCount) ||
+                parameterCount > kMaximumReflectedParameters || techniqueCount == 0 ||
+                techniqueCount > kMaximumReflectedTechniques ||
+                objectCount > kMaximumEffectObjects || !ConsumeGraphItems(techniqueCount))
+            {
+                return false;
+            }
+            objectTypes_.assign(objectCount, -1);
+            objectRecordsSeen_.assign(objectCount, false);
+
+            parameters_.reserve(parameterCount);
+            for (std::uint32_t i = 0; i < parameterCount; ++i)
+            {
+                std::uint32_t typeOffset = 0;
+                std::uint32_t valueOffset = 0;
+                std::uint32_t flags = 0;
+                std::uint32_t annotationCount = 0;
+                if (!Read(cursor, typeOffset) || !Read(cursor, valueOffset) ||
+                    !Read(cursor, flags) || !Read(cursor, annotationCount) ||
+                    !ValidateAnnotations(cursor, annotationCount))
+                {
+                    return false;
+                }
+                ValueInfo info;
+                if (!ValidateValue(typeOffset, valueOffset, 0, info)) return false;
+                parameters_.push_back(std::move(info));
+            }
+
+            techniques_.reserve(techniqueCount);
+            for (std::uint32_t techniqueIndex = 0;
+                 techniqueIndex < techniqueCount; ++techniqueIndex)
+            {
+                std::uint32_t nameOffset = 0;
+                std::uint32_t annotationCount = 0;
+                std::uint32_t passCount = 0;
+                if (!Read(cursor, nameOffset) || !Read(cursor, annotationCount) ||
+                    !Read(cursor, passCount) || !ValidateString(nameOffset) || passCount == 0 ||
+                    passCount > kMaximumReflectedItems || !ConsumeGraphItems(passCount) ||
+                    !ValidateAnnotations(cursor, annotationCount))
+                {
+                    return false;
+                }
+
+                TechniqueInfo technique;
+                technique.passes.reserve(passCount);
+                for (std::uint32_t passIndex = 0; passIndex < passCount; ++passIndex)
+                {
+                    std::uint32_t passNameOffset = 0;
+                    std::uint32_t passAnnotationCount = 0;
+                    std::uint32_t stateCount = 0;
+                    if (!Read(cursor, passNameOffset) ||
+                        !Read(cursor, passAnnotationCount) || !Read(cursor, stateCount) ||
+                        !ValidateString(passNameOffset) || stateCount > kMaximumReflectedItems ||
+                        !ConsumeGraphItems(stateCount) ||
+                        !ValidateAnnotations(cursor, passAnnotationCount))
+                    {
+                        return false;
+                    }
+
+                    PassInfo pass;
+                    pass.stateObjectReferences.reserve(stateCount);
+                    for (std::uint32_t stateIndex = 0; stateIndex < stateCount; ++stateIndex)
+                    {
+                        std::uint32_t stateType = 0;
+                        std::uint32_t legacy = 0;
+                        std::uint32_t stateTypeOffset = 0;
+                        std::uint32_t stateValueOffset = 0;
+                        if (!Read(cursor, stateType) || !Read(cursor, legacy) ||
+                            !Read(cursor, stateTypeOffset) ||
+                            !Read(cursor, stateValueOffset))
+                        {
+                            return false;
+                        }
+                        ValueInfo info;
+                        if (!ValidateValue(stateTypeOffset, stateValueOffset, 0, info))
+                            return false;
+                        pass.stateObjectReferences.push_back(info.firstObjectReference);
+                    }
+                    technique.passes.push_back(std::move(pass));
+                }
+                techniques_.push_back(std::move(technique));
+            }
+
+            std::uint32_t smallObjectCount = 0;
+            std::uint32_t largeObjectCount = 0;
+            if (!Read(cursor, smallObjectCount) || !Read(cursor, largeObjectCount) ||
+                smallObjectCount > kMaximumEffectObjects ||
+                largeObjectCount > kMaximumEffectObjects ||
+                smallObjectCount > objectTypes_.size() ||
+                largeObjectCount > objectTypes_.size() - smallObjectCount)
+            {
+                return false;
+            }
+            for (std::uint32_t i = 0; i < smallObjectCount; ++i)
+            {
+                std::uint32_t objectIndex = 0;
+                std::uint32_t length = 0;
+                if (!Read(cursor, objectIndex) || !Read(cursor, length) ||
+                    objectIndex >= objectTypes_.size() || objectTypes_[objectIndex] < kStringType ||
+                    objectTypes_[objectIndex] > kVertexShaderType || !MarkObjectRecord(objectIndex) ||
+                    !ValidateObjectBlob(cursor, length,
+                        objectTypes_[objectIndex] <= kSamplerCubeType))
+                {
+                    return false;
+                }
+            }
+            for (std::uint32_t i = 0; i < largeObjectCount; ++i)
+            {
+                std::uint32_t techniqueIndex = 0;
+                std::uint32_t index = 0;
+                std::uint32_t legacy = 0;
+                std::uint32_t stateIndex = 0;
+                std::uint32_t objectEncoding = 0;
+                std::uint32_t length = 0;
+                if (!Read(cursor, techniqueIndex) || !Read(cursor, index) ||
+                    !Read(cursor, legacy) || !Read(cursor, stateIndex) ||
+                    !Read(cursor, objectEncoding) || !Read(cursor, length))
+                {
+                    return false;
+                }
+
+                std::optional<std::uint32_t> objectIndex;
+                if (techniqueIndex == UINT32_MAX)
+                {
+                    if (index >= parameters_.size() ||
+                        stateIndex >= parameters_[index].stateObjectReferences.size())
+                        return false;
+                    objectIndex = parameters_[index].stateObjectReferences[stateIndex];
+                }
+                else
+                {
+                    if (techniqueIndex >= techniques_.size() ||
+                        index >= techniques_[techniqueIndex].passes.size() ||
+                        stateIndex >= techniques_[techniqueIndex].passes[index]
+                            .stateObjectReferences.size())
+                    {
+                        return false;
+                    }
+                    objectIndex = techniques_[techniqueIndex].passes[index]
+                        .stateObjectReferences[stateIndex];
+                }
+                if (!objectIndex || *objectIndex >= objectTypes_.size())
+                {
+                    return false;
+                }
+                const int objectType = objectTypes_[*objectIndex];
+                if (objectType < static_cast<int>(kTextureType) ||
+                    objectType > static_cast<int>(kVertexShaderType) ||
+                    !MarkObjectRecord(*objectIndex) ||
+                    (objectEncoding == 2 && objectType >= static_cast<int>(kPixelShaderType) &&
+                     !ValidateStandalonePreshaderHeader(cursor, length)) ||
+                    !ValidateObjectBlob(cursor, length,
+                        objectType <= static_cast<int>(kSamplerCubeType)))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+    private:
+        static constexpr std::uint32_t kScalarClass = 0;
+        static constexpr std::uint32_t kMatrixColumnsClass = 3;
+        static constexpr std::uint32_t kObjectClass = 4;
+        static constexpr std::uint32_t kStructClass = 5;
+        static constexpr std::uint32_t kBoolType = 1;
+        static constexpr std::uint32_t kFloatType = 3;
+        static constexpr std::uint32_t kStringType = 4;
+        static constexpr std::uint32_t kTextureType = 5;
+        static constexpr std::uint32_t kTextureCubeType = 9;
+        static constexpr std::uint32_t kSamplerType = 10;
+        static constexpr std::uint32_t kSamplerCubeType = 14;
+        static constexpr std::uint32_t kPixelShaderType = 15;
+        static constexpr std::uint32_t kVertexShaderType = 16;
+        static constexpr std::uint32_t kSamplerTextureState = 4;
+
+        struct ValueInfo
+        {
+            std::optional<std::uint32_t> firstObjectReference;
+            std::vector<std::optional<std::uint32_t>> stateObjectReferences;
+        };
+
+        struct PassInfo
+        {
+            std::vector<std::optional<std::uint32_t>> stateObjectReferences;
+        };
+
+        struct TechniqueInfo
+        {
+            std::vector<PassInfo> passes;
+        };
+
+        bool Read(std::size_t& cursor, std::uint32_t& value) const
+        {
+            if (cursor > bytes_.size() || bytes_.size() - cursor < 4) return false;
+            value = ReadUInt32LittleEndian(bytes_, cursor);
+            cursor += 4;
+            return true;
+        }
+
+        bool ResolveOffset(std::uint32_t relativeOffset, std::size_t bytes,
+                           std::size_t& absoluteOffset) const
+        {
+            if ((relativeOffset & 3u) != 0 || relativeOffset > bytes_.size() - base_)
+                return false;
+            absoluteOffset = base_ + relativeOffset;
+            return absoluteOffset <= bytes_.size() && bytes <= bytes_.size() - absoluteOffset;
+        }
+
+        bool ValidateString(std::uint32_t relativeOffset)
+        {
+            std::size_t stringOffset = 0;
+            if (!ResolveOffset(relativeOffset, 4, stringOffset)) return false;
+            const std::uint32_t length = ReadUInt32LittleEndian(bytes_, stringOffset);
+            if (length == 0) return true;
+            stringOffset += 4;
+            return length <= bytes_.size() - stringOffset &&
+                   bytes_[stringOffset + length - 1] == 0 &&
+                   ConsumeAllocation(length);
+        }
+
+        bool ConsumeAllocation(std::size_t bytes)
+        {
+            if (bytes > kMaximumCompiledEffectBytes - reflectedAllocationBytes_) return false;
+            reflectedAllocationBytes_ += bytes;
+            return true;
+        }
+
+        bool ConsumeGraphItems(std::size_t count)
+        {
+            if (count > kMaximumReflectedItems - graphItemCount_) return false;
+            graphItemCount_ += count;
+            return true;
+        }
+
+        bool MarkObjectRecord(std::uint32_t objectIndex)
+        {
+            if (objectIndex >= objectRecordsSeen_.size() || objectRecordsSeen_[objectIndex])
+                return false;
+            objectRecordsSeen_[objectIndex] = true;
+            return true;
+        }
+
+        bool ValidateAnnotations(std::size_t& cursor, std::uint32_t count)
+        {
+            if (count > kMaximumReflectedItems ||
+                count > (bytes_.size() - std::min(cursor, bytes_.size())) / 8)
+            {
+                return false;
+            }
+            for (std::uint32_t i = 0; i < count; ++i)
+            {
+                std::uint32_t typeOffset = 0;
+                std::uint32_t valueOffset = 0;
+                ValueInfo ignored;
+                if (!Read(cursor, typeOffset) || !Read(cursor, valueOffset) ||
+                    !ValidateValue(typeOffset, valueOffset, 0, ignored))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool AssignObjectType(std::uint32_t objectIndex, std::uint32_t type)
+        {
+            if (objectIndex >= objectTypes_.size()) return false;
+            int& knownType = objectTypes_[objectIndex];
+            if (knownType != -1 && knownType != static_cast<int>(type)) return false;
+            knownType = static_cast<int>(type);
+            return true;
+        }
+
+        bool ValidateValue(std::uint32_t typeOffset, std::uint32_t valueOffset,
+                           std::size_t depth, ValueInfo& result)
+        {
+            if (depth >= kMaximumReflectionDepth ||
+                ++validatedValueCount_ > kMaximumReflectedItems)
+            {
+                return false;
+            }
+            std::size_t typeCursor = 0;
+            std::size_t valueCursor = 0;
+            if (!ResolveOffset(typeOffset, 20, typeCursor) ||
+                !ResolveOffset(valueOffset, 0, valueCursor))
+            {
+                return false;
+            }
+
+            std::uint32_t type = 0;
+            std::uint32_t parameterClass = 0;
+            std::uint32_t nameOffset = 0;
+            std::uint32_t semanticOffset = 0;
+            std::uint32_t elementCount = 0;
+            if (!Read(typeCursor, type) || !Read(typeCursor, parameterClass) ||
+                !Read(typeCursor, nameOffset) || !Read(typeCursor, semanticOffset) ||
+                !Read(typeCursor, elementCount) || !ValidateString(nameOffset) ||
+                !ValidateString(semanticOffset) || elementCount > kMaximumReflectedItems)
+            {
+                return false;
+            }
+
+            if (parameterClass >= kScalarClass &&
+                parameterClass <= kMatrixColumnsClass)
+            {
+                std::uint32_t columnCount = 0;
+                std::uint32_t rowCount = 0;
+                if (type < kBoolType || type > kFloatType ||
+                    !Read(typeCursor, columnCount) || !Read(typeCursor, rowCount) ||
+                    columnCount == 0 || columnCount > 4 || rowCount == 0 || rowCount > 4)
+                {
+                    return false;
+                }
+                const std::size_t elements = std::max<std::uint32_t>(elementCount, 1);
+                const std::size_t cells = static_cast<std::size_t>(columnCount) * rowCount * elements;
+                const std::size_t reflectedStorageBytes = 16u * rowCount * elements;
+                return cells <= kMaximumCompiledEffectBytes / 4 &&
+                       cells * 4 <= bytes_.size() - valueCursor &&
+                       ConsumeAllocation(reflectedStorageBytes);
+            }
+
+            if (parameterClass == kObjectClass)
+            {
+                if (type < kStringType || type > kVertexShaderType) return false;
+                if (type >= kSamplerType && type <= kSamplerCubeType)
+                {
+                    std::uint32_t stateCount = 0;
+                    if (!Read(valueCursor, stateCount) ||
+                        stateCount > kMaximumReflectedItems ||
+                        stateCount > (bytes_.size() - valueCursor) / 16 ||
+                        !ConsumeAllocation(static_cast<std::size_t>(stateCount) * 16u))
+                    {
+                        return false;
+                    }
+                    result.stateObjectReferences.reserve(stateCount);
+                    for (std::uint32_t i = 0; i < stateCount; ++i)
+                    {
+                        std::uint32_t rawStateType = 0;
+                        std::uint32_t legacy = 0;
+                        std::uint32_t stateTypeOffset = 0;
+                        std::uint32_t stateValueOffset = 0;
+                        if (!Read(valueCursor, rawStateType) || !Read(valueCursor, legacy) ||
+                            !Read(valueCursor, stateTypeOffset) ||
+                            !Read(valueCursor, stateValueOffset))
+                        {
+                            return false;
+                        }
+                        const std::uint32_t stateType = rawStateType & ~0xA0u;
+                        if (stateType > 17) return false;
+                        ValueInfo stateValue;
+                        if (!ValidateValue(stateTypeOffset, stateValueOffset,
+                                           depth + 1, stateValue))
+                        {
+                            return false;
+                        }
+                        if (stateType == kSamplerTextureState &&
+                            !stateValue.firstObjectReference)
+                        {
+                            return false;
+                        }
+                        result.stateObjectReferences.push_back(
+                            stateValue.firstObjectReference);
+                    }
+                    return true;
+                }
+
+                const std::size_t objectReferences =
+                    std::max<std::uint32_t>(elementCount, 1);
+                if (objectReferences > (bytes_.size() - valueCursor) / 4 ||
+                    !ConsumeAllocation(objectReferences * 4u))
+                {
+                    return false;
+                }
+                for (std::size_t i = 0; i < objectReferences; ++i)
+                {
+                    std::uint32_t objectIndex = 0;
+                    if (!Read(valueCursor, objectIndex) || !AssignObjectType(objectIndex, type))
+                        return false;
+                    if (i == 0) result.firstObjectReference = objectIndex;
+                }
+                return true;
+            }
+
+            if (parameterClass != kStructClass) return false;
+            std::uint32_t memberCount = 0;
+            if (!Read(typeCursor, memberCount) || memberCount > kMaximumReflectedItems ||
+                memberCount > (bytes_.size() - typeCursor) / 28)
+            {
+                return false;
+            }
+            std::size_t structStorageCells = 0;
+            std::size_t tightDefaultCells = 0;
+            for (std::uint32_t i = 0; i < memberCount; ++i)
+            {
+                std::uint32_t memberType = 0;
+                std::uint32_t memberClass = 0;
+                std::uint32_t memberNameOffset = 0;
+                std::uint32_t memberSemanticOffset = 0;
+                std::uint32_t memberElements = 0;
+                std::uint32_t memberColumns = 0;
+                std::uint32_t memberRows = 0;
+                if (!Read(typeCursor, memberType) || !Read(typeCursor, memberClass) ||
+                    !Read(typeCursor, memberNameOffset) ||
+                    !Read(typeCursor, memberSemanticOffset) ||
+                    !Read(typeCursor, memberElements) || !Read(typeCursor, memberColumns) ||
+                    !Read(typeCursor, memberRows) || !ValidateString(memberNameOffset) ||
+                    !ValidateString(memberSemanticOffset) || memberType < kBoolType ||
+                    memberType > kFloatType || memberClass > kMatrixColumnsClass ||
+                    memberElements > kMaximumReflectedItems || memberColumns == 0 ||
+                    memberColumns > 4 || memberRows == 0 || memberRows > 4)
+                {
+                    return false;
+                }
+                const std::size_t storageElements =
+                    std::max<std::uint32_t>(memberElements, 1);
+                const std::size_t memberStorage = 4u * memberRows * storageElements;
+                const std::size_t memberDefaults =
+                    static_cast<std::size_t>(memberColumns) * memberRows * memberElements;
+                if (memberStorage > kMaximumCompiledEffectBytes / 4 - structStorageCells ||
+                    memberDefaults > kMaximumCompiledEffectBytes / 4 - tightDefaultCells)
+                {
+                    return false;
+                }
+                structStorageCells += memberStorage;
+                tightDefaultCells += memberDefaults;
+            }
+            const std::size_t elements = std::max<std::uint32_t>(elementCount, 1);
+            if (structStorageCells > kMaximumCompiledEffectBytes / 4 / elements ||
+                tightDefaultCells > (bytes_.size() - typeCursor) / 4 / elements)
+            {
+                return false;
+            }
+            return ConsumeAllocation(structStorageCells * elements * 4u);
+        }
+
+        bool ValidateObjectBlob(std::size_t& cursor, std::uint32_t length,
+                                bool requireTerminator)
+        {
+            if (cursor > bytes_.size() || length > bytes_.size() - cursor) return false;
+            if (requireTerminator && length > 0 && bytes_[cursor + length - 1] != 0)
+                return false;
+            if (requireTerminator && !ConsumeAllocation(length)) return false;
+            const std::size_t paddedLength = (static_cast<std::size_t>(length) + 3u) & ~3u;
+            if (paddedLength > bytes_.size() - cursor) return false;
+            cursor += paddedLength;
+            return true;
+        }
+
+        bool ValidateStandalonePreshaderHeader(std::size_t cursor, std::uint32_t length)
+        {
+            if (cursor > bytes_.size() || length < 4 || length > bytes_.size() - cursor)
+                return false;
+            const std::uint32_t nameLength = ReadUInt32LittleEndian(bytes_, cursor);
+            return nameLength > 0 && nameLength <= length - 4u &&
+                   bytes_[cursor + 4u + nameLength - 1u] == 0 &&
+                   ConsumeAllocation(nameLength);
+        }
+
+        const std::vector<SharpRuntime::bytecs>& bytes_;
+        std::size_t base_ = 0;
+        std::size_t validatedValueCount_ = 0;
+        std::size_t reflectedAllocationBytes_ = 0;
+        std::size_t graphItemCount_ = 0;
+        std::vector<int> objectTypes_;
+        std::vector<bool> objectRecordsSeen_;
+        std::vector<ValueInfo> parameters_;
+        std::vector<TechniqueInfo> techniques_;
+    };
+
     bool HasStructurallyValidEffectFrameworkHeader(
         const std::vector<SharpRuntime::bytecs>& bytes)
     {
-        if (bytes.size() < 24) return false;
-
-        std::size_t tokenOffset = 0;
-        const std::uint32_t outerToken = ReadUInt32LittleEndian(bytes, 0);
-        if (outerToken == kXna4EffectWrapperToken)
-        {
-            const std::uint32_t wrappedOffset = ReadUInt32LittleEndian(bytes, 4);
-            if (wrappedOffset < 8 || wrappedOffset > bytes.size() - 8) return false;
-            tokenOffset = wrappedOffset;
-        }
-        else if (outerToken != kEffectFrameworkToken)
-        {
-            return false;
-        }
-
-        if (ReadUInt32LittleEndian(bytes, tokenOffset) != kEffectFrameworkToken) return false;
-        const std::size_t effectBase = tokenOffset + 8;
-        const std::uint32_t structureOffset =
-            ReadUInt32LittleEndian(bytes, tokenOffset + 4);
-        if (structureOffset > bytes.size() - effectBase) return false;
-        const std::size_t structure = effectBase + structureOffset;
-        if (bytes.size() - structure < 16) return false;
-
-        // The MojoShader parser allocates these top-level tables before it can diagnose deeper
-        // malformed data. Conservative, format-independent ceilings prevent multiplication
-        // overflow and unreasonable allocations without constraining real-world XNA effects.
-        const std::uint32_t parameterCount = ReadUInt32LittleEndian(bytes, structure);
-        const std::uint32_t techniqueCount = ReadUInt32LittleEndian(bytes, structure + 4);
-        const std::uint32_t objectCount = ReadUInt32LittleEndian(bytes, structure + 12);
-        return parameterCount <= kMaximumReflectedParameters &&
-               techniqueCount > 0 && techniqueCount <= kMaximumReflectedTechniques &&
-               objectCount <= kMaximumEffectObjects;
+        return EffectFrameworkPreflight(bytes).Validate();
     }
 
     Microsoft::Xna::Framework::Graphics::EffectAnnotation MakeAnnotation(
@@ -94,8 +577,14 @@ namespace
         const CNA::Internal::Renderers::CompiledEffectValueDescription& value,
         std::size_t& reflectedValueBytes)
     {
-        if (value.rowCount < 0 || value.rowCount > 4 ||
-            value.columnCount < 0 || value.columnCount > 4 ||
+        const bool validDimensions = value.parameterClass ==
+                Microsoft::Xna::Framework::Graphics::EffectParameterClass::Struct
+            ? value.rowCount >= 0 && value.rowCount <= 1 && value.columnCount >= 0 &&
+              static_cast<std::size_t>(value.columnCount) <=
+                  kMaximumCompiledEffectBytes / sizeof(std::uint32_t)
+            : value.rowCount >= 0 && value.rowCount <= 4 &&
+              value.columnCount >= 0 && value.columnCount <= 4;
+        if (!validDimensions ||
             value.elementCount < 0 ||
             static_cast<std::size_t>(value.elementCount) > kMaximumReflectedItems ||
             value.rawValue.size() > kMaximumCompiledEffectBytes - reflectedValueBytes ||
@@ -141,6 +630,10 @@ namespace
             ValidateReflectedParameter(member, depth + 1, itemCount, reflectedValueBytes);
     }
 
+    std::size_t ReflectedParameterStorageBytes(
+        const CNA::Internal::Renderers::CompiledEffectParameterDescription& parameter,
+        std::size_t depth = 0);
+
     void ValidateCompiledDescription(
         const CNA::Internal::Renderers::CompiledEffectDescription& description)
     {
@@ -156,7 +649,15 @@ namespace
         std::size_t itemCount = 0;
         std::size_t reflectedValueBytes = 0;
         for (const auto& parameter : description.parameters)
+        {
             ValidateReflectedParameter(parameter, 0, itemCount, reflectedValueBytes);
+            if (ReflectedParameterStorageBytes(parameter) != parameter.rawValue.size())
+            {
+                throw System::ArgumentException(
+                    "The compiled effect parameter storage does not match its reflected layout.",
+                    "effectCode");
+            }
+        }
 
         for (const auto& technique : description.techniques)
         {
@@ -185,6 +686,58 @@ namespace
                 ValidateAnnotations(pass.annotations, itemCount, reflectedValueBytes);
             }
         }
+    }
+
+    std::size_t ReflectedParameterStorageBytes(
+        const CNA::Internal::Renderers::CompiledEffectParameterDescription& parameter,
+        std::size_t depth)
+    {
+        using Microsoft::Xna::Framework::Graphics::EffectParameterClass;
+
+        if (depth >= kMaximumReflectionDepth)
+        {
+            throw System::ArgumentException(
+                "The compiled effect parameter graph exceeds CNA's reflection limits.",
+                "effectCode");
+        }
+
+        std::size_t singleValueBytes = 0;
+        if (parameter.parameterClass == EffectParameterClass::Struct)
+        {
+            for (const auto& member : parameter.structureMembers)
+            {
+                const std::size_t memberBytes =
+                    ReflectedParameterStorageBytes(member, depth + 1);
+                if (memberBytes > kMaximumCompiledEffectBytes - singleValueBytes)
+                {
+                    throw System::ArgumentException(
+                        "The compiled effect structure storage exceeds CNA's safety limit.",
+                        "effectCode");
+                }
+                singleValueBytes += memberBytes;
+            }
+        }
+        else if (parameter.parameterClass == EffectParameterClass::Object)
+        {
+            // Effect Framework object values are indices into the native object table.
+            singleValueBytes = sizeof(std::uint32_t);
+        }
+        else
+        {
+            // MojoShader expands every numeric row to a complete float4 register, including
+            // scalar/vector structure members and array elements.
+            singleValueBytes = static_cast<std::size_t>(std::max(parameter.rowCount, 1)) * 16;
+        }
+
+        const std::size_t elements =
+            static_cast<std::size_t>(std::max(parameter.elementCount, 1));
+        if (singleValueBytes > 0 && elements > kMaximumCompiledEffectBytes / singleValueBytes)
+        {
+            throw System::ArgumentException(
+                "The compiled effect parameter storage exceeds CNA's safety limit.",
+                "effectCode");
+        }
+        return singleValueBytes * elements;
     }
 }
 
@@ -417,22 +970,15 @@ namespace Microsoft::Xna::Framework::Graphics
             std::size_t memberOffset = offset;
             for (const auto& member : desc.structureMembers)
             {
-                const std::size_t memberElements = static_cast<std::size_t>(
-                    std::max(member.elementCount, 1));
-                const std::size_t memberCells = static_cast<std::size_t>(
-                    std::max(member.rowCount, 1)) * static_cast<std::size_t>(
-                    std::max(member.columnCount, 1)) * memberElements;
-                const std::size_t memberBytes = memberCells <=
-                        std::numeric_limits<std::size_t>::max() / 4
-                    ? memberCells * 4 : 0;
+                const std::size_t memberBytes = ReflectedParameterStorageBytes(member);
                 parameter.members_->Add(build(member, memberOffset, memberBytes, true));
                 memberOffset += memberBytes;
             }
 
             if (includeArrayElements && desc.elementCount > 0)
             {
-                const std::size_t elementStride = static_cast<std::size_t>(
-                    std::max(desc.rowCount, 1)) * 16;
+                const std::size_t elementStride = size /
+                    static_cast<std::size_t>(desc.elementCount);
                 for (int i = 0; i < desc.elementCount; ++i)
                 {
                     auto elementDescription = desc;

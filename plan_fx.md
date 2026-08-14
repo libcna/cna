@@ -1,6 +1,6 @@
 # Compiled XNA Effect Bytecode Support Plan
 
-- Status: **In progress — FNA3D vertical slice implemented on `feature/fx`**
+- Status: **In progress — FNA3D vertical slice implemented and parser-hardened on `feature/fx`**
 - Planning baseline: `develop` at `a749fdce34a5825eb80a778b5db68e11da9358f8`
 - Target branch: `feature/fx`
 - Scope of this document: architecture, implementation checklist, and current delivery status
@@ -29,16 +29,34 @@ Delivered task groups:
 - canonical bounded `EffectReader`, replacement of the unsupported placeholder, and negative
   payload tests, plus an end-to-end ContentManager/XNB/render pixel test (`FX-040`–`FX-043`);
 - dedicated false-by-default capability gating for every non-FNA3D renderer and bounded common,
-  native-reflection, pass-state and sampler-state graphs (`FX-036`, partial `FX-050`).
+  native-reflection, pass-state and sampler-state graphs (`FX-036`, partial `FX-050`);
+- a checked compiled-Effect preflight for the complete reflected value/object/technique/pass graph,
+  including nested aggregate/storage sizing, bounded offsets and counts, object-record validation,
+  and a 64 MiB reflected-storage ceiling (partial `FX-050`);
+- a repository-managed patch for pinned MojoShader `6333f74dbd5644789a63e903816441b16c1e8b60`
+  that turns a missing shader-to-Effect parameter match into an ordinary parser error. CMake applies
+  the versioned patch automatically and idempotently for both normal FNA3D FetchContent checkouts
+  and explicit source overrides (`FX-030`, partial `FX-050`).
 
 The FNA3D state mapping has also been audited token-by-token against FNA's `Effect.cs`, including
 its historical blend-factor byte order, separate-alpha propagation rules, boolean interpretation,
-and the way anisotropic filter components collapse into the eight XNA aggregate filters. The
-targeted ASan/UBSan build executes all 31 FX/XNB/capability tests without an address-sanitizer
-failure. `FX-052` remains open because LeakSanitizer cannot operate under this managed environment's
-ptrace policy and the pinned upstream MojoShader itself reports known UBSan findings in float
-formatting and zero-length clone copies; these are recorded rather than misrepresented as a clean
-third-party sanitizer gate.
+and the way anisotropic filter components collapse into the eight XNA aggregate filters. A focused
+`BasicEffect.fxb` regression now reproduces the former missing-symbol assertion with seed
+`0x46584241534943`, iteration 121, and byte mutation `offset 25018 xor 0x04`; it is rejected with a
+normal MojoShader diagnostic. The deterministic malformed-input corpus covers 512 synthetic and
+128 stock-Effect mutations without per-case output or a flaky wall-clock assertion, while retaining
+the seed, iteration, size, and mutation description in failure traces.
+
+A fresh ASan/UBSan build executes all 58 FX/XNB/capability tests without an address-sanitizer or CNA
+undefined-behavior finding after MojoShader enum fields were made safe to inspect even when mutated
+bytes do not encode a valid C++ enum. `FX-052` remains open because LeakSanitizer cannot operate
+under this managed environment's ptrace policy and the pinned upstream MojoShader itself reports
+known UBSan findings in float formatting and zero-length clone copies; these are recorded rather
+than misrepresented as a clean third-party sanitizer gate. A broader affected debug run passes
+1,203 Effect, SpriteBatch, GraphicsDevice, primitive, and model tests. A build directory created
+from scratch fetched the exact pinned FNA3D and MojoShader revisions, applied only the managed
+MojoShader patch, built `CnaTests`, and passed the focused regression, corpus, and all 58 targeted
+tests; configuring the same checkout again confirmed that patch application is idempotent.
 
 Still open before the FNA3D slice can satisfy every aspirational exit criterion in this plan:
 
@@ -46,10 +64,12 @@ Still open before the FNA3D slice can satisfy every aspirational exit criterion 
   an independent normalized FNA oracle (`FX-004`, `FX-005`); the synthetic state-only fixture
   already supplies the remaining deterministic reflection/pass/render-state coverage without a
   proprietary compiler dependency;
-- broader sampler/texture conformance, fuzz harnesses, sanitizer/reset stress runs, performance
-  baselines, and full project regressions (`FX-023`, `FX-038`, `FX-050`–`FX-054`);
-- additional renderer implementations (`FX-060`–`FX-069`). Until each passes the shared contract,
-  its correct behavior is an explicit `NotSupportedException`, never a silent stock-shader fallback.
+- broader sampler/texture conformance, a reusable coverage-guided fuzz harness, sanitizer/reset
+  stress runs, performance baselines, and full project regressions (`FX-023`, `FX-038`, remaining
+  `FX-050`–`FX-054` work);
+- additional renderer implementations (`FX-060`–`FX-069`), including EasyGL/OpenGL/OpenGL ES
+  (`FX-062`) and Vulkan (`FX-064`–`FX-065`). Until each passes the shared contract, its correct
+  behavior is an explicit `NotSupportedException`, never a silent stock-shader fallback.
 
 ## 1. Executive conclusion
 

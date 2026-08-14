@@ -1,0 +1,114 @@
+--- a/mojoshader_effects.c
++++ b/mojoshader_effects.c
+@@ -289,13 +289,15 @@ static char *readstring(const uint8 *base,
+ 
+ static int findparameter(const MOJOSHADER_effectParam *params,
+                          const uint32 param_count,
+-                         const char *name)
++                         const char *name,
++                         ErrorList *errors)
+ {
+     int i;
+     for (i = 0; i < param_count; i++)
+-        if (strcmp(name, params[i].value.name) == 0)
++        if ((name != NULL) && (params[i].value.name != NULL) &&
++            (strcmp(name, params[i].value.name) == 0))
+             return i;
+-    assert(0 && "Parameter not found!");
++    errorlist_add(errors, NULL, 0, "Shader parameter not found in effect.");
+     return -1;
+ }
+ 
+@@ -734,7 +736,10 @@ static void readsmallobjects(const uint32 numsmallobjects,
+             {
+                 int par = findparameter(effect->params,
+                                         effect->param_count,
+-                                        pd->symbols[j].name);
++                                        pd->symbols[j].name,
++                                        errors);
++                if (par < 0)
++                    return;
+                 object->shader.params[j] = par;
+                 if (pd->symbols[j].register_set == MOJOSHADER_SYMREGSET_SAMPLER)
+                 {
+@@ -751,9 +756,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
+                 object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
+                 for (j = 0; j < pd->preshader->symbol_count; j++)
+                 {
+-                    object->shader.preshader_params[j] = findparameter(effect->params,
+-                                                                       effect->param_count,
+-                                                                       pd->preshader->symbols[j].name);
++                    int par = findparameter(effect->params,
++                                            effect->param_count,
++                                            pd->preshader->symbols[j].name,
++                                            errors);
++                    if (par < 0)
++                        return;
++                    object->shader.preshader_params[j] = par;
+                 } // for
+             } // if
+         } // else if
+@@ -822,10 +831,14 @@ static void readlargeobjects(const uint32 numlargeobjects,
+                 const char *array = readstring(*ptr, 0, m, d);
+                 object->shader.param_count = 1;
+                 object->shader.params = (uint32 *) m(sizeof (uint32), d);
+-                object->shader.params[0] = findparameter(effect->params,
+-                                                         effect->param_count,
+-                                                         array);
++                int par = findparameter(effect->params,
++                                        effect->param_count,
++                                        array,
++                                        errors);
+                 f((void *) array, d);
++                if (par < 0)
++                    return;
++                object->shader.params[0] = par;
+                 object->shader.preshader = MOJOSHADER_parsePreshader(*ptr + start, length,
+                                                                      m, f, d);
+                 // !!! FIXME: check for errors.
+@@ -833,9 +846,13 @@ static void readlargeobjects(const uint32 numlargeobjects,
+                 object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
+                 for (j = 0; j < object->shader.preshader->symbol_count; j++)
+                 {
+-                    object->shader.preshader_params[j] = findparameter(effect->params,
+-                                                                       effect->param_count,
+-                                                                       object->shader.preshader->symbols[j].name);
++                    int par = findparameter(effect->params,
++                                            effect->param_count,
++                                            object->shader.preshader->symbols[j].name,
++                                            errors);
++                    if (par < 0)
++                        return;
++                    object->shader.preshader_params[j] = par;
+                 } // for
+             } // if
+             else
+@@ -871,7 +888,10 @@ static void readlargeobjects(const uint32 numlargeobjects,
+                 {
+                     int par = findparameter(effect->params,
+                                             effect->param_count,
+-                                            pd->symbols[j].name);
++                                            pd->symbols[j].name,
++                                            errors);
++                    if (par < 0)
++                        return;
+                     object->shader.params[j] = par;
+                     if (pd->symbols[j].register_set == MOJOSHADER_SYMREGSET_SAMPLER)
+                     {
+@@ -888,9 +908,13 @@ static void readlargeobjects(const uint32 numlargeobjects,
+                     object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
+                     for (j = 0; j < pd->preshader->symbol_count; j++)
+                     {
+-                        object->shader.preshader_params[j] = findparameter(effect->params,
+-                                                                           effect->param_count,
+-                                                                           pd->preshader->symbols[j].name);
++                        int par = findparameter(effect->params,
++                                                effect->param_count,
++                                                pd->preshader->symbols[j].name,
++                                                errors);
++                        if (par < 0)
++                            return;
++                        object->shader.preshader_params[j] = par;
+                     } // for
+                 } // if
+             }

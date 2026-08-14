@@ -29,6 +29,7 @@
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <cstring>
 #include <fstream>
@@ -113,6 +114,49 @@ namespace
                                  nameOffset, semanticOffset, elementCount, 1, 1);
     }
 
+    std::uint32_t FloatBits(float value);
+
+    std::uint32_t AppendLightingStructType(std::vector<std::uint8_t>& bytes,
+                                           std::uint32_t nameOffset,
+                                           std::uint32_t intensityName,
+                                           std::uint32_t directionName,
+                                           std::uint32_t thresholdsName,
+                                           std::uint32_t empty)
+    {
+        const auto offset = static_cast<std::uint32_t>(bytes.size() - 8);
+        AppendUInt32(bytes, static_cast<std::uint32_t>(MOJOSHADER_SYMTYPE_VOID));
+        AppendUInt32(bytes, static_cast<std::uint32_t>(MOJOSHADER_SYMCLASS_STRUCT));
+        AppendUInt32(bytes, nameOffset);
+        AppendUInt32(bytes, empty); // semantic
+        AppendUInt32(bytes, 0); // elements
+        AppendUInt32(bytes, 3); // members
+
+        auto appendMember = [&](MOJOSHADER_symbolClass parameterClass,
+                                std::uint32_t memberName, std::uint32_t elements,
+                                std::uint32_t columns, std::uint32_t rows)
+        {
+            AppendUInt32(bytes, static_cast<std::uint32_t>(MOJOSHADER_SYMTYPE_FLOAT));
+            AppendUInt32(bytes, static_cast<std::uint32_t>(parameterClass));
+            AppendUInt32(bytes, memberName);
+            AppendUInt32(bytes, empty); // semantic
+            AppendUInt32(bytes, elements);
+            AppendUInt32(bytes, columns);
+            AppendUInt32(bytes, rows);
+        };
+        // The Effect Framework struct encoding stores the concrete element multiplicity for each
+        // member, including one for non-array members (unlike top-level numeric declarations,
+        // where zero means non-array).
+        appendMember(MOJOSHADER_SYMCLASS_SCALAR, intensityName, 1, 1, 1);
+        appendMember(MOJOSHADER_SYMCLASS_VECTOR, directionName, 1, 3, 1);
+        appendMember(MOJOSHADER_SYMCLASS_SCALAR, thresholdsName, 2, 1, 1);
+
+        // Struct defaults live immediately after the member metadata. MojoShader expands every
+        // member row to a float4 register while parsing this tight compiler representation.
+        for (const float value : {0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f})
+            AppendUInt32(bytes, FloatBits(value));
+        return offset;
+    }
+
     std::uint32_t AppendValueBits(std::vector<std::uint8_t>& bytes, std::uint32_t value)
     {
         const auto offset = static_cast<std::uint32_t>(bytes.size() - 8);
@@ -157,6 +201,10 @@ namespace
         const std::uint32_t tintName = AppendEffectString(bytes, "Tint");
         const std::uint32_t transformName = AppendEffectString(bytes, "Transform");
         const std::uint32_t weightsName = AppendEffectString(bytes, "Weights");
+        const std::uint32_t lightingName = AppendEffectString(bytes, "Lighting");
+        const std::uint32_t intensityName = AppendEffectString(bytes, "Intensity");
+        const std::uint32_t directionName = AppendEffectString(bytes, "Direction");
+        const std::uint32_t thresholdsName = AppendEffectString(bytes, "Thresholds");
         const std::uint32_t visibleName = AppendEffectString(bytes, "Visible");
         const std::uint32_t qualityName = AppendEffectString(bytes, "Quality");
         const std::uint32_t passTagName = AppendEffectString(bytes, "PassTag");
@@ -180,6 +228,8 @@ namespace
             transformName, empty, 0, 4, 4);
         const std::uint32_t weightsType =
             AppendScalarType(bytes, MOJOSHADER_SYMTYPE_FLOAT, weightsName, empty, 2);
+        const std::uint32_t lightingType = AppendLightingStructType(
+            bytes, lightingName, intensityName, directionName, thresholdsName, empty);
         const std::uint32_t visibleType =
             AppendScalarType(bytes, MOJOSHADER_SYMTYPE_BOOL, visibleName, empty);
         const std::uint32_t qualityType =
@@ -207,7 +257,7 @@ namespace
 
         const auto structureOffset = static_cast<std::uint32_t>(bytes.size() - 8);
         PatchUInt32(bytes, 4, structureOffset);
-        AppendUInt32(bytes, 4); // parameters
+        AppendUInt32(bytes, 5); // parameters
         AppendUInt32(bytes, 2); // techniques
         AppendUInt32(bytes, 0); // ignored legacy count
         AppendUInt32(bytes, 0); // objects
@@ -221,6 +271,11 @@ namespace
 
         AppendUInt32(bytes, tintType);
         AppendUInt32(bytes, tintValue);
+        AppendUInt32(bytes, 0); // flags
+        AppendUInt32(bytes, 0); // annotations
+
+        AppendUInt32(bytes, lightingType);
+        AppendUInt32(bytes, empty); // ignored for struct values; defaults follow type metadata
         AppendUInt32(bytes, 0); // flags
         AppendUInt32(bytes, 0); // annotations
 
@@ -318,6 +373,127 @@ namespace
         return {fileBytes.begin(), fileBytes.end()};
     }
 
+    struct DeterministicRng
+    {
+        std::uint64_t state;
+
+        std::uint32_t Next()
+        {
+            state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+            return static_cast<std::uint32_t>(state >> 33);
+        }
+
+        std::uint32_t Below(std::uint32_t bound)
+        {
+            return bound == 0 ? 0 : Next() % bound;
+        }
+    };
+
+    std::string MutateEffectBytes(DeterministicRng& random,
+                                  std::vector<std::uint8_t>& bytes)
+    {
+        if (bytes.empty()) return "seed is empty";
+        std::ostringstream description;
+        const std::uint32_t mutationCount = 1 + random.Below(5);
+        for (std::uint32_t mutation = 0; mutation < mutationCount; ++mutation)
+        {
+            if (mutation > 0) description << "; ";
+            switch (random.Below(5))
+            {
+                case 0:
+                {
+                    const std::uint32_t offset =
+                        random.Below(static_cast<std::uint32_t>(bytes.size()));
+                    const std::uint32_t bit = random.Below(8);
+                    bytes[offset] ^= static_cast<std::uint8_t>(1u << bit);
+                    description << "flip byte " << offset << " bit " << bit;
+                    break;
+                }
+                case 1:
+                {
+                    const std::uint32_t offset =
+                        random.Below(static_cast<std::uint32_t>(bytes.size()));
+                    const std::uint32_t value = random.Below(256);
+                    bytes[offset] = static_cast<std::uint8_t>(value);
+                    description << "replace byte " << offset << " with " << value;
+                    break;
+                }
+                case 2:
+                {
+                    if (bytes.size() > 1)
+                    {
+                        const std::uint32_t length = 1 + random.Below(
+                            static_cast<std::uint32_t>(bytes.size() - 1));
+                        bytes.resize(length);
+                        description << "truncate to " << length << " bytes";
+                    }
+                    else
+                    {
+                        description << "retain one-byte input";
+                    }
+                    break;
+                }
+                case 3:
+                {
+                    const std::uint32_t offset = random.Below(
+                        static_cast<std::uint32_t>(bytes.size() + 1));
+                    const std::uint32_t value = random.Below(256);
+                    bytes.insert(bytes.begin() + offset, static_cast<std::uint8_t>(value));
+                    description << "insert " << value << " at byte " << offset;
+                    break;
+                }
+                case 4:
+                {
+                    const std::size_t offset = random.Below(
+                        static_cast<std::uint32_t>(bytes.size()));
+                    const std::size_t writable = std::min<std::size_t>(4, bytes.size() - offset);
+                    std::fill_n(bytes.begin() + offset, writable, 0xFF);
+                    description << "fill " << writable << " byte(s) with 255 at byte " << offset;
+                    break;
+                }
+                default: break;
+            }
+        }
+        return description.str();
+    }
+
+    void RunEffectMutationCorpus(GraphicsDevice& device,
+                                 const std::vector<std::uint8_t>& seed,
+                                 std::uint64_t randomSeed, int iterations)
+    {
+        DeterministicRng random{randomSeed};
+        int completed = 0;
+        int cleanlyRejected = 0;
+        for (int iteration = 0; iteration < iterations; ++iteration)
+        {
+            auto mutated = seed;
+            const std::string mutation = MutateEffectBytes(random, mutated);
+            std::ostringstream context;
+            context << "seed=0x" << std::hex << randomSeed << std::dec
+                    << " iteration=" << iteration << " size=" << mutated.size()
+                    << " mutation=" << mutation;
+            SCOPED_TRACE(context.str());
+            try
+            {
+                Effect effect(device, mutated);
+                ++completed;
+            }
+            catch (const std::bad_alloc&)
+            {
+                ADD_FAILURE() << "allocation bomb escaped the compiled-effect limits";
+            }
+            catch (const std::exception&)
+            {
+                ++cleanlyRejected;
+            }
+            catch (...)
+            {
+                ADD_FAILURE() << "non-standard exception escaped malformed Effect parsing";
+            }
+        }
+        EXPECT_EQ(completed + cleanlyRejected, iterations);
+    }
+
     class ScratchContentRoot
     {
     public:
@@ -384,7 +560,7 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureReflectsAnnotationsTechniquesAndEx
     GraphicsDevice device;
     Effect effect(device, BuildSyntheticConformanceEffect({}));
 
-    ASSERT_EQ(effect.getParametersProperty().getCountProperty(), 4);
+    ASSERT_EQ(effect.getParametersProperty().getCountProperty(), 5);
     auto* gain = effect.getParametersProperty()["Gain"];
     ASSERT_NE(gain, nullptr);
     EXPECT_EQ(gain->getSemanticProperty(), "SCALAR");
@@ -416,6 +592,31 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureReflectsAnnotationsTechniquesAndEx
     EXPECT_FLOAT_EQ(weightValues[1], 0.8f);
     weights->getElementsProperty()[1].SetValue(0.6f);
     EXPECT_FLOAT_EQ(weights->GetValueSingleArray(2)[1], 0.6f);
+
+    auto* lighting = effect.getParametersProperty()["Lighting"];
+    ASSERT_NE(lighting, nullptr);
+    EXPECT_EQ(lighting->getParameterClassProperty(),
+              Microsoft::Xna::Framework::Graphics::EffectParameterClass::Struct);
+    EXPECT_EQ(lighting->getParameterTypeProperty(),
+              Microsoft::Xna::Framework::Graphics::EffectParameterType::Void);
+    EXPECT_EQ(lighting->getRowCountProperty(), 1);
+    EXPECT_EQ(lighting->getColumnCountProperty(), 16);
+    auto& lightingMembers = lighting->getStructureMembersProperty();
+    ASSERT_EQ(lightingMembers.getCountProperty(), 3);
+    EXPECT_FLOAT_EQ(lightingMembers["Intensity"]->GetValueSingle(), 0.5f);
+    const auto direction = lightingMembers["Direction"]->GetValueVector3();
+    EXPECT_FLOAT_EQ(direction.X, 0.6f);
+    EXPECT_FLOAT_EQ(direction.Y, 0.7f);
+    EXPECT_FLOAT_EQ(direction.Z, 0.8f);
+    auto* thresholds = lightingMembers["Thresholds"];
+    ASSERT_NE(thresholds, nullptr);
+    ASSERT_EQ(thresholds->getElementsProperty().getCountProperty(), 2);
+    const auto thresholdValues = thresholds->GetValueSingleArray(2);
+    ASSERT_EQ(thresholdValues.size(), 2u);
+    EXPECT_FLOAT_EQ(thresholdValues[0], 0.9f);
+    EXPECT_FLOAT_EQ(thresholdValues[1], 1.0f);
+    thresholds->getElementsProperty()[1].SetValue(1.25f);
+    EXPECT_FLOAT_EQ(thresholds->GetValueSingleArray(2)[1], 1.25f);
 
     auto& techniques = effect.getTechniquesProperty();
     ASSERT_EQ(techniques.getCountProperty(), 2);
@@ -552,6 +753,44 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureRejectsUnknownRenderStateTransacti
     catch (const std::runtime_error& error)
     {
         EXPECT_NE(std::string(error.what()).find("unsupported render state 177"),
+                  std::string::npos);
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, DeterministicMutationCorpusCompletesOrFailsCleanly)
+{
+    GraphicsDevice device;
+    RunEffectMutationCorpus(device, BuildSyntheticConformanceEffect({}),
+                            0x465853594E5448ULL, 512);
+    RunEffectMutationCorpus(device, LoadStockEffect("BasicEffect.fxb"),
+                            0x46584241534943ULL, 128);
+}
+
+TEST(Fna3dCompiledEffectTest, MissingShaderParameterSymbolIsRejectedNormally)
+{
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    auto bytes = LoadStockEffect("BasicEffect.fxb");
+    constexpr std::size_t mutationOffset = 25018;
+    ASSERT_GT(bytes.size(), mutationOffset);
+
+    // This is BasicEffect corpus seed 0x46584241534943, iteration 121: changing this
+    // shader-symbol byte makes it no longer match any reflected Effect parameter.
+    bytes[mutationOffset] ^= static_cast<std::uint8_t>(1u << 4);
+    try
+    {
+        Effect effect(device, bytes);
+        FAIL() << "a shader symbol without a matching Effect parameter must be rejected";
+    }
+    catch (const std::bad_alloc&)
+    {
+        FAIL() << "the malformed Effect escaped the parser's allocation limits";
+    }
+    catch (const std::runtime_error& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("Shader parameter not found in effect."),
                   std::string::npos);
     }
 }

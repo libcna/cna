@@ -4,7 +4,9 @@
 # repository at a pinned tag, in the same spirit as the SOKOL/BGFX/WEBGPU integrations. FNA3D is a
 # real multi-file C library (not a single-header drop-in), so unlike sokol this actually builds a
 # static archive; it carries MojoShader as a git submodule, which the fetch must recurse into
-# because FNA3D's own CMakeLists.txt compiles MojoShader's translation units directly.
+# because FNA3D's own CMakeLists.txt compiles MojoShader's translation units directly. CNA carries
+# one narrow parser-robustness patch for that exact submodule revision; the fetch/configure path
+# applies it automatically and idempotently.
 #
 # FNA3D's only dependency is SDL 3.2.0 or newer -- exactly the SDL3 CNA already vendors -- so the
 # fetched project resolves SDL3::SDL3 from CNA's own already-configured imported target
@@ -33,6 +35,11 @@ set(CNA_FNA3D_GIT_TAG "3240147"
 function(cna_configure_fna3d)
     include(FetchContent)
 
+    set(_cna_fna3d_mojoshader_patch
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-effect-parameter-lookup.patch")
+    set(_cna_fna3d_mojoshader_patch_script
+        "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
+
     if(NOT TARGET SDL3::SDL3)
         message(FATAL_ERROR
             "CNA: the FNA3D renderer needs SDL3::SDL3 before cna_configure_fna3d() runs -- FNA3D "
@@ -46,6 +53,9 @@ function(cna_configure_fna3d)
         GIT_SHALLOW    FALSE
         GIT_PROGRESS   TRUE
         GIT_SUBMODULES_RECURSE TRUE
+        PATCH_COMMAND  "${CMAKE_COMMAND}"
+                       "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch}"
+                       -P "${_cna_fna3d_mojoshader_patch_script}"
     )
 
     # FNA3D defaults to a shared library. CNA links every renderer's dependencies statically into
@@ -57,6 +67,21 @@ function(cna_configure_fna3d)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(fna3d)
     set(BUILD_SHARED_LIBS "${_cna_fna3d_saved_shared}" CACHE BOOL "" FORCE)
+
+    # A FETCHCONTENT_SOURCE_DIR_FNA3D override bypasses FetchContent's download/update/patch
+    # steps. Re-run the idempotent script explicitly so an offline/local checkout receives the
+    # same required parser fix before any configured FNA3D target is compiled.
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}"
+                "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch}"
+                -P "${_cna_fna3d_mojoshader_patch_script}"
+        WORKING_DIRECTORY "${fna3d_SOURCE_DIR}"
+        RESULT_VARIABLE _cna_fna3d_mojoshader_patch_result)
+    if(NOT _cna_fna3d_mojoshader_patch_result EQUAL 0)
+        message(FATAL_ERROR
+            "CNA: failed to ensure the required MojoShader Effect parser patch is applied in "
+            "${fna3d_SOURCE_DIR}.")
+    endif()
 
     if(NOT TARGET FNA3D)
         message(FATAL_ERROR
