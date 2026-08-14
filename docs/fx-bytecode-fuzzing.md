@@ -67,11 +67,13 @@ The seeds are the six provenance-tracked stock binaries in `modules/renderers/fn
 techniques and preshaders, which is the structure a mutation-based campaign needs to start from.
 
 A campaign is not the only mutation coverage. `Fna3dCompiledEffectTests.cpp` runs a deterministic,
-seeded corpus on every build — 512 mutations of the synthetic fixture and 128 of a stock binary —
-through exactly the same construction/reflection/clone/apply path, and fails on an escaped
-`std::bad_alloc`, a non-`std::exception` throw, or a crash. It keeps the seed, iteration, size and
-mutation description in every failure trace, so a finding there is reproducible without the corpus
-directory.
+seeded corpus on every build — 1,024 mutations of the state-only synthetic fixture, 192 of a
+shader-bearing one that reaches the object table, constant table and preshader selection path, and
+192 of a real stock binary — through exactly the same construction/reflection/clone/apply path. It
+fails on an escaped `std::bad_alloc`, a non-`std::exception` throw, or a crash, and keeps the seed,
+iteration, size and mutation description in every failure trace, so a finding there is reproducible
+without the corpus directory. Its mutator includes the whole-aligned-word overwrite that found most
+of the parser crashes above, and the whole thing costs about 130 ms.
 
 ## Mutation campaign
 

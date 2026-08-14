@@ -135,7 +135,7 @@ namespace
         for (std::uint32_t mutation = 0; mutation < mutationCount; ++mutation)
         {
             if (mutation > 0) description << "; ";
-            switch (random.Below(5))
+            switch (random.Below(6))
             {
                 case 0:
                 {
@@ -186,6 +186,31 @@ namespace
                     const std::size_t writable = std::min<std::size_t>(4, bytes.size() - offset);
                     std::fill_n(bytes.begin() + offset, writable, 0xFF);
                     description << "fill " << writable << " byte(s) with 255 at byte " << offset;
+                    break;
+                }
+                case 5:
+                {
+                    // Whole aligned words are where the Effect Framework keeps its offsets and
+                    // counts, so overwriting one reaches the bounds checks that byte flips
+                    // almost never do. This is the mutation that found most of the parser
+                    // crashes the managed MojoShader patch now fixes.
+                    if (bytes.size() >= 4)
+                    {
+                        const std::uint32_t word = random.Below(
+                            static_cast<std::uint32_t>(bytes.size() / 4));
+                        const std::uint32_t value =
+                            random.Below(4) == 0 ? 0xFFFFFFFFu : random.Next();
+                        for (std::size_t byte = 0; byte < 4; ++byte)
+                        {
+                            bytes[word * 4 + byte] =
+                                static_cast<std::uint8_t>(value >> (byte * 8));
+                        }
+                        description << "set word " << word << " to " << value;
+                    }
+                    else
+                    {
+                        description << "retain short input";
+                    }
                     break;
                 }
                 default: break;
@@ -639,10 +664,19 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureRejectsUnknownRenderStateTransacti
 TEST(Fna3dCompiledEffectTest, DeterministicMutationCorpusCompletesOrFailsCleanly)
 {
     GraphicsDevice device;
+    // Iteration counts are chosen to keep this well under a second while still reaching the
+    // parser paths the FX-051 campaign found crashes in; the campaign itself runs far longer
+    // out of tree (docs/fx-bytecode-fuzzing.md).
     RunEffectMutationCorpus(device, BuildSyntheticConformanceEffect({}),
-                            0x465853594E5448ULL, 512);
+                            0x465853594E5448ULL, 1024);
     RunEffectMutationCorpus(device, LoadStockEffect("BasicEffect.fxb"),
-                            0x46584241534943ULL, 128);
+                            0x46584241534943ULL, 192);
+    // A shader-bearing fixture reaches the object table, the constant table and the preshader
+    // selection path, none of which the state-only fixture can exercise.
+    SyntheticEffectOptions withSampler;
+    withSampler.includeSampler = true;
+    RunEffectMutationCorpus(device, BuildSyntheticEffect(withSampler),
+                            0x4658534D504C52ULL, 192);
 }
 
 TEST(Fna3dCompiledEffectTest, MissingShaderParameterSymbolIsRejectedNormally)
