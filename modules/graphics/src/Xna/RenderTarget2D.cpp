@@ -37,46 +37,26 @@ namespace Microsoft::Xna::Framework::Graphics
         return static_cast<int>(result >> 1);
     }
 
-#ifdef CNA_RENDERER_SKIA
-    // SKIA-142: the formats FNA itself reports renderable (see the surface-format matrix's
-    // "FNA/Skia RT decision" column) that this raster renderer can now genuinely render into --
-    // Skia's raster SkSurface has no hardware format restriction, but promoting only these keeps
-    // parity with real XNA/FNA renderability, not "whatever Skia happens to allow". Every other
-    // format (packed 16-bit colours, all compressed formats, SNORM, Alpha8, ColorBgraEXT) is a
-    // real non-renderable format on actual XNA/FNA hardware and stays refused regardless.
-    static bool IsRenderableSkiaFormatEXT(SurfaceFormat format) noexcept
-    {
-        return format == SurfaceFormat::Color
-            || format == SurfaceFormat::Rgba1010102
-            || format == SurfaceFormat::Rg32
-            || format == SurfaceFormat::Rgba64
-            || format == SurfaceFormat::Single
-            || format == SurfaceFormat::Vector2
-            || format == SurfaceFormat::Vector4
-            || format == SurfaceFormat::HalfSingle
-            || format == SurfaceFormat::HalfVector2
-            || format == SurfaceFormat::HalfVector4
-            || format == SurfaceFormat::HdrBlendable
-            || format == SurfaceFormat::ColorSrgbEXT
-            || format == SurfaceFormat::ByteEXT
-            || format == SurfaceFormat::UShortEXT;
-    }
-#endif
-
     static std::shared_ptr<IRenderTargetRenderer> CreateValidatedRenderTargetRenderer(
         GraphicsDevice& device, int width, int height, SurfaceFormat format,
         DepthFormat depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-#ifdef CNA_RENDERER_SKIA
-        if (!IsRenderableSkiaFormatEXT(format))
+        // plan_runtimerenderer.md design decision 9: renderability is the renderer's own question.
+        // A renderer that answers Defer accepts the framework's rule, which is what every renderer
+        // except SKIA did when this was an #ifdef block.
+        switch (device.GetRenderer().ClassifyRenderTargetFormatEXT(static_cast<int>(format)))
         {
-            throw System::NotSupportedException(
-                "Skia RenderTarget2D: this SurfaceFormat is not renderable (matches FNA "
-                "hardware renderability, not Skia's own raster capability).");
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                break;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+                throw System::NotSupportedException(
+                    "RenderTarget2D: this SurfaceFormat is not renderable on the active renderer "
+                    "(matches real XNA/FNA hardware renderability, not the backing library's own "
+                    "raster capability).");
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                Texture::ValidateFormat(format);
+                break;
         }
-#else
-        Texture::ValidateFormat(format);
-#endif
         // A renderer with no real RenderTarget2D storage (or that refused this particular
         // request, e.g. OpenGL1 without GL_ARB_framebuffer_object) returns nullptr here.
         // Construction is deliberately allowed to succeed anyway -- Texture3D/TextureCube

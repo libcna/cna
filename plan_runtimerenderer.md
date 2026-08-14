@@ -563,25 +563,25 @@ Worth doing on its own merits. After this phase, `modules/graphics/src` should c
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P3-1 | ⬜ | Add `IGraphicsRenderer::GetMaxTextureSizeForProfileEXT(int profile)` — default: no ceiling (`INT_MAX`). |
-| RTR-P3-2 | ⬜ | `DirectX9Renderer` overrides it with the real `D9-100` table currently in `D3D9ProfileCapabilities.hpp`. |
-| RTR-P3-3 | ⬜ | `Texture2D.cpp` — replace both `#ifdef CNA_RENDERER_DIRECTX9` `ValidateTextureSizeForProfileEXT` call sites with the virtual. |
-| RTR-P3-4 | ⬜ | `Texture3D.cpp` — same conversion (3 sites). |
-| RTR-P3-5 | ⬜ | `TextureCube.cpp` — same conversion (3 sites). |
-| RTR-P3-6 | ⬜ | `GraphicsDevice.cpp` — same conversion for the `MaxRenderTargets` Reach ceiling (`:2922`). |
-| RTR-P3-7 | ⬜ | Add `IGraphicsRenderer::IsProfileSupportedEXT(int profile)` — default `true` (the honest current answer for 45 renderers). |
-| RTR-P3-8 | ⬜ | `GraphicsAdapter::IsProfileSupported()` — route through the virtual, delete the `#ifdef`. |
-| RTR-P3-9 | ⬜ | Add `IGraphicsRenderer::QueryRenderTargetFormatEXT(...)` / `QueryBackBufferFormatEXT(...)` — defaults preserve the current fall-back-to-`Color` stub behaviour. |
-| RTR-P3-10 | ⬜ | `GraphicsAdapter::QueryRenderTargetFormat()` / `QueryBackBufferFormat()` — route through the virtuals, delete both `#ifdef`s. |
-| RTR-P3-11 | ⬜ | Add `IGraphicsRenderer::IsSurfaceFormatSupportedEXT(int format)` and `IsColorTransferFormatEXT(int format)` — defaults are the current non-Skia behaviour. |
-| RTR-P3-12 | ⬜ | `SkiaRenderer` overrides all three format predicates with its real promoted-format table. |
-| RTR-P3-13 | ⬜ | `Texture2D.cpp` — replace the three `#ifdef CNA_RENDERER_SKIA` blocks (`ValidateTexture2DFormatEXT`, the `Color*` transfer predicate, `IsCompressedTransferFormatEXT`). |
-| RTR-P3-14 | ⬜ | `RenderTarget2D.cpp` — replace both `#ifdef CNA_RENDERER_SKIA` blocks. |
-| RTR-P3-15 | ⬜ | `GDI` multisample write-back: `GraphicsDevice::SetPresentationParameters()` and `createRenderer()` currently special-case `GDI`. Generalize to "always echo `GetMultiSampleCount()` back" — verify no other renderer regresses, since every other one already returns what it was given. |
-| RTR-P3-16 | ⬜ | `GraphicsAdapter.cpp` — drop the now-unused `D3D9FormatMapping.hpp`/`D3D9ProfileCapabilities.hpp` includes from the XNA layer. |
-| RTR-P3-17 | ⬜ | Verification: a test asserts `grep -c CNA_RENDERER_ modules/graphics/src` is **0**. |
-| RTR-P3-18 | ⬜ | Re-run the D3D9 divergence suite (`docs/d3d9-divergence-report.md`) and the Skia 2D oracle diff (`scripts/run-skia-2d-oracle-diff.sh`) — behaviour must be unchanged, this is a pure relocation. |
-| RTR-P3-19 | ⬜ | **Phase gate.** `DIRECTX9` (Wine), `SKIA`, `GDI` (Wine) and `OPENGLES3` builds all green with their existing suites. |
+| RTR-P3-1 | ✅ | Add `IGraphicsRenderer::GetMaxTextureSizeForProfileEXT(int profile)` — default: no ceiling (`INT_MAX`). |
+| RTR-P3-2 | ✅ | `DirectX9Renderer` overrides it with the real `D9-100` table currently in `D3D9ProfileCapabilities.hpp`. |
+| RTR-P3-3 | ✅ | `Texture2D.cpp` — replace both `#ifdef CNA_RENDERER_DIRECTX9` `ValidateTextureSizeForProfileEXT` call sites with the virtual. |
+| RTR-P3-4 | ✅ | `Texture3D.cpp` — same conversion (3 sites). |
+| RTR-P3-5 | ✅ | `TextureCube.cpp` — same conversion (3 sites). |
+| RTR-P3-6 | ✅ | `GraphicsDevice.cpp` — same conversion for the `MaxRenderTargets` Reach ceiling (`:2922`). |
+| RTR-P3-7 | ✅ | Add `IGraphicsRenderer::IsProfileSupportedEXT(int profile)` — default `true` (the honest current answer for 45 renderers). |
+| RTR-P3-8 | ✅ | `GraphicsAdapter::IsProfileSupported()` — route through the virtual, delete the `#ifdef`. |
+| RTR-P3-9 | ✅ | Add `IGraphicsRenderer::QueryRenderTargetFormatEXT(...)` / `QueryBackBufferFormatEXT(...)` — defaults preserve the current fall-back-to-`Color` stub behaviour. |
+| RTR-P3-10 | ✅ | `GraphicsAdapter::QueryRenderTargetFormat()` / `QueryBackBufferFormat()` — route through the virtuals, delete both `#ifdef`s. |
+| RTR-P3-11 | ✅ | Add `IGraphicsRenderer::IsSurfaceFormatSupportedEXT(int format)` and `IsColorTransferFormatEXT(int format)` — defaults are the current non-Skia behaviour. |
+| RTR-P3-12 | ✅ | `SkiaRenderer` overrides all three format predicates with its real promoted-format table. |
+| RTR-P3-13 | ✅ | `Texture2D.cpp` — replace the three `#ifdef CNA_RENDERER_SKIA` blocks (`ValidateTexture2DFormatEXT`, the `Color*` transfer predicate, `IsCompressedTransferFormatEXT`). |
+| RTR-P3-14 | ✅ | `RenderTarget2D.cpp` — replace both `#ifdef CNA_RENDERER_SKIA` blocks. |
+| RTR-P3-15 | ✅ | `GDI` multisample write-back: `GraphicsDevice::SetPresentationParameters()` and `createRenderer()` currently special-case `GDI`. Generalize to "always echo `GetMultiSampleCount()` back" — verify no other renderer regresses, since every other one already returns what it was given. |
+| RTR-P3-16 | ✅ | `GraphicsAdapter.cpp` — drop the now-unused `D3D9FormatMapping.hpp`/`D3D9ProfileCapabilities.hpp` includes from the XNA layer. |
+| RTR-P3-17 | ✅ | Verification: a test asserts `grep -c CNA_RENDERER_ modules/graphics/src` is **0**. |
+| RTR-P3-18 | 🟨 | Re-run the D3D9 divergence suite (`docs/d3d9-divergence-report.md`) and the Skia 2D oracle diff (`scripts/run-skia-2d-oracle-diff.sh`) — behaviour must be unchanged, this is a pure relocation. |
+| RTR-P3-19 | ✅ | **Phase gate.** `DIRECTX9` (Wine), `SKIA`, `GDI` (Wine) and `OPENGLES3` builds all green with their existing suites. |
 
 ---
 

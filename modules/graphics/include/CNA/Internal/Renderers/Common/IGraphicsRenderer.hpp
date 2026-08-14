@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1319,6 +1320,27 @@ namespace CNA::Internal::Renderers
                static_cast<std::size_t>(stream.strideInBytes);
     }
 
+    /**
+     * @brief A renderer's answer about a surface format, or a deferral to the framework's own rule.
+     *
+     * plan_runtimerenderer.md design decision 9. Renderer-specific format behaviour used to live as
+     * #ifdef blocks inside the XNA layer, where the #else branch carried the renderer-agnostic
+     * rule. Moving those behind a virtual has to preserve that structure exactly: a renderer either
+     * has a real, renderer-specific answer, or it defers -- it must never be forced to restate the
+     * framework's rule, because a wrong restatement silently narrows a public API.
+     */
+    enum class RendererFormatVerdict
+    {
+        /** @brief This renderer has no renderer-specific answer; the framework's own rule applies. */
+        Defer,
+
+        /** @brief This renderer genuinely supports the format. */
+        Supported,
+
+        /** @brief This renderer genuinely does not support the format. */
+        Unsupported
+    };
+
     class IGraphicsRenderer
     {
     public:
@@ -1389,6 +1411,25 @@ namespace CNA::Internal::Renderers
         {
             return requestedFormat;
         }
+        /**
+         * @brief Maps a requested MSAA sample count to the count this renderer actually applied.
+         *
+         * plan_runtimerenderer.md design decision 9. The identity default is deliberate and is
+         * exactly what every renderer except GDI did when this was an #ifdef CNA_RENDERER_GDI block
+         * in the XNA layer: PresentationParameters keeps echoing back what the game asked for.
+         * Only a renderer that clamps the request at construction time (GDI, which supports one
+         * real optional mode) needs to correct that, and it must not be generalized to "always
+         * report GetMultiSampleCount()" -- most renderers leave that at its 0 default, so doing so
+         * would report "no MSAA" for every renderer that in fact honoured the request.
+         *
+         * @param requestedMultiSampleCount The count the game asked for.
+         * @return The count actually in effect.
+         */
+        [[nodiscard]] virtual int GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const
+        {
+            return requestedMultiSampleCount;
+        }
+
         /** @brief Depth/stencil counterpart of GetAppliedBackBufferFormatEXT(). */
         [[nodiscard]] virtual int GetAppliedDepthStencilFormatEXT(int requestedFormat) const
         {
@@ -1396,6 +1437,147 @@ namespace CNA::Internal::Renderers
         }
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
+
+        // --- GraphicsProfile ceilings (plan_runtimerenderer.md design decision 9) -------------
+        //
+        // XNA's GraphicsProfile.Reach/HiDef carry real, enforced-at-creation-time ceilings. Only a
+        // renderer with a genuine capability structure to consult (D3D9's D3DCAPS9) can answer them
+        // honestly; the other 45 have no such structure, and this project refuses to substitute a
+        // hardcoded table pretending to be a capability query. The defaults below are therefore
+        // "no ceiling" -- exactly the behaviour every non-D3D9 renderer had when these lived as
+        // #ifdef CNA_RENDERER_DIRECTX9 blocks inside the XNA layer.
+
+        /**
+         * @brief Largest texture edge length the given GraphicsProfile permits.
+         *
+         * A profile CEILING, not a hardware query: even where the device could allocate more, a
+         * Reach-profile game is restricted to the profile's limit, which is what XNA's portability
+         * guarantee means.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxTextureSizeForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        /**
+         * @brief Largest cube-map edge length the given GraphicsProfile permits.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxCubeSizeForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        /**
+         * @brief Largest volume-texture extent the given GraphicsProfile permits.
+         *
+         * Zero has a distinct meaning here: the profile does not support volume (3D) textures at
+         * all, which is genuinely the case for GraphicsProfile.Reach on D3D9 -- not merely a small
+         * size ceiling.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum extent, 0 for "no volume textures at all", or
+         *         std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxVolumeExtentForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        /**
+         * @brief Largest number of simultaneous render targets the given GraphicsProfile permits.
+         *
+         * Distinct from XNA's own general 4-target ceiling (which GraphicsDevice enforces for every
+         * renderer) and from any hardware cap the renderer enforces separately.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum count, or std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxRenderTargetsForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        // --- Surface-format boundaries (plan_runtimerenderer.md design decision 9) -------------
+
+        /**
+         * @brief Whether a Texture2D may be created with the given surface format.
+         *
+         * Tri-state on purpose. The framework already has a renderer-agnostic rule for this
+         * (Texture::ValidateFormat), and 45 of the 46 renderers are content with it -- so the
+         * default is Defer, meaning "the framework's own rule applies". Only a renderer that
+         * genuinely stores each format in its own native layout (SKIA) answers Supported /
+         * Unsupported. A plain bool would have forced every other renderer to restate the
+         * framework rule, and getting that restatement wrong would silently narrow a public API.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether a RenderTarget2D may be created with the given surface format.
+         *
+         * Deliberately separate from ClassifySurfaceFormatEXT: renderability is a strictly narrower
+         * question than storability. SKIA's raster surface has no hardware format restriction at
+         * all, yet it still refuses the formats real XNA/FNA hardware cannot render into, because
+         * parity with XNA is the goal rather than "whatever the backing library happens to allow".
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether GetData/SetData with a Color-shaped element is meaningful for a format.
+         *
+         * Same tri-state reasoning as ClassifySurfaceFormatEXT. The framework rule here is "any
+         * format whose texel is a multiple of four bytes", which is a route real code depends on
+         * (MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it). SKIA narrows it to
+         * the formats that are genuinely 32-bit RGBA-shaped, because it stores the others in their
+         * own layouts and a Color* transfer would read the wrong bits.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether a format is a block-compressed format this renderer transfers as blocks.
+         *
+         * The default is false for every format: renderers that do not store compressed textures
+         * natively never take the compressed transfer path.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true when the format transfers as compressed blocks rather than pixels.
+         */
+        [[nodiscard]] virtual bool IsCompressedTransferFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return false;
+        }
+
         /// Converts a point from SDL window-coordinate space to logical (virtual) game
         /// coordinates. A renderer whose drawable pixel size differs from SDL_GetWindowSize()
         /// must account for that density internally. Returns true on success. Default: no-op.

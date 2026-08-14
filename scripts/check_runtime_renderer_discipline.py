@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Runtime-dispatch discipline gate (plan_runtimerenderer.md RTR-P1-6).
 
-Renderer selection leaks into the XNA layer as `#ifdef CNA_RENDERER_<X>` blocks. Phase P1 removed
-every window-creation one from GraphicsDevice.cpp by routing those decisions through
-GraphicsRendererDescriptor instead; phase P3 removes the rest by moving them behind
-IGraphicsRenderer virtuals.
+Renderer selection used to leak into the XNA layer as `#ifdef CNA_RENDERER_<X>` blocks. Phase P1
+removed every window-creation one by routing those decisions through GraphicsRendererDescriptor;
+phase P3 removed the rest, behind IGraphicsRenderer virtuals (queries that have a device) and
+GraphicsRendererDescriptor::adapterQueries hooks (GraphicsAdapter queries, which run before one
+exists). modules/graphics/src is now free of them entirely.
 
-This check pins that progress so it cannot silently regress: a new `#ifdef CNA_RENDERER_*` in
-modules/graphics/src fails here unless it is on the explicit, shrinking allowlist below. The
-allowlist is expected to reach zero at the end of P3, at which point the ALLOWED table should be
-emptied rather than extended.
+This check pins that: any `CNA_RENDERER_*` reappearing in modules/graphics/src fails here. The
+ALLOWED table is empty and is meant to stay that way -- a renderer-specific behaviour belongs
+behind a virtual or a hook, not behind the preprocessor.
 
 Also verifies the complementary invariant: every renderer family owns exactly one descriptor
 translation unit, so no family can be added without its pre-construction contract.
@@ -28,13 +28,10 @@ RENDERERS = os.path.join(REPO, "modules", "renderers")
 # that removes each. Every entry here is a known debt, not an accepted pattern.
 #   file (repo-relative) -> (max occurrences, removing task)
 ALLOWED = {
-    # 4 live #ifdefs (2 GDI, 2 DIRECTX9) plus one prose mention of DIRECTX9 in a comment.
-    "modules/graphics/src/Xna/GraphicsDevice.cpp":   (5, "RTR-P3-6 / RTR-P3-15"),
-    "modules/graphics/src/Xna/Texture2D.cpp":        (9, "RTR-P3-3 / RTR-P3-13"),
-    "modules/graphics/src/Xna/Texture3D.cpp":        (4, "RTR-P3-4"),
-    "modules/graphics/src/Xna/TextureCube.cpp":      (4, "RTR-P3-5"),
-    "modules/graphics/src/Xna/GraphicsAdapter.cpp":  (4, "RTR-P3-8 / RTR-P3-10"),
-    "modules/graphics/src/Xna/RenderTarget2D.cpp":   (2, "RTR-P3-14"),
+    # Empty as of RTR-P3: every renderer-specific behaviour in the XNA layer now goes through an
+    # IGraphicsRenderer virtual (texture/render-target queries, which have a device) or a
+    # GraphicsRendererDescriptor adapter hook (GraphicsAdapter queries, which run before one
+    # exists). Do not add entries here -- add a virtual or a hook instead.
 }
 
 # Window creation is fully descriptor-driven as of P1: none of these may reappear in the XNA layer.
@@ -108,10 +105,8 @@ def main():
             print(f"  - {failure}\n", file=sys.stderr)
         return 1
 
-    remaining = sum(budget for budget, _ in ALLOWED.values())
     print(f"OK: {family_count} renderer families each own one descriptor unit; "
-          f"no window-creation renderer macro in the XNA layer; "
-          f"{remaining} tolerated CNA_RENDERER_* occurrences remain (removed by phase P3).")
+          f"modules/graphics/src is free of CNA_RENDERER_* entirely.")
     return 0
 
 

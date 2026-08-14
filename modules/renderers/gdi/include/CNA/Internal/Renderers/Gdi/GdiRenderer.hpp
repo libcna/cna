@@ -59,6 +59,21 @@ namespace CNA::Internal::Renderers::Gdi
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
         void UpdatePresentationFormatEXT(int, int, bool) override {}
         [[nodiscard]] int GetMultiSampleCount() const override;
+
+        /**
+         * @brief Reports the sample count GDI actually applied, ignoring the request.
+         *
+         * plan_runtimerenderer.md design decision 9: GDI clamps to its one real optional mode (4x)
+         * at construction, so echoing the game's request back would misreport the device.
+         *
+         * @param requestedMultiSampleCount Ignored -- the applied count is what this renderer has.
+         * @return GetMultiSampleCount().
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const override
+        {
+            (void)requestedMultiSampleCount;
+            return GetMultiSampleCount();
+        }
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int) const override { return 0; }
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int) const override { return 0; }
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,

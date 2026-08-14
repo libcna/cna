@@ -9,6 +9,7 @@
 // names if windows.h is parsed first.
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 #include "CNA/Internal/Renderers/Common/NotYetImplemented.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ConstantUpload.hpp"
@@ -1538,6 +1539,33 @@ namespace CNA::Internal::Renderers::DirectX9
         // D3DERR_DEVICENOTRESET) and goes straight to the real Resetting->Reset()->Reset sequence.
         if (!deviceLost_) return;
         PerformResetRecovery();
+    }
+
+    // --- GraphicsProfile ceilings (plan_runtimerenderer.md design decision 9) -----------------
+    //
+    // D9-100's own table, previously enforced from #ifdef CNA_RENDERER_DIRECTX9 blocks inside
+    // Texture2D/Texture3D/TextureCube/GraphicsDevice. Checked as profile CEILINGS, not hardware
+    // queries: even where this device could allocate more, a Reach-profile game is restricted to
+    // the profile's limit, which is what XNA's portability guarantee means.
+
+    int DirectX9Renderer::GetMaxTextureSizeForProfileEXT(int graphicsProfile) const
+    {
+        return MaxTextureSizeForProfileEXT(graphicsProfile);
+    }
+
+    int DirectX9Renderer::GetMaxRenderTargetsForProfileEXT(int graphicsProfile) const
+    {
+        return MaxRenderTargetsForProfileEXT(graphicsProfile);
+    }
+
+    int DirectX9Renderer::GetMaxCubeSizeForProfileEXT(int graphicsProfile) const
+    {
+        return MaxCubeSizeForProfileEXT(graphicsProfile);
+    }
+
+    int DirectX9Renderer::GetMaxVolumeExtentForProfileEXT(int graphicsProfile) const
+    {
+        return MaxVolumeExtentForProfileEXT(graphicsProfile);
     }
 }
 

@@ -980,6 +980,117 @@ namespace CNA::Internal::Renderers::Skia
     void SkiaRenderer::DrawPrimitivesEx(const IVertexBufferRenderer&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int, const GpuDrawParams&) { ThrowSkiaUnsupported3D("DrawPrimitivesEx"); }
     void SkiaRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer&, const IIndexBufferRenderer&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int, const GpuDrawParams&) { ThrowSkiaUnsupported3D("DrawIndexedPrimitivesEx"); }
     void SkiaRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer&, const IIndexBufferRenderer&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int, int, const GpuDrawParams&) { ThrowSkiaUnsupported3D("DrawInstancedPrimitivesEx"); }
+
+    // --- Format boundaries (plan_runtimerenderer.md design decision 9) ---------------------
+    //
+    // These three tables used to live as #ifdef CNA_RENDERER_SKIA blocks inside Texture2D.cpp and
+    // RenderTarget2D.cpp. They are reproduced here unchanged; the only difference is that the XNA
+    // layer now asks the renderer instead of asking the preprocessor.
+
+    RendererFormatVerdict SkiaRenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::ColorBgraEXT:
+            case SurfaceFormat::ColorSrgbEXT:
+            case SurfaceFormat::ByteEXT:
+            case SurfaceFormat::UShortEXT:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::HdrBlendable:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::Bc7EXT:
+            case SurfaceFormat::Bc7SrgbEXT:
+                return RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Unsupported;
+        }
+    }
+
+    RendererFormatVerdict SkiaRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        // Skia stores each promoted format in its own native layout, so a Color* transfer is only
+        // meaningful for the three that are genuinely 32-bit RGBA-shaped. Every other promoted
+        // format has a typed overload that reads its real bits instead.
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::ColorBgraEXT:
+            case SurfaceFormat::ColorSrgbEXT:
+                return RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Unsupported;
+        }
+    }
+
+    RendererFormatVerdict SkiaRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        // SKIA-142: the formats FNA itself reports renderable (see the surface-format matrix's
+        // "FNA/Skia RT decision" column) that this raster renderer can genuinely render into.
+        // Skia's raster SkSurface has no hardware format restriction, but promoting only these
+        // keeps parity with real XNA/FNA renderability rather than "whatever Skia happens to
+        // allow". Every other format (packed 16-bit colours, all compressed formats, SNORM,
+        // Alpha8, ColorBgraEXT) is a real non-renderable format on actual XNA/FNA hardware and
+        // stays refused regardless.
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+            case SurfaceFormat::ColorSrgbEXT:
+            case SurfaceFormat::ByteEXT:
+            case SurfaceFormat::UShortEXT:
+                return RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Unsupported;
+        }
+    }
+
+    bool SkiaRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        // SKIA-140/141: these transfer raw compressed blocks through the same CNAEXT byte-array
+        // overloads ByteEXT uses, matching how real XNA/FNA upload compressed content.
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::Bc7EXT:
+            case SurfaceFormat::Bc7SrgbEXT:
+                return true;
+            default:
+                return false;
+        }
+    }
+
 } // namespace CNA::Internal::Renderers::Skia
 
 namespace CNA::Internal::Renderers

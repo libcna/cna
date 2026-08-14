@@ -105,6 +105,45 @@ namespace CNA::Internal::Renderers
     };
 
     /**
+     * @brief A renderer's answer about a GraphicsAdapter-level query, or a deferral.
+     *
+     * plan_runtimerenderer.md design decision 9, with a correction the implementation forced:
+     * GraphicsAdapter's profile/format queries are ADAPTER-level and run before any GraphicsDevice
+     * exists, so they cannot be routed through an IGraphicsRenderer virtual the way the texture and
+     * render-target queries are. They go through these static descriptor hooks instead -- which is
+     * the right shape anyway, since the whole point of an adapter query is to ask before committing
+     * to a device.
+     */
+    struct RendererAdapterQueries
+    {
+        /**
+         * @brief Whether the renderer can honestly enforce a GraphicsProfile floor.
+         *
+         * Null means "no renderer-specific answer": GraphicsAdapter keeps its honest `return true`,
+         * which is what 45 of the 46 renderers had. Only D3D9 has a real D3DCAPS9 to consult, and
+         * this project refuses to substitute a hardcoded table pretending to be a capability query.
+         */
+        bool (*isProfileSupported)(int graphicsProfile) = nullptr;
+
+        /**
+         * @brief Whether a surface format is valid for a profile AND supported by the real device.
+         *
+         * Null means "no renderer-specific answer"; GraphicsAdapter applies its own format rule.
+         */
+        bool (*isRenderTargetFormatSupported)(int graphicsProfile, int surfaceFormat) = nullptr;
+
+        /** @brief Back-buffer counterpart of isRenderTargetFormatSupported. */
+        bool (*isBackBufferFormatSupported)(int graphicsProfile, int surfaceFormat) = nullptr;
+
+        /**
+         * @brief Clamps a requested MSAA count to what the device supports for a format.
+         *
+         * Null means "no renderer-specific answer"; GraphicsAdapter reports 0, as before.
+         */
+        int (*clampMultiSampleCount)(int surfaceFormat, int requestedMultiSampleCount) = nullptr;
+    };
+
+    /**
      * @brief The pre-construction contract of one renderer family.
      *
      * One instance exists per renderer family, returned by that family's own GetDescriptor().
@@ -202,6 +241,16 @@ namespace CNA::Internal::Renderers
          * @return The new renderer; never nullptr on success. Throws on failure.
          */
         std::unique_ptr<IGraphicsRenderer> (*create)(const GraphicsRendererCreateArgs& args) = nullptr;
+
+        /**
+         * @brief Adapter-level queries this renderer can answer before a device exists.
+         *
+         * Unlike the hooks above, the members of this struct MAY be null -- null means "this
+         * renderer has no renderer-specific answer, use the framework's own rule". That is the
+         * honest state for 45 of the 46 renderers, and the distinction matters: a renderer forced
+         * to restate the framework rule would eventually restate it wrongly.
+         */
+        RendererAdapterQueries adapterQueries{};
     };
 
 }

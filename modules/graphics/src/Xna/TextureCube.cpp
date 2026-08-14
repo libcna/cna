@@ -16,11 +16,8 @@
 #include <vector>
 
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef cube-texture-size
-// ceilings, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_DIRECTX9
+// ceilings. plan_runtimerenderer.md design decision 9: asked of the active renderer rather than
 // convention exactly.
-#ifdef CNA_RENDERER_DIRECTX9
-#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
-#endif
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -38,13 +35,13 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
-#ifdef CNA_RENDERER_DIRECTX9
     // D9-103 follow-up: same profile-CEILING enforcement Texture2D.cpp already established
-    // (D9-100's own table: Reach=512, HiDef=4096), checked BEFORE the renderer is created.
+    // (D9-100's own table: Reach=512, HiDef=4096). Renderers with no profile distinction report
+    // no ceiling, which is exactly what they did when this was an #ifdef block.
     static void ValidateCubeSizeForProfileEXT(const GraphicsDevice& device, int size)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxSize = CNA::Internal::Renderers::DirectX9::MaxCubeSizeForProfileEXT(profile);
+        const int maxSize = device.GetRenderer().GetMaxCubeSizeForProfileEXT(profile);
         if (size > maxSize)
         {
             throw System::NotSupportedException(
@@ -53,7 +50,6 @@ namespace Microsoft::Xna::Framework::Graphics
                 "'s own maximum cube size of " + std::to_string(maxSize));
         }
     }
-#endif
 
     TextureCube::~TextureCube() = default;
 
@@ -62,9 +58,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , size_(size)
         , renderer_(nullptr)
     {
-#ifdef CNA_RENDERER_DIRECTX9
         ValidateCubeSizeForProfileEXT(device, size);
-#endif
         Texture::ValidateFormat(format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(size, size) : 1;

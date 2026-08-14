@@ -32,6 +32,11 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 
 Legend: ✅ implemented and verified · 🟨 exists but unverified · ⬜ not implemented.
 
+`modules/graphics/src` contains no `CNA_RENDERER_*` reference at all as of phase P3; renderer-specific
+behaviour reaches the XNA layer through `IGraphicsRenderer` virtuals (queries that have a device) or
+`GraphicsRendererDescriptor::adapterQueries` hooks (`GraphicsAdapter` queries, which run before one
+exists). `scripts/check_runtime_renderer_discipline.py` enforces both.
+
 ---
 
 ## What a renderer descriptor answers

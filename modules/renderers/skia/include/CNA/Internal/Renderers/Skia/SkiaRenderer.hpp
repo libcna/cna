@@ -113,6 +113,43 @@ namespace CNA::Internal::Renderers::Skia
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        // plan_runtimerenderer.md design decision 9: Skia stores each promoted format in its own
+        // native layout, so unlike every other renderer it has real answers about which formats a
+        // texture may use and which of them a Color* transfer can meaningfully read. These used to
+        // live as #ifdef CNA_RENDERER_SKIA blocks inside Texture2D.cpp and RenderTarget2D.cpp.
+
+        /**
+         * @brief Whether a Texture2D may be created with the given surface format.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported when Skia stores that format natively, Unsupported otherwise.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a Color* transfer reads that format's real bits.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported only for the genuinely 32-bit RGBA-shaped formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a RenderTarget2D may use this format.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported for the formats real XNA/FNA hardware reports renderable.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief Whether the format transfers as compressed blocks rather than pixels.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true for the block-compressed formats Skia stores natively.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
         void Ensure3DSupported(const char* operation) const override;
 
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,

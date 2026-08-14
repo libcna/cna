@@ -19,16 +19,6 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
-// plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach's own MaxRenderTargets=1
-// ceiling, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_DIRECTX9
-// convention exactly. Distinct from MAX_RENDERTARGET_BINDINGS below (XNA's own general 4-target
-// ceiling, renderer-agnostic) and from D9-54's own NumSimultaneousRTs hardware-cap enforcement
-// inside DirectX9Renderer::SetRenderTargets() -- this is the profile's own, separately lower,
-// software-imposed ceiling.
-#ifdef CNA_RENDERER_DIRECTX9
-#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
-#endif
-
 #include <SDL3/SDL.h>
 
 #include <algorithm>
@@ -2110,11 +2100,11 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderer_)
         {
             NormalizeAppliedPresentationFormats(*renderer_, applied);
-#ifdef CNA_RENDERER_GDI
-            // This CNAEXT store-only path does not reconfigure MSAA. Keep reporting the currently
-            // active GDI sample storage instead of echoing a request that was never applied.
-            applied.setMultiSampleCountProperty(renderer_->GetMultiSampleCount());
-#endif
+            // This CNAEXT store-only path does not reconfigure MSAA. A renderer that clamped the
+            // request at construction reports what is really in effect rather than letting a
+            // request that was never applied be echoed back.
+            applied.setMultiSampleCountProperty(renderer_->GetAppliedMultiSampleCountEXT(
+                applied.getMultiSampleCountProperty()));
             renderer_->SetSwapInterval(toSwapInterval(pp.getPresentationIntervalProperty()));
         }
         presentationParameters_ = applied;
@@ -2285,13 +2275,13 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             renderer_->SetVirtualResolution(virtualWidth_, virtualHeight_);
             NormalizeAppliedPresentationFormats(*renderer_, presentationParameters_);
-#ifdef CNA_RENDERER_GDI
-            // The GDI factory clamps to its one real optional mode (4x) during construction.
-            // Surface that result immediately; Reset() already performs the same write-back via
-            // ApplyMultiSampleCount(), but direct construction previously retained 2x/8x requests.
+            // A renderer that clamps to its own real modes during construction (GDI supports one
+            // optional mode, 4x) surfaces that result immediately. Reset() already performs the
+            // same write-back via ApplyMultiSampleCount(); direct construction previously retained
+            // the unapplied request.
             presentationParameters_.setMultiSampleCountProperty(
-                renderer_->GetMultiSampleCount());
-#endif
+                renderer_->GetAppliedMultiSampleCountEXT(
+                    presentationParameters_.getMultiSampleCountProperty()));
             if (!rendererStartupNameLogged_)
             {
                 std::cout << "CNA: graphics renderer: "
@@ -2782,14 +2772,16 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::invalid_argument("SetRenderTargets: at most " +
                 std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
 
-#ifdef CNA_RENDERER_DIRECTX9
         // D9-103 follow-up: GraphicsProfile.Reach's own MaxRenderTargets=1 ceiling (D9-100's own
         // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
         // above (XNA's own general 4-target ceiling) and from D9-54's own hardware-cap
         // enforcement inside the renderer (NumSimultaneousRTs, which could be higher).
+        // plan_runtimerenderer.md design decision 9: asked of the active renderer; renderers with
+        // no profile distinction report no ceiling.
+        if (renderer_ != nullptr)
         {
             const int profile = static_cast<int>(graphicsProfile_);
-            const int maxForProfile = CNA::Internal::Renderers::DirectX9::MaxRenderTargetsForProfileEXT(profile);
+            const int maxForProfile = renderer_->GetMaxRenderTargetsForProfileEXT(profile);
             if (static_cast<int>(renderTargets.size()) > maxForProfile)
             {
                 throw System::NotSupportedException(
@@ -2799,7 +2791,6 @@ namespace Microsoft::Xna::Framework::Graphics
                     "'s own maximum of " + std::to_string(maxForProfile));
             }
         }
-#endif
 
         if (renderTargets.empty())
         {
