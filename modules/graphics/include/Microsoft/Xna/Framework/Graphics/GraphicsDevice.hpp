@@ -36,6 +36,7 @@
 #include "System/Object.hpp"
 #include "CNA/CNAHelper.hpp"
 #include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
@@ -1105,6 +1106,15 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_Window* window_;
         bool ownsWindow_;
         std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
+        /// plan_runtimerenderer.md RTR-P5: the descriptor this device actually resolved to, which
+        /// may differ from the selected one when a fallback chain substituted another renderer.
+        /// Pinned at construction so a later reconstruction (Reset, multisample change) rebuilds
+        /// the SAME renderer rather than re-running resolution against a changed environment.
+        const CNA::Internal::Renderers::GraphicsRendererDescriptor* activeDescriptor_ = nullptr;
+        /// The window kind window_ was created for, so a fallback candidate needing a different one
+        /// can be detected before it is handed an incompatible window (design decision 8).
+        CNA::Internal::Renderers::RendererWindowKind activeWindowKind_ =
+            CNA::Internal::Renderers::RendererWindowKind::None;
         bool rendererStartupNameLogged_ = false;
         Viewport viewport_;
         const VertexBuffer* currentVertexBuffer_;
@@ -1239,6 +1249,26 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void createOrAttachWindow();
         void createRenderer();
+
+        /**
+         * @brief Resolves which renderer this device uses, honouring any configured fallback chain.
+         *
+         * plan_runtimerenderer.md design decisions 6 and 7. Creates the window and the renderer
+         * together, because the window's flags depend on which renderer is being attempted: a
+         * candidate that needs a different window kind cannot reuse the previous candidate's
+         * window. Runs once, from the constructor. Reconstruction paths use createRenderer()
+         * directly and never re-resolve.
+         *
+         * @throws System::InvalidOperationException when no candidate could be created.
+         */
+        void resolveRenderer();
+
+        /**
+         * @brief Destroys this device's SDL window when it owns one, leaving window_ null.
+         *
+         * Used between fallback attempts that need different window kinds.
+         */
+        void discardOwnedWindow();
         void destroyNativeResources();
         void UpdateViewportFromWindow();
         void SetVirtualResolution(int width, int height);

@@ -137,7 +137,8 @@ namespace Microsoft::Xna::Framework::Graphics
             return request;
         }
 
-        [[nodiscard]] SDL_WindowFlags getRendererWindowFlags()
+        [[nodiscard]] SDL_WindowFlags getRendererWindowFlags(
+            const CNA::Internal::Renderers::GraphicsRendererDescriptor& descriptor)
         {
             // plan_runtimerenderer.md RTR-P1-2 / design decision 2: the per-renderer half of this
             // decision now lives in each family's own GraphicsRendererDescriptor. SDL_WINDOW_RESIZABLE
@@ -147,7 +148,6 @@ namespace Microsoft::Xna::Framework::Graphics
             // and DILIGENT, each of which picks its native API itself -- keep doing exactly that;
             // their computation moved into their own prepareWindowFlags() hook rather than being
             // reached through an #ifdef here.
-            const auto& descriptor = selectedDescriptor();
             return static_cast<SDL_WindowFlags>(
                 SDL_WINDOW_RESIZABLE | descriptor.prepareWindowFlags());
         }
@@ -191,15 +191,6 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
 
-        // plan_runtimerenderer.md design decision 5: the selection latches HERE, at the start of
-        // construction -- not at the first CreateGraphicsRenderer call. createOrAttachWindow() below
-        // already consumes the decision (window flags, whether a window exists at all), so latching
-        // any later would let a SetPreferred() call land after CNA had acted on the previous answer.
-        //
-        // Latching forbids CHANGING the selection, not creating a renderer again:
-        // RecreateRendererForMultiSampleCount() legitimately rebuilds the same renderer on a live
-        // device, and does so through this same descriptor.
-        CNA::GraphicsRendererSelectionAccessEXT::Latch(selectedDescriptor().type);
 
         // plan_headless.md design decision 2 / plan_software.md design decision 4 / plan_stub.md
         // design decision 1: the Headless, Software, and Stub renderers never create a real window
@@ -207,26 +198,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // no display server present -- not just a headless-but-present one. PortableGL joins them:
         // it is a CPU software OpenGL 3.x-ish renderer (rswinkle/PortableGL) with the same "no
         // window, no GPU library, no SDL video subsystem" shape.
-        // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the descriptor's
-        // own needsVideoSubsystem: a renderer that normally wants a window (D3D12) can be asked for
-        // a genuinely off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what
-        // lets such a device run with no display server at all, not merely without a visible window.
-        if (selectedDescriptor().needsVideoSubsystem
-            && !presentationParameters_.getHeadlessEXTProperty())
-        {
-            if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-            {
-                throw makeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO)");
-            }
-        }
 
         // The Touch Panel needs this for normalized-to-pixel touch coordinate scaling.
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayHeightProperty(virtualHeight_);
 
-        createOrAttachWindow();
-        applyPresentationParametersToWindow();
-        createRenderer();
+        resolveRenderer();
         UpdateViewportFromWindow();
 
         // Task 896/955: blendState_/depthStencilState_/rasterizerState_ above were only ever
@@ -2159,7 +2136,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::createOrAttachWindow()
     {
-        const auto& descriptor = selectedDescriptor();
+        const auto& descriptor =
+            activeDescriptor_ != nullptr ? *activeDescriptor_ : selectedDescriptor();
 
         // No real window, ever -- HEADLESS/SOFTWARE/STUB/PORTABLEGL, matching the constructor's own
         // needsVideoSubsystem check. GraphicsRendererCreateArgs::window stays nullptr;
@@ -2204,7 +2182,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        SDL_WindowFlags windowFlags = getRendererWindowFlags();
+        SDL_WindowFlags windowFlags = getRendererWindowFlags(descriptor);
 
         // plan_runtimerenderer.md RTR-P1-5: attributes that must be set before SDL_CreateWindow.
         // OPENGL1 is the one renderer with real work here -- it requests a legacy/compatibility
@@ -2259,6 +2237,172 @@ namespace Microsoft::Xna::Framework::Graphics
             renderer_->SetStringMarkerEXT(marker.c_str());
     }
 
+    void GraphicsDevice::discardOwnedWindow()
+    {
+        if (window_ == nullptr)
+            return;
+
+        if (ownsWindow_)
+        {
+            // Clear the shared input handles first: leaving them pointing at a window that is about
+            // to be destroyed is exactly the dangling-handle bug destroyNativeResources() already
+            // guards against.
+            if (Microsoft::Xna::Framework::Input::TextInputEXT::getWindowHandleProperty()
+                == reinterpret_cast<std::uintptr_t>(window_))
+            {
+                Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(0);
+            }
+            if (Microsoft::Xna::Framework::Input::Mouse::getWindowHandleProperty()
+                == reinterpret_cast<std::uintptr_t>(window_))
+            {
+                Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(0);
+            }
+            SDL_DestroyWindow(window_);
+        }
+
+        window_ = nullptr;
+        ownsWindow_ = false;
+        presentationParameters_.setDeviceWindowHandleProperty(0);
+    }
+
+    void GraphicsDevice::resolveRenderer()
+    {
+        namespace Renderers = CNA::Internal::Renderers;
+        using CNA::GraphicsRendererFallbackReason;
+        using CNA::GraphicsRendererFallbackRecord;
+
+        const auto attemptOrder = CNA::GraphicsRendererSelectionAccessEXT::GetAttemptOrder();
+
+        // Design decision 6: with fallback disabled this loop runs exactly once and any failure
+        // propagates unchanged, so a build that never opts in behaves as it always did.
+        std::string firstFailure;
+
+        for (const CNA::GraphicsRendererType candidateType : attemptOrder)
+        {
+            const Renderers::GraphicsRendererDescriptor* candidate =
+                Renderers::GraphicsRendererRegistry::Find(candidateType);
+
+            if (candidate == nullptr)
+            {
+                // A chain may legitimately name renderers other configurations have; record the
+                // skip rather than omitting it, so the history explains every step.
+                CNA::GraphicsRendererSelectionAccessEXT::RecordFallback(
+                    GraphicsRendererFallbackRecord{
+                        candidateType, GraphicsRendererFallbackReason::NotCompiledIn,
+                        "not compiled into this build"});
+                continue;
+            }
+
+            // Design decision 8: a candidate needing a different window kind cannot reuse the
+            // window a previous attempt created. Recreating it is only legal while this device owns
+            // it -- with a caller-supplied DeviceWindowHandle the attempt is refused outright
+            // rather than silently run against an incompatible window.
+            if (window_ != nullptr
+                && !Renderers::AreWindowKindsCompatible(activeWindowKind_, candidate->windowKind))
+            {
+                if (!ownsWindow_)
+                {
+                    CNA::GraphicsRendererSelectionAccessEXT::RecordFallback(
+                        GraphicsRendererFallbackRecord{
+                            candidateType, GraphicsRendererFallbackReason::WindowKindConflict,
+                            "needs a different window kind, and the SDL window was supplied by the "
+                            "caller through PresentationParameters.DeviceWindowHandle, so CNA may "
+                            "not destroy and recreate it"});
+                    continue;
+                }
+                discardOwnedWindow();
+            }
+
+            if (!candidate->isAvailable())
+            {
+                CNA::GraphicsRendererSelectionAccessEXT::RecordFallback(
+                    GraphicsRendererFallbackRecord{
+                        candidateType, GraphicsRendererFallbackReason::ProbeUnavailable,
+                        "the renderer reported it cannot run on this machine"});
+                continue;
+            }
+
+            activeDescriptor_ = candidate;
+            try
+            {
+                // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the
+                // descriptor's own needsVideoSubsystem: a renderer that normally wants a window
+                // (D3D12) can be asked for a genuinely off-screen device instead. Skipping
+                // SDL_INIT_VIDEO is the point -- it is what lets such a device run with no display
+                // server at all, not merely without a visible window.
+                //
+                // RTR-P5-15: done per candidate, not once up front. A fallback chain can legitimately
+                // cross this boundary (VULKAN -> HEADLESS, or the reverse), and the answer belongs to
+                // whichever renderer is actually being attempted. SDL_InitSubSystem is reference
+                // counted, so a second attempt that also needs video is harmless.
+                if (candidate->needsVideoSubsystem
+                    && !presentationParameters_.getHeadlessEXTProperty())
+                {
+                    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+                    {
+                        throw makeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO)");
+                    }
+                }
+
+                if (window_ == nullptr)
+                {
+                    activeWindowKind_ = candidate->windowKind;
+                    createOrAttachWindow();
+                    applyPresentationParametersToWindow();
+                }
+                createRenderer();
+            }
+            catch (const std::exception& e)
+            {
+                activeDescriptor_ = nullptr;
+                renderer_.reset();
+                if (firstFailure.empty())
+                    firstFailure = std::string(candidate->name) + ": " + e.what();
+
+                // Design decision 6: without an opted-in chain this is simply the game's error.
+                if (attemptOrder.size() == 1)
+                    throw;
+
+                CNA::GraphicsRendererSelectionAccessEXT::RecordFallback(
+                    GraphicsRendererFallbackRecord{
+                        candidateType, GraphicsRendererFallbackReason::InitializationFailed,
+                        e.what()});
+                discardOwnedWindow();
+                continue;
+            }
+
+            // plan_runtimerenderer.md design decision 5, refined by RTR-P5-18: the selection
+            // latches on SUCCESSFUL resolution, not at the start of construction.
+            //
+            // Latching up front was the first cut, and it was wrong in a way the fallback tests
+            // caught: a construction that threw still froze the selection, so a game that caught
+            // the error could not then try a different configuration -- and GetActive() would
+            // report a renderer that had never been created. Everything that consumes the decision
+            // (window flags, whether a window exists at all, the video subsystem) happens inside
+            // this function, so latching at its end is still before anything outside GraphicsDevice
+            // can have acted on the answer.
+            //
+            // It forbids CHANGING the selection, not creating a renderer again:
+            // RecreateRendererForMultiSampleCount() rebuilds the same renderer on a live device.
+            CNA::GraphicsRendererSelectionAccessEXT::Latch(candidate->type);
+            return;
+        }
+
+        // Design decision 7: an exhausted chain carries the FIRST failure as the primary cause --
+        // that is the renderer the game actually asked for -- with the rest as accumulated detail.
+        std::string detail;
+        for (const auto& record : CNA::GraphicsRendererSelection::GetFallbackHistory())
+        {
+            detail += "\n  - " + std::string(CNA::getGraphicsRendererName(record.type)) + " (" +
+                      std::string(CNA::getGraphicsRendererFallbackReasonName(record.reason)) +
+                      "): " + record.message;
+        }
+        throw System::InvalidOperationException(
+            "CNA: no graphics renderer could be created." +
+            (firstFailure.empty() ? std::string() : "\n  first failure -- " + firstFailure) +
+            "\n  attempted:" + detail);
+    }
+
     void GraphicsDevice::createRenderer()
     {
         GraphicsRendererCreateArgs args;
@@ -2297,7 +2441,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // plan_runtimerenderer.md design decision 4: reached through the descriptor rather than a
         // single shared factory symbol, which is what lets several renderer archives coexist.
-        const auto& descriptor = selectedDescriptor();
+        //
+        // RTR-P5-17: deliberately the RESOLVED descriptor, not a fresh resolution. A reconstruction
+        // (Reset, multisample change) must rebuild the same renderer -- an MSAA failure on a device
+        // the game is already using is a real error, not a reason to change renderer mid-game.
+        const auto& descriptor =
+            activeDescriptor_ != nullptr ? *activeDescriptor_ : selectedDescriptor();
         renderer_ = descriptor.create(args);
 
         if (renderer_ != nullptr)

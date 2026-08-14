@@ -26,7 +26,7 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 | Per-family descriptors | ✅ all 42 families; guarded by `scripts/check_runtime_renderer_discipline.py` |
 | Namespaced factories / generated registry | ✅ all 42 factories namespaced; `cmake/RendererRegistry.cmake` emits the table |
 | `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
-| Fallback chain | 🟨 configurable (`SetFallbackChain`/`EnableAutomaticFallback`); the substitution itself lands in P5 |
+| Fallback chain | ✅ resolution, recording, logging, exhaustion; cross-window-kind recreation unverified until a multi-renderer build |
 | Multi-renderer CMake mode | ⬜ not implemented |
 | Runtime identity reporting | ⬜ not implemented |
 

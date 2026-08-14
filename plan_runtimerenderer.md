@@ -617,29 +617,29 @@ substitution, which arrives with P8.
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P5-1 | ⬜ | Add `SetFallbackChain(std::span<const GraphicsRendererType>)` — latches like `SetPreferred()`. |
-| RTR-P5-2 | ⬜ | Add `EnableAutomaticFallback(bool)` — derives the chain from every compiled-in renderer. |
-| RTR-P5-3 | ⬜ | Define and document the automatic chain's ordering. Recommend deriving it from the existing `CNA::GraphicsBackendCategory`/`GraphicsBackendMaturity` enums (`modules/core/include/CNA/`) rather than inventing a new ranking — mature GPU renderers first, CPU renderers next, `STUB` last. |
-| RTR-P5-4 | ⬜ | Add `GetActive()` — what was really created; equals `GetSelected()` when no fallback occurred. |
-| RTR-P5-5 | ⬜ | Add `GetFallbackHistory()` returning `std::span<const GraphicsRendererFallbackRecord>`. |
-| RTR-P5-6 | ⬜ | Wire the `isAvailable()` probe into the selection path: probe failure on the preferred renderer is `ProbeUnavailable`. |
-| RTR-P5-7 | ⬜ | Wire initialization failure: `descriptor.create()` throwing is caught, recorded as `InitializationFailed` with the exception message, and the next chain entry is tried. |
-| RTR-P5-8 | ⬜ | Exhausted chain → throw, carrying the **first** failure as primary cause and every subsequent one as accumulated detail in the message. |
-| RTR-P5-9 | ⬜ | Fallback disabled (the default) → the first failure propagates unchanged, exactly as today. Regression test that the existing exception type and message survive. |
-| RTR-P5-10 | ⬜ | `CNA::Logger` warning per fallback step: what was tried, why it failed, what is being tried next (design decision 7). |
-| RTR-P5-11 | ⬜ | Window-kind conflict detection: comparing `RendererWindowKind` of the failed and candidate renderers (design decision 8). |
-| RTR-P5-12 | ⬜ | Cross-kind fallback with `ownsWindow_ == true`: destroy and recreate the SDL window with the candidate's flags, re-publishing `Mouse`/`TextInputEXT` window handles. |
-| RTR-P5-13 | ⬜ | Cross-kind fallback with a caller-supplied `DeviceWindowHandle`: record `WindowKindConflict` and skip that candidate with a clear log line — never silently reuse an incompatible window. |
-| RTR-P5-14 | ⬜ | `applyPreWindowAttributes` must re-run for the candidate before its window is recreated (`OPENGL1`'s GLX visual would otherwise be wrong). |
-| RTR-P5-15 | ⬜ | Fallback across `needsVideoSubsystem` (e.g. `VULKAN` → `HEADLESS`): `SDL_QuitSubSystem(SDL_INIT_VIDEO)` handling, and the reverse direction. |
-| RTR-P5-16 | ⬜ | Fallback interaction with `PresentationParameters::HeadlessEXT` — a headless request must not silently fall back to a windowed renderer. |
-| RTR-P5-17 | ⬜ | Fallback must **not** engage for `RecreateRendererForMultiSampleCount()`: an MSAA reconstruction failure is a genuine error on an already-chosen renderer, not a reason to change renderer mid-game. |
-| RTR-P5-18 | ⬜ | Unit tests with a fake registry: probe-fail → next; create-throw → next; both → third; exhausted → throw with accumulated causes; disabled → first exception propagates. |
-| RTR-P5-19 | ⬜ | Unit tests for history/active reporting: empty history on clean first hit, ordered history otherwise, `GetActive() != GetSelected()` after substitution. |
-| RTR-P5-20 | ⬜ | Test that `GetActive()` before latch throws (nothing has been created yet, so there is no honest answer). |
-| RTR-P5-21 | ⬜ | Example program demonstrating a fallback chain and printing `GetFallbackHistory()`. |
-| RTR-P5-22 | ⬜ | `docs/runtime-renderer-selection.md` — fallback section: default-throw policy, opt-in, ordering, the window-kind limitation, and the explicit statement that fallback never happens silently. |
-| RTR-P5-23 | ⬜ | **Phase gate.** Chain-of-1 exercises every path; default behaviour unchanged. |
+| RTR-P5-1 | ✅ | Add `SetFallbackChain(std::span<const GraphicsRendererType>)` — latches like `SetPreferred()`. |
+| RTR-P5-2 | ✅ | Add `EnableAutomaticFallback(bool)` — derives the chain from every compiled-in renderer. |
+| RTR-P5-3 | ✅ | Define and document the automatic chain's ordering. Recommend deriving it from the existing `CNA::GraphicsBackendCategory`/`GraphicsBackendMaturity` enums (`modules/core/include/CNA/`) rather than inventing a new ranking — mature GPU renderers first, CPU renderers next, `STUB` last. |
+| RTR-P5-4 | ✅ | Add `GetActive()` — what was really created; equals `GetSelected()` when no fallback occurred. |
+| RTR-P5-5 | ✅ | Add `GetFallbackHistory()` returning `std::span<const GraphicsRendererFallbackRecord>`. |
+| RTR-P5-6 | ✅ | Wire the `isAvailable()` probe into the selection path: probe failure on the preferred renderer is `ProbeUnavailable`. |
+| RTR-P5-7 | ✅ | Wire initialization failure: `descriptor.create()` throwing is caught, recorded as `InitializationFailed` with the exception message, and the next chain entry is tried. |
+| RTR-P5-8 | ✅ | Exhausted chain → throw, carrying the **first** failure as primary cause and every subsequent one as accumulated detail in the message. |
+| RTR-P5-9 | ✅ | Fallback disabled (the default) → the first failure propagates unchanged, exactly as today. Regression test that the existing exception type and message survive. |
+| RTR-P5-10 | ✅ | `CNA::Logger` warning per fallback step: what was tried, why it failed, what is being tried next (design decision 7). |
+| RTR-P5-11 | ✅ | Window-kind conflict detection: comparing `RendererWindowKind` of the failed and candidate renderers (design decision 8). |
+| RTR-P5-12 | 🟨 | Cross-kind fallback with `ownsWindow_ == true`: destroy and recreate the SDL window with the candidate's flags, re-publishing `Mouse`/`TextInputEXT` window handles. |
+| RTR-P5-13 | 🟨 | Cross-kind fallback with a caller-supplied `DeviceWindowHandle`: record `WindowKindConflict` and skip that candidate with a clear log line — never silently reuse an incompatible window. |
+| RTR-P5-14 | ✅ | `applyPreWindowAttributes` must re-run for the candidate before its window is recreated (`OPENGL1`'s GLX visual would otherwise be wrong). |
+| RTR-P5-15 | ✅ | Fallback across `needsVideoSubsystem` (e.g. `VULKAN` → `HEADLESS`): `SDL_QuitSubSystem(SDL_INIT_VIDEO)` handling, and the reverse direction. |
+| RTR-P5-16 | ✅ | Fallback interaction with `PresentationParameters::HeadlessEXT` — a headless request must not silently fall back to a windowed renderer. |
+| RTR-P5-17 | ✅ | Fallback must **not** engage for `RecreateRendererForMultiSampleCount()`: an MSAA reconstruction failure is a genuine error on an already-chosen renderer, not a reason to change renderer mid-game. |
+| RTR-P5-18 | ✅ | Unit tests with a fake registry: probe-fail → next; create-throw → next; both → third; exhausted → throw with accumulated causes; disabled → first exception propagates. |
+| RTR-P5-19 | ✅ | Unit tests for history/active reporting: empty history on clean first hit, ordered history otherwise, `GetActive() != GetSelected()` after substitution. |
+| RTR-P5-20 | ✅ | Test that `GetActive()` before latch throws (nothing has been created yet, so there is no honest answer). |
+| RTR-P5-21 | ✅ | Example program demonstrating a fallback chain and printing `GetFallbackHistory()`. |
+| RTR-P5-22 | ✅ | `docs/runtime-renderer-selection.md` — fallback section: default-throw policy, opt-in, ordering, the window-kind limitation, and the explicit statement that fallback never happens silently. |
+| RTR-P5-23 | ✅ | **Phase gate.** Chain-of-1 exercises every path; default behaviour unchanged. |
 
 ---
 
