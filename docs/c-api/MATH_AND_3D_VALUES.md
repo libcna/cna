@@ -76,10 +76,11 @@ helper's signed-shift/overflow edge case.
 
 ## Vector operations
 
-`vectors.h` begins with the complete Vector2 surface. Constructors and named constants become
+`vectors.h` provides the complete Vector2 and Vector3 surfaces. Constructors and named constants become
 initialization/get operations; value-returning and out-ref native overload pairs collapse to one
 fallible C result-plus-output operation. Named C operations also represent every arithmetic
-operator. Float division retains canonical IEEE infinity/NaN behavior, including zero divisors,
+operator. Vector3 additionally exposes all XNA direction constants and cross products. Float
+division retains canonical IEEE infinity/NaN behavior, including zero divisors,
 and zero-vector normalization likewise follows the native result rather than inventing validation.
 
 Matrix, quaternion and normal transformations support both a single value and raw-array ranges.

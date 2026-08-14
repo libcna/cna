@@ -498,6 +498,349 @@ CNA_C_API CNA_Result cna_vector2_transform_normal_array(
     uint64_t destination_index,
     uint64_t length);
 
+/**
+ * @brief Initializes a zero Vector3.
+ * @param out_value Receives the vector.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_init(CNA_Vector3* out_value);
+
+/**
+ * @brief Initializes a Vector3 from components.
+ * @param x X component.
+ * @param y Y component.
+ * @param z Z component.
+ * @param out_value Receives the vector.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_init_xyz(
+    float x,
+    float y,
+    float z,
+    CNA_Vector3* out_value);
+
+/**
+ * @brief Initializes all Vector3 components from one scalar.
+ * @param value Component value.
+ * @param out_value Receives the vector.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_init_scalar(float value, CNA_Vector3* out_value);
+
+/**
+ * @brief Initializes a Vector3 from a Vector2 and Z component.
+ * @param value XY components.
+ * @param z Z component.
+ * @param out_value Receives the vector.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_init_vector2_z(
+    CNA_Vector2 value,
+    float z,
+    CNA_Vector3* out_value);
+
+/** @brief Gets Vector3 Zero. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_zero(CNA_Vector3* out_value);
+/** @brief Gets Vector3 One. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_one(CNA_Vector3* out_value);
+/** @brief Gets Vector3 UnitX. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_unit_x(CNA_Vector3* out_value);
+/** @brief Gets Vector3 UnitY. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_unit_y(CNA_Vector3* out_value);
+/** @brief Gets Vector3 UnitZ. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_unit_z(CNA_Vector3* out_value);
+/** @brief Gets Vector3 Up. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_up(CNA_Vector3* out_value);
+/** @brief Gets Vector3 Down. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_down(CNA_Vector3* out_value);
+/** @brief Gets Vector3 Right. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_right(CNA_Vector3* out_value);
+/** @brief Gets Vector3 Left. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_left(CNA_Vector3* out_value);
+/** @brief Gets Vector3 Forward. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_forward(CNA_Vector3* out_value);
+/** @brief Gets Vector3 Backward. @param out_value Receives the vector. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_backward(CNA_Vector3* out_value);
+
+/**
+ * @brief Tests two Vector3 values for equality.
+ * @param left First vector.
+ * @param right Second vector.
+ * @param out_equal Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_equals(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    CNA_Bool* out_equal);
+
+/**
+ * @brief Tests two Vector3 values for inequality.
+ * @param left First vector.
+ * @param right Second vector.
+ * @param out_not_equal Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_not_equals(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    CNA_Bool* out_not_equal);
+
+/** @brief Computes a Vector3 hash. @param value Source vector. @param out_hash Receives the hash. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_hash_code(CNA_Vector3 value, int32_t* out_hash);
+/** @brief Computes a Vector3 length. @param value Source vector. @param out_length Receives the length. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_length(CNA_Vector3 value, float* out_length);
+/** @brief Computes a squared Vector3 length. @param value Source vector. @param out_length_squared Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_length_squared(
+    CNA_Vector3 value,
+    float* out_length_squared);
+/** @brief Normalizes a Vector3 in place. @param value Vector to mutate. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_normalize_in_place(CNA_Vector3* value);
+/** @brief Gets a Vector3 string byte count. @param value Vector to format. @param out_bytes Receives the count. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_get_string_size(CNA_Vector3 value, uint64_t* out_bytes);
+
+/**
+ * @brief Copies the canonical Vector3 UTF-8 string without a terminator.
+ * @param value Vector to format.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination byte capacity.
+ * @param out_bytes Receives the required count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_copy_string(
+    CNA_Vector3 value,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/** @brief Adds Vector3 values. @param left First vector. @param right Second vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_add(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    CNA_Vector3* out_value);
+
+/**
+ * @brief Performs Vector3 barycentric interpolation.
+ * @param value1 First vector.
+ * @param value2 Second vector.
+ * @param value3 Third vector.
+ * @param amount1 Second-vector weight.
+ * @param amount2 Third-vector weight.
+ * @param out_value Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_barycentric(
+    CNA_Vector3 value1,
+    CNA_Vector3 value2,
+    CNA_Vector3 value3,
+    float amount1,
+    float amount2,
+    CNA_Vector3* out_value);
+
+/**
+ * @brief Performs Vector3 Catmull-Rom interpolation.
+ * @param value1 First control vector.
+ * @param value2 Second control vector.
+ * @param value3 Third control vector.
+ * @param value4 Fourth control vector.
+ * @param amount Interpolation amount.
+ * @param out_value Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_catmull_rom(
+    CNA_Vector3 value1,
+    CNA_Vector3 value2,
+    CNA_Vector3 value3,
+    CNA_Vector3 value4,
+    float amount,
+    CNA_Vector3* out_value);
+
+/** @brief Clamps Vector3 components. @param value Source vector. @param minimum Minimum components. @param maximum Maximum components. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_clamp(
+    CNA_Vector3 value,
+    CNA_Vector3 minimum,
+    CNA_Vector3 maximum,
+    CNA_Vector3* out_value);
+/** @brief Computes a Vector3 cross product. @param left First vector. @param right Second vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_cross(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    CNA_Vector3* out_value);
+/** @brief Computes Vector3 distance. @param left First vector. @param right Second vector. @param out_distance Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_distance(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    float* out_distance);
+/** @brief Computes squared Vector3 distance. @param left First vector. @param right Second vector. @param out_distance_squared Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_distance_squared(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    float* out_distance_squared);
+/** @brief Divides Vector3 values component-wise. @param left Dividend. @param right Divisor. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_divide(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    CNA_Vector3* out_value);
+/** @brief Divides a Vector3 by a scalar. @param value Dividend. @param divider Divisor. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_divide_scalar(
+    CNA_Vector3 value,
+    float divider,
+    CNA_Vector3* out_value);
+/** @brief Computes a Vector3 dot product. @param left First vector. @param right Second vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_dot(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    float* out_value);
+
+/**
+ * @brief Performs Vector3 Hermite interpolation.
+ * @param value1 Source vector.
+ * @param tangent1 Source tangent.
+ * @param value2 Destination vector.
+ * @param tangent2 Destination tangent.
+ * @param amount Interpolation amount.
+ * @param out_value Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_vector3_hermite(
+    CNA_Vector3 value1,
+    CNA_Vector3 tangent1,
+    CNA_Vector3 value2,
+    CNA_Vector3 tangent2,
+    float amount,
+    CNA_Vector3* out_value);
+
+/** @brief Linearly interpolates Vector3 values. @param value1 Source vector. @param value2 Destination vector. @param amount Interpolation amount. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_lerp(
+    CNA_Vector3 value1,
+    CNA_Vector3 value2,
+    float amount,
+    CNA_Vector3* out_value);
+/** @brief Selects component-wise Vector3 maxima. @param left First vector. @param right Second vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_max(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    CNA_Vector3* out_value);
+/** @brief Selects component-wise Vector3 minima. @param left First vector. @param right Second vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_min(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    CNA_Vector3* out_value);
+/** @brief Multiplies Vector3 values component-wise. @param left First vector. @param right Second vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_multiply(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    CNA_Vector3* out_value);
+/** @brief Multiplies a Vector3 by a scalar. @param value Source vector. @param scale Multiplier. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_multiply_scalar(
+    CNA_Vector3 value,
+    float scale,
+    CNA_Vector3* out_value);
+/** @brief Negates a Vector3. @param value Source vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_negate(CNA_Vector3 value, CNA_Vector3* out_value);
+/** @brief Returns a normalized Vector3. @param value Source vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_normalize(CNA_Vector3 value, CNA_Vector3* out_value);
+/** @brief Reflects a Vector3 across a normal. @param value Source vector. @param normal Reflection normal. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_reflect(
+    CNA_Vector3 value,
+    CNA_Vector3 normal,
+    CNA_Vector3* out_value);
+/** @brief Smooth-step interpolates Vector3 values. @param value1 Source vector. @param value2 Destination vector. @param amount Interpolation amount. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_smooth_step(
+    CNA_Vector3 value1,
+    CNA_Vector3 value2,
+    float amount,
+    CNA_Vector3* out_value);
+/** @brief Subtracts Vector3 values. @param left First vector. @param right Second vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_subtract(
+    CNA_Vector3 left,
+    CNA_Vector3 right,
+    CNA_Vector3* out_value);
+
+/** @brief Transforms a Vector3 position by a matrix. @param value Source vector. @param matrix Transformation matrix. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_transform_matrix(
+    CNA_Vector3 value,
+    CNA_Matrix matrix,
+    CNA_Vector3* out_value);
+
+/**
+ * @brief Transforms a Vector3 array range by a matrix.
+ * @param source Source array, or null only for zero count.
+ * @param source_count Source element count.
+ * @param source_index First source element.
+ * @param matrix Transformation matrix.
+ * @param destination Destination array, or null only for zero count.
+ * @param destination_count Destination element count.
+ * @param destination_index First destination element.
+ * @param length Elements to transform.
+ * @return A CNA result code; validation precedes all writes.
+ */
+CNA_C_API CNA_Result cna_vector3_transform_matrix_array(
+    const CNA_Vector3* source,
+    uint64_t source_count,
+    uint64_t source_index,
+    CNA_Matrix matrix,
+    CNA_Vector3* destination,
+    uint64_t destination_count,
+    uint64_t destination_index,
+    uint64_t length);
+
+/** @brief Transforms a Vector3 by a quaternion. @param value Source vector. @param rotation Rotation. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_transform_quaternion(
+    CNA_Vector3 value,
+    CNA_Quaternion rotation,
+    CNA_Vector3* out_value);
+
+/**
+ * @brief Transforms a Vector3 array range by a quaternion.
+ * @param source Source array, or null only for zero count.
+ * @param source_count Source element count.
+ * @param source_index First source element.
+ * @param rotation Quaternion rotation.
+ * @param destination Destination array, or null only for zero count.
+ * @param destination_count Destination element count.
+ * @param destination_index First destination element.
+ * @param length Elements to transform.
+ * @return A CNA result code; validation precedes all writes.
+ */
+CNA_C_API CNA_Result cna_vector3_transform_quaternion_array(
+    const CNA_Vector3* source,
+    uint64_t source_count,
+    uint64_t source_index,
+    CNA_Quaternion rotation,
+    CNA_Vector3* destination,
+    uint64_t destination_count,
+    uint64_t destination_index,
+    uint64_t length);
+
+/** @brief Transforms a Vector3 normal without translation. @param value Source normal. @param matrix Transformation matrix. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_vector3_transform_normal(
+    CNA_Vector3 value,
+    CNA_Matrix matrix,
+    CNA_Vector3* out_value);
+
+/**
+ * @brief Transforms a Vector3 normal array range without translation.
+ * @param source Source array, or null only for zero count.
+ * @param source_count Source element count.
+ * @param source_index First source element.
+ * @param matrix Transformation matrix.
+ * @param destination Destination array, or null only for zero count.
+ * @param destination_count Destination element count.
+ * @param destination_index First destination element.
+ * @param length Elements to transform.
+ * @return A CNA result code; validation precedes all writes.
+ */
+CNA_C_API CNA_Result cna_vector3_transform_normal_array(
+    const CNA_Vector3* source,
+    uint64_t source_count,
+    uint64_t source_index,
+    CNA_Matrix matrix,
+    CNA_Vector3* destination,
+    uint64_t destination_count,
+    uint64_t destination_index,
+    uint64_t length);
+
 #ifdef __cplusplus
 }
 #endif

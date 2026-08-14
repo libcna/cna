@@ -779,6 +779,16 @@
       "tests": "every entry point, overload-equivalent math, IEEE division, strings, null/range atomicity and single/bulk transforms in strict-C `VectorSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B2b"
+    },
+    {
+      "id": "vector3-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Vector3\\.hpp$",
+      "kinds": ["constant", "constructor", "method", "operator"],
+      "mapping": "`cna_vector3_*` initialization, direction constants, scalar/value/cross operations, named operators, exact UTF-8 count/copy and validated raw-array matrix/quaternion transform ranges",
+      "tests": "every entry point, overload-equivalent math, IEEE division, strings, null/range atomicity and single/bulk transforms in strict-C `VectorSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B2c"
     }
   ]
 }

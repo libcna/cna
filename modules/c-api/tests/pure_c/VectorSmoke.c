@@ -15,6 +15,11 @@ static int vector2_near(CNA_Vector2 value, float x, float y)
     return near_float(value.x, x) && near_float(value.y, y);
 }
 
+static int vector3_near(CNA_Vector3 value, float x, float y, float z)
+{
+    return near_float(value.x, x) && near_float(value.y, y) && near_float(value.z, z);
+}
+
 static CNA_Matrix translation_matrix(float x, float y)
 {
     CNA_Matrix matrix = {0};
@@ -24,6 +29,13 @@ static CNA_Matrix translation_matrix(float x, float y)
     matrix.m44 = 1.0F;
     matrix.m41 = x;
     matrix.m42 = y;
+    return matrix;
+}
+
+static CNA_Matrix translation_matrix3(float x, float y, float z)
+{
+    CNA_Matrix matrix = translation_matrix(x, y);
+    matrix.m43 = z;
     return matrix;
 }
 
@@ -209,8 +221,240 @@ static int validate_transforms(void)
     return 1;
 }
 
+static int validate_vector3_construction_and_members(void)
+{
+    CNA_Vector3 zero = {9.0F, 9.0F, 9.0F};
+    CNA_Vector3 one;
+    CNA_Vector3 value;
+    CNA_Vector3 direction;
+    CNA_Bool predicate = CNA_FALSE;
+    int32_t hash = 0;
+    int32_t equal_hash = 1;
+    float scalar = 0.0F;
+    if (cna_vector3_init(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_vector3_init(&zero) != CNA_RESULT_SUCCESS ||
+        !vector3_near(zero, 0.0F, 0.0F, 0.0F) ||
+        cna_vector3_init_xyz(2.0F, 3.0F, 6.0F, &value) != CNA_RESULT_SUCCESS ||
+        !vector3_near(value, 2.0F, 3.0F, 6.0F) ||
+        cna_vector3_init_scalar(2.0F, &one) != CNA_RESULT_SUCCESS ||
+        !vector3_near(one, 2.0F, 2.0F, 2.0F) ||
+        cna_vector3_init_vector2_z((CNA_Vector2){4.0F, 5.0F}, 6.0F, &one) !=
+            CNA_RESULT_SUCCESS || !vector3_near(one, 4.0F, 5.0F, 6.0F) ||
+        cna_vector3_get_zero(&zero) != CNA_RESULT_SUCCESS ||
+        cna_vector3_get_one(&one) != CNA_RESULT_SUCCESS ||
+        !vector3_near(one, 1.0F, 1.0F, 1.0F) ||
+        cna_vector3_get_unit_x(&direction) != CNA_RESULT_SUCCESS ||
+        !vector3_near(direction, 1.0F, 0.0F, 0.0F) ||
+        cna_vector3_get_unit_y(&direction) != CNA_RESULT_SUCCESS ||
+        !vector3_near(direction, 0.0F, 1.0F, 0.0F) ||
+        cna_vector3_get_unit_z(&direction) != CNA_RESULT_SUCCESS ||
+        !vector3_near(direction, 0.0F, 0.0F, 1.0F) ||
+        cna_vector3_get_up(&direction) != CNA_RESULT_SUCCESS ||
+        !vector3_near(direction, 0.0F, 1.0F, 0.0F) ||
+        cna_vector3_get_down(&direction) != CNA_RESULT_SUCCESS ||
+        !vector3_near(direction, 0.0F, -1.0F, 0.0F) ||
+        cna_vector3_get_right(&direction) != CNA_RESULT_SUCCESS ||
+        !vector3_near(direction, 1.0F, 0.0F, 0.0F) ||
+        cna_vector3_get_left(&direction) != CNA_RESULT_SUCCESS ||
+        !vector3_near(direction, -1.0F, 0.0F, 0.0F) ||
+        cna_vector3_get_forward(&direction) != CNA_RESULT_SUCCESS ||
+        !vector3_near(direction, 0.0F, 0.0F, -1.0F) ||
+        cna_vector3_get_backward(&direction) != CNA_RESULT_SUCCESS ||
+        !vector3_near(direction, 0.0F, 0.0F, 1.0F)) {
+        return 0;
+    }
+
+    if (cna_vector3_equals(value, value, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_vector3_not_equals(value, zero, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_vector3_get_hash_code(value, &hash) != CNA_RESULT_SUCCESS ||
+        cna_vector3_get_hash_code(value, &equal_hash) != CNA_RESULT_SUCCESS ||
+        hash != equal_hash ||
+        cna_vector3_get_hash_code(value, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_vector3_length(value, &scalar) != CNA_RESULT_SUCCESS ||
+        !near_float(scalar, 7.0F) ||
+        cna_vector3_length_squared(value, &scalar) != CNA_RESULT_SUCCESS ||
+        !near_float(scalar, 49.0F)) {
+        return 0;
+    }
+
+    if (cna_vector3_normalize_in_place(&value) != CNA_RESULT_SUCCESS ||
+        !vector3_near(value, 2.0F / 7.0F, 3.0F / 7.0F, 6.0F / 7.0F) ||
+        cna_vector3_normalize_in_place(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    value = (CNA_Vector3){2.0F, 3.0F, 6.0F};
+    static const char Expected[] = "{X:2 Y:3 Z:6}";
+    uint64_t byte_count = 0U;
+    char bytes[sizeof(Expected) - 1U];
+    char too_small = 'v';
+    if (cna_vector3_get_string_size(value, &byte_count) != CNA_RESULT_SUCCESS ||
+        byte_count != sizeof(Expected) - 1U ||
+        cna_vector3_copy_string(value, &too_small, 1U, &byte_count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL || too_small != 'v' ||
+        cna_vector3_copy_string(value, bytes, sizeof(bytes), &byte_count) != CNA_RESULT_SUCCESS ||
+        byte_count != sizeof(bytes) || memcmp(bytes, Expected, sizeof(bytes)) != 0) {
+        return 0;
+    }
+    return 1;
+}
+
+static int validate_vector3_arithmetic(void)
+{
+    const CNA_Vector3 a = {2.0F, 4.0F, 6.0F};
+    const CNA_Vector3 b = {1.0F, -2.0F, 3.0F};
+    CNA_Vector3 result = a;
+    float scalar = 0.0F;
+    if (cna_vector3_add(result, b, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 3.0F, 2.0F, 9.0F) ||
+        cna_vector3_subtract(a, b, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 1.0F, 6.0F, 3.0F) ||
+        cna_vector3_multiply(a, b, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 2.0F, -8.0F, 18.0F) ||
+        cna_vector3_multiply_scalar(a, 0.5F, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 1.0F, 2.0F, 3.0F) ||
+        cna_vector3_divide(a, b, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 2.0F, -2.0F, 2.0F) ||
+        cna_vector3_divide_scalar(a, 2.0F, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 1.0F, 2.0F, 3.0F) ||
+        cna_vector3_negate(a, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, -2.0F, -4.0F, -6.0F) ||
+        cna_vector3_dot(a, b, &scalar) != CNA_RESULT_SUCCESS || scalar != 12.0F ||
+        cna_vector3_distance(a, b, &scalar) != CNA_RESULT_SUCCESS ||
+        !near_float(scalar, sqrtf(46.0F)) ||
+        cna_vector3_distance_squared(a, b, &scalar) != CNA_RESULT_SUCCESS ||
+        scalar != 46.0F ||
+        cna_vector3_cross(a, b, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 24.0F, 0.0F, -8.0F)) {
+        return 0;
+    }
+
+    if (cna_vector3_barycentric(
+            (CNA_Vector3){0.0F, 0.0F, 0.0F},
+            (CNA_Vector3){2.0F, 4.0F, 6.0F},
+            (CNA_Vector3){4.0F, 8.0F, 12.0F},
+            0.25F,
+            0.5F,
+            &result) != CNA_RESULT_SUCCESS || !vector3_near(result, 2.5F, 5.0F, 7.5F) ||
+        cna_vector3_catmull_rom(
+            (CNA_Vector3){0.0F, 0.0F, 0.0F},
+            (CNA_Vector3){1.0F, 2.0F, 3.0F},
+            (CNA_Vector3){2.0F, 4.0F, 6.0F},
+            (CNA_Vector3){3.0F, 6.0F, 9.0F},
+            0.5F,
+            &result) != CNA_RESULT_SUCCESS || !vector3_near(result, 1.5F, 3.0F, 4.5F) ||
+        cna_vector3_clamp(
+            (CNA_Vector3){-2.0F, 9.0F, 4.0F},
+            (CNA_Vector3){0.0F, 1.0F, 2.0F},
+            (CNA_Vector3){3.0F, 5.0F, 3.0F},
+            &result) != CNA_RESULT_SUCCESS || !vector3_near(result, 0.0F, 5.0F, 3.0F) ||
+        cna_vector3_hermite(
+            (CNA_Vector3){0.0F, 0.0F, 0.0F},
+            (CNA_Vector3){0.0F, 0.0F, 0.0F},
+            (CNA_Vector3){10.0F, 20.0F, 30.0F},
+            (CNA_Vector3){0.0F, 0.0F, 0.0F},
+            0.5F,
+            &result) != CNA_RESULT_SUCCESS || !vector3_near(result, 5.0F, 10.0F, 15.0F) ||
+        cna_vector3_lerp(a, b, 0.5F, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 1.5F, 1.0F, 4.5F) ||
+        cna_vector3_max(a, b, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 2.0F, 4.0F, 6.0F) ||
+        cna_vector3_min(a, b, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 1.0F, -2.0F, 3.0F) ||
+        cna_vector3_normalize((CNA_Vector3){2.0F, 3.0F, 6.0F}, &result) !=
+            CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 2.0F / 7.0F, 3.0F / 7.0F, 6.0F / 7.0F) ||
+        cna_vector3_reflect(
+            (CNA_Vector3){1.0F, -1.0F, 2.0F},
+            (CNA_Vector3){0.0F, 1.0F, 0.0F},
+            &result) != CNA_RESULT_SUCCESS || !vector3_near(result, 1.0F, 1.0F, 2.0F) ||
+        cna_vector3_smooth_step(a, b, 0.5F, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 1.5F, 1.0F, 4.5F) ||
+        cna_vector3_add(a, b, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_vector3_divide_scalar(a, 0.0F, &result) != CNA_RESULT_SUCCESS ||
+        !isinf(result.x) || !isinf(result.y) || !isinf(result.z)) {
+        return 0;
+    }
+    if (cna_vector3_normalize((CNA_Vector3){0.0F, 0.0F, 0.0F}, &result) !=
+            CNA_RESULT_SUCCESS ||
+        !isnan(result.x) || !isnan(result.y) || !isnan(result.z)) {
+        return 0;
+    }
+    return 1;
+}
+
+static int validate_vector3_transforms(void)
+{
+    const CNA_Matrix matrix = translation_matrix3(10.0F, 20.0F, 30.0F);
+    const CNA_Quaternion identity = {0.0F, 0.0F, 0.0F, 1.0F};
+    const float half_sqrt = 0.70710678F;
+    const CNA_Quaternion quarter_turn = {0.0F, 0.0F, half_sqrt, half_sqrt};
+    CNA_Vector3 result;
+    if (cna_vector3_transform_matrix((CNA_Vector3){1.0F, 2.0F, 3.0F}, matrix, &result) !=
+            CNA_RESULT_SUCCESS || !vector3_near(result, 11.0F, 22.0F, 33.0F) ||
+        cna_vector3_transform_normal((CNA_Vector3){1.0F, 2.0F, 3.0F}, matrix, &result) !=
+            CNA_RESULT_SUCCESS || !vector3_near(result, 1.0F, 2.0F, 3.0F) ||
+        cna_vector3_transform_quaternion(
+            (CNA_Vector3){1.0F, 2.0F, 3.0F}, identity, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 1.0F, 2.0F, 3.0F) ||
+        cna_vector3_transform_quaternion(
+            (CNA_Vector3){1.0F, 0.0F, 3.0F}, quarter_turn, &result) != CNA_RESULT_SUCCESS ||
+        !vector3_near(result, 0.0F, 1.0F, 3.0F)) {
+        return 0;
+    }
+
+    const CNA_Vector3 source[3] = {
+        {1.0F, 2.0F, 3.0F}, {3.0F, 4.0F, 5.0F}, {5.0F, 6.0F, 7.0F}
+    };
+    CNA_Vector3 destination[3] = {
+        {-1.0F, -1.0F, -1.0F}, {-1.0F, -1.0F, -1.0F}, {-1.0F, -1.0F, -1.0F}
+    };
+    if (cna_vector3_transform_matrix_array(
+            source, 3U, 1U, matrix, destination, 3U, 0U, 2U) != CNA_RESULT_SUCCESS ||
+        !vector3_near(destination[0], 13.0F, 24.0F, 35.0F) ||
+        !vector3_near(destination[1], 15.0F, 26.0F, 37.0F) ||
+        !vector3_near(destination[2], -1.0F, -1.0F, -1.0F) ||
+        cna_vector3_transform_quaternion_array(
+            source, 3U, 0U, identity, destination, 3U, 0U, 3U) != CNA_RESULT_SUCCESS ||
+        !vector3_near(destination[2], 5.0F, 6.0F, 7.0F) ||
+        cna_vector3_transform_normal_array(
+            source, 3U, 0U, matrix, destination, 3U, 0U, 3U) != CNA_RESULT_SUCCESS ||
+        !vector3_near(destination[0], 1.0F, 2.0F, 3.0F)) {
+        return 0;
+    }
+
+    CNA_Vector3 alias[3] = {
+        {1.0F, 2.0F, 3.0F}, {4.0F, 5.0F, 6.0F}, {7.0F, 8.0F, 9.0F}
+    };
+    if (cna_vector3_transform_quaternion_array(
+            alias, 3U, 0U, identity, alias, 3U, 1U, 2U) != CNA_RESULT_SUCCESS ||
+        !vector3_near(alias[0], 1.0F, 2.0F, 3.0F) ||
+        !vector3_near(alias[1], 1.0F, 2.0F, 3.0F) ||
+        !vector3_near(alias[2], 1.0F, 2.0F, 3.0F)) {
+        return 0;
+    }
+
+    destination[0] = (CNA_Vector3){77.0F, 88.0F, 99.0F};
+    if (cna_vector3_transform_matrix_array(
+            source, 3U, 2U, matrix, destination, 3U, 0U, 2U) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        !vector3_near(destination[0], 77.0F, 88.0F, 99.0F) ||
+        cna_vector3_transform_matrix_array(0, 0U, 0U, matrix, 0, 0U, 0U, 0U) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
     return validate_construction_and_members() &&
-        validate_arithmetic() && validate_transforms() ? 0 : 1;
+        validate_arithmetic() && validate_transforms() &&
+        validate_vector3_construction_and_members() &&
+        validate_vector3_arithmetic() && validate_vector3_transforms() ? 0 : 1;
 }
