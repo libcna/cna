@@ -9,18 +9,19 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **448 closed (`✔` 276, `✅` 172),
-  6 `⬜` remaining.** The other 6 carry a deliberate partial marker: 1 `🔬` (investigation, no
-  implementation owed) and 5 `✅/⬜`; there is no `✅/🐛` residue, standalone `🐛`, or `⛔`.
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **450 closed (`✔` 274, `✅` 176),
+  5 `⬜` remaining.** The other 5 carry a deliberate partial marker: 1 `🔬` (investigation, no
+  implementation owed) and 4 `✅/⬜`; there is no `✅/🐛` residue, standalone `🐛`, or `⛔`.
 - **Draco is no longer optional local state:** `third_party/draco` is a gitlink pinned to
   Draco **1.5.7** (`8786740086a9f4d83f44aa83badfbea4dce7a1b5`). The normal build uses it; the sanitizer
   workflow also runs `CNA_ENABLE_DRACO=OFF` so the named refusal path cannot rot.
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
   (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
   `partially-remediated`: `GLTF-241`, whose residue is owned by `GLTF-238`.
-- The campaign has **not** been declared complete. `GLTF-458` (**GLTF CORE 2.0 CORRECT**) and
-  `GLTF-459` (**GLTF ROBUST**) are both still `⬜`, and neither should be flipped without the
-  evidence its own row demands.
+- **`GLTF CORE 2.0 CORRECT` was declared on 2026-08-15** (`GLTF-458`) after all 20 §27.1 rows and
+  the freshly rerun four-renderer Gate B were green. The campaign itself is not complete:
+  `GLTF-459` (**GLTF ROBUST**) remains `⬜`, and optional-extension/renderer-specific L7 residue
+  must not be folded into the narrower CORE claim.
 
 ## How to verify, exactly
 
@@ -54,10 +55,10 @@ Expected as of this writing:
 | full suite | **6 372 passed, 191 skipped, 18 failed** |
 | generator `--check` / `--determinism` | **145 assets, 729 files — byte-identical** |
 | pinned Khronos Validator | **270 valid, 20 expected-invalid, 42 warnings** |
-| `*Gltf*`, HEADLESS + vendored Draco | **549 tests: 548 passed, 1 opt-in ChronographWatch skip** (21.5 s locally) |
+| `*Gltf*`, HEADLESS + vendored Draco | **552 tests: 551 passed, 1 opt-in ChronographWatch skip** (14.7 s on the 2026-08-15 declaration revision) |
 | `*Gltf*`, HEADLESS without Draco | **539 tests: 538 passed, 1 opt-in skip**; the ten-test difference is the real decoder/encoder evidence, while the unavailable-path checks still run |
 | conformance ladder, Draco `ON` / `OFF` | **10/10 passed** / **10/10 passed** |
-| pinned reference renderer subset | **12/12 passed**; minimum foreground IoU 0.999579, coverage ratio 0.999891–1.000422, worst foreground RGB MAE 67.60 |
+| pinned reference renderer subset | **13/13 passed**; the original 12-case bounds remain minimum foreground IoU 0.999579, coverage ratio 0.999891–1.000422 and worst foreground RGB MAE 67.60; `uv1-material` additionally passes after dual-stream support |
 | final pinned viewer retake | **14/14 rows, 15/15 cases passed** through two byte-identical viewer captures plus the exact viewer camera in the Khronos renderer; report in `docs/gltf-viewer-retake-report.json` |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
@@ -171,7 +172,7 @@ narrower than the old table implied:
 |---|---|---|
 | **format/material breadth** | `GLTF-184`, `244`, `344` | §27.1 row 7 is green: strides 60/76 carry two sampled UV sets, direct/offline selectors agree, and EasyGL OPENGLES2/3 plus the pinned Khronos comparison prove the image. Per-map `KHR_texture_transform` matrices and the two `KHR_materials_specular` texture inputs remain. `GLTF-244` still requires its full material matrix at L7 on two rasterisers. |
 | **renderer/platform residue** | `GLTF-379`, `385`–`387` | The seven completed semantic-audit slices stay recorded under the investigation row. Vulkan, DirectX11/DXVK and SOFTWARE have strong numerical/native evidence, but no renderer-specific whole-corpus L7 capture/tolerance policy. |
-| **milestone chain** | `GLTF-449`, `458`–`460` | All 20 §27.1 rows are now green, so `GLTF-458` is ready for an evidence-backed declaration and `FUTURE.md` update. Evaluate ROBUST separately against all twelve §27.2 rows before writing the retrospective. |
+| **milestone chain** | `GLTF-459`–`460` | CORE and the matching `FUTURE.md` update (`GLTF-449`/`458`) are closed. Evaluate ROBUST separately against all twelve §27.2 rows before writing the retrospective. |
 
 ## Suggested next clusters
 
@@ -191,9 +192,9 @@ viewer integration and pinned reference subset became green.
 4. **Finish renderer/platform residue (`GLTF-379`, `385`–`387`)** with explicit renderer-specific
    image evidence or a documented release-boundary decision; do not turn existing L1–L6/native
    success into an unstated L7 claim.
-5. **Declare CORE now, then close the remaining milestone chain in order** (`GLTF-449`,
-   `458`–`460`). CORE and ROBUST are separate gates: the optional-extension and cross-renderer
-   residue above does not reopen a green §27.1 row, but it still blocks the broader ROBUST claim.
+5. **Close the remaining milestone chain in order** (`GLTF-459`–`460`). CORE is declared; ROBUST
+   is a separate gate. The optional-extension and cross-renderer residue above does not reopen a
+   green §27.1 row, but it still blocks the broader ROBUST claim and therefore the retrospective.
 
 **Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to
 add a fixture and when a document belongs inline instead — both were learned the expensive way.
