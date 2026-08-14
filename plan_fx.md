@@ -1,6 +1,7 @@
 # Compiled XNA Effect Bytecode Support Plan
 
-- Status: **In progress — FNA3D vertical slice implemented and parser-hardened on `feature/fx`**
+- Status: **In progress — FNA3D vertical slice implemented, conformance-suited and parser-hardened
+  on `feature/fx`; `FX-057` deliberately not declared (see section 10.1's assessment)**
 - Planning baseline: `develop` at `a749fdce34a5825eb80a778b5db68e11da9358f8`
 - Target branch: `feature/fx`
 - Scope of this document: architecture, implementation checklist, and current delivery status
@@ -496,7 +497,7 @@ must be accepted before a row can close.
 | FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | **Done.** The whole `CnaTests` binary runs under FNA3D: 5,997 pass and every remaining failure is explained -- one real regression from this branch (a stale FNA3D instancing message) fixed here, three `MouseCursorTest` failures caused by `SDL_VIDEODRIVER=offscreen` having no system cursors, one render-target readback that fails only on the SDL_GPU/Vulkan driver and passes on FNA3D's OpenGL driver, and one pre-existing FNA3D device-lifetime crash unrelated to compiled effects, now recorded in `known_bugs.md` |
 | FX-055 | Publish FNA3D support documentation, format/error guide, capability matrix, dependency notices, and migration examples | FX-043, FX-054 | **Done.** `docs/fx-compiled-effects.md` covers the format boundary, loading, reflection, values, techniques/passes, published pass state, samplers, clone, lifetime, the renderer matrix, an error table, XNA-to-CNA migration, and the dependency/licence notices |
 | FX-056 | Update/supersede the old FX plan documents and Phase 74 rows without erasing their historical record | FX-055 | **Done.** `docs/fx-bytecode-support-plan.md` and `docs/shader-effect-vs-fx-bytecode.md` carry supersession banners and point at the current guide; `plan_graphics.md` Phase 74 keeps its original rows and adds a row-by-row disposition (obsolete / delivered / re-scoped / carried forward) so none of them can be picked up again |
-| FX-057 | Declare the FNA3D vertical slice usable | FX-051, FX-052, FX-054, FX-055, FX-056 | All FNA3D MVP exit criteria in section 10 pass |
+| FX-057 | Declare the FNA3D vertical slice usable | FX-051, FX-052, FX-054, FX-055, FX-056 | **Blocked, deliberately.** Six of eight exit criteria pass; the oracle criterion needs `FX-005` (no `mono`/`dotnet` on the development machine) and the safe-failure criterion needs `FX-051` to run dry. Assessed row by row in section 10.1 |
 
 ### Phase G - Additional renderer waves
 
@@ -557,6 +558,27 @@ The feature may be advertised as usable on FNA3D only when all of the following 
 - malformed input and unsupported renderers fail explicitly and safely;
 - fuzz/sanitizer and full regression gates are clean;
 - `CompiledEffects` is true only on FNA3D and documentation says so precisely.
+
+#### Assessment (2026-08-14)
+
+`FX-057` is **not** declared. Six of the eight criteria pass; two do not, and neither is a matter
+of remaining effort alone.
+
+| Criterion | State |
+|---|---|
+| byte-array and XNB loading | **Pass** — both paths tested, including an end-to-end ContentManager load and draw |
+| reflection matches the FNA oracle | **Not met.** There is no oracle. `FX-005` needs the FNA reference tool, which needs `mono`/`xbuild` and a built `FNA.dll`; neither `mono` nor `dotnet` exists on this machine. Reflection is currently verified against the format and against CNA's own fixtures, which is self-consistency, not ground truth |
+| parameters, annotations, textures/samplers, techniques, passes, states | **Pass** — covered by the shared conformance suite and the FNA3D-specific tests |
+| SpriteBatch and 3D pixel tests | **Pass** — deterministic pixels for both paths and for a blend-factor state oracle |
+| clone and lifetime | **Pass** — clone chains, device reset, disposal ordering, repeated cycles |
+| malformed input and unsupported renderers fail explicitly and safely | **Partial.** Unsupported renderers refuse by name, and CNA's own layer rejects every malformed category tested. But a fuzz campaign still reaches a wild read inside pinned MojoShader after a few thousand mutations, so "safely" does not yet hold for arbitrary hostile content. Documented as a trust boundary rather than claimed |
+| fuzz/sanitizer and regression gates clean | **Partial.** Sanitizers are clean for CNA-owned code (`FX-052`) and the full regression is explained (`FX-054`), but the fuzz gate is not clean (`FX-051`) |
+| `CompiledEffects` true only on FNA3D, documented precisely | **Pass** |
+
+So the accurate public statement today is: compiled effects work on FNA3D for content the game
+ships, are covered by a portable conformance suite, and are documented -- but the feature is not
+yet declared usable, because it has no independent oracle and cannot yet promise safe failure on
+hostile input.
 
 ### 10.2 Project-wide completion
 
