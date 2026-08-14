@@ -2,6 +2,7 @@
 
 #include "CNA/C/graphics.h"
 #include "CnaCApiGraphicsDetail.hpp"
+#include "CnaCApiGraphicsStateDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
@@ -34,6 +35,11 @@ using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::Texture2DResource;
+using CNA::C::Detail::ToNativeBlendState;
+using CNA::C::Detail::ToNativeDepthStencilState;
+using CNA::C::Detail::ToNativeRasterizerState;
+using CNA::C::Detail::ToNativeSamplerState;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
@@ -45,12 +51,6 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-struct Texture2DResource final {
-    std::shared_ptr<Texture2D> value;
-    CNA_Handle parentGame;
-    uint64_t activeBatchReferenceCount;
-};
 
 struct SpriteBatchResource final {
     std::shared_ptr<SpriteBatch> value;
@@ -252,14 +252,7 @@ struct ResolvedSpriteCommand final {
     const CNA_Handle handle,
     std::shared_ptr<Texture2DResource>* const outTexture)
 {
-    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::Texture2D, outTexture);
-    if (result == CNA_RESULT_SUCCESS) {
-        return CNA_RESULT_SUCCESS;
-    }
-    return Fail(
-        result,
-        ErrorCategoryForResult(result),
-        "The owned Texture2D handle is invalid for this call.");
+    return CNA::C::Detail::GetOwnedTexture2D(handle, outTexture);
 }
 
 [[nodiscard]] CNA_Result GetSpriteBatch(
@@ -299,12 +292,16 @@ void ReleaseBatchTextureReferences(SpriteBatchResource& spriteBatch) noexcept
 
 namespace CNA::C::Detail {
 
-CNA_Result CreateOwnedTexture2D(
+namespace {
+
+CNA_Result CreateOwnedTexture2DWithKind(
     std::shared_ptr<Texture2D> texture,
     const CNA_Handle parentGame,
+    const ObjectKind kind,
     CNA_Handle* const outTexture)
 {
-    if (texture == nullptr || parentGame == CNA_INVALID_HANDLE || outTexture == nullptr) {
+    if (texture == nullptr || parentGame == CNA_INVALID_HANDLE || outTexture == nullptr ||
+        (kind != ObjectKind::Texture2D && kind != ObjectKind::RenderTarget2D)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
             CNA_ERROR_CATEGORY_ARGUMENT,
@@ -312,11 +309,8 @@ CNA_Result CreateOwnedTexture2D(
     }
     *outTexture = CNA_INVALID_HANDLE;
     const auto resource = std::make_shared<Texture2DResource>(
-        Texture2DResource{std::move(texture), parentGame, 0U});
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::Texture2D,
-        resource,
-        outTexture);
+        Texture2DResource{std::move(texture), parentGame, 0U, 0U});
+    const CNA_Result result = GetRuntimeHandles().Create(kind, resource, outTexture);
     if (result != CNA_RESULT_SUCCESS) {
         return Fail(
             result,
@@ -325,6 +319,52 @@ CNA_Result CreateOwnedTexture2D(
     }
     AddOwnedGraphicsResource();
     return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result CreateOwnedTexture2D(
+    std::shared_ptr<Texture2D> texture,
+    const CNA_Handle parentGame,
+    CNA_Handle* const outTexture)
+{
+    return CreateOwnedTexture2DWithKind(
+        std::move(texture), parentGame, ObjectKind::Texture2D, outTexture);
+}
+
+CNA_Result CreateOwnedRenderTarget2D(
+    std::shared_ptr<Texture2D> texture,
+    const CNA_Handle parentGame,
+    CNA_Handle* const outTexture)
+{
+    return CreateOwnedTexture2DWithKind(
+        std::move(texture), parentGame, ObjectKind::RenderTarget2D, outTexture);
+}
+
+CNA_Result GetOwnedTexture2D(
+    const CNA_Handle handle,
+    std::shared_ptr<Texture2DResource>* const outTexture)
+{
+    ObjectKind kind = ObjectKind::Unknown;
+    CNA_Result result = GetRuntimeHandles().GetKind(handle, &kind);
+    if (result != CNA_RESULT_SUCCESS ||
+        (kind != ObjectKind::Texture2D && kind != ObjectKind::RenderTarget2D)) {
+        if (result == CNA_RESULT_SUCCESS) {
+            result = CNA_RESULT_INVALID_HANDLE;
+        }
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned Texture2D handle is invalid for this call.");
+    }
+    result = GetRuntimeHandles().Get(handle, kind, outTexture);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The owned Texture2D handle is invalid for this call.");
 }
 
 } // namespace CNA::C::Detail
@@ -784,11 +824,12 @@ CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (texture->activeBatchReferenceCount != 0U) {
+        if (texture->activeBatchReferenceCount != 0U ||
+            texture->activeFontReferenceCount != 0U) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
-                "The Texture2D is retained by an active SpriteBatch interval.");
+                "The Texture2D is retained by an active SpriteBatch interval or SpriteFont.");
         }
         texture->value->Dispose();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(textureHandle);
@@ -876,6 +917,68 @@ CNA_Result cna_sprite_batch_begin(
         spriteBatch->value->Begin(
             nativeSortMode,
             Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend);
+        spriteBatch->begun = true;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_begin_with_states(
+    const CNA_Handle spriteBatchHandle,
+    const CNA_SpriteSortMode sortMode,
+    const CNA_BlendState* const blendState,
+    const CNA_SamplerState* const samplerState,
+    const CNA_DepthStencilState* const depthStencilState,
+    const CNA_RasterizerState* const rasterizerState)
+{
+    return CallWithExceptionBarrier([&]() {
+        SpriteSortMode nativeSortMode{};
+        Microsoft::Xna::Framework::Graphics::BlendState nativeBlendState;
+        Microsoft::Xna::Framework::Graphics::SamplerState nativeSamplerState;
+        Microsoft::Xna::Framework::Graphics::DepthStencilState nativeDepthStencilState;
+        Microsoft::Xna::Framework::Graphics::RasterizerState nativeRasterizerState;
+        if (!TryMapSpriteSortMode(sortMode, &nativeSortMode)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The SpriteBatch sort mode is invalid.");
+        }
+        if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ToNativeDepthStencilState(
+                depthStencilState, &nativeDepthStencilState);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ToNativeRasterizerState(
+                rasterizerState, &nativeRasterizerState);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (spriteBatch->begun) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The SpriteBatch already has an active begin/end interval.");
+        }
+
+        spriteBatch->value->Begin(
+            nativeSortMode,
+            nativeBlendState,
+            &nativeSamplerState,
+            &nativeDepthStencilState,
+            &nativeRasterizerState);
         spriteBatch->begun = true;
         return CNA_RESULT_SUCCESS;
     });

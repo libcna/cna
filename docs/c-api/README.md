@@ -5,11 +5,12 @@
 The native C API is experimental. Its initial `0.1.0` shared library and public C17 headers provide
 the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycle slice
 (`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery) plus
-owned Color-format `Texture2D` creation, bulk RGBA8 transfer, POD-array `SpriteBatch` submission and
-point-in-time keyboard, mouse, gamepad and touch snapshots. An owned `ContentManager` adds UTF-8
-root/cache control and a typed Color Texture2D load route; owned PCM16 sound effects add explicit
-instance playback/control plus a real native playback-availability probe. Exact support and
-omissions are recorded in
+owned Color-format `Texture2D` creation, bulk RGBA8 transfer, POD-array `SpriteBatch` submission,
+complete graphics-state descriptors, display/adapter/presentation snapshots, owned render targets
+and caller-built SpriteFonts, plus point-in-time keyboard, mouse, gamepad and touch snapshots. An
+owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
+PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
+probe. Exact support and omissions are recorded in
 [`FEATURE_MATRIX.md`](FEATURE_MATRIX.md). It is not complete public CNA coverage. The contract in
 this directory is binding on implementation until the release gate in
 [`../../plan_binding.md`](../../plan_binding.md) is complete.
@@ -70,8 +71,9 @@ gate.
 - Every public declaration receives a Doxygen block in its `.h` header.
 
 The exact modules and headers are defined in the implementation plan. The current header split is
-`abi.h`, `core.h`, `runtime.h`, `graphics.h`, `input.h`, `content.h` and `audio.h`; later family
-headers follow as coverage requires.
+`abi.h`, `core.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
+`sprite_font.h`, `input.h`, `content.h` and `audio.h`; later family headers follow as coverage
+requires.
 
 ## Supported configurations
 
@@ -94,8 +96,9 @@ The C API must not expose:
 - hidden ownership, C++ containers, locale-dependent strings or implicit allocator rules.
 
 See the sibling contract documents for ABI versioning, handles, ownership, errors, text/buffers,
-callbacks/threading, renderer capability reporting, [input snapshots](INPUT_SNAPSHOTS.md) and the
-Sharp Runtime boundary. The owned content/cache contract is in [`CONTENT.md`](CONTENT.md). The
+callbacks/threading, renderer capability reporting, [graphics resources](GRAPHICS_RESOURCES.md),
+[input snapshots](INPUT_SNAPSHOTS.md) and the Sharp Runtime boundary. The owned content/cache
+contract is in [`CONTENT.md`](CONTENT.md). The
 [audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary. The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record.

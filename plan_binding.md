@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B4 complete; B5 underway through CBIND-028 under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-034 under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -232,7 +232,7 @@ mechanical wrapper.
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | CBIND-033 | Inventory the complete public CNA surface | ✅ | Doxygen-backed `tools/c-api/generate_coverage_inventory.py` deterministically tracks all 414 public headers and 6,415 public/protected declarations while explicitly excluding 95 `Internal`/`Detail` headers and the C API itself. `coverage_mappings.json` assigns reviewed current mappings; every remaining symbol has a C-native mapping proposal, test obligation, status and owner task. The snapshot records 443 implemented, 21 partial, 5,881 planned and 70 explicitly deleted/not-applicable declarations; `--check` proves drift without prematurely wiring the CBIND-043 CI gate. |
-| CBIND-034 | Add render targets, sprite fonts and graphics state coverage | ⬜ | Expose compact handles/POD descriptors and capability/error behavior for every public member in this family; verify resource ownership and renderer-specific refusal paths from C. |
+| CBIND-034 | Add render targets, sprite fonts and graphics state coverage | ✅ | `graphics_state.h`, `display.h`, `render_target.h` and `sprite_font.h` map every inventory row in this family: fixed identities and complete state PODs/presets/device round-trips, sampler slots and explicit-state SpriteBatch Begin; display/adapter/presentation values and safe native-handle/refresh limitations; owned 2D/cube targets with applied-property snapshots and atomic singular/MRT binding; copied glyph SpriteFonts retaining their source Texture2D. Strict-C HEADLESS and SDL_RENDERER tests cover ABI layouts, properties, UTF-8, ownership, stale/wrong-thread handles, real 2D binding and honest unavailable-backend paths. The inventory now records 814 implemented, 21 partial, 5,510 planned and 70 not applicable rows, with no planned CBIND-034 row. |
 | CBIND-035 | Add 3D resources, effects, models and draw-submission coverage | ⬜ | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions for all public APIs in these families. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. |
 | CBIND-036 | Add stream, storage, networking and asynchronous-operation coverage | ⬜ | Define stream callbacks, storage/network objects and neutral operation handles where the canonical API needs them, with documented ownership, thread, cancellation and error conversion. Never expose `System::IO::Stream`, `Task`, `std::future` or a C++ pointer. |
 | CBIND-037 | Add collections, events, services, media and devices coverage | ⬜ | Map every public collection/event/service/media/device API to count/copy, stable-handle or callback forms. Prohibit public container layouts and test mutation, capacity, ownership and thread rules. |
@@ -304,7 +304,7 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-033` are ✅; `CBIND-034` through `CBIND-044` are ⬜ **not started**. The
+`CBIND-000` through `CBIND-034` are ✅; `CBIND-035` through `CBIND-044` are ⬜ **not started**. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -313,5 +313,8 @@ SDL pixel-verified backbuffer readback, not complete public CNA coverage. No lan
 binding exists. B4 is complete; B5 now includes owned content-manager/root/cache control and Color
 Texture2D loads, keyboard/mouse/gamepad/touch capture and a PCM16 SoundEffect/instance control
 route with stable native playback-availability reporting and isolated success/unavailable-device
-regressions. B5 is complete. B6 now has a deterministic, reviewed 414-header/6,415-symbol baseline;
-render targets, sprite fonts and graphics-state coverage in `CBIND-034` are next.
+regressions. B5 is complete. B6 has a deterministic, reviewed 414-header/6,415-symbol baseline and
+now maps the full CBIND-034 graphics family through C-native state/display PODs, adapter queries,
+owned render targets and SpriteFonts. The current snapshot is 814 implemented, 21 partial, 5,510
+planned and 70 not applicable; CBIND-035 3D resources, effects, models and bulk draw submission is
+next.

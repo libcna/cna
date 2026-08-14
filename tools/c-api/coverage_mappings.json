@@ -247,15 +247,6 @@
       "task": "CBIND-026"
     },
     {
-      "id": "backbuffer-info-properties",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PresentationParameters::get(?:BackBufferWidth|BackBufferHeight|BackBufferFormat)Property$",
-      "kinds": ["method"],
-      "mapping": "field in `CNA_BackBufferInfo` from `cna_graphics_device_get_backbuffer_info`",
-      "tests": "ABI layout plus HEADLESS/SDL_RENDERER `LifecycleSmoke.c`",
-      "status": "implemented",
-      "task": "CBIND-026"
-    },
-    {
       "id": "texture2d-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D$",
       "kinds": ["class"],
@@ -335,10 +326,10 @@
       "id": "spritebatch-begin-partial",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::Begin$",
       "kinds": ["method"],
-      "mapping": "`cna_sprite_batch_begin`; sort mode exposed, other state fixed to XNA defaults",
-      "tests": "all sort modes, validation/state and renderer refusal in `LifecycleSmoke.c`",
+      "mapping": "`cna_sprite_batch_begin` plus `cna_sprite_batch_begin_with_states`; Effect and transform-matrix variants remain planned in CBIND-035",
+      "tests": "all sort modes/defaults in `LifecycleSmoke.c` and explicit state/backend-refusal cases in `GraphicsSurfaceSmoke.c`",
       "status": "partial",
-      "task": "CBIND-024"
+      "task": "CBIND-034"
     },
     {
       "id": "spritebatch-draw-partial",
@@ -559,6 +550,114 @@
       "tests": "`AudioSmoke.c` transitions, clamping, validation, lifetime and threading",
       "status": "implemented",
       "task": "CBIND-030"
+    },
+    {
+      "id": "graphics-state-identities",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:Blend|BlendFunction|ColorWriteChannels|CompareFunction|CullMode|FillMode|StencilOperation|TextureAddressMode|TextureFilter)\\.hpp$",
+      "mapping": "fixed-width `CNA_*` identity and stable `CNA_*` constants in `graphics_state.h`; flag operators use ordinary C bitwise operations",
+      "tests": "C/C++ ABI identity assertions plus state validation in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "graphics-state-values",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:BlendState|DepthStencilState|RasterizerState|SamplerState)\\.hpp$",
+      "mapping": "versioned `CNA_BlendState`, `CNA_DepthStencilState`, `CNA_RasterizerState` or `CNA_SamplerState` POD with preset initializer and device get/set operations",
+      "tests": "ABI layout/identity assertions and preset, validation, device round-trip and backend-refusal cases in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "sampler-state-collection",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SamplerStateCollection\\.hpp$",
+      "mapping": "indexed `cna_graphics_device_get_sampler_state` / `cna_graphics_device_set_sampler_state` over fixed pixel/vertex collections",
+      "tests": "slot and stage round-trip, bounds and ABI cases in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "render-display-identities",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/(?:DisplayOrientation|Graphics/(?:CubeMapFace|DepthFormat|GraphicsProfile|PresentInterval))\\.hpp$",
+      "mapping": "fixed-width `CNA_*` identity and stable constants in `render_target.h` or `display.h`; orientation flags use ordinary C bitwise operations",
+      "tests": "C/C++ ABI identity assertions and graphics-surface behavior cases",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "vector3-spritefont-value",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Vector3$",
+      "kinds": ["class", "struct"],
+      "mapping": "fixed-layout `CNA_Vector3` POD used by `CNA_SpriteFontGlyph.kerning`",
+      "tests": "C/C++ ABI layout assertions and glyph construction in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "vector3-spritefont-fields",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Vector3::[XYZ]$",
+      "kinds": ["field"],
+      "mapping": "same-named field in fixed-layout `CNA_Vector3`",
+      "tests": "C/C++ ABI layout assertions and glyph construction in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "render-target-surface",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:IRenderTarget|RenderTarget2D|RenderTargetBinding|RenderTargetCube|RenderTargetUsage)\\.hpp$",
+      "mapping": "owned render-target handles plus versioned create/info/binding PODs and `cna_graphics_device_*render_target*` operations; content loss is the current false invariant and renderer pointers become an availability flag",
+      "tests": "ABI layouts and HEADLESS/SDL create, inheritance, property, bind, query, disposal, stale-handle and unavailable-renderer cases in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "sprite-font-surface",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteFont\\.hpp$",
+      "mapping": "owned SpriteFont handle, copied `CNA_SpriteFontGlyph` table, versioned info, character copy, mutable properties and UTF-8 measurement operations",
+      "tests": "ABI layouts and `GraphicsSurfaceSmoke.c` construction, characters, both measurement semantics, fallback, texture retention, UTF-8, threading and lifetime cases",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "display-mode-surface",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/DisplayMode(?:Collection)?\\.hpp$",
+      "mapping": "versioned `CNA_DisplayMode` value plus adapter display-mode count/copy/filter snapshot operations; constructors, indexing and iteration collapse to value initialization and arrays",
+      "tests": "ABI layout plus display-mode construction/equality and adapter collection/filter cases in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "graphics-adapter-surface",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsAdapter\\.hpp$",
+      "mapping": "adapter index, versioned metadata, UTF-8 string copy, display modes, preferences, profile/format queries and explicit safe native-handle/refresh limitations",
+      "tests": "ABI layout and adapter enumeration, strings, modes, preferences, profile/format queries and limitation cases in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "presentation-parameters-surface",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PresentationParameters\\.hpp$",
+      "mapping": "versioned `CNA_PresentationParameters` POD with init, native clone semantics, bounds, device get/set and an explicit safe native-window-handle limitation",
+      "tests": "C/C++ ABI layout plus initialization, clone, bounds, device round-trip and native-handle limitation cases in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
+    },
+    {
+      "id": "graphics-device-state-target-display-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:getPresentationParametersProperty|getDisplayModeProperty|getSamplerStatesProperty|getVertexSamplerStatesProperty|getBlendStateProperty|setBlendStateProperty|getDepthStencilStateProperty|setDepthStencilStateProperty|getRasterizerStateProperty|setRasterizerStateProperty|SetRenderTarget|SetRenderTargets|GetRenderTargets|SetPresentationParameters)$",
+      "kinds": ["method"],
+      "mapping": "matching presentation/display, state/sampler or render-target C API operation with callback-scoped device validation",
+      "tests": "HEADLESS/SDL device round-trip, binding, backend-refusal, invalid input, threading and ABI cases in `GraphicsSurfaceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-034"
     }
   ]
 }

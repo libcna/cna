@@ -1,11 +1,11 @@
 # NEXT.md
 
-## C BINDING / C ABI — PUBLIC-SURFACE INVENTORY COMPLETE THROUGH CBIND-033 (2026-08-14)
+## C BINDING / C ABI — GRAPHICS RESOURCES COMPLETE THROUGH CBIND-034 (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. `CBIND-001`–`033` are complete: `docs/c-api/` defines the
+> API** through C-native mappings. `CBIND-001`–`034` are complete: `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
 > `SDL_RENDERER`. The work deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig,
@@ -37,10 +37,16 @@
 > applications need not infer them from backend/platform names. `CBIND-033` now establishes the
 > complete public-header baseline: a Doxygen-backed generator inventories 414 public headers and
 > 6,415 public/protected declarations, excluding 95 explicit `Internal`/`Detail` headers. Every
-> symbol has a stable ID, C mapping, test obligation, status and owner task: 443 are implemented,
-> 21 partial, 5,881 planned and 70 explicitly deleted/not applicable. Deterministic `--check`
-> detects drift; wiring it into CI remains correctly reserved for CBIND-043. `CBIND-034` render
-> targets, sprite fonts and graphics-state coverage is next.
+> symbol has a stable ID, C mapping, test obligation, status and owner task. `CBIND-034` adds
+> complete fixed-layout Blend/DepthStencil/Rasterizer/Sampler descriptors and presets, device and
+> sampler state round-trips, explicit-state SpriteBatch Begin, display/adapter/presentation
+> snapshots and queries, owned RenderTarget2D/RenderTargetCube handles and copied-glyph SpriteFont
+> handles with enforced texture retention. The same strict-C test passes against HEADLESS and
+> SDL_RENDERER, including real SDL 2D target binding and honest unavailable target/state paths.
+> The inventory is now 814 implemented, 21 partial, 5,510 planned and 70 explicitly
+> deleted/not applicable, with no planned CBIND-034 row. Deterministic `--check` detects drift;
+> wiring it into CI remains correctly reserved for CBIND-043. `CBIND-035` 3D resources, effects,
+> models and bulk draw submission is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

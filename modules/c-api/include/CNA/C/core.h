@@ -114,6 +114,20 @@ typedef struct CNA_Vector2 {
 } CNA_Vector2;
 
 /**
+ * @brief Represents a three-component single-precision vector value.
+ */
+typedef struct CNA_Vector3 {
+    /** @brief X component. */
+    float x;
+
+    /** @brief Y component. */
+    float y;
+
+    /** @brief Z component. */
+    float z;
+} CNA_Vector3;
+
+/**
  * @brief Represents an integer rectangle as position and size.
  */
 typedef struct CNA_Rectangle {

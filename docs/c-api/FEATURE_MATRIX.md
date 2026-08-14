@@ -20,18 +20,22 @@ fallible calls return `CNA_Result`; no C++ or Sharp Runtime type or exception cr
 | Lifecycle | Load, update, draw, unload and exit callbacks with copied callback table, context and optional copied UTF-8 failure message | Callbacks are synchronous; a callback failure becomes `CNA_RESULT_CALLBACK` |
 | Timing | `CNA_GameTime` snapshots with total/elapsed 100-nanosecond ticks and running-slowly flag | Present only for update and draw callbacks |
 | Graphics discovery | Borrow callback-scoped device; query renderer identity/name, maximum 2D texture dimension and 13 capability flags | Device handle expires when the callback returns; renderer selection remains compile-time |
+| Graphics states | Complete BlendState, DepthStencilState, RasterizerState and SamplerState POD descriptors; native presets; device get/set; 16 pixel and vertex sampler slots | Applying an otherwise valid state may fail when the compiled backend cannot represent it; Effect and transform-matrix SpriteBatch variants remain planned |
+| Display and presentation | DisplayMode initialization/equality; adapter metadata, UTF-8 strings, modes, preferences, profile/format queries; PresentationParameters init/clone/bounds/device round-trip | Adapter indices are point-in-time; native monitor/window handles are deliberately not disclosed; active-device adapter refresh returns `NOT_SUPPORTED` |
 | Backbuffer | Query logical width, height and format; count/query then copy the complete RGBA8 backbuffer | Draw-time use; HEADLESS honestly returns `CNA_RESULT_NOT_SUPPORTED`; no region or non-Color readback |
 | Surface formats | Stable identities for all 27 currently canonical `SurfaceFormat` values | Initial texture transfer accepts only `CNA_SURFACE_FORMAT_COLOR` |
 | Texture2D | Create owned Color textures, query width/height/level count/format, upload and read the exact complete level-zero RGBA8 array, destroy | No subrectangle, arbitrary element type or per-mip transfer; mipmapped creation is represented but Color transfer remains level zero |
-| SpriteBatch | Create/destroy, begin with all five sort modes, submit an array of rectangle-based textured commands, end | Fixed XNA default blend/sampler/depth/rasterizer state; no custom state, transform, effect or text draw |
+| Render targets | Create/query/destroy owned 2D and cube targets; singular/MRT binding; active binding count/copy; RenderTarget2D accepted by Texture2D routes | Backend storage availability is explicit; HEADLESS binding returns `NOT_SUPPORTED`; bound targets cannot be destroyed; current ContentLost invariant is false |
+| SpriteBatch | Create/destroy, begin with all five sort modes or explicit blend/sampler/depth/rasterizer state, submit an array of rectangle-based textured commands, end | No transform, Effect or text-draw submission yet |
 | Sprite commands | Destination/source rectangles, RGBA tint, finite rotation/origin/depth and both flip bits | Every command is validated before native submission; every texture must belong to the same game |
+| SpriteFont | Build from a retained Texture2D/RenderTarget2D plus copied UTF-16 glyph/rectangle/kerning table; properties; character copy; UTF-8 measure; destroy | Caller creates the atlas/glyph table; no SpriteBatch text-draw command yet; source texture must outlive the font |
 | Keyboard | Fresh 256-key snapshot; all 160 canonical `Keys` names; local down/up, pressed count and ascending count/copy helpers | Non-player `Keyboard::GetState()` only; snapshot capture is creation-thread only, copied POD queries are thread-independent |
 | Mouse | Fresh logical position, vertical/horizontal wheel and five-button snapshot | Read-only capture; cursor positioning/capture/events remain planned |
 | Gamepad | Four player slots; default and explicit three-mode dead-zone capture; connection/packet, all 31 button bits, sticks/triggers; local combined-button and pure normalization helpers | Disconnected slots succeed with rest snapshots; capabilities, vibration and extensions remain planned |
 | Touch | Current capabilities and fixed-capacity eight-location collection with previous location and pressure; local find/previous helpers | Platform absence succeeds as disconnected/empty; display, gestures and events remain planned |
 | Content | Own a content manager; UTF-8 root count/copy/set; unload cache; load owned Color Texture2D handles; destroy | Create from a callback-scoped device; returned textures outlive manager unload/destruction; no other asset type yet |
 | Audio | Probe real playback availability; create owned mono/stereo PCM16LE effects; duration; owned instances; play/pause/resume/immediate or release-tail stop; volume/pitch/pan/loop/state; destroy | Availability is a successful versioned snapshot; creation-thread control; instances before effect before game; no device maps resource creation to `NOT_SUPPORTED`; no file/content, streaming, microphone, XACT or 3D route yet |
-| Values | ABI layouts for color, `Vector2` fields and `Rectangle` fields | Vector/rectangle methods, operators and named members are not yet mapped |
+| Values | ABI layouts for color, `Vector2`, SpriteFont `Vector3` kerning and `Rectangle` fields | Remaining vector/rectangle methods, operators and named members are not yet mapped |
 
 The complete exported-function list is mechanically checked so the shared library exposes only
 `cna_*` symbols. Pure C and C++ header translation tests freeze the implemented value layouts and
@@ -53,6 +57,10 @@ time. The initial slice currently has this automated evidence:
 | Audio availability, PCM creation, mixer transitions, threading and parent order | Available snapshot plus SDL dummy audio tested | Available snapshot plus SDL dummy audio/video tested | Audio behavior is renderer-independent; physical devices not C-tested |
 | Unavailable audio device and shutdown after repeated probes/creation failures | Successful unavailable snapshots in isolated invalid-driver process | Successful unavailable snapshots in isolated invalid-audio/dummy-video process | Exact driver availability is platform-specific |
 | SpriteBatch validation, state and lifetime | Tested | Tested | Not yet C-tested |
+| Graphics state values, device state/sampler round-trip and explicit-state SpriteBatch begin | Tested | Tested with supported opaque blend state; unsupported backend state paths preserved | Other renderer identities not yet C-tested |
+| Display modes, adapter snapshots/queries and PresentationParameters | Tested | Tested with SDL dummy video | Native handle disclosure and unsafe live refresh are explicit callable limitations |
+| RenderTarget2D/RenderTargetCube creation and binding contract | Creation/property/lifetime tested; bind returns `NOT_SUPPORTED` | Real RenderTarget2D binding and unavailable cube path tested | Capability and native allocation remain backend-specific |
+| SpriteFont glyph/properties/UTF-8 measurement and source-texture lifetime | Tested | Tested | Renderer-independent layout/measurement over a game-owned texture |
 | Observable SpriteBatch pixels | No raster backbuffer | Exact uploaded red/green/blue texels and clear pixel tested | No initial C evidence |
 | Full RGBA8 backbuffer readback | `CNA_RESULT_NOT_SUPPORTED`, destination unchanged | Tested before presentation | Depends on the selected native backend; not yet C-tested |
 
@@ -70,6 +78,8 @@ appropriate C evidence before this table claims support.
 | Texture2D | Owned child that survives callbacks; destroy before its game |
 | SpriteBatch | Owned child that survives callbacks; destroy before its game |
 | Submitted texture | Retained by an active batch until successful `End` or batch destruction; destruction while retained is refused |
+| RenderTarget2D / RenderTargetCube | Owned game child; unbind and destroy before game; RenderTarget2D also satisfies Texture2D C operations |
+| SpriteFont | Owned game child; destroy before game and before its retained source Texture2D/RenderTarget2D |
 | Game callbacks/context | Table is copied; function pointers and context remain caller-owned and valid through game destruction |
 | POD values and output buffers | Caller-owned; inputs are copied for the call and no output API writes a partial array |
 | Keyboard snapshot | Independent copied POD; it has no handle or game lifetime after capture |
@@ -109,9 +119,9 @@ The following families are planned work, not implicitly supported and not perman
 - player-indexed keyboard capture, input mutation/events, gamepad control/capabilities/extensions
   and touch display/gesture/event APIs;
 - 3D resources and draws, vertex/index buffers, models, meshes, effects and shaders;
-- render targets, occlusion queries and remaining graphics-device/presentation operations;
+- occlusion queries and remaining graphics-device operations;
 - non-Color texture transfers, texture regions, mip-level transfer and additional texture types;
-- custom SpriteBatch states, matrices, effects, `SpriteFont` and text drawing;
+- SpriteBatch matrices, effects and text drawing;
 - advanced and renderer-specific CNA extensions not listed in the implemented table.
 
 Until the generated inventory and completion gates in `plan_binding.md` are finished, any public

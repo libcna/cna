@@ -5,7 +5,9 @@
 
 #include "CNA/C/core.h"
 
+#include "System/ArgumentException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <cstdint>
 #include <cstddef>
@@ -33,6 +35,9 @@ enum class ObjectKind : uint32_t {
     ContentManager = 7,
     SoundEffect = 8,
     SoundEffectInstance = 9,
+    RenderTarget2D = 10,
+    RenderTargetCube = 11,
+    SpriteFont = 12,
     Test = UINT32_MAX
 };
 
@@ -76,8 +81,12 @@ template<typename TCallable>
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
     } catch (const std::ios_base::failure& exception) {
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+    } catch (const System::ArgumentException& exception) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
     } catch (const System::NotSupportedException& exception) {
         return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
+    } catch (const System::InvalidOperationException& exception) {
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const std::exception& exception) {
         return Fail(CNA_RESULT_INTERNAL, CNA_ERROR_CATEGORY_INTERNAL, exception.what());
     } catch (...) {

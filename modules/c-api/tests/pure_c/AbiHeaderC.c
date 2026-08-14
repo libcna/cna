@@ -115,3 +115,98 @@ _Static_assert(sizeof(CNA_SoundEffectCreateInfo) == 24U,
                "CNA_SoundEffectCreateInfo layout must remain stable");
 _Static_assert(sizeof(CNA_SoundEffectInstanceInfo) == 32U,
                "CNA_SoundEffectInstanceInfo layout must remain stable");
+_Static_assert(sizeof(CNA_Vector3) == 12U,
+               "CNA_Vector3 layout must remain stable");
+_Static_assert(sizeof(CNA_Blend) == sizeof(uint32_t) &&
+                   CNA_BLEND_ONE == UINT32_C(0) &&
+                   CNA_BLEND_SOURCE_ALPHA_SATURATION == UINT32_C(12),
+               "CNA blend identities must remain stable");
+_Static_assert(sizeof(CNA_BlendFunction) == sizeof(uint32_t) &&
+                   CNA_BLEND_FUNCTION_ADD == UINT32_C(0) &&
+                   CNA_BLEND_FUNCTION_MIN == UINT32_C(4),
+               "CNA blend-function identities must remain stable");
+_Static_assert(sizeof(CNA_ColorWriteChannels) == sizeof(uint32_t) &&
+                   CNA_COLOR_WRITE_NONE == UINT32_C(0) &&
+                   CNA_COLOR_WRITE_ALL == UINT32_C(15),
+               "CNA color-write bits must remain stable");
+_Static_assert(sizeof(CNA_CompareFunction) == sizeof(uint32_t) &&
+                   CNA_COMPARE_ALWAYS == UINT32_C(0) &&
+                   CNA_COMPARE_NOT_EQUAL == UINT32_C(7),
+               "CNA comparison identities must remain stable");
+_Static_assert(sizeof(CNA_StencilOperation) == sizeof(uint32_t) &&
+                   CNA_STENCIL_KEEP == UINT32_C(0) &&
+                   CNA_STENCIL_INVERT == UINT32_C(7),
+               "CNA stencil-operation identities must remain stable");
+_Static_assert(sizeof(CNA_CullMode) == sizeof(uint32_t) &&
+                   CNA_CULL_NONE == UINT32_C(0) &&
+                   CNA_CULL_COUNTER_CLOCKWISE_FACE == UINT32_C(2),
+               "CNA cull-mode identities must remain stable");
+_Static_assert(sizeof(CNA_FillMode) == sizeof(uint32_t) &&
+                   CNA_FILL_SOLID == UINT32_C(0) && CNA_FILL_WIREFRAME == UINT32_C(1),
+               "CNA fill-mode identities must remain stable");
+_Static_assert(sizeof(CNA_TextureAddressMode) == sizeof(uint32_t) &&
+                   CNA_TEXTURE_ADDRESS_WRAP == UINT32_C(0) &&
+                   CNA_TEXTURE_ADDRESS_MIRROR == UINT32_C(2),
+               "CNA texture-address identities must remain stable");
+_Static_assert(sizeof(CNA_TextureFilter) == sizeof(uint32_t) &&
+                   CNA_TEXTURE_FILTER_LINEAR == UINT32_C(0) &&
+                   CNA_TEXTURE_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT == UINT32_C(8),
+               "CNA texture-filter identities must remain stable");
+_Static_assert(sizeof(CNA_BlendState) == 56U,
+               "CNA_BlendState layout must remain stable");
+_Static_assert(sizeof(CNA_DepthStencilState) == 64U,
+               "CNA_DepthStencilState layout must remain stable");
+_Static_assert(sizeof(CNA_RasterizerState) == 28U,
+               "CNA_RasterizerState layout must remain stable");
+_Static_assert(sizeof(CNA_SamplerState) == 40U,
+               "CNA_SamplerState layout must remain stable");
+_Static_assert(sizeof(CNA_DepthFormat) == sizeof(uint32_t) &&
+                   CNA_DEPTH_FORMAT_NONE == UINT32_C(0) &&
+                   CNA_DEPTH_FORMAT_DEPTH24_STENCIL8 == UINT32_C(3),
+               "CNA depth-format identities must remain stable");
+_Static_assert(sizeof(CNA_RenderTargetUsage) == sizeof(uint32_t) &&
+                   CNA_RENDER_TARGET_USAGE_DISCARD_CONTENTS == UINT32_C(0) &&
+                   CNA_RENDER_TARGET_USAGE_PLATFORM_CONTENTS == UINT32_C(2),
+               "CNA render-target usage identities must remain stable");
+_Static_assert(sizeof(CNA_CubeMapFace) == sizeof(uint32_t) &&
+                   CNA_CUBE_MAP_FACE_POSITIVE_X == UINT32_C(0) &&
+                   CNA_CUBE_MAP_FACE_NEGATIVE_Z == UINT32_C(5),
+               "CNA cube-face identities must remain stable");
+_Static_assert(sizeof(CNA_RenderTarget2DCreateInfo) == 40U,
+               "CNA_RenderTarget2DCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_RenderTargetCubeCreateInfo) == 32U,
+               "CNA_RenderTargetCubeCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_RenderTargetInfo) == 44U,
+               "CNA_RenderTargetInfo layout must remain stable");
+_Static_assert(sizeof(CNA_RenderTargetBinding) == 24U,
+               "CNA_RenderTargetBinding layout must remain stable");
+_Static_assert(sizeof(CNA_Char16) == sizeof(uint16_t),
+               "CNA_Char16 must have a fixed-width representation");
+_Static_assert(sizeof(CNA_SpriteFontGlyph) == 56U,
+               "CNA_SpriteFontGlyph layout must remain stable");
+_Static_assert(sizeof(((CNA_SpriteFontCreateInfo*)0)->glyphs) == sizeof(void*),
+               "CNA_SpriteFontCreateInfo must use the platform C pointer representation");
+_Static_assert(sizeof(CNA_SpriteFontInfo) == 32U,
+               "CNA_SpriteFontInfo layout must remain stable");
+_Static_assert(sizeof(CNA_GraphicsProfile) == sizeof(uint32_t) &&
+                   CNA_GRAPHICS_PROFILE_REACH == UINT32_C(0) &&
+                   CNA_GRAPHICS_PROFILE_HI_DEF == UINT32_C(1),
+               "CNA graphics-profile identities must remain stable");
+_Static_assert(sizeof(CNA_PresentInterval) == sizeof(uint32_t) &&
+                   CNA_PRESENT_INTERVAL_DEFAULT == UINT32_C(0) &&
+                   CNA_PRESENT_INTERVAL_IMMEDIATE == UINT32_C(3),
+               "CNA presentation-interval identities must remain stable");
+_Static_assert(sizeof(CNA_DisplayOrientation) == sizeof(uint32_t) &&
+                   CNA_DISPLAY_ORIENTATION_DEFAULT == UINT32_C(0) &&
+                   CNA_DISPLAY_ORIENTATION_PORTRAIT == UINT32_C(4),
+               "CNA display-orientation bits must remain stable");
+_Static_assert(sizeof(CNA_NativeHandleValue) == sizeof(uint64_t),
+               "CNA_NativeHandleValue must have a fixed-width representation");
+_Static_assert(sizeof(CNA_DisplayMode) == 24U,
+               "CNA_DisplayMode layout must remain stable");
+_Static_assert(sizeof(CNA_GraphicsAdapterInfo) == 48U,
+               "CNA_GraphicsAdapterInfo layout must remain stable");
+_Static_assert(sizeof(CNA_GraphicsFormatSelection) == 24U,
+               "CNA_GraphicsFormatSelection layout must remain stable");
+_Static_assert(sizeof(CNA_PresentationParameters) == 44U,
+               "CNA_PresentationParameters layout must remain stable");

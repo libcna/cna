@@ -15,7 +15,11 @@ add_library(cna_c_api SHARED
     src/CnaCApiAudio.cpp
     src/CnaCApiContent.cpp
     src/CnaCApiDetail.cpp
+    src/CnaCApiDisplay.cpp
     src/CnaCApiGraphics.cpp
+    src/CnaCApiGraphicsState.cpp
+    src/CnaCApiRenderTarget.cpp
+    src/CnaCApiSpriteFont.cpp
     src/CnaCApiInput.cpp
     src/CnaCApiRuntime.cpp
 )
@@ -169,6 +173,24 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_ContentSmoke COMMAND cna_c_api_content_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_ContentSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
+    add_executable(cna_c_api_graphics_surface_smoke
+        tests/pure_c/GraphicsSurfaceSmoke.c
+    )
+    set_target_properties(cna_c_api_graphics_surface_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_graphics_surface_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_graphics_surface_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_graphics_surface_smoke)
+    add_test(NAME CApi_GraphicsSurfaceSmoke COMMAND cna_c_api_graphics_surface_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_GraphicsSurfaceSmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()
