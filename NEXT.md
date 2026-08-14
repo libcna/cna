@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — BUILT-IN VERTEX VALUES COMPLETE THROUGH CBIND-035C1 (2026-08-15)
+## C BINDING / C ABI — VERTEX DECLARATIONS COMPLETE THROUGH CBIND-035C2 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -126,7 +126,11 @@
 > stable type identities and generic default/equality/hash/string/stride/element-copy operations.
 > Strict-C tests cover exact native strings and every canonical packed GPU declaration, while
 > C17/C++23 assertions freeze all layouts. The inventory is now 2,039 implemented, 21 partial,
-> 4,285 planned and 70 N/A. CBIND-035C2 vertex declarations and bindings is next.
+> 4,285 planned and 70 N/A. CBIND-035C2 maps all 14 VertexDeclaration and VertexBufferBinding
+> rows through standalone owned declaration handles, copied arrays and a fixed 16-byte binding
+> descriptor. Empty/computed/explicit construction, exact type names, atomic copies and
+> wrong-kind/stale/wrong-thread lifetime behavior are strict-C tested. The inventory is now 2,053
+> implemented, 21 partial, 4,271 planned and 70 N/A. CBIND-035C3 GraphicsResource is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

@@ -979,6 +979,26 @@
       "tests": "all built-in vertex identities and their exact declarations in strict-C `VertexValueSmoke.c`, plus C/C++ identity assertions",
       "status": "implemented",
       "task": "CBIND-035C1"
+    },
+    {
+      "id": "vertex-declaration-ownership",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexDeclaration\\.hpp$",
+      "kinds": ["class", "constructor", "method"],
+      "mapping": "owned generation/type/thread-validated `CNA_VertexDeclarationHandle` plus empty, computed-stride and explicit-stride creation, exact type-name count/copy, stride query, atomic element copy and destruction; initializer-list and vector explicit-stride constructors share one copied-array route",
+      "tests": "all constructors and queries, computed/explicit/empty declarations, exact type name, copy capacity, invalid elements/ranges, wrong-kind/stale/wrong-thread handles and destruction in strict-C `VertexResourceSmoke.c`, plus C/C++ handle assertions",
+      "status": "implemented",
+      "task": "CBIND-035C2"
+    },
+    {
+      "id": "vertex-buffer-binding-value",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexBufferBinding\\.hpp$",
+      "kinds": ["class", "constructor", "method"],
+      "mapping": "fixed-layout `CNA_VertexBufferBinding` with direct handle/offset/frequency fields; zero aggregate is the default constructor and `cna_vertex_buffer_binding_init` provides structurally validated parameterized construction",
+      "tests": "default and parameterized construction, direct getters/fields, negative/null validation and C/C++ ABI size/alignment/offset assertions in strict-C `VertexResourceSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035C2"
     }
   ]
 }

@@ -329,6 +329,13 @@ static_assert(offsetof(CNA_VertexPositionNormalTexture, texture_coordinate) == 2
 static_assert(offsetof(CNA_VertexPositionNormalTextureSkinned, blend_weight) == 32U);
 static_assert(offsetof(CNA_VertexPositionNormalTextureSkinned, blend_indices) == 48U);
 static_assert(offsetof(CNA_VertexPositionTexture, texture_coordinate) == 12U);
+static_assert(sizeof(CNA_VertexDeclarationHandle) == 8U);
+static_assert(sizeof(CNA_VertexBufferHandle) == 8U);
+static_assert(sizeof(CNA_VertexBufferBinding) == 16U);
+static_assert(alignof(CNA_VertexBufferBinding) == 8U);
+static_assert(offsetof(CNA_VertexBufferBinding, vertex_buffer) == 0U);
+static_assert(offsetof(CNA_VertexBufferBinding, vertex_offset) == 8U);
+static_assert(offsetof(CNA_VertexBufferBinding, instance_frequency) == 12U);
 static_assert(CNA_MATH_E == 2.71828175F);
 static_assert(CNA_MATH_LOG10_E == 0.4342945F);
 static_assert(CNA_MATH_LOG2_E == 1.442695F);

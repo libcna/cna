@@ -248,3 +248,19 @@ channels. Element copies always report the required count and never write a part
 Unknown vertex, format or semantic identities fail before output mutation. Strict-C tests exercise
 every operation and exact native string/declaration under both configured backends; C17/C++23
 assertions freeze all identities, sizes and field offsets.
+
+## Vertex declarations and bindings
+
+`vertex_resources.h` owns standalone `VertexDeclaration` instances through
+`CNA_VertexDeclarationHandle`. Creation copies the caller's element array and supports the native
+empty, computed-stride and explicit-stride forms; the two native explicit-stride container
+overloads intentionally share one C array route. Stride, exact type-name and caller-capacity
+element queries require the creation thread. Handles validate generation and kind, and explicit
+destruction makes stale reuse fail predictably.
+
+`CNA_VertexBufferBinding` is a 16-byte caller-owned descriptor containing a buffer handle, vertex
+offset and instance frequency. `{CNA_INVALID_HANDLE, 0, 0}` represents the native default value.
+`cna_vertex_buffer_binding_init` validates the parameterized constructor's nonzero token and
+nonnegative integers without retaining anything. Because owned vertex buffers arrive in C6, token
+kind, generation, game and thread are deliberately revalidated by any later operation that
+consumes the descriptor; structural initialization alone is not a resource-validity claim.

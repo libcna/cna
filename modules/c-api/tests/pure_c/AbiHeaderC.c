@@ -395,3 +395,13 @@ _Static_assert(offsetof(CNA_VertexPositionColor, color) == 12U &&
                    offsetof(CNA_VertexPositionNormalTextureSkinned, blend_indices) == 48U &&
                    offsetof(CNA_VertexPositionTexture, texture_coordinate) == 12U,
                "CNA built-in vertex fields must remain stable");
+_Static_assert(sizeof(CNA_VertexDeclarationHandle) == 8U &&
+                   sizeof(CNA_VertexBufferHandle) == 8U,
+               "CNA vertex-resource handles must remain stable");
+_Static_assert(sizeof(CNA_VertexBufferBinding) == 16U &&
+                   _Alignof(CNA_VertexBufferBinding) == 8U,
+               "CNA_VertexBufferBinding layout must remain stable");
+_Static_assert(offsetof(CNA_VertexBufferBinding, vertex_buffer) == 0U &&
+                   offsetof(CNA_VertexBufferBinding, vertex_offset) == 8U &&
+                   offsetof(CNA_VertexBufferBinding, instance_frequency) == 12U,
+               "CNA_VertexBufferBinding fields must remain stable");

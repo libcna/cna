@@ -35,7 +35,8 @@ fallible calls return `CNA_Result`; no C++ or Sharp Runtime type or exception cr
 | Touch | Current capabilities and fixed-capacity eight-location collection with previous location and pressure; local find/previous helpers | Platform absence succeeds as disconnected/empty; display, gestures and events remain planned |
 | Content | Own a content manager; UTF-8 root count/copy/set; unload cache; load owned Color Texture2D handles; destroy | Create from a callback-scoped device; returned textures outlive manager unload/destruction; no other asset type yet |
 | Audio | Probe real playback availability; create owned mono/stereo PCM16LE effects; duration; owned instances; play/pause/resume/immediate or release-tail stop; volume/pitch/pan/loop/state; destroy | Availability is a successful versioned snapshot; creation-thread control; instances before effect before game; no device maps resource creation to `NOT_SUPPORTED`; no file/content, streaming, microphone, XACT or 3D route yet |
-| Values and 3D identities | ABI layouts for Color, Point, Vector2/3/4, Quaternion, Matrix, Plane, Ray, bounding volumes, CurveKey, all 17 PackedVector raw values, VertexElement and all seven built-in `VertexPosition*` values; all MathHelper constants/scalar operations; complete Point/Rectangle, Vector2/3/4, Quaternion, Matrix, Plane, Ray, bounding-volume, CurveKey, CurveKeyCollection, Curve, Color, PackedVector, built-in vertex equality/hash/text and VertexElement operations; all 141 named colors; all three half-conversion routes; canonical built-in GPU stride/element queries; curve loops/evaluation/tangents; transforms/factories/decomposition, caller-capacity corners and explicit optional intersections; stable containment, plane, curve, packed-format, buffer, index, primitive, SetData and vertex identities | The canonical BoundingFrustum boundary-origin ray branch is callable but returns `NOT_SUPPORTED`; owned vertex declarations/bindings and 3D resource behavior remain planned |
+| Values and 3D identities | ABI layouts for Color, Point, Vector2/3/4, Quaternion, Matrix, Plane, Ray, bounding volumes, CurveKey, all 17 PackedVector raw values, VertexElement and all seven built-in `VertexPosition*` values; all MathHelper constants/scalar operations; complete Point/Rectangle, Vector2/3/4, Quaternion, Matrix, Plane, Ray, bounding-volume, CurveKey, CurveKeyCollection, Curve, Color, PackedVector, built-in vertex equality/hash/text and VertexElement operations; all 141 named colors; all three half-conversion routes; canonical built-in GPU stride/element queries; curve loops/evaluation/tangents; transforms/factories/decomposition, caller-capacity corners and explicit optional intersections; stable containment, plane, curve, packed-format, buffer, index, primitive, SetData and vertex identities | The canonical BoundingFrustum boundary-origin ray branch is callable but returns `NOT_SUPPORTED`; vertex/index resources and 3D draw behavior remain planned |
+| Vertex declarations and bindings | Own empty, computed-stride or explicit-stride declarations; query exact type name/stride and count/copy elements; fixed default/initialized vertex-buffer binding descriptor | Declarations are standalone creation-thread handles; buffer binding tokens become type/generation validated when consumed after vertex buffers land; no draw submission yet |
 
 The complete exported-function list is mechanically checked so the shared library exposes only
 `cna_*` symbols. Pure C and C++ header translation tests freeze the implemented value layouts and
@@ -62,6 +63,7 @@ time. The initial slice currently has this automated evidence:
 | RenderTarget2D/RenderTargetCube creation and binding contract | Creation/property/lifetime tested; bind returns `NOT_SUPPORTED` | Real RenderTarget2D binding and unavailable cube path tested | Capability and native allocation remain backend-specific |
 | SpriteFont glyph/properties/UTF-8 measurement and source-texture lifetime | Tested | Tested | Renderer-independent layout/measurement over a game-owned texture |
 | Built-in vertex values, strings and packed GPU declarations | Tested | Tested | Renderer-independent copied POD and declaration operations |
+| Owned vertex declarations and binding descriptors | Tested | Tested | Renderer-independent copied arrays and standalone handle lifetime |
 | Observable SpriteBatch pixels | No raster backbuffer | Exact uploaded red/green/blue texels and clear pixel tested | No initial C evidence |
 | Full RGBA8 backbuffer readback | `CNA_RESULT_NOT_SUPPORTED`, destination unchanged | Tested before presentation | Depends on the selected native backend; not yet C-tested |
 
@@ -118,8 +120,8 @@ The following families are planned work, not implicitly supported and not perman
 - remaining window, platform, service, event and runtime APIs;
 - player-indexed keyboard capture, input mutation/events, gamepad control/capabilities/extensions
   and touch display/gesture/event APIs;
-- 3D resources and draws, vertex/index buffers and owned vertex declarations/bindings beyond the
-  completed built-in value/declaration-query routes, models, meshes, effects and shaders;
+- 3D resources and draws, vertex/index buffers and consumption of the completed declaration/
+  binding values, models, meshes, effects and shaders;
 - occlusion queries and remaining graphics-device operations;
 - non-Color texture transfers, texture regions, mip-level transfer and additional texture types;
 - SpriteBatch matrices, effects and text drawing;

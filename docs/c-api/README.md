@@ -11,8 +11,9 @@ and caller-built SpriteFonts, fixed-layout 3D math/geometry values, complete Mat
 Point/Rectangle and complete Vector2/Vector3/Vector4/Quaternion/Matrix/Plane/Ray/bounding-volume
 operations, complete CurveKey/Curve/CurveKeyCollection evaluation and mutation, packed storage and
 complete PackedVector conversion/equality plus Color operations/named values, all seven built-in
-vertex POD values with equality/hash/text and canonical declaration queries, core draw/buffer/
-vertex identities, plus
+vertex POD values with equality/hash/text and canonical declaration queries, owned standalone
+vertex declarations and fixed vertex-buffer binding descriptors, core draw/buffer/vertex
+identities, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
