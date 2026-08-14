@@ -957,6 +957,7 @@ uniform vec4 uAlphaTest;
 uniform vec3 uFogColor;
 uniform vec3 uSrgb;
 uniform vec4 uDielectricFresnel;
+uniform vec4 uTextureTransformRows[10];
 out vec4 fragColor;
 
 vec3 cnaSrgbToLinear(vec3 c)
@@ -997,9 +998,16 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * NdotL;
 }
 
+vec2 cnaPbrTransformUV(vec2 uv, int slot)
+{
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, uTextureTransformRows[slot * 2].xyz),
+                dot(value, uTextureTransformRows[slot * 2 + 1].xyz));
+}
+
 void main()
 {
-    vec4 baseColorTex = texture(uTexture, vUV);
+    vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(vUV, 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), uSrgb.x);
     vec3 albedo = baseColor * uDiffuseColor.rgb;
     float alpha = baseColorTex.a * uDiffuseColor.a;
@@ -1012,11 +1020,11 @@ void main()
     vec3 T = normalize(vTangent - N * dot(N, vTangent));
     vec3 B = cross(N, T) * vBitangentSign;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture(uNormalMap, vUV).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture(uNormalMap, cnaPbrTransformUV(vUV, 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= uNormalScale;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
-    vec4 mr = texture(uMetallicRoughnessMap, vUV);
+    vec4 mr = texture(uMetallicRoughnessMap, cnaPbrTransformUV(vUV, 2));
     float roughness = clamp(mr.g * uRoughnessFactor, 0.045, 1.0);
     float metallic = clamp(mr.b * uMetallicFactor, 0.0, 1.0);
 
@@ -1029,10 +1037,10 @@ void main()
     Lo += PbrLight(finalNormal, V, normalize(-uLight1Dir), uLight1Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-uLight2Dir), uLight2Diffuse, albedo, F0, F90, roughness, metallic);
 
-    float occlusionSample = texture(uOcclusionMap, vUV).r;
+    float occlusionSample = texture(uOcclusionMap, cnaPbrTransformUV(vUV, 4)).r;
     float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);
     vec3 ambient = uAmbientColor * albedo * occlusion;
-    vec3 emissiveSample = texture(uEmissiveMap, vUV).rgb;
+    vec3 emissiveSample = texture(uEmissiveMap, cnaPbrTransformUV(vUV, 3)).rgb;
     emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y);
     vec3 emissive = uEmissiveColor * emissiveSample;
 
@@ -3361,6 +3369,15 @@ void main()
                 gl4_glUniform4f(dielectricFresnelLoc,
                                 params.pbrDielectricF0[0], params.pbrDielectricF0[1],
                                 params.pbrDielectricF0[2], params.pbrDielectricF90);
+            for (int row = 0; row < 10; ++row)
+            {
+                const std::string name =
+                    "uTextureTransformRows[" + std::to_string(row) + "]";
+                const int location = prog.UniformLocation(name.c_str());
+                if (location < 0) continue;
+                const float* values = params.pbrTextureTransformRows[row];
+                gl4_glUniform4f(location, values[0], values[1], values[2], values[3]);
+            }
             const int alphaTestLoc = prog.UniformLocation("uAlphaTest");
             if (alphaTestLoc >= 0)
                 gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],

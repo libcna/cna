@@ -1062,6 +1062,13 @@ namespace CNA::Internal::Renderers::Magnum
             program.SetVector4(program.LocationOf("uDielectricFresnel"), Mg::Vector4{
                 params.pbrDielectricF0[0], params.pbrDielectricF0[1],
                 params.pbrDielectricF0[2], params.pbrDielectricF90});
+            for (int row = 0; row < 10; ++row)
+            {
+                const float* values = params.pbrTextureTransformRows[row];
+                program.SetVector4(program.LocationOf(
+                    "uTextureTransformRows[" + std::to_string(row) + "]"),
+                    Mg::Vector4{values[0], values[1], values[2], values[3]});
+            }
             program.SetVector3(program.LocationOf("uAmbientColor"), Mg::Vector3{
                 params.ambientColor[0], params.ambientColor[1], params.ambientColor[2]});
             program.SetVector3(program.LocationOf("uEmissiveColor"), Mg::Vector3{

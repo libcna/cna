@@ -450,6 +450,7 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform vec3 uFogColor;\n";
             source += "uniform vec3 uSrgb;\n";
             source += "uniform vec4 uDielectricFresnel;\n";
+            source += "uniform vec4 uTextureTransformRows[10];\n";
             // Unit 4 (the occlusion map) needs a fifth flag, which does not fit in uRtFlipV's four
             // components -- this is the only program that samples that far.
             source += "uniform vec4 uRtFlipVHi;\n";
@@ -487,8 +488,15 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
     return ((vec3(1.0) - fresnel) * diffuse / 3.14159265 + specular) * lightColor * nDotL;
 }
 )";
+            source += R"(
+vec2 cnaPbrTransformUV(vec2 uv, int slot){
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, uTextureTransformRows[slot * 2].xyz),
+                dot(value, uTextureTransformRows[slot * 2 + 1].xyz));
+}
+)";
             source += "void main(){\n";
-            source += "    vec4 baseColor = texture(uTexture, cnaSampleUV(vTexCoord, uRtFlipV.x));\n";
+            source += "    vec4 baseColor = texture(uTexture, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 0), uRtFlipV.x));\n";
             source += "    vec3 baseLinear = mix(baseColor.rgb, cnaSrgbToLinear(baseColor.rgb), uSrgb.x);\n";
             source += "    vec3 albedo = baseLinear * uDiffuseColor.rgb;\n";
             source += "    float alpha = baseColor.a * uDiffuseColor.a;\n";
@@ -499,11 +507,11 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             source += "    vec3 bitangent = cross(normal, tangent) * vBitangentSign;\n";
             source += "    mat3 tangentBasis = mat3(tangent, bitangent, normal);\n";
             source += "    vec3 sampledNormal =\n";
-            source += "        texture(uNormalMap, cnaSampleUV(vTexCoord, uRtFlipV.y)).rgb * 2.0 - 1.0;\n";
+            source += "        texture(uNormalMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 1), uRtFlipV.y)).rgb * 2.0 - 1.0;\n";
             source += "    sampledNormal.xy *= uNormalScale;\n";
             source += "    vec3 shadingNormal = normalize(tangentBasis * sampledNormal);\n";
             source += "    vec4 metallicRoughness =\n";
-            source += "        texture(uMetallicRoughnessMap, cnaSampleUV(vTexCoord, uRtFlipV.z));\n";
+            source += "        texture(uMetallicRoughnessMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 2), uRtFlipV.z));\n";
             // glTF's own packing: green is roughness, blue is metallic. The roughness floor keeps
             // the specular lobe from collapsing into a numerically undefined mirror.
             source += "    float roughness = clamp(metallicRoughness.g * uRoughnessFactor, 0.045, 1.0);\n";
@@ -517,10 +525,10 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             source += "                                 uLight1Diffuse, albedo, f0, f90, roughness, metallic)\n";
             source += "                   + cnaPbrLight(shadingNormal, view, normalize(-uLight2Dir),\n";
             source += "                                 uLight2Diffuse, albedo, f0, f90, roughness, metallic);\n";
-            source += "    float occlusionSample = texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x)).r;\n";
+            source += "    float occlusionSample = texture(uOcclusionMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 4), uRtFlipVHi.x)).r;\n";
             source += "    float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);\n";
             source += "    vec3 ambient = uAmbientColor * albedo * occlusion;\n";
-            source += "    vec3 emissiveSample = texture(uEmissiveMap, cnaSampleUV(vTexCoord, uRtFlipV.w)).rgb;\n";
+            source += "    vec3 emissiveSample = texture(uEmissiveMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 3), uRtFlipV.w)).rgb;\n";
             source += "    emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), uSrgb.y);\n";
             source += "    vec3 emissive = uEmissiveColor * emissiveSample;\n";
             source += "    fragColor = vec4(ambient + reflected + emissive, alpha);\n";
