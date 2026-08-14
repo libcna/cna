@@ -1111,6 +1111,50 @@ an external renderer or browser to CNA's CI/runtime dependency graph. This 12-as
 the independent implementation check; the 145-asset EasyGL gate in §5.3 is the broad regression
 oracle. Neither is substituted for the other.
 
+### 5.5 Final viewer retake matrix (`GLTF-429`)
+
+The release retake is the exact 14-row Gate C matrix from `plan_gltf.md` §30.3, executed by
+`scripts/gltf-viewer-retake.py`. Row 12 has separate sparse-attribute and sparse-index cases, so a
+complete run is 14 rows and 15 captures. The runner fetches nothing: it requires the already-built
+pinned Khronos renderer, a production OPENGLES3 viewer and an explicit sparse checkout of the
+three pinned sample models:
+
+```bash
+scripts/fetch-gltf-sample-assets.sh /tmp/cna-gltf-retake-assets \
+  Fox DamagedHelmet Sponza
+
+xvfb-run -a python3 scripts/gltf-viewer-retake.py \
+  --renderer /tmp/glTF-Sample-Renderer \
+  --sample-assets /tmp/cna-gltf-retake-assets \
+  --viewer /path/to/cna-gltf-viewer/build/cna_gltf_viewer \
+  --viewer-source /path/to/cna-gltf-viewer \
+  --output /tmp/cna-gltf-viewer-retake \
+  --report-out docs/gltf-viewer-retake-report.json
+```
+
+The renderer must be the §0.4 pin `863b981fb755359063e370ff7b6e956bda0716e2`; the sample checkout
+must be `2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf`. The script verifies both commits and the model
+licence metadata before opening a window. No third-party asset is copied into the repository. Its
+temporary full-PBR case copies DamagedHelmet's external resources into a disposable directory and
+authors all five texture roles plus non-default base-colour, metallic, roughness, normal-scale,
+occlusion-strength and emissive factors there; the pinned source checkout is never modified.
+
+Each CNA image is produced by two independent viewer processes and must be byte-identical. The
+same exact camera is then passed to the independent Khronos renderer. Every case requires non-clear
+mask IoU at least **0.99**, foreground coverage within **[0.99, 1.01]**, and intersection RGB MAE
+at most **100**. Fixed-time Fox and rigid-node animations must also differ from their bind/time-zero
+controls. Same-renderer canonical cases are byte-compared with their committed L7 goldens. The
+large row rejects a resource closure below 50 MiB, and every row records source/image hashes,
+camera, browser/GPU identity, two process timings and maximum RSS.
+
+The 2026-08-14 final run passed all 15 cases without changing these thresholds. Minimum mask IoU
+was **0.998719**, coverage ranged from **0.999891 to 1.000422**, and maximum RGB MAE was **67.04**.
+The Sponza resource closure was **52,686,624 bytes** with **262,267 triangles**; its two viewer runs
+used at most **793,836 KiB** RSS in the recorded campaign. The audit record is
+[`gltf-viewer-retake-report.json`](gltf-viewer-retake-report.json). PNGs are deliberately disposable:
+the report preserves their hashes and all reproduction state while avoiding a second large image
+corpus.
+
 ---
 
 ## 6. The tangent generation algorithm (`GLTF-180`)
