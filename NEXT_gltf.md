@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **441 closed (`✔` 273, `✅` 168),
-  11 `⬜` remaining.** The other 8 carry a deliberate partial marker: 1 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **442 closed (`✔` 273, `✅` 169),
+  10 `⬜` remaining.** The other 8 carry a deliberate partial marker: 1 `🔬` (investigation, no
   implementation owed) and 7 `✅/⬜`; there is no `✅/🐛` residue, standalone `🐛`, or `⛔`.
 - **Draco is no longer optional local state:** `third_party/draco` is a gitlink pinned to
   Draco **1.5.7** (`8786740086a9f4d83f44aa83badfbea4dce7a1b5`). The normal build uses it; the sanitizer
@@ -168,7 +168,7 @@ narrower than the old table implied:
 |---|---|---|
 | **whole-corpus L7 harness/policy** | `GLTF-009`, `244`, `384`–`387`, `390`, `391` | The independent 12-asset reference subset is green and has a committed report. Turning that into a corpus-wide, multi-renderer CTest rung still needs golden storage/update policy and per-renderer tolerances. DIRECTX11 additionally needs Windows CI. |
 | **format/shader breadth** | `GLTF-182`, `183`, `344` | A second UV stream plus per-map selection is an ABI/shader change. `KHR_materials_specular` remains partial only for its two textures; factors and colour are already carried and rendered. |
-| **final viewer matrix** | `GLTF-323`, `429`, `432` | The viewer is writable and its direct/offline/reference captures work. The exact fourteen-row record is incomplete, especially the fetch-on-demand ≥50 MB case, so §27.1 row 20 remains partial. |
+| **final viewer matrix** | `GLTF-429`, `432` | The viewer is writable and its direct/offline/reference captures work; explicit imported-camera selection is now closed too. The exact fourteen-row record is incomplete, especially the fetch-on-demand ≥50 MB case, so §27.1 row 20 remains partial. |
 | **milestone chain** | `GLTF-449`, `458`–`460` | These are intentionally gated by the remaining technical rows; do not change `FUTURE.md` or declare either milestone early. |
 
 ## Suggested next clusters
