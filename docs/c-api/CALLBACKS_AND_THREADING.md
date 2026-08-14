@@ -48,6 +48,11 @@ handle, retained after the callback and used later on the same creation/graphics
 handles do not inherit the callback's generation lifetime; they instead follow explicit destroy
 and child-before-game ordering.
 
+An owned content manager may likewise be created from that callback-scoped device and retained
+after the callback. Root access, loads, unload and destruction remain creation-thread operations.
+Resources returned by a content load are independent owned game children rather than borrowed
+manager-cache entries.
+
 `cna_keyboard_get_state` also accepts the active game handle and performs a fresh capture on this
 same creation thread; it is valid inside update/draw callbacks and at other safe points while the
 game handle is live. The resulting `CNA_KeyboardState` is an independent POD value. Its query and

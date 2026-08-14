@@ -30,6 +30,7 @@ enum class ObjectKind : uint32_t {
     Texture2D = 4,
     SpriteBatch = 5,
     EventRegistration = 6,
+    ContentManager = 7,
     Test = UINT32_MAX
 };
 

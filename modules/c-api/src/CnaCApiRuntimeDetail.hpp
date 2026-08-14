@@ -32,6 +32,12 @@ void RemoveOwnedGraphicsResource() noexcept;
 
 [[nodiscard]] bool HasOwnedGraphicsResources() noexcept;
 
+void AddOwnedContentManager() noexcept;
+
+void RemoveOwnedContentManager() noexcept;
+
+[[nodiscard]] bool HasOwnedContentManagers() noexcept;
+
 } // namespace CNA::C::Detail
 
 #endif

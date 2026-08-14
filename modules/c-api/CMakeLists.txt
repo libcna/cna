@@ -12,6 +12,7 @@ endfunction()
 
 add_library(cna_c_api SHARED
     src/CnaCApi.cpp
+    src/CnaCApiContent.cpp
     src/CnaCApiDetail.cpp
     src/CnaCApiGraphics.cpp
     src/CnaCApiInput.cpp
@@ -135,6 +136,24 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_LifecycleSmoke COMMAND cna_c_api_lifecycle_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_LifecycleSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
+    add_executable(cna_c_api_content_smoke
+        tests/pure_c/ContentSmoke.c
+    )
+    set_target_properties(cna_c_api_content_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_content_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_content_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_content_smoke)
+    add_test(NAME CApi_ContentSmoke COMMAND cna_c_api_content_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_ContentSmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()

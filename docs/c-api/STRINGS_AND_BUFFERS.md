@@ -82,6 +82,10 @@ exact native read succeeds. The adapter stages canonical `Color` values and conv
 `CNA_Color`; a too-small destination or renderer `NOT_SUPPORTED` result leaves every caller pixel
 unchanged.
 
+Content root directories and asset names are copied UTF-8 views with embedded NUL rejected. Root
+output uses byte count/copy without a terminator and performs no partial write. Asset paths remain
+inside the native content manager; no filesystem-path or stream object is returned to C.
+
 ## Collections
 
 No `std::vector`, Sharp Runtime collection, iterator or container pointer crosses the boundary.

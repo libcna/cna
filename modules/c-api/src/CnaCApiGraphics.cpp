@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/graphics.h"
+#include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
@@ -295,6 +296,38 @@ void ReleaseBatchTextureReferences(SpriteBatchResource& spriteBatch) noexcept
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+CNA_Result CreateOwnedTexture2D(
+    std::shared_ptr<Texture2D> texture,
+    const CNA_Handle parentGame,
+    CNA_Handle* const outTexture)
+{
+    if (texture == nullptr || parentGame == CNA_INVALID_HANDLE || outTexture == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The native Texture2D ownership transfer is invalid.");
+    }
+    *outTexture = CNA_INVALID_HANDLE;
+    const auto resource = std::make_shared<Texture2DResource>(
+        Texture2DResource{std::move(texture), parentGame, 0U});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::Texture2D,
+        resource,
+        outTexture);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned Texture2D handle could not be created.");
+    }
+    AddOwnedGraphicsResource();
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_graphics_device_get_renderer_info(
     const CNA_Handle graphicsDeviceHandle,
@@ -615,20 +648,10 @@ CNA_Result cna_texture2d_create(
             static_cast<int>(createInfo->height),
             createInfo->mip_map == CNA_TRUE,
             SurfaceFormat::Color);
-        const auto resource = std::make_shared<Texture2DResource>(
-            Texture2DResource{texture, graphicsDevice->parentGame, 0U});
-        const CNA_Result result = GetRuntimeHandles().Create(
-            ObjectKind::Texture2D,
-            resource,
+        return CNA::C::Detail::CreateOwnedTexture2D(
+            texture,
+            graphicsDevice->parentGame,
             outTexture);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                ErrorCategoryForResult(result),
-                "The owned Texture2D handle could not be created.");
-        }
-        AddOwnedGraphicsResource();
-        return CNA_RESULT_SUCCESS;
     });
 }
 

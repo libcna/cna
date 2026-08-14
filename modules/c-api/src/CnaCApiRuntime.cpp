@@ -38,6 +38,7 @@ struct RuntimeState final {
     HandleRegistry handles;
     bool hasActiveGame = false;
     uint64_t ownedGraphicsResourceCount = 0U;
+    uint64_t ownedContentManagerCount = 0U;
 };
 
 [[nodiscard]] RuntimeState& GetRuntimeState()
@@ -349,6 +350,29 @@ bool HasOwnedGraphicsResources() noexcept
     return state.ownedGraphicsResourceCount != 0U;
 }
 
+void AddOwnedContentManager() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    ++state.ownedContentManagerCount;
+}
+
+void RemoveOwnedContentManager() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    if (state.ownedContentManagerCount != 0U) {
+        --state.ownedContentManagerCount;
+    }
+}
+
+bool HasOwnedContentManagers() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    return state.ownedContentManagerCount != 0U;
+}
+
 } // namespace CNA::C::Detail
 
 CNA_Result cna_game_create(
@@ -489,11 +513,11 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (HasOwnedGraphicsResources()) {
+        if (HasOwnedGraphicsResources() || CNA::C::Detail::HasOwnedContentManagers()) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
-                "All owned C graphics resources must be destroyed before the game.");
+                "All owned C child resources must be destroyed before the game.");
         }
 
         game->Shutdown();

@@ -26,6 +26,10 @@ No function may let a C++ exception, Sharp Runtime exception or platform excepti
 The adapter catches known native exception categories first, maps them to this set, then catches all
 remaining failures as `CNA_RESULT_INTERNAL`.
 
+Typed content loads map missing, unreadable and decoder-rejected asset data to `CNA_RESULT_IO`.
+They reserve `CNA_RESULT_NOT_SUPPORTED` for a renderer refusal or a decoded resource outside the
+currently documented C transfer subset.
+
 ## Error information
 
 On failure, CNA records structured error information for the calling thread. The first ABI exposes:

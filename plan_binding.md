@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B4 complete through CBIND-027 under HEADLESS and SDL_RENDERER; B5 is next (2026-08-14).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B4 complete; B5 underway through CBIND-028 under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -217,7 +217,7 @@ they do not export C++ collections or attempt to mirror C++ overload sets mechan
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-028 | Expose `ContentManager` minimum | ⬜ | Add content-manager ownership, UTF-8 root directory and approved resource-load functions. Define cache ownership and resource release behavior precisely; native path/stream objects remain hidden. |
+| CBIND-028 | Expose `ContentManager` minimum | ✅ | `content.h` owns a game-child native manager created from the callback-scoped device, copies/counts its UTF-8 root, exposes explicit cache unload/destroy and provides the first approved typed load for Color Texture2D. Every successful load returns a new independently owned existing C texture handle that survives manager unload/destruction; missing assets and invalid names map predictably, and no native path, stream, service provider or template type crosses the ABI. HEADLESS and SDL_RENDERER strict-C tests cover pixels, cache/unload lifetime, parent order, stale handles and thread/UTF-8/capacity failures. |
 | CBIND-029 | Expose expanded input snapshots | ⬜ | Add mouse, game-pad and touch snapshots only after their layouts, dead-zone/normalization behavior and platform availability are specified and tested in C. |
 | CBIND-030 | Expose minimal audio resource/control surface | ⬜ | Add only concrete C use-case APIs (for example sound creation/play/stop/volume) with explicit audio-thread and deferred-destruction behavior. No Sharp Runtime collection or async object crosses the boundary. |
 | CBIND-031 | Add pure-C content/audio regression programs | ⬜ | Verify UTF-8 paths, predictable load failures, handle ownership, audio shutdown and unavailable-device behavior using fixtures that do not rely on a future language binding. |
@@ -304,10 +304,11 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-027` are ✅; `CBIND-028` through `CBIND-044` are ⬜ **not started**. The
+`CBIND-000` through `CBIND-028` are ✅; `CBIND-029` through `CBIND-044` are ⬜ **not started**. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, keyboard POD snapshots and
 SDL pixel-verified backbuffer readback, not complete public CNA coverage. No language-specific
-binding exists. B4 is complete; B5's systematic input/content/audio/media expansion and the
-complete public-surface inventory remain subsequent work.
+binding exists. B4 is complete; B5 now includes owned content-manager/root/cache control and Color
+Texture2D loads. Expanded input/audio/media and the complete public-surface inventory remain
+subsequent work.
