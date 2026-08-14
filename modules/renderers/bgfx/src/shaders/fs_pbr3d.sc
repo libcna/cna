@@ -32,6 +32,8 @@ uniform vec4 u_alphaTest;
 uniform vec4 u_fogColor;
 // x=decode base, y=decode emissive, z=encode output.
 uniform vec4 u_srgb;
+// xyz=dielectric F0, w=dielectric F90 (KHR_materials_ior/specular factor endpoints).
+uniform vec4 u_dielectricFresnel;
 // REMED-GFX-078: per-slot V-flip for render-target color sources (bottom-up FBO on originBottomLeft
 // renderers -- see REMED-GFX-067). x=base color(0), y=normal(1), z=metallic-roughness(2),
 // w=emissive(3). The occlusion map (slot 4) is intentionally NOT covered -- a live RenderTarget2D as
@@ -55,7 +57,7 @@ vec3 cnaLinearToSrgb(vec3 c)
     return mix(lo, hi, step(vec3_splat(0.0031308), c));
 }
 
-vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic)
+vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic)
 {
     vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -67,7 +69,7 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
     float D = a2 / (3.14159265 * dTerm * dTerm + 1e-7);
     float k = (roughness + 1.0); k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
-    vec3 F = F0 + (vec3_splat(1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    vec3 F = F0 + (F90 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
     vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     vec3 diffuseColor = albedo * (1.0 - metallic);
     vec3 kd = vec3_splat(1.0) - F;
@@ -94,12 +96,13 @@ void main()
     float metallic  = clamp(mr.b * u_metallicRoughnessFactor.x, 0.0, 1.0);
 
     vec3 V = normalize(u_eyePos.xyz - v_worldPos);
-    vec3 F0 = mix(vec3_splat(0.04), albedo, metallic);
+    vec3 F0 = mix(u_dielectricFresnel.xyz, albedo, metallic);
+    vec3 F90 = mix(vec3_splat(u_dielectricFresnel.w), vec3_splat(1.0), metallic);
 
     vec3 Lo = vec3_splat(0.0);
-    Lo += PbrLight(finalNormal, V, normalize(-u_light0Dir.xyz), u_light0Diffuse.xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-u_light1Dir.xyz), u_light1Diffuse.xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-u_light2Dir.xyz), u_light2Diffuse.xyz, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-u_light0Dir.xyz), u_light0Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-u_light1Dir.xyz), u_light1Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-u_light2Dir.xyz), u_light2Diffuse.xyz, albedo, F0, F90, roughness, metallic);
 
     float occlusion = texture2D(s_texOcclusion, v_texcoord0).r;
     occlusion = 1.0 + u_metallicRoughnessFactor.w * (occlusion - 1.0);

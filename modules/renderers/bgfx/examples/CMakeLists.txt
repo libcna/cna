@@ -1067,6 +1067,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME Bgfx_Pbr_SrgbTransfer COMMAND cna_test_bgfx_pbr_srgb_transfer
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # GLTF-343/344: renderer-specific async-readback adaptation of the shared Fresnel witness.
+    cna_bgfx_test(cna_test_bgfx_pbr_fresnel_factors
+                  bgfx_pbr_fresnel_factors_test.cpp)
+    target_link_libraries(cna_test_bgfx_pbr_fresnel_factors PRIVATE SDL3::SDL3)
+    cna_register_renderer_test(NAME Bgfx_Pbr_FresnelFactors COMMAND cna_test_bgfx_pbr_fresnel_factors
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # CNB-67 (Phase 13C), Bgfx port: SkinnedEffect.VertexColorEnabled on the stride-56 skinned+
     # Color vertex layout (vs_skinned3d.sc/fs_skinned3d.sc and vs_skinned3d_vertexlit.sc/
     # fs_skinned3d_vertexlit.sc's new a_color0/v_vertexColor0/u_vertexColorEnabled3D wiring) --
