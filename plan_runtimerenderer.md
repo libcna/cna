@@ -810,20 +810,20 @@ Each set is its own task because each will surface its own third-party integrati
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P12-1 | ⬜ | `docs/runtime-renderer-selection.md` complete: API reference, precedence, latch, fallback, conflict matrix, per-platform supported sets, cost table. |
-| RTR-P12-2 | ⬜ | `CLAUDE.md` — document the second build mode and the `cmake-build-multi/` directory (the build-directory list is closed; this is a deliberate, reviewed addition, not an ad-hoc one). |
-| RTR-P12-3 | ⬜ | `README.md` — short section on choosing a renderer at runtime, linking the doc. |
-| RTR-P12-4 | ⬜ | `AUDIT.md` — record the new CNAEXT public surface (`GraphicsRendererSelection`, `GetActive`, fallback API) with its test status. |
-| RTR-P12-5 | ⬜ | `NEXT.md` — record what remains after this plan closes. |
+| RTR-P12-1 | ✅ | `docs/runtime-renderer-selection.md` complete: API reference, precedence, latch, fallback, conflict matrix, per-platform supported sets, cost table. |
+| RTR-P12-2 | ✅ | `CLAUDE.md` — document the second build mode and the `cmake-build-multi/` directory (the build-directory list is closed; this is a deliberate, reviewed addition, not an ad-hoc one). |
+| RTR-P12-3 | ✅ | `README.md` — short section on choosing a renderer at runtime, linking the doc. |
+| RTR-P12-4 | ✅ | `AUDIT.md` — record the new CNAEXT public surface (`GraphicsRendererSelection`, `GetActive`, fallback API) with its test status. |
+| RTR-P12-5 | ✅ | `NEXT.md` — record what remains after this plan closes. |
 | RTR-P12-6 | ⬜ | Every renderer plan document that describes the single-renderer assumption gets a one-line pointer to this plan (do not rewrite them). |
-| RTR-P12-7 | ⬜ | CI: single-renderer matrix unchanged, plus the P8 reference multi set. |
+| RTR-P12-7 | ✅ | CI: single-renderer matrix unchanged, plus the P8 reference multi set. |
 | RTR-P12-8 | ⬜ | CI: the Emscripten multi set from RTR-P10-22, since that is the one with real end-user value. |
-| RTR-P12-9 | ⬜ | Doxygen coverage check on every new public header (`CLAUDE.md` requires a full block on every public member). |
-| RTR-P12-10 | ⬜ | `CHECKLIST.md` — add the runtime-dispatch items a new renderer family must now provide (descriptor, namespaced factory, availability probe, registry entry). |
-| RTR-P12-11 | ⬜ | Update `scripts/check_renderer_identities.py`'s stale "42" docstring to 46 while touching this area. |
-| RTR-P12-12 | ⬜ | Remove the stale `CNA_RENDERER_SDL` reference in `modules/core/include/CNA/Entrypoint.hpp:22` — it names an identity that does not exist. |
-| RTR-P12-13 | ⬜ | Final sweep: no `CNA_RENDERER_*` occurrence remains in `modules/graphics/src`; every remaining occurrence elsewhere is deliberate and documented. |
-| RTR-P12-14 | ⬜ | Performance check: confirm the added indirection (one function-pointer call per device construction, none per frame) is not measurable — and say so with numbers rather than asserting it. |
+| RTR-P12-9 | ✅ | Doxygen coverage check on every new public header (`CLAUDE.md` requires a full block on every public member). |
+| RTR-P12-10 | ✅ | `CHECKLIST.md` — add the runtime-dispatch items a new renderer family must now provide (descriptor, namespaced factory, availability probe, registry entry). |
+| RTR-P12-11 | ✅ | Update `scripts/check_renderer_identities.py`'s stale "42" docstring to 46 while touching this area. |
+| RTR-P12-12 | ✅ | Remove the stale `CNA_RENDERER_SDL` reference in `modules/core/include/CNA/Entrypoint.hpp:22` — it names an identity that does not exist. |
+| RTR-P12-13 | ✅ | Final sweep: no `CNA_RENDERER_*` occurrence remains in `modules/graphics/src`; every remaining occurrence elsewhere is deliberate and documented. |
+| RTR-P12-14 | ✅ | Performance check: confirm the added indirection (one function-pointer call per device construction, none per frame) is not measurable — and say so with numbers rather than asserting it. |
 | RTR-P12-15 | ⬜ | **Plan gate.** Single-renderer builds byte-identical in behaviour; multi-renderer mode documented, tested and CI-covered. |
 
 ---

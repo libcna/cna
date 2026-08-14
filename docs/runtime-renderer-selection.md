@@ -1,8 +1,9 @@
 # Runtime graphics renderer selection
 
-**Status: in development.** Nothing described here is usable yet. This document tracks
-`plan_runtimerenderer.md` as it is implemented, and states plainly what exists and what does not.
-Do not describe CNA as supporting runtime renderer selection until the status table below says so.
+**Status: usable.** Runtime renderer selection works and is verified across several build sets (see
+the table at the end). What is *not* done is the test/example corpus: its ~892 renderer-gated sites
+still describe the build's default renderer rather than each compiled-in one. See
+`plan_runtimerenderer.md` phase P9 and `NEXT.md`.
 
 ---
 
@@ -27,7 +28,7 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 | Namespaced factories / generated registry | ✅ all 42 factories namespaced; `cmake/RendererRegistry.cmake` emits the table |
 | `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
 | Fallback chain | ✅ resolution, recording, logging, exhaustion; cross-window-kind recreation unverified until a multi-renderer build |
-| Multi-renderer CMake mode | ⬜ not implemented |
+| Multi-renderer CMake mode | ✅ `CNA_GRAPHICS_RENDERERS`, configure-time combination rules, CI job |
 | Runtime identity reporting | ✅ `GraphicsDevice::GetGraphicsRendererType/Name()` report the device's real renderer |
 
 Legend: ✅ implemented and verified · 🟨 exists but unverified · ⬜ not implemented.

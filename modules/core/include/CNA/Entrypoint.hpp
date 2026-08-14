@@ -19,7 +19,11 @@
 
 #if defined(SDL_PLATFORM_ANDROID) || defined(__ANDROID__)
 #  include <SDL3/SDL_main.h>
-#elif defined(CNA_RENDERER_SDL) || defined(SDL_h_)
+#elif defined(SDL_h_)
 // Non-Android SDL builds: include SDL_main.h for completeness; it is a no-op there.
+//
+// plan_runtimerenderer.md RTR-P12-12: this used to also test CNA_RENDERER_SDL, which is not and
+// never was one of the public renderer identities (the SDL_Renderer one is CNA_RENDERER_SDL_RENDERER).
+// The macro could never be defined, so the condition was dead.
 #  include <SDL3/SDL_main.h>
 #endif

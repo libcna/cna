@@ -166,6 +166,19 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 ## 6. 🔌 Renderer System
 
 CNA exposes **46 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+
+Renderers are normally chosen at **compile time**, one per build. CNA can also be built with
+several renderers and the concrete one chosen at **runtime**, before the game starts:
+
+```cpp
+#include "CNA/GraphicsRendererSelection.hpp"
+
+CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::Vulkan);
+```
+
+A renderer that is unavailable or fails to start is an **error** by default — CNA never silently
+substitutes another. An opt-in fallback chain is available when a game wants one. See
+[docs/runtime-renderer-selection.md](docs/runtime-renderer-selection.md).
 configuration). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 

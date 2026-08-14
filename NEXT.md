@@ -1,5 +1,39 @@
 # NEXT.md
 
+## RUNTIME GRAPHICS RENDERER SELECTION (`feature/graphicsruntimedispatch`, 2026-08-15)
+
+CNA can now be compiled with several graphics renderers and choose between them at runtime, while
+compile-time selection remains the default and recommended mode. Design, decisions and the full
+task breakdown: `plan_runtimerenderer.md`. User-facing documentation:
+`docs/runtime-renderer-selection.md`.
+
+**Verified build sets** (all with the full `CnaTests` suite):
+
+| Set | Result |
+|---|---|
+| `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | 6379 passed, 0 failed |
+| `HEADLESS;SOFTWARE;STUB` | 6181 passed, 0 failed |
+| `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | 16 failures, identical by name to a single-renderer `SDL_RENDERER` build's — pre-existing, none from this feature |
+| Single-renderer `OPENGLES3` / `HEADLESS` / `SOFTWARE` / `SDL_RENDERER` | unchanged |
+
+**What remains** (phase numbers refer to `plan_runtimerenderer.md`):
+
+- **P9 — the test/example corpus.** 892 `#ifdef CNA_RENDERER_*` sites still describe the *default*
+  renderer. That is deliberate and consistent (only the default's macro is project-wide), but it
+  means a multi-renderer build's renderer-gated tests exercise one renderer, not each. Converting
+  them to runtime gating is the largest remaining piece.
+- **P10 — the remaining multi sets.** The heavier middleware families (BGFX, LLGL, DILIGENT, FNA3D,
+  WICKED, SOKOL, MAGNUM, SKIA, WEBGPU), the Windows DirectX sets, and the Emscripten set
+  (`WEBGL2;CANVAS;HTML_DOM;SVG_DOM`) — the last of which has the highest practical payoff, since one
+  wasm bundle could carry every browser renderer.
+- **P11 — EasyGL's GL profile at runtime.** Until then the five GL identities cannot coexist; the
+  configure step rejects that combination with a message pointing here.
+- **P6-3 / P6-6.** `RENDERER_TARGET` is still a scalar naming the default, with
+  `CNA_RENDERER_TARGETS` alongside it. Every one of its ~128 uses means "the default renderer" and
+  is correct as it stands.
+
+---
+
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
 > Ten frozen feature lanes integrated one at a time into `11branches`, which started at exactly the
