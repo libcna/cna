@@ -83,6 +83,12 @@ This fetch is not a licence review. Before copying or redistributing a model, in
 `THIRD_PARTY_NOTICES.md`'s `GLTF-018` procedure. The script is intentionally absent from CMake and
 CI.
 
+The one repeatable real-world acceptance is the historical `ChronographWatch` reproducer. After
+fetching it as above, set `CNA_GLTF_CHRONOGRAPH_WATCH` to its `glTF-Binary/ChronographWatch.glb` and
+run `CnaTests --gtest_filter='GltfRealWorldAcceptanceL4.*'`. The test locks its SHA-256 before
+checking transforms, materials, variants, transmission and animation; without the variable it
+skips rather than pretending the external asset ran.
+
 The pinned Asset Generator revision has root manifests with 28 groups and 219 permutations. An
 explicitly downloaded checkout can be projected onto CNA's canonical fixture identities with:
 

@@ -215,6 +215,29 @@ generator check. The glTF sanitizer workflow invokes this audit. Thus a copied e
 cannot silently become a fixture or test resource; CNA's current zero-third-party-asset policy must
 be changed explicitly, together with the per-asset `GLTF-018` licence and attribution record.
 
+`ChronographWatch` has one opt-in acceptance because it is the exact real-world file that exposed
+the campaign's transform failure (`GLTF-407`). Fetch and run it without copying the model into CNA:
+
+```bash
+scripts/fetch-gltf-sample-assets.sh /tmp/cna-gltf-watch ChronographWatch
+CNA_GLTF_CHRONOGRAPH_WATCH=/tmp/cna-gltf-watch/Models/ChronographWatch/glTF-Binary/ChronographWatch.glb \
+  /path/to/CnaTests --gtest_filter='GltfRealWorldAcceptanceL4.*'
+```
+
+The test first requires SHA-256
+`8e875fcd83efb433afed9ef1c18b2c2b2e075e2bf48371cadfd2a3cf529f1aef`, so the result applies to
+§4.4's exact 7,446,368-byte reproducer. It checks the three recorded world-bounds pairs against
+both the independent L4 oracle and CNA's production extraction, then checks 29 materials, all 28
+variant mappings, the scalar transmission approximation for `Glass Face`, and the 121-key/60-second
+rigid animation of `Hand Seconds`. With no environment variable the case reports `SKIPPED`; this is
+an explicit network/licence-gated supplementary check, not a green claim over a missing file.
+
+At the pinned revision the model and textures are CC-BY-4.0 (Darmstadt Graphics Group GmbH, Eric
+Chadwick) and the Khronos/3D Commerce/DGG logos carry the model's own `LicenseRef-LegalMark-*`
+records. The local test reads those files from their external checkout; it makes no claim that the
+logos are cleared for redistribution. No model, texture, logo or metadata file is committed or
+redistributed by CNA, and the zero-asset guard above stays unchanged.
+
 To check that the immutable objects still exist without changing the pins:
 
 ```bash

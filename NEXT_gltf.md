@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **418 closed (`✔` 272, `✅` 146),
-  32 `⬜` remaining.** The other 10 carry a deliberate partial marker: 1 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **419 closed (`✔` 273, `✅` 146),
+  31 `⬜` remaining.** The other 10 carry a deliberate partial marker: 1 `🔬` (investigation, no
   implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
   `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
@@ -50,7 +50,7 @@ Expected as of this writing:
 | pinned Khronos Validator | **262 valid, 20 expected-invalid, 42 warnings** |
 | `*Gltf*` on `STUB` / `HEADLESS` / `OPENGLES3` | **493 passed, 27 skipped** / **520 passed, 0 skipped** / **520 passed, 0 skipped** |
 | `*Gltf*` on `VULKAN` / `DIRECTX11` | **520 passed, 0 skipped** / **493 passed, 1 symlink skip** (26 POSIX tool cases are not registered on Windows) |
-| `*Gltf*` on `SOFTWARE` | **531 passed, 0 skipped**; its first run found and fixed the optional-base-map and 48/56/68-byte layout boundary; `GLTF-206`/`GLTF-179` added focused policy/parity witnesses, `GLTF-163` added two all-renderer index-width gates, `GLTF-394` added the Direct3D point-topology policy, `GLTF-405` locked the pinned sparse sample-asset fetcher, and `GLTF-398`/`420` added the required-CI workflow lock |
+| `*Gltf*` on `SOFTWARE` | **531 passed, 1 explicitly skipped** without external assets; **532 passed** when `CNA_GLTF_CHRONOGRAPH_WATCH` names the pinned GLTF-407 GLB. Its first run found and fixed the optional-base-map and 48/56/68-byte layout boundary; `GLTF-206`/`179` added policy/parity witnesses, `GLTF-163` added index-width gates, `GLTF-394` added the Direct3D topology policy, `GLTF-405`/`407` added pinned real-world fetch/acceptance, and `GLTF-398`/`420` added the required-CI workflow lock |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -177,7 +177,7 @@ blocked on those backends.
 | **second/third renderer** | 11 — `GLTF-158`, `160`, `168`, `213`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs L1–L6 comparisons. OPENGLES3 is now present; Vulkan and the platform-specific renderers are not. Some EasyGL-only halves are therefore actionable even where the whole cross-renderer row is not. |
 | **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
 | **`cna-gltf-viewer` repo** | 12 — `GLTF-323`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
-| **third-party assets** | 2 — `GLTF-407`, `411` | Repositories, licences, the Asset Generator manifest projection, the sparse pinned fetcher (`GLTF-405`), the zero-third-party-asset CI guard (`GLTF-406`) and the reference capture protocol exist. The remaining rows need deliberately fetched, per-asset licence-reviewed model runs/captures. |
+| **third-party assets** | 1 — `GLTF-411` | Repositories, licences, the Asset Generator manifest projection, sparse pinned fetcher (`GLTF-405`), zero-third-party-asset CI guard (`GLTF-406`), exact ChronographWatch acceptance (`GLTF-407`) and reference capture protocol exist. The remaining row needs actual ten-asset reference-renderer captures. |
 | **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
 | **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |
 
