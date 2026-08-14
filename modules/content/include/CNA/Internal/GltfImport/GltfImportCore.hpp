@@ -251,10 +251,19 @@ namespace CNA::Internal::GltfImport
          * XNA's `TextureFilter` has no "base level only" value — that is a property of the texture
          * having one mip level, not of the sampler — so the mip mode carried in @ref filter is
          * arbitrary for these two and `MipPoint` is chosen as the least-blending option. This flag
-         * is what makes the approximation visible instead of implied (`GLTF-204`), and it becomes
-         * observable the day `GLTF-206` starts generating mip levels.
+         * makes the approximation visible instead of implied (`GLTF-204`) and distinguishes it
+         * from `GLTF-206`'s explicitly requested-but-unavailable mip-chain report.
          */
         bool minFilterHasNoMipStage = false;
+        /**
+         * @brief True when an explicitly declared glTF `minFilter` requires a mip chain.
+         *
+         * PNG/JPEG images imported from glTF currently have one level. Keeping this bit separate
+         * from @ref filter lets `GLTF-206` report the affected map without guessing from an XNA
+         * enum (and without treating glTF's implementation-chosen default as an author request).
+         * The four `*_MIPMAP_*` values set it; `NEAREST`, `LINEAR` and undefined do not.
+         */
+        bool minFilterRequiresMipChain = false;
     };
 
     /**
@@ -597,6 +606,17 @@ namespace CNA::Internal::GltfImport
          * where the file claims it still loads without the extension.
          */
         std::vector<std::string> unsupportedTextureSourcesEXT;
+        /**
+         * @brief Sampled material maps whose declared minification filter needs missing mip levels.
+         *
+         * plan_gltf.md `GLTF-206`. `Texture2D::FromStream` decodes glTF's PNG/JPEG images as a
+         * single level. CNA deliberately does not synthesize a generic RGBA chain: colour maps
+         * need sRGB-aware filtering, normal maps need vector renormalisation, and packed PBR maps
+         * need linear per-channel filtering. Until role-aware generation exists, the GPU samples
+         * level zero for every LOD and this list makes the resulting minification-quality loss
+         * explicit. Only maps the selected effect actually samples are named.
+         */
+        std::vector<std::string> mipmappedSamplerMapsWithoutMipChainEXT;
         /**
          * @brief Maps whose `KHR_texture_transform` could not be applied (`GLTF-184`/`GLTF-336`).
          *

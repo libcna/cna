@@ -2971,6 +2971,25 @@ namespace Microsoft::Xna::Framework::Content
                             " is sampled with the base colour's coordinates (GLTF-181, a "
                             "documented limit).");
                     }
+                    // plan_gltf.md GLTF-206: imported PNG/JPEG images have one level. Generating
+                    // the same RGBA box-filter chain for colour, normal and packed-data maps would
+                    // be materially wrong, so the explicit quality deferral is reported per map.
+                    if (!meshOut.mipmappedSamplerMapsWithoutMipChainEXT.empty())
+                    {
+                        std::string maps;
+                        for (const std::string& map :
+                             meshOut.mipmappedSamplerMapsWithoutMipChainEXT)
+                        {
+                            if (!maps.empty()) { maps += ", "; }
+                            maps += map;
+                        }
+                        CNA::Logger::Warn(
+                            "glTF file '" + path + "': primitive '" + meshOut.name + "' maps " +
+                            maps + " declare a mipmapped minFilter, but CNA imports glTF PNG/JPEG "
+                            "images with one texture level. Role-aware mip generation is deferred, "
+                            "so level zero is used for every LOD and minification quality may be "
+                            "reduced (GLTF-206).");
+                    }
                     // plan_gltf.md GLTF-091: XNA carries one colour channel, so a second set is
                     // not declined gracefully -- it is data that does not arrive.
                     if (meshOut.extraColorSetsEXT > 0)

@@ -884,6 +884,12 @@ independent, then obtains analytic byte 92 twice on OPENGLES2 and OPENGLES3.
 their common out-of-range UV resolves to the authored yellow, blue and green quadrants under
 CLAMP, REPEAT and MIRRORED_REPEAT respectively, after the application selects each part's public
 base-colour sampler on device slot zero.
+`GltfSamplerMapping.MissingRoleAwareMipChainIsReportedOnlyForAnAffectedSampledMap` owns the adjacent
+mipmap boundary (`GLTF-206`): `sampler-trilinear` explicitly requests `LINEAR_MIPMAP_LINEAR` and
+names `baseColorTexture` in the missing-chain report, while the otherwise comparable
+`tex-reference-checkerboard` requests base-level-only `NEAREST` and remains silent. The raw mapping
+test separately proves all four `*_MIPMAP_*` enums require a chain and that an undefined sampler
+does not acquire an authored request by accident.
 `EasyGL_Gltf_TangentHandedness` adds the generated two-primitive tangent witness: its common
 tangent-space approximately-`+Y` normal map becomes world `+Y`/`-Y` solely through the two authored
 `tangent.w` signs, producing analytic bytes 151/0 under one light on both EasyGL profiles.

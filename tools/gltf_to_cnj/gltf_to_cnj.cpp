@@ -362,6 +362,26 @@ namespace
                         "UV channel).");
                 }
 
+                // plan_gltf.md GLTF-206: the converter copies glTF PNG/JPEG bytes and the runtime
+                // decoder creates one texture level. Report authored mip filtering now, rather
+                // than pretending a role-incorrect generic RGBA downsample would be fidelity.
+                if (!meshOut.mipmappedSamplerMapsWithoutMipChainEXT.empty())
+                {
+                    std::string maps;
+                    for (const std::string& map :
+                         meshOut.mipmappedSamplerMapsWithoutMipChainEXT)
+                    {
+                        if (!maps.empty()) { maps += ", "; }
+                        maps += map;
+                    }
+                    warnings.push_back(
+                        "Primitive '" + partName + "': " + maps +
+                        " declares a mipmapped minFilter, but CNA imports glTF PNG/JPEG images "
+                        "with one texture level. Role-aware mip generation is deferred, so level "
+                        "zero is used for every LOD and minification quality may be reduced "
+                        "(GLTF-206).");
+                }
+
                 // plan_gltf.md GLTF-339: transmission approximated as alpha blending.
                 if (meshOut.transmissionApproximatedEXT)
                 {

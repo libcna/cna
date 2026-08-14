@@ -76,6 +76,8 @@ TEST(GltfSamplerMapping, EveryMinMagCombinationMapsToItsExactXnaFilter)
             MapGltfSamplerEXT(row.magFilter, row.minFilter, kRepeat, kRepeat);
         EXPECT_EQ(row.expected, mapped.filter);
         EXPECT_FALSE(mapped.minFilterHasNoMipStage) << "this minFilter does have a mip stage";
+        EXPECT_TRUE(mapped.minFilterRequiresMipChain)
+            << "every explicit *_MIPMAP_* minFilter needs more than level zero";
     }
 }
 
@@ -90,11 +92,13 @@ TEST(GltfSamplerMapping, ANonMipmappedMinFilterIsFlaggedRatherThanSilentlyApprox
 
         const SamplerOut nearest = MapGltfSamplerEXT(magFilter, kNearest, kRepeat, kRepeat);
         EXPECT_TRUE(nearest.minFilterHasNoMipStage);
+        EXPECT_FALSE(nearest.minFilterRequiresMipChain);
         const SamplerOut linear = MapGltfSamplerEXT(magFilter, kLinear, kRepeat, kRepeat);
         EXPECT_TRUE(linear.minFilterHasNoMipStage);
+        EXPECT_FALSE(linear.minFilterRequiresMipChain);
 
-        // Point is chosen as the least-blending mip mode, so minification still behaves as the
-        // file asked even once GLTF-206 starts generating levels.
+        // Point is chosen as the least-blending mip mode. With GLTF-206's current single-level
+        // policy it is inert, but it remains the safe choice if role-aware chains are added later.
         EXPECT_EQ(magFilter == kNearest ? TextureFilter::Point
                                         : TextureFilter::MinPointMagLinearMipPoint,
                   nearest.filter);
@@ -155,6 +159,8 @@ TEST(GltfSamplerMapping, AnUndefinedSamplerIsGltfsOwnDefaultAndSaysSo)
            "tell 'the author chose repeat' from 'the author said nothing'";
     EXPECT_FALSE(mapped.minFilterHasNoMipStage)
         << "the default filter is the auto one, which does mipmap";
+    EXPECT_FALSE(mapped.minFilterRequiresMipChain)
+        << "an implementation-chosen default is not an authored request for a mip chain";
 }
 
 // GLTF-399's texture group turns the raw-enum table above into real-file witnesses. The cases are
@@ -172,25 +178,26 @@ TEST(GltfSamplerMapping, TextureCorpusCarriesAuthoredSamplerStatePerTextureSlot)
         TextureAddressMode addressV;
         bool declared;
         bool noMipStage;
+        bool requiresMipChain;
     };
 
     const Row rows[] = {
         {"tex-reference-checkerboard", TextureSlotEXT::BaseColor, TextureFilter::Point,
-         TextureAddressMode::Clamp, TextureAddressMode::Clamp, true, true},
+         TextureAddressMode::Clamp, TextureAddressMode::Clamp, true, true, false},
         {"uv1-material", TextureSlotEXT::BaseColor, TextureFilter::Linear,
-         TextureAddressMode::Wrap, TextureAddressMode::Wrap, false, false},
+         TextureAddressMode::Wrap, TextureAddressMode::Wrap, false, false, false},
         {"uv-out-of-range-clamp", TextureSlotEXT::BaseColor, TextureFilter::Linear,
-         TextureAddressMode::Clamp, TextureAddressMode::Clamp, true, false},
+         TextureAddressMode::Clamp, TextureAddressMode::Clamp, true, false, true},
         {"uv-out-of-range-wrap", TextureSlotEXT::BaseColor, TextureFilter::Linear,
-         TextureAddressMode::Wrap, TextureAddressMode::Wrap, true, false},
+         TextureAddressMode::Wrap, TextureAddressMode::Wrap, true, false, true},
         {"uv-out-of-range-mirror", TextureSlotEXT::BaseColor, TextureFilter::Linear,
-         TextureAddressMode::Mirror, TextureAddressMode::Mirror, true, false},
+         TextureAddressMode::Mirror, TextureAddressMode::Mirror, true, false, true},
         {"sampler-trilinear", TextureSlotEXT::BaseColor, TextureFilter::Linear,
-         TextureAddressMode::Wrap, TextureAddressMode::Wrap, true, false},
+         TextureAddressMode::Wrap, TextureAddressMode::Wrap, true, false, true},
         {"texture-shared-two-samplers", TextureSlotEXT::BaseColor, TextureFilter::Point,
-         TextureAddressMode::Clamp, TextureAddressMode::Clamp, true, true},
+         TextureAddressMode::Clamp, TextureAddressMode::Clamp, true, true, false},
         {"texture-shared-two-samplers", TextureSlotEXT::Normal, TextureFilter::Linear,
-         TextureAddressMode::Mirror, TextureAddressMode::Wrap, true, false},
+         TextureAddressMode::Mirror, TextureAddressMode::Wrap, true, false, true},
     };
 
     // Prove the hardest row actually has the shape its name claims. Without this control, two
@@ -222,7 +229,68 @@ TEST(GltfSamplerMapping, TextureCorpusCarriesAuthoredSamplerStatePerTextureSlot)
         EXPECT_EQ(row.addressV, actual.addressV);
         EXPECT_EQ(row.declared, actual.declared);
         EXPECT_EQ(row.noMipStage, actual.minFilterHasNoMipStage);
+        EXPECT_EQ(row.requiresMipChain, actual.minFilterRequiresMipChain);
     }
+}
+
+// GLTF-206's acceptance is an explicit deferral WITH a report entry. The positive witness authors
+// LINEAR_MIPMAP_LINEAR on a real base-colour image; the control authors base-level-only NEAREST on
+// the same kind of image. This proves the report follows the sampler request and is not a generic
+// "all textures lack mipmaps" warning.
+TEST(GltfSamplerMapping, MissingRoleAwareMipChainIsReportedOnlyForAnAffectedSampledMap)
+{
+    const auto extract = [](const char* id)
+    {
+        const CnaTest::GltfOracle::LoadedFixture fixture(id);
+        EXPECT_TRUE(fixture.Ok()) << fixture.Error();
+        if (!fixture.Ok()) { return MeshOut{}; }
+        return CNA::Internal::GltfImport::ExtractMesh(
+            &fixture.Data(), fixture.Data().meshes[0].primitives[0], "probe", nullptr, 1.0f);
+    };
+
+    const MeshOut mipmapped = extract("sampler-trilinear");
+    ASSERT_EQ(1u, mipmapped.mipmappedSamplerMapsWithoutMipChainEXT.size());
+    EXPECT_EQ("baseColorTexture", mipmapped.mipmappedSamplerMapsWithoutMipChainEXT.front());
+
+    const MeshOut baseOnly = extract("tex-reference-checkerboard");
+    EXPECT_TRUE(baseOnly.mipmappedSamplerMapsWithoutMipChainEXT.empty());
+}
+
+// KHR_materials_pbrSpecularGlossiness is converted to the ordinary PBR path, with diffuseTexture
+// becoming baseColorTexture (GLTF-349). The image finder already followed that view, but the
+// sampler finder used to keep reading the now-inapplicable metallic-roughness view. Reshape the
+// real trilinear fixture after parsing so the texture/image/sampler pointers stay parser-owned and
+// prove that both sampler state and GLTF-206's report follow the converted diffuse texture.
+TEST(GltfSamplerMapping, ConvertedSpecularGlossinessDiffuseKeepsItsTextureSampler)
+{
+    CnaTest::GltfOracle::LoadedFixture fixture("sampler-trilinear");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+
+    cgltf_data& data = const_cast<cgltf_data&>(fixture.Data());
+    ASSERT_EQ(1u, data.materials_count);
+    cgltf_material& material = data.materials[0];
+    const cgltf_texture_view diffuseView =
+        material.pbr_metallic_roughness.base_color_texture;
+    ASSERT_NE(nullptr, diffuseView.texture);
+    ASSERT_NE(nullptr, diffuseView.texture->sampler);
+
+    material.has_pbr_specular_glossiness = 1;
+    material.pbr_specular_glossiness.diffuse_texture = diffuseView;
+    for (float& component : material.pbr_specular_glossiness.diffuse_factor)
+    {
+        component = 1.0f;
+    }
+    material.has_pbr_metallic_roughness = 0;
+
+    const MeshOut converted = CNA::Internal::GltfImport::ExtractMesh(
+        &data, data.meshes[0].primitives[0], "probe", nullptr, 1.0f);
+    const SamplerOut& sampler = converted.material.samplers[
+        static_cast<std::size_t>(TextureSlotEXT::BaseColor)];
+    EXPECT_TRUE(sampler.declared);
+    EXPECT_TRUE(sampler.minFilterRequiresMipChain);
+    EXPECT_EQ(TextureFilter::Linear, sampler.filter);
+    ASSERT_EQ(1u, converted.mipmappedSamplerMapsWithoutMipChainEXT.size());
+    EXPECT_EQ("baseColorTexture", converted.mipmappedSamplerMapsWithoutMipChainEXT.front());
 }
 
 // --- plan_gltf.md GLTF-060 / GLTF-097: attribute count agreement, as a shared assertion ------------

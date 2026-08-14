@@ -254,6 +254,25 @@ expressible, at which point the transform belongs in the shader and this baking 
 that goes with it — should be removed rather than kept alongside. Until then, baking is the only
 one of the two that renders anything at all.
 
+## Texture mipmaps are role-aware or absent (`GLTF-206`)
+
+glTF's four `*_MIPMAP_*` minification filters request a mip chain, but CNA decodes the PNG/JPEG
+images used by core glTF into one-level `Texture2D` objects. CNA deliberately does **not** generate
+one generic RGBA chain. The correct downsample depends on the map's meaning:
+
+- base colour and emissive samples are sRGB-encoded and must be filtered in linear light;
+- normal-map vectors must be decoded, filtered and renormalised;
+- metallic-roughness and occlusion are linear data channels and must not receive the colour-map
+  transfer function.
+
+For now, every LOD therefore samples level zero. This is deterministic and preserves authored
+values, at the cost of aliasing and reduced minification quality. It is also explicit:
+`SamplerOut::minFilterRequiresMipChain` distinguishes an authored mip filter from an unspecified
+default, and `MeshOut::mipmappedSamplerMapsWithoutMipChainEXT` names only affected maps the chosen
+effect samples. Both load paths warn with those names. `NEAREST` and `LINEAR` request base level
+only and do not warn; neither does an absent/undefined sampler, because glTF leaves that filtering
+choice to the implementation.
+
 ## Where normals and tangents are renormalised
 
 `plan_gltf.md` `GLTF-177`. §3.7.2.1 requires `NORMAL` and `TANGENT` to be unit length, but three

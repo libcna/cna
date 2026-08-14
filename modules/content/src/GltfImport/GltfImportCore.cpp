@@ -2342,10 +2342,24 @@ namespace CNA::Internal::GltfImport
             // plan_gltf.md GLTF-202: one sampler per texture slot, read from the texture each view
             // names. A slot with no texture keeps glTF's default with `declared` false.
             const auto slot = [](TextureSlotEXT s) { return static_cast<std::size_t>(s); };
-            if (prim.material->has_pbr_metallic_roughness)
+            // FindBaseColorImage gives the archived specular-glossiness diffuse texture
+            // precedence because GLTF-349 converts that material model to CNA's PBR path. Its
+            // sampler must follow the same source view; reading the core metallic-roughness view
+            // here instead made converted textured materials fall back to LinearWrap and also
+            // bypassed GLTF-206's mip-chain report.
+            if (prim.material->has_pbr_specular_glossiness)
+            {
+                out.material.samplers[slot(TextureSlotEXT::BaseColor)] =
+                    SamplerForTextureView(
+                        prim.material->pbr_specular_glossiness.diffuse_texture);
+            }
+            else if (prim.material->has_pbr_metallic_roughness)
             {
                 out.material.samplers[slot(TextureSlotEXT::BaseColor)] =
                     SamplerForTextureView(prim.material->pbr_metallic_roughness.base_color_texture);
+            }
+            if (prim.material->has_pbr_metallic_roughness)
+            {
                 out.material.samplers[slot(TextureSlotEXT::MetallicRoughness)] =
                     SamplerForTextureView(
                         prim.material->pbr_metallic_roughness.metallic_roughness_texture);
@@ -2382,6 +2396,43 @@ namespace CNA::Internal::GltfImport
         out.useDualTexture = (!out.usePbr) && (!out.skinned) &&
                              (out.material.occlusionImage != nullptr) &&
                              (out.material.baseColorImage != nullptr);
+
+        // plan_gltf.md GLTF-206: glTF's ordinary PNG/JPEG inputs decode to one texture level, so
+        // an authored *_MIPMAP_* minFilter cannot actually choose a lower-resolution level. Do not
+        // silently synthesize one generic RGBA chain: base colour/emissive are sRGB data, normals
+        // must be renormalised, and metallic-roughness/occlusion are linear packed channels. Name
+        // only maps the chosen effect samples; an unsupported/downgraded map already has its own
+        // more relevant report entry.
+        const auto noteMissingMipChain = [&](TextureSlotEXT textureSlot,
+                                             const cgltf_image* image,
+                                             const char* mapName)
+        {
+            const std::size_t index = static_cast<std::size_t>(textureSlot);
+            if (image != nullptr &&
+                out.material.samplers[index].minFilterRequiresMipChain)
+            {
+                out.mipmappedSamplerMapsWithoutMipChainEXT.emplace_back(mapName);
+            }
+        };
+        noteMissingMipChain(TextureSlotEXT::BaseColor,
+                            out.material.baseColorImage, "baseColorTexture");
+        if (out.usePbr)
+        {
+            noteMissingMipChain(TextureSlotEXT::Normal,
+                                out.material.normalImage, "normalTexture");
+            noteMissingMipChain(TextureSlotEXT::MetallicRoughness,
+                                out.material.metallicRoughnessImage,
+                                "metallicRoughnessTexture");
+            noteMissingMipChain(TextureSlotEXT::Emissive,
+                                out.material.emissiveImage, "emissiveTexture");
+            noteMissingMipChain(TextureSlotEXT::Occlusion,
+                                out.material.occlusionImage, "occlusionTexture");
+        }
+        else if (out.useDualTexture)
+        {
+            noteMissingMipChain(TextureSlotEXT::Occlusion,
+                                out.material.occlusionImage, "occlusionTexture");
+        }
 
         // Each of a glTF material's texture references (baseColorTexture, normalTexture,
         // metallicRoughnessTexture, emissiveTexture, occlusionTexture) can independently select
@@ -3293,14 +3344,15 @@ namespace CNA::Internal::GltfImport
         bool minLinear = true;   // §3.8.4's default when undefined
         bool mipLinear = true;
         bool noMipStage = false;
+        bool requiresMipChain = false;
         switch (minFilter)
         {
             case 9728: minLinear = false; noMipStage = true;  break;  // NEAREST
             case 9729: minLinear = true;  noMipStage = true;  break;  // LINEAR
-            case 9984: minLinear = false; mipLinear = false;  break;  // NEAREST_MIPMAP_NEAREST
-            case 9985: minLinear = true;  mipLinear = false;  break;  // LINEAR_MIPMAP_NEAREST
-            case 9986: minLinear = false; mipLinear = true;   break;  // NEAREST_MIPMAP_LINEAR
-            case 9987: minLinear = true;  mipLinear = true;   break;  // LINEAR_MIPMAP_LINEAR
+            case 9984: minLinear = false; mipLinear = false; requiresMipChain = true; break;
+            case 9985: minLinear = true;  mipLinear = false; requiresMipChain = true; break;
+            case 9986: minLinear = false; mipLinear = true;  requiresMipChain = true; break;
+            case 9987: minLinear = true;  mipLinear = true;  requiresMipChain = true; break;
             default:   break;                                          // undefined
         }
         // A minFilter with no mip stage means "use the base level only", which XNA expresses
@@ -3333,6 +3385,7 @@ namespace CNA::Internal::GltfImport
                                    : TextureFilter::MinPointMagLinearMipPoint;
         }
         out.minFilterHasNoMipStage = noMipStage;
+        out.minFilterRequiresMipChain = requiresMipChain;
 
         const auto address = [](int wrap) {
             switch (wrap)

@@ -468,14 +468,28 @@ The one real approximation is elsewhere and is now recorded where it happens: gl
 `LINEAR` minFilters mean *no mipmapping*, and XNA has no `TextureFilter` value for "base level only"
 — that is a property of the texture's level count, not of the sampler. `SamplerOut` carries a
 `minFilterHasNoMipStage` flag so the arbitrary choice (point, the least-blending mip mode) is
-visible rather than implied, and it becomes observable the day `GLTF-206` starts generating levels.
+visible rather than implied.
+
+**Mip-chain policy (`GLTF-206`).** glTF PNG/JPEG images arrive through `Texture2D::FromStream` with
+one level. Automatic generation is explicitly deferred: the five material-map roles cannot share
+one correct RGBA downsampler. Base colour and emissive need sRGB-aware filtering, normal maps need
+their vectors renormalised, and metallic-roughness plus occlusion need linear per-channel filtering.
+An unqualified box filter would replace a visible quality limitation with wrong material data.
+
+The deferral is observable without expanding public API. `SamplerOut::minFilterRequiresMipChain`
+marks only the four explicitly authored `*_MIPMAP_*` values (not an undefined, implementation-
+chosen filter), and `MeshOut::mipmappedSamplerMapsWithoutMipChainEXT` names each affected map the
+selected effect actually samples. Both the direct loader and `gltf_to_cnj` warn with those names.
+The texture remains a legal one-level texture, so every backend samples level zero at every LOD;
+the consequence is reduced minification quality, not undefined or partially initialised mip data.
 
 **Compatibility.** Additive. Every entry is `LinearWrap` for a part built by any other content path,
 which is exactly what those parts got before.
 
 **Test.** `GltfSamplerMappingTests` covers §14.2 exhaustively — every min×mag combination against
 the XNA value that means exactly it, every wrap value on both axes independently, both
-non-mipmapped minFilters, and the undefined-sampler default. The whole table is testable directly
+non-mipmapped minFilters, the missing-chain classification, and the undefined-sampler default. The
+whole table is testable directly
 because `MapGltfSamplerEXT` takes raw glTF enum values rather than a `cgltf_sampler`, which no
 realistic number of fixtures could match for coverage.
 
