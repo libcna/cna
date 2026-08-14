@@ -1,3 +1,8 @@
+# plan_runtimerenderer.md RTR-P9-14: renderer gates here test LIST MEMBERSHIP
+# (CNA_RENDERER_IDENTITIES) rather than equality with the build default. In
+# single-renderer mode the list has one entry and the two are identical; in a
+# multi-renderer build a target is buildable when its renderer is compiled in at
+# all, not only when it happens to be the default.
 # CNAEXT graphics-extension examples (module-local registration; the target definitions
 # moved here verbatim from cmake/Examples.cmake when examples moved into their owning
 # physical modules).
@@ -21,7 +26,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT)
 endif()
 
 # ---- DepthEffect manual verification demo (renders + screenshots each colour-depth mode) -----
-if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND ("OPENGLES3" IN_LIST CNA_RENDERER_IDENTITIES OR "OPENGL33" IN_LIST CNA_RENDERER_IDENTITIES) AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_depth_effect_demo depth_effect_demo_test.cpp)
     # The shared example-support headers ("common/ScreenshotEXT.hpp", ...) live with the
     # graphics module's examples.
@@ -44,7 +49,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGL
 endif()
 
 # ---- CRTEffect manual verification demo (renders + screenshots each CRT parameter set) --------
-if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND ("OPENGLES3" IN_LIST CNA_RENDERER_IDENTITIES OR "OPENGL33" IN_LIST CNA_RENDERER_IDENTITIES) AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_crt_effect_demo crt_effect_demo_test.cpp)
     target_include_directories(cna_crt_effect_demo PRIVATE ${CNA_GRAPHICS_EXAMPLES_DIR})
     target_compile_definitions(cna_crt_effect_demo PRIVATE

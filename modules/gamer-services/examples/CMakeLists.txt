@@ -1,3 +1,8 @@
+# plan_runtimerenderer.md RTR-P9-14: renderer gates here test LIST MEMBERSHIP
+# (CNA_RENDERER_IDENTITIES) rather than equality with the build default. In
+# single-renderer mode the list has one entry and the two are identical; in a
+# multi-renderer build a target is buildable when its renderer is compiled in at
+# all, not only when it happens to be the default.
 # GamerServices-subsystem examples (module-local registration; the target definitions
 # moved here verbatim from cmake/Examples.cmake when examples moved into their owning
 # physical modules).
@@ -10,10 +15,10 @@
 # Example/demo executables historically live at the build root; keep them there.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
-if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
+if(CNA_BUILD_EXAMPLES AND ("OPENGLES2" IN_LIST CNA_RENDERER_IDENTITIES OR "OPENGLES3" IN_LIST CNA_RENDERER_IDENTITIES
+        OR "OPENGL33" IN_LIST CNA_RENDERER_IDENTITIES
+        OR "WEBGL1" IN_LIST CNA_RENDERER_IDENTITIES OR "WEBGL2" IN_LIST CNA_RENDERER_IDENTITIES
+        OR "VULKAN" IN_LIST CNA_RENDERER_IDENTITIES))
     # Task 11.11 (Phase 11b): real windowed proof that AvatarRenderer's real-rendering
     # extension (Phase 10) draws Phase 11a's procedurally-generated, non-synthetic avatar
     # content (tools/avatar_builder/ + tools/avatar_asset_pipeline/convert_avatar.py,

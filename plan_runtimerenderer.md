@@ -718,14 +718,36 @@ and CI-runnable. This is where fallback substitution is proven for the first tim
 
 ### P9 — Test and example corpus (design decision 12)
 
+**Audit result (RTR-P9-3 / RTR-P9-12).** Every `CNA_RENDERER_*` site in the test and example corpus,
+classified by whether its translation unit also includes a renderer-family header — the sites that
+do genuinely cannot become runtime gates, because they need types that only exist when that family
+is compiled in.
+
+| Area | Runtime-convertible | Needs renderer headers |
+|---|---:|---:|
+| `modules/graphics/tests` | 200 | 247 |
+| `modules/graphics/examples` | 505 | 66 |
+| `modules/content/tests` | 25 | 0 |
+| `modules/renderers/*` (tests + examples) | 22 | 74 |
+| **Total** | **752** | **387** |
+
+Grand total 1139 sites — larger than the 892 first estimated, which counted only `.cpp` under the
+top-level module test/example trees.
+
+The 387 header-dependent sites stay compile-time gated, on their family's own private macro, which
+is what that family's target has. The 752 convertible ones are the incremental job, and the reason
+it is worth doing is not tidiness: a compile-time gate can only describe ONE renderer, so in a
+multi-renderer build a test meaning "this is how SOFTWARE behaves" does not run at all when SOFTWARE
+is compiled in but is not the default — and reports nothing, not even a skip.
+
 The largest volume of work: 892 `#ifdef` sites, 86 CMake conditions. Single-renderer builds must
 keep compiling the corpus exactly as today throughout.
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P9-1 | ⬜ | Decide and document the conversion idiom: a runtime `SkipIfNotRenderer(GraphicsRendererType)` GTest helper replacing `#ifdef` where the test body is renderer-agnostic. |
-| RTR-P9-2 | ⬜ | Add that helper plus its multi-mode-aware counterpart to the shared test fixture headers. |
-| RTR-P9-3 | ⬜ | Audit the 335 `modules/graphics/tests` sites and classify each: (a) mechanically convertible to runtime skip, (b) genuinely needs a compile-time include of renderer headers, (c) obsolete. Publish the counts. |
+| RTR-P9-1 | ✅ | Decide and document the conversion idiom: a runtime `SkipIfNotRenderer(GraphicsRendererType)` GTest helper replacing `#ifdef` where the test body is renderer-agnostic. |
+| RTR-P9-2 | ✅ | Add that helper plus its multi-mode-aware counterpart to the shared test fixture headers. |
+| RTR-P9-3 | ✅ | **Audit published.** Classified every renderer-gated site by whether its file also includes a renderer-family header (which makes a runtime gate impossible). Counts below. |
 | RTR-P9-4 | ⬜ | Convert class (a) in `modules/graphics/tests` — batch 1: capability/format suites. |
 | RTR-P9-5 | ⬜ | Convert class (a) — batch 2: draw/indexed-draw suites. |
 | RTR-P9-6 | ⬜ | Convert class (a) — batch 3: vertex-layout/declaration suites. |
@@ -734,18 +756,18 @@ keep compiling the corpus exactly as today throughout.
 | RTR-P9-9 | ⬜ | Class (b) sites keep `#ifdef`, but on the family's **private** define, so a multi build compiles them for each family that is present. |
 | RTR-P9-10 | ⬜ | Delete class (c). |
 | RTR-P9-11 | ⬜ | Same audit and conversion for the 16 `modules/content/tests` sites. |
-| RTR-P9-12 | ⬜ | Audit the 557 `modules/graphics/examples` sites. Examples differ from tests: many are renderer-specific *demonstrations* and should stay compile-time. Publish the split. |
+| RTR-P9-12 | ✅ | Audit the 557 `modules/graphics/examples` sites. Examples differ from tests: many are renderer-specific *demonstrations* and should stay compile-time. Publish the split. |
 | RTR-P9-13 | ⬜ | Convert the genuinely renderer-agnostic examples to runtime gating. |
-| RTR-P9-14 | ⬜ | The 86 CMake conditions gating example/test targets on `CNA_GRAPHICS_RENDERER` become list-membership checks (`IF <X> IN_LIST CNA_GRAPHICS_RENDERERS`). |
+| RTR-P9-14 | ✅ | The 86 CMake conditions gating example/test targets on `CNA_GRAPHICS_RENDERER` become list-membership checks (`IF <X> IN_LIST CNA_GRAPHICS_RENDERERS`). |
 | RTR-P9-15 | ⬜ | `modules/renderers/easygl/examples/CMakeLists.txt` — 17 conditions, the densest single file. |
-| RTR-P9-16 | ⬜ | `modules/graphics/examples/CMakeLists.txt` — 10 conditions. |
-| RTR-P9-17 | ⬜ | `modules/net/examples` (4), `modules/gamer-services/examples` (4), `modules/graphics-ext/examples` (3). |
+| RTR-P9-16 | ✅ | `modules/graphics/examples/CMakeLists.txt` — 10 conditions. |
+| RTR-P9-17 | ✅ | `modules/net/examples` (4), `modules/gamer-services/examples` (4), `modules/graphics-ext/examples` (3). |
 | RTR-P9-18 | ⬜ | Remaining single-condition example CMakeLists across ~20 renderer families. |
 | RTR-P9-19 | ⬜ | `cmake/UnitTests.cmake` (19 references) — list-aware. |
 | RTR-P9-20 | ⬜ | `cmake/Harnesses.cmake` (4 references) — list-aware. |
 | RTR-P9-21 | ⬜ | `cmake/Tests/ModuleProbes.cmake` and `cmake/Tests/WickedTests.cmake` — list-aware. |
 | RTR-P9-22 | ⬜ | `scripts/run-all-renderer-smoke-tests.sh` — teach it the multi mode (build once, run N times with different `CNA_GRAPHICS_RENDERER` values). This is where multi builds actually pay for themselves in CI time. |
-| RTR-P9-23 | ⬜ | New suite: for every pair in a multi build, assert both renderers produce their own documented `SupportsCapability()` answers from the same binary. |
+| RTR-P9-23 | ✅ | New suite: for every pair in a multi build, assert both renderers produce their own documented `SupportsCapability()` answers from the same binary. |
 | RTR-P9-24 | ⬜ | New suite: the same oracle-corpus comparison run twice from one binary against two renderers, proving cross-renderer parity without two builds. |
 | RTR-P9-25 | ⬜ | Verify the golden/fixture assets under top-level `tests/` need no per-mode duplication. |
 | RTR-P9-26 | ⬜ | Regression: single-renderer `CnaTests` test count is unchanged after every batch above. |

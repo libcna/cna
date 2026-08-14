@@ -205,7 +205,21 @@ Not every pair of renderers can be linked into one binary. Incompatible combinat
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
-| `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6379 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
+| `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
+
+### What a multi-renderer build makes newly testable
+
+`CrossRendererContractTests` asks questions that previously required building twice and comparing
+artifacts out of band — it walks every compiled-in renderer in one process, against live devices,
+and checks the properties every renderer must hold regardless of what it draws: that it reports the
+identity it was selected as, that a capability answer is a property of the renderer rather than of
+when it was asked (stable across repeat queries and across a renderer rebuild), that `Clear`/
+`Present` are accepted, that the logical viewport is never degenerate even without a window, and
+that a `Texture2D` round-trip works.
+
+It deliberately does **not** compare two renderers' answers to each other: renderers legitimately
+differ (SOFTWARE rasterizes, STUB renders nothing). What they may not do is disagree about the
+framework contract.
 
 Cost of that set versus a single-renderer `HEADLESS` build: the `CnaTests` binary grows from
 238.5 MB to 241.2 MB (**+1.2 %**) for two additional renderers. The runtime cost is one

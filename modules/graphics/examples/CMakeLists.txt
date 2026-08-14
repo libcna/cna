@@ -1,3 +1,8 @@
+# plan_runtimerenderer.md RTR-P9-14: renderer gates here test LIST MEMBERSHIP
+# (CNA_RENDERER_IDENTITIES) rather than equality with the build default. In
+# single-renderer mode the list has one entry and the two are identical; in a
+# multi-renderer build a target is buildable when its renderer is compiled in at
+# all, not only when it happens to be the default.
 # Graphics-subsystem examples (module-local registration; the target definitions moved
 # here verbatim from cmake/Examples.cmake / cmake/Harnesses.cmake /
 # cmake/Tests/CrossRendererBenchmark.cmake when examples moved into their owning
@@ -55,7 +60,7 @@ if(CNA_BUILD_EXAMPLES)
                 "${CMAKE_CURRENT_SOURCE_DIR}/demo_2d/Content"
                 "$<TARGET_FILE_DIR:cna_demo_2d>/Content"
             COMMENT "Copying Content next to cna_demo_2d executable")
-        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU" AND CNA_WEBGPU_RUNTIME_LIBRARY)
+        if("WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES AND CNA_WEBGPU_RUNTIME_LIBRARY)
             add_custom_command(TARGET cna_demo_2d POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:cna_demo_2d>"
@@ -85,10 +90,10 @@ if(CNA_BUILD_EXAMPLES)
     endif()
 endif()
 
-if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
+if(CNA_BUILD_EXAMPLES AND ("OPENGLES2" IN_LIST CNA_RENDERER_IDENTITIES OR "OPENGLES3" IN_LIST CNA_RENDERER_IDENTITIES
+        OR "OPENGL33" IN_LIST CNA_RENDERER_IDENTITIES
+        OR "WEBGL1" IN_LIST CNA_RENDERER_IDENTITIES OR "WEBGL2" IN_LIST CNA_RENDERER_IDENTITIES
+        OR "VULKAN" IN_LIST CNA_RENDERER_IDENTITIES))
     # ---- 3D house demo (EasyGL and Vulkan) -----------------------------------
     # The 3D house demo exercises the EasyGL 3D pipeline. Other renderers throw
     # "3D not supported", so the target is only enabled with a GL-family public renderer
@@ -110,7 +115,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         # under -DCNA_GRAPHICS_RENDERER=WEBGL1 (contradicting EasyGLRenderer's own
         # SDL_GL_CONTEXT_MAJOR_VERSION=2 request for that profile, GLB-8) -- found while verifying
         # GLB-36's real emcc WEBGL1 build.
-        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1")
+        if("WEBGL1" IN_LIST CNA_RENDERER_IDENTITIES)
             set(_cna_house3d_min_webgl_version 1)
             set(_cna_house3d_max_webgl_version 1)
         else()
@@ -177,7 +182,7 @@ if(CNA_BUILD_TESTS AND EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1
         -sEXPORTED_RUNTIME_METHODS=UTF8ToString)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
+    if("WEBGL2" IN_LIST CNA_RENDERER_IDENTITIES)
         # Emscripten defaults to -sMAX_WEBGL_VERSION=1; without this, the EasyGL implementation's
         # ES 3.0/WebGL2
         # SDL_GL_CONTEXT_MAJOR_VERSION=3 request (EasyGLRenderer.cpp) silently falls back to
