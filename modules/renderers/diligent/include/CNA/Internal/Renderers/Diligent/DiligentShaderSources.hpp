@@ -56,7 +56,24 @@ float ComputeFogKeep(float3 objectPosition)
 
         /// Appended to pixel shaders only. `discard` is not valid in a vertex shader, so this
         /// cannot live in the shared constants block above even though every stage includes that.
-        constexpr const char* kPixelHelpersHlsl = R"(
+constexpr const char* kPixelHelpersHlsl = R"(
+float3 CnaSrgbToLinear(float3 color)
+{
+    float3 low = color / 12.92;
+    // Use a vector exponent: Diligent's HLSL2GLSL path preserves pow() literally, while GLSL
+    // (unlike HLSL) requires both pow operands to have the same vector width.
+    float3 high = pow((color + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
+    return lerp(low, high, step(0.04045, color));
+}
+
+float3 CnaLinearToSrgb(float3 color)
+{
+    float3 low = color * 12.92;
+    float exponent = 1.0 / 2.4;
+    float3 high = 1.055 * pow(max(color, 0.0), float3(exponent, exponent, exponent)) - 0.055;
+    return lerp(low, high, step(0.0031308, color));
+}
+
 /// XNA alpha test, in the encoding GpuDrawParams::alphaTest documents:
 ///   tolerance > 0 -> pass = |alpha - reference| < tolerance
 ///   otherwise     -> pass = alpha < reference
@@ -69,7 +86,11 @@ float4 FinishPixel(float4 color, float fogKeep)
     float weight = passesAlphaTest ? g_AlphaTest.z : g_AlphaTest.w;
     if (weight < 0.0)
         discard;
-    color.rgb = lerp(g_FogColor.rgb, color.rgb, fogKeep);
+    // g_FogColor.w is zero for every ordinary effect. PBR repurposes that otherwise-unused lane
+    // as its output-transfer flag, so fog and the final OETF stay in the same linear workflow.
+    float3 fogColor = lerp(g_FogColor.rgb, CnaSrgbToLinear(g_FogColor.rgb), g_FogColor.w);
+    color.rgb = lerp(fogColor, color.rgb, fogKeep);
+    color.rgb = lerp(color.rgb, CnaLinearToSrgb(color.rgb), g_FogColor.w);
     return color;
 }
 
@@ -592,7 +613,8 @@ cbuffer PbrConstants
 {
     float4 g_PbrAmbientMetallic;   // xyz = ambient colour, w = metallic factor
     float4 g_PbrEmissiveRoughness; // xyz = emissive colour, w = roughness factor
-    float4 g_PbrMapScales;          // x = normal scale, y = occlusion strength
+    // x = normal scale, y = occlusion strength, z = decode base, w = decode emissive.
+    float4 g_PbrMapScales;
 };
 
 struct PSInput
@@ -635,7 +657,9 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 void main(in PSInput psIn, out PSOutput psOut)
 {
     float4 baseColorTex = g_Texture.Sample(g_Texture_sampler, psIn.UV);
-    float3 albedo = baseColorTex.rgb * g_DiffuseColor.rgb;
+    float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb),
+                            g_PbrMapScales.z);
+    float3 albedo = baseColor * g_DiffuseColor.rgb;
     float alpha = baseColorTex.a * g_DiffuseColor.a;
 
     float3 N = normalize(psIn.Normal);
@@ -661,7 +685,9 @@ void main(in PSInput psIn, out PSOutput psOut)
     float occlusion = g_OcclusionMap.Sample(g_OcclusionMap_sampler, psIn.UV).r;
     occlusion = 1.0 + g_PbrMapScales.y * (occlusion - 1.0);
     float3 ambient = g_PbrAmbientMetallic.xyz * albedo * occlusion;
-    float3 emissive = g_PbrEmissiveRoughness.xyz * g_EmissiveMap.Sample(g_EmissiveMap_sampler, psIn.UV).rgb;
+    float3 emissiveSample = g_EmissiveMap.Sample(g_EmissiveMap_sampler, psIn.UV).rgb;
+    emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), g_PbrMapScales.w);
+    float3 emissive = g_PbrEmissiveRoughness.xyz * emissiveSample;
 
     psOut.Color = FinishPixel(float4(ambient + Lo + emissive, alpha), psIn.FogKeep);
 }

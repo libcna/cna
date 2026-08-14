@@ -1757,7 +1757,9 @@ namespace CNA::Internal::Renderers::Diligent
             params.pbrMetallicFactor,
             params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2],
             params.pbrRoughnessFactor,
-            params.pbrNormalScale, params.pbrOcclusionStrength, 0.0f, 0.0f,
+            params.pbrNormalScale, params.pbrOcclusionStrength,
+            params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+            params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
         };
         void* mapped = nullptr;
         context_->MapBuffer(pbrBuffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
@@ -3781,6 +3783,7 @@ namespace CNA::Internal::Renderers::Diligent
             }
             for (int component = 0; component < 3; ++component)
                 constants.fogColor[component] = params->fogColor[component];
+            constants.fogColor[3] = params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
             constants.flags[0] = params->textureEnabled && texture != nullptr ? 1.0f : 0.0f;
             constants.flags[1] = params->vertexColorEnabled ? 1.0f : 0.0f;
             constants.flags[2] = params->lightingEnabled ? 1.0f : 0.0f;

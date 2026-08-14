@@ -130,6 +130,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
     cna_diligent_test(cna_test_diligent_pbr diligent_pbr_test.cpp)
     cna_register_diligent_test(Diligent_Pbr cna_test_diligent_pbr)
 
+    # GLTF-213: exact mid-grey transfer witnesses on the rigid and skinned Diligent programs.
+    cna_diligent_test(cna_test_diligent_pbr_srgb_transfer
+                      ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+    cna_register_diligent_test(Diligent_Pbr_SrgbTransfer cna_test_diligent_pbr_srgb_transfer)
+
     # plan_diligent.md DILIGENT-49: RasterizerState.DepthBias/SlopeScaleDepthBias pixel verification.
     cna_diligent_test(cna_test_diligent_depthbias diligent_depthbias_test.cpp)
     cna_register_diligent_test(Diligent_DepthBias cna_test_diligent_depthbias)

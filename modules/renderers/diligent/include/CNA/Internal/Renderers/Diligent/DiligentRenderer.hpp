@@ -1503,6 +1503,7 @@ namespace CNA::Internal::Renderers::Diligent
             float flags[4];
             float alphaTest[4];
             float fogVector[4];
+            /// xyz = FogColor; w = PBR output sRGB encode flag (zero for every non-PBR shader).
             float fogColor[4];
             float envMapParams[4];
             float envMapSpecular[4];
