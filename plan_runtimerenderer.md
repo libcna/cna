@@ -669,7 +669,7 @@ The first phase that changes the build model.
 | RTR-P6-18 | ✅ | `scripts/check_renderer_identities.py` still passes: 46 identities, unchanged (design decision 10). |
 | RTR-P6-19 | ✅ | New `scripts/check_renderer_combinations.py` — mechanically verifies the conflict matrix in CMake matches the documented table, the same registry-gate shape as `check_renderer_identities.py`. |
 | RTR-P6-20 | ✅ | Verify build-directory discipline: multi builds go into a stable in-repo `cmake-build-multi/`, per `CLAUDE.md` — no new per-combination directories. |
-| RTR-P6-21 | ⬜ | Measure and record multi-build cost (configure time, build time at `-j3`, binary size) for the P8 reference set, so the cost of the mode is documented rather than discovered. |
+| RTR-P6-21 | ✅ | Measure and record multi-build cost (configure time, build time at `-j3`, binary size) for the P8 reference set, so the cost of the mode is documented rather than discovered. |
 | RTR-P6-22 | ✅ | `CMakePresets.json` — one preset for the reference multi set. |
 | RTR-P6-23 | ✅ | Confirm single-renderer configures are **bit-identical** to before P6 (same defines, same targets, same link line). |
 | RTR-P6-24 | ✅ | **Phase gate.** Single-renderer builds unchanged; a two-entry multi build configures, builds and links. |
@@ -770,7 +770,7 @@ keep compiling the corpus exactly as today throughout.
 | RTR-P9-23 | ✅ | New suite: for every pair in a multi build, assert both renderers produce their own documented `SupportsCapability()` answers from the same binary. |
 | RTR-P9-24 | ⬜ | New suite: the same oracle-corpus comparison run twice from one binary against two renderers, proving cross-renderer parity without two builds. |
 | RTR-P9-25 | ⬜ | Verify the golden/fixture assets under top-level `tests/` need no per-mode duplication. |
-| RTR-P9-26 | ⬜ | Regression: single-renderer `CnaTests` test count is unchanged after every batch above. |
+| RTR-P9-26 | ✅ | Regression: single-renderer `CnaTests` test count is unchanged after every batch above. |
 | RTR-P9-27 | ⬜ | **Phase gate.** Single-renderer test counts unchanged; the P8 multi set runs the converted corpus. |
 
 ---
