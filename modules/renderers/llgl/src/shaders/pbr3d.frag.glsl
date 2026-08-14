@@ -25,6 +25,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 fogVector;
     vec4 alphaTest;
     vec4 dielectricFresnel;    // xyz = dielectric F0, w = dielectric F90
+    vec4 textureTransformRows[10];
 };
 
 layout(binding = 2) uniform texture2D colorMap;
@@ -90,9 +91,16 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec
     return (kd * diffuseTerm / 3.14159265 + specular) * lightColor * NdotL;
 }
 
+vec2 cnaPbrTransformUV(vec2 uv, int slot)
+{
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, textureTransformRows[slot * 2].xyz),
+                dot(value, textureTransformRows[slot * 2 + 1].xyz));
+}
+
 void main()
 {
-    vec4 baseColorTex = texture(sampler2D(colorMap, samplerState), vTexCoord);
+    vec4 baseColorTex = texture(sampler2D(colorMap, samplerState), cnaPbrTransformUV(vTexCoord, 0));
     // Base colour factor and alpha are kept independent (not premultiplied) -- the PBR BRDF's
     // albedo and alpha are separate quantities per glTF's own baseColorFactor convention, unlike
     // most other CNA stock effects' DiffuseColor.
@@ -108,13 +116,13 @@ void main()
     vec3 T = normalize(vTangent - N * dot(N, vTangent));
     vec3 B = cross(N, T) * vBitangentSign;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture(sampler2D(normalMap, normalMapSampler), vTexCoord).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture(sampler2D(normalMap, normalMapSampler), cnaPbrTransformUV(vTexCoord, 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= roughnessWeightsPad.z;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
     // glTF packing: G=roughness, B=metallic. A 1x1 white default (both channels 1.0) leaves the
     // constant Metallic/RoughnessFactor unperturbed when no map is bound.
-    vec4 mr = texture(sampler2D(metallicRoughnessMap, metallicRoughnessMapSampler), vTexCoord);
+    vec4 mr = texture(sampler2D(metallicRoughnessMap, metallicRoughnessMapSampler), cnaPbrTransformUV(vTexCoord, 2));
     float roughness = clamp(mr.g * roughnessWeightsPad.x, 0.045, 1.0);
     float metallic  = clamp(mr.b * emissiveMetallic.w, 0.0, 1.0);
 
@@ -130,10 +138,10 @@ void main()
     Lo += PbrLight(finalNormal, V, safeNormalize(-light2DirPad.xyz), light2DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
 
     // R channel, 1x1 white default = fully lit (no darkening) when no occlusion map is bound.
-    float occlusionSample = texture(sampler2D(occlusionMap, occlusionMapSampler), vTexCoord).r;
+    float occlusionSample = texture(sampler2D(occlusionMap, occlusionMapSampler), cnaPbrTransformUV(vTexCoord, 4)).r;
     float occlusion = 1.0 + roughnessWeightsPad.w * (occlusionSample - 1.0);
     vec3 ambient = ambientColorPad.xyz * albedo * occlusion;
-    vec3 emissiveSample = texture(sampler2D(emissiveMap, emissiveMapSampler), vTexCoord).rgb;
+    vec3 emissiveSample = texture(sampler2D(emissiveMap, emissiveMapSampler), cnaPbrTransformUV(vTexCoord, 3)).rgb;
     emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), eyePositionWorldPad.w);
     vec3 emissive = emissiveMetallic.xyz * emissiveSample;
 

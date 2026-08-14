@@ -32,6 +32,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 fogVector;
     vec4 alphaTest;            // reference, tolerance, pass weight, fail weight
     vec4 dielectricFresnel;    // xyz = dielectric F0, w = dielectric F90
+    vec4 textureTransformRows[10];
 };
 
 layout(location = 0) in vec3 position;

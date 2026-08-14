@@ -23,6 +23,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 fogVector;
     vec4 alphaTest;
     vec4 dielectricFresnel;    // xyz = dielectric F0, w = dielectric F90
+    vec4 textureTransformRows[10];
 };
 
 layout(binding = 2) uniform sampler2D colorMap;
@@ -79,9 +80,16 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec
     return (kd * diffuseTerm / 3.14159265 + specular) * lightColor * NdotL;
 }
 
+vec2 cnaPbrTransformUV(vec2 uv, int slot)
+{
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, textureTransformRows[slot * 2].xyz),
+                dot(value, textureTransformRows[slot * 2 + 1].xyz));
+}
+
 void main()
 {
-    vec4 baseColorTex = texture(colorMap, vTexCoord);
+    vec4 baseColorTex = texture(colorMap, cnaPbrTransformUV(vTexCoord, 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), ambientColorPad.w);
     vec3 albedo = baseColor * diffuseColor.rgb;
     float alpha = baseColorTex.a * diffuseColor.a;
@@ -94,11 +102,11 @@ void main()
     vec3 T = normalize(vTangent - N * dot(N, vTangent));
     vec3 B = cross(N, T) * vBitangentSign;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture(normalMap, vTexCoord).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture(normalMap, cnaPbrTransformUV(vTexCoord, 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= roughnessWeightsPad.z;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
-    vec4 mr = texture(metallicRoughnessMap, vTexCoord);
+    vec4 mr = texture(metallicRoughnessMap, cnaPbrTransformUV(vTexCoord, 2));
     float roughness = clamp(mr.g * roughnessWeightsPad.x, 0.045, 1.0);
     float metallic  = clamp(mr.b * emissiveMetallic.w, 0.0, 1.0);
 
@@ -111,10 +119,10 @@ void main()
     Lo += PbrLight(finalNormal, V, safeNormalize(-light1DirPad.xyz), light1DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, safeNormalize(-light2DirPad.xyz), light2DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
 
-    float occlusionSample = texture(occlusionMap, vTexCoord).r;
+    float occlusionSample = texture(occlusionMap, cnaPbrTransformUV(vTexCoord, 4)).r;
     float occlusion = 1.0 + roughnessWeightsPad.w * (occlusionSample - 1.0);
     vec3 ambient = ambientColorPad.xyz * albedo * occlusion;
-    vec3 emissiveSample = texture(emissiveMap, vTexCoord).rgb;
+    vec3 emissiveSample = texture(emissiveMap, cnaPbrTransformUV(vTexCoord, 3)).rgb;
     emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), eyePositionWorldPad.w);
     vec3 emissive = emissiveMetallic.xyz * emissiveSample;
 
