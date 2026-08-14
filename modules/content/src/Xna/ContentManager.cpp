@@ -3187,10 +3187,8 @@ namespace Microsoft::Xna::Framework::Content
                             std::to_string(meshOut.stride) +
                             ", so the authored tangent basis is discarded (GLTF-086).");
                     }
-                    // plan_gltf.md GLTF-181: CNA's PBR effects sample every map from ONE shared UV
-                    // channel. A material whose maps disagree renders some of them from the wrong
-                    // set -- detected since CNB-97 but, until now, reported only by the offline
-                    // tool, so the runtime path was silently wrong on exactly the same file.
+                    // plan_gltf.md GLTF-188: GLTF-182/183 carry two distinct sampled TEXCOORD
+                    // sets. A third remains outside the adopted vertex ABI and is reported by map.
                     if (!meshOut.uvSetMismatchedMapsEXT.empty())
                     {
                         std::string maps;
@@ -3200,11 +3198,10 @@ namespace Microsoft::Xna::Framework::Content
                             maps += map;
                         }
                         CNA::Logger::Warn(
-                            "glTF file '" + path + "': primitive '" + meshOut.name + "' samples " +
-                            maps + " from a different TEXCOORD set than the one CNA baked. Its PBR "
-                            "effects have one shared UV channel, so " + maps +
-                            " is sampled with the base colour's coordinates (GLTF-181, a "
-                            "documented limit).");
+                            "glTF file '" + path + "': primitive '" + meshOut.name + "' needs a "
+                            "third distinct TEXCOORD set for " + maps + ". CNA carries the first "
+                            "two sampled sets, so these maps fall back to packed channel 0 "
+                            "(GLTF-188, a documented limit).");
                     }
                     // plan_gltf.md GLTF-206: imported PNG/JPEG images have one level. Generating
                     // the same RGBA box-filter chain for colour, normal and packed-data maps would

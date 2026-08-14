@@ -435,9 +435,8 @@ namespace
                         partName, meshOut.usePbr);
                 }
 
-                // Per-map UV set selection: PbrEffect/SkinnedPbrEffect sample every map from a
-                // single shared UV channel (the base-color texture's own TEXCOORD set); warn
-                // rather than silently mis-rendering when another map references a different one.
+                // GLTF-188: two distinct sampled TEXCOORD sets are carried; name any map that
+                // needs a third rather than silently remapping it.
                 if (!meshOut.uvSetMismatchedMapsEXT.empty())
                 {
                     // GLTF-188: named, so the warning says which map to go and look at.
@@ -448,10 +447,9 @@ namespace
                         maps += map;
                     }
                     warnings.push_back(
-                        "Primitive '" + partName + "': " + maps + " references a different glTF "
-                        "TEXCOORD set than the base-color texture, and will be sampled with the "
-                        "base colour's UV data instead (CNA samples every PBR map from one shared "
-                        "UV channel).");
+                        "Primitive '" + partName + "' needs a third distinct glTF TEXCOORD set for " +
+                        maps + "; CNA carries the first two sampled sets, so these maps fall back "
+                        "to packed channel 0.");
                 }
 
                 // plan_gltf.md GLTF-206: the converter copies glTF PNG/JPEG bytes and the runtime

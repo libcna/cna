@@ -800,10 +800,10 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief The PBR maps whose TEXCOORD set does not fit the two carried channels, by name.
          *
-         * plan_gltf.md `GLTF-181`/`GLTF-188`. `PbrEffect`/`SkinnedPbrEffect` sample every map from
-         * GLTF-182/183 carry at most two distinct authored sets. A material using a third distinct
-         * set still has no attribute/varying for it and falls back to packed channel 0. This lists
-         * exactly which maps were remapped, so the report names the remaining loss.
+         * plan_gltf.md `GLTF-181`/`GLTF-188`. GLTF-182/183 carry at most two distinct authored
+         * sets through `PbrEffect`/`SkinnedPbrEffect`. A material using a third distinct set still
+         * has no attribute/varying for it and falls back to packed channel 0. This lists exactly
+         * which maps were remapped, so the report names the remaining loss.
          *
          * `GLTF-188` narrowed it from a bare `bool` for two reasons. A single flag could not say
          * *which* map to go and look at, which is the only actionable part of the warning; and it
